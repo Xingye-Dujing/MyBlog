@@ -1,10 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { getDefaultChats } from '@/data/defaultChats'
 
 const STORAGE_KEY = 'blog-chats'
-const VERSION_KEY = 'blog-chats-version'
-const CURRENT_VERSION = 2
 
 export const useChatStore = defineStore('chat', () => {
   const chats = ref([])
@@ -22,24 +19,38 @@ export const useChatStore = defineStore('chat', () => {
     })
   )
 
-  function init() {
-    const savedVersion = Number(localStorage.getItem(VERSION_KEY)) || 0
-    if (savedVersion < CURRENT_VERSION) {
-      // Version upgraded: regenerate defaults with fresh timestamps
-      chats.value = getDefaultChats()
-      localStorage.setItem(VERSION_KEY, String(CURRENT_VERSION))
-      return
-    }
+  async function init() {
+    // Priority 1: localStorage (user's current data)
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       try {
         chats.value = JSON.parse(saved)
+        return
       } catch {
-        chats.value = getDefaultChats()
+        // localStorage corrupted, continue to load from file
       }
-    } else {
-      chats.value = getDefaultChats()
     }
+
+    // Priority 2: Load from dev API (src/data/chats.json)
+    try {
+      const res = await fetch('/api/load-chats')
+      if (res.ok) {
+        const result = await res.json()
+        if (result.data && Array.isArray(result.data)) {
+          chats.value = result.data
+        } else if (Array.isArray(result)) {
+          chats.value = result
+        }
+        // Save to localStorage for future use
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
+        return
+      }
+    } catch {
+      // API not available (production or error), continue to fallback
+    }
+
+    // Fallback: empty data
+    chats.value = []
   }
 
   function save() {
@@ -147,14 +158,33 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function resetToDefault() {
-    chats.value = getDefaultChats()
+    chats.value = []
     activeChatId.value = null
+  }
+
+  // Import from user-selected file (for cross-device sync)
+  function importFromUserFile(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result)
+          chats.value = data
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
+          resolve(true)
+        } catch {
+          resolve(false)
+        }
+      }
+      reader.onerror = () => resolve(false)
+      reader.readAsText(file)
+    })
   }
 
   return {
     chats, activeChatId, activeChat, sortedChats,
     init, createChat, addMessage, updateMessage, deleteMessage,
     deleteChat, updateChat, togglePin,
-    syncToFile, exportJSON, importJSON, resetToDefault
+    syncToFile, exportJSON, importJSON, resetToDefault, importFromUserFile
   }
 })

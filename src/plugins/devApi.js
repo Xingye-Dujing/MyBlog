@@ -5,6 +5,7 @@ export function devApiPlugin() {
   return {
     name: 'blog-dev-api',
     configureServer(server) {
+      // Save chats to src/data/chats.json
       server.middlewares.use('/api/save-chats', (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405
@@ -32,6 +33,33 @@ export function devApiPlugin() {
             res.end(JSON.stringify({ error: err.message }))
           }
         })
+      })
+
+      // Load chats from src/data/chats.json
+      server.middlewares.use('/api/load-chats', (req, res) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }))
+          return
+        }
+
+        try {
+          const filePath = path.resolve(process.cwd(), 'src/data/chats.json')
+          if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf-8')
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(data)
+          } else {
+            res.statusCode = 404
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'File not found', data: [] }))
+          }
+        } catch (err) {
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: err.message, data: [] }))
+        }
       })
     }
   }

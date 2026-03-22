@@ -93,6 +93,22 @@ async function syncToFile() {
 
 const syncStatus = ref('')
 
+function handleFileImport(event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  chatStore.importFromUserFile(file).then(ok => {
+    if (ok) {
+      syncStatus.value = 'import-success'
+    } else {
+      syncStatus.value = 'import-error'
+    }
+    setTimeout(() => { syncStatus.value = '' }, 2000)
+    // Reset file input
+    event.target.value = ''
+  })
+}
+
 watch(() => route.params.id, () => {
   editingMessage.value = null
   showActions.value = false
@@ -118,7 +134,7 @@ onMounted(() => {
       </div>
       <div class="header-actions">
         <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
-          {{ syncStatus === 'success' ? '已同步' : '同步失败' }}
+          {{ syncStatus.includes('success') ? '已同步' : '同步失败' }}
         </div>
         <button class="header-btn" title="更多" @click="showActions = !showActions">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -135,6 +151,11 @@ onMounted(() => {
           <button @click="syncToFile(); showActions = false">
             同步到文件
           </button>
+          <button @click="$refs.fileInput.click(); showActions = false">
+            从文件导入
+          </button>
+          <input ref="fileInput" type="file" accept=".json,application/json" @change="handleFileImport"
+            style="display: none;" />
           <button @click="chatStore.exportJSON(); showActions = false">
             导出全部数据
           </button>
@@ -230,6 +251,16 @@ onMounted(() => {
   background: #fee;
 }
 
+.sync-toast.import-success {
+  color: #2d7d2d;
+  background: #e8f5e9;
+}
+
+.sync-toast.import-error {
+  color: #c9372e;
+  background: #fee;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -306,6 +337,21 @@ onMounted(() => {
 
 .actions-dropdown button.danger:hover {
   background: #fee;
+}
+
+.file-input-label {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  font-family: 'LXGW WenKai', serif;
+  font-size: 0.85rem;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.file-input-label:hover {
+  background: #f5f5f5;
 }
 
 .messages-area {
