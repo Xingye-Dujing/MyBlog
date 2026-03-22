@@ -321,7 +321,7 @@ onMounted(() => {
   border: none;
   background: none;
   cursor: pointer;
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   font-size: 0.85rem;
   color: #333;
   transition: background 0.15s;
@@ -343,7 +343,7 @@ onMounted(() => {
   display: block;
   width: 100%;
   padding: 10px 16px;
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   font-size: 0.85rem;
   color: #333;
   cursor: pointer;

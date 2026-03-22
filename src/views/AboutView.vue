@@ -128,7 +128,7 @@ const router = useRouter()
   color: #333;
   padding: 6px 12px;
   border-radius: 6px;
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   font-size: 0.9rem;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -309,6 +309,7 @@ const router = useRouter()
   }
 
   .back-btn {
+    margin-left: -14px;
     min-height: 44px;
   }
 

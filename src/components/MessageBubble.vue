@@ -335,6 +335,11 @@ const dateStr = computed(() => {
     padding: 12px 14px 6px;
   }
 
+  .message-bubble:hover {
+    background: #fafafa;
+    border-left-color: transparent;
+  }
+
   .message-content {
     font-size: 0.95rem;
     line-height: 1.8;

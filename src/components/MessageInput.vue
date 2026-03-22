@@ -188,7 +188,7 @@ defineExpose({ setContent })
 
 .cancel-btn {
   font-size: 0.8rem;
-  font-family: 'LXGW WenKai', 'Consolas', serif;
+  font-family: serif;
   color: #c9372e;
   background: none;
   border: none;
@@ -227,7 +227,7 @@ defineExpose({ setContent })
   border: 1.5px solid #e0e0e0;
   border-radius: 8px;
   padding: 10px 14px;
-  font-family: 'LXGW WenKai', 'Consolas', serif;
+  font-family: serif;
   font-size: 0.95rem;
   line-height: 1.6;
   outline: none;
@@ -303,7 +303,6 @@ defineExpose({ setContent })
   }
 
   .input-area textarea {
-    font-size: 16px;
     padding: 10px 12px;
     min-height: 40px;
     max-height: 160px;

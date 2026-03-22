@@ -204,7 +204,7 @@ function formatDate(ts) {
   border: 1.5px solid #e0e0e0;
   border-radius: 6px;
   padding: 8px 12px;
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   font-size: 0.9rem;
   outline: none;
   transition: border-color 0.2s;
@@ -225,7 +225,7 @@ function formatDate(ts) {
 .btn-confirm {
   padding: 5px 14px;
   border-radius: 5px;
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -276,7 +276,7 @@ function formatDate(ts) {
   flex: 1;
   border: none;
   outline: none;
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   font-size: 0.9rem;
   color: #333;
   background: transparent;
@@ -455,7 +455,8 @@ function formatDate(ts) {
   }
 
   .chat-item.active {
-    padding-left: 13px;
+    padding-left: 16px;
+    border-left: none;
   }
 
   .list-footer {

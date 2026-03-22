@@ -11,13 +11,6 @@ import { RouterView } from 'vue-router'
 </template>
 
 <style>
-@font-face {
-  font-family: 'LXGW WenKai';
-  src: url('/font/LXGWWenKaiGB-Medium.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-}
-
 * {
   margin: 0;
   padding: 0;
@@ -25,7 +18,7 @@ import { RouterView } from 'vue-router'
 }
 
 body {
-  font-family: 'LXGW WenKai', serif;
+  font-family: serif;
   overflow-x: hidden;
   background-color: white;
   min-height: 100vh;
