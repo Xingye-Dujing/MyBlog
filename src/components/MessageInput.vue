@@ -5,7 +5,7 @@ const emit = defineEmits(['send'])
 
 const props = defineProps({
   editingMessage: { type: Object, default: null },
-  placeholder: { type: String, default: '写点什么... 支持 Markdown、代码块、$数学公式$' }
+  placeholder: { type: String, default: '写点什么... 支持 Markdown 语法' }
 })
 
 const content = ref('')
