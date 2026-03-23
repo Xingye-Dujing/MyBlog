@@ -21,9 +21,20 @@ const filteredChats = computed(() => {
   if (!q) return list
   return list.filter(c =>
     c.title.toLowerCase().includes(q) ||
-    c.tags.some(t => t.toLowerCase().includes(q))
+    c.tags.some(t => t.toLowerCase().includes(q)) ||
+    c.messages.some(m => m.content.toLowerCase().includes(q))
   )
 })
+
+// Get matching messages for preview
+function getMatchingMessages(chat, query, limit = 2) {
+  if (!query) return []
+  const q = query.toLowerCase()
+  const matches = chat.messages
+    .filter(m => m.content.toLowerCase().includes(q))
+    .slice(0, limit)
+  return matches
+}
 
 // Group chats by tags
 const groupedChats = computed(() => {
@@ -166,7 +177,13 @@ function handleEditKey(e) {
         <circle cx="11" cy="11" r="8" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
-      <input v-model="searchQuery" class="search-input" placeholder="搜索对话..." type="text">
+      <input v-model="searchQuery" class="search-input" placeholder="搜索消息内容..." type="text">
+      <button v-if="searchQuery" class="clear-search" @click="searchQuery = ''" title="清除搜索">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
 
     <div class="chat-items">
@@ -197,7 +214,15 @@ function handleEditKey(e) {
                 </span>
                 <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
               </div>
-              <p class="chat-preview">{{ getLastMessage(chat) }}</p>
+              <p v-if="searchQuery && getMatchingMessages(chat, searchQuery).length" class="chat-preview search-match">
+                <span v-for="(msg, idx) in getMatchingMessages(chat, searchQuery)" :key="msg.id"
+                  class="message-snippet">
+                  <span v-if="idx > 0" class="snippet-separator"> · </span>
+                  <span class="snippet-text">{{ msg.content.substring(0, 60) }}{{ msg.content.length > 60 ? '...' : ''
+                    }}</span>
+                </span>
+              </p>
+              <p v-else class="chat-preview">{{ getLastMessage(chat) }}</p>
               <div v-if="chat.tags.length" class="chat-tags">
                 <span v-for="tag in chat.tags.slice(0, 3)" :key="tag" class="tag">{{ tag }}</span>
               </div>
@@ -233,7 +258,15 @@ function handleEditKey(e) {
                 </span>
                 <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
               </div>
-              <p class="chat-preview">{{ getLastMessage(chat) }}</p>
+              <p v-if="searchQuery && getMatchingMessages(chat, searchQuery).length" class="chat-preview search-match">
+                <span v-for="(msg, idx) in getMatchingMessages(chat, searchQuery)" :key="msg.id"
+                  class="message-snippet">
+                  <span v-if="idx > 0" class="snippet-separator"> · </span>
+                  <span class="snippet-text">{{ msg.content.substring(0, 60) }}{{ msg.content.length > 60 ? '...' : ''
+                    }}</span>
+                </span>
+              </p>
+              <p v-else class="chat-preview">{{ getLastMessage(chat) }}</p>
               <div v-if="chat.tags.length" class="chat-tags">
                 <span v-for="t in chat.tags.slice(0, 3)" :key="t" class="tag">{{ t }}</span>
               </div>
@@ -408,6 +441,42 @@ function handleEditKey(e) {
 
 .search-input::placeholder {
   color: #ccc;
+}
+
+.clear-search {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  transition: color 0.2s;
+}
+
+.clear-search:hover {
+  color: #666;
+}
+
+.clear-search svg {
+  width: 16px;
+  height: 16px;
+}
+
+.search-match {
+  color: #409eff;
+}
+
+.message-snippet {
+  font-style: italic;
+}
+
+.snippet-separator {
+  color: #ccc;
+  margin: 0 4px;
 }
 
 .chat-items {
