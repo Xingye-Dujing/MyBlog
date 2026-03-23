@@ -1,10 +1,11 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'cancel-insert'])
 
 const props = defineProps({
   editingMessage: { type: Object, default: null },
+  insertTarget: { type: Object, default: null },
   placeholder: { type: String, default: '写点什么... 支持 Markdown 语法' }
 })
 
@@ -103,10 +104,22 @@ function setContent(text) {
   })
 }
 
+function focus() {
+  nextTick(() => {
+    textareaRef.value?.focus()
+  })
+}
+
 function cancelEdit() {
   content.value = ''
   nextTick(autoResize)
   emit('send', null)
+}
+
+function cancelInsert() {
+  content.value = ''
+  nextTick(autoResize)
+  emit('cancel-insert')
 }
 
 onMounted(() => {
@@ -129,7 +142,7 @@ onUnmounted(() => {
   }
 })
 
-defineExpose({ setContent })
+defineExpose({ setContent, focus })
 </script>
 
 <template>
@@ -138,6 +151,10 @@ defineExpose({ setContent })
       <div v-if="editingMessage" class="editing-hint">
         <span>正在编辑消息</span>
         <button class="cancel-btn" @click="cancelEdit">取消</button>
+      </div>
+      <div v-else-if="insertTarget" class="editing-hint insert-mode">
+        <span>正在插入新块到{{ insertTarget.position === 'above' ? '上方' : '下方' }}</span>
+        <button class="cancel-btn" @click="cancelInsert">取消</button>
       </div>
       <div class="input-area" :class="{ 'drag-over': isDragOver }">
         <textarea ref="textareaRef" v-model="content" :placeholder="isDragOver ? '释放以上传图片...' : placeholder" rows="1"

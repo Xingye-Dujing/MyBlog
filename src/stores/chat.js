@@ -75,13 +75,28 @@ export const useChatStore = defineStore('chat', () => {
     return chat
   }
 
+  function updateChatTitle(chatId, newTitle) {
+    const chat = chats.value.find(c => c.id === chatId)
+    if (!chat) return
+    chat.title = newTitle
+    chat.updatedAt = Date.now()
+  }
+
+  function updateChatTags(chatId, tags) {
+    const chat = chats.value.find(c => c.id === chatId)
+    if (!chat) return
+    chat.tags = tags
+    chat.updatedAt = Date.now()
+  }
+
   function addMessage(chatId, content) {
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return null
     const msg = {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       content,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      editHistory: []
     }
     chat.messages.push(msg)
     chat.updatedAt = Date.now()
@@ -93,8 +108,46 @@ export const useChatStore = defineStore('chat', () => {
     if (!chat) return
     const msg = chat.messages.find(m => m.id === messageId)
     if (!msg) return
+    // Add to edit history (keep original timestamp, record edit times)
+    if (!msg.editHistory) {
+      msg.editHistory = []
+    }
+    msg.editHistory.push(Date.now())
     msg.content = content
     chat.updatedAt = Date.now()
+  }
+
+  function moveMessage(chatId, messageId, direction) {
+    const chat = chats.value.find(c => c.id === chatId)
+    if (!chat) return
+    const index = chat.messages.findIndex(m => m.id === messageId)
+    if (index === -1) return
+
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    if (newIndex < 0 || newIndex >= chat.messages.length) return
+
+      // Swap messages
+      ;[chat.messages[index], chat.messages[newIndex]] = [chat.messages[newIndex], chat.messages[index]]
+    chat.updatedAt = Date.now()
+  }
+
+  function insertMessage(chatId, targetMessageId, content, position) {
+    const chat = chats.value.find(c => c.id === chatId)
+    if (!chat) return null
+    const index = chat.messages.findIndex(m => m.id === targetMessageId)
+    if (index === -1) return null
+
+    const msg = {
+      id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      content,
+      timestamp: Date.now(),
+      editHistory: []
+    }
+
+    const insertIndex = position === 'above' ? index : index + 1
+    chat.messages.splice(insertIndex, 0, msg)
+    chat.updatedAt = Date.now()
+    return msg
   }
 
   function deleteMessage(chatId, messageId) {
@@ -184,7 +237,8 @@ export const useChatStore = defineStore('chat', () => {
   return {
     chats, activeChatId, activeChat, sortedChats,
     init, createChat, addMessage, updateMessage, deleteMessage,
-    deleteChat, updateChat, togglePin,
-    syncToFile, exportJSON, importJSON, resetToDefault, importFromUserFile
+    deleteChat, updateChat, togglePin, updateChatTitle, updateChatTags,
+    syncToFile, exportJSON, importJSON, resetToDefault, importFromUserFile,
+    moveMessage, insertMessage
   }
 })

@@ -13,6 +13,13 @@ const messagesContainer = ref(null)
 const inputRef = ref(null)
 const editingMessage = ref(null)
 const showActions = ref(false)
+const insertTarget = ref(null)
+const movingMessageId = ref(null)
+const moveDirection = ref('')
+const editingTitle = ref(false)
+const titleInput = ref('')
+const showTagsEditor = ref(false)
+const tagInput = ref('')
 
 const chat = computed(() => {
   const id = route.params.id
@@ -50,11 +57,16 @@ function scrollToBottom(smooth = true) {
 function handleSend(content) {
   if (content === null) {
     editingMessage.value = null
+    insertTarget.value = null
     return
   }
   if (editingMessage.value) {
     chatStore.updateMessage(chat.value.id, editingMessage.value.id, content)
     editingMessage.value = null
+  } else if (insertTarget.value) {
+    chatStore.insertMessage(chat.value.id, insertTarget.value.messageId, content, insertTarget.value.position)
+    insertTarget.value = null
+    scrollToBottom()
   } else {
     chatStore.addMessage(chat.value.id, content)
   }
@@ -68,6 +80,22 @@ function handleEdit(msg) {
 
 function handleDelete(msg) {
   chatStore.deleteMessage(chat.value.id, msg.id)
+}
+
+function handleMove(msg, direction) {
+  movingMessageId.value = msg.id
+  moveDirection.value = direction
+  chatStore.moveMessage(chat.value.id, msg.id, direction)
+  setTimeout(() => {
+    movingMessageId.value = null
+    moveDirection.value = ''
+  }, 300)
+}
+
+function handleInsert(msg, position) {
+  insertTarget.value = { messageId: msg.id, position }
+  inputRef.value?.setContent('')
+  inputRef.value?.focus()
 }
 
 function deleteChat() {
@@ -93,6 +121,64 @@ async function syncToFile() {
 
 const syncStatus = ref('')
 
+function startEditTitle() {
+  titleInput.value = chat.value.title
+  editingTitle.value = true
+  showActions.value = false
+}
+
+function saveTitle() {
+  const newTitle = titleInput.value.trim()
+  if (newTitle && newTitle !== chat.value.title) {
+    chatStore.updateChatTitle(chat.value.id, newTitle)
+  }
+  editingTitle.value = false
+  titleInput.value = ''
+}
+
+function cancelEditTitle() {
+  editingTitle.value = false
+  titleInput.value = ''
+}
+
+function handleTitleKeydown(e) {
+  if (e.key === 'Enter') {
+    saveTitle()
+  } else if (e.key === 'Escape') {
+    cancelEditTitle()
+  }
+}
+
+function openTagsEditor() {
+  tagInput.value = ''
+  showTagsEditor.value = true
+  showActions.value = false
+}
+
+function closeTagsEditor() {
+  showTagsEditor.value = false
+  tagInput.value = ''
+}
+
+function addTag() {
+  const tag = tagInput.value.trim()
+  if (!tag) return
+  if (!chat.value.tags.includes(tag)) {
+    chatStore.updateChatTags(chat.value.id, [...chat.value.tags, tag])
+  }
+  tagInput.value = ''
+}
+
+function removeTag(tag) {
+  chatStore.updateChatTags(chat.value.id, chat.value.tags.filter(t => t !== tag))
+}
+
+function handleTagKeydown(e) {
+  if (e.key === 'Enter') {
+    addTag()
+  }
+}
+
 function handleFileImport(event) {
   const file = event.target.files[0]
   if (!file) return
@@ -112,6 +198,7 @@ function handleFileImport(event) {
 watch(() => route.params.id, () => {
   editingMessage.value = null
   showActions.value = false
+  editingTitle.value = false
   nextTick(() => scrollToBottom(false))
 })
 
@@ -129,8 +216,14 @@ onMounted(() => {
         </svg>
       </button>
       <div class="header-info">
-        <h2 class="chat-name">{{ chat.title }}</h2>
-        <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
+        <div v-if="editingTitle" class="title-edit-form" @click.stop>
+          <input v-model="titleInput" class="title-input" autofocus @keydown="handleTitleKeydown" @blur="saveTitle" />
+          <button class="title-save-btn" @click="saveTitle">保存</button>
+        </div>
+        <template v-else>
+          <h2 class="chat-name" @dblclick="startEditTitle" :title="`双击编辑标题`">{{ chat.title }}</h2>
+          <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
+        </template>
       </div>
       <div class="header-actions">
         <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
@@ -145,6 +238,12 @@ onMounted(() => {
         </button>
         <div v-if="showActions" class="actions-overlay" @click="showActions = false"></div>
         <div v-if="showActions" class="actions-dropdown">
+          <button @click="startEditTitle()">
+            重命名对话
+          </button>
+          <button @click="openTagsEditor()">
+            管理分类
+          </button>
           <button @click="togglePin(); showActions = false">
             {{ chat.pinned ? '取消置顶' : '置顶对话' }}
           </button>
@@ -163,6 +262,37 @@ onMounted(() => {
             删除对话
           </button>
         </div>
+
+        <!-- Tags Editor Modal -->
+        <div v-if="showTagsEditor" class="tags-editor-overlay" @click="closeTagsEditor">
+          <div class="tags-editor" @click.stop>
+            <div class="tags-editor-header">
+              <h3>管理分类</h3>
+              <button class="close-btn" @click="closeTagsEditor">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div class="current-tags">
+              <span v-for="tag in chat.tags" :key="tag" class="current-tag">
+                {{ tag }}
+                <button @click="removeTag(tag)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </span>
+              <span v-if="!chat.tags.length" class="no-tags">暂无分类</span>
+            </div>
+            <div class="add-tag-form">
+              <input v-model="tagInput" class="tag-input" placeholder="输入分类名称..." @keydown="handleTagKeydown" />
+              <button class="add-tag-btn" @click="addTag">添加</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -172,14 +302,16 @@ onMounted(() => {
           <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
         </div>
         <MessageBubble v-for="msg in messagesWithDates" :key="msg.id" :message="msg" :show-date="msg.showDate"
-          @edit="handleEdit" @delete="handleDelete" />
+          :move-class="movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''"
+          @edit="handleEdit" @delete="handleDelete" @move="handleMove" @insert="handleInsert" />
         <div v-if="!chat.messages.length" class="empty-chat">
           <p>开始输入第一条消息</p>
         </div>
       </div>
     </div>
 
-    <MessageInput ref="inputRef" :editing-message="editingMessage" @send="handleSend" />
+    <MessageInput ref="inputRef" :editing-message="editingMessage" :insert-target="insertTarget" @send="handleSend"
+      @cancel-insert="insertTarget = null" />
   </div>
 </template>
 
@@ -259,6 +391,184 @@ onMounted(() => {
 .sync-toast.import-error {
   color: #c9372e;
   background: #fee;
+}
+
+.title-edit-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-input {
+  border: 1.4px solid black;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-family: serif;
+  font-size: 1rem;
+  outline: none;
+  background: #fff;
+}
+
+.title-save-btn {
+  padding: 6px 14px;
+  background: #c9372e;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-family: serif;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.title-save-btn:hover {
+  background: #a52d25;
+}
+
+.tags-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.tags-editor {
+  background: #fff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  padding: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.tags-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tags-editor-header h3 {
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: #000;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 6px;
+  color: #666;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #f0f0f0;
+  color: #000;
+}
+
+.close-btn svg {
+  width: 100%;
+  height: 100%;
+}
+
+.current-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 8px;
+  min-height: 60px;
+  margin-bottom: 16px;
+}
+
+.current-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #fee;
+  color: #c9372e;
+  border-radius: 16px;
+  font-size: 0.85rem;
+}
+
+.current-tag button {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 3px;
+  color: #c9372e;
+  border-radius: 50%;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.current-tag button:hover {
+  background: #fdd;
+}
+
+.current-tag button svg {
+  width: 100%;
+  height: 100%;
+}
+
+.no-tags {
+  font-size: 0.85rem;
+  color: #999;
+  width: 100%;
+  text-align: center;
+}
+
+.add-tag-form {
+  display: flex;
+  gap: 8px;
+}
+
+.tag-input {
+  flex: 1;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: serif;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.tag-input:focus {
+  border-color: #c9372e;
+}
+
+.add-tag-btn {
+  padding: 8px 20px;
+  background: #c9372e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: serif;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-tag-btn:hover {
+  background: #a52d25;
 }
 
 @keyframes fadeIn {
@@ -498,6 +808,68 @@ onMounted(() => {
 
   .actions-dropdown button:not(:last-child) {
     border-bottom: 1px solid #f0f0f0;
+  }
+
+  .title-edit-form {
+    flex: 1;
+  }
+
+  .title-input {
+    font-size: 1rem;
+    padding: 4px 8px;
+  }
+
+  .title-save-btn {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+  }
+
+  /* Mobile tags editor - full screen modal */
+  .tags-editor-overlay {
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  .tags-editor {
+    width: 95%;
+    max-width: none;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .tags-editor-header h3 {
+    font-size: 1rem;
+  }
+
+  .close-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .current-tags {
+    min-height: 50px;
+    padding: 10px;
+  }
+
+  .current-tag {
+    font-size: 0.8rem;
+    padding: 3px 8px;
+  }
+
+  .current-tag button {
+    width: 16px;
+    height: 16px;
+  }
+
+  .tag-input {
+    font-size: 0.9rem;
+    padding: 7px 10px;
+    min-height: 44px;
+  }
+
+  .add-tag-btn {
+    padding: 7px 16px;
+    font-size: 0.85rem;
+    min-height: 44px;
   }
 }
 

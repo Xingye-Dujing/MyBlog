@@ -11,6 +11,9 @@ const chatStore = useChatStore()
 const searchQuery = ref('')
 const showNewChat = ref(false)
 const newChatTitle = ref('')
+const editingChatId = ref(null)
+const editingTitle = ref('')
+const expandedTags = ref(new Set())
 
 const filteredChats = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -20,6 +23,29 @@ const filteredChats = computed(() => {
     c.title.toLowerCase().includes(q) ||
     c.tags.some(t => t.toLowerCase().includes(q))
   )
+})
+
+// Group chats by tags
+const groupedChats = computed(() => {
+  const groups = {
+    untagged: [],
+    tagged: {}
+  }
+
+  filteredChats.value.forEach(chat => {
+    if (chat.tags.length === 0) {
+      groups.untagged.push(chat)
+    } else {
+      chat.tags.forEach(tag => {
+        if (!groups.tagged[tag]) {
+          groups.tagged[tag] = []
+        }
+        groups.tagged[tag].push(chat)
+      })
+    }
+  })
+
+  return groups
 })
 
 const activeChatId = computed(() => route.params.id || null)
@@ -67,6 +93,51 @@ function formatDate(ts) {
   }
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
+
+function toggleTagExpand(tag) {
+  const newSet = new Set(expandedTags.value)
+  if (newSet.has(tag)) {
+    newSet.delete(tag)
+  } else {
+    newSet.add(tag)
+  }
+  expandedTags.value = newSet
+}
+
+function isExpanded(tag) {
+  return expandedTags.value.has(tag)
+}
+
+function startEditTitle(chat, e) {
+  e.stopPropagation()
+  editingChatId.value = chat.id
+  editingTitle.value = chat.title
+}
+
+function saveTitle(chat, e) {
+  e.stopPropagation()
+  const newTitle = editingTitle.value.trim()
+  if (newTitle && newTitle !== chat.title) {
+    chatStore.updateChatTitle(chat.id, newTitle)
+  }
+  editingChatId.value = null
+  editingTitle.value = ''
+}
+
+function cancelEditTitle(e) {
+  e.stopPropagation()
+  editingChatId.value = null
+  editingTitle.value = ''
+}
+
+function handleEditKey(e) {
+  if (e.key === 'Enter') {
+    saveTitle(chatStore.chats.find(c => c.id === editingChatId.value), e)
+  }
+  if (e.key === 'Escape') {
+    cancelEditTitle(e)
+  }
+}
 </script>
 
 <template>
@@ -99,21 +170,74 @@ function formatDate(ts) {
     </div>
 
     <div class="chat-items">
-      <div v-for="chat in filteredChats" :key="chat.id" class="chat-item" :class="{ active: chat.id === activeChatId }"
-        @click="selectChat(chat)">
-        <div class="chat-item-main">
-          <div class="chat-item-header">
-            <span class="chat-title">
-              <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-              </svg>
-              {{ chat.title }}
-            </span>
-            <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
+      <!-- Untagged chats -->
+      <div v-if="groupedChats.untagged.length" class="chat-group">
+        <div class="group-header" @click="toggleTagExpand('untagged')">
+          <svg class="expand-icon" :class="{ expanded: isExpanded('untagged') }" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <span>未分类</span>
+          <span class="group-count">{{ groupedChats.untagged.length }}</span>
+        </div>
+        <div v-if="isExpanded('untagged')" class="group-content">
+          <div v-for="chat in groupedChats.untagged" :key="chat.id" class="chat-item"
+            :class="{ active: chat.id === activeChatId }" @click="selectChat(chat)">
+            <div class="chat-item-main">
+              <div class="chat-item-header">
+                <span v-if="editingChatId === chat.id" class="edit-title-container" @click.stop>
+                  <input v-model="editingTitle" class="edit-title-input" autofocus @keydown="handleEditKey"
+                    @blur="saveTitle(chat, $event)" />
+                </span>
+                <span v-else class="chat-title" @dblclick="startEditTitle(chat, $event)">
+                  <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                  </svg>
+                  {{ chat.title }}
+                </span>
+                <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
+              </div>
+              <p class="chat-preview">{{ getLastMessage(chat) }}</p>
+              <div v-if="chat.tags.length" class="chat-tags">
+                <span v-for="tag in chat.tags.slice(0, 3)" :key="tag" class="tag">{{ tag }}</span>
+              </div>
+            </div>
           </div>
-          <p class="chat-preview">{{ getLastMessage(chat) }}</p>
-          <div v-if="chat.tags.length" class="chat-tags">
-            <span v-for="tag in chat.tags.slice(0, 3)" :key="tag" class="tag">{{ tag }}</span>
+        </div>
+      </div>
+
+      <!-- Tagged chats -->
+      <div v-for="(chats, tag) in groupedChats.tagged" :key="tag" class="chat-group">
+        <div class="group-header" @click="toggleTagExpand(tag)">
+          <svg class="expand-icon" :class="{ expanded: isExpanded(tag) }" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <span>{{ tag }}</span>
+          <span class="group-count">{{ chats.length }}</span>
+        </div>
+        <div v-if="isExpanded(tag)" class="group-content">
+          <div v-for="chat in chats" :key="chat.id" class="chat-item" :class="{ active: chat.id === activeChatId }"
+            @click="selectChat(chat)">
+            <div class="chat-item-main">
+              <div class="chat-item-header">
+                <span v-if="editingChatId === chat.id" class="edit-title-container" @click.stop>
+                  <input v-model="editingTitle" class="edit-title-input" autofocus @keydown="handleEditKey"
+                    @blur="saveTitle(chat, $event)" />
+                </span>
+                <span v-else class="chat-title" @dblclick="startEditTitle(chat, $event)">
+                  <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                  </svg>
+                  {{ chat.title }}
+                </span>
+                <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
+              </div>
+              <p class="chat-preview">{{ getLastMessage(chat) }}</p>
+              <div v-if="chat.tags.length" class="chat-tags">
+                <span v-for="t in chat.tags.slice(0, 3)" :key="t" class="tag">{{ t }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -291,6 +415,66 @@ function formatDate(ts) {
   overflow-y: auto;
 }
 
+.chat-group {
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.group-header:hover {
+  background: #f0f0f0;
+}
+
+.expand-icon {
+  width: 16px;
+  height: 16px;
+  color: #999;
+  transition: transform 0.2s;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.group-count {
+  font-size: 0.75rem;
+  color: #bbb;
+  margin-left: auto;
+}
+
+.group-content {
+  background: #fff;
+}
+
+.edit-title-container {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-title-input {
+  width: 100%;
+  border: 1.5px solid #409eff;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: serif;
+  font-size: 0.95rem;
+  outline: none;
+  background: #fff;
+}
+
+.edit-title-input:focus {
+  border-color: #409eff;
+}
+
 .chat-item {
   padding: 14px 20px;
   border-bottom: 1px solid #f5f5f5;
@@ -466,6 +650,22 @@ function formatDate(ts) {
 
   .footer-link {
     min-height: 44px;
+  }
+
+  .edit-title-input {
+    font-size: 0.95rem;
+    padding: 6px 10px;
+    min-height: 44px;
+  }
+
+  .group-header {
+    padding: 12px 16px;
+    min-height: 44px;
+  }
+
+  .expand-icon {
+    width: 18px;
+    height: 18px;
   }
 }
 </style>
