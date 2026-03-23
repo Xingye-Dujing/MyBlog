@@ -61,6 +61,63 @@ export function devApiPlugin() {
           res.end(JSON.stringify({ error: err.message, data: [] }))
         }
       })
+
+      // Save comments to src/data/comments.json
+      server.middlewares.use('/api/save-comments', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }))
+          return
+        }
+
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body)
+            const filePath = path.resolve(process.cwd(), 'src/data/comments.json')
+            const dir = path.dirname(filePath)
+            if (!fs.existsSync(dir)) {
+              fs.mkdirSync(dir, { recursive: true })
+            }
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true, path: filePath }))
+          } catch (err) {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: err.message }))
+          }
+        })
+      })
+
+      // Load comments from src/data/comments.json
+      server.middlewares.use('/api/load-comments', (req, res) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }))
+          return
+        }
+
+        try {
+          const filePath = path.resolve(process.cwd(), 'src/data/comments.json')
+          if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf-8')
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(data)
+          } else {
+            res.statusCode = 404
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'File not found', data: [] }))
+          }
+        } catch (err) {
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: err.message, data: [] }))
+        }
+      })
     }
   }
 }

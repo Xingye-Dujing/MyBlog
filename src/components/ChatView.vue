@@ -2,12 +2,15 @@
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
+import { useCommentStore } from '@/stores/comment'
 import MessageBubble from '@/components/MessageBubble.vue'
 import MessageInput from '@/components/MessageInput.vue'
+import CommentSection from '@/components/CommentSection.vue'
 
 const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
+const commentStore = useCommentStore()
 
 const messagesContainer = ref(null)
 const inputRef = ref(null)
@@ -80,6 +83,9 @@ function handleEdit(msg) {
 
 function handleDelete(msg) {
   chatStore.deleteMessage(chat.value.id, msg.id)
+  // Delete associated comments
+  commentStore.deleteMessageComments(chat.value.id, msg.id)
+  commentStore.syncToFile()
 }
 
 function handleMove(msg, direction) {
@@ -101,6 +107,9 @@ function handleInsert(msg, position) {
 function deleteChat() {
   if (!chat.value) return
   chatStore.deleteChat(chat.value.id)
+  // Delete all comments for this chat
+  commentStore.deleteChatComments(chat.value.id)
+  commentStore.syncToFile()
   router.push({ name: 'home' })
 }
 
@@ -195,10 +204,20 @@ function handleFileImport(event) {
   })
 }
 
-watch(() => route.params.id, () => {
+watch(() => route.params.id, (newId, oldId) => {
   editingMessage.value = null
   showActions.value = false
   editingTitle.value = false
+  // Filter orphaned comments when switching chats
+  if (oldId && newId) {
+    const validChatIds = chatStore.chats.map(c => c.id)
+    const validMessageMap = {}
+    chatStore.chats.forEach(c => {
+      validMessageMap[c.id] = c.messages.map(m => m.id)
+    })
+    commentStore.filterOrphanedComments(validChatIds, validMessageMap)
+    commentStore.syncToFile()
+  }
   nextTick(() => scrollToBottom(false))
 })
 
@@ -302,11 +321,13 @@ onMounted(() => {
           <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
         </div>
         <MessageBubble v-for="msg in messagesWithDates" :key="msg.id" :message="msg" :show-date="msg.showDate"
+          :chat-id="chat.id"
           :move-class="movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''"
           @edit="handleEdit" @delete="handleDelete" @move="handleMove" @insert="handleInsert" />
         <div v-if="!chat.messages.length" class="empty-chat">
           <p>开始输入第一条消息</p>
         </div>
+        <CommentSection :chat-id="chat.id" />
       </div>
     </div>
 
@@ -675,6 +696,9 @@ onMounted(() => {
   max-width: 900px;
   margin: 0 auto;
   padding: 0 24px;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-tags-header {

@@ -1,11 +1,13 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/composables/useMarkdown'
+import MessageComments from '@/components/MessageComments.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
   showDate: { type: Boolean, default: false },
-  moveClass: { type: String, default: '' }
+  moveClass: { type: String, default: '' },
+  chatId: { type: String, default: '' }
 })
 
 const emit = defineEmits(['edit', 'delete', 'move', 'insert'])
@@ -107,6 +109,7 @@ function formatTimelineTime(ts) {
           </span>
         </div>
         <div class="message-actions">
+          <MessageComments v-if="chatId" :chat-id="chatId" :message-id="message.id" />
           <button class="action-btn" title="上移" @click="emit('move', message, 'up')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="18 15 12 9 6 15" />

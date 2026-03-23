@@ -155,6 +155,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!chat) return
     chat.messages = chat.messages.filter(m => m.id !== messageId)
     chat.updatedAt = Date.now()
+    // Note: Comment deletion is handled by commentStore to maintain separation
   }
 
   function deleteChat(chatId) {
@@ -162,6 +163,7 @@ export const useChatStore = defineStore('chat', () => {
     if (activeChatId.value === chatId) {
       activeChatId.value = null
     }
+    // Note: Comment deletion is handled by commentStore to maintain separation
   }
 
   function updateChat(chatId, updates) {
