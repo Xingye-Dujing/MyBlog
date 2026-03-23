@@ -282,6 +282,13 @@ function handleEditKey(e) {
     </div>
 
     <div class="list-footer">
+      <router-link to="/timeline" class="footer-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        <span>时间线</span>
+      </router-link>
       <router-link to="/about" class="footer-link">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -639,6 +646,8 @@ function handleEditKey(e) {
 .list-footer {
   border-top: 1px solid #f0f0f0;
   padding: 12px 20px;
+  display: flex;
+  gap: 8px;
 }
 
 .footer-link {
@@ -650,6 +659,8 @@ function handleEditKey(e) {
   padding: 8px 12px;
   border-radius: 6px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
+  justify-content: center;
 }
 
 .footer-link:hover {
