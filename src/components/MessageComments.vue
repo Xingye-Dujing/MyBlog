@@ -250,6 +250,7 @@ function formatTime(timestamp) {
 }
 
 .comments-list {
+  padding-right: 2px;
   max-height: 300px;
   overflow-y: auto;
   margin-bottom: 12px;

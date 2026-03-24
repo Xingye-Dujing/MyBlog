@@ -346,6 +346,10 @@ function setViewMode(mode) {
   border-radius: 3px;
 }
 
+.message-text :deep(img) {
+  max-width: 300px;
+}
+
 .timeline-footer {
   border-top: 1px solid #e0e0e0;
   padding: 12px 24px;
@@ -396,6 +400,10 @@ function setViewMode(mode) {
 
   .timeline-message {
     padding: 12px 16px;
+  }
+
+  .message-text :deep(img) {
+    max-width: 200px;
   }
 
   .message-time {
