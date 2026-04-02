@@ -338,6 +338,7 @@ function setViewMode(mode) {
 .message-text :deep(code) {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 0.85em;
+  word-break: break-word;
 }
 
 .message-text :deep(:not(pre) > code) {
@@ -348,6 +349,10 @@ function setViewMode(mode) {
 
 .message-text :deep(img) {
   max-width: 300px;
+}
+
+.message-text :deep(a) {
+  word-break: break-word;
 }
 
 .timeline-footer {

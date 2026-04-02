@@ -255,7 +255,7 @@ function formatTimelineTime(ts) {
 }
 
 .message-bubble {
-  padding: 16px 20px 8px;
+  padding: 16px 20px 8px 28px;
   border-left: 3px solid transparent;
   border-radius: 2px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -305,6 +305,7 @@ function formatTimelineTime(ts) {
   text-decoration: underline;
   text-underline-offset: 3px;
   transition: opacity 0.2s;
+  word-wrap: break-word;
 }
 
 .message-content :deep(a:hover) {
@@ -388,9 +389,7 @@ function formatTimelineTime(ts) {
 
 /* Desktop: uniform height, auto width */
 .message-content :deep(p:has(img) img) {
-  height: 280px;
-  width: auto;
-  object-fit: cover;
+  object-fit: contain;
   margin: 0;
   border: 2px solid #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);

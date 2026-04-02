@@ -334,7 +334,6 @@ function formatTime(timestamp) {
   background: #e8e8e8;
   padding: 2px 4px;
   border-radius: 3px;
-  font-size: 0.8em;
   color: #c9372e;
 }
 
