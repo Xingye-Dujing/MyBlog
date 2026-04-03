@@ -92,7 +92,7 @@
     "id": "chat-1775041780538",
     "title": "编译原理",
     "createdAt": 1775041780538,
-    "updatedAt": 1775131780614,
+    "updatedAt": 1775239206920,
     "tags": [
       "计算机",
       "编程"
@@ -220,6 +220,184 @@
           1775131665216,
           1775131780614
         ]
+      },
+      {
+        "id": "msg-1775143627246-eijr",
+        "content": "![10.png](/img/C-interpreter/10.png)\n\n这部分的完整代码是\n```C\nint main(int argc, char** argv)\n{\n    // allocate memory for virtual machine\n    if (!((text = head_text = malloc(poolsize))))\n    {\n        printf(\"could not malloc(%d) for text area\\n\", poolsize);\n        return -1;\n    }\n    if (!((stack = malloc(poolsize))))\n    {\n        printf(\"could not malloc(%d) for stack area\\n\", poolsize);\n        return -1;\n    }\n\n    memset(text, 0, poolsize);\n    memset(stack, 0, poolsize);\n\n    bp = sp = (intptr_t*)((char*)stack + poolsize);\n    ax = 0;\n\n    int i = 0;\n    text[i++] = IMM;\n    text[i++] = 10;\n    text[i++] = PUSH;\n    text[i++] = IMM;\n    text[i++] = 20;\n    text[i++] = ADD;\n    text[i++] = PUSH;\n    text[i++] = EXIT;\n    pc = text;\n\n    return eval();\n}\n```\n\n注意，不能有 `program()`。",
+        "timestamp": 1775143627246,
+        "editHistory": [
+          1775143640273
+        ]
+      },
+      {
+        "id": "msg-1775146416700-8hlp",
+        "content": "`手把手教你构建 C 语言编译器（3）- 词法分析器` 这一章的代码少了初始化 `symbols`：\n\n``` C\n    if (!((symbols = malloc(poolsize))))\n    {\n        printf(\"could not malloc(%d) for symbol table\\n\", poolsize);\n        return -1;\n    }\n\n    memset(symbols, 0, poolsize);\n```",
+        "timestamp": 1775146416700,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775152357700-mxcy",
+        "content": "`手把手教你构建 C 语言编译器（3）- 词法分析器` 我为词法分析器增加了分析结果的显示功能。\n\n测试文件 `hello.c` 的内容如下：\n\n![11.png](/img/C-interpreter/11.png)\n\n程序运行结果如下：\n\n![12.png](/img/C-interpreter/12.png)\n![13.png](/img/C-interpreter/13.png)",
+        "timestamp": 1775152357700,
+        "editHistory": [
+          1775152372102
+        ]
+      },
+      {
+        "id": "msg-1775152599496-bjug",
+        "content": "经过几个小时的努力，分支成了这样：\n\n![14.png](/img/C-interpreter/14.png)\n\n没有 `Chapter-4` 分支是因为第四章的内容并不需要，仅供了解即可。",
+        "timestamp": 1775152599496,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775152709485-sa67",
+        "content": "今天就到这里了，后面继续加油！",
+        "timestamp": 1775152709485,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775206578279-h1xc",
+        "content": "奥对，忘了说了。这个作者的代码只能在 Linux 上编译，如果要在 Windows 上进行编译，需要将 `#include <unistd.h>` 改成 `#include <io.h>`，其它都不用改。为了实现在哪一个系统上都能编译，我们可以写成：\n\n```C\n#ifdef _WIN32\n#include <io.h>\n#else\n#include <unistd.h>\n#endif\n```",
+        "timestamp": 1775206578279,
+        "editHistory": [
+          1775206590024
+        ]
+      },
+      {
+        "id": "msg-1775207108773-txo9",
+        "content": "此外，代码实现中还有很多细节，教程里都没有讲到。如果后面有时间，我将针对代码做一些细节的补充讲述。",
+        "timestamp": 1775207108773,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775208102987-i4ru",
+        "content": "```C\nvoid global_declaration() {\n    // global_declaration ::= enum_decl | variable_decl | function_decl\n    //\n    // enum_decl ::= 'enum' [id] '{' id ['=' 'num'] {',' id ['=' 'num'} '}'\n    //\n    // variable_decl ::= type {'*'} id { ',' {'*'} id } ';'\n    //\n    // function_decl ::= type {'*'} id '(' parameter_decl ')' '{' body_decl '}'\n```\n\n`enum_decl ::= 'enum' [id] '{' id ['=' 'num'] {',' id ['=' 'num'} '}'` 应当为 `// enum_decl ::= 'enum' [id] '{' id ['=' 'num'] {',' id ['=' 'num']} '}'`。少一个 `]`",
+        "timestamp": 1775208102987,
+        "editHistory": [
+          1775208111327
+        ]
+      },
+      {
+        "id": "msg-1775210096035-3h9x",
+        "content": "```C\n            current_id[Class] = Glo; // global variable\n            current_id[Value] = (int)data; // assign memory address\n            data = data + sizeof(int);\n```\n\n理论上讲，最节约内存的写法是依据 `type` 的值进行具体化的类型转换。但这样比较麻烦。`type` 代指类型的最大所需空间是 `int` (32位机器上，指针与 `int` 所需字节相同，`char` 所需比 `int` 小)，所以我们一律设置成 `int` 是够用的。就是 `type` 为 `Char` 时，会有一点内存浪费。",
+        "timestamp": 1775210096035,
+        "editHistory": [
+          1775210103746
+        ]
+      },
+      {
+        "id": "msg-1775210243680-7rvt",
+        "content": "又忘说了。为了适配 64 位机器，作者的代码是一律将 `int` 换成 `intptr_t`。但这种代码太具有破环性了，我不喜欢。我是在需要 `intptr_t` 的地方使用 `intptr_t`。可以用 `int`  的地方使用 `int`。",
+        "timestamp": 1775210243680,
+        "editHistory": [
+          1775210269568
+        ]
+      },
+      {
+        "id": "msg-1775210757294-5c0c",
+        "content": "```C\n    // parse type information\n    if (token == Int) {\n        match(Int);\n    }\n    else if (token == Char) {\n        match(Char);\n        basetype = CHAR;\n    }\n```\n\n这里有问题，它没有考虑出现不支持的类型。如果类型指定不是 `Int` 或 `Char`，我们应当报错并退出。\n\n```C\n    // parse type information\n    if (token == Int) {\n        match(Int);\n    }\n    else if (token == Char) {\n        match(Char);\n        basetype = CHAR;\n    }\n    else {\n        printf(\"%d: bad type\\n\", line);\n        exit(-1);\n    }\n```",
+        "timestamp": 1775210757294,
+        "editHistory": [
+          1775210764899
+        ]
+      },
+      {
+        "id": "msg-1775211213708-dovb",
+        "content": "为了能自举，一定要写成下面这样：\n\n```C\n    int i;\n    i = 0;\n```\n\n将声明与赋值分开。",
+        "timestamp": 1775211213708,
+        "editHistory": [
+          1775211552538
+        ]
+      },
+      {
+        "id": "msg-1775211546124-tp93",
+        "content": "```C\n    int type; // tmp, actual type for variable\n    int i; // tmp\n```\n\n下面的 `int i;` 没用到，删去。",
+        "timestamp": 1775211546124,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775213936101-lyf7",
+        "content": "我们既然构建的是 C 语言的解释器，那么我们也可以写一个像 Python 一样的交互式 C 语言代码运行程序。\n\nTODO：写 C 语言的 REPL 环境。",
+        "timestamp": 1775213936101,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775215510936-5s0c",
+        "content": "`手把手教你构建 C 语言编译器（5）- 变量定义`  我为这一章的内容增加了分析结果的显示功能，以此来检查代码是否有误。\n\n测试文件 `test.c` 的内容如下：\n\n```C\nenum Color { RED, GREEN, BLUE };\n\nenum Number { ZERO = 0, ONE = 1, TWO = 2 };\n\nenum { A = 2, B };\n\nint a;\nint b, c, d;\nchar e;\nchar f, g;\n\nint *ptr;\nint **pptr;\nchar *cptr;\n\nint x, *y, z;\n```\n\n程序运行结果如下：\n\n![15.png](/img/C-interpreter/15.png)\n![16.png](/img/C-interpreter/16.png)",
+        "timestamp": 1775215510936,
+        "editHistory": [
+          1775215625322
+        ]
+      },
+      {
+        "id": "msg-1775216097539-r58q",
+        "content": "> 即在这断代码之前，我们已经为当前的标识符\n\n错别字",
+        "timestamp": 1775216097539,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775216746044-m1vt",
+        "content": "注意，一定先变量定义，再写语句\n\n> 我们实现的 C 语言与现代的 C 语言不太一致，我们需要所有的变量定义出现在所有的语句之前。",
+        "timestamp": 1775216746044,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775218048175-03uc",
+        "content": "这个解释器的实现和一般的编译器实现思路不一样，这个解释器把词法分析、语法分析以及代码生成全部杂糅到一块了。",
+        "timestamp": 1775218048175,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775219513595-z4rf",
+        "content": "才发现，为了自举，`+=` 也不能在代码中出现。算了，都写这么多了。我后面将 `+=` 实现就好了，它也不难实现。",
+        "timestamp": 1775219513595,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775231936457-z3b9",
+        "content": "如果看不懂 `CALL` `ENT` `LEA` `ADJ` `LEV` 指令是如何使用的，也就是说不懂汇编层面的函数调用实现，那可以看看 https://www.bilibili.com/video/BV14U4y1J76i/?spm_id_from=333.337.search-card.all.click&vd_source=6b9463a509cd8a44c1a15747be382433。 函数调用的讲解从 18：10 开始，个人认为讲的还是蛮清楚的。这个视频设置的指令名称有些和我们的不一致，依据指令作用对应即可，并不影响理解。",
+        "timestamp": 1775231936457,
+        "editHistory": [
+          1775231952604
+        ]
+      },
+      {
+        "id": "msg-1775233825008-nl4k",
+        "content": "函数调用大致使用了以下指令并经历了以下过程：\n\n```\nFunction call:\n1. PUSH: pass arguments to stack (Caller code)\n2. CALL: jump to function (Caller code)\n3. ENT: make space for local variables (Callee code)\n4. LEA: get arguments address (Callee code)\n5. LEV: restore call frame and PC (Callee code)\n6. ADJ: remove arguments from frame (Caller code)\n```\n\n其中 3-5 的汇编指令是被调用函数的代码，1、2、6 是外部调用方的代码。哪部分是谁的代码将会影响后面的代码生成环节，务必清楚。",
+        "timestamp": 1775233825008,
+        "editHistory": [
+          1775233980455
+        ]
+      },
+      {
+        "id": "msg-1775237273131-1mr4",
+        "content": "`手把手教你构建 C 语言编译器（6）- 函数定义` 同样的，我也做了一个结果显示功能，用于测试代码的正确性。\n\n测试文件 `test.c` 的内容如下：\n\n```C\nint add(int a, int b) {\n    int result;\n}\n\nint multiply(int x, int y, int z) {\n    int temp1;\n    int temp2;\n    int product;\n}\n```\n\n程序运行结果如下：\n\n![17.png](/img/C-interpreter/17.png)\n![18.png](/img/C-interpreter/18.png)",
+        "timestamp": 1775237273131,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775238404809-w9ez",
+        "content": "在上面的程序结果显示中，我们要注意以下几个东西：\n\n1. `index` 为 `bp index - 1` 的位置不是空的，存的是函数执行完后要返回的地址！结果分析只显示参数和局部变量的相关信息，所以 `index` 为 `bp index - 1` 的情况并未显示。此外，现在的代码也没有处理到这一步，无论如何 `index` 为 `bp index - 1` 的位置的内容现在都无法显示出来。\n2. 为什么参数的 `LEA` 指令没有明确给出后面的数值，而局部变量的给出了：因为参数显示的时候, `bp index` 的值还未计算完毕。只有当参数全部遍历完，`bp index` 的值才能知道。\n3.  由 `current_id[Value] = (intptr_t)(text + 1);` 和 `++text` 可知，`text` 指向填充过的最后一个代码。但这会导致一个问题，`text` 的第一个位置永远为空，因为 `text` 还未使用就先 `++`了。所以我推荐 `text` 改成指向下一个代码要填充的地址，以节省一个 `intptr_t` 空间。相应的，代码换成 `current_id[Value] = text;` 和 `text++`。",
+        "timestamp": 1775238404809,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775238635258-6hu8",
+        "content": "`Chapter-7` 及之后分支采纳在上一条消息 3 中提出的方案：\n\n1. 将 `current_id[Value] = (intptr_t)(text + 1);` 改成 `current_id[Value] = text;`\n2. 统一将 `++text` 换成 `text++`。",
+        "timestamp": 1775238635258,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775239121503-gcie",
+        "content": "又一天的努力，分支提交情况变成这样了：\n\n![19.png](/img/C-interpreter/19.png)\n\n因为原先全是 `Done` 不好分辨，所以我又重新设置了相应分支的 `commit` 信息。作为结果就导致了时间上的混乱（`Chapter-5` 比 `Chapter-1` 等的时间还要早）。",
+        "timestamp": 1775239121503,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775239206920-orau",
+        "content": "马上马上就要搞定啦！明天继续加油哦！",
+        "timestamp": 1775239206920,
+        "editHistory": []
       }
     ]
   },
@@ -982,7 +1160,7 @@
     "id": "chat-1774163734215",
     "title": "生活",
     "createdAt": 1774163734215,
-    "updatedAt": 1775131012225,
+    "updatedAt": 1775206681754,
     "tags": [
       "我",
       "生活"
@@ -1103,6 +1281,12 @@
         "id": "msg-1775131012225-hpjw",
         "content": "刚刚边吃饭边看了《你是迟来的欢喜》。手机号送的芒果会员终于用上了。这剧还算好看的，快快更新吧。（前几天一直在看，今天看完最新一集了，才想起来记录一下这部剧。）",
         "timestamp": 1775131012225,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775206681754-hm3v",
+        "content": "放假啦，放假啦。今天的天气非常的好，我心情也是非常的美丽啊！",
+        "timestamp": 1775206681754,
         "editHistory": []
       }
     ]

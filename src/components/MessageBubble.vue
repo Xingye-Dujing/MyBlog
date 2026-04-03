@@ -733,8 +733,6 @@ function formatTimelineTime(ts) {
 
   /* Mobile: uniform width, auto height to maintain aspect ratio */
   .message-content :deep(p:has(img) img) {
-    width: 280px;
-    max-width: 90%;
     height: auto;
     align-self: center;
   }
