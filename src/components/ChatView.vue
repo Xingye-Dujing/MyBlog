@@ -69,11 +69,9 @@ function handleSend(content) {
   } else if (insertTarget.value) {
     chatStore.insertMessage(chat.value.id, insertTarget.value.messageId, content, insertTarget.value.position)
     insertTarget.value = null
-    scrollToBottom()
   } else {
     chatStore.addMessage(chat.value.id, content)
   }
-  scrollToBottom()
 }
 
 function handleEdit(msg) {
