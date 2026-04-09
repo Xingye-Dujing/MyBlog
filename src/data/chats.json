@@ -1,5 +1,35 @@
 [
   {
+    "id": "chat-1775741226040",
+    "title": "Tampermonkey 油猴",
+    "createdAt": 1775741226040,
+    "updatedAt": 1775742192529,
+    "tags": [
+      "实用"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1775741314445-7y6x",
+        "content": "https://www.tampermonkey.net/\n\n它是最流行的浏览器扩展之一。它允许用户自定义并增强您最喜爱的网页的功能。用户脚本是小型 JavaScript 程序，可用于向网页添加新功能或修改现有功能。使用 Tampermonkey，您可以轻松在任何网站上创建、管理和运行这些用户脚本。",
+        "timestamp": 1775741314445,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775742080751-hzi7",
+        "content": "在安装好 Tampermonkey 之后，下载使用 Js 脚本之前，必须要执行两步操作，否则 Js 脚本不起作用：\n\n1. 在浏览器的拓展程序页面开启开发者模式（开关一般在页面右上角）：\n\n![01.png](/img/monkey/01.png)\n\n2. 允许油猴运行用户脚本：\n\n（对右上角的油猴图标右键，点击 `管理拓展程序`；开启 `允许运行用户脚本`）\n\n![02.png](/img/monkey/02.png)\n![03.png](/img/monkey/03.png)\n\n执行完上面两步之后，最后关闭重新启动一下浏览器。",
+        "timestamp": 1775742080751,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775742192529-bjym",
+        "content": "https://www.tampermonkey.net/faq.php?q=Q209\n\n上面是谷歌浏览器的操作演示，其它浏览器可以看这个文档。",
+        "timestamp": 1775742192529,
+        "editHistory": []
+      }
+    ]
+  },
+  {
     "id": "chat-1775644864036",
     "title": "raylib",
     "createdAt": 1775644864036,
@@ -68,7 +98,7 @@
     "id": "chat-1775569576971",
     "title": "操作系统",
     "createdAt": 1775569576971,
-    "updatedAt": 1775657767718,
+    "updatedAt": 1775754257942,
     "tags": [
       "编程",
       "计算机"
@@ -123,9 +153,145 @@
         "editHistory": []
       },
       {
-        "id": "msg-1775657767718-25bs",
-        "content": "`07-bootsector-disk` 看不懂，我需要更详细的教程。",
-        "timestamp": 1775657767718,
+        "id": "msg-1775744422705-wv9d",
+        "content": "下面是一份关于 BIOS 中断调用 `int 0x13` 功能号 `0x02` 的技术文档，主要用于在实模式（如 DOS 环境或操作系统引导阶段）下从磁盘读取扇区数据。这是在 `07-bootsector-disk` 中提到的，https://stanislavs.org/helppc/int_13-2.html 。\n\n```\n                                     INT 13,2 - Read Disk Sectors\n\n输入参数（调用前设置）：\n\tAH = 02 ---- 指定功能号为“读取扇区”\n\tAL = number of sectors to read\t(1-128 dec.) ---- 要读取的扇区数量（十进制 1-128）\n\tCH = track/cylinder number  (0-1023 dec., see below) ---- 磁道/柱面号（十进制 0-1023，详见下文说明）\n\tCL = sector number  (1-17 dec.) ---- 扇区号（十进制 1-17，注意：扇区号从 1 开始，而非 0）\n\tDH = head number  (0-15 dec.) ---- 磁头号（十进制 0-15）\n\tDL = drive number (0=A:, 1=2nd floppy, 80h=drive 0, 81h=drive 1)\n                                                                ---- 驱动器号（0=A:，1=第二个软驱，80h=硬盘 0，81h=硬盘 1）\n\tES:BX = pointer to buffer ---- 指向内存缓冲区的指针（数据将被读入此处）\n\n\n\ton return:  返回值（调用后）：\n\tAH = status  (see INT 13,STATUS) ---- 状态码（参见 INT 13,STATUS 相关文档）\n\tAL = number of sectors read ---- 实际读取的扇区数量\n\tCF = 0 if successful ----  (进位标志) 成功\n\t   = 1 if error ---- 发生错误\n\n\n\t- BIOS disk reads should be retried at least three times and the\n\t  controller should be reset upon error detection\n            ---- BIOS 磁盘读取在检测到错误时应至少重试三次，并且应在检测到错误时复位控制器\n\t- be sure ES:BX does not cross a 64K segment boundary or a\n\t  DMA boundary error will occur\n            ---- 务必确保 ES:BX 指向的缓冲区不跨越 64K 段边界，否则会发生 DMA 边界错误\n\t- many programming references list only floppy disk register values\n            ---- 许多编程参考资料仅列出了软盘驱动器的寄存器值\n\t- only the disk number is checked for validity\n            ---- 仅检查驱动器号的有效性\n\t- the parameters in CX change depending on the number of cylinders;\n\t  the track/cylinder number is a 10 bit value taken from the 2 high\n\t  order bits of CL and the 8 bits in CH (low order 8 bits of track):\n            ---- CX 寄存器中的参数会根据柱面数量而变化；磁道/柱面号是一个 10 位的值，由 CL 的高 2 位和 CH 的 8 位组成（磁道的低 8 位）\n                 CX 寄存器位图解：\n\n\t  |F|E|D|C|B|A|9|8|7|6|5-0|  CX\n\t   | | | | | | | | | |\t`-----\tsector number ----- 位 7-0 (CL 的低 6 位)：扇区号\n\t   | | | | | | | | `---------  high order 2 bits of track/cylinder ---- 位 7-6 (CL 的高 2 位)：磁道/柱面号的高 2 位\n\t   `------------------------  low order 8 bits of track/cyl number ---- 位 7-0 (CH 的全部 8 位)：磁道/柱面号的低 8 位\n```\n\n千问针对这个文档做出以下补充：\n1. 这段文档描述了早期 PC 架构中直接与硬件打交道的核心方式。在现代操作系统（如 Windows, Linux）中，应用程序通常通过文件系统 API 读取文件，但在编写操作系统内核、引导加载程序（Boot loader）或进行底层系统维护时，`INT 13h` 是至关重要的。\n2. CHS 寻址模式：该中断使用的是 CHS 寻址，即通过“柱面-磁头-扇区”的物理坐标来定位数据，而不是现代常用的 LBA（逻辑块寻址）。CH (Cylinder High) 和 CL (Cylinder Low + Sector) 的组合非常特殊。由于早期设计限制，柱面号被拆分了。你需要将 `CL` 的最高两位（Bit 6, 7）提取出来，作为柱面号的第 9、10 位，剩下的位作为扇区号。柱面号 (Cylinder) = `(CL & 0xC0) << 2 | CH`；扇区号 (Sector) = `CL & 0x3F`。\n3. 内存缓冲区限制 (ES:BX)：文档特别强调了 DMA 边界错误。在早期的 ISA 总线架构中，DMA 控制器只能处理 64KB 以内的数据传输。如果 ES:BX 指向的缓冲区从 `0x0000:0xFF00` 开始，读取的数据量如果超过了 `0x100` 字节，就会跨越到下一个 64KB 段，导致 DMA 传输失败或数据写入错误的内存位置。解决方法：通常将缓冲区地址对齐到 64KB 边界，或者确保读取的数据量足够小。\n4. 驱动器号：00h, 01h: 软盘驱动器 A: 和 B:。80h, 81h: 物理硬盘。这是 BIOS 识别硬盘的标准方式。\n5. 错误处理：文档建议“重试三次并复位控制器”。这是因为早期的机械硬盘和软盘非常不稳定，磁头未对准或磁盘表面瑕疵都可能导致读取失败，重试往往能解决问题。",
+        "timestamp": 1775744422705,
+        "editHistory": [
+          1775745749850,
+          1775746766451,
+          1775746932386
+        ]
+      },
+      {
+        "id": "msg-1775746039694-c4j9",
+        "content": "注意文档中的这里：\n\n```\n\tCF = 0 if successful ----  (进位标志) 成功\n\t   = 1 if error ---- 发生错误\n```\n\n`CF` 搭配 `jc` 实现错误处理的跳转。\n\n`jc` 的全称是 Jump if Carry（如果进位则跳转）。\n\n当 CPU 的进位标志位（Carry Flag, CF） 的值为 1 时，程序会跳转到指定的目标地址执行；如果 CF 为 0，则程序会继续顺序执行下一条指令。",
+        "timestamp": 1775746039694,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775746198168-lnfr",
+        "content": "`0x09000` 与 `0x8000` 一样，位于 Free (648 KB) 区域。`07-bootsector-disk` 中用到了这个地址。",
+        "timestamp": 1775746198168,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775746325415-h7s6",
+        "content": "上面的 `INT 13,2 - Read Disk Sectors` 文档必须认真看，否则看不懂代码。",
+        "timestamp": 1775746325415,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775746628141-78fb",
+        "content": "扇区划分的基本规则：\n\n在 x86 架构的标准引导过程中，物理存储（在这里是 `nasm` 生成的 `.bin` 文件）被逻辑上切分为固定大小的块，称为扇区。\n\n扇区大小：固定为 512 字节。\n\n第 1 个扇区（引导扇区/MBR）：文件的 第 0 字节 到 第 511 字节。\n\n第 2 个扇区：文件的 第 512 字节 到 第 1023 字节。\n\n第 N 个扇区：从 `(N-1) * 512` 开始，长度为 512 字节。\n\n因而扇区的划分是自动进行的。我们写了几个 512 字节就有几个扇区。",
+        "timestamp": 1775746628141,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775746879806-ad4l",
+        "content": "```\n\ton return:\n\t...\n\tAL = number of sectors read ---- 实际读取的扇区数量\n\t...\n```\n\n对应代码\n\n```nasm\n    pop dx\n    cmp al, dh    ; BIOS 还会将 'al' 设置为读取的扇区数。进行比较。\n    jne sectors_error\n```",
+        "timestamp": 1775746879806,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775747123459-hoil",
+        "content": "另外提一句，我们一定要清楚不同函数的参数传递使用的是哪个/哪些寄存器。比如 `print` 和 `print_nl` 均使用 `bx` 传参；`disk_load` 使用 `dh` 传参；`print_hex` 使用 `dx` 传参。",
+        "timestamp": 1775747123459,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775747700831-jwob",
+        "content": "```\n        on return:  返回值（调用后）：\n\tAH = status  (see INT 13,STATUS) ---- 状态码（参见 INT 13,STATUS 相关文档）\n```\n\n`AH` 中保存错误码，在此处就是 `0x02`。\n\n所以在 `boot_sect_disk.asm` 中的链接写错了。\n\n```\ncheck out the code at http://stanislavs.org/helppc/int_13-1.html\n```\n\n应该为\n\n```\ncheck out the code at http://stanislavs.org/helppc/int_13-2.html\n```\n\n打开 http://stanislavs.org/helppc/int_13-1.html 可以看到，它的错误码是 `0x01`，且保存在 `AL` 中。与我们这里完全不一样。",
+        "timestamp": 1775747700831,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775748459606-2pr9",
+        "content": "原作者的注释跟官方文档并不严格对应。比如\n\n```\n(0 = floppy, 1 = floppy2, 0x80 = hdd, 0x81 = hdd2)\n```\n\n跟官方文档\n\n```\n(0=A:, 1=2nd floppy, 80h=drive 0, 81h=drive 1)\n```\n\n不完全一样，但大意正确，所指的东西是一样的。",
+        "timestamp": 1775748459606,
+        "editHistory": [
+          1775748489187,
+          1775749062199,
+          1775749086238
+        ]
+      },
+      {
+        "id": "msg-1775749044918-nwfl",
+        "content": ">     ; the bios sets 'dl' for our boot disk number\n\n我们的代码没有显式指定 `dl`，即没有显式设置从哪个驱动器读 sector。\n\n因为此时我们直接使用命令 `qemu-system-x86_64/qemu boot.bin`，QEMU 将自行设定 `dl` 的值，使得读取可以正常操作。",
+        "timestamp": 1775749044918,
+        "editHistory": [
+          1775749466427,
+          1775750118903,
+          1775751262551
+        ]
+      },
+      {
+        "id": "msg-1775749900535-q6tj",
+        "content": ">    ; if you have trouble, use the '-fda' flag: 'qemu -fda file.bin'\n\n如果我们在指令中增加 `-fda` 参数，则告诉 QEMU 将这个文件加载到软盘驱动器 A: 中。此时 QEMU 会自动将 `dl` 设置为 `0x00`，我们无需显式设置 `dl`。当然我们可以通过显式设置 `dl` 来验证 `-fda` 参数确实是告诉 QEMU 将这个文件加载到软盘驱动器 A: 中。 \n\n![06.png](/img/os/06.png)\n\n![07.png](/img/os/07.png)\n\n注释中提到的问题，我想是因为 QEMU 版本不同而导致的差异。一些 QEMU 版本不会自行设置 `dl` 的值，所以就需要我们显式指定 `-fda`，让 QEMU 将文件加载到软盘驱动器 A: 中，并自动设置 `dl` 为 `0x00`。",
+        "timestamp": 1775749900535,
+        "editHistory": [
+          1775750105792,
+          1775751149006,
+          1775751477219,
+          1775752548393,
+          1775752791435,
+          1775753653281
+        ]
+      },
+      {
+        "id": "msg-1775750081268-f6ow",
+        "content": "如果我们使用 `-hda` 参数，而不是 `-fda` 参数，则是告诉 QEMU 将这个文件加载到硬盘 0 中，并自动设置 `dl` 为 `0x80`。同样的，我们可以显式指定 `dl` 为 `0x80`，来验证这一点。\n\n![05.png](/img/os/05.png)",
+        "timestamp": 1775750081268,
+        "editHistory": [
+          1775751090401,
+          1775752620326
+        ]
+      },
+      {
+        "id": "msg-1775750760258-v8ek",
+        "content": "此外，经过我的测试，我所下载的 QEMU 版本，默认将这个文件加载到磁盘 0 中。所以在我这个 QEMU 版本下，当我没有任何多余参数 (`-fda` `hda`) 指定时，QEMU 会自动将 `dl` 设置为 `0x80` 从而保证 sector 正常读取。\n\n![04.png](/img/os/04.png)",
+        "timestamp": 1775750760258,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775750918570-0668",
+        "content": "！！！我强烈建议各位将 `dl` 依次设置为 `0x00` `0x01` `0x80` `0x81` 来试出自己的 QEMU 版本是将文件默认加载到哪个驱动器中。",
+        "timestamp": 1775750918570,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775752377591-zana",
+        "content": "> The BIOS sets `dl` to the drive number before calling the bootloader. However,\nI found some problems with qemu when booting from the hdd.\n\n> There are two quick options:\n\n> 1. Try the flag `-fda` for example, `qemu -fda boot_sect_main.bin` which will set `dl`\nas `0x00`, it seems to work fine then.\n> 2. Explicitly use the flag `-boot`, e.g. `qemu boot_sect_main.bin -boot c` which \nautomatically sets `dl` as `0x80` and lets the bootloader read data\n\n关于这个问题为什么会出现以及这样为什么可以解决，我在上面几条消息已经详细阐述。第一点中，除了使用 `-fda`，我们也可以使用 `-hda`。在这里，我将讲述一下 `-boot` 参数：\n\n`-boot a`：告诉 QEMU 将文件加载到软盘驱动器（A:）中（QEMU 会自动将 `dl` 设置为 `0x00`，无需代码显式设置 `dl`）\n\n`-boot c`：告诉 QEMU 将文件加载到硬盘 0 中（QEMU 会自动将 `dl` 设置为 `0x80`，无需代码显式设置 `dl`）\n\n所以 `-boot` 参数搭配 `a` 和 `b`只是 `fda` 和 `hda` 的另一种写法。",
+        "timestamp": 1775752377591,
+        "editHistory": [
+          1775752972707,
+          1775753644782
+        ]
+      },
+      {
+        "id": "msg-1775753464928-lqt7",
+        "content": "值得注意的是，我们不应在代码中显式指定 `dl`，而是依靠 QEMU 的自行设置。当我们不显式指定 `dl` 时，一次 nasm 汇编，我们可以任意使用 `-fda` / `-hda` /  `-boot` 参数，甚至无参数进行 bin 文件的 qemu 运行；但当我们显式指定 `dl` 时，我们显式指定的值总会在后面覆盖掉 QEMU 自动设置的值。这样一次 nasm 汇编，我们的 qemu 运行指令只能采用与我们设置的值相对应的命令格式。\n\n因而，我们可以利用自行设置 `dl` 的值来验证 QEMU 将文件加载到哪个驱动器下了。（前面用到讲述的方法）\n\n此外还可以通过自行设置 `dl` 的值来强行让 QEMU（操作系统使用者）将启动文件加载到指定驱动器里。",
+        "timestamp": 1775753464928,
+        "editHistory": [
+          1775753516012,
+          1775753635159
+        ]
+      },
+      {
+        "id": "msg-1775753784089-576n",
+        "content": "总而言之两句话：\n1. 无特殊用途就不要显式设置 `dl` 的值。\n2. 仅仅输入 `qemu file.bin` 无法运行时，就加上 `-fda` `-hda` `-boot` 的任一参数",
+        "timestamp": 1775753784089,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775754195469-mlxn",
+        "content": "奥对，可能有些人不知道，我在此补充一句。第一个软盘是 A 盘（A：），第二个软盘是 B 盘（B：），第一个磁盘是 C 盘（C：），第二个磁盘是 D 盘（D：）。现如今，我们已不使用软盘，所以也就不存在 A 盘，B盘了，也是因此现在的计算机盘符号是从 C 开始，而不是从 A 开始。注意区分磁盘和硬盘：在软件意义（逻辑层）上，磁盘是硬盘经过分区后的单元。比如我们常把一个 1 TB 的硬盘分区成 C： D：... ，C：等就是磁盘。",
+        "timestamp": 1775754195469,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775754257942-jhud",
+        "content": "至此，`07-bootsector-disk` 这一章算是理的差不多了，明天开始搞 `08-32bit-print`。",
+        "timestamp": 1775754257942,
         "editHistory": []
       }
     ]
@@ -704,7 +870,7 @@
     "id": "chat-1775394088572",
     "title": "cowsay",
     "createdAt": 1775394088572,
-    "updatedAt": 1775407645811,
+    "updatedAt": 1775742399314,
     "tags": [
       "计算机",
       "娱乐",
@@ -2262,7 +2428,7 @@
     "id": "chat-1774163734215",
     "title": "生活",
     "createdAt": 1774163734215,
-    "updatedAt": 1775566494354,
+    "updatedAt": 1775742491316,
     "tags": [
       "我",
       "生活"
@@ -2413,6 +2579,12 @@
         "id": "msg-1775566494354-jhdd",
         "content": "今天尝试让通义千问帮我充话费（因为有5元优惠），以下是使用感受。\n\n通义千问的野心很大，但安全问题同样让我担忧：\n1. 它不经我同意就知道我当前处在哪个城市\n2. 它不经我同意就能获得我的手机号\n\n由此可以想到，我手机里的很多信息，千问都可以直接读到。",
         "timestamp": 1775566494354,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1775742491316-gsak",
+        "content": "今天开始三天运动会。坐了一天感觉浑身累。晒死了，困死了。",
+        "timestamp": 1775742491316,
         "editHistory": []
       }
     ]
