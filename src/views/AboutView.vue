@@ -34,7 +34,13 @@ const router = useRouter()
             个人简介
           </h3>
           <p class="bio-text">
-            尊崇极简，相信简约而优雅的设计能够带来更好的用户体验。热爱技术，在代码的世界里寻找秩序与美感，用技术解决实际问题。
+            尊崇极简，热爱技术。
+          </p>
+          <p class="bio-text">
+            编程计算机都是自学，纯业余。目前堪堪达到入门级别（甚至门也没入）。
+          </p>
+          <p class="bio-text">
+            下面的能力条是以我的 Python 水平为单位 1 进行衡量，我会的也并没有全指出。更多详情请见“编程学习历程”对话。
           </p>
         </div>
 
@@ -98,6 +104,9 @@ const router = useRouter()
             <a href="mailto:1933679780@qq.com" class="contact-link">
               <img src="/img/profile/email.png" alt="Email" class="contact-icon">
               <span>1933679780@qq.com</span>
+            </a>
+            <a class="contact-link">
+              <span>Delta Chat（我的二维码在 Delta Chat 对话中）</span>
             </a>
           </div>
         </div>
