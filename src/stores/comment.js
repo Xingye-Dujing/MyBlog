@@ -124,7 +124,7 @@ export const useCommentStore = defineStore('comment', () => {
     try {
       const res = await fetch('/api/save-comments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json;charset=utf-8;' },
         body: JSON.stringify(comments.value)
       })
       return res.ok
@@ -152,7 +152,7 @@ export const useCommentStore = defineStore('comment', () => {
 
   // Export comments as JSON
   function exportJSON() {
-    const blob = new Blob([JSON.stringify(comments.value, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(comments.value, null, 2)], { type: 'application/json;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
