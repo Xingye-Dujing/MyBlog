@@ -1,5 +1,386 @@
 [
   {
+    "id": "chat-1778839648839",
+    "title": "Lambda 演算计算器总结",
+    "createdAt": 1778839648839,
+    "updatedAt": 1778840527588,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778840403371-bt2p",
+        "content": "给 `plam`, `Lambda Explorer` 和 `txyyss` 做个总结：\n\n1. `plam` 不支持 `\\a.\\b. ...` 的写法，只支持 `\\a b. ...` 的写法。`txyyss` 与 `plam` 正好反过来。`Lambda Explorer` 两种写法都支持。\n2. 因为 `Lambda Explorer` 规定只有当所有字母都是大写时才表示多字符符号（比如 `AB` 视作一个符号，`ab` 视作 `a` 应用到 `b`），因而 Lambda Explorer 在写表达式时，遇到应用且只有小写字符时可以省略空格。但是 `plam` 和 `txyyss` 应用的空格绝不可以省略。\n\n（ `Lambda Explorer`：`ab` 被视为 `a` 应用 `b` ）\n\n![94.jpg](/img/lambda/94.jpg)\n\n( `plam` 与 `txyyss`，`ab` 被视为一个符号，和 `a` 是不一样的符号 )\n\n![95.jpg](/img/lambda/95.jpg)\n\n3. `plam` 有几个注意点，在 `plam` 对话中已单独列出。`plam` 和 `txyyss` 起别名都是用 `=`，但是 `plam` 的 `=` 两边都要有空格，`txyyss` 的 `=` 两边有无空格都可。`Lambda Explorer` 起别名用 `:=`，两边有误空格都可以。\n4. 三者都可以给出中间规约过程。除此之外，`plam` 还可以在一定程度上给出已定义别名的阿尔法等价结果。但是其阿尔法等价能力远不如 `Lambda Explorer`。`Lambda Explorer` 还可以给出表达式的自由变量信息。`txyyss` 没有额外功能，结果只是标准的 Lamda 表达式，别名仅仅是作为写表达式时的复用工具使用。\n5. `plam` 文件里预定的定义，`txyyss` 预定的定义，`Lambda Explorer` 引导里预定的定义，不一定相同。从而导致了如果使用预定定义，规约结果只在一定范围内相同，超出范围的规约结果不一定一样。如我们在“加号乘加号到底是什么”对话中提到的 `add mul add` 和 `mul add add`。\n\n综上所述，这三个 Lamda 演算计算器各有所长。我们可以都使用。对同一个表达式进行规约，最后三者结果应当是一致的。换句话说，如果三个计算器给出的结果一致，我们在很大程度上可以认为规约结果是正确的，无需在手算验证了。\n\n**但使用它们的时候，一定一定要确保别名定义的一致！** 否则看起来是一样的表达式输入，但别名展开后就是不一样的。仅仅是别名给我们造成的假象，实质上输入的表达式根本不等价。\n\n---\n\n我们可以多程序验证，但不要太过相信任何一个程序。还可以询问 AI 和手动验算。",
+        "timestamp": 1778840403371,
+        "editHistory": [
+          1778840425515,
+          1778840457941
+        ]
+      },
+      {
+        "id": "msg-1778840527588-gpb1",
+        "content": "论交互性和教学用途，https://lambdacalc.dev/?spm=5176.28103460.0.0.efec75515e31hT 上面三个软件都不如这个！",
+        "timestamp": 1778840527588,
+        "editHistory": []
+      }
+    ]
+  },
+  {
+    "id": "chat-1778835007817",
+    "title": "加号乘加号到底是什么",
+    "createdAt": 1778835007817,
+    "updatedAt": 1778838046271,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778835132024-6q03",
+        "content": "这个对话是对 https://www.bilibili.com/video/BV1oFj7zPEaA/ 内容的延伸思考。",
+        "timestamp": 1778835132024,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778835259100-hogm",
+        "content": "为方便讲解，作以下规定：\n\n1. 后续出现的自由变量和数字均表示邱奇数，比如 `a`, `b`, `3`。（ `3` 是 `\\f x.f (f (f x))` 的别名，不再指数学意义上的 `3` ）\n2. 在自由变量或数字右上角加 `'` 表示该邱奇数对应的数学数值，比如 `3'` 表示数学意义上的 `3`。",
+        "timestamp": 1778835259100,
+        "editHistory": [
+          1778835307547,
+          1778835319567
+        ]
+      },
+      {
+        "id": "msg-1778835624996-mg13",
+        "content": "`mul a b` 换成数学语句表示“`a'` 乘 `b'`”，从而我们可以引申出 `mul add add` 表示“`add` 乘 `add`”，或更进一步的“加 乘 加”。通过计算我们可以得到, `(mul add add a b c d)'` 等于 `d'^((c'^b')*(a'+c'))`。截止到这里是视频里讲到的。\n\n![87.png](/img/lambda/87.png)",
+        "timestamp": 1778835624996,
+        "editHistory": [
+          1778836001766,
+          1778836016625,
+          1778836228511,
+          1778837808818
+        ]
+      },
+      {
+        "id": "msg-1778835827980-etwm",
+        "content": "可我不满足于此。我要进一步思考。与上面一样的写法约定。现在我们看 `add mul add`。`add a b` 换成数学语句表示“`a'` 加 `b'`”，从而我们可以引申出 `add mul add` 表示“`mul` 加 `add`”，或更进一步的“乘 加 加”。通过计算我们可以得到，`(add mul add a b c)'` 等于 `(c'^(a'(a'+b')))`。\n\n![81.jpg](/img/lambda/81.jpg)\n![82.jpg](/img/lambda/82.png)\n\n最后一个 `add mul add 3 1 2` 将结果复制到 Lambda Explorer 查看，可以看出结果是邱奇数 `4096`，是没有问题的。",
+        "timestamp": 1778835827980,
+        "editHistory": [
+          1778836050409
+        ]
+      },
+      {
+        "id": "msg-1778835981053-j2vj",
+        "content": "因为 `add mul add` 只需要三个邱奇数就能得到一个邱奇数。所以我想 `mul add add` 是不是也只需要三个邱奇数就行。事实证明，我想的果然没错。通过计算我们可以得到, `(mul add add a b c)'` 等于 `(c'^b')*(a'+c')`\n\n![83.jpg](/img/lambda/83.jpg)",
+        "timestamp": 1778835981053,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778836398563-nlw4",
+        "content": "综上所述, `mul add add` 和 `add mul add` 都只需应用三个邱奇数就可以得到一个邱奇数。所以啊，b站那个视频讲的也不完全对。`mul add add` 并不是要应用四个邱奇数才行。三个即可。应用三个邱奇数后，如果我们在传入邱奇数，就是做幂运算了。前面的 `(mul add add a b c)'` 或 `(add mul add a b c)'` 当指数，新传入的邱奇数对应数值作底数",
+        "timestamp": 1778836398563,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778836460045-h997",
+        "content": "真没想到 `add` 和 `mul` 的随意搭配也可以构成有意义的数学运算。不过也体会到没有类型约束的 Lamda 演算真的混乱。不知道其它搭配起来能不能构成有意义的数学运算，可以再探索探索。",
+        "timestamp": 1778836460045,
+        "editHistory": [
+          1778836474201
+        ]
+      },
+      {
+        "id": "msg-1778836512527-tp81",
+        "content": "还有 `(a(SUCC b))' = (b'+1)^a'`。这个讲起来很简单：\n1. 有括号先看括号，`SUCC b` 的结果是一个邱奇数\n2. 我们知道 `(a b)' = b'^a'`。所以 `( a (SUCC b) )' = (SUCC b)'^a'`\n3. 我们知道 `(SUCC b)' = b'+1`\n4. 综上, `(b'+1)^a'`",
+        "timestamp": 1778836512527,
+        "editHistory": [
+          1778836526117
+        ]
+      },
+      {
+        "id": "msg-1778836604996-dxo0",
+        "content": "但是要注意，**由于同一含义有不同的写法，所以写法一变，上面的结论就可能不再奏效**！",
+        "timestamp": 1778836604996,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778836667751-jxz1",
+        "content": "之前讲的都是针对 `plam` 的定义方式。现在我们换成 `txyyss` 的定义方式，你就会发现**结果和之前不一样了**！",
+        "timestamp": 1778836667751,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778836929483-5p9c",
+        "content": "根据在 Lambda Explorer 和 txyyss 的演示，我们可以看到 `ADD` / `PLUS` 的定义一变，结果就不再一致。\n\n![84.jpg](/img/lambda/84.jpg)\n![85.jpg](/img/lambda/85.png)",
+        "timestamp": 1778836929483,
+        "editHistory": [
+          1778836937838
+        ]
+      },
+      {
+        "id": "msg-1778837133608-f8fq",
+        "content": "在 `plam` 使用 `txyyss` 对 `plus` 的定义方式，可得到与 `txyyss` 同样的结果：\n\n![86.png](/img/lambda/86.png)",
+        "timestamp": 1778837133608,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778837189919-0bmq",
+        "content": "所以**不同的定义方法只在一定范围内结果一样**，比如 `plam` 对 `add` 的定义和 `txyyss` 对 `plus` 的定义，在作用到两个邱奇数时，其规约结果是相同的（都表示自然数加法）。但是如果我们不将其作用到两个邱奇数，那么规约结果就不一定相同了。其结果是混乱的。",
+        "timestamp": 1778837189919,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778837260131-wfmc",
+        "content": "综上，那个视频有两个问题：\n\n1. `mul add add` 只需要三个邱奇数即可，不需要四个\n2. `mul add add`  的结果是不确定的，结果是什么取决于 `add` 和 `mul` 的定义方式。",
+        "timestamp": 1778837260131,
+        "editHistory": [
+          1778837269611
+        ]
+      },
+      {
+        "id": "msg-1778837382439-zosl",
+        "content": "虽然同一含义有不同写法，但不同写法之间不是等价的。**同一含义**是一个很大的限制条件，不同的定义方法只在这个限定范围内结果一样。如果将其随便使用，那么结果是混乱不稳定的。",
+        "timestamp": 1778837382439,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778838046271-uukb",
+        "content": "由此我们可以想到，如果对自然数的定义不同，那么一切都会变得不一样。好在大家现在都是用邱奇的方式定义自然数。",
+        "timestamp": 1778838046271,
+        "editHistory": []
+      }
+    ]
+  },
+  {
+    "id": "chat-1778833380189",
+    "title": "同一含义的不同写法",
+    "createdAt": 1778833380189,
+    "updatedAt": 1778835043870,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778834260269-mlg4",
+        "content": "表示同一个含义的写法不是唯一的，比如对自然数的编码不只一种形式（邱奇数最常见），对加法的定义不只一种形式（一种利用 SUCC 间接实现，一种直接 `f` `x` 定义 ），对异或的定义不只一种形式（ Lambda Explorer 对话中提到 ）。",
+        "timestamp": 1778834260269,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778834573812-wrbg",
+        "content": "邱奇数求幂的三种实现：\n\n1. 使用乘法间接运算：`λa.λb.b (MULT a) (λf x.f x)`\n2. `plam` 程序采用的：`λm.λn.λf.λx. n m f x`\n3. 最常见写法：`λm.λn. n m`\n\n---\n\n写法二和写法三的区别就在于最后是否替换占位符到想要的符号。\n\n写法二出自 `plam`，它的邱奇数识别必须是符号 `f` 和 `x`。因此它通过把占位符换成 `f` `x`，以达到能够识别的形式。（详见 `plam` 对话 ）\n\n写法三推荐在 Lambda Explorer 使用。即使占位符不是严格的 `f` 和 `x`, 它也能看出是不是邱奇数。\n\n![79.jpg](/img/lambda/79.jpg)",
+        "timestamp": 1778834573812,
+        "editHistory": [
+          1778834761255
+        ]
+      },
+      {
+        "id": "msg-1778834804178-5e82",
+        "content": "同一含义的定义大部分都不唯一，具体用哪一个要看你使用的场景适合哪一个或者说你喜欢哪一个。",
+        "timestamp": 1778834804178,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778834852247-5mkw",
+        "content": "同时一个定义可能不只表示一种含义。比如 `λf.λx.x` 既是邱奇数 `0`, 也是邱奇布尔值 `False`。",
+        "timestamp": 1778834852247,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778835034692-w1s6",
+        "content": "关于同一含义的不同写法，还有一点要特别注意。详见**加号乘加号到底是什么**对话。",
+        "timestamp": 1778835034692,
+        "editHistory": [
+          1778835043870
+        ]
+      }
+    ]
+  },
+  {
+    "id": "chat-1778831609989",
+    "title": "txyyss's Lambda-Calculus",
+    "createdAt": 1778831609989,
+    "updatedAt": 1778832386825,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778831626752-vhs7",
+        "content": "https://github.com/txyyss/Lambda-Calculus",
+        "timestamp": 1778831626752,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778832203086-s6cm",
+        "content": "https://github.com/txyyss/Lambda-Calculus/releases/tag/v1.0\n\nReleases 页面有编译好的 pdf 和 exe",
+        "timestamp": 1778832203086,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778832250359-7o4s",
+        "content": "https://github.com/txyyss/Lambda-Calculus/releases/download/v1.0/lambda.pdf\n\n这个 PDF 强烈推荐观看！",
+        "timestamp": 1778832250359,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778832386825-eyv3",
+        "content": "作者的 PDF 都配套了 exe 的演示说明。是质量极高且不可多得 Lambda 演算学习资料",
+        "timestamp": 1778832386825,
+        "editHistory": []
+      }
+    ]
+  },
+  {
+    "id": "chat-1778830988887",
+    "title": "Lambda Diagrams",
+    "createdAt": 1778830988887,
+    "updatedAt": 1778831217582,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778831057413-pdmy",
+        "content": "可视化 Lambda 表达式和规约（让规约过程动起来）！非常牛的思路：https://tromp.github.io/cl/diagrams.html",
+        "timestamp": 1778831057413,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778831072731-0ld5",
+        "content": "开发者博客：https://tromp.github.io/\n\n又是一个相当强的人",
+        "timestamp": 1778831072731,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778831180344-gvor",
+        "content": "相关视频：\n\nhttps://www.youtube.com/watch?v=RcVA8Nj6HEo\n\nhttps://www.youtube.com/playlist?list=PLi8_XqluS5xc7GL-bgVrxpA2Uww6nK0gV",
+        "timestamp": 1778831180344,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778831217582-j24p",
+        "content": "相关代码：https://github.com/polux/lambda-diagrams\n\n我在 Windows 上因为版本问题没有编译成功，Debian 上还没有尝试。",
+        "timestamp": 1778831217582,
+        "editHistory": []
+      }
+    ]
+  },
+  {
+    "id": "chat-1778830565345",
+    "title": "Lambda Calculus Calculator",
+    "createdAt": 1778830565345,
+    "updatedAt": 1778830831008,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778830676256-ez1g",
+        "content": "论交互性，论教学用途，它是最强的！而且界面设计很美观，很现代。\n\nhttps://lambdacalc.dev/?spm=5176.28103460.0.0.efec75515e31hT",
+        "timestamp": 1778830676256,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778830762781-zcj7",
+        "content": "强烈推荐所有学习 Lambda 演算的人使用它！",
+        "timestamp": 1778830762781,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778830806038-9gxq",
+        "content": "随意控制展开顺序：\n\n![77.png](/img/lambda/77.png)\n![78.png](/img/lambda/78.png)",
+        "timestamp": 1778830806038,
+        "editHistory": [
+          1778830831006
+        ]
+      }
+    ]
+  },
+  {
+    "id": "chat-1778829768446",
+    "title": "不动点组合子",
+    "createdAt": 1778829768446,
+    "updatedAt": 1778840776900,
+    "tags": [
+      "Lambda 演算"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778840590056-9495",
+        "content": "在 Lambda 演算中，每一个表达式都有一个不动点：\n\n![39.png](/img/lambda/39.png)",
+        "timestamp": 1778840590056,
+        "editHistory": [
+          1778840599018
+        ]
+      },
+      {
+        "id": "msg-1778840619817-jstj",
+        "content": "关于不动点组合子：\n\n1. 所有不动点组合子都没有范式（最简式）。\n2. 不动点组合子不只一个，光我现在知道的都有两个：\n\n- Y 组合子：`λf.(λx.(f (x x)) λx.(f (x x)))`\n- `λf.(λx. f (λy. x x y)) (λx. f (λy. x x y))`\n\nhttps://brilliant.org/wiki/lambda-calculus/ 对此也有提及。\n\n3. [百度百科介绍](https://baike.baidu.com/item/%E4%B8%8D%E5%8A%A8%E7%82%B9%E7%BB%84%E5%90%88%E5%AD%90/8265635)，这个有看的必要性！",
+        "timestamp": 1778840619817,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778840694515-2cdn",
+        "content": "将不动点组合子应用到表达式 `F` 上，其结果就是 `F` 的不动点。",
+        "timestamp": 1778840694515,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778840776900-lntk",
+        "content": "阐释递归与不动点的关系：这一关系常用于消除明递归\n\n![40.png](/img/lambda/40.png)\n\n> `f =(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) f` 经过重写我们有\n\n![41.png](/img/lambda/41.png)\n\n于是我们知道，阶乘函数 `f` 是 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn))))` 的不动点。那么 `f x` 就等价于 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) 的不动点 x`。\n\n接下来我们用代码实现这一步。注意**代码中的 `f` `x` 虽与上面重名，但所指的内容完全不一样，一定要依据上下文区分清楚其含义**。\n\n我们让 Haskell 代码中的 `let x = f x` 相当于 `m = g m`，其中第一个表达式的 `x` 是第二个表达式的 `m`；第一个表达式的 `f` 是第二个表达式的 `g`。根据不动点的定义，我们得到 `m` 是 `g` 的不动点，从而 `x` 就是 `f` 的不动点。综上， `let fix f = let x = f x in x` 的结果 `x` 是 `f` 的不动点，因而**这个表达式的作用就是求 `f` 的不动点**。\n\n（ 下一段 `f` `x` 的含义与图片的相同，与上一段不同，注意区分 ）\n\n我们要求 `f x`，还已知 `f` 是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点。由此，我们只需要求 `(\\g n -> if (n == 0) then 0 else n + g (n - 1)) 的不动点 x` 即可。`fix f` 的作用是求 `f` 的不动点，因而 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1))` 就是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点，也就是我们最开始的递归函数 `f`。于是原来的函数应用 `f n` 就变成了 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1)) n`。于是我们使用下面的代码就实现了递归函数 `f` 的计算：\n\n![42.png](/img/lambda/42.png)\n\n因而我们实现了不出现阶乘函数 `f` 的名字就完成了它的应用，从而消除了明递归。\n\n总结一下整个过程。现在我们有一个阶乘函数 `f`，我们要求 `f x`。我们可以构建出一个 `g` 使得 `f` 是 `g` 的不动点。于是 `f x` 等价于 `g 的不动点 x` 等价于 `fix g x`。其本质是**构造一个新函数，通过某种操作达成与原函数一样的作用而不直接使用原函数**。\n\n那问题来了，要**如何构建出合适的 `g` 呢**？只需在原递归函数引入一个新参数并将其放在所有参数的第一个，然后再把内部的函数名换成这个参数的名字。\n\n从数学推导上讲，要求一个函数的不动点，我们只需要将它应用到不动点组合子（不动点组合子不只一个）上即可。在 Haskell 实现中，由于它的惰性计算特性，我们可以直接使用不动点的定义（不动点方程） `let x = f x in x` 来求 `f` 的不动点。\n\n给定一个函数 `f`，我们要求另一个函数 `g` 使得已有函数 `f` 是 `g` 的不动点。我们只需在 `f` 中引入一个新参数，并将其放在所有参数的第一位，然后表达式内部所有出现函数名 `f` 的地方换成引入参数的名字即可。",
+        "timestamp": 1778840776900,
+        "editHistory": []
+      }
+    ]
+  },
+  {
+    "id": "chat-1778829444698",
+    "title": "fix 消除明递归",
+    "createdAt": 1778829444698,
+    "updatedAt": 1778829721616,
+    "tags": [
+      "Haskell"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1778829506729-3534",
+        "content": "**不动点构造法消除明递归**：有一个阶乘函数 `f`，我们要求 `f x`。我们可以构建出一个 `g` 使得 `f` 是 `g` 的不动点。于是 `f x` 等价于 `g 的不动点 x` 等价于 `fix g x`。其本质是**构造一个新函数，通过某种操作达成与原函数一样的作用而不直接使用原函数**。\n\n其中 `fix` 是求参数不动点的函数。在 Haskell 中，托**惰性计算**的福，`let fix f = let x = f x in x` 短短一句就完成了 `fix` 的定义。\n\n`g` 的构造也很简单，只需在原递归函数 `f` 中引入一个新参数并将其放在所有参数的第一个，然后再把内部的函数名换成这个参数的名字。",
+        "timestamp": 1778829506729,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778829557564-kuoc",
+        "content": "接下来数学推导说明其正确性：\n\n![40.png](/img/lambda/40.png)\n\n> `f =(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) f` 经过重写我们有\n\n![41.png](/img/lambda/41.png)\n\n于是我们知道，阶乘函数 `f` 是 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn))))` 的不动点。那么 `f x` 就等价于 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) 的不动点 x`。\n\n接下来我们用代码实现这一步。注意**代码中的 `f` `x` 虽与上面重名，但所指的内容完全不一样，一定要依据上下文区分清楚其含义**。\n\n我们让 Haskell 代码中的 `let x = f x` 相当于 `m = g m`，其中第一个表达式的 `x` 是第二个表达式的 `m`；第一个表达式的 `f` 是第二个表达式的 `g`。根据不动点的定义，我们得到 `m` 是 `g` 的不动点，从而 `x` 就是 `f` 的不动点。综上， `let fix f = let x = f x in x` 的结果 `x` 是 `f` 的不动点，因而**这个表达式的作用就是求 `f` 的不动点**。\n\n（ 下一段 `f` `x` 的含义与图片的相同，与上一段不同，注意区分 ）\n\n我们要求 `f x`，还已知 `f` 是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点。由此，我们只需要求 `(\\g n -> if (n == 0) then 0 else n + g (n - 1)) 的不动点 x` 即可。`fix f` 的作用是求 `f` 的不动点，因而 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1))` 就是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点，也就是我们最开始的递归函数 `f`。于是原来的函数应用 `f n` 就变成了 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1)) n`。于是我们使用下面的代码就实现了递归函数 `f` 的计算：\n\n![42.png](/img/lambda/42.png)\n\n因而我们实现了不出现阶乘函数 `f` 的名字就完成了它的应用，从而消除了明递归。\n\n总结一下整个过程。现在我们有一个阶乘函数 `f`，我们要求 `f x`。我们可以构建出一个 `g` 使得 `f` 是 `g` 的不动点。于是 `f x` 等价于 `g 的不动点 x` 等价于 `fix g x`。其本质是**构造一个新函数，通过某种操作达成与原函数一样的作用而不直接使用原函数**。\n\n那问题来了，要**如何构建出合适的 `g` 呢**？从上面的推导可以看出，只需在原递归函数引入一个新参数并将其放在所有参数的第一个，然后再把内部的函数名换成这个参数的名字。",
+        "timestamp": 1778829557564,
+        "editHistory": [
+          1778829585035
+        ]
+      },
+      {
+        "id": "msg-1778829607793-zpdo",
+        "content": "两个互逆过程：\n\n- 从数学推导上讲，要求一个函数的不动点，我们只需要将它应用到不动点组合子（不动点组合子不只一个）上即可。在 Haskell 实现中，由于它的惰性计算特性，我们可以直接使用不动点的定义（不动点方程） `let x = f x in x` 来求 `f` 的不动点。\n\n- 给定一个函数 `f`，我们要求另一个函数 `g` 使得已有函数 `f` 是 `g` 的不动点。我们只需在 `f` 中引入一个新参数，并将其放在所有参数的第一位，然后表达式内部所有出现函数名 `f` 的地方换成引入参数的名字即可。",
+        "timestamp": 1778829607793,
+        "editHistory": [
+          1778829649071
+        ]
+      },
+      {
+        "id": "msg-1778829721616-awz4",
+        "content": "接下来举例说明如何使用 `fix` 消除明递归。",
+        "timestamp": 1778829721616,
+        "editHistory": []
+      }
+    ]
+  },
+  {
     "id": "chat-1778773500808",
     "title": "Susan B. Horwitz",
     "createdAt": 1778773500808,
@@ -55,7 +436,7 @@
     "id": "chat-1778772769691",
     "title": "Lambda Viewer",
     "createdAt": 1778772769691,
-    "updatedAt": 1778773027114,
+    "updatedAt": 1778833149663,
     "tags": [
       "Lambda 演算"
     ],
@@ -69,10 +450,11 @@
       },
       {
         "id": "msg-1778772990608-daty",
-        "content": "1. 多种规约路径：\n\n![29.png](/img/lambda/29.png)\n\n2. 交互性强，你还可以随意指定规约顺序：\n\n![30.png](/img/lambda/30.png)\n\n3. Lambda 可视化：\n\n![31.png](/img/lambda/31.png)",
+        "content": "1. 多种规约路径：\n\n![29.png](/img/lambda/29.png)\n\n2. 交互性强，你还可以随意指定规约顺序：（右上角标有 α 转换和 β 规约）\n\n![30.png](/img/lambda/30.png)\n\n3. Lambda 可视化：\n\n![31.png](/img/lambda/31.png)",
         "timestamp": 1778772990608,
         "editHistory": [
-          1778773027114
+          1778773027114,
+          1778833149663
         ]
       }
     ]
@@ -81,7 +463,7 @@
     "id": "chat-1778772286089",
     "title": "Ben Lynn",
     "createdAt": 1778772286089,
-    "updatedAt": 1778773075873,
+    "updatedAt": 1778831463436,
     "tags": [
       "Lambda 演算",
       "Haskell"
@@ -109,6 +491,12 @@
         "content": "可以跟着他去学 Lambda 演算和 Haskell：\n\n![25.png](/img/lambda/25.png)\n![26.png](/img/lambda/26.png)\n![27.png](/img/lambda/27.png)",
         "timestamp": 1778772710803,
         "editHistory": []
+      },
+      {
+        "id": "msg-1778831463436-54v2",
+        "content": "https://theory.stanford.edu/~blynn/lambda/\n\n不仅教我们 Lambda 演算，还教我们如何写一个 Lambda 演算计算器",
+        "timestamp": 1778831463436,
+        "editHistory": []
       }
     ]
   },
@@ -116,7 +504,7 @@
     "id": "chat-1778771620051",
     "title": "λ-Calculus: 道生万物",
     "createdAt": 1778771620051,
-    "updatedAt": 1778772129741,
+    "updatedAt": 1778830939476,
     "tags": [
       "Lambda 演算"
     ],
@@ -132,9 +520,12 @@
       },
       {
         "id": "msg-1778772129741-zw12",
-        "content": "下面的**在线演绎 λ-Calculus**推荐所有人尝试！",
+        "content": "下面的**在线演绎 λ-Calculus**推荐所有人尝试！\n\n（ 不过我更喜欢 https://lambdacalc.dev/?spm=5176.28103460.0.0.efec75515e31hT ，更推荐大家使用这个 ）",
         "timestamp": 1778772129741,
-        "editHistory": []
+        "editHistory": [
+          1778830934822,
+          1778830939476
+        ]
       },
       {
         "id": "msg-1778772071213-sx9d",
@@ -150,7 +541,7 @@
     "id": "chat-1778761658820",
     "title": "plam",
     "createdAt": 1778761658820,
-    "updatedAt": 1778785587086,
+    "updatedAt": 1778839625048,
     "tags": [
       "Lambda 演算"
     ],
@@ -188,17 +579,31 @@
       },
       {
         "id": "msg-1778771001122-j7m1",
-        "content": "接下来是一些使用演示：\n\n![14.png](/img/lambda/14.png)\n![10.png](/img/lambda/10.png)\n![12.png](/img/lambda/12.png)\n![13.png](/img/lambda/13.png)\n![11.png](/img/lambda/11.png)",
+        "content": "接下来是一些使用演示：\n\n（ 必要的 `()` 不可省略 ）\n\n![14.png](/img/lambda/14.png)\n![10.png](/img/lambda/10.png)\n![12.png](/img/lambda/12.png)\n![13.png](/img/lambda/13.png)\n![11.png](/img/lambda/11.png)",
         "timestamp": 1778771001122,
         "editHistory": [
-          1778771038466
+          1778771038466,
+          1778831310254,
+          1778839147580
         ]
       },
       {
         "id": "msg-1778771245669-vbsq",
-        "content": "提供规约步骤：\n\n![18.png](/img/lambda/18.png)\n![19.png](/img/lambda/19.png)",
+        "content": "提供规约步骤：`:d`\n\n![18.png](/img/lambda/18.png)\n![19.png](/img/lambda/19.png)",
         "timestamp": 1778771245669,
-        "editHistory": []
+        "editHistory": [
+          1778831325756
+        ]
+      },
+      {
+        "id": "msg-1778839598010-pi3y",
+        "content": "`plam` 使用时的注意事项：\n1. 写 lamda 表达式时，`\\` 和 `.` 之间不允许再出现 `\\`，即**强制要求采用多变量的写法**。此外，这个问题出现在起别名和直接输入表达式时的**报错信息不一样**：\n\n![91.jpg](/img/lambda/91.jpg)\n\n2. 给一个表达式起别名的时候， `=` 两边一定一定要有空格，否则报错。\n\n![92.jpg](/img/lambda/92.png)\n\n3. 最好**不要对已定义的别名再次赋值**。如果赋的表达式合法，那么没有问题，就按照你想的那样。如果赋的表达式不合法，那么就等同于直接输入别名进行输出，`=` 及之后全部被忽略，相当于什么也没有做。如果此时没有意识到是有问题的，误以为成功赋值，那后面会造成影响。所以，最好不要对别名再次赋值。\n\n![93.jpg](/img/lambda/93.jpg)\n\n成功赋值时没有任何输出信息。没有成功赋值就是显示原先的值，不会报错。\n\n![92.jpg](/img/lambda/92.png)\n\n这个例子也可以说明这个问题。因为赋给 `problem` 的表达式不合法，右边全部被忽略，等同于直接输入 `problem`。而此时我们没有定义 `problem`，所以报错信息是未声明 `problem`。",
+        "timestamp": 1778839598010,
+        "editHistory": [
+          1778839612526,
+          1778839617300,
+          1778839625048
+        ]
       },
       {
         "id": "msg-1778779909014-jmc1",
@@ -286,6 +691,35 @@
         "content": "此外，还有一个非常耗脑细胞的思考。这个我留到明天再说吧。现在已经不晚了，该歇歇睡觉了。",
         "timestamp": 1778785587086,
         "editHistory": []
+      },
+      {
+        "id": "msg-1778838867666-ptg2",
+        "content": "`plam` 的**前继实现非常值得研究**。它和我网上看到的通过有序对定义的方式不一样。\n\n```\nP = \\n f x. n (\\g h. h (g f)) (\\u. x) (\\u. u)\n```",
+        "timestamp": 1778838867666,
+        "editHistory": [
+          1778838876689,
+          1778838889582,
+          1778838909367,
+          1778838976190
+        ]
+      },
+      {
+        "id": "msg-1778838921097-zf2j",
+        "content": "注意，0 的前继是 0。",
+        "timestamp": 1778838921097,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778838958095-hitj",
+        "content": "在 Lambda Explorer 使用 `plam` 定义 `P`  的写法：\n\n![88.jpg](/img/lambda/88.jpg)",
+        "timestamp": 1778838958095,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778839102182-bob7",
+        "content": "`plam` 的 `P` 写法是真厉害！它没有采用常用的维护对子写法，下面是通义千问对其的解读：\n\n![89.jpg](/img/lambda/89.jpg)\n![90.jpg](/img/lambda/90.jpg)",
+        "timestamp": 1778839102182,
+        "editHistory": []
       }
     ]
   },
@@ -293,7 +727,7 @@
     "id": "chat-1778761437715",
     "title": "Lambda Explorer",
     "createdAt": 1778761437715,
-    "updatedAt": 1778785671068,
+    "updatedAt": 1778833297278,
     "tags": [
       "Lambda 演算"
     ],
@@ -321,10 +755,11 @@
       },
       {
         "id": "msg-1778779055769-nvvp",
-        "content": "1. 最简单形式：\n\n![47.png](/img/lambda/47.png)\n\n2. 这个程序规定**变量都是单字符**，于是可以省略所有空格。每两个字符都表示应用：\n\n![48.png](/img/lambda/48.png)\n![49.png](/img/lambda/49.png)\n\n3. 因而在这个程序里，**空格是毫无意义的**：\n\n![50.png](/img/lambda/50.png)\n\n4. 它可以给出规约过程，上面的图片有演示。\n5. 对没有范式（最简式）的表达式的程序结果演示：\n\n![54.png](/img/lambda/54.png)\n![55.png](/img/lambda/55.png)\n![51.png](/img/lambda/51.png)\n\n6. 对不动点组合子没有范式（最简式）的演示：\n\n![52.png](/img/lambda/52.png)\n![56.png](/img/lambda/56.png)\n![53.png](/img/lambda/53.png)\n\n7. 空格可少，但 **`()` 必要时必须加**：\n\n![57.png](/img/lambda/57.png)\n![58.png](/img/lambda/58.png)\n![59.png](/img/lambda/59.png)\n![60.png](/img/lambda/60.png)\n\n8. `XOR` 的实现：\n\n![61.png](/img/lambda/61.png)\n\n- 程序开发者的实现思路：\n\n![62.png](/img/lambda/62.png)\n\n- 我的实现思路：\n\n（ 抓住 `TURE` 返回第一个参数，`FALSE` 返回第二个参数，然后应用两次这个即可（ `TURE` 和 `FALSE` 的嵌套使用） ）\n\n![63.png](/img/lambda/63.png)\n\n9. 对邱奇数的理解：**邱奇数 `n` 组合某个函数 `n` 次**\n\n这个理解非常重要，一定要领会！且要利用这个理解做推导！有了这个理解，涉及邱奇数的规约推导会方便很多！\n\n![64.png](/img/lambda/64.png)",
+        "content": "1. 最简单形式：\n\n![47.png](/img/lambda/47.png)\n\n2. 这个程序规定**变量都是单字符**，于是可以省略所有空格。每两个字符都表示应用：\n\n![48.png](/img/lambda/48.png)\n![49.png](/img/lambda/49.png)\n\n3. 因而在这个程序里，**空格是毫无意义的**：\n\n![50.png](/img/lambda/50.png)\n\n4. 它可以给出规约过程，自由变量等信息，上面的图片有演示。\n5. 对没有范式（最简式）的表达式的程序结果演示：\n\n![54.png](/img/lambda/54.png)\n![55.png](/img/lambda/55.png)\n![51.png](/img/lambda/51.png)\n\n6. 对不动点组合子没有范式（最简式）的演示：\n\n![52.png](/img/lambda/52.png)\n![56.png](/img/lambda/56.png)\n![53.png](/img/lambda/53.png)\n\n7. 空格可少，但 **`()` 必要时必须加**：\n\n![57.png](/img/lambda/57.png)\n![58.png](/img/lambda/58.png)\n![59.png](/img/lambda/59.png)\n![60.png](/img/lambda/60.png)\n\n8. `XOR` 的实现：\n\n![61.png](/img/lambda/61.png)\n\n- 程序开发者的实现思路：\n\n![62.png](/img/lambda/62.png)\n\n- 我的实现思路：\n\n（ 抓住 `TURE` 返回第一个参数，`FALSE` 返回第二个参数，然后应用两次这个即可（ `TURE` 和 `FALSE` 的嵌套使用） ）\n\n![63.png](/img/lambda/63.png)\n\n9. 对邱奇数的理解：**邱奇数 `n` 组合某个函数 `n` 次**\n\n这个理解非常重要，一定要领会！且要利用这个理解做推导！有了这个理解，涉及邱奇数的规约推导会方便很多！\n\n![64.png](/img/lambda/64.png)",
         "timestamp": 1778779055769,
         "editHistory": [
-          1778782437285
+          1778782437285,
+          1778833297278
         ]
       },
       {
@@ -2416,7 +2851,7 @@
     "id": "chat-1777619988701",
     "title": "VSCode",
     "createdAt": 1777619988701,
-    "updatedAt": 1777985066358,
+    "updatedAt": 1778786535298,
     "tags": [
       "编程"
     ],
@@ -2432,6 +2867,12 @@
         "id": "msg-1777985066358-yic3",
         "content": "它最近更新的也太频繁了吧。好几次打开都有更新提示。",
         "timestamp": 1777985066358,
+        "editHistory": []
+      },
+      {
+        "id": "msg-1778786535298-x8w4",
+        "content": "它什么时候加的内置浏览器标签页功能？为什么要更这个功能出来啊，神经病啊。",
+        "timestamp": 1778786535298,
         "editHistory": []
       }
     ]
@@ -2478,7 +2919,7 @@
     "id": "chat-1777612036591",
     "title": "cjieba",
     "createdAt": 1777612036591,
-    "updatedAt": 1777988253480,
+    "updatedAt": 1778841505370,
     "tags": [
       "文本分析",
       "C/C++"
@@ -2490,6 +2931,14 @@
         "content": "`cppjieba` 的 C 接口。",
         "timestamp": 1777988253480,
         "editHistory": []
+      },
+      {
+        "id": "msg-1778841491244-0g8i",
+        "content": "我在 Windows 使用 `mingw` 工具链编译运行时，编译没有报错，但运行时报了`找不到入口...` 的错误。解决方案：\n\n![01.png](/img/jieba/01.png)",
+        "timestamp": 1778841491244,
+        "editHistory": [
+          1778841505370
+        ]
       }
     ]
   },
@@ -6103,7 +6552,7 @@
     "id": "chat-1774437536379",
     "title": "Windows 恶心行为",
     "createdAt": 1774437536379,
-    "updatedAt": 1778682918673,
+    "updatedAt": 1778786475122,
     "tags": [
       "计算机"
     ],
@@ -6157,6 +6606,15 @@
         "content": "Windows 我真是求求你了，学学隔壁 Debian/Mac 的 UI 设计吧，Windows 的窗口真的好丑。",
         "timestamp": 1777611177953,
         "editHistory": []
+      },
+      {
+        "id": "msg-1778786432278-va45",
+        "content": "有些时候我明明按住 `Shift` 键了，明明文字也显示`移动到`了，可它最后执行结果还是 `复制到`。不是有些时候，是经常！这个 Bug 快烦死我了。",
+        "timestamp": 1778786432278,
+        "editHistory": [
+          1778786448757,
+          1778786466020
+        ]
       }
     ]
   },
@@ -6164,7 +6622,7 @@
     "id": "chat-1774415441654",
     "title": "总述",
     "createdAt": 1774415441654,
-    "updatedAt": 1778782390363,
+    "updatedAt": 1778840840764,
     "tags": [
       "Lambda 演算"
     ],
@@ -6201,22 +6659,28 @@
       },
       {
         "id": "msg-1778773436102-xyri",
-        "content": "学习资源：\n\n**0. https://brilliant.org/wiki/lambda-calculus/** 这个一定要看！\n1. https://plato.stanford.edu/entries/lambda-calculus/\n2. https://personal.utdallas.edu/~gupta/courses/apl/lambda.pdf\n3. https://courses.seas.harvard.edu/courses/cs152/2024sp/lectures/sld01-intro.pdf\n4. https://arxiv.org/pdf/1503.09060\n5. https://pages.cs.wisc.edu/~horwitz/CS704-NOTES/\n6. https://cs.lmu.edu/~ray/notes/lambdacalculus/\n7. https://theory.stanford.edu/~blynn/lambda/\n8. https://sshwy.github.io/lamcalc/ch01-intro.html",
+        "content": "学习资源：\n\n**0. https://brilliant.org/wiki/lambda-calculus/** 这个一定要看！\n1. https://plato.stanford.edu/entries/lambda-calculus/\n2. https://personal.utdallas.edu/~gupta/courses/apl/lambda.pdf\n3. https://courses.seas.harvard.edu/courses/cs152/2024sp/lectures/sld01-intro.pdf\n4. https://arxiv.org/pdf/1503.09060\n\n这个论文写得好！推荐把这个论文打印下来读。果然，这种偏理论的还是要看论文才行，尤其是英语论文。视频讲的都不太靠谱，讲的不规范或者不全。\n\n5. https://pages.cs.wisc.edu/~horwitz/CS704-NOTES/\n6. https://cs.lmu.edu/~ray/notes/lambdacalculus/\n7. https://theory.stanford.edu/~blynn/lambda/\n8. https://sshwy.github.io/lamcalc/ch01-intro.html\n9. https://courses.cs.cornell.edu/cs312/2008sp/recitations/rec26.html\n10. https://palmstroem.blogspot.com/2012/05/lambda-calculus-for-absolute-dummies.html\n---\n\n中文\n\n**0. https://github.com/txyyss/Lambda-Calculus/releases/download/v1.0/lambda.pdf**\n\n强烈推荐看这个！详见 txyyss's Lambda-Calculus 对话。这本 PDF 还有配套的计算器可使用。\n\n1.  https://rratic.top/posts/lambda-calculus/\n2. https://www.cnblogs.com/QiFande/p/18984935\n3. https://note.tonycrane.cc/cs/pl/ppl/topic1/\n4. https://blog.ruo-chen.wang/2021/04/lambda-calculus-from-the-ground-up.html\n5. https://zhuanlan.zhihu.com/p/57972301\n6. https://learnxinyminutes.com/zh-cn/lambda-calculus/\n7. https://zhuanlan.zhihu.com/p/518185502\n8. https://zhuanlan.zhihu.com/p/30510749\n9. https://sylambdacode.github.io/2025/08/05/FixedPointCombinator.html\n---\n\n视频\n\n1. https://www.bilibili.com/video/BV1oFj7zPEaA/ \n2. https://youtu.be/pkCLMl0e_0k",
         "timestamp": 1778773436102,
         "editHistory": [
           1778773462405,
           1778774923946,
-          1778777065253
+          1778777065253,
+          1778830480414,
+          1778832132334,
+          1778832441789
         ]
       },
       {
         "id": "msg-1778776706450-xrww",
-        "content": "**标 0 的 https://brilliant.org/wiki/lambda-calculus/ 一定要看**。讲的全且明了，同时**从数学定义出发，有证明有公式**，是比较规范的教程。\n\n1. 函数部分应用是基于 `η` 转换：\n\n![33.png](/img/lambda/33.png)\n\n2. 邱奇数的定义：\n\n![34.png](/img/lambda/34.png)\n\n3. 证明后继表达式的正确性：\n\n![35.png](/img/lambda/35.png)\n\n4. 证明 `add` 表达式的正确性：\n\n！！！**网站的原证明过程有问题**：\n\n- 第一个 `=` 后面完全不对，第二个 `=` 及之后都没有问题\n- 但第二个 `=` 及之后的过程有些繁琐，我们没有必要展开 `n 上面一横杠`\n\n![36.png](/img/lambda/36.png)\n\n这样才正确（经我修正后）：\n\n![37.png](/img/lambda/37.png)\n\n5. 证明 `isZero` 表达式的正确性：\n\n核心点：**邱奇数 0 和邱奇布尔值 False 是同一个表达式（阿尔法等价）**，再考虑到邱奇布尔值 False 只返回第二个参数的特性。\n\n![38.png](/img/lambda/38.png)\n\n6. **证明在 Lambda 演算中，每一个表达式都有一个不动点**：\n\n![39.png](/img/lambda/39.png)\n\n7. **证明递归可用不动点组合子实现**：\n\n![40.png](/img/lambda/40.png)\n![41.png](/img/lambda/41.png)\n![42.png](/img/lambda/42.png)\n\n8. 两个**不可判定问题**：\n\n- 判断任两个表达式是否可相互规约（是否等价）\n- 判断某个表达式是否具有范式（是否可归约到最简式）\n\n![43.png](/img/lambda/43.png)\n![44.png](/img/lambda/44.png)\n\n9. 上面讲的都是**无类型**的 Lambda 演算。但使用无类型的 Lambda 演算编写过于困难，如果出现了带类型的 Lambda 演算，比如 Haskell 在内的大量函数时编程语言都是基于 类型的 Lambda 演算：\n\n![45.png](/img/lambda/45.png)\n\n10. 可以**使用 Lambda 演算进行命题的形式化证明**，GitHub 上有对应的项目：\n\n![46.png](/img/lambda/46.png)",
+        "content": "**标 0 的 https://brilliant.org/wiki/lambda-calculus/ 一定要看**。讲的全且明了，同时**从数学定义出发，有证明有公式**，是比较规范的教程。\n\n1. 函数部分应用是基于 `η` 转换：\n\n![33.png](/img/lambda/33.png)\n\n2. 邱奇数的定义：\n\n![34.png](/img/lambda/34.png)\n\n3. 证明后继表达式的正确性：\n\n![35.png](/img/lambda/35.png)\n\n4. 证明 `add` 表达式的正确性：\n\n！！！**网站的原证明过程有问题**：\n\n- 第一个 `=` 后面完全不对，第二个 `=` 及之后都没有问题\n- 但第二个 `=` 及之后的过程有些繁琐，我们没有必要展开 `n 上面一横杠`\n\n![36.png](/img/lambda/36.png)\n\n这样才正确（经我修正后）：\n\n![37.png](/img/lambda/37.png)\n\n5. 证明 `isZero` 表达式的正确性：\n\n核心点：**邱奇数 0 和邱奇布尔值 False 是同一个表达式（阿尔法等价）**，再考虑到邱奇布尔值 False 只返回第二个参数的特性。\n\n![38.png](/img/lambda/38.png)\n\n6. **证明在 Lambda 演算中，每一个表达式都有一个不动点**：\n\n![39.png](/img/lambda/39.png)\n\n7. **阐释递归与不动点的关系：这一关系常用于消除明递归**\n\n![40.png](/img/lambda/40.png)\n\n> `f =(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) f` 经过重写我们有\n\n![41.png](/img/lambda/41.png)\n\n于是我们知道，阶乘函数 `f` 是 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn))))` 的不动点。那么 `f x` 就等价于 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) 的不动点 x`。\n\n接下来我们用代码实现这一步。注意**代码中的 `f` `x` 虽与上面重名，但所指的内容完全不一样，一定要依据上下文区分清楚其含义**。\n\n我们让 Haskell 代码中的 `let x = f x` 相当于 `m = g m`，其中第一个表达式的 `x` 是第二个表达式的 `m`；第一个表达式的 `f` 是第二个表达式的 `g`。根据不动点的定义，我们得到 `m` 是 `g` 的不动点，从而 `x` 就是 `f` 的不动点。综上， `let fix f = let x = f x in x` 的结果 `x` 是 `f` 的不动点，因而**这个表达式的作用就是求 `f` 的不动点**。\n\n（ 下一段 `f` `x` 的含义与图片的相同，与上一段不同，注意区分 ）\n\n我们要求 `f x`，还已知 `f` 是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点。由此，我们只需要求 `(\\g n -> if (n == 0) then 0 else n + g (n - 1)) 的不动点 x` 即可。`fix f` 的作用是求 `f` 的不动点，因而 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1))` 就是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点，也就是我们最开始的递归函数 `f`。于是原来的函数应用 `f n` 就变成了 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1)) n`。于是我们使用下面的代码就实现了递归函数 `f` 的计算：\n\n![42.png](/img/lambda/42.png)\n\n因而我们实现了不出现阶乘函数 `f` 的名字就完成了它的应用，从而消除了明递归。\n\n总结一下整个过程。现在我们有一个阶乘函数 `f`，我们要求 `f x`。我们可以构建出一个 `g` 使得 `f` 是 `g` 的不动点。于是 `f x` 等价于 `g 的不动点 x` 等价于 `fix g x`。其本质是**构造一个新函数，通过某种操作达成与原函数一样的作用而不直接使用原函数**。\n\n那问题来了，要**如何构建出合适的 `g` 呢**？只需在原递归函数引入一个新参数并将其放在所有参数的第一个，然后再把内部的函数名换成这个参数的名字。\n\n从数学推导上讲，要求一个函数的不动点，我们只需要将它应用到不动点组合子（不动点组合子不只一个）上即可。在 Haskell 实现中，由于它的惰性计算特性，我们可以直接使用不动点的定义（不动点方程） `let x = f x in x` 来求 `f` 的不动点。\n\n给定一个函数 `f`，我们要求另一个函数 `g` 使得已有函数 `f` 是 `g` 的不动点。我们只需在 `f` 中引入一个新参数，并将其放在所有参数的第一位，然后表达式内部所有出现函数名 `f` 的地方换成引入参数的名字即可。\n\n8. 两个**不可判定问题**：\n\n- 判断任两个表达式是否可相互规约（是否等价）\n- 判断某个表达式是否具有范式（是否可归约到最简式）\n\n![43.png](/img/lambda/43.png)\n![44.png](/img/lambda/44.png)\n\n9. 上面讲的都是**无类型**的 Lambda 演算。但使用无类型的 Lambda 演算编写过于困难，如果出现了带类型的 Lambda 演算，比如 Haskell 在内的大量函数时编程语言都是基于 类型的 Lambda 演算：\n\n![45.png](/img/lambda/45.png)\n\n10. 可以**使用 Lambda 演算进行命题的形式化证明**，GitHub 上有对应的项目：\n\n![46.png](/img/lambda/46.png)",
         "timestamp": 1778776706450,
         "editHistory": [
           1778776744627,
           1778777103635,
-          1778777162969
+          1778777162969,
+          1778825903063,
+          1778829231022,
+          1778829389465
         ]
       },
       {
@@ -6234,20 +6698,18 @@
         ]
       },
       {
-        "id": "msg-1778777784139-xc69",
-        "content": "关于不动点组合子：\n\n1. 所有不动点组合子都没有范式（最简式）。\n2. 不动点组合子不只一个，光我现在知道的都有两个：\n\n- Y 组合子：`λf.(λx.(f (x x)) λx.(f (x x)))`\n- `λf.(λx. f (λy. x x y)) (λx. f (λy. x x y))`\n\nhttps://brilliant.org/wiki/lambda-calculus/ 对此也有提及。\n\n3. [百度百科介绍](https://baike.baidu.com/item/%E4%B8%8D%E5%8A%A8%E7%82%B9%E7%BB%84%E5%90%88%E5%AD%90/8265635)，这个有看的必要性！",
-        "timestamp": 1778777784139,
-        "editHistory": [
-          1778777798340,
-          1778777806497
-        ]
+        "id": "msg-1778829970443-w4fu",
+        "content": "`.` 后面的东西会尽可能的向右拓展：\n\n比如 `λa.λb.a a b` 中 (λb.a a b) 作为整体表达式的子表达式，而柯西化后 `λa b.a a b` 无子 λ 表达式",
+        "timestamp": 1778829970443,
+        "editHistory": []
       },
       {
         "id": "msg-1778779141585-kr3k",
-        "content": "对邱奇数的理解：**邱奇数 `n` 组合某个函数 `n` 次**\n\n这个理解非常重要，一定要领会！且要利用这个理解做推导！有了这个理解，涉及邱奇数的规约推导会方便很多！\n\n![64.png](/img/lambda/64.png)",
+        "content": "对邱奇数的理解：**邱奇数 `n` 组合某个函数 `n` 次**\n\n这个理解非常重要，一定要领会！且要利用这个理解做推导！有了这个理解，涉及邱奇数的规约推导会方便很多！\n\n邱奇数加法乘法幂的运算都利用了这个理解！\n\n![64.png](/img/lambda/64.png)",
         "timestamp": 1778779141585,
         "editHistory": [
-          1778782390363
+          1778782390363,
+          1778832613683
         ]
       },
       {
@@ -6257,6 +6719,12 @@
         "editHistory": [
           1778779180172
         ]
+      },
+      {
+        "id": "msg-1778840840764-o34z",
+        "content": "行了，Lambda 演算内容写成现在这样已经差不多了。就差一些细节待完善了。",
+        "timestamp": 1778840840764,
+        "editHistory": []
       }
     ]
   },
@@ -6632,7 +7100,7 @@
     "id": "chat-1774272586134",
     "title": "总述",
     "createdAt": 1774272586134,
-    "updatedAt": 1778780710529,
+    "updatedAt": 1778841105604,
     "tags": [
       "Haskell"
     ],
@@ -6757,11 +7225,14 @@
       },
       {
         "id": "msg-1778492014087-4rw1",
-        "content": "Windows 端使用 Haskell：**一定要让 cmd 支持 UTF-8**，否则报错信息的显示会有问题。详情请见 https://github.com/learnyouahaskell/learnyouahaskell.github.io/issues/140\n\n推荐使用“Beta 版：使用 Unicode UTF-8 提供全球语言支持”方法，一劳永逸：https://www.cnblogs.com/ljbguanli/p/18991944#_UTF8__11\n\n![02.png](/img/Windows/02.png)",
+        "content": "Windows 端使用 Haskell：**一定要让 cmd 支持 UTF-8**，否则报错信息的显示会有问题。详情请见 https://github.com/learnyouahaskell/learnyouahaskell.github.io/issues/140\n\n---\n\n同时这个 issue 还说明了不支持 UTF-8 会导致编译报错的问题：\n\n![77.png](/img/haskell/77.png)\n\n使用 `chcp 65001` 支持 UTF-8：\n\n![76.png](/img/haskell/76.png)\n\n---\n\n推荐使用“Beta 版：使用 Unicode UTF-8 提供全球语言支持”方法，一劳永逸：https://www.cnblogs.com/ljbguanli/p/18991944#_UTF8__11\n\n![02.png](/img/Windows/02.png)",
         "timestamp": 1778492014087,
         "editHistory": [
           1778603337087,
-          1778683007497
+          1778683007497,
+          1778841044012,
+          1778841076951,
+          1778841105604
         ]
       },
       {
@@ -7144,11 +7615,19 @@
       },
       {
         "id": "msg-1775817022945-pd3t",
-        "content": "Haskell 的折叠函数 `foldl` `foldr`，不动点组合子 `fix` 等抽象都在减少编程者对明递归的使用。也是因此，我们在写 Haskell 代码时，都要尽量减少明递归的函数定义和使用，用已有的抽象出来的函数来代替。\n\n---\n\n使用不动点组合子消除明递归：\n\n![40.png](/img/lambda/40.png)\n![41.png](/img/lambda/41.png)\n![42.png](/img/lambda/42.png)",
+        "content": "Haskell 的折叠函数 `foldl` `foldr`，不动点函数 `fix` 等抽象都在减少编程者对明递归的使用。也是因此，我们在写 Haskell 代码时，都要尽量减少明递归的函数定义和使用，用已有的抽象出来的函数来代替。\n\n---\n\n**不动点构造法消除明递归**：有一个阶乘函数 `f`，我们要求 `f x`。我们可以构建出一个 `g` 使得 `f` 是 `g` 的不动点。于是 `f x` 等价于 `g 的不动点 x` 等价于 `fix g x`。其本质是**构造一个新函数，通过某种操作达成与原函数一样的作用而不直接使用原函数**。\n\n其中 `fix` 是求参数不动点的函数。在 Haskell 中，托**惰性计算**的福，`let fix f = let x = f x in x` 短短一句就完成了 `fix` 的定义。\n\n`g` 的构造也很简单，只需在原递归函数 `f` 中引入一个新参数并将其放在所有参数的第一个，然后再把内部的函数名换成这个参数的名字。\n\n---\n\n接下来数学推导说明其正确性：\n\n![40.png](/img/lambda/40.png)\n\n> `f =(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) f` 经过重写我们有\n\n![41.png](/img/lambda/41.png)\n\n于是我们知道，阶乘函数 `f` 是 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn))))` 的不动点。那么 `f x` 就等价于 `(λg.λn.ifThenElse(isZeron) 0 (addn(g(predn)))) 的不动点 x`。\n\n接下来我们用代码实现这一步。注意**代码中的 `f` `x` 虽与上面重名，但所指的内容完全不一样，一定要依据上下文区分清楚其含义**。\n\n我们让 Haskell 代码中的 `let x = f x` 相当于 `m = g m`，其中第一个表达式的 `x` 是第二个表达式的 `m`；第一个表达式的 `f` 是第二个表达式的 `g`。根据不动点的定义，我们得到 `m` 是 `g` 的不动点，从而 `x` 就是 `f` 的不动点。综上， `let fix f = let x = f x in x` 的结果 `x` 是 `f` 的不动点，因而**这个表达式的作用就是求 `f` 的不动点**。\n\n（ 下一段 `f` `x` 的含义与图片的相同，与上一段不同，注意区分 ）\n\n我们要求 `f x`，还已知 `f` 是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点。由此，我们只需要求 `(\\g n -> if (n == 0) then 0 else n + g (n - 1)) 的不动点 x` 即可。`fix f` 的作用是求 `f` 的不动点，因而 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1))` 就是 `(\\g n -> if (n == 0) then 0 else n + g (n - 1))` 的不动点，也就是我们最开始的递归函数 `f`。于是原来的函数应用 `f n` 就变成了 `fix (\\g n -> if (n == 0) then 0 else n + g (n - 1)) n`。于是我们使用下面的代码就实现了递归函数 `f` 的计算：\n\n![42.png](/img/lambda/42.png)\n\n因而我们实现了不出现阶乘函数 `f` 的名字就完成了它的应用，从而消除了明递归。\n\n总结一下整个过程。现在我们有一个阶乘函数 `f`，我们要求 `f x`。我们可以构建出一个 `g` 使得 `f` 是 `g` 的不动点。于是 `f x` 等价于 `g 的不动点 x` 等价于 `fix g x`。其本质是**构造一个新函数，通过某种操作达成与原函数一样的作用而不直接使用原函数**。\n\n那问题来了，要**如何构建出合适的 `g` 呢**？只需在原递归函数引入一个新参数并将其放在所有参数的第一个，然后再把内部的函数名换成这个参数的名字。\n\n---\n\n从数学推导上讲，要求一个函数的不动点，我们只需要将它应用到不动点组合子（不动点组合子不只一个）上即可。在 Haskell 实现中，由于它的惰性计算特性，我们可以直接使用不动点的定义（不动点方程） `let x = f x in x` 来求 `f` 的不动点。\n\n给定一个函数 `f`，我们要求另一个函数 `g` 使得已有函数 `f` 是 `g` 的不动点。我们只需在 `f` 中引入一个新参数，并将其放在所有参数的第一位，然后表达式内部所有出现函数名 `f` 的地方换成引入参数的名字即可。",
         "timestamp": 1775817022945,
         "editHistory": [
           1778780692964,
-          1778780710529
+          1778780710529,
+          1778826165521,
+          1778826186730,
+          1778826229609,
+          1778826262014,
+          1778826818260,
+          1778829136843,
+          1778829171358,
+          1778829432979
         ]
       },
       {
@@ -7382,7 +7861,7 @@
     "id": "chat-1774163734215",
     "title": "碎碎念",
     "createdAt": 1774163734215,
-    "updatedAt": 1778786067209,
+    "updatedAt": 1778841562367,
     "tags": [
       "我",
       "生活"
@@ -7652,6 +8131,12 @@
         "editHistory": [
           1778786067209
         ]
+      },
+      {
+        "id": "msg-1778841562366-1ssu",
+        "content": "哎呀，累死了，今天就先这样吧。我要赶紧去看韩剧歇歇！",
+        "timestamp": 1778841562366,
+        "editHistory": []
       }
     ]
   }
