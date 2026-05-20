@@ -102,11 +102,16 @@ const router = useRouter()
           </h3>
           <div class="contact-links">
             <a href="mailto:1933679780@qq.com" class="contact-link">
-              <img src="/img/profile/email.png" alt="Email" class="contact-icon">
               <span>1933679780@qq.com</span>
             </a>
             <a class="contact-link">
               <span>Delta Chat（我的二维码在 Delta Chat 对话中）</span>
+            </a>
+            <a href="https://github.com/Xingye-Dujing" class="contact-link">
+              <span>https://github.com/Xingye-Dujing</span>
+            </a>
+            <a href="https://gitee.com/Xingye-Dujing" class="contact-link">
+              <span>https://gitee.com/Xingye-Dujing</span>
             </a>
           </div>
         </div>
