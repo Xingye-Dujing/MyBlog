@@ -28,24 +28,41 @@ export const useCommentStore = defineStore('comment', () => {
   }
 
   async function init() {
-    if (initialized.value) return
+    if (initialized.value) {
+      console.log('[CommentStore] Already initialized, skipping')
+      return
+    }
+    
+    console.log('[CommentStore] init() called, PROD mode:', import.meta.env.PROD)
 
     // Priority 1: localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
+    console.log('[CommentStore] Checking localStorage, has data:', !!saved)
+    
     if (saved) {
       try {
-        comments.value = JSON.parse(saved)
-        initialized.value = true
-        return
-      } catch {
+        const parsed = JSON.parse(saved)
+        // Only use localStorage data if it's not empty
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          comments.value = parsed
+          console.log('[CommentStore] Loaded from localStorage, count:', comments.value.length)
+          initialized.value = true
+          return
+        } else {
+          console.log('[CommentStore] localStorage data is empty, continuing to load from file')
+        }
+      } catch (e) {
+        console.warn('[CommentStore] localStorage parse error:', e)
         // localStorage corrupted, continue to load from file
       }
     }
 
     // Priority 2: Load from dev API only in development mode
     if (!import.meta.env.PROD) {
+      console.log('[CommentStore] Dev mode: trying /api/load-comments')
       try {
         const res = await fetch('/api/load-comments')
+        console.log('[CommentStore] API response status:', res.status, res.ok)
         if (res.ok) {
           const result = await res.json()
           if (result.data && Array.isArray(result.data)) {
@@ -53,31 +70,39 @@ export const useCommentStore = defineStore('comment', () => {
           } else if (Array.isArray(result)) {
             comments.value = result
           }
+          console.log('[CommentStore] Loaded from API, count:', comments.value.length)
           localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
           initialized.value = true
           return
         }
-      } catch {
+      } catch (e) {
+        console.warn('[CommentStore] API load error:', e)
         // API not available, continue to fallback
       }
     }
 
     // Priority 3: Load from static JSON file in production
     if (import.meta.env.PROD) {
+      console.log('[CommentStore] Prod mode: trying /data/comments.json')
       try {
         const res = await fetch('/data/comments.json')
+        console.log('[CommentStore] Static file response status:', res.status, res.ok)
         if (res.ok) {
           comments.value = await res.json()
+          console.log('[CommentStore] Loaded from static file, count:', comments.value.length)
           localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
           initialized.value = true
           return
+        } else {
+          console.error('[CommentStore] Static file fetch failed, status:', res.status)
         }
       } catch (error) {
-        console.error('Failed to load comments data from static file:', error)
+        console.error('[CommentStore] Failed to load comments data from static file:', error)
       }
     }
 
     // Fallback: empty data
+    console.log('[CommentStore] Fallback to empty data')
     comments.value = []
     initialized.value = true
   }
