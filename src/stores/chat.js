@@ -31,22 +31,39 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
 
-    // Priority 2: Load from dev API (src/data/chats.json)
-    try {
-      const res = await fetch('/api/load-chats')
-      if (res.ok) {
-        const result = await res.json()
-        if (result.data && Array.isArray(result.data)) {
-          chats.value = result.data
-        } else if (Array.isArray(result)) {
-          chats.value = result
+    // Priority 2: Load from dev API only in development mode
+    if (!import.meta.env.PROD) {
+      try {
+        const res = await fetch('/api/load-chats')
+        if (res.ok) {
+          const result = await res.json()
+          if (result.data && Array.isArray(result.data)) {
+            chats.value = result.data
+          } else if (Array.isArray(result)) {
+            chats.value = result
+          }
+          // Save to localStorage for future use
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
+          return
         }
-        // Save to localStorage for future use
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
-        return
+      } catch {
+        // API not available, continue to fallback
       }
-    } catch {
-      // API not available (production or error), continue to fallback
+    }
+
+    // Priority 3: Load from static JSON file in production
+    if (import.meta.env.PROD) {
+      try {
+        const res = await fetch('/data/chats.json')
+        if (res.ok) {
+          chats.value = await res.json()
+          // Save to localStorage for future use
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
+          return
+        }
+      } catch (error) {
+        console.error('Failed to load chats data from static file:', error)
+      }
     }
 
     // Fallback: empty data
@@ -60,6 +77,7 @@ export const useChatStore = defineStore('chat', () => {
   watch(chats, save, { deep: true })
 
   function createChat(title, tags = []) {
+    if (import.meta.env.PROD) return null
     const now = Date.now()
     const id = 'chat-' + now
     const chat = {
@@ -76,6 +94,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateChatTitle(chatId, newTitle) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     chat.title = newTitle
@@ -83,6 +102,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateChatTags(chatId, tags) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     chat.tags = tags
@@ -90,6 +110,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function addMessage(chatId, content) {
+    if (import.meta.env.PROD) return null
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return null
     const msg = {
@@ -104,6 +125,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateMessage(chatId, messageId, content) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     const msg = chat.messages.find(m => m.id === messageId)
@@ -118,6 +140,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function moveMessage(chatId, messageId, direction) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     const index = chat.messages.findIndex(m => m.id === messageId)
@@ -132,6 +155,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function insertMessage(chatId, targetMessageId, content, position) {
+    if (import.meta.env.PROD) return null
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return null
     const index = chat.messages.findIndex(m => m.id === targetMessageId)
@@ -151,6 +175,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function deleteMessage(chatId, messageId) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     chat.messages = chat.messages.filter(m => m.id !== messageId)
@@ -159,6 +184,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function deleteChat(chatId) {
+    if (import.meta.env.PROD) return
     chats.value = chats.value.filter(c => c.id !== chatId)
     if (activeChatId.value === chatId) {
       activeChatId.value = null
@@ -167,6 +193,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateChat(chatId, updates) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     Object.assign(chat, updates)
@@ -174,12 +201,17 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function togglePin(chatId) {
+    if (import.meta.env.PROD) return
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
     chat.pinned = !chat.pinned
   }
 
+  // Sync chats to file (development mode only)
   async function syncToFile() {
+    if (import.meta.env.PROD) {
+      return false
+    }
     try {
       const res = await fetch('/api/save-chats', {
         method: 'POST',
@@ -203,6 +235,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function importJSON(jsonData) {
+    if (import.meta.env.PROD) return false
     try {
       const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData
       chats.value = data
@@ -213,12 +246,14 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function resetToDefault() {
+    if (import.meta.env.PROD) return
     chats.value = []
     activeChatId.value = null
   }
 
   // Import from user-selected file (for cross-device sync)
   function importFromUserFile(file) {
+    if (import.meta.env.PROD) return Promise.resolve(false)
     return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = (e) => {

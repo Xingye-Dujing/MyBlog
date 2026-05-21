@@ -1,18 +1,17 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { getPlainText } from '@/composables/useMarkdown'
 
-const router = useRouter()
 const route = useRoute()
+const router = useRouter()
 const chatStore = useChatStore()
 
 const searchQuery = ref('')
-const showNewChat = ref(false)
 const newChatTitle = ref('')
-const editingChatId = ref(null)
-const editingTitle = ref('')
+const showNewChat = ref(false)
+const isDev = !import.meta.env.PROD
 const expandedTags = ref(new Set())
 
 const filteredChats = computed(() => {
@@ -66,6 +65,7 @@ function selectChat(chat) {
 }
 
 function createChat() {
+  if (!isDev) return
   const title = newChatTitle.value.trim()
   if (!title) return
   const chat = chatStore.createChat(title)
@@ -155,7 +155,7 @@ function handleEditKey(e) {
   <div class="chat-list">
     <div class="list-header">
       <h1 class="list-title">对话</h1>
-      <button class="new-chat-btn" title="新建对话" @click="showNewChat = !showNewChat">
+      <button v-if="isDev" class="new-chat-btn" title="新建对话" @click="showNewChat = !showNewChat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -163,7 +163,7 @@ function handleEditKey(e) {
       </button>
     </div>
 
-    <div v-if="showNewChat" class="new-chat-form">
+    <div v-if="showNewChat && isDev" class="new-chat-form">
       <input v-model="newChatTitle" class="new-chat-input" placeholder="输入对话标题..." autofocus
         @keydown="handleNewChatKey">
       <div class="new-chat-actions">

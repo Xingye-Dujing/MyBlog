@@ -42,22 +42,39 @@ export const useCommentStore = defineStore('comment', () => {
       }
     }
 
-    // Priority 2: Load from dev API (src/data/comments.json)
-    try {
-      const res = await fetch('/api/load-comments')
-      if (res.ok) {
-        const result = await res.json()
-        if (result.data && Array.isArray(result.data)) {
-          comments.value = result.data
-        } else if (Array.isArray(result)) {
-          comments.value = result
+    // Priority 2: Load from dev API only in development mode
+    if (!import.meta.env.PROD) {
+      try {
+        const res = await fetch('/api/load-comments')
+        if (res.ok) {
+          const result = await res.json()
+          if (result.data && Array.isArray(result.data)) {
+            comments.value = result.data
+          } else if (Array.isArray(result)) {
+            comments.value = result
+          }
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
+          initialized.value = true
+          return
         }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
-        initialized.value = true
-        return
+      } catch {
+        // API not available, continue to fallback
       }
-    } catch {
-      // API not available, continue to fallback
+    }
+
+    // Priority 3: Load from static JSON file in production
+    if (import.meta.env.PROD) {
+      try {
+        const res = await fetch('/data/comments.json')
+        if (res.ok) {
+          comments.value = await res.json()
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
+          initialized.value = true
+          return
+        }
+      } catch (error) {
+        console.error('Failed to load comments data from static file:', error)
+      }
     }
 
     // Fallback: empty data
@@ -101,26 +118,32 @@ export const useCommentStore = defineStore('comment', () => {
     return comment
   }
 
-  // Delete a comment
+  // Delete a comment - disabled in production
   function deleteComment(commentId) {
+    if (import.meta.env.PROD) return
     const index = comments.value.findIndex(c => c.id === commentId)
     if (index !== -1) {
       comments.value.splice(index, 1)
     }
   }
 
-  // Delete all comments for a chat
+  // Delete all comments for a chat - disabled in production
   function deleteChatComments(chatId) {
+    if (import.meta.env.PROD) return
     comments.value = comments.value.filter(c => c.chatId !== chatId)
   }
 
-  // Delete comments for a specific message
+  // Delete comments for a specific message - disabled in production
   function deleteMessageComments(chatId, messageId) {
+    if (import.meta.env.PROD) return
     comments.value = comments.value.filter(c => !(c.chatId === chatId && c.messageId === messageId))
   }
 
-  // Sync comments to file
+  // Sync comments to file (development mode only)
   async function syncToFile() {
+    if (import.meta.env.PROD) {
+      return false
+    }
     try {
       const res = await fetch('/api/save-comments', {
         method: 'POST',
@@ -161,8 +184,9 @@ export const useCommentStore = defineStore('comment', () => {
     URL.revokeObjectURL(url)
   }
 
-  // Import comments from JSON
+  // Import comments from JSON - disabled in production
   function importJSON(jsonData) {
+    if (import.meta.env.PROD) return false
     try {
       const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData
       comments.value = data

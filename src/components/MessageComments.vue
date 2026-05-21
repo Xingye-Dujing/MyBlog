@@ -14,6 +14,7 @@ const showComments = ref(false)
 const newCommentContent = ref('')
 const isSubmitting = ref(false)
 const commentsRef = ref(null)
+const isDev = !import.meta.env.PROD
 
 const comments = computed(() => {
   return commentStore.getMessageComments(props.chatId, props.messageId)
@@ -51,8 +52,10 @@ function submitComment() {
   newCommentContent.value = ''
   isSubmitting.value = false
 
-  // Sync to file in dev mode
-  commentStore.syncToFile()
+  // Sync to file only in dev mode
+  if (isDev) {
+    commentStore.syncToFile()
+  }
 }
 
 function handleKeydown(e) {
@@ -63,6 +66,7 @@ function handleKeydown(e) {
 }
 
 function deleteComment(commentId) {
+  if (!isDev) return
   if (confirm('确定要删除这条评论吗？')) {
     commentStore.deleteComment(commentId)
     commentStore.syncToFile()
@@ -131,7 +135,7 @@ function formatTime(timestamp) {
                 <span class="comment-time">{{ formatTime(comment.timestamp) }}</span>
               </div>
               <div class="comment-text" v-html="renderMarkdown(comment.content)"></div>
-              <button class="comment-delete" @click="deleteComment(comment.id)" title="删除评论">
+              <button v-if="isDev" class="comment-delete" @click="deleteComment(comment.id)" title="删除评论">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6" />
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />

@@ -11,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
 const commentStore = useCommentStore()
+const isDev = !import.meta.env.PROD
 
 const messagesContainer = ref(null)
 const inputRef = ref(null)
@@ -81,9 +82,11 @@ function handleEdit(msg) {
 
 function handleDelete(msg) {
   chatStore.deleteMessage(chat.value.id, msg.id)
-  // Delete associated comments
+  // Delete associated comments (only in dev mode)
   commentStore.deleteMessageComments(chat.value.id, msg.id)
-  commentStore.syncToFile()
+  if (!import.meta.env.PROD) {
+    commentStore.syncToFile()
+  }
 }
 
 function handleMove(msg, direction) {
@@ -105,9 +108,11 @@ function handleInsert(msg, position) {
 function deleteChat() {
   if (!chat.value) return
   chatStore.deleteChat(chat.value.id)
-  // Delete all comments for this chat
+  // Delete all comments for this chat (only in dev mode)
   commentStore.deleteChatComments(chat.value.id)
-  commentStore.syncToFile()
+  if (!import.meta.env.PROD) {
+    commentStore.syncToFile()
+  }
   router.push({ name: 'home' })
 }
 
@@ -238,7 +243,7 @@ onMounted(() => {
           <button class="title-save-btn" @click="saveTitle">保存</button>
         </div>
         <template v-else>
-          <h2 class="chat-name" @dblclick="startEditTitle" :title="`双击编辑标题`">{{ chat.title }}</h2>
+          <h2 class="chat-name" @dblclick="isDev && startEditTitle()" :title="isDev ? '双击编辑标题' : ''">{{ chat.title }}</h2>
           <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
         </template>
       </div>
@@ -246,15 +251,15 @@ onMounted(() => {
         <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
           {{ syncStatus.includes('success') ? '已同步' : '同步失败' }}
         </div>
-        <button class="header-btn" title="更多" @click="showActions = !showActions">
+        <button v-if="isDev" class="header-btn" title="更多" @click="showActions = !showActions">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="1" />
             <circle cx="19" cy="12" r="1" />
             <circle cx="5" cy="12" r="1" />
           </svg>
         </button>
-        <div v-if="showActions" class="actions-overlay" @click="showActions = false"></div>
-        <div v-if="showActions" class="actions-dropdown">
+        <div v-if="showActions && isDev" class="actions-overlay" @click="showActions = false"></div>
+        <div v-if="showActions && isDev" class="actions-dropdown">
           <button @click="startEditTitle()">
             重命名对话
           </button>
@@ -329,7 +334,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <MessageInput ref="inputRef" :editing-message="editingMessage" :insert-target="insertTarget" @send="handleSend"
+    <MessageInput v-if="isDev" ref="inputRef" :editing-message="editingMessage" :insert-target="insertTarget" @send="handleSend"
       @cancel-insert="insertTarget = null" />
   </div>
 </template>
