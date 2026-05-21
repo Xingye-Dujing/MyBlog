@@ -20,7 +20,7 @@ export const useChatStore = defineStore('chat', () => {
   )
 
   async function init() {
-    console.log('[ChatStore] init() called, PROD mode:', import.meta.env.PROD)
+    console.log('[ChatStore] init() called')
     
     // Priority 1: localStorage (user's current data)
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -39,52 +39,25 @@ export const useChatStore = defineStore('chat', () => {
         }
       } catch (e) {
         console.warn('[ChatStore] localStorage parse error:', e)
-        // localStorage corrupted, continue to load from file
       }
     }
 
-    // Priority 2: Load from dev API only in development mode
-    if (!import.meta.env.PROD) {
-      console.log('[ChatStore] Dev mode: trying /api/load-chats')
-      try {
-        const res = await fetch('/api/load-chats')
-        console.log('[ChatStore] API response status:', res.status, res.ok)
-        if (res.ok) {
-          const result = await res.json()
-          if (result.data && Array.isArray(result.data)) {
-            chats.value = result.data
-          } else if (Array.isArray(result)) {
-            chats.value = result
-          }
-          console.log('[ChatStore] Loaded from API, count:', chats.value.length)
-          // Save to localStorage for future use
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
-          return
-        }
-      } catch (e) {
-        console.warn('[ChatStore] API load error:', e)
-        // API not available, continue to fallback
+    // Priority 2: Load from static JSON file
+    console.log('[ChatStore] Trying to load from /data/chats.json')
+    try {
+      const res = await fetch('/data/chats.json')
+      console.log('[ChatStore] Static file response status:', res.status, res.ok)
+      if (res.ok) {
+        chats.value = await res.json()
+        console.log('[ChatStore] Loaded from static file, count:', chats.value.length)
+        // Save to localStorage for future use
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
+        return
+      } else {
+        console.error('[ChatStore] Static file fetch failed, status:', res.status)
       }
-    }
-
-    // Priority 3: Load from static JSON file in production
-    if (import.meta.env.PROD) {
-      console.log('[ChatStore] Prod mode: trying /data/chats.json')
-      try {
-        const res = await fetch('/data/chats.json')
-        console.log('[ChatStore] Static file response status:', res.status, res.ok)
-        if (res.ok) {
-          chats.value = await res.json()
-          console.log('[ChatStore] Loaded from static file, count:', chats.value.length)
-          // Save to localStorage for future use
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
-          return
-        } else {
-          console.error('[ChatStore] Static file fetch failed, status:', res.status)
-        }
-      } catch (error) {
-        console.error('[ChatStore] Failed to load chats data from static file:', error)
-      }
+    } catch (error) {
+      console.error('[ChatStore] Failed to load chats data from static file:', error)
     }
 
     // Fallback: empty data
@@ -229,21 +202,9 @@ export const useChatStore = defineStore('chat', () => {
     chat.pinned = !chat.pinned
   }
 
-  // Sync chats to file (development mode only)
+  // Sync chats to file - disabled (read-only mode)
   async function syncToFile() {
-    if (import.meta.env.PROD) {
-      return false
-    }
-    try {
-      const res = await fetch('/api/save-chats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json;charset=utf-8;' },
-        body: JSON.stringify(chats.value)
-      })
-      return res.ok
-    } catch {
-      return false
-    }
+    return false
   }
 
   function exportJSON() {

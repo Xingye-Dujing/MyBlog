@@ -33,7 +33,7 @@ export const useCommentStore = defineStore('comment', () => {
       return
     }
     
-    console.log('[CommentStore] init() called, PROD mode:', import.meta.env.PROD)
+    console.log('[CommentStore] init() called')
 
     // Priority 1: localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -53,52 +53,25 @@ export const useCommentStore = defineStore('comment', () => {
         }
       } catch (e) {
         console.warn('[CommentStore] localStorage parse error:', e)
-        // localStorage corrupted, continue to load from file
       }
     }
 
-    // Priority 2: Load from dev API only in development mode
-    if (!import.meta.env.PROD) {
-      console.log('[CommentStore] Dev mode: trying /api/load-comments')
-      try {
-        const res = await fetch('/api/load-comments')
-        console.log('[CommentStore] API response status:', res.status, res.ok)
-        if (res.ok) {
-          const result = await res.json()
-          if (result.data && Array.isArray(result.data)) {
-            comments.value = result.data
-          } else if (Array.isArray(result)) {
-            comments.value = result
-          }
-          console.log('[CommentStore] Loaded from API, count:', comments.value.length)
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
-          initialized.value = true
-          return
-        }
-      } catch (e) {
-        console.warn('[CommentStore] API load error:', e)
-        // API not available, continue to fallback
+    // Priority 2: Load from static JSON file
+    console.log('[CommentStore] Trying to load from /data/comments.json')
+    try {
+      const res = await fetch('/data/comments.json')
+      console.log('[CommentStore] Static file response status:', res.status, res.ok)
+      if (res.ok) {
+        comments.value = await res.json()
+        console.log('[CommentStore] Loaded from static file, count:', comments.value.length)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
+        initialized.value = true
+        return
+      } else {
+        console.error('[CommentStore] Static file fetch failed, status:', res.status)
       }
-    }
-
-    // Priority 3: Load from static JSON file in production
-    if (import.meta.env.PROD) {
-      console.log('[CommentStore] Prod mode: trying /data/comments.json')
-      try {
-        const res = await fetch('/data/comments.json')
-        console.log('[CommentStore] Static file response status:', res.status, res.ok)
-        if (res.ok) {
-          comments.value = await res.json()
-          console.log('[CommentStore] Loaded from static file, count:', comments.value.length)
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(comments.value))
-          initialized.value = true
-          return
-        } else {
-          console.error('[CommentStore] Static file fetch failed, status:', res.status)
-        }
-      } catch (error) {
-        console.error('[CommentStore] Failed to load comments data from static file:', error)
-      }
+    } catch (error) {
+      console.error('[CommentStore] Failed to load comments data from static file:', error)
     }
 
     // Fallback: empty data
@@ -164,24 +137,12 @@ export const useCommentStore = defineStore('comment', () => {
     comments.value = comments.value.filter(c => !(c.chatId === chatId && c.messageId === messageId))
   }
 
-  // Sync comments to file (development mode only)
+  // Sync comments to file - disabled (read-only mode)
   async function syncToFile() {
-    if (import.meta.env.PROD) {
-      return false
-    }
-    try {
-      const res = await fetch('/api/save-comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json;charset=utf-8;' },
-        body: JSON.stringify(comments.value)
-      })
-      return res.ok
-    } catch {
-      return false
-    }
+    return false
   }
 
-  // Filter out orphaned comments (comments whose chat/message no longer exists)
+  // Filter out orphaned comments
   function filterOrphanedComments(validChatIds, validMessageMap) {
     const beforeCount = comments.value.length
     comments.value = comments.value.filter(c => {
