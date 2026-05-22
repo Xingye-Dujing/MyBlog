@@ -9,9 +9,6 @@ const router = useRouter()
 const chatStore = useChatStore()
 
 const searchQuery = ref('')
-const newChatTitle = ref('')
-const showNewChat = ref(false)
-const isDev = !import.meta.env.PROD
 const expandedTags = ref(new Set())
 
 const filteredChats = computed(() => {
@@ -64,26 +61,6 @@ function selectChat(chat) {
   router.push({ name: 'chat', params: { id: chat.id } })
 }
 
-function createChat() {
-  if (!isDev) return
-  const title = newChatTitle.value.trim()
-  if (!title) return
-  const chat = chatStore.createChat(title)
-  newChatTitle.value = ''
-  showNewChat.value = false
-  router.push({ name: 'chat', params: { id: chat.id } })
-}
-
-function cancelNewChat() {
-  showNewChat.value = false
-  newChatTitle.value = ''
-}
-
-function handleNewChatKey(e) {
-  if (e.key === 'Enter') createChat()
-  if (e.key === 'Escape') cancelNewChat()
-}
-
 function getLastMessage(chat) {
   if (!chat.messages.length) return '暂无消息'
   return getPlainText(chat.messages[chat.messages.length - 1].content, 50)
@@ -118,58 +95,12 @@ function toggleTagExpand(tag) {
 function isExpanded(tag) {
   return expandedTags.value.has(tag)
 }
-
-function startEditTitle(chat, e) {
-  e.stopPropagation()
-  editingChatId.value = chat.id
-  editingTitle.value = chat.title
-}
-
-function saveTitle(chat, e) {
-  e.stopPropagation()
-  const newTitle = editingTitle.value.trim()
-  if (newTitle && newTitle !== chat.title) {
-    chatStore.updateChatTitle(chat.id, newTitle)
-  }
-  editingChatId.value = null
-  editingTitle.value = ''
-}
-
-function cancelEditTitle(e) {
-  e.stopPropagation()
-  editingChatId.value = null
-  editingTitle.value = ''
-}
-
-function handleEditKey(e) {
-  if (e.key === 'Enter') {
-    saveTitle(chatStore.chats.find(c => c.id === editingChatId.value), e)
-  }
-  if (e.key === 'Escape') {
-    cancelEditTitle(e)
-  }
-}
 </script>
 
 <template>
   <div class="chat-list">
     <div class="list-header">
       <h1 class="list-title">对话</h1>
-      <button v-if="isDev" class="new-chat-btn" title="新建对话" @click="showNewChat = !showNewChat">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
-    </div>
-
-    <div v-if="showNewChat && isDev" class="new-chat-form">
-      <input v-model="newChatTitle" class="new-chat-input" placeholder="输入对话标题..." autofocus
-        @keydown="handleNewChatKey">
-      <div class="new-chat-actions">
-        <button class="btn-cancel" @click="cancelNewChat">取消</button>
-        <button class="btn-confirm" :disabled="!newChatTitle.trim()" @click="createChat">创建</button>
-      </div>
     </div>
 
     <div class="search-box">
@@ -202,11 +133,7 @@ function handleEditKey(e) {
             :class="{ active: chat.id === activeChatId }" @click="selectChat(chat)">
             <div class="chat-item-main">
               <div class="chat-item-header">
-                <span v-if="editingChatId === chat.id" class="edit-title-container" @click.stop>
-                  <input v-model="editingTitle" class="edit-title-input" autofocus @keydown="handleEditKey"
-                    @blur="saveTitle(chat, $event)" />
-                </span>
-                <span v-else class="chat-title" @dblclick="startEditTitle(chat, $event)">
+                <span class="chat-title">
                   <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
@@ -246,11 +173,7 @@ function handleEditKey(e) {
             @click="selectChat(chat)">
             <div class="chat-item-main">
               <div class="chat-item-header">
-                <span v-if="editingChatId === chat.id" class="edit-title-container" @click.stop>
-                  <input v-model="editingTitle" class="edit-title-input" autofocus @keydown="handleEditKey"
-                    @blur="saveTitle(chat, $event)" />
-                </span>
-                <span v-else class="chat-title" @dblclick="startEditTitle(chat, $event)">
+                <span class="chat-title">
                   <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
@@ -276,26 +199,12 @@ function handleEditKey(e) {
       </div>
 
       <div v-if="!filteredChats.length" class="empty-list">
-        <p v-if="searchQuery">没有找到匹配的对话</p>
-        <p v-else>暂无对话，点击 + 创建</p>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <p v-if="searchQuery">未找到相关消息</p>
+        <p v-else>暂无对话</p>
       </div>
-    </div>
-
-    <div class="list-footer">
-      <router-link to="/timeline" class="footer-link">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-        <span>时间线</span>
-      </router-link>
-      <router-link to="/about" class="footer-link">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-        <span>关于</span>
-      </router-link>
     </div>
   </div>
 </template>
@@ -305,216 +214,127 @@ function handleEditKey(e) {
   width: 320px;
   height: 100vh;
   border-right: 1.5px solid #e0e0e0;
+  background: #fff;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  position: sticky;
-  top: 0;
-  flex-shrink: 0;
-  transition: width 0.2s ease;
-}
-
-.chat-list.collapsed {
-  width: 0 !important;
   overflow: hidden;
-  border-right: none;
 }
 
 .list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 20px 12px;
+  padding: 24px 20px 16px;
   border-bottom: 1px solid #f0f0f0;
 }
 
 .list-title {
-  font-size: 1.6rem;
-  font-weight: 200;
+  font-size: 1.5rem;
+  font-weight: 400;
   color: #000;
-  letter-spacing: 3px;
   margin: 0;
-}
-
-.new-chat-btn {
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid #000;
-  background: #fff;
-  border-radius: 8px;
-  cursor: pointer;
-  padding: 7px;
-  color: #000;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.new-chat-btn:hover {
-  background: #000;
-  color: #fff;
-}
-
-.new-chat-btn svg {
-  width: 100%;
-  height: 100%;
-}
-
-.new-chat-form {
-  padding: 12px 20px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.new-chat-input {
-  width: 100%;
-  border: 1.5px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-family: serif;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.new-chat-input:focus {
-  border-color: #000;
-}
-
-.new-chat-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.btn-cancel,
-.btn-confirm {
-  padding: 5px 14px;
-  border-radius: 5px;
-  font-family: serif;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-cancel {
-  background: none;
-  border: 1px solid #e0e0e0;
-  color: #666;
-}
-
-.btn-cancel:hover {
-  border-color: #999;
-}
-
-.btn-confirm {
-  background: #000;
-  border: 1px solid #000;
-  color: #fff;
-}
-
-.btn-confirm:hover:not(:disabled) {
-  background: #333;
-}
-
-.btn-confirm:disabled {
-  background: #e0e0e0;
-  border-color: #e0e0e0;
-  cursor: not-allowed;
+  letter-spacing: 2px;
 }
 
 .search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  position: relative;
   padding: 12px 20px;
   border-bottom: 1px solid #f0f0f0;
 }
 
 .search-icon {
-  width: 18px;
-  height: 18px;
-  color: #bbb;
-  flex-shrink: 0;
+  position: absolute;
+  left: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: #999;
+  pointer-events: none;
 }
 
 .search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-family: serif;
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 32px;
+  border: 1.5px solid #e8e8e8;
+  border-radius: 18px;
   font-size: 0.9rem;
-  color: #333;
-  background: transparent;
+  font-family: serif;
+  background: #fafafa;
+  outline: none;
+  transition: all 0.2s;
 }
 
-.search-input::placeholder {
-  color: #ccc;
+.search-input:focus {
+  border-color: #c9372e;
+  background: #fff;
 }
 
 .clear-search {
-  width: 20px;
-  height: 20px;
-  padding: 0;
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
   border: none;
-  background: transparent;
+  background: none;
   cursor: pointer;
+  padding: 0;
+  color: #999;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #bbb;
-  transition: color 0.2s;
+  border-radius: 50%;
 }
 
 .clear-search:hover {
-  color: #666;
+  background: #f0f0f0;
 }
 
 .clear-search svg {
-  width: 16px;
-  height: 16px;
-}
-
-.search-match {
-  color: #409eff;
-}
-
-.message-snippet {
-  font-style: italic;
-}
-
-.snippet-separator {
-  color: #ccc;
-  margin: 0 4px;
+  width: 14px;
+  height: 14px;
 }
 
 .chat-items {
   flex: 1;
   overflow-y: auto;
+  padding: 8px 0;
 }
 
+/* Chat groups */
 .chat-group {
-  border-bottom: 1px solid #f5f5f5;
+  margin-bottom: 8px;
 }
 
 .group-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: #fafafa;
+  gap: 6px;
+  padding: 12px 20px;
   cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #666;
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
   user-select: none;
-  transition: background 0.15s;
+  transition: all 0.2s;
 }
 
 .group-header:hover {
-  background: #f0f0f0;
+  background: #f5f5f5;
+}
+
+.group-header:first-child {
+  border-top: none;
 }
 
 .expand-icon {
   width: 16px;
   height: 16px;
-  color: #999;
   transition: transform 0.2s;
+  flex-shrink: 0;
 }
 
 .expand-icon.expanded {
@@ -522,40 +342,21 @@ function handleEditKey(e) {
 }
 
 .group-count {
+  margin-left: auto;
   font-size: 0.75rem;
   color: #bbb;
-  margin-left: auto;
+  font-weight: 400;
 }
 
 .group-content {
-  background: #fff;
-}
-
-.edit-title-container {
-  flex: 1;
-  min-width: 0;
-}
-
-.edit-title-input {
-  width: 100%;
-  border: 1.5px solid #409eff;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-family: serif;
-  font-size: 0.95rem;
-  outline: none;
-  background: #fff;
-}
-
-.edit-title-input:focus {
-  border-color: #409eff;
+  overflow: hidden;
 }
 
 .chat-item {
   padding: 14px 20px;
-  border-bottom: 1px solid #f5f5f5;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 3px solid transparent;
 }
 
 .chat-item:hover {
@@ -570,24 +371,22 @@ function handleEditKey(e) {
 
 .chat-item-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 6px;
 }
 
 .chat-title {
   font-size: 0.95rem;
-  font-weight: 400;
-  color: #000;
-  letter-spacing: 0.5px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  font-weight: 500;
+  color: #333;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .pin-icon {
@@ -605,77 +404,65 @@ function handleEditKey(e) {
 }
 
 .chat-preview {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   color: #999;
-  margin: 0;
+  margin: 0 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+.chat-preview.search-match {
+  color: #c9372e;
+  white-space: normal;
+  overflow: visible;
+}
+
+.message-snippet {
+  display: inline;
+}
+
+.snippet-separator {
+  margin: 0 2px;
+  color: #ccc;
+}
+
+.snippet-text {
+  display: inline;
 }
 
 .chat-tags {
   display: flex;
   gap: 4px;
-  margin-top: 6px;
   flex-wrap: wrap;
 }
 
 .tag {
   font-size: 0.7rem;
-  color: #888;
-  padding: 1px 8px;
-  background: #f0f0f0;
-  border-radius: 3px;
-}
-
-.chat-item.active .tag {
-  background: #e8e8e8;
+  color: #666;
+  padding: 2px 8px;
+  background: #f5f5f5;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
 }
 
 .empty-list {
-  padding: 40px 20px;
+  padding: 60px 20px;
   text-align: center;
+  color: #ccc;
+}
+
+.empty-list svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  opacity: 0.3;
 }
 
 .empty-list p {
   font-size: 0.9rem;
-  color: #ccc;
-}
-
-.list-footer {
-  border-top: 1px solid #f0f0f0;
-  padding: 12px 20px;
-  display: flex;
-  gap: 8px;
-}
-
-.footer-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  color: #666;
-  padding: 8px 12px;
-  border-radius: 6px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  flex: 1;
-  justify-content: center;
-}
-
-.footer-link:hover {
-  background: #f5f5f5;
-  color: #000;
-}
-
-.footer-link svg {
-  width: 20px;
-  height: 20px;
-}
-
-.footer-link span {
-  font-size: 0.9rem;
-  letter-spacing: 1px;
+  margin: 0;
 }
 
 @media (max-width: 768px) {
@@ -683,69 +470,45 @@ function handleEditKey(e) {
     width: 100%;
     height: 100dvh;
     border-right: none;
-    position: static;
+    border-bottom: 1.5px solid #e0e0e0;
   }
 
   .list-header {
-    padding: 16px 16px 10px;
-    padding-top: calc(16px + env(safe-area-inset-top));
+    padding: 20px 16px 12px;
+    padding-top: calc(20px + env(safe-area-inset-top));
   }
 
   .list-title {
-    font-size: 1.4rem;
-  }
-
-  .new-chat-btn {
-    width: 40px;
-    height: 40px;
-    padding: 8px;
+    font-size: 1.3rem;
   }
 
   .search-box {
-    padding: 10px 16px;
+    padding: 8px 16px;
   }
 
-  .new-chat-form {
+  .group-header {
     padding: 10px 16px;
   }
 
   .chat-item {
-    padding: 14px 16px;
-    -webkit-touch-callout: none;
-  }
-
-  .chat-item:active {
-    background: #f0f0f0;
-  }
-
-  .chat-item.active {
-    padding-left: 16px;
-    border-left: none;
-  }
-
-  .list-footer {
-    padding: 10px 16px;
-    padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  }
-
-  .footer-link {
-    min-height: 44px;
-  }
-
-  .edit-title-input {
-    font-size: 0.95rem;
-    padding: 6px 10px;
-    min-height: 44px;
-  }
-
-  .group-header {
     padding: 12px 16px;
-    min-height: 44px;
   }
 
-  .expand-icon {
-    width: 18px;
-    height: 18px;
+  .chat-title {
+    font-size: 0.9rem;
+  }
+
+  .chat-preview {
+    font-size: 0.8rem;
+  }
+
+  .chat-date {
+    font-size: 0.7rem;
+  }
+
+  .tag {
+    font-size: 0.65rem;
+    padding: 2px 6px;
   }
 }
 </style>
