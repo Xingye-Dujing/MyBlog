@@ -406,7 +406,6 @@ function formatTimelineTime(ts) {
 
 .message-content :deep(.katex-display) {
   margin: 16px 0;
-  overflow-x: auto;
 }
 
 .message-content :deep(table) {

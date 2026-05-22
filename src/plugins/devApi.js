@@ -5,7 +5,7 @@ export function devApiPlugin() {
   return {
     name: 'blog-dev-api',
     configureServer(server) {
-      // Save chats to src/data/chats.json
+      // Save chats to public/data/chats.json
       server.middlewares.use('/api/save-chats', (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405
@@ -18,7 +18,7 @@ export function devApiPlugin() {
         req.on('end', () => {
           try {
             const data = JSON.parse(body)
-            const filePath = path.resolve(process.cwd(), 'src/data/chats.json')
+            const filePath = path.resolve(process.cwd(), 'public/data/chats.json')
             const dir = path.dirname(filePath)
             if (!fs.existsSync(dir)) {
               fs.mkdirSync(dir, { recursive: true })
@@ -35,7 +35,7 @@ export function devApiPlugin() {
         })
       })
 
-      // Load chats from src/data/chats.json
+      // Load chats from public/data/chats.json
       server.middlewares.use('/api/load-chats', (req, res) => {
         if (req.method !== 'GET') {
           res.statusCode = 405
@@ -44,7 +44,7 @@ export function devApiPlugin() {
         }
 
         try {
-          const filePath = path.resolve(process.cwd(), 'src/data/chats.json')
+          const filePath = path.resolve(process.cwd(), 'public/data/chats.json')
           if (fs.existsSync(filePath)) {
             const data = fs.readFileSync(filePath, 'utf-8')
             res.statusCode = 200
@@ -62,7 +62,7 @@ export function devApiPlugin() {
         }
       })
 
-      // Save comments to src/data/comments.json
+      // Save comments to public/data/comments.json
       server.middlewares.use('/api/save-comments', (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405
@@ -75,7 +75,7 @@ export function devApiPlugin() {
         req.on('end', () => {
           try {
             const data = JSON.parse(body)
-            const filePath = path.resolve(process.cwd(), 'src/data/comments.json')
+            const filePath = path.resolve(process.cwd(), 'public/data/comments.json')
             const dir = path.dirname(filePath)
             if (!fs.existsSync(dir)) {
               fs.mkdirSync(dir, { recursive: true })
@@ -92,7 +92,7 @@ export function devApiPlugin() {
         })
       })
 
-      // Load comments from src/data/comments.json
+      // Load comments from public/data/comments.json
       server.middlewares.use('/api/load-comments', (req, res) => {
         if (req.method !== 'GET') {
           res.statusCode = 405
@@ -101,7 +101,7 @@ export function devApiPlugin() {
         }
 
         try {
-          const filePath = path.resolve(process.cwd(), 'src/data/comments.json')
+          const filePath = path.resolve(process.cwd(), 'public/data/comments.json')
           if (fs.existsSync(filePath)) {
             const data = fs.readFileSync(filePath, 'utf-8')
             res.statusCode = 200
