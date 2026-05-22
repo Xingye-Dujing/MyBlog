@@ -1,14 +1,13 @@
 <script setup>
-import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import MessageBubble from '@/components/MessageBubble.vue'
+import CommentSection from '@/components/CommentSection.vue'
 
 const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
-
-const messagesContainer = ref(null)
 
 const chat = computed(() => {
   const id = route.params.id
@@ -24,6 +23,7 @@ const messagesWithDates = computed(() => {
     const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     result.push({
       ...msg,
+      chatId: chat.value.id, // Add chatId to each message for comment lookup
       showDate: dateKey !== lastDate
     })
     lastDate = dateKey
@@ -52,6 +52,9 @@ const messagesWithDates = computed(() => {
           <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
         </div>
         <MessageBubble v-for="msg in messagesWithDates" :key="msg.id" :message="msg" :show-date="msg.showDate" />
+
+        <!-- Comment section -->
+        <CommentSection :chat-id="chat.id" />
       </div>
     </div>
   </div>
