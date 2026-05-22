@@ -145,16 +145,16 @@ const messagesWithDates = computed(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border: none;
     background: none;
     cursor: pointer;
-    padding: 8px;
+    padding: 6px;
     color: #000;
     margin-right: 6px;
     flex-shrink: 0;
-    border-radius: 6px;
+    border-radius: 5px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -163,35 +163,42 @@ const messagesWithDates = computed(() => {
   }
 
   .back-btn svg {
-    width: 100%;
-    height: 100%;
+    width: 18px;
+    height: 18px;
   }
 
   .chat-header {
-    padding: 10px 12px;
-    padding-top: calc(10px + env(safe-area-inset-top));
+    padding: 8px 4px;
+    padding-top: calc(8px + env(safe-area-inset-top));
   }
 
   .chat-name {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
   }
 
   .chat-meta {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
   }
 
   .messages-area {
-    padding: 8px 0;
+    padding: 6px 0;
     -webkit-overflow-scrolling: touch;
   }
 
+  .messages-content {
+    padding: 0 16px;
+  }
+
   .chat-tags-header {
-    padding: 0 12px 8px;
+    padding: 10px 12px 6px;
+    gap: 5px;
   }
 
   .header-tag {
-    font-size: 0.7rem;
-    padding: 2px 8px;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 10px;
   }
 }
 </style>

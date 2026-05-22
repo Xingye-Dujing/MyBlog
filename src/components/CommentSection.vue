@@ -176,6 +176,14 @@ function formatTime(timestamp) {
   color: #444;
 }
 
+.comment-text :deep(strong) {
+  font-weight: 600;
+}
+
+.comment-text :deep(em) {
+  font-style: italic;
+}
+
 .comment-text :deep(p) {
   margin: 0 0 8px;
 }
@@ -193,42 +201,86 @@ function formatTime(timestamp) {
   background: #f0f0f0;
   padding: 2px 6px;
   border-radius: 3px;
-  font-family: 'Consolas', monospace;
+  color: #c9372e;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.9em;
+}
+
+.comment-text :deep(pre) {
+  background: #f6f6f6;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.comment-text :deep(pre code) {
+  background: none;
+  padding: 0;
+  color: inherit;
 }
 
 @media (max-width: 768px) {
   .chat-comment-section {
-    padding: 16px;
-    margin-top: 16px;
+    padding: 14px;
+    margin-top: 14px;
     border-radius: 6px;
   }
 
-  .comment-avatar {
-    width: 32px;
-    height: 32px;
+  .section-header {
+    margin-bottom: 16px;
   }
 
-  .comment-avatar svg {
-    width: 20px;
-    height: 20px;
+  .section-header h3 {
+    font-size: 1rem;
   }
 
-  .comment-item {
-    gap: 10px;
-    padding: 12px 0;
-  }
-
-  .comment-author {
-    font-size: 0.85rem;
-  }
-
-  .comment-time {
+  .comment-total {
     font-size: 0.75rem;
   }
 
+  .comment-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .comment-avatar svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .comment-item {
+    gap: 8px;
+    padding: 10px 0;
+  }
+
+  .comment-meta {
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .comment-author {
+    font-size: 0.8rem;
+  }
+
+  .comment-time {
+    font-size: 0.7rem;
+  }
+
   .comment-text {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .comment-text :deep(p) {
+    margin: 0 0 6px;
+  }
+
+  .comment-text :deep(code) {
+    padding: 1px 5px;
   }
 }
 </style>

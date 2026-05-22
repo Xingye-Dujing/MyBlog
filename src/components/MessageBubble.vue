@@ -146,14 +146,13 @@ function formatTime(timestamp) {
 }
 
 .message-bubble {
-  padding: 16px 20px 8px;
+  padding: 16px 26px 8px;
   border-left: 3px solid transparent;
   border-radius: 2px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .message-bubble:hover {
-  background: #fafafa;
   border-left-color: #000;
 }
 
@@ -195,6 +194,7 @@ function formatTime(timestamp) {
   text-decoration: underline;
   text-underline-offset: 3px;
   transition: opacity 0.2s;
+  word-wrap: break-word;
 }
 
 .message-content :deep(a:hover) {
@@ -211,12 +211,28 @@ function formatTime(timestamp) {
   color: #555;
 }
 
+.message-content :deep(pre.hljs) {
+  background: #f6f6f6;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 12px 0;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.message-content :deep(pre.hljs code) {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  color: #333333d5;
+}
+
 .message-content :deep(code) {
   background: #f0f0f0;
   padding: 2px 6px;
   border-radius: 3px;
-  font-family: 'Consolas', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.9em;
+  color: #c9372e;
 }
 
 .message-content :deep(pre) {
@@ -234,14 +250,39 @@ function formatTime(timestamp) {
 
 .message-content :deep(img) {
   max-width: 100%;
-  height: auto;
-  border-radius: 4px;
-  margin: 12px 0;
+  border-radius: 8px;
+  margin: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Multi-image container for essay-style layout */
+.message-content :deep(p:has(img)) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+/* Desktop: uniform height, auto width */
+.message-content :deep(p:has(img) img) {
+  object-fit: contain;
+  margin: 0;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Middle divider image: smaller, circular */
+.message-content :deep(p:has(img) img[alt="ZS"]) {
+  height: 40px;
+  width: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid #fff;
 }
 
 .message-content :deep(blockquote) {
-  border-left: 3px solid #000;
-  padding-left: 16px;
   margin: 12px 0;
   color: #666;
 }
@@ -347,6 +388,11 @@ function formatTime(timestamp) {
   border-top: 1px solid #f0f0f0;
 }
 
+.message-comments :deep(code){
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  color: #c9372e;
+}
+
 .comment-item {
   display: flex;
   gap: 10px;
@@ -427,52 +473,103 @@ function formatTime(timestamp) {
 
 @media (max-width: 768px) {
   .message-bubble {
-    padding: 12px 16px 6px;
+    padding: 10px 14px 6px;
+  }
+
+  .message-bubble:hover {
+    border-left-color: transparent;
   }
 
   .message-content {
-    font-size: 1rem;
-    line-height: 1.8;
+    font-size: 0.85rem;
+    line-height: 1.7;
   }
 
   .message-content :deep(h2) {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
+    margin: 6px 0 10px;
+    padding-bottom: 6px;
   }
 
   .message-content :deep(h3) {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
+    margin: 6px 0 6px;
+  }
+
+  .message-content :deep(p) {
+    margin: 0 0 10px;
+  }
+
+  .message-content :deep(pre) {
+    padding: 10px;
+    margin: 10px 0;
+  }
+
+  .message-content :deep(ul),
+  .message-content :deep(ol) {
+    margin: 10px 0;
+    padding-left: 20px;
+  }
+
+  .message-content :deep(hr) {
+    margin: 14px 0;
+  }
+
+  .message-content :deep(table) {
+    margin: 10px 0;
+  }
+
+  .message-content :deep(th),
+  .message-content :deep(td) {
+    padding: 6px;
   }
 
   .date-separator {
-    margin: 20px 0 12px;
+    margin: 4px 0 4px;
   }
 
   .date-separator span {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    padding: 0 12px;
   }
 
   .message-time {
+    font-size: 0.65rem;
+  }
+
+  .comment-toggle-btn {
+    padding: 3px 6px;
     font-size: 0.7rem;
   }
 
-  .comment-badge {
-    font-size: 0.65rem;
-    padding: 2px 6px;
+  .comment-toggle-btn svg {
+    width: 14px;
+    height: 14px;
   }
 
-  .comment-avatar {
-    width: 28px;
-    height: 28px;
-  }
-
-  .comment-avatar svg {
-    width: 18px;
-    height: 18px;
+  .message-comments {
+    margin-top: 10px;
+    padding-top: 10px;
   }
 
   .comment-item {
     gap: 8px;
-    padding: 10px 0;
+    padding: 8px 0;
+  }
+
+  .comment-avatar {
+    width: 26px;
+    height: 26px;
+  }
+
+  .comment-avatar svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .comment-meta {
+    gap: 6px;
+    margin-bottom: 5px;
   }
 
   .comment-author {
@@ -480,11 +577,16 @@ function formatTime(timestamp) {
   }
 
   .comment-time {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
   }
 
   .comment-text {
     font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .comment-text :deep(p) {
+    margin: 0 0 5px;
   }
 }
 </style>

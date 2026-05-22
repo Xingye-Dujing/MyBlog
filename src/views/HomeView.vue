@@ -142,12 +142,13 @@ onUnmounted(() => {
 
 .empty-content {
   text-align: center;
+  padding: 20px;
 }
 
 .empty-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 20px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
   color: #ddd;
 }
 
@@ -157,18 +158,18 @@ onUnmounted(() => {
 }
 
 .empty-title {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: #999;
-  margin: 0 0 8px;
-  letter-spacing: 2px;
+  margin: 0 0 6px;
+  letter-spacing: 1.5px;
   font-weight: 200;
 }
 
 .empty-sub {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: #ccc;
   margin: 0;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
 /* Resize handle */

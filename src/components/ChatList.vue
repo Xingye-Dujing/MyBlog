@@ -474,41 +474,66 @@ function isExpanded(tag) {
   }
 
   .list-header {
-    padding: 20px 16px 12px;
-    padding-top: calc(20px + env(safe-area-inset-top));
+    padding-top: calc(10px + env(safe-area-inset-top));
   }
 
   .list-title {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
   }
 
   .search-box {
-    padding: 8px 16px;
+    padding: 6px 14px;
+  }
+
+  .search-input {
+    height: 32px;
+    font-size: 0.75rem;
+    padding-left: 40px;
   }
 
   .group-header {
-    padding: 10px 16px;
-  }
-
-  .chat-item {
-    padding: 12px 16px;
-  }
-
-  .chat-title {
-    font-size: 0.9rem;
-  }
-
-  .chat-preview {
+    padding: 8px 14px;
     font-size: 0.8rem;
   }
 
+  .group-count {
+    font-size: 0.75rem;
+  }
+
+  .chat-item {
+    padding: 10px 14px;
+  }
+
+  .chat-title {
+    font-size: 0.85rem;
+  }
+
+  .chat-preview {
+    font-size: 0.75rem;
+    margin: 0 0 4px;
+  }
+
   .chat-date {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
   }
 
   .tag {
-    font-size: 0.65rem;
-    padding: 2px 6px;
+    font-size: 0.6rem;
+    padding: 1px 5px;
+  }
+
+  .empty-list {
+    padding: 40px 16px;
+  }
+
+  .empty-list svg {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 10px;
+  }
+
+  .empty-list p {
+    font-size: 0.85rem;
   }
 }
 </style>
