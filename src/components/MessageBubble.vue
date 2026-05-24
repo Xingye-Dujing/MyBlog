@@ -202,7 +202,7 @@ function formatTime(timestamp) {
 }
 
 .message-content :deep(strong) {
-  font-weight: 600;
+  font-weight: bold;
   color: #000;
 }
 
@@ -318,7 +318,7 @@ function formatTime(timestamp) {
 
 .message-content :deep(th) {
   background: #f5f5f5;
-  font-weight: 600;
+  font-weight: bold;
 }
 
 .message-content :deep(.katex) {

@@ -177,7 +177,7 @@ function formatTime(timestamp) {
 }
 
 .comment-text :deep(strong) {
-  font-weight: 600;
+  font-weight: bold;
 }
 
 .comment-text :deep(em) {
