@@ -14,6 +14,12 @@ const router = createRouter({
       name: 'chat',
       component: HomeView,
     },
+    {
+      path: '/news',
+      beforeEnter() {
+        window.location.href = '/h5-news.html'
+      }
+    }
   ],
 })
 
