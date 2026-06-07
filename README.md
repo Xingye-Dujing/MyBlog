@@ -2,7 +2,10 @@
 
 极简风格、聊天式布局的个人博客，基于 Vue 3 和 Vite 构建
 
-在线访问我的博客（需**翻墙**）：https://my-blog-eight-dun.vercel.app
+在线访问我的博客：
+
+- https://xingye-blog.zh-cn.edgeone.cool
+- 需翻墙：https://my-blog-eight-dun.vercel.app
 
 > 在线版本由 `production` 分支构建并部署，与当前 `main` 分支有所不同。两者的区别及各自作用，请阅读其中的 **「博客理念」对话**
 
@@ -90,3 +93,4 @@ src/
 - 当前 `main` 分支**仅适用于 `npm run dev` 开发模式**
 - 如需执行 `npm run build` 并部署，请切换到 `production` 分支
 - `main` 与 `production` 分支的区别及各自作用，详见其中的「博客理念」对话
+- `main` 分支的对话数据自 2026 年 6 月 7 日起就不再更新。只有 `production` 分支的数据是实时更新的
