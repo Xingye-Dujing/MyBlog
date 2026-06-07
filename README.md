@@ -26,7 +26,7 @@
 ![06.jpg](./public/img/blog/13.jpg)
 ![07.jpg](./public/img/blog/14.jpg)
 
-> 注：手机端可直接访问 [https://my-blog-eight-dun.vercel.app](https://my-blog-eight-dun.vercel.app)，无需局域网访问。
+> 注：手机端可直接访问在线版，无需像 `main` 分支进行局域网访问。
 
 ## 如何使用
 
@@ -45,4 +45,4 @@
    npm run build
    ```
 
-4. 推荐使用 GitHub 搭配 Vercel 一键部署（我的在线版即采用此方式）
+4. 推荐使用 GitHub 搭配 Vercel/Edgeone 一键部署（我的在线版即采用此方式）
