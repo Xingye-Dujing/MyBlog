@@ -223,9 +223,6 @@ function handleEditKey(e) {
                 </span>
               </p>
               <p v-else class="chat-preview">{{ getLastMessage(chat) }}</p>
-              <div v-if="chat.tags.length" class="chat-tags">
-                <span v-for="tag in chat.tags.slice(0, 3)" :key="tag" class="tag">{{ tag }}</span>
-              </div>
             </div>
           </div>
         </div>
@@ -269,6 +266,7 @@ function handleEditKey(e) {
               <p v-else class="chat-preview">{{ getLastMessage(chat) }}</p>
               <div v-if="chat.tags.length" class="chat-tags">
                 <span v-for="t in chat.tags.slice(0, 3)" :key="t" class="tag">{{ t }}</span>
+                <span v-if="chat.tags.length > 3" class="tag">...</span>
               </div>
             </div>
           </div>
