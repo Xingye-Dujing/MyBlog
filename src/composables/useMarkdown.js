@@ -4,7 +4,7 @@ import katex from 'katex'
 import texmath from 'markdown-it-texmath'
 
 const md = new MarkdownIt({
-  html: false,
+  html: true,
   linkify: true,
   typographer: true,
   highlight(str, lang) {
