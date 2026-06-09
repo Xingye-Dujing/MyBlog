@@ -20,11 +20,20 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 300) + 'px'
 }
 
-function insertImageMarkdown(filename) {
+function insertMediaMarkdown(file) {
   const textarea = textareaRef.value
   if (!textarea) return
 
-  const markdown = `![${filename}](/img/${filename})`
+  const isVideo = file.type.startsWith('video/')
+  const filename = file.name
+  let markdown = ''
+  
+  if (isVideo) {
+    markdown = `<video src="..." controls style="max-width: 100%;"></video>`
+  } else {
+    markdown = `![${filename}](/img/${filename})`
+  }
+
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
   const text = content.value
@@ -47,9 +56,11 @@ function handleDrop(e) {
   isDragOver.value = false
 
   const files = e.dataTransfer.files
-  if (files.length > 0 && files[0].type.startsWith('image/')) {
+  if (files.length > 0) {
     const file = files[0]
-    insertImageMarkdown(file.name)
+    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+      insertMediaMarkdown(file)
+    }
   }
 }
 
@@ -68,13 +79,14 @@ function handlePaste(e) {
   if (!items) return
 
   for (let i = 0; i < items.length; i++) {
-    if (items[i].type.startsWith('image/')) {
+    const type = items[i].type
+    if (type.startsWith('image/') || type.startsWith('video/')) {
       e.preventDefault()
       const file = items[i].getAsFile()
       if (file) {
-        // For clipboard images, use a generic name with timestamp
-        const filename = `clipboard-${Date.now()}.${file.name.split('.').pop() || 'png'}`
-        insertImageMarkdown(filename)
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : (type.startsWith('video/') ? 'mp4' : 'png')
+        const filename = `clipboard-${Date.now()}.${ext}`
+        insertMediaMarkdown({ name: filename, type: type })
       }
       break
     }
@@ -157,8 +169,14 @@ defineExpose({ setContent, focus })
         <button class="cancel-btn" @click="cancelInsert">取消</button>
       </div>
       <div class="input-area" :class="{ 'drag-over': isDragOver }">
-        <textarea ref="textareaRef" v-model="content" :placeholder="isDragOver ? '释放以上传图片...' : placeholder" rows="1"
-          @input="autoResize" @keydown="handleKeydown"></textarea>
+        <textarea 
+          ref="textareaRef" 
+          v-model="content" 
+          :placeholder="isDragOver ? '释放以上传图片或视频...' : placeholder" 
+          rows="1"
+          @input="autoResize" 
+          @keydown="handleKeydown"
+        ></textarea>
         <button class="send-btn" :disabled="!content.trim()" @click="send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="22" y1="2" x2="11" y2="13" />
@@ -168,7 +186,7 @@ defineExpose({ setContent, focus })
       </div>
       <div class="input-hint">
         <span v-if="!isDragOver">Ctrl + Enter 发送</span>
-        <span v-else>释放以上传图片</span>
+        <span v-else>释放以上传图片或视频</span>
       </div>
     </div>
   </div>
