@@ -34,7 +34,7 @@
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
-          <div class="outline-title" :style="{ paddingLeft: (section.level - 1) * 12 + 'px' }">
+          <div class="outline-title">
             <span class="title-text">{{ section.title }}</span>
             <span v-if="section.messageCount > 1" class="msg-badge">{{ section.messageCount }}条</span>
           </div>
@@ -172,7 +172,6 @@ function handleToggle(sectionId) {
 
 .outline-item.active .outline-item-header {
   background: #f5f5f5;
-  border-left: 2px solid #000;
 }
 
 .collapse-btn {
@@ -271,10 +270,6 @@ function handleToggle(sectionId) {
   max-height: 40vh;
   overflow-y: auto;
   border-top: 1px solid #f0f0f0;
-}
-
-.mobile-outline .outline-item-header {
-  padding: 12px 16px;
 }
 
 @media (max-width: 768px) {

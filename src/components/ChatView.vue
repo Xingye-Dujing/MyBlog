@@ -256,7 +256,6 @@ onUnmounted(() => {
               <line x1="3" y1="18" x2="3.01" y2="18" />
             </svg>
             <span>文章导览</span>
-            <span class="summary-badge">{{ sections.length }}章</span>
           </summary>
           <OutlineSidebar
             :sections="sections"

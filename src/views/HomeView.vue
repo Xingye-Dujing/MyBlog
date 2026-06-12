@@ -195,7 +195,7 @@ onUnmounted(() => {
 /* Toggle sidebar button */
 .toggle-sidebar-btn {
   position: absolute;
-  top: 16px;
+  top: 8px;
   right: 16px;
   z-index: 20;
   width: 36px;
