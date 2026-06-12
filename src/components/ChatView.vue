@@ -47,8 +47,7 @@ const messagesWithDates = computed(() => {
     const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     // 查找该消息所属的章节
     const section = sections.value.find(s => idx >= s.startMsgIndex && idx <= s.endMsgIndex)
-    const isHeadingMsg = section?.headingMsgIndex === idx
-    const isVisible = !section?.collapsed || isHeadingMsg
+    const isVisible = !section?.collapsed  // 折叠时整个章节（包括标题消息）隐藏
     result.push({
       ...msg,
       showDate: dateKey !== lastDate,
@@ -88,7 +87,7 @@ function buildSections() {
       messageCount: messages.length
     })
   } else {
-    // 第一个大纲节点之前的内容（可选，命名为“开头”）
+    // 开头部分（第一个大纲之前）
     if (outlineIndices[0] > 0) {
       newSections.push({
         id: 'section-intro',
@@ -102,14 +101,13 @@ function buildSections() {
       })
     }
 
-    // 每个大纲节点及其后续内容
+    // 每个大纲节点（包含自身）形成一个章节
     for (let i = 0; i < outlineIndices.length; i++) {
-      const currentIdx = outlineIndices[i]
-      const nextIdx = outlineIndices[i + 1] ?? messages.length
-      const msg = messages[currentIdx]
+      const startIdx = outlineIndices[i]
+      const endIdx = (outlineIndices[i + 1] ?? messages.length) - 1
+      const msg = messages[startIdx]
       let title = msg.outline?.title?.trim()
       if (!title) {
-        // 留空时自动取消息纯文本的前30字
         const plain = getPlainText(msg.content, 30)
         title = plain.length > 30 ? plain.slice(0, 30) + '…' : plain
       }
@@ -117,11 +115,11 @@ function buildSections() {
         id: `section-${msg.id}`,
         title,
         level: 2,
-        startMsgIndex: currentIdx,
-        endMsgIndex: nextIdx - 1,
-        headingMsgIndex: currentIdx,
+        startMsgIndex: startIdx,
+        endMsgIndex: endIdx,
+        headingMsgIndex: startIdx,
         collapsed: false,
-        messageCount: nextIdx - currentIdx
+        messageCount: endIdx - startIdx + 1
       })
     }
   }
@@ -149,13 +147,9 @@ function toggleSection(sectionId) {
 // 跳转到指定章节（滚动到该章节的标题消息）
 function jumpToSection(section) {
   if (!chat.value) return
-  // 如果章节已折叠，先展开以便看到内容
-  if (section.collapsed) toggleSection(section.id)
-
-  const targetMsgIndex = section.headingMsgIndex ?? section.startMsgIndex
-  const targetMsg = chat.value.messages[targetMsgIndex]
+  if (section.collapsed) toggleSection(section.id) // 先展开
+  const targetMsg = chat.value.messages[section.startMsgIndex]
   if (!targetMsg) return
-
   nextTick(() => {
     const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
     const targetIdx = chat.value.messages.findIndex(m => m.id === targetMsg.id)
@@ -199,35 +193,21 @@ function onScroll() {
   }
 }
 
-// 手机端回到顶部
-function scrollToTop() {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-}
-
 // 当大纲被修改时重新构建章节
 function handleOutlineUpdate() {
   buildSections()
   nextTick(() => {
-    // 重新添加消息DOM的id（用于锚点，可选）
+    // 重新添加消息 DOM 的 id
     addHeadingIdsToDOM()
   })
 }
 
-// 辅助：为每条消息的 DOM 添加 id（方便跳转，但不是必须）
+// 辅助：为每条消息的 DOM 添加 id
 function addHeadingIdsToDOM() {
   if (!messagesContainer.value) return
   const wrappers = messagesContainer.value.querySelectorAll('.message-wrapper')
   wrappers.forEach((wrapper, idx) => {
     if (!wrapper.id) wrapper.id = `msg-${idx}`
-  })
-}
-
-function scrollToBottom(smooth = true) {
-  nextTick(() => {
-    const el = messagesContainer.value
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' })
   })
 }
 
@@ -247,7 +227,6 @@ function handleSend(content) {
     chatStore.addMessage(chat.value.id, content)
   }
   handleOutlineUpdate()
-  scrollToBottom()
 }
 
 function handleEdit(msg) {
@@ -400,16 +379,13 @@ watch(() => route.params.id, (newId, oldId) => {
     commentStore.syncToFile()
   }
   handleOutlineUpdate()
-  nextTick(() => scrollToBottom(false))
 })
 
 watch(() => chat.value, () => {
   handleOutlineUpdate()
-  nextTick(() => scrollToBottom(false))
 }, { deep: true, immediate: true })
 
 onMounted(() => {
-  scrollToBottom(false)
   window.addEventListener('resize', handleResize)
   if (messagesContainer.value) {
     messagesContainer.value.addEventListener('scroll', onScroll)
@@ -445,12 +421,6 @@ onUnmounted(() => {
           </template>
         </div>
         <div class="header-actions">
-          <!-- 手机端回到顶部按钮 -->
-          <button v-if="isMobile" class="header-btn scroll-top-btn" title="回到顶部" @click="scrollToTop">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="18 15 12 9 6 15" />
-            </svg>
-          </button>
           <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
             {{ syncStatus.includes('success') ? '已同步' : '同步失败' }}
           </div>
@@ -586,9 +556,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-.scroll-top-btn svg {
-  transform: rotate(180deg);
 }
 .mobile-outline-container {
   border-bottom: 1px solid #e0e0e0;

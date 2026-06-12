@@ -114,7 +114,7 @@ function updateOutline(enabled, title) {
   border-radius: 6px;
   padding: 4px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  width: 200px;
+  width: 260px;
 }
 .outline-editor input {
   width: 100%;
@@ -124,9 +124,6 @@ function updateOutline(enabled, title) {
   font-size: 0.8rem;
   font-family: serif;
   outline: none;
-}
-.outline-editor input:focus {
-  border-color: #c9372e;
 }
 @media (max-width: 768px) {
   .outline-editor {

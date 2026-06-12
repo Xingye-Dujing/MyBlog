@@ -1,5 +1,5 @@
 <template>
-  <div class="outline-sidebar" :class="{ 'mobile-outline': isMobile }" :style="{ width: width + 'px' }">
+  <div class="outline-sidebar" :class="{ 'mobile-outline': isMobile }" :style="{ width: isMobile ? '100%' : width + 'px' }">
     <div v-if="!isMobile" class="outline-header">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="8" y1="6" x2="21" y2="6" />
@@ -93,7 +93,6 @@ function stopResize() {
   document.body.style.cursor = ''
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', stopResize)
-  // 保存宽度
   localStorage.setItem(STORAGE_KEY, width.value)
 }
 
@@ -169,7 +168,6 @@ function handleToggle(sectionId) {
 }
 .outline-item.active .outline-item-header {
   background: #f5f5f5;
-  border-left: 2px solid #000;
 }
 .collapse-btn {
   width: 24px;
