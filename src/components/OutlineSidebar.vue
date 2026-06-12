@@ -82,7 +82,7 @@ function startResize(e) {
 function onMouseMove(e) {
   if (!isResizing) return
   const delta = e.clientX - startX
-  let newWidth = startWidth + delta
+  let newWidth = startWidth - delta
   newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth))
   width.value = newWidth
 }
@@ -144,8 +144,8 @@ function handleToggle(sectionId) {
 }
 
 .outline-header svg {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   color: #c9372e;
 }
 

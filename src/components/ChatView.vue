@@ -13,6 +13,7 @@ const chatStore = useChatStore()
 
 const messagesContainer = ref(null)
 const isMobile = ref(window.innerWidth <= 768)
+const showOutlinePanel = ref(true)   // 手机端大纲面板显示/隐藏状态
 
 // 大纲相关状态
 const sections = ref([])      // 章节列表
@@ -121,13 +122,7 @@ function toggleSection(sectionId) {
   const section = sections.value.find(s => s.id === sectionId)
   if (section) {
     section.collapsed = !section.collapsed
-    sections.value = [...sections.value]  // 触发响应式更新
-    // 折叠/展开后，可能需要重新调整滚动位置（可选）
-    nextTick(() => {
-      if (!section.collapsed && section.headingMsgIndex !== null) {
-        // 如果展开，可选滚动到该章节标题
-      }
-    })
+    sections.value = [...sections.value]
   }
 }
 
@@ -143,13 +138,12 @@ function jumpToSection(section) {
 
   nextTick(() => {
     const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
-    const targetIdx = targetMsgIndex
-    if (messageElements && messageElements[targetIdx]) {
-      messageElements[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (messageElements && messageElements[targetMsgIndex]) {
+      messageElements[targetMsgIndex].scrollIntoView({ behavior: 'smooth', block: 'start' })
       activeHeadingId.value = section.id
       // 短暂高亮效果
       setTimeout(() => {
-        const el = messageElements[targetIdx]
+        const el = messageElements[targetMsgIndex]
         if (el) {
           el.style.transition = 'background 0.3s'
           el.style.background = '#faf0e6'
@@ -178,14 +172,18 @@ function onScroll() {
       }
     }
   }
-  if (currentActiveId !== activeHeadingId.value) {
-    activeHeadingId.value = currentActiveId
-  }
+  if (currentActiveId !== activeHeadingId.value) activeHeadingId.value = currentActiveId
 }
 
-// 监听窗口大小变化，更新手机端标志
+// 手机端切换大纲面板显示/隐藏
+function toggleOutlinePanel() {
+  showOutlinePanel.value = !showOutlinePanel.value
+}
+
 function handleResize() {
   isMobile.value = window.innerWidth <= 768
+  // 当从手机切换到电脑时，确保面板状态重置
+  if (!isMobile.value) showOutlinePanel.value = true
 }
 
 // 监听路由变化，重新构建大纲
@@ -241,10 +239,13 @@ onUnmounted(() => {
           <h2 class="chat-name">{{ chat.title }}</h2>
           <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
         </div>
+          <!-- 手机端：大纲导览开关按钮 -->
+          <button v-if="isMobile && sections.length > 0" class="outline-toggle-btn" @click="toggleOutlinePanel" :title="showOutlinePanel ? '隐藏导览' : '显示导览'">
+          </button>
       </div>
 
       <!-- 手机端大纲折叠面板（仅当有章节时显示） -->
-      <div v-if="isMobile && sections.length > 0" class="mobile-outline-container">
+      <div v-if="isMobile && sections.length > 0 && showOutlinePanel" class="mobile-outline-container">
         <details class="mobile-outline-details">
           <summary class="mobile-outline-summary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -347,7 +348,6 @@ onUnmounted(() => {
   color: #bbb;
   letter-spacing: 0.5px;
 }
-
 .messages-area {
   flex: 1;
   overflow-y: auto;
@@ -381,14 +381,22 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .chat-view {
+.chat-view {
     flex-direction: column;
     height: 100dvh;
+    max-height: 100dvh;
   }
 
-  .chat-header {
-    padding: 10px 12px;
-    padding-top: calc(10px + env(safe-area-inset-top));
+  .chat-main {
+    height: 100%;
+    min-height: 0;     /* 关键：允许 flex 子项收缩 */
+  }
+
+  .messages-area {
+    flex: 1;
+    min-height: 0;     /* 关键：允许滚动 */
+    overflow-y: auto;
+    padding: 8px 0;
   }
 
   .back-btn {
@@ -449,6 +457,10 @@ onUnmounted(() => {
     font-size: 0.65rem;
     padding: 2px 6px;
     border-radius: 10px;
+  }
+  .outline-toggle-btn {
+    padding: 8px;
+    margin-right: 10px;
   }
 }
 
