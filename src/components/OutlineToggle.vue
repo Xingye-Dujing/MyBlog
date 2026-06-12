@@ -48,38 +48,33 @@ const inputRef = ref(null)
 const outlineEnabled = computed(() => props.outline?.enabled || false)
 
 function toggleOutline() {
-  const newEnabled = !outlineEnabled.value
-  if (newEnabled && !customTitle.value) {
-    // 如果需要输入标题，打开编辑器
+  if (outlineEnabled.value) {
+    // 已启用：关闭
+    updateOutline(false, '')
+  } else {
+    // 未启用：打开编辑器，等待输入
     editing.value = true
     nextTick(() => {
       inputRef.value?.focus()
     })
-    // 先临时启用，但不保存标题
-    updateOutline(true, '', true)
-  } else if (!newEnabled) {
-    updateOutline(false, '')
-  } else {
-    updateOutline(true, customTitle.value)
   }
 }
 
 function saveTitle() {
   editing.value = false
-  updateOutline(true, customTitle.value)
+  updateOutline(true, customTitle.value.trim())
 }
 
-function updateOutline(enabled, title, skipTitleSave = false) {
+function updateOutline(enabled, title) {
   const chat = chatStore.chats.find(c => c.id === props.chatId)
   const msg = chat?.messages.find(m => m.id === props.messageId)
   if (msg) {
     if (!msg.outline) msg.outline = { enabled: false, title: '' }
     msg.outline.enabled = enabled
-    if (!skipTitleSave) {
-      msg.outline.title = title.trim()
-    }
+    msg.outline.title = title
     chatStore.updateChat(props.chatId, { updatedAt: Date.now() })
     emit('update')
+    if (!enabled) customTitle.value = '' // 清空标题
   }
 }
 </script>

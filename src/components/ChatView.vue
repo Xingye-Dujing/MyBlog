@@ -215,7 +215,7 @@ function handleOutlineUpdate() {
   })
 }
 
-// 辅助：为每条消息的DOM添加id（方便跳转，但不是必须）
+// 辅助：为每条消息的 DOM 添加 id（方便跳转，但不是必须）
 function addHeadingIdsToDOM() {
   if (!messagesContainer.value) return
   const wrappers = messagesContainer.value.querySelectorAll('.message-wrapper')
@@ -224,7 +224,6 @@ function addHeadingIdsToDOM() {
   })
 }
 
-// 原有消息操作方法（保持不变，仅保留核心逻辑）
 function scrollToBottom(smooth = true) {
   nextTick(() => {
     const el = messagesContainer.value
@@ -587,9 +586,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-.has-outline .chat-main {
-  width: calc(100% - 260px);
 }
 .scroll-top-btn svg {
   transform: rotate(180deg);

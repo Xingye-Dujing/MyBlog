@@ -1,6 +1,6 @@
 <template>
-  <div class="outline-sidebar" :class="{ 'mobile-outline': isMobile }">
-    <div class="outline-header">
+  <div class="outline-sidebar" :class="{ 'mobile-outline': isMobile }" :style="{ width: width + 'px' }">
+    <div v-if="!isMobile" class="outline-header">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="8" y1="6" x2="21" y2="6" />
         <line x1="8" y1="12" x2="21" y2="12" />
@@ -41,17 +41,76 @@
         </div>
       </div>
     </div>
+    <!-- 拖拽条（仅在非手机端显示） -->
+    <div v-if="!isMobile" class="resize-handle" @mousedown="startResize"></div>
   </div>
 </template>
 
 <script setup>
-defineProps({
+import { ref, onMounted, onUnmounted } from 'vue'
+
+const props = defineProps({
   sections: { type: Array, required: true },
   activeHeadingId: { type: String, default: null },
   isMobile: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['toggle-section', 'jump-to'])
+
+// 宽度控制
+const STORAGE_KEY = 'outline-sidebar-width'
+const DEFAULT_WIDTH = 260
+const MIN_WIDTH = 180
+const MAX_WIDTH = 400
+
+const width = ref(DEFAULT_WIDTH)
+let isResizing = false
+let startX = 0
+let startWidth = 0
+
+function startResize(e) {
+  isResizing = true
+  startX = e.clientX
+  startWidth = width.value
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'ew-resize'
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', stopResize)
+  e.preventDefault()
+}
+
+function onMouseMove(e) {
+  if (!isResizing) return
+  const delta = e.clientX - startX
+  let newWidth = startWidth - delta
+  newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth))
+  width.value = newWidth
+}
+
+function stopResize() {
+  isResizing = false
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', stopResize)
+  // 保存宽度
+  localStorage.setItem(STORAGE_KEY, width.value)
+}
+
+onMounted(() => {
+  const saved = localStorage.getItem(STORAGE_KEY)
+  if (saved) {
+    const w = parseInt(saved, 10)
+    if (!isNaN(w) && w >= MIN_WIDTH && w <= MAX_WIDTH) {
+      width.value = w
+    }
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 
 function handleJump(section) {
   emit('jump-to', section)
@@ -64,7 +123,7 @@ function handleToggle(sectionId) {
 
 <style scoped>
 .outline-sidebar {
-  width: 260px;
+  position: relative;
   background: #fff;
   border-left: 1.5px solid #e0e0e0;
   height: 100vh;
@@ -73,7 +132,7 @@ function handleToggle(sectionId) {
   overflow-y: auto;
   flex-shrink: 0;
   font-family: serif;
-  transition: all 0.2s ease;
+  transition: none;
 }
 .outline-header {
   display: flex;
@@ -164,13 +223,27 @@ function handleToggle(sectionId) {
   color: #000;
   font-weight: 500;
 }
+.resize-handle {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.2s;
+}
+.resize-handle:hover {
+  background: rgba(0,0,0,0.05);
+}
 /* 手机端样式 */
 .mobile-outline {
+  width: 100% !important;
   position: sticky;
   top: 0;
   left: 0;
   right: 0;
-  width: 100%;
   height: auto;
   max-height: 50vh;
   border-left: none;
@@ -178,9 +251,6 @@ function handleToggle(sectionId) {
   z-index: 10;
   background: #fff;
   overflow-y: auto;
-}
-.mobile-outline .outline-header {
-  padding: 12px 16px;
 }
 .mobile-outline .outline-items {
   padding: 0;
@@ -192,7 +262,7 @@ function handleToggle(sectionId) {
   padding: 12px 16px;
 }
 @media (max-width: 768px) {
-  .outline-sidebar:not(.mobile-outline) {
+  .resize-handle {
     display: none;
   }
 }
