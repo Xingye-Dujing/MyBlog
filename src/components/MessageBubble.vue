@@ -5,7 +5,8 @@ import { useCommentStore } from '@/stores/comment'
 
 const props = defineProps({
   message: { type: Object, required: true },
-  showDate: { type: Boolean, default: false }
+  showDate: { type: Boolean, default: false },
+  visible: { type: Boolean, default: true }
 })
 const commentStore = useCommentStore()
 const isCommentsExpanded = ref(false)
@@ -47,18 +48,11 @@ function formatTime(timestamp) {
   const oneHour = 3600000
   const oneDay = 86400000
 
-  if (diff < oneMinute) {
-    return '刚刚'
-  } else if (diff < oneHour) {
-    const mins = Math.floor(diff / oneMinute)
-    return `${mins}分钟前`
-  } else if (diff < oneDay) {
-    const hours = Math.floor(diff / oneHour)
-    return `${hours}小时前`
-  } else if (diff < oneDay * 7) {
-    const days = Math.floor(diff / oneDay)
-    return `${days}天前`
-  } else {
+  if (diff < oneMinute) return '刚刚'
+  else if (diff < oneHour) return `${Math.floor(diff / oneMinute)}分钟前`
+  else if (diff < oneDay) return `${Math.floor(diff / oneHour)}小时前`
+  else if (diff < oneDay * 7) return `${Math.floor(diff / oneDay)}天前`
+  else {
     const mo = String(d.getMonth() + 1).padStart(2, '0')
     const da = String(d.getDate()).padStart(2, '0')
     return `${mo}-${da}`
@@ -67,7 +61,7 @@ function formatTime(timestamp) {
 </script>
 
 <template>
-  <div class="message-wrapper">
+  <div v-show="visible" class="message-wrapper">
     <div v-if="showDate" class="date-separator">
       <span>{{ dateStr }}</span>
     </div>
@@ -75,10 +69,7 @@ function formatTime(timestamp) {
       <div class="message-content" v-html="rendered"></div>
       <div class="message-footer">
         <span class="message-time">{{ timeStr }}</span>
-        <button v-if="commentCount > 0"
-          class="comment-toggle-btn"
-          @click.stop="toggleComments"
-        >
+        <button v-if="commentCount > 0" class="comment-toggle-btn" @click.stop="toggleComments">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
@@ -91,8 +82,7 @@ function formatTime(timestamp) {
         <div v-for="comment in messageComments" :key="comment.id" class="comment-item">
           <div class="comment-avatar">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
             </svg>
           </div>
           <div class="comment-content">
