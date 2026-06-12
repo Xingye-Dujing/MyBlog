@@ -8552,7 +8552,7 @@
     "id": "chat-1775561139811",
     "title": "FFmpeg（视频处理）",
     "createdAt": 1775561139811,
-    "updatedAt": 1781110974403,
+    "updatedAt": 1781282667807,
     "tags": [
       "实用"
     ],
@@ -8568,7 +8568,11 @@
           1781105389636,
           1781105398759,
           1781110686235
-        ]
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "下载链接"
+        }
       },
       {
         "id": "msg-1775561176037-329l",
@@ -8577,7 +8581,11 @@
         "editHistory": [
           1775561558721,
           1779279239937
-        ]
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "普通压缩视频"
+        }
       },
       {
         "id": "msg-1779280960802-lus1",
@@ -8594,7 +8602,11 @@
         "editHistory": [
           1781109347478,
           1781109396281
-        ]
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "压缩视频到指定大小"
+        }
       },
       {
         "id": "msg-1781110483715-3b7c",
@@ -8624,7 +8636,11 @@
         "id": "msg-1781109785237-l206",
         "content": "向 DeepSeek 请教以达成大广赛视频提交的要求：\n\n## 一、目的\n\n**将原始视频作品处理为完全符合大广赛 Bb 类提交规范的 MP4 文件，并确保其在评委的浏览器中能够流畅、无错误地在线播放。**\n\n具体需要满足以下硬性要求：\n\n- 格式：MP4，视频编码 **H.264 (AVC)**，音频编码 **AAC**。\n- 文件大小：**≤50 MB**（**二次编码**）。\n- 时长：**60 ~ 180 秒**（横屏，宽高比 16:9，无倒计时、无任何学生/指导教师信息或特殊标记）。\n- 播放性能：支持 **“边下边播”**（FastStart 元数据前置），在不同设备、不同浏览器的**网页中均能正常显示**画面和声音。\n\n---\n\n## 二、实现步骤\n\n### 1. 使用 `ffprobe` 检查原始视频的基本信息\n\n打开终端（Windows 用 CMD 或 PowerShell，Linux/macOS 用 Terminal），执行以下命令：\n\n```bash\nffprobe -v error -show_entries stream=codec_name,width,height -of default=noprint_wrappers=1 你的视频.mp4\n```\n\n**预期输出示例**（若视频为 H.264 编码且 16:9）：\n```\ncodec_name=h264\nwidth=1920\nheight=1080\n```\n\n- 如果 `codec_name` 不是 `h264`，或宽高比不是 16:9（如 1920×1080、1280×720、854×480 等），则必须在下一步转码。\n- 如果视频已经是 H.264 且 16:9，**仍建议执行下一步的二次编码**，以严格控制文件大小 ≤50 MB，并添加 `+faststart` 优化网页播放。\n\n> 若视频时长超出 60 ~ 180 秒，先用 FFmpeg 裁剪：\n> ```bash\n> ffmpeg -i 输入.mp4 -ss 开始时间 -t 持续时间 -c copy 裁剪后.mp4\n> ```\n\n---\n\n### 2. 使用 FFmpeg 双通道（Two‑Pass）编码（二次编码），生成符合要求的视频\n\n根据你的操作系统选择对应的一行命令（视频已是 16:9，无需加黑边或水印）。  \n\n命令中目标码率设为 `2000k`，对于最长 180 秒的视频，最终文件约 46.8 MB，安全小于 50 MB。\n\n#### Windows (CMD 或 PowerShell)\n```bash\nffmpeg -i input.mp4 -c:v libx264 -preset medium -pass 1 -b:v 2000k -an -f null NUL && ffmpeg -i input.mp4 -c:v libx264 -preset medium -pass 2 -b:v 2000k -c:a aac -b:a 128k -movflags +faststart output.mp4\n```\n\n#### Linux / macOS (Bash / Terminal)\n```bash\nffmpeg -i input.mp4 -c:v libx264 -preset medium -pass 1 -b:v 2000k -an -f null /dev/null && ffmpeg -i input.mp4 -c:v libx264 -preset medium -pass 2 -b:v 2000k -c:a aac -b:a 128k -movflags +faststart output.mp4\n```\n\n> 命令说明：\n> - `-pass 1`：第一遍分析视频复杂度，不生成视频文件。\n> - `-pass 2`：第二遍利用分析结果进行实际编码，达到画质与体积的最佳平衡。\n> - `-movflags +faststart`：将元数据移到文件头，实现边下边播（网页播放必备）。\n> - `-an`（第一遍）：忽略音频，加快分析速度。\n\n执行后，当前目录会生成 `output.mp4`。\n\n---\n\n### 3. 验证输出文件是否满足所有要求\n\n#### 3.1 检查编码格式和分辨率\n再次使用 `ffprobe`：\n\n```bash\nffprobe -v error -show_entries stream=codec_name,width,height -of default=noprint_wrappers=1 output.mp4\n```\n应显示 `h264` 和 16:9 的分辨率（例如 1920×1080）。\n\n#### 3.2 检查文件大小\n\n直接查看文件属性，确保 **≤50 MB**。  \n\n若略微超过，可降低码率至 `1500k`（大约 36 MB）重新执行步骤 2。\n\n#### 3.3 检查时长\n\n```bash\nffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 output.mp4\n```\n\n确认时长在 60 ~ 180 秒之间。\n\n#### 3.4 检查网页播放效果\n\n将 `output.mp4` 拖入 **Chrome、Edge、Firefox** 等浏览器中，验证：\n\n- 能立即开始播放（无需等待完全下载）。\n- 有画面、有声音。\n- 无任何学生姓名、院校名称或特殊标记。\n\n---\n\n## 三、常见问题与解决\n\n| 问题 | 解决方法 |\n|------|----------|\n| 命令报错 `ffmpeg not found` | 安装 FFmpeg 并加入系统 PATH 环境变量。 |\n| 输出文件 >50 MB | 将 `-b:v 2000k` 改为 `-b:v 1500k` 或更低，重新运行双通道命令。 |\n| 视频出现黑边 | 原视频不是严格的 16:9，需在步骤 2 的 `-vf` 中添加 `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2`（但你的视频已是 16:9，一般不需要）。 |\n| 浏览器不能自动播放 | 检查是否包含音频且为 AAC 编码（`-c:a aac` 已保证）。有的浏览器策略要求用户交互，但评委通常手动点击播放，不影响评审。 |\n\n---\n\n以上步骤完全基于大广赛官方文件以及 FFmpeg 双通道编码的最佳实践，能确保你的作品在技术层面顺利通过提交与评审。",
         "timestamp": 1781109785237,
-        "editHistory": []
+        "editHistory": [],
+        "outline": {
+          "enabled": true,
+          "title": "使得视频符合大广赛要求"
+        }
       },
       {
         "id": "msg-1781110193107-6ka6",
@@ -8645,7 +8661,11 @@
         "id": "msg-1781110919978-wqcs",
         "content": "将视频转换成 `gif` 动图并压缩：\n\n```bash\nffmpeg -i input.mp4 -vf \"fps=15,scale=640:-1:flags=lanczos\" output.gif\n```\n\n- `-i input.mp4`：输入的视频文件\n- `fps=15`：将帧率降低到 15 帧/秒（通常表情包 10-15 帧就很流畅了）\n- `scale=640:-1`：将宽度设为 640 像素，高度按比例自动适应（`-1` 表示自适应，且 `ffmpeg` 会自动处理为偶数）\n- `flags=lanczos`：使用 Lanczos 算法进行缩放，在缩小尺寸时能最大限度保留画面细节\n\n---\n\n如果不想使用 `ffmpeg`，可以使用将视频转成动图的在线网页：https://www.freeconvert.com/convert/video-to-gif",
         "timestamp": 1781110919978,
-        "editHistory": []
+        "editHistory": [],
+        "outline": {
+          "enabled": true,
+          "title": "视频转动图"
+        }
       }
     ]
   },
