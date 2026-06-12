@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/composables/useMarkdown'
 import MessageComments from '@/components/MessageComments.vue'
+import OutlineToggle from '@/components/OutlineToggle.vue'   // 新增
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -10,7 +11,7 @@ const props = defineProps({
   chatId: { type: String, default: '' }
 })
 
-const emit = defineEmits(['edit', 'delete', 'move', 'insert'])
+const emit = defineEmits(['edit', 'delete', 'move', 'insert', 'outline-update'])
 
 const showHistory = ref(false)
 
@@ -88,6 +89,10 @@ function formatTimelineTime(ts) {
 
   return `${mo}-${da} ${h}:${m}`
 }
+
+function handleOutlineUpdate() {
+  emit('outline-update')
+}
 </script>
 
 <template>
@@ -110,6 +115,14 @@ function formatTimelineTime(ts) {
         </div>
         <div class="message-actions">
           <MessageComments v-if="chatId" :chat-id="chatId" :message-id="message.id" />
+          <OutlineToggle
+            v-if="chatId"
+            :chat-id="chatId"
+            :message-id="message.id"
+            :message-content="message.content"
+            :outline="message.outline"
+            @update="handleOutlineUpdate"
+          />
           <button class="action-btn" title="上移" @click="emit('move', message, 'up')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="18 15 12 9 6 15" />

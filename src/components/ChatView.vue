@@ -1,11 +1,13 @@
 <script setup>
-import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useCommentStore } from '@/stores/comment'
+import { getPlainText } from '@/composables/useMarkdown'
 import MessageBubble from '@/components/MessageBubble.vue'
 import MessageInput from '@/components/MessageInput.vue'
 import CommentSection from '@/components/CommentSection.vue'
+import OutlineSidebar from '@/components/OutlineSidebar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,37 +25,210 @@ const editingTitle = ref(false)
 const titleInput = ref('')
 const showTagsEditor = ref(false)
 const tagInput = ref('')
+const isMobile = ref(window.innerWidth <= 768)
+// 大纲相关状态
+const sections = ref([])
+const activeHeadingId = ref(null)
+let scrollListener = null
 
 const chat = computed(() => {
   const id = route.params.id
   return chatStore.chats.find(c => c.id === id) || null
 })
 
+// 带显示状态的消息列表（根据章节折叠状态控制可见性）
 const messagesWithDates = computed(() => {
   if (!chat.value) return []
   const result = []
   let lastDate = ''
-  for (const msg of chat.value.messages) {
+  for (let idx = 0; idx < chat.value.messages.length; idx++) {
+    const msg = chat.value.messages[idx]
     const d = new Date(msg.timestamp)
     const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    // 查找该消息所属的章节
+    const section = sections.value.find(s => idx >= s.startMsgIndex && idx <= s.endMsgIndex)
+    const isHeadingMsg = section?.headingMsgIndex === idx
+    const isVisible = !section?.collapsed || isHeadingMsg
     result.push({
       ...msg,
-      showDate: dateKey !== lastDate
+      showDate: dateKey !== lastDate,
+      _visible: isVisible,
+      _sectionId: section?.id
     })
     lastDate = dateKey
   }
   return result
 })
 
+// 构建章节：基于用户标记的大纲节点（outline.enabled）
+function buildSections() {
+  if (!chat.value || !chat.value.messages.length) {
+    sections.value = []
+    return
+  }
+  const messages = chat.value.messages
+  // 找出所有启用了大纲的消息索引
+  const outlineIndices = []
+  messages.forEach((msg, idx) => {
+    if (msg.outline?.enabled) outlineIndices.push(idx)
+  })
+
+  const newSections = []
+
+  if (outlineIndices.length === 0) {
+    // 没有任何大纲节点，整体作为一个章节
+    newSections.push({
+      id: 'section-all',
+      title: '全部内容',
+      level: 2,
+      startMsgIndex: 0,
+      endMsgIndex: messages.length - 1,
+      headingMsgIndex: null,
+      collapsed: false,
+      messageCount: messages.length
+    })
+  } else {
+    // 第一个大纲节点之前的内容（可选，命名为“开头”）
+    if (outlineIndices[0] > 0) {
+      newSections.push({
+        id: 'section-intro',
+        title: '开头',
+        level: 2,
+        startMsgIndex: 0,
+        endMsgIndex: outlineIndices[0] - 1,
+        headingMsgIndex: null,
+        collapsed: false,
+        messageCount: outlineIndices[0]
+      })
+    }
+
+    // 每个大纲节点及其后续内容
+    for (let i = 0; i < outlineIndices.length; i++) {
+      const currentIdx = outlineIndices[i]
+      const nextIdx = outlineIndices[i + 1] ?? messages.length
+      const msg = messages[currentIdx]
+      let title = msg.outline?.title?.trim()
+      if (!title) {
+        // 留空时自动取消息纯文本的前30字
+        const plain = getPlainText(msg.content, 30)
+        title = plain.length > 30 ? plain.slice(0, 30) + '…' : plain
+      }
+      newSections.push({
+        id: `section-${msg.id}`,
+        title,
+        level: 2,
+        startMsgIndex: currentIdx,
+        endMsgIndex: nextIdx - 1,
+        headingMsgIndex: currentIdx,
+        collapsed: false,
+        messageCount: nextIdx - currentIdx
+      })
+    }
+  }
+
+  // 保留原有的折叠状态
+  const oldSectionsMap = new Map(sections.value.map(s => [s.id, s.collapsed]))
+  newSections.forEach(section => {
+    if (oldSectionsMap.has(section.id)) {
+      section.collapsed = oldSectionsMap.get(section.id)
+    }
+  })
+
+  sections.value = newSections
+}
+
+// 切换章节折叠状态
+function toggleSection(sectionId) {
+  const section = sections.value.find(s => s.id === sectionId)
+  if (section) {
+    section.collapsed = !section.collapsed
+    sections.value = [...sections.value] // 触发响应式更新
+  }
+}
+
+// 跳转到指定章节（滚动到该章节的标题消息）
+function jumpToSection(section) {
+  if (!chat.value) return
+  // 如果章节已折叠，先展开以便看到内容
+  if (section.collapsed) toggleSection(section.id)
+
+  const targetMsgIndex = section.headingMsgIndex ?? section.startMsgIndex
+  const targetMsg = chat.value.messages[targetMsgIndex]
+  if (!targetMsg) return
+
+  nextTick(() => {
+    const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
+    const targetIdx = chat.value.messages.findIndex(m => m.id === targetMsg.id)
+    if (messageElements && messageElements[targetIdx]) {
+      messageElements[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'start' })
+      activeHeadingId.value = section.id
+      // 短暂高亮
+      setTimeout(() => {
+        const el = messageElements[targetIdx]
+        if (el) {
+          el.style.transition = 'background 0.3s'
+          el.style.background = '#faf0e6'
+          setTimeout(() => { if (el) el.style.background = '' }, 800)
+        }
+      }, 100)
+    }
+  })
+}
+
+// 滚动监听，高亮当前所在的章节
+function onScroll() {
+  if (!messagesContainer.value || !sections.value.length) return
+  const container = messagesContainer.value
+  const messageElements = container.querySelectorAll('.message-wrapper')
+  let currentActiveId = null
+  for (let i = 0; i < messageElements.length; i++) {
+    const el = messageElements[i]
+    const rect = el.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
+      const msgIndex = i
+      const section = sections.value.find(s => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex)
+      if (section && section.headingMsgIndex !== null) {
+        currentActiveId = section.id
+        break
+      }
+    }
+  }
+  if (currentActiveId !== activeHeadingId.value) {
+    activeHeadingId.value = currentActiveId
+  }
+}
+
+// 手机端回到顶部
+function scrollToTop() {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
+
+// 当大纲被修改时重新构建章节
+function handleOutlineUpdate() {
+  buildSections()
+  nextTick(() => {
+    // 重新添加消息DOM的id（用于锚点，可选）
+    addHeadingIdsToDOM()
+  })
+}
+
+// 辅助：为每条消息的DOM添加id（方便跳转，但不是必须）
+function addHeadingIdsToDOM() {
+  if (!messagesContainer.value) return
+  const wrappers = messagesContainer.value.querySelectorAll('.message-wrapper')
+  wrappers.forEach((wrapper, idx) => {
+    if (!wrapper.id) wrapper.id = `msg-${idx}`
+  })
+}
+
+// 原有消息操作方法（保持不变，仅保留核心逻辑）
 function scrollToBottom(smooth = true) {
   nextTick(() => {
     const el = messagesContainer.value
-    if (el) {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: smooth ? 'smooth' : 'instant'
-      })
-    }
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' })
   })
 }
 
@@ -72,6 +247,8 @@ function handleSend(content) {
   } else {
     chatStore.addMessage(chat.value.id, content)
   }
+  handleOutlineUpdate()
+  scrollToBottom()
 }
 
 function handleEdit(msg) {
@@ -84,6 +261,7 @@ function handleDelete(msg) {
   // Delete associated comments
   commentStore.deleteMessageComments(chat.value.id, msg.id)
   commentStore.syncToFile()
+  handleOutlineUpdate()
 }
 
 function handleMove(msg, direction) {
@@ -94,6 +272,7 @@ function handleMove(msg, direction) {
     movingMessageId.value = null
     moveDirection.value = ''
   }, 300)
+  handleOutlineUpdate()
 }
 
 function handleInsert(msg, position) {
@@ -199,7 +378,12 @@ function handleFileImport(event) {
     setTimeout(() => { syncStatus.value = '' }, 2000)
     // Reset file input
     event.target.value = ''
+    handleOutlineUpdate()
   })
+}
+
+function handleResize() {
+  isMobile.value = window.innerWidth <= 768
 }
 
 watch(() => route.params.id, (newId, oldId) => {
@@ -216,121 +400,176 @@ watch(() => route.params.id, (newId, oldId) => {
     commentStore.filterOrphanedComments(validChatIds, validMessageMap)
     commentStore.syncToFile()
   }
+  handleOutlineUpdate()
   nextTick(() => scrollToBottom(false))
 })
 
+watch(() => chat.value, () => {
+  handleOutlineUpdate()
+  nextTick(() => scrollToBottom(false))
+}, { deep: true, immediate: true })
+
 onMounted(() => {
   scrollToBottom(false)
+  window.addEventListener('resize', handleResize)
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', onScroll)
+    scrollListener = onScroll
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  if (messagesContainer.value && scrollListener) {
+    messagesContainer.value.removeEventListener('scroll', scrollListener)
+  }
 })
 </script>
 
 <template>
-  <div v-if="chat" class="chat-view">
-    <div class="chat-header">
-      <button class="back-btn mobile-only" @click="router.push({ name: 'home' })">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
-      <div class="header-info">
-        <div v-if="editingTitle" class="title-edit-form" @click.stop>
-          <input v-model="titleInput" class="title-input" autofocus @keydown="handleTitleKeydown" @blur="saveTitle" />
-          <button class="title-save-btn" @click="saveTitle">保存</button>
-        </div>
-        <template v-else>
-          <h2 class="chat-name" @dblclick="startEditTitle" :title="`双击编辑标题`">{{ chat.title }}</h2>
-          <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
-        </template>
-      </div>
-      <div class="header-actions">
-        <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
-          {{ syncStatus.includes('success') ? '已同步' : '同步失败' }}
-        </div>
-        <button class="header-btn" title="更多" @click="showActions = !showActions">
+  <div class="chat-view" :class="{ 'has-outline': !isMobile && sections.length > 0 }">
+    <div class="chat-main">
+      <div class="chat-header">
+        <button class="back-btn mobile-only" @click="router.push({ name: 'home' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="1" />
-            <circle cx="19" cy="12" r="1" />
-            <circle cx="5" cy="12" r="1" />
+            <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <div v-if="showActions" class="actions-overlay" @click="showActions = false"></div>
-        <div v-if="showActions" class="actions-dropdown">
-          <button @click="startEditTitle()">
-            重命名对话
-          </button>
-          <button @click="openTagsEditor()">
-            管理分类
-          </button>
-          <button @click="togglePin(); showActions = false">
-            {{ chat.pinned ? '取消置顶' : '置顶对话' }}
-          </button>
-          <button @click="syncToFile(); showActions = false">
-            同步到文件
-          </button>
-          <button @click="$refs.fileInput.click(); showActions = false">
-            从文件导入
-          </button>
-          <input ref="fileInput" type="file" accept=".json,application/json" @change="handleFileImport"
-            style="display: none;" />
-          <button @click="chatStore.exportJSON(); showActions = false">
-            导出全部数据
-          </button>
-          <button class="danger" @click="deleteChat()">
-            删除对话
-          </button>
+        <div class="header-info">
+          <div v-if="editingTitle" class="title-edit-form" @click.stop>
+            <input v-model="titleInput" class="title-input" autofocus @keydown="handleTitleKeydown" @blur="saveTitle" />
+            <button class="title-save-btn" @click="saveTitle">保存</button>
+          </div>
+          <template v-else>
+            <h2 class="chat-name" @dblclick="startEditTitle" :title="`双击编辑标题`">{{ chat.title }}</h2>
+            <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
+          </template>
         </div>
+        <div class="header-actions">
+          <!-- 手机端回到顶部按钮 -->
+          <button v-if="isMobile" class="header-btn scroll-top-btn" title="回到顶部" @click="scrollToTop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+          <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
+            {{ syncStatus.includes('success') ? '已同步' : '同步失败' }}
+          </div>
+          <button class="header-btn" title="更多" @click="showActions = !showActions">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
+              <circle cx="5" cy="12" r="1" />
+            </svg>
+          </button>
+          <div v-if="showActions" class="actions-overlay" @click="showActions = false"></div>
+          <div v-if="showActions" class="actions-dropdown">
+            <button @click="startEditTitle()">重命名对话</button>
+            <button @click="openTagsEditor()">管理分类</button>
+            <button @click="togglePin(); showActions = false">{{ chat.pinned ? '取消置顶' : '置顶对话' }}</button>
+            <button @click="syncToFile(); showActions = false">同步到文件</button>
+            <button @click="$refs.fileInput.click(); showActions = false">从文件导入</button>
+            <input ref="fileInput" type="file" accept=".json,application/json" @change="handleFileImport" style="display: none;" />
+            <button @click="chatStore.exportJSON(); showActions = false">导出全部数据</button>
+            <button class="danger" @click="deleteChat()">删除对话</button>
+          </div>
 
-        <!-- Tags Editor Modal -->
-        <div v-if="showTagsEditor" class="tags-editor-overlay" @click="closeTagsEditor">
-          <div class="tags-editor" @click.stop>
-            <div class="tags-editor-header">
-              <h3>管理分类</h3>
-              <button class="close-btn" @click="closeTagsEditor">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div class="current-tags">
-              <span v-for="tag in chat.tags" :key="tag" class="current-tag">
-                {{ tag }}
-                <button @click="removeTag(tag)">
+          <!-- 标签编辑器弹窗 -->
+          <div v-if="showTagsEditor" class="tags-editor-overlay" @click="closeTagsEditor">
+            <div class="tags-editor" @click.stop>
+              <div class="tags-editor-header">
+                <h3>管理分类</h3>
+                <button class="close-btn" @click="closeTagsEditor">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
-              </span>
-              <span v-if="!chat.tags.length" class="no-tags">暂无分类</span>
-            </div>
-            <div class="add-tag-form">
-              <input v-model="tagInput" class="tag-input" placeholder="输入分类名称..." @keydown="handleTagKeydown" />
-              <button class="add-tag-btn" @click="addTag">添加</button>
+              </div>
+              <div class="current-tags">
+                <span v-for="tag in chat.tags" :key="tag" class="current-tag">
+                  {{ tag }}
+                  <button @click="removeTag(tag)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+                <span v-if="!chat.tags.length" class="no-tags">暂无分类</span>
+              </div>
+              <div class="add-tag-form">
+                <input v-model="tagInput" class="tag-input" placeholder="输入分类名称..." @keydown="handleTagKeydown" />
+                <button class="add-tag-btn" @click="addTag">添加</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div ref="messagesContainer" class="messages-area">
-      <div class="messages-content">
-        <div v-if="chat.tags.length" class="chat-tags-header">
-          <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
-        </div>
-        <MessageBubble v-for="msg in messagesWithDates" :key="msg.id" :message="msg" :show-date="msg.showDate"
-          :chat-id="chat.id"
-          :move-class="movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''"
-          @edit="handleEdit" @delete="handleDelete" @move="handleMove" @insert="handleInsert" />
-        <div v-if="!chat.messages.length" class="empty-chat">
-          <p>开始输入第一条消息</p>
-        </div>
-        <CommentSection :chat-id="chat.id" />
+      <!-- 手机端大纲折叠面板 -->
+      <div v-if="isMobile && sections.length > 0" class="mobile-outline-container">
+        <details class="mobile-outline-details">
+          <summary class="mobile-outline-summary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+            <span>文章导览</span>
+            <span class="summary-badge">{{ sections.length }}章</span>
+          </summary>
+          <OutlineSidebar
+            :sections="sections"
+            :active-heading-id="activeHeadingId"
+            :is-mobile="true"
+            @toggle-section="toggleSection"
+            @jump-to="jumpToSection"
+          />
+        </details>
       </div>
+
+      <div ref="messagesContainer" class="messages-area">
+        <div class="messages-content">
+          <div v-if="chat.tags.length" class="chat-tags-header">
+            <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
+          </div>
+          <MessageBubble
+            v-for="msg in messagesWithDates"
+            :key="msg.id"
+            :message="msg"
+            :show-date="msg.showDate"
+            :chat-id="chat.id"
+            :move-class="movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''"
+            :style="{ display: msg._visible ? 'block' : 'none' }"
+            @edit="handleEdit"
+            @delete="handleDelete"
+            @move="handleMove"
+            @insert="handleInsert"
+            @outline-update="handleOutlineUpdate"
+          />
+          <div v-if="!chat.messages.length" class="empty-chat">
+            <p>开始输入第一条消息</p>
+          </div>
+          <CommentSection :chat-id="chat.id" />
+        </div>
+      </div>
+
+      <MessageInput ref="inputRef" :editing-message="editingMessage" :insert-target="insertTarget" @send="handleSend" @cancel-insert="insertTarget = null" />
     </div>
 
-    <MessageInput ref="inputRef" :editing-message="editingMessage" :insert-target="insertTarget" @send="handleSend"
-      @cancel-insert="insertTarget = null" />
+    <!-- 电脑端大纲侧边栏 -->
+    <OutlineSidebar
+      v-if="!isMobile && sections.length > 0"
+      :sections="sections"
+      :active-heading-id="activeHeadingId"
+      :is-mobile="false"
+      @toggle-section="toggleSection"
+      @jump-to="jumpToSection"
+    />
   </div>
 </template>
 
@@ -338,11 +577,60 @@ onMounted(() => {
 .chat-view {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   min-width: 0;
+  overflow: hidden;
 }
-
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.has-outline .chat-main {
+  width: calc(100% - 260px);
+}
+.scroll-top-btn svg {
+  transform: rotate(180deg);
+}
+.mobile-outline-container {
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+.mobile-outline-details {
+  background: #fff;
+}
+.mobile-outline-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.9rem;
+  color: #333;
+  user-select: none;
+}
+.mobile-outline-summary::-webkit-details-marker {
+  display: none;
+}
+.mobile-outline-summary svg {
+  width: 18px;
+  height: 18px;
+  color: #c9372e;
+}
+.summary-badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #999;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+.mobile-outline-details[open] .mobile-outline-summary {
+  border-bottom: 1px solid #f0f0f0;
+}
 .chat-header {
   display: flex;
   align-items: center;

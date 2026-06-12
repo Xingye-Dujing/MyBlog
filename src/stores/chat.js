@@ -96,7 +96,8 @@ export const useChatStore = defineStore('chat', () => {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       content,
       timestamp: Date.now(),
-      editHistory: []
+      editHistory: [],
+      outline: { enabled: false, title: '' }
     }
     chat.messages.push(msg)
     chat.updatedAt = Date.now()
@@ -114,6 +115,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     msg.editHistory.push(Date.now())
     msg.content = content
+    if (!msg.outline) msg.outline = { enabled: false, title: '' }
     chat.updatedAt = Date.now()
   }
 
@@ -141,9 +143,9 @@ export const useChatStore = defineStore('chat', () => {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       content,
       timestamp: Date.now(),
-      editHistory: []
+      editHistory: [],
+      outline: { enabled: false, title: '' }
     }
-
     const insertIndex = position === 'above' ? index : index + 1
     chat.messages.splice(insertIndex, 0, msg)
     chat.updatedAt = Date.now()
