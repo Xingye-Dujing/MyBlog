@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <title>耿同学打假学术圈 · 舆情热度趋势图</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: #d8d8d4;
+        font-family: "Inter", "Noto Serif SC", system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        padding: 32px 24px;
+      }
+      .chart-card {
+        max-width: 1400px;
+        width: 100%;
+        background: #fdfdf9;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.04),
+          0 4px 16px rgba(0, 0, 0, 0.06),
+          0 12px 48px rgba(0, 0, 0, 0.08);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .export-wrapper {
+        max-width: 1200px;
+        width: 100%;
+        text-align: right;
+        margin-bottom: 16px;
+      }
+      .export-btn {
+        background: #8b1a1a;
+        border: none;
+        color: white;
+        padding: 8px 20px;
+        border-radius: 30px;
+        font-family: "Inter", sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: opacity 0.2s;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+      }
+      .export-btn:hover {
+        opacity: 0.85;
+      }
+      .chart-header {
+        padding: 0 32px 22px 32px;
+        border-bottom: none;
+        position: relative;
+      }
+      .header-top-line {
+        margin: 0 -32px 28px -32px;
+      }
+      .chart-title {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-family: "Noto Serif SC", serif;
+        font-weight: 700;
+        font-size: 2rem;
+        line-height: 1.35;
+        color: #111;
+        letter-spacing: 0.01em;
+      }
+      .chart-title .em {
+        font-family: "Playfair Display", serif;
+        color: #8b1a1a;
+        font-weight: 400;
+        font-size: 1.5rem;
+      }
+      .chart-sub {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: 14px;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .sub-block {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin: 0 20px;
+      }
+      .sub-label {
+        font-size: 0.8rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #aaa;
+        font-family: "Noto Serif SC", serif;
+        font-weight: 500;
+        margin-bottom: 2px;
+      }
+      .sub-value {
+        font-size: 0.9rem;
+        color: #444;
+        font-family: serif, monospace !important;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+      }
+      .chart-body {
+        padding: 20px 12px 8px 12px;
+      }
+      canvas {
+        width: 100% !important;
+        height: auto !important;
+      }
+      .chart-footer {
+        padding: 22px 32px 28px 32px;
+        border-top: 1px solid #eae7e0;
+        background: #fcfbf8;
+      }
+      .credit-note {
+        background: linear-gradient(135deg, #f9f6f0 0%, #f4f0ea 100%);
+        padding: 18px 22px;
+        border-radius: 12px;
+        border-left: 3px solid #8b1a1a;
+        border-top: 1px solid rgba(139, 26, 26, 0.06);
+        border-right: 1px solid rgba(0, 0, 0, 0.03);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+      }
+      .credit-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 1.2rem;
+        line-height: 1.7;
+        color: #5b4c3a;
+      }
+      .credit-dot {
+        color: #8b1a1a;
+        font-size: 0.5rem;
+        margin-top: 5px;
+        flex-shrink: 0;
+        opacity: 0.6;
+      }
+      .credit-text {
+        font-family: "Inter", "Noto Serif SC", sans-serif;
+        letter-spacing: 0.01em;
+      }
+      .credit-text strong {
+        font-weight: 700;
+        color: #8b1a1a;
+        font-family: "Noto Serif SC", serif;
+        margin-right: 8px;
+        white-space: nowrap;
+      }
+      .credit-text code {
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        background: rgba(139, 26, 26, 0.07);
+        color: #7a1616;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 1.1rem;
+        border: 1px solid rgba(139, 26, 26, 0.08);
+        letter-spacing: 0.02em;
+      }
+      .legend-row {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        flex-wrap: wrap;
+        padding: 0 28px 8px 28px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 1.2rem;
+        color: #555;
+        font-family: "Noto Serif SC", serif;
+      }
+      .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .top-img {
+        width: 320px;
+        position: absolute;
+        left: 60%;
+        top: -10%;
+        border-radius: 30%;
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="export-wrapper">
+      <button class="export-btn" id="exportBtn">导出图片</button>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="header-top-line"></div>
+        <div class="chart-title">
+          “耿同学打假学术圈”<span class="em"> 舆情热度演变趋势</span>
+        </div>
+        <div class="chart-sub">
+          <div class="sub-block">
+            <span class="sub-label">监测周期</span>
+            <span class="sub-value">2026.05.14 — 2026.06.10</span>
+          </div>
+          <img src="h5news/01.png" class="top-img" alt="同济事件" />
+          <div class="sub-block" style="text-align: right">
+            <span class="sub-label">热度区间</span>
+            <span class="sub-value">0 – 100</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-body">
+        <canvas id="gengRealChart" width="1200" height="460"></canvas>
+      </div>
+
+      <div class="legend-row">
+        <div class="legend-item">
+          <div
+            class="legend-dot"
+            style="background: rgba(44, 123, 182, 0.25)"
+          ></div>
+          起 · 萌芽蓄势
+        </div>
+        <div class="legend-item">
+          <div
+            class="legend-dot"
+            style="background: rgba(217, 95, 2, 0.25)"
+          ></div>
+          承 · 巅峰爆发
+        </div>
+        <div class="legend-item">
+          <div
+            class="legend-dot"
+            style="background: rgba(117, 112, 179, 0.25)"
+          ></div>
+          转 · 断崖回落
+        </div>
+        <div class="legend-item">
+          <div
+            class="legend-dot"
+            style="background: rgba(102, 166, 30, 0.25)"
+          ></div>
+          合 · 长尾弥散
+        </div>
+      </div>
+
+      <div class="chart-footer">
+        <div class="credit-note">
+          <div class="credit-row">
+            <span class="credit-dot">◆</span>
+            <div class="credit-text">
+              <strong>数据来源</strong>微博话题
+              <code>#耿同学学术打假#</code> 公开监测指标
+            </div>
+          </div>
+          <div class="credit-row">
+            <span class="credit-dot">◆</span>
+            <div class="credit-text">
+              <strong>热度计算</strong
+              ><code
+                >综合指数 = 阅读量 × 0.55 + 讨论量 × 0.25 + 互动量 × 0.10 +
+                原创量 × 0.10 -> 归一化至 0-100</code
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        if (typeof ChartAnnotation !== "undefined")
+          Chart.register(ChartAnnotation);
+
+        const sourceData = {
+          read: [
+            { time: "05-13", value: 56 },
+            { time: "05-14", value: 16 },
+            { time: "05-15", value: 8 },
+            { time: "05-16", value: 626 },
+            { time: "05-17", value: 2660 },
+            { time: "05-18", value: 2272 },
+            { time: "05-19", value: 1006 },
+            { time: "05-20", value: 624 },
+            { time: "05-21", value: 476 },
+            { time: "05-22", value: 444 },
+            { time: "05-23", value: 978 },
+            { time: "05-24", value: 446 },
+            { time: "05-25", value: 316 },
+            { time: "05-26", value: 3184 },
+            { time: "05-27", value: 2658 },
+            { time: "05-28", value: 4556 },
+            { time: "05-29", value: 2626 },
+            { time: "05-30", value: 7326 },
+            { time: "05-31", value: 2582 },
+            { time: "06-01", value: 1048 },
+            { time: "06-02", value: 686 },
+            { time: "06-03", value: 696 },
+            { time: "06-04", value: 268 },
+            { time: "06-05", value: 154 },
+            { time: "06-06", value: 42 },
+            { time: "06-07", value: 20 },
+            { time: "06-08", value: 10 },
+            { time: "06-09", value: 22 },
+            { time: "06-10", value: 2 },
+            { time: "06-11", value: 0 },
+          ],
+          me: [
+            { time: "05-13", value: 0 },
+            { time: "05-14", value: 0 },
+            { time: "05-15", value: 0 },
+            { time: "05-16", value: 1 },
+            { time: "05-17", value: 5 },
+            { time: "05-18", value: 0 },
+            { time: "05-19", value: 1 },
+            { time: "05-20", value: 0 },
+            { time: "05-21", value: 0 },
+            { time: "05-22", value: 0 },
+            { time: "05-23", value: 2 },
+            { time: "05-24", value: 1 },
+            { time: "05-25", value: 0 },
+            { time: "05-26", value: 7 },
+            { time: "05-27", value: 4 },
+            { time: "05-28", value: 7 },
+            { time: "05-29", value: 3 },
+            { time: "05-30", value: 5 },
+            { time: "05-31", value: 17 },
+            { time: "06-01", value: 1 },
+            { time: "06-02", value: 0 },
+            { time: "06-03", value: 1 },
+            { time: "06-04", value: 2 },
+            { time: "06-05", value: 0 },
+            { time: "06-06", value: 0 },
+            { time: "06-07", value: 0 },
+            { time: "06-08", value: 0 },
+            { time: "06-09", value: 0 },
+            { time: "06-10", value: 0 },
+            { time: "06-11", value: 1 },
+          ],
+          ori: [
+            { time: "05-13", value: 0 },
+            { time: "05-14", value: 0 },
+            { time: "05-15", value: 0 },
+            { time: "05-16", value: 1 },
+            { time: "05-17", value: 1 },
+            { time: "05-18", value: 0 },
+            { time: "05-19", value: 1 },
+            { time: "05-20", value: 0 },
+            { time: "05-21", value: 0 },
+            { time: "05-22", value: 0 },
+            { time: "05-23", value: 2 },
+            { time: "05-24", value: 0 },
+            { time: "05-25", value: 0 },
+            { time: "05-26", value: 2 },
+            { time: "05-27", value: 2 },
+            { time: "05-28", value: 2 },
+            { time: "05-29", value: 1 },
+            { time: "05-30", value: 1 },
+            { time: "05-31", value: 5 },
+            { time: "06-01", value: 1 },
+            { time: "06-02", value: 0 },
+            { time: "06-03", value: 1 },
+            { time: "06-04", value: 2 },
+            { time: "06-05", value: 0 },
+            { time: "06-06", value: 0 },
+            { time: "06-07", value: 0 },
+            { time: "06-08", value: 0 },
+            { time: "06-09", value: 0 },
+            { time: "06-10", value: 0 },
+            { time: "06-11", value: 1 },
+          ],
+          partake: [
+            { time: "05-13", value: 0 },
+            { time: "05-14", value: 0 },
+            { time: "05-15", value: 0 },
+            { time: "05-16", value: 1 },
+            { time: "05-17", value: 9 },
+            { time: "05-18", value: 2 },
+            { time: "05-19", value: 1 },
+            { time: "05-20", value: 0 },
+            { time: "05-21", value: 0 },
+            { time: "05-22", value: 0 },
+            { time: "05-23", value: 2 },
+            { time: "05-24", value: 5 },
+            { time: "05-25", value: 1 },
+            { time: "05-26", value: 12 },
+            { time: "05-27", value: 7 },
+            { time: "05-28", value: 21 },
+            { time: "05-29", value: 8 },
+            { time: "05-30", value: 52 },
+            { time: "05-31", value: 103 },
+            { time: "06-01", value: 2 },
+            { time: "06-02", value: 1 },
+            { time: "06-03", value: 1 },
+            { time: "06-04", value: 2 },
+            { time: "06-05", value: 0 },
+            { time: "06-06", value: 0 },
+            { time: "06-07", value: 0 },
+            { time: "06-08", value: 0 },
+            { time: "06-09", value: 0 },
+            { time: "06-10", value: 0 },
+            { time: "06-11", value: 1 },
+          ],
+        };
+
+        const timeOrder = sourceData.read.map((item) => item.time);
+        const dateBase = "2026-";
+        const readValues = sourceData.read.map((d) => d.value);
+        const meValues = sourceData.me.map((d) => d.value);
+        const oriValues = sourceData.ori.map((d) => d.value);
+        const partakeValues = sourceData.partake.map((d) => d.value);
+
+        const wRead = 0.55,
+          wPartake = 0.25,
+          wOri = 0.1,
+          wMe = 0.1;
+        const rawScores = timeOrder.map(
+          (_, i) =>
+            wRead * readValues[i] +
+            wPartake * partakeValues[i] +
+            wOri * oriValues[i] +
+            wMe * meValues[i],
+        );
+
+        let minRaw = Math.min(...rawScores);
+        let maxRaw = Math.max(...rawScores);
+        if (maxRaw === minRaw) maxRaw = minRaw + 1;
+
+        let heatIndex = rawScores.map((score) =>
+          Math.round(((score - minRaw) / (maxRaw - minRaw)) * 100),
+        );
+        const maxHeat = Math.max(...heatIndex);
+        if (maxHeat > 0 && maxHeat !== 100) {
+          const ratio = 100 / maxHeat;
+          heatIndex = heatIndex.map((v) =>
+            Math.min(100, Math.round(v * ratio)),
+          );
+        }
+        const finalHeat = heatIndex.map((v) => Math.min(100, Math.max(0, v)));
+
+        const dateObjects = timeOrder.map(
+          (timeStr) => new Date(`${dateBase}${timeStr}`),
+        );
+
+        let maxValue = -Infinity,
+          peakDateObj = null,
+          peakHeatValue = 0;
+        finalHeat.forEach((val, idx) => {
+          if (val > maxValue) {
+            maxValue = val;
+            peakDateObj = dateObjects[idx];
+            peakHeatValue = val;
+          }
+        });
+
+        const stages = [
+          {
+            name: "起 · 萌芽蓄势",
+            start: "2026-05-12",
+            end: "2026-05-25",
+            color: "rgba(44,123,182,0.12)",
+            border: "rgba(44,123,182,0.35)",
+            textColor: "#2C7BB6",
+            xAdjust: 280,
+          },
+          {
+            name: "承 · 巅峰爆发",
+            start: "2026-05-25",
+            end: "2026-05-31",
+            color: "rgba(217,95,2,0.12)",
+            border: "rgba(217,95,2,0.35)",
+            textColor: "#D95F02",
+            xAdjust: 70,
+          },
+          {
+            name: "转 · 断崖回落",
+            start: "2026-05-31",
+            end: "2026-06-05",
+            color: "rgba(117,112,179,0.12)",
+            border: "rgba(117,112,179,0.35)",
+            textColor: "#7570B3",
+            xAdjust: 54,
+          },
+          {
+            name: "合 · 长尾弥散",
+            start: "2026-06-05",
+            end: "2026-06-13",
+            color: "rgba(102,166,30,0.12)",
+            border: "rgba(102,166,30,0.35)",
+            textColor: "#66A61E",
+            xAdjust: 80,
+          },
+        ];
+
+        let annotations = {};
+        stages.forEach((stage, idx) => {
+          annotations[`stage-bg-${idx}`] = {
+            type: "box",
+            xMin: stage.start,
+            xMax: stage.end,
+            yMin: 0,
+            yMax: 100,
+            backgroundColor: stage.color,
+            borderWidth: 0,
+            drawTime: "beforeDatasetsDraw",
+          };
+          if (idx > 0) {
+            annotations[`stage-line-${idx}`] = {
+              type: "line",
+              xMin: stage.start,
+              xMax: stage.start,
+              yMin: 0,
+              yMax: 105,
+              borderColor: stage.border,
+              borderWidth: 1.2,
+              borderDash: [4, 6],
+              drawTime: "beforeDatasetsDraw",
+            };
+          }
+          annotations[`stage-label-${idx}`] = {
+            type: "label",
+            xValue: stage.start,
+            yValue: 6,
+            content: stage.name,
+            position: "start",
+            xAdjust: stage.xAdjust,
+            yAdjust: -300,
+            color: stage.textColor,
+            font: {
+              weight: "600",
+              size: 18,
+              family: "'Noto Serif SC', 'SimHei', serif",
+            },
+            backgroundColor: "rgba(253,253,249,0.9)",
+            padding: { top: 3, bottom: 3, left: 8, right: 8 },
+            borderRadius: 4,
+          };
+        });
+
+        if (peakDateObj && peakHeatValue) {
+          annotations.peakNote = {
+            type: "label",
+            xValue: "2026-05-30",
+            yValue: peakHeatValue,
+            content: ["热度最高点"],
+            position: "start",
+            color: "#8b1a1a",
+            backgroundColor: "rgba(255,248,240,0.98)",
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: "rgba(139,26,26,0.45)",
+            font: { size: 18, weight: "700", family: "'Noto Serif SC', serif" },
+            xAdjust: 28,
+            yAdjust: -28,
+            padding: 8,
+          };
+        }
+
+        const canvasElem = document.getElementById("gengRealChart");
+        const ctx = canvasElem.getContext("2d");
+        const gradientFill = ctx.createLinearGradient(0, 0, 0, 460);
+        gradientFill.addColorStop(0, "rgba(139,26,26,0.18)");
+        gradientFill.addColorStop(0.6, "rgba(139,26,26,0.03)");
+        gradientFill.addColorStop(1, "rgba(139,26,26,0.0)");
+
+        let existingChart = Chart.getChart(canvasElem);
+        if (existingChart) existingChart.destroy();
+
+        const firstDate = dateObjects[1];
+        const lastDate = dateObjects[dateObjects.length - 2];
+        const timeOffset = 0.5 * 24 * 60 * 60 * 1000;
+        const xMin = firstDate.getTime() - timeOffset;
+        const xMax = lastDate.getTime() + timeOffset;
+
+        new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: dateObjects,
+            datasets: [
+              {
+                label: "综合舆情热度指数",
+                data: finalHeat,
+                borderColor: "#8b1a1a",
+                backgroundColor: gradientFill,
+                borderWidth: 3.8,
+                pointRadius: 3.8,
+                pointHoverRadius: 10,
+                pointBackgroundColor: "#fdfdf9",
+                pointBorderColor: "#8b1a1a",
+                pointBorderWidth: 2.2,
+                pointStyle: "circle",
+                tension: 0.45,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: { display: false },
+              annotation: { annotations },
+              tooltip: {
+                backgroundColor: "rgba(20,20,20,0.92)",
+                titleFont: {
+                  size: 14,
+                  family: "'Noto Serif SC', serif",
+                  weight: "600",
+                },
+                bodyFont: { size: 13, family: "'Inter', sans-serif" },
+                cornerRadius: 8,
+                padding: 10,
+                displayColors: false,
+                callbacks: {
+                  title: (tooltipItems) => {
+                    const date = new Date(tooltipItems[0].parsed.x);
+                    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+                  },
+                  label: (context) => `舆情热度: ${context.raw} 分`,
+                  afterLabel: (context) => {
+                    const idx = context.dataIndex;
+                    return `原始加权值: ${rawScores[idx].toFixed(1)}`;
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  unit: "day",
+                  tooltipFormat: "yyyy-MM-dd",
+                  displayFormats: { day: "MM-dd" },
+                },
+                title: {
+                  display: true,
+                  text: "日期 ( 2026年 )",
+                  font: {
+                    size: 18,
+                    weight: "600",
+                    family: "'Noto Serif SC', serif",
+                  },
+                  color: "#777",
+                  padding: { top: 6 },
+                },
+                grid: {
+                  display: true,
+                  color: "rgba(0,0,0,0.04)",
+                  lineWidth: 0.6,
+                },
+                border: { color: "#ddd" },
+                ticks: {
+                  source: "labels",
+                  autoSkip: false,
+                  maxRotation: 45,
+                  minRotation: 35,
+                  font: {
+                    size: 18,
+                    family: "'Noto Serif SC', serif",
+                    weight: "400",
+                  },
+                  color: "#6b5e4e",
+                  callback: (val) => {
+                    const date = new Date(val);
+                    return `${date.getMonth() + 1}/${date.getDate()}`;
+                  },
+                  stepSize: 1,
+                },
+                min: xMin,
+                max: xMax,
+              },
+              y: {
+                beginAtZero: true,
+                max: 110,
+                title: {
+                  display: true,
+                  text: "热 度 指 数",
+                  font: {
+                    size: 20,
+                    weight: "600",
+                    family: "'Noto Serif SC', serif",
+                  },
+                  color: "#777",
+                  padding: { bottom: 6 },
+                },
+                grid: {
+                  color: "rgba(0,0,0,0.04)",
+                  lineWidth: 0.7,
+                },
+                border: { color: "#ddd" },
+                ticks: {
+                  stepSize: 20,
+                  font: { size: 18, family: "'Inter', sans-serif" },
+                  color: "#888",
+                  callback: (val) => `${val}`,
+                },
+              },
+            },
+            layout: {
+              padding: {
+                top: 45,
+                bottom: 18,
+                left: 10,
+                right: 28,
+              },
+            },
+            interaction: { mode: "index", intersect: false },
+            elements: {
+              line: { borderJoin: "round", borderCapStyle: "round" },
+            },
+            hover: { mode: "index", intersect: false },
+          },
+        });
+      })();
+
+      document
+        .getElementById("exportBtn")
+        .addEventListener("click", function () {
+          const element = document.querySelector(".chart-card");
+          html2canvas(element, {
+            scale: 2,
+            backgroundColor: "#fdfdf9",
+            useCORS: true,
+            logging: false,
+          })
+            .then((canvas) => {
+              const link = document.createElement("a");
+              link.download = "geng_opinion_chart.png";
+              link.href = canvas.toDataURL("image/png");
+              link.click();
+            })
+            .catch((err) => {
+              console.error("截图失败:", err);
+              alert("截图生成失败，可尝试刷新页面后重试。");
+            });
+        });
+    </script>
+  </body>
+</html>
