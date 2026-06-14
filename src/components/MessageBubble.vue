@@ -223,6 +223,7 @@ function formatTime(timestamp) {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.9em;
   color: #c9372e;
+  word-break: break-all;
 }
 
 .message-content :deep(pre) {
@@ -507,6 +508,7 @@ function formatTime(timestamp) {
 
   .message-content :deep(table) {
     margin: 10px 0;
+    overflow-x: auto;
   }
 
   .message-content :deep(th),
