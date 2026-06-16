@@ -95,16 +95,15 @@ export function useSections(chat, messagesContainer) {
       if (messageElements && messageElements[targetIdx]) {
         messageElements[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'start' })
         activeHeadingId.value = section.id
-        setTimeout(() => {
-          const el = messageElements[targetIdx]
-          if (el) {
-            el.style.transition = 'background 0.3s'
-            el.style.background = '#faf0e6'
+        const el = messageElements[targetIdx]
+        if (el) {
+          setTimeout(() => {
+            el.classList.add('section-highlight')
             setTimeout(() => {
-              if (el) el.style.background = ''
+              el.classList.remove('section-highlight')
             }, 800)
-          }
-        }, 100)
+          }, 100)
+        }
       }
     })
   }

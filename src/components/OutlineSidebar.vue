@@ -55,7 +55,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const props = defineProps({
+defineProps({
   sections: { type: Array, required: true },
   activeHeadingId: { type: String, default: null },
   isMobile: { type: Boolean, default: false },

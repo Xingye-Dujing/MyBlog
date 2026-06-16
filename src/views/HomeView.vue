@@ -39,7 +39,7 @@ function saveState() {
 }
 
 // Resize handlers
-function startResize(_e) {
+function startResize() {
   isResizing.value = true
   document.body.style.cursor = 'ew-resize'
   document.body.style.userSelect = 'none'

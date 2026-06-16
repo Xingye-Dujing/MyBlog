@@ -55,7 +55,6 @@ const {
   syncToFile,
   startEditTitle,
   saveTitle,
-  cancelEditTitle,
   handleTitleKeydown,
   openTagsEditor,
   closeTagsEditor,
@@ -356,6 +355,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+:deep(.section-highlight) {
+  transition: background 0.3s;
+  background: #faf0e6;
+}
+
 .chat-view {
   flex: 1;
   display: flex;
