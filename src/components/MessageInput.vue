@@ -3,7 +3,7 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 
 const emit = defineEmits(['send', 'cancel-insert'])
 
-const props = defineProps({
+defineProps({
   editingMessage: { type: Object, default: null },
   insertTarget: { type: Object, default: null },
   placeholder: { type: String, default: '写点什么... 支持 Markdown 语法' },
