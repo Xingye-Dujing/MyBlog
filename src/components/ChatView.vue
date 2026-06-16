@@ -85,7 +85,7 @@ function navigateSearch(direction) {
     (currentMatchIndex.value + direction + matches.length) % matches.length
   const target = matches[currentMatchIndex.value]
   const el = messagesContainer.value?.querySelector(`[data-msg-id="${target.id}"]`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 watch(searchQuery, () => {
@@ -109,7 +109,7 @@ function scrollToHashMessage() {
     setTimeout(() => {
       const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
         el.classList.add('deep-link-highlight')
         setTimeout(() => el.classList.remove('deep-link-highlight'), 1500)
       }
@@ -336,11 +336,6 @@ onUnmounted(() => {
   color: #666;
   transition: all 0.2s;
   flex-shrink: 0;
-}
-
-.header-btn:hover {
-  background: #f0f0f0;
-  color: #000;
 }
 
 .header-btn svg {
@@ -579,6 +574,7 @@ onUnmounted(() => {
   }
   .outline-toggle-btn {
     padding: 8px;
+    margin-left: 10px;
     margin-right: 10px;
   }
 
@@ -587,7 +583,7 @@ onUnmounted(() => {
   }
 
   .search-input {
-    font-size: 16px;
+    font-size: 0.8rem;
   }
 
   .header-btn {
