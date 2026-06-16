@@ -29,6 +29,17 @@ md.use(texmath, {
   katexOptions: { throwOnError: false },
 })
 
+const defaultImageRender =
+  md.renderer.rules.image ||
+  function (tokens, idx, options, env, self) {
+    return self.renderToken(tokens, idx, options)
+  }
+
+md.renderer.rules.image = function (tokens, idx, options, env, self) {
+  tokens[idx].attrSet('loading', 'lazy')
+  return defaultImageRender(tokens, idx, options, env, self)
+}
+
 export function renderMarkdown(content) {
   if (!content) return ''
   return md.render(content)
