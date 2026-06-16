@@ -6,7 +6,7 @@ import { useCommentStore } from '@/stores/comment'
 const props = defineProps({
   message: { type: Object, required: true },
   showDate: { type: Boolean, default: false },
-  visible: { type: Boolean, default: true }
+  visible: { type: Boolean, default: true },
 })
 const commentStore = useCommentStore()
 const isCommentsExpanded = ref(false)
@@ -30,7 +30,8 @@ const dateStr = computed(() => {
 
 // Get comments for this specific message
 const messageComments = computed(() => {
-  return commentStore.getMessageComments(props.message.chatId, props.message.id)
+  return commentStore
+    .getMessageComments(props.message.chatId, props.message.id)
     .sort((a, b) => a.timestamp - b.timestamp)
 })
 
@@ -82,7 +83,9 @@ function formatTime(timestamp) {
         <div v-for="comment in messageComments" :key="comment.id" class="comment-item">
           <div class="comment-avatar">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              <path
+                d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+              />
             </svg>
           </div>
           <div class="comment-content">
@@ -265,7 +268,7 @@ function formatTime(timestamp) {
 }
 
 /* Middle divider image: smaller, circular */
-.message-content :deep(p:has(img) img[alt="ZS"]) {
+.message-content :deep(p:has(img) img[alt='ZS']) {
   height: 40px;
   width: 40px;
   border-radius: 50%;
@@ -379,7 +382,7 @@ function formatTime(timestamp) {
   border-top: 1px solid #f0f0f0;
 }
 
-.message-comments :deep(code){
+.message-comments :deep(code) {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   color: #c9372e;
 }

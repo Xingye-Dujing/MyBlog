@@ -31,16 +31,19 @@
 ## 如何使用
 
 1. 安装依赖
+
    ```bash
    npm install
    ```
 
 2. 开发模式下运行
+
    ```bash
    npm run dev
    ```
 
 3. 构建生产版本
+
    ```bash
    npm run build
    ```

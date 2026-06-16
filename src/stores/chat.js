@@ -11,7 +11,7 @@ export const useChatStore = defineStore('chat', () => {
       if (a.pinned && !b.pinned) return -1
       if (!a.pinned && b.pinned) return 1
       return b.updatedAt - a.updatedAt
-    })
+    }),
   )
 
   async function init() {
@@ -43,6 +43,6 @@ export const useChatStore = defineStore('chat', () => {
   return {
     chats,
     sortedChats,
-    init
+    init,
   }
 })

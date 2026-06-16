@@ -13,16 +13,16 @@ const chatStore = useChatStore()
 
 const messagesContainer = ref(null)
 const isMobile = ref(window.innerWidth <= 768)
-const showOutlinePanel = ref(true)   // 手机端大纲面板显示/隐藏状态
+const showOutlinePanel = ref(true) // 手机端大纲面板显示/隐藏状态
 
 // 大纲相关状态
-const sections = ref([])      // 章节列表
-const activeHeadingId = ref(null)  // 当前高亮的章节 ID
+const sections = ref([]) // 章节列表
+const activeHeadingId = ref(null) // 当前高亮的章节 ID
 let scrollListener = null
 
 const chat = computed(() => {
   const id = route.params.id
-  return chatStore.chats.find(c => c.id === id) || null
+  return chatStore.chats.find((c) => c.id === id) || null
 })
 
 // 判断消息是否显示日期分隔线
@@ -36,7 +36,9 @@ function shouldShowDate(msg, idx) {
 
 // 判断消息是否可见（根据章节折叠状态）
 function isMessageVisible(msgIndex) {
-  const section = sections.value.find(s => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex)
+  const section = sections.value.find(
+    (s) => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex,
+  )
   return !section?.collapsed
 }
 
@@ -65,7 +67,7 @@ function buildSections() {
       endMsgIndex: messages.length - 1,
       headingMsgIndex: null,
       collapsed: false,
-      messageCount: messages.length
+      messageCount: messages.length,
     })
   } else {
     // 开头部分（第一个大纲之前的内容）
@@ -78,7 +80,7 @@ function buildSections() {
         endMsgIndex: outlineIndices[0] - 1,
         headingMsgIndex: null,
         collapsed: false,
-        messageCount: outlineIndices[0]
+        messageCount: outlineIndices[0],
       })
     }
 
@@ -101,14 +103,14 @@ function buildSections() {
         endMsgIndex: endIdx,
         headingMsgIndex: startIdx,
         collapsed: false,
-        messageCount: endIdx - startIdx + 1
+        messageCount: endIdx - startIdx + 1,
       })
     }
   }
 
   // 保留原有的折叠状态
-  const oldSectionsMap = new Map(sections.value.map(s => [s.id, s.collapsed]))
-  newSections.forEach(section => {
+  const oldSectionsMap = new Map(sections.value.map((s) => [s.id, s.collapsed]))
+  newSections.forEach((section) => {
     if (oldSectionsMap.has(section.id)) {
       section.collapsed = oldSectionsMap.get(section.id)
     }
@@ -119,7 +121,7 @@ function buildSections() {
 
 // 切换章节折叠状态
 function toggleSection(sectionId) {
-  const section = sections.value.find(s => s.id === sectionId)
+  const section = sections.value.find((s) => s.id === sectionId)
   if (section) {
     section.collapsed = !section.collapsed
     sections.value = [...sections.value]
@@ -147,7 +149,9 @@ function jumpToSection(section) {
         if (el) {
           el.style.transition = 'background 0.3s'
           el.style.background = '#faf0e6'
-          setTimeout(() => { if (el) el.style.background = '' }, 800)
+          setTimeout(() => {
+            if (el) el.style.background = ''
+          }, 800)
         }
       }, 100)
     }
@@ -165,7 +169,7 @@ function onScroll() {
     const rect = el.getBoundingClientRect()
     const containerRect = container.getBoundingClientRect()
     if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
-      const section = sections.value.find(s => i >= s.startMsgIndex && i <= s.endMsgIndex)
+      const section = sections.value.find((s) => i >= s.startMsgIndex && i <= s.endMsgIndex)
       if (section && section.headingMsgIndex !== null) {
         currentActiveId = section.id
         break
@@ -187,27 +191,34 @@ function handleResize() {
 }
 
 // 监听路由变化，重新构建大纲
-watch(() => route.params.id, () => {
-  buildSections()
-  activeHeadingId.value = null
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = 0
-    }
-  })
-})
-
-// 监听对话内容变化（如果数据动态加载后可能变化）
-watch(() => chat.value, (newChat) => {
-  if (newChat) {
+watch(
+  () => route.params.id,
+  () => {
     buildSections()
+    activeHeadingId.value = null
     nextTick(() => {
       if (messagesContainer.value) {
         messagesContainer.value.scrollTop = 0
       }
     })
-  }
-}, { immediate: true, deep: true })
+  },
+)
+
+// 监听对话内容变化（如果数据动态加载后可能变化）
+watch(
+  () => chat.value,
+  (newChat) => {
+    if (newChat) {
+      buildSections()
+      nextTick(() => {
+        if (messagesContainer.value) {
+          messagesContainer.value.scrollTop = 0
+        }
+      })
+    }
+  },
+  { immediate: true, deep: true },
+)
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
@@ -239,13 +250,20 @@ onUnmounted(() => {
           <h2 class="chat-name">{{ chat.title }}</h2>
           <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
         </div>
-          <!-- 手机端：大纲导览开关按钮 -->
-          <button v-if="isMobile && sections.length > 0" class="outline-toggle-btn" @click="toggleOutlinePanel" :title="showOutlinePanel ? '隐藏导览' : '显示导览'">
-          </button>
+        <!-- 手机端：大纲导览开关按钮 -->
+        <button
+          v-if="isMobile && sections.length > 0"
+          class="outline-toggle-btn"
+          @click="toggleOutlinePanel"
+          :title="showOutlinePanel ? '隐藏导览' : '显示导览'"
+        ></button>
       </div>
 
       <!-- 手机端大纲折叠面板（仅当有章节时显示） -->
-      <div v-if="isMobile && sections.length > 0 && showOutlinePanel" class="mobile-outline-container">
+      <div
+        v-if="isMobile && sections.length > 0 && showOutlinePanel"
+        class="mobile-outline-container"
+      >
         <details class="mobile-outline-details">
           <summary class="mobile-outline-summary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -381,7 +399,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-.chat-view {
+  .chat-view {
     flex-direction: column;
     height: 100dvh;
     max-height: 100dvh;
@@ -389,12 +407,12 @@ onUnmounted(() => {
 
   .chat-main {
     height: 100%;
-    min-height: 0;     /* 关键：允许 flex 子项收缩 */
+    min-height: 0; /* 关键：允许 flex 子项收缩 */
   }
 
   .messages-area {
     flex: 1;
-    min-height: 0;     /* 关键：允许滚动 */
+    min-height: 0; /* 关键：允许滚动 */
     overflow-y: auto;
     padding: 8px 0;
   }

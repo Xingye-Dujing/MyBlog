@@ -4,13 +4,14 @@ import { useCommentStore } from '@/stores/comment'
 import { renderMarkdown } from '@/composables/useMarkdown'
 
 const props = defineProps({
-  chatId: { type: String, required: true }
+  chatId: { type: String, required: true },
 })
 
 const commentStore = useCommentStore()
 
 const comments = computed(() => {
-  return commentStore.getMessageComments(props.chatId, null)
+  return commentStore
+    .getMessageComments(props.chatId, null)
     .sort((a, b) => a.timestamp - b.timestamp)
 })
 
@@ -61,7 +62,8 @@ function formatTime(timestamp) {
         <div class="comment-avatar">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path
-              d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+            />
           </svg>
         </div>
         <div class="comment-content">

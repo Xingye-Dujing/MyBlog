@@ -6,12 +6,12 @@ export const useCommentStore = defineStore('comment', () => {
 
   // Get comments for a specific chat (function, not computed)
   function getChatComments(chatId) {
-    return comments.value.filter(c => c.chatId === chatId)
+    return comments.value.filter((c) => c.chatId === chatId)
   }
 
   // Get comments for a specific message (function, not computed)
   function getMessageComments(chatId, messageId) {
-    return comments.value.filter(c => c.chatId === chatId && c.messageId === messageId)
+    return comments.value.filter((c) => c.chatId === chatId && c.messageId === messageId)
   }
 
   async function init() {
@@ -42,6 +42,6 @@ export const useCommentStore = defineStore('comment', () => {
     comments,
     init,
     getChatComments,
-    getMessageComments
+    getMessageComments,
   }
 })
