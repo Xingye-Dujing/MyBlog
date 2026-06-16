@@ -5,6 +5,7 @@ const STORAGE_KEY = 'blog-chats'
 
 export const useChatStore = defineStore('chat', () => {
   const chats = ref([])
+  const isInitialized = ref(false)
 
   const sortedChats = computed(() =>
     [...chats.value].sort((a, b) => {
@@ -27,6 +28,7 @@ export const useChatStore = defineStore('chat', () => {
         console.log('[ChatStore] Loaded from static file, count:', chats.value.length)
         // Save to localStorage for future use
         localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.value))
+        isInitialized.value = true
         return
       } else {
         console.error('[ChatStore] Static file fetch failed, status:', res.status)
@@ -38,10 +40,12 @@ export const useChatStore = defineStore('chat', () => {
     // Fallback: empty data
     console.log('[ChatStore] Fallback to empty data')
     chats.value = []
+    isInitialized.value = true
   }
 
   return {
     chats,
+    isInitialized,
     sortedChats,
     init,
   }

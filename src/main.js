@@ -11,6 +11,17 @@ import 'katex/dist/katex.min.css'
 
 const app = createApp(App)
 
+app.config.errorHandler = (err, instance, info) => {
+  console.error(
+    '[Vue Error]',
+    err,
+    '\n  component:',
+    instance?.$options?.name || 'anonymous',
+    '\n  info:',
+    info,
+  )
+}
+
 app.use(createPinia())
 app.use(router)
 
