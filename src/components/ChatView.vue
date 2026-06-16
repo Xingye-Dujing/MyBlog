@@ -101,6 +101,24 @@ function handleResize() {
   if (!isMobile.value) showOutlinePanel.value = true
 }
 
+function scrollToHashMessage() {
+  const hash = route.hash
+  if (!hash || !hash.startsWith('#msg-')) return
+  const msgId = hash.slice(5)
+  nextTick(() => {
+    setTimeout(() => {
+      const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('deep-link-highlight')
+        setTimeout(() => el.classList.remove('deep-link-highlight'), 1500)
+      }
+    }, 300)
+  })
+}
+
+watch(() => route.hash, scrollToHashMessage)
+
 watch(
   () => route.params.id,
   () => {
@@ -135,6 +153,7 @@ watch(
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   attachScrollListener()
+  scrollToHashMessage()
 })
 
 onUnmounted(() => {
@@ -285,6 +304,25 @@ onUnmounted(() => {
 :deep(.search-match) {
   background: #fffde7 !important;
   transition: background 0.3s;
+}
+
+:deep(.deep-link-highlight) {
+  animation: deepLinkPulse 1.5s ease;
+}
+
+@keyframes deepLinkPulse {
+  0% {
+    background: #fff3cd;
+    box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+  }
+  50% {
+    background: #fff3cd;
+    box-shadow: 0 0 0 8px rgba(255, 193, 7, 0);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+  }
 }
 
 .header-btn {

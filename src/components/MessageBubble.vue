@@ -9,6 +9,15 @@ const props = defineProps({
 })
 const commentStore = useCommentStore()
 const isCommentsExpanded = ref(false)
+const copiedLink = ref(false)
+
+function copyLink() {
+  const url = `${window.location.origin}${window.location.pathname}#msg-${props.message.id}`
+  navigator.clipboard.writeText(url).then(() => {
+    copiedLink.value = true
+    setTimeout(() => (copiedLink.value = false), 1500)
+  })
+}
 const rendered = computed(() => renderMarkdown(props.message.content))
 
 const timeStr = computed(() => {
@@ -68,7 +77,13 @@ function formatTime(timestamp) {
     <div class="message-bubble">
       <div class="message-content" v-html="rendered"></div>
       <div class="message-footer">
-        <span class="message-time">{{ timeStr }}</span>
+        <span
+          class="message-time"
+          :title="copiedLink ? '已复制链接' : '点击复制链接'"
+          @click="copyLink"
+        >
+          {{ copiedLink ? '已复制' : timeStr }}
+        </span>
         <button v-if="commentCount > 0" class="comment-toggle-btn" @click.stop="toggleComments">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -339,6 +354,13 @@ function formatTime(timestamp) {
   font-size: 0.75rem;
   color: #bbb;
   letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.message-time:hover {
+  color: #c9372e;
 }
 
 .comment-badge {
