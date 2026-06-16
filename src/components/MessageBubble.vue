@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/composables/useMarkdown'
 import MessageComments from '@/components/MessageComments.vue'
-import OutlineToggle from '@/components/OutlineToggle.vue' // 新增
+import OutlineToggle from '@/components/OutlineToggle.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -14,6 +14,15 @@ const props = defineProps({
 const emit = defineEmits(['edit', 'delete', 'move', 'insert', 'outline-update'])
 
 const showHistory = ref(false)
+const copiedLink = ref(false)
+
+function copyLink() {
+  const url = `${window.location.origin}${window.location.pathname}#msg-${props.message.id}`
+  navigator.clipboard.writeText(url).then(() => {
+    copiedLink.value = true
+    setTimeout(() => (copiedLink.value = false), 1500)
+  })
+}
 
 const rendered = computed(() => renderMarkdown(props.message.content))
 
@@ -108,7 +117,13 @@ function handleOutlineUpdate() {
       <div class="message-content" v-html="rendered"></div>
       <div class="message-footer">
         <div class="footer-left">
-          <span class="message-time">{{ timeStr }}</span>
+          <span
+            class="message-time"
+            :title="copiedLink ? '已复制链接' : '点击复制链接'"
+            @click="copyLink"
+          >
+            {{ copiedLink ? '已复制' : timeStr }}
+          </span>
           <span
             v-if="hasEditHistory"
             class="edit-history"
@@ -481,10 +496,16 @@ function handleOutlineUpdate() {
   color: #bbb;
   letter-spacing: 0.5px;
   transition: color 0.2s;
+  cursor: pointer;
+  user-select: none;
 }
 
 .message-bubble:hover .message-time {
   color: #999;
+}
+
+.message-time:hover {
+  color: #c9372e !important;
 }
 
 .edit-history {
