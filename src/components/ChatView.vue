@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useCommentStore } from '@/stores/comment'
-import { getPlainText } from '@/composables/useMarkdown'
+import { useSections } from '@/composables/useSections'
+import { useChatActions } from '@/composables/useChatActions'
 import MessageBubble from '@/components/MessageBubble.vue'
 import MessageInput from '@/components/MessageInput.vue'
 import CommentSection from '@/components/CommentSection.vue'
@@ -16,27 +17,71 @@ const commentStore = useCommentStore()
 
 const messagesContainer = ref(null)
 const inputRef = ref(null)
-const editingMessage = ref(null)
-const showActions = ref(false)
-const insertTarget = ref(null)
-const movingMessageId = ref(null)
-const moveDirection = ref('')
-const editingTitle = ref(false)
-const titleInput = ref('')
-const showTagsEditor = ref(false)
-const tagInput = ref('')
 const isMobile = ref(window.innerWidth <= 768)
-// 大纲相关状态
-const sections = ref([])
-const activeHeadingId = ref(null)
-let scrollListener = null
 
 const chat = computed(() => {
   const id = route.params.id
   return chatStore.chats.find((c) => c.id === id) || null
 })
 
-// 带显示状态的消息列表（根据章节折叠状态控制可见性）
+const {
+  sections,
+  activeHeadingId,
+  toggleSection,
+  jumpToSection,
+  handleOutlineUpdate,
+  attachScrollListener,
+  detachScrollListener,
+} = useSections(chat, messagesContainer)
+
+const {
+  editingMessage,
+  insertTarget,
+  movingMessageId,
+  moveDirection,
+  editingTitle,
+  titleInput,
+  showTagsEditor,
+  tagInput,
+  showActions,
+  syncStatus,
+  handleSend: _handleSend,
+  handleEdit,
+  handleDelete: _handleDelete,
+  handleMove: _handleMove,
+  handleInsert,
+  deleteChat,
+  togglePin,
+  syncToFile,
+  startEditTitle,
+  saveTitle,
+  cancelEditTitle,
+  handleTitleKeydown,
+  openTagsEditor,
+  closeTagsEditor,
+  addTag,
+  removeTag,
+  handleTagKeydown,
+  handleFileImport: _handleFileImport,
+  resetUIState,
+} = useChatActions(chat, router, inputRef)
+
+function handleSend(content) {
+  _handleSend(content, handleOutlineUpdate)
+}
+
+function handleDelete(msg) {
+  _handleDelete(msg, handleOutlineUpdate)
+}
+
+function handleMove(msg, direction) {
+  _handleMove(msg, direction, handleOutlineUpdate)
+}
+
+function handleFileImport(event) {
+  _handleFileImport(event, handleOutlineUpdate)
+}
+
 const messagesWithDates = computed(() => {
   if (!chat.value) return []
   const result = []
@@ -45,9 +90,8 @@ const messagesWithDates = computed(() => {
     const msg = chat.value.messages[idx]
     const d = new Date(msg.timestamp)
     const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-    // 查找该消息所属的章节
     const section = sections.value.find((s) => idx >= s.startMsgIndex && idx <= s.endMsgIndex)
-    const isVisible = !section?.collapsed // 折叠时整个章节（包括标题消息）隐藏
+    const isVisible = !section?.collapsed
     result.push({
       ...msg,
       showDate: dateKey !== lastDate,
@@ -59,334 +103,10 @@ const messagesWithDates = computed(() => {
   return result
 })
 
-// 构建章节：基于用户标记的大纲节点（outline.enabled）
-function buildSections() {
-  if (!chat.value || !chat.value.messages.length) {
-    sections.value = []
-    return
-  }
-  const messages = chat.value.messages
-  // 找出所有启用了大纲的消息索引
-  const outlineIndices = []
-  messages.forEach((msg, idx) => {
-    if (msg.outline?.enabled) outlineIndices.push(idx)
-  })
-
-  const newSections = []
-
-  if (outlineIndices.length === 0) {
-    // 没有任何大纲节点，整体作为一个章节
-    newSections.push({
-      id: 'section-all',
-      title: '全部内容',
-      level: 2,
-      startMsgIndex: 0,
-      endMsgIndex: messages.length - 1,
-      headingMsgIndex: null,
-      collapsed: false,
-      messageCount: messages.length,
-    })
-  } else {
-    // 开头部分（第一个大纲之前）
-    if (outlineIndices[0] > 0) {
-      newSections.push({
-        id: 'section-intro',
-        title: '开头',
-        level: 2,
-        startMsgIndex: 0,
-        endMsgIndex: outlineIndices[0] - 1,
-        headingMsgIndex: null,
-        collapsed: false,
-        messageCount: outlineIndices[0],
-      })
-    }
-
-    // 每个大纲节点（包含自身）形成一个章节
-    for (let i = 0; i < outlineIndices.length; i++) {
-      const startIdx = outlineIndices[i]
-      const endIdx = (outlineIndices[i + 1] ?? messages.length) - 1
-      const msg = messages[startIdx]
-      let title = msg.outline?.title?.trim()
-      if (!title) {
-        const plain = getPlainText(msg.content, 30)
-        title = plain.length > 30 ? plain.slice(0, 30) + '…' : plain
-      }
-      newSections.push({
-        id: `section-${msg.id}`,
-        title,
-        level: 2,
-        startMsgIndex: startIdx,
-        endMsgIndex: endIdx,
-        headingMsgIndex: startIdx,
-        collapsed: false,
-        messageCount: endIdx - startIdx + 1,
-      })
-    }
-  }
-
-  // 保留原有的折叠状态
-  const oldSectionsMap = new Map(sections.value.map((s) => [s.id, s.collapsed]))
-  newSections.forEach((section) => {
-    if (oldSectionsMap.has(section.id)) {
-      section.collapsed = oldSectionsMap.get(section.id)
-    }
-  })
-
-  sections.value = newSections
-}
-
-// 切换章节折叠状态
-function toggleSection(sectionId) {
-  const section = sections.value.find((s) => s.id === sectionId)
-  if (section) {
-    section.collapsed = !section.collapsed
-    sections.value = [...sections.value] // 触发响应式更新
-  }
-}
-
-// 跳转到指定章节（滚动到该章节的标题消息）
-function jumpToSection(section) {
-  if (!chat.value) return
-  if (section.collapsed) toggleSection(section.id) // 先展开
-  const targetMsg = chat.value.messages[section.startMsgIndex]
-  if (!targetMsg) return
-  nextTick(() => {
-    const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
-    const targetIdx = chat.value.messages.findIndex((m) => m.id === targetMsg.id)
-    if (messageElements && messageElements[targetIdx]) {
-      messageElements[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'start' })
-      activeHeadingId.value = section.id
-      // 短暂高亮
-      setTimeout(() => {
-        const el = messageElements[targetIdx]
-        if (el) {
-          el.style.transition = 'background 0.3s'
-          el.style.background = '#faf0e6'
-          setTimeout(() => {
-            if (el) el.style.background = ''
-          }, 800)
-        }
-      }, 100)
-    }
-  })
-}
-
-// 滚动监听，高亮当前所在的章节
-function onScroll() {
-  if (!messagesContainer.value || !sections.value.length) return
-  const container = messagesContainer.value
-  const messageElements = container.querySelectorAll('.message-wrapper')
-  let currentActiveId = null
-  for (let i = 0; i < messageElements.length; i++) {
-    const el = messageElements[i]
-    const rect = el.getBoundingClientRect()
-    const containerRect = container.getBoundingClientRect()
-    if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
-      const msgIndex = i
-      const section = sections.value.find(
-        (s) => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex,
-      )
-      if (section && section.headingMsgIndex !== null) {
-        currentActiveId = section.id
-        break
-      }
-    }
-  }
-  if (currentActiveId !== activeHeadingId.value) {
-    activeHeadingId.value = currentActiveId
-  }
-}
-
-// 当大纲被修改时重新构建章节
-function handleOutlineUpdate() {
-  buildSections()
-  nextTick(() => {
-    // 重新添加消息 DOM 的 id
-    addHeadingIdsToDOM()
-  })
-}
-
-// 辅助：为每条消息的 DOM 添加 id
-function addHeadingIdsToDOM() {
-  if (!messagesContainer.value) return
-  const wrappers = messagesContainer.value.querySelectorAll('.message-wrapper')
-  wrappers.forEach((wrapper, idx) => {
-    if (!wrapper.id) wrapper.id = `msg-${idx}`
-  })
-}
-
-function handleSend(content) {
-  if (content === null) {
-    editingMessage.value = null
-    insertTarget.value = null
-    return
-  }
-  if (editingMessage.value) {
-    chatStore.updateMessage(chat.value.id, editingMessage.value.id, content)
-    editingMessage.value = null
-  } else if (insertTarget.value) {
-    chatStore.insertMessage(
-      chat.value.id,
-      insertTarget.value.messageId,
-      content,
-      insertTarget.value.position,
-    )
-    insertTarget.value = null
-  } else {
-    chatStore.addMessage(chat.value.id, content)
-  }
-  handleOutlineUpdate()
-}
-
-function handleEdit(msg) {
-  editingMessage.value = msg
-  inputRef.value?.setContent(msg.content)
-}
-
-function handleDelete(msg) {
-  chatStore.deleteMessage(chat.value.id, msg.id)
-  // Delete associated comments
-  commentStore.deleteMessageComments(chat.value.id, msg.id)
-  commentStore.syncToFile()
-  handleOutlineUpdate()
-}
-
-function handleMove(msg, direction) {
-  movingMessageId.value = msg.id
-  moveDirection.value = direction
-  chatStore.moveMessage(chat.value.id, msg.id, direction)
-  setTimeout(() => {
-    movingMessageId.value = null
-    moveDirection.value = ''
-  }, 300)
-  handleOutlineUpdate()
-}
-
-function handleInsert(msg, position) {
-  insertTarget.value = { messageId: msg.id, position }
-  inputRef.value?.setContent('')
-  inputRef.value?.focus()
-}
-
-function deleteChat() {
-  if (!chat.value) return
-  chatStore.deleteChat(chat.value.id)
-  // Delete all comments for this chat
-  commentStore.deleteChatComments(chat.value.id)
-  commentStore.syncToFile()
-  router.push({ name: 'home' })
-}
-
-function togglePin() {
-  if (!chat.value) return
-  chatStore.togglePin(chat.value.id)
-}
-
-async function syncToFile() {
-  const ok = await chatStore.syncToFile()
-  if (ok) {
-    syncStatus.value = 'success'
-  } else {
-    syncStatus.value = 'error'
-  }
-  setTimeout(() => {
-    syncStatus.value = ''
-  }, 2000)
-}
-
-const syncStatus = ref('')
-
-function startEditTitle() {
-  titleInput.value = chat.value.title
-  editingTitle.value = true
-  showActions.value = false
-}
-
-function saveTitle() {
-  const newTitle = titleInput.value.trim()
-  if (newTitle && newTitle !== chat.value.title) {
-    chatStore.updateChatTitle(chat.value.id, newTitle)
-  }
-  editingTitle.value = false
-  titleInput.value = ''
-}
-
-function cancelEditTitle() {
-  editingTitle.value = false
-  titleInput.value = ''
-}
-
-function handleTitleKeydown(e) {
-  if (e.key === 'Enter') {
-    saveTitle()
-  } else if (e.key === 'Escape') {
-    cancelEditTitle()
-  }
-}
-
-function openTagsEditor() {
-  tagInput.value = ''
-  showTagsEditor.value = true
-  showActions.value = false
-}
-
-function closeTagsEditor() {
-  showTagsEditor.value = false
-  tagInput.value = ''
-}
-
-function addTag() {
-  const tag = tagInput.value.trim()
-  if (!tag) return
-  if (!chat.value.tags.includes(tag)) {
-    chatStore.updateChatTags(chat.value.id, [...chat.value.tags, tag])
-  }
-  tagInput.value = ''
-}
-
-function removeTag(tag) {
-  chatStore.updateChatTags(
-    chat.value.id,
-    chat.value.tags.filter((t) => t !== tag),
-  )
-}
-
-function handleTagKeydown(e) {
-  if (e.key === 'Enter') {
-    addTag()
-  }
-}
-
-function handleFileImport(event) {
-  const file = event.target.files[0]
-  if (!file) return
-
-  chatStore.importFromUserFile(file).then((ok) => {
-    if (ok) {
-      syncStatus.value = 'import-success'
-    } else {
-      syncStatus.value = 'import-error'
-    }
-    setTimeout(() => {
-      syncStatus.value = ''
-    }, 2000)
-    // Reset file input
-    event.target.value = ''
-    handleOutlineUpdate()
-  })
-}
-
-function handleResize() {
-  isMobile.value = window.innerWidth <= 768
-}
-
 watch(
   () => route.params.id,
   (newId, oldId) => {
-    editingMessage.value = null
-    showActions.value = false
-    editingTitle.value = false
-    // Filter orphaned comments when switching chats
+    resetUIState()
     if (oldId && newId) {
       const validChatIds = chatStore.chats.map((c) => c.id)
       const validMessageMap = {}
@@ -408,19 +128,18 @@ watch(
   { deep: true, immediate: true },
 )
 
+function handleResize() {
+  isMobile.value = window.innerWidth <= 768
+}
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
-  if (messagesContainer.value) {
-    messagesContainer.value.addEventListener('scroll', onScroll)
-    scrollListener = onScroll
-  }
+  attachScrollListener()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  if (messagesContainer.value && scrollListener) {
-    messagesContainer.value.removeEventListener('scroll', scrollListener)
-  }
+  detachScrollListener()
 })
 </script>
 
@@ -455,14 +174,22 @@ onUnmounted(() => {
           <div v-if="syncStatus" class="sync-toast" :class="syncStatus">
             {{ syncStatus.includes('success') ? '已同步' : '同步失败' }}
           </div>
-          <button class="header-btn" title="更多" @click="showActions = !showActions">
+          <button
+            class="header-btn"
+            title="更多"
+            @click="showActions = !showActions"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="1" />
               <circle cx="19" cy="12" r="1" />
               <circle cx="5" cy="12" r="1" />
             </svg>
           </button>
-          <div v-if="showActions" class="actions-overlay" @click="showActions = false"></div>
+          <div
+            v-if="showActions"
+            class="actions-overlay"
+            @click="showActions = false"
+          ></div>
           <div v-if="showActions" class="actions-dropdown">
             <button @click="startEditTitle()">重命名对话</button>
             <button @click="openTagsEditor()">管理分类</button>
@@ -509,7 +236,11 @@ onUnmounted(() => {
           </div>
 
           <!-- 标签编辑器弹窗 -->
-          <div v-if="showTagsEditor" class="tags-editor-overlay" @click="closeTagsEditor">
+          <div
+            v-if="showTagsEditor"
+            class="tags-editor-overlay"
+            @click="closeTagsEditor"
+          >
             <div class="tags-editor" @click.stop>
               <div class="tags-editor-header">
                 <h3>管理分类</h3>
