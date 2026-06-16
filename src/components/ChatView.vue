@@ -468,24 +468,24 @@ onUnmounted(() => {
             <button @click="openTagsEditor()">管理分类</button>
             <button
               @click="
-                togglePin()
-                showActions = false
+                togglePin();
+                showActions = false;
               "
             >
               {{ chat.pinned ? '取消置顶' : '置顶对话' }}
             </button>
             <button
               @click="
-                syncToFile()
-                showActions = false
+                syncToFile();
+                showActions = false;
               "
             >
               同步到文件
             </button>
             <button
               @click="
-                $refs.fileInput.click()
-                showActions = false
+                $refs.fileInput.click();
+                showActions = false;
               "
             >
               从文件导入
@@ -499,8 +499,8 @@ onUnmounted(() => {
             />
             <button
               @click="
-                chatStore.exportJSON()
-                showActions = false
+                chatStore.exportJSON();
+                showActions = false;
               "
             >
               导出全部数据
@@ -576,22 +576,26 @@ onUnmounted(() => {
           <div v-if="chat.tags.length" class="chat-tags-header">
             <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
           </div>
-          <MessageBubble
-            v-for="msg in messagesWithDates"
-            :key="msg.id"
-            :message="msg"
-            :show-date="msg.showDate"
-            :chat-id="chat.id"
-            :move-class="
-              movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''
-            "
-            :style="{ display: msg._visible ? 'block' : 'none' }"
-            @edit="handleEdit"
-            @delete="handleDelete"
-            @move="handleMove"
-            @insert="handleInsert"
-            @outline-update="handleOutlineUpdate"
-          />
+          <template v-for="msg in messagesWithDates" :key="msg.id">
+            <MessageBubble
+              v-if="msg._visible"
+              :message="msg"
+              :show-date="msg.showDate"
+              :chat-id="chat.id"
+              :move-class="
+                movingMessageId === msg.id
+                  ? moveDirection === 'up'
+                    ? 'move-up'
+                    : 'move-down'
+                  : ''
+              "
+              @edit="handleEdit"
+              @delete="handleDelete"
+              @move="handleMove"
+              @insert="handleInsert"
+              @outline-update="handleOutlineUpdate"
+            />
+          </template>
           <div v-if="!chat.messages.length" class="empty-chat">
             <p>开始输入第一条消息</p>
           </div>
