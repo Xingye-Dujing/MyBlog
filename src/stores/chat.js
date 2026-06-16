@@ -7,16 +7,14 @@ export const useChatStore = defineStore('chat', () => {
   const chats = ref([])
   const activeChatId = ref(null)
 
-  const activeChat = computed(() =>
-    chats.value.find(c => c.id === activeChatId.value) || null
-  )
+  const activeChat = computed(() => chats.value.find((c) => c.id === activeChatId.value) || null)
 
   const sortedChats = computed(() =>
     [...chats.value].sort((a, b) => {
       if (a.pinned && !b.pinned) return -1
       if (!a.pinned && b.pinned) return 1
       return b.updatedAt - a.updatedAt
-    })
+    }),
   )
 
   async function init() {
@@ -69,35 +67,35 @@ export const useChatStore = defineStore('chat', () => {
       updatedAt: now,
       tags,
       pinned: false,
-      messages: []
+      messages: [],
     }
     chats.value.unshift(chat)
     return chat
   }
 
   function updateChatTitle(chatId, newTitle) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
     chat.title = newTitle
     chat.updatedAt = Date.now()
   }
 
   function updateChatTags(chatId, tags) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
     chat.tags = tags
     chat.updatedAt = Date.now()
   }
 
   function addMessage(chatId, content) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return null
     const msg = {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       content,
       timestamp: Date.now(),
       editHistory: [],
-      outline: { enabled: false, title: '' }
+      outline: { enabled: false, title: '' },
     }
     chat.messages.push(msg)
     chat.updatedAt = Date.now()
@@ -105,9 +103,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateMessage(chatId, messageId, content) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
-    const msg = chat.messages.find(m => m.id === messageId)
+    const msg = chat.messages.find((m) => m.id === messageId)
     if (!msg) return
     // Add to edit history (keep original timestamp, record edit times)
     if (!msg.editHistory) {
@@ -120,23 +118,24 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function moveMessage(chatId, messageId, direction) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
-    const index = chat.messages.findIndex(m => m.id === messageId)
+    const index = chat.messages.findIndex((m) => m.id === messageId)
     if (index === -1) return
 
     const newIndex = direction === 'up' ? index - 1 : index + 1
-    if (newIndex < 0 || newIndex >= chat.messages.length) return
-
-      // Swap messages
-      ;[chat.messages[index], chat.messages[newIndex]] = [chat.messages[newIndex], chat.messages[index]]
+    if (newIndex < 0 || newIndex >= chat.messages.length) return // Swap messages
+    ;[chat.messages[index], chat.messages[newIndex]] = [
+      chat.messages[newIndex],
+      chat.messages[index],
+    ]
     chat.updatedAt = Date.now()
   }
 
   function insertMessage(chatId, targetMessageId, content, position) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return null
-    const index = chat.messages.findIndex(m => m.id === targetMessageId)
+    const index = chat.messages.findIndex((m) => m.id === targetMessageId)
     if (index === -1) return null
 
     const msg = {
@@ -144,7 +143,7 @@ export const useChatStore = defineStore('chat', () => {
       content,
       timestamp: Date.now(),
       editHistory: [],
-      outline: { enabled: false, title: '' }
+      outline: { enabled: false, title: '' },
     }
     const insertIndex = position === 'above' ? index : index + 1
     chat.messages.splice(insertIndex, 0, msg)
@@ -153,15 +152,15 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function deleteMessage(chatId, messageId) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
-    chat.messages = chat.messages.filter(m => m.id !== messageId)
+    chat.messages = chat.messages.filter((m) => m.id !== messageId)
     chat.updatedAt = Date.now()
     // Note: Comment deletion is handled by commentStore to maintain separation
   }
 
   function deleteChat(chatId) {
-    chats.value = chats.value.filter(c => c.id !== chatId)
+    chats.value = chats.value.filter((c) => c.id !== chatId)
     if (activeChatId.value === chatId) {
       activeChatId.value = null
     }
@@ -169,14 +168,14 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateChat(chatId, updates) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
     Object.assign(chat, updates)
     chat.updatedAt = Date.now()
   }
 
   function togglePin(chatId) {
-    const chat = chats.value.find(c => c.id === chatId)
+    const chat = chats.value.find((c) => c.id === chatId)
     if (!chat) return
     chat.pinned = !chat.pinned
   }
@@ -186,7 +185,7 @@ export const useChatStore = defineStore('chat', () => {
       const res = await fetch('/api/save-chats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json;charset=utf-8;' },
-        body: JSON.stringify(chats.value)
+        body: JSON.stringify(chats.value),
       })
       return res.ok
     } catch {
@@ -195,7 +194,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function exportJSON() {
-    const blob = new Blob([JSON.stringify(chats.value, null, 2)], { type: 'application/json;charset=utf-8;' })
+    const blob = new Blob([JSON.stringify(chats.value, null, 2)], {
+      type: 'application/json;charset=utf-8;',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -239,10 +240,26 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   return {
-    chats, activeChatId, activeChat, sortedChats,
-    init, createChat, addMessage, updateMessage, deleteMessage,
-    deleteChat, updateChat, togglePin, updateChatTitle, updateChatTags,
-    syncToFile, exportJSON, importJSON, resetToDefault, importFromUserFile,
-    moveMessage, insertMessage
+    chats,
+    activeChatId,
+    activeChat,
+    sortedChats,
+    init,
+    createChat,
+    addMessage,
+    updateMessage,
+    deleteMessage,
+    deleteChat,
+    updateChat,
+    togglePin,
+    updateChatTitle,
+    updateChatTags,
+    syncToFile,
+    exportJSON,
+    importJSON,
+    resetToDefault,
+    importFromUserFile,
+    moveMessage,
+    insertMessage,
   }
 })

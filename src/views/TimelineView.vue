@@ -13,13 +13,13 @@ const viewMode = ref('month') // 'day', 'month', 'year'
 const timelineData = computed(() => {
   const messages = []
 
-  chatStore.chats.forEach(chat => {
-    chat.messages.forEach(msg => {
+  chatStore.chats.forEach((chat) => {
+    chat.messages.forEach((msg) => {
       messages.push({
         ...msg,
         chatId: chat.id,
         chatTitle: chat.title,
-        chatPinned: chat.pinned
+        chatPinned: chat.pinned,
       })
     })
   })
@@ -35,7 +35,7 @@ const groupedTimeline = computed(() => {
   const messages = timelineData.value
   const groups = {}
 
-  messages.forEach(msg => {
+  messages.forEach((msg) => {
     const date = new Date(msg.timestamp)
     let key
 
@@ -106,15 +106,9 @@ function setViewMode(mode) {
     <div class="timeline-header">
       <h1 class="timeline-title">时间线</h1>
       <div class="view-mode-toggle">
-        <button :class="{ active: viewMode === 'day' }" @click="setViewMode('day')">
-          日
-        </button>
-        <button :class="{ active: viewMode === 'month' }" @click="setViewMode('month')">
-          月
-        </button>
-        <button :class="{ active: viewMode === 'year' }" @click="setViewMode('year')">
-          年
-        </button>
+        <button :class="{ active: viewMode === 'day' }" @click="setViewMode('day')">日</button>
+        <button :class="{ active: viewMode === 'month' }" @click="setViewMode('month')">月</button>
+        <button :class="{ active: viewMode === 'year' }" @click="setViewMode('year')">年</button>
       </div>
     </div>
 
@@ -135,7 +129,12 @@ function setViewMode(mode) {
               <div class="message-time">{{ formatMessageTime(msg.timestamp) }}</div>
               <div class="message-content">
                 <div class="message-chat-link" @click="goToChat(msg.chatId)">
-                  <svg v-if="msg.chatPinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <svg
+                    v-if="msg.chatPinned"
+                    class="pin-icon"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
                   <span>{{ msg.chatTitle }}</span>

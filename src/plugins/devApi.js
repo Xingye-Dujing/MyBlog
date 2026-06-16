@@ -14,7 +14,9 @@ export function devApiPlugin() {
         }
 
         let body = ''
-        req.on('data', chunk => { body += chunk })
+        req.on('data', (chunk) => {
+          body += chunk
+        })
         req.on('end', () => {
           try {
             const data = JSON.parse(body)
@@ -71,7 +73,9 @@ export function devApiPlugin() {
         }
 
         let body = ''
-        req.on('data', chunk => { body += chunk })
+        req.on('data', (chunk) => {
+          body += chunk
+        })
         req.on('end', () => {
           try {
             const data = JSON.parse(body)
@@ -118,6 +122,6 @@ export function devApiPlugin() {
           res.end(JSON.stringify({ error: err.message, data: [] }))
         }
       })
-    }
+    },
   }
 }

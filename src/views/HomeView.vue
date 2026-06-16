@@ -91,13 +91,22 @@ onUnmounted(() => {
 
 <template>
   <div class="home-layout">
-    <ChatList v-show="!isCollapsed && (!hasActiveChat || !isMobile())"
-      :class="{ 'mobile-hidden': hasActiveChat && !isMobile(), 'collapsed': isCollapsed && !isMobile() }"
-      :style="{ width: isMobile() ? '100%' : `${sidebarWidth}px` }" />
+    <ChatList
+      v-show="!isCollapsed && (!hasActiveChat || !isMobile())"
+      :class="{
+        'mobile-hidden': hasActiveChat && !isMobile(),
+        collapsed: isCollapsed && !isMobile(),
+      }"
+      :style="{ width: isMobile() ? '100%' : `${sidebarWidth}px` }"
+    />
 
     <!-- Resize handle - only show on desktop when not collapsed -->
-    <div v-if="!isCollapsed && !isMobile()" class="resize-handle" :class="{ 'resizing': isResizing }"
-      @mousedown="startResize"></div>
+    <div
+      v-if="!isCollapsed && !isMobile()"
+      class="resize-handle"
+      :class="{ resizing: isResizing }"
+      @mousedown="startResize"
+    ></div>
 
     <ChatView v-if="hasActiveChat" class="chat-panel" />
 

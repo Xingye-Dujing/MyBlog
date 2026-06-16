@@ -2,13 +2,13 @@
 import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/composables/useMarkdown'
 import MessageComments from '@/components/MessageComments.vue'
-import OutlineToggle from '@/components/OutlineToggle.vue'   // 新增
+import OutlineToggle from '@/components/OutlineToggle.vue' // 新增
 
 const props = defineProps({
   message: { type: Object, required: true },
   showDate: { type: Boolean, default: false },
   moveClass: { type: String, default: '' },
-  chatId: { type: String, default: '' }
+  chatId: { type: String, default: '' },
 })
 
 const emit = defineEmits(['edit', 'delete', 'move', 'insert', 'outline-update'])
@@ -35,14 +35,16 @@ const dateStr = computed(() => {
 
 const editHistoryStr = computed(() => {
   if (!props.message.editHistory || props.message.editHistory.length === 0) return ''
-  return props.message.editHistory.map(ts => {
-    const d = new Date(ts)
-    const h = String(d.getHours()).padStart(2, '0')
-    const m = String(d.getMinutes()).padStart(2, '0')
-    const mo = String(d.getMonth() + 1).padStart(2, '0')
-    const da = String(d.getDate()).padStart(2, '0')
-    return `${mo}-${da} ${h}:${m}`
-  }).join(' · ')
+  return props.message.editHistory
+    .map((ts) => {
+      const d = new Date(ts)
+      const h = String(d.getHours()).padStart(2, '0')
+      const m = String(d.getMinutes()).padStart(2, '0')
+      const mo = String(d.getMonth() + 1).padStart(2, '0')
+      const da = String(d.getDate()).padStart(2, '0')
+      return `${mo}-${da} ${h}:${m}`
+    })
+    .join(' · ')
 })
 
 const hasEditHistory = computed(() => {
@@ -52,17 +54,19 @@ const hasEditHistory = computed(() => {
 const timelineEvents = computed(() => {
   if (!props.message.editHistory || props.message.editHistory.length === 0) return []
 
-  const events = [{
-    type: 'create',
-    timestamp: props.message.timestamp,
-    label: '创建'
-  }]
+  const events = [
+    {
+      type: 'create',
+      timestamp: props.message.timestamp,
+      label: '创建',
+    },
+  ]
 
   props.message.editHistory.forEach((ts, index) => {
     events.push({
       type: 'edit',
       timestamp: ts,
-      label: `第 ${index + 1} 次编辑`
+      label: `第 ${index + 1} 次编辑`,
     })
   })
 
@@ -105,8 +109,12 @@ function handleOutlineUpdate() {
       <div class="message-footer">
         <div class="footer-left">
           <span class="message-time">{{ timeStr }}</span>
-          <span v-if="hasEditHistory" class="edit-history" @click="showHistory = true"
-            :title="`编辑时间：${editHistoryStr}`">
+          <span
+            v-if="hasEditHistory"
+            class="edit-history"
+            @click="showHistory = true"
+            :title="`编辑时间：${editHistoryStr}`"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
@@ -154,7 +162,9 @@ function handleOutlineUpdate() {
           <button class="action-btn action-delete" title="删除" @click="emit('delete', message)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path
+                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+              />
             </svg>
           </button>
         </div>
@@ -176,8 +186,13 @@ function handleOutlineUpdate() {
         <div class="history-timeline">
           <div v-for="(event, index) in timelineEvents" :key="index" class="timeline-item">
             <div class="timeline-dot" :class="event.type">
-              <svg v-if="event.type === 'create'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2">
+              <svg
+                v-if="event.type === 'create'"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -200,7 +215,9 @@ function handleOutlineUpdate() {
 <style scoped>
 .message-wrapper {
   margin-bottom: 8px;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease;
 }
 
 .message-wrapper.move-up {
@@ -409,7 +426,7 @@ function handleOutlineUpdate() {
 }
 
 /* Middle divider image: smaller, circular */
-.message-content :deep(p:has(img) img[alt="ZS"]) {
+.message-content :deep(p:has(img) img[alt='ZS']) {
   height: 40px;
   width: 40px;
   border-radius: 50%;
@@ -749,7 +766,7 @@ function handleOutlineUpdate() {
     align-self: center;
   }
 
-  .message-content :deep(p:has(img) img[alt="ZS"]) {
+  .message-content :deep(p:has(img) img[alt='ZS']) {
     width: 32px;
     height: 32px;
     align-self: center;

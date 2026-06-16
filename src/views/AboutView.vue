@@ -18,7 +18,7 @@ const router = useRouter()
     <div class="about-content">
       <div class="about-card">
         <div class="avatar-section">
-          <img src="/img/profile/profile-photo.jpg" class="avatar" alt="Avatar">
+          <img src="/img/profile/profile-photo.jpg" class="avatar" alt="Avatar" />
           <div class="avatar-info">
             <h2 class="name">Xingye-Dujing</h2>
             <p class="role">非专业人士 & 编程爱好者</p>
@@ -27,26 +27,35 @@ const router = useRouter()
 
         <div class="bio-section">
           <h3 class="section-title">
-            <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              class="title-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
               <circle cx="12" cy="7" r="4"></circle>
             </svg>
             个人简介
           </h3>
+          <p class="bio-text">尊崇极简，热爱技术。</p>
+          <p class="bio-text">编程计算机都是自学，纯业余。目前堪堪达到入门级别（甚至门也没入）。</p>
           <p class="bio-text">
-            尊崇极简，热爱技术。
-          </p>
-          <p class="bio-text">
-            编程计算机都是自学，纯业余。目前堪堪达到入门级别（甚至门也没入）。
-          </p>
-          <p class="bio-text">
-            下面的能力条是以我的 Python 水平为单位 1 进行衡量，我会的也并没有全指出。更多详情请见“编程学习历程”对话。
+            下面的能力条是以我的 Python 水平为单位 1
+            进行衡量，我会的也并没有全指出。更多详情请见“编程学习历程”对话。
           </p>
         </div>
 
         <div class="skills-section">
           <h3 class="section-title">
-            <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              class="title-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <polyline points="16 18 22 12 16 6"></polyline>
               <polyline points="8 6 2 12 8 18"></polyline>
             </svg>
@@ -94,8 +103,16 @@ const router = useRouter()
 
         <div class="contact-section">
           <h3 class="section-title">
-            <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <svg
+              class="title-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+              ></path>
               <polyline points="22,6 12,13 2,6"></polyline>
             </svg>
             联系方式

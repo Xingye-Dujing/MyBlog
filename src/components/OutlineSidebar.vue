@@ -1,5 +1,9 @@
 <template>
-  <div class="outline-sidebar" :class="{ 'mobile-outline': isMobile }" :style="{ width: isMobile ? '100%' : width + 'px' }">
+  <div
+    class="outline-sidebar"
+    :class="{ 'mobile-outline': isMobile }"
+    :style="{ width: isMobile ? '100%' : width + 'px' }"
+  >
     <div v-if="!isMobile" class="outline-header">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="8" y1="6" x2="21" y2="6" />
@@ -36,7 +40,9 @@
           </button>
           <div class="outline-title" :style="{ paddingLeft: (section.level - 1) * 12 + 'px' }">
             <span class="title-text">{{ section.title }}</span>
-            <span v-if="section.messageCount > 1" class="msg-badge">{{ section.messageCount }}条</span>
+            <span v-if="section.messageCount > 1" class="msg-badge"
+              >{{ section.messageCount }}条</span
+            >
           </div>
         </div>
       </div>
@@ -52,7 +58,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const props = defineProps({
   sections: { type: Array, required: true },
   activeHeadingId: { type: String, default: null },
-  isMobile: { type: Boolean, default: false }
+  isMobile: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['toggle-section', 'jump-to'])
@@ -233,7 +239,7 @@ function handleToggle(sectionId) {
   transition: background 0.2s;
 }
 .resize-handle:hover {
-  background: rgba(0,0,0,0.05);
+  background: rgba(0, 0, 0, 0.05);
 }
 /* 手机端样式 */
 .mobile-outline {

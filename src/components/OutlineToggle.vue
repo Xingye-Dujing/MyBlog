@@ -35,7 +35,7 @@ const props = defineProps({
   chatId: { type: String, required: true },
   messageId: { type: String, required: true },
   messageContent: { type: String, default: '' },
-  outline: { type: Object, default: () => ({ enabled: false, title: '' }) }
+  outline: { type: Object, default: () => ({ enabled: false, title: '' }) },
 })
 
 const emit = defineEmits(['update'])
@@ -66,8 +66,8 @@ function saveTitle() {
 }
 
 function updateOutline(enabled, title) {
-  const chat = chatStore.chats.find(c => c.id === props.chatId)
-  const msg = chat?.messages.find(m => m.id === props.messageId)
+  const chat = chatStore.chats.find((c) => c.id === props.chatId)
+  const msg = chat?.messages.find((m) => m.id === props.messageId)
   if (msg) {
     if (!msg.outline) msg.outline = { enabled: false, title: '' }
     msg.outline.enabled = enabled
@@ -113,7 +113,7 @@ function updateOutline(enabled, title) {
   border: 1px solid #e0e0e0;
   border-radius: 6px;
   padding: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   width: 260px;
 }
 .outline-editor input {

@@ -33,7 +33,7 @@ let scrollListener = null
 
 const chat = computed(() => {
   const id = route.params.id
-  return chatStore.chats.find(c => c.id === id) || null
+  return chatStore.chats.find((c) => c.id === id) || null
 })
 
 // 带显示状态的消息列表（根据章节折叠状态控制可见性）
@@ -46,13 +46,13 @@ const messagesWithDates = computed(() => {
     const d = new Date(msg.timestamp)
     const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     // 查找该消息所属的章节
-    const section = sections.value.find(s => idx >= s.startMsgIndex && idx <= s.endMsgIndex)
-    const isVisible = !section?.collapsed  // 折叠时整个章节（包括标题消息）隐藏
+    const section = sections.value.find((s) => idx >= s.startMsgIndex && idx <= s.endMsgIndex)
+    const isVisible = !section?.collapsed // 折叠时整个章节（包括标题消息）隐藏
     result.push({
       ...msg,
       showDate: dateKey !== lastDate,
       _visible: isVisible,
-      _sectionId: section?.id
+      _sectionId: section?.id,
     })
     lastDate = dateKey
   }
@@ -84,7 +84,7 @@ function buildSections() {
       endMsgIndex: messages.length - 1,
       headingMsgIndex: null,
       collapsed: false,
-      messageCount: messages.length
+      messageCount: messages.length,
     })
   } else {
     // 开头部分（第一个大纲之前）
@@ -97,7 +97,7 @@ function buildSections() {
         endMsgIndex: outlineIndices[0] - 1,
         headingMsgIndex: null,
         collapsed: false,
-        messageCount: outlineIndices[0]
+        messageCount: outlineIndices[0],
       })
     }
 
@@ -119,14 +119,14 @@ function buildSections() {
         endMsgIndex: endIdx,
         headingMsgIndex: startIdx,
         collapsed: false,
-        messageCount: endIdx - startIdx + 1
+        messageCount: endIdx - startIdx + 1,
       })
     }
   }
 
   // 保留原有的折叠状态
-  const oldSectionsMap = new Map(sections.value.map(s => [s.id, s.collapsed]))
-  newSections.forEach(section => {
+  const oldSectionsMap = new Map(sections.value.map((s) => [s.id, s.collapsed]))
+  newSections.forEach((section) => {
     if (oldSectionsMap.has(section.id)) {
       section.collapsed = oldSectionsMap.get(section.id)
     }
@@ -137,7 +137,7 @@ function buildSections() {
 
 // 切换章节折叠状态
 function toggleSection(sectionId) {
-  const section = sections.value.find(s => s.id === sectionId)
+  const section = sections.value.find((s) => s.id === sectionId)
   if (section) {
     section.collapsed = !section.collapsed
     sections.value = [...sections.value] // 触发响应式更新
@@ -152,7 +152,7 @@ function jumpToSection(section) {
   if (!targetMsg) return
   nextTick(() => {
     const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
-    const targetIdx = chat.value.messages.findIndex(m => m.id === targetMsg.id)
+    const targetIdx = chat.value.messages.findIndex((m) => m.id === targetMsg.id)
     if (messageElements && messageElements[targetIdx]) {
       messageElements[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'start' })
       activeHeadingId.value = section.id
@@ -162,7 +162,9 @@ function jumpToSection(section) {
         if (el) {
           el.style.transition = 'background 0.3s'
           el.style.background = '#faf0e6'
-          setTimeout(() => { if (el) el.style.background = '' }, 800)
+          setTimeout(() => {
+            if (el) el.style.background = ''
+          }, 800)
         }
       }, 100)
     }
@@ -181,7 +183,9 @@ function onScroll() {
     const containerRect = container.getBoundingClientRect()
     if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
       const msgIndex = i
-      const section = sections.value.find(s => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex)
+      const section = sections.value.find(
+        (s) => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex,
+      )
       if (section && section.headingMsgIndex !== null) {
         currentActiveId = section.id
         break
@@ -221,7 +225,12 @@ function handleSend(content) {
     chatStore.updateMessage(chat.value.id, editingMessage.value.id, content)
     editingMessage.value = null
   } else if (insertTarget.value) {
-    chatStore.insertMessage(chat.value.id, insertTarget.value.messageId, content, insertTarget.value.position)
+    chatStore.insertMessage(
+      chat.value.id,
+      insertTarget.value.messageId,
+      content,
+      insertTarget.value.position,
+    )
     insertTarget.value = null
   } else {
     chatStore.addMessage(chat.value.id, content)
@@ -280,7 +289,9 @@ async function syncToFile() {
   } else {
     syncStatus.value = 'error'
   }
-  setTimeout(() => { syncStatus.value = '' }, 2000)
+  setTimeout(() => {
+    syncStatus.value = ''
+  }, 2000)
 }
 
 const syncStatus = ref('')
@@ -334,7 +345,10 @@ function addTag() {
 }
 
 function removeTag(tag) {
-  chatStore.updateChatTags(chat.value.id, chat.value.tags.filter(t => t !== tag))
+  chatStore.updateChatTags(
+    chat.value.id,
+    chat.value.tags.filter((t) => t !== tag),
+  )
 }
 
 function handleTagKeydown(e) {
@@ -347,13 +361,15 @@ function handleFileImport(event) {
   const file = event.target.files[0]
   if (!file) return
 
-  chatStore.importFromUserFile(file).then(ok => {
+  chatStore.importFromUserFile(file).then((ok) => {
     if (ok) {
       syncStatus.value = 'import-success'
     } else {
       syncStatus.value = 'import-error'
     }
-    setTimeout(() => { syncStatus.value = '' }, 2000)
+    setTimeout(() => {
+      syncStatus.value = ''
+    }, 2000)
     // Reset file input
     event.target.value = ''
     handleOutlineUpdate()
@@ -364,26 +380,33 @@ function handleResize() {
   isMobile.value = window.innerWidth <= 768
 }
 
-watch(() => route.params.id, (newId, oldId) => {
-  editingMessage.value = null
-  showActions.value = false
-  editingTitle.value = false
-  // Filter orphaned comments when switching chats
-  if (oldId && newId) {
-    const validChatIds = chatStore.chats.map(c => c.id)
-    const validMessageMap = {}
-    chatStore.chats.forEach(c => {
-      validMessageMap[c.id] = c.messages.map(m => m.id)
-    })
-    commentStore.filterOrphanedComments(validChatIds, validMessageMap)
-    commentStore.syncToFile()
-  }
-  handleOutlineUpdate()
-})
+watch(
+  () => route.params.id,
+  (newId, oldId) => {
+    editingMessage.value = null
+    showActions.value = false
+    editingTitle.value = false
+    // Filter orphaned comments when switching chats
+    if (oldId && newId) {
+      const validChatIds = chatStore.chats.map((c) => c.id)
+      const validMessageMap = {}
+      chatStore.chats.forEach((c) => {
+        validMessageMap[c.id] = c.messages.map((m) => m.id)
+      })
+      commentStore.filterOrphanedComments(validChatIds, validMessageMap)
+      commentStore.syncToFile()
+    }
+    handleOutlineUpdate()
+  },
+)
 
-watch(() => chat.value, () => {
-  handleOutlineUpdate()
-}, { deep: true, immediate: true })
+watch(
+  () => chat.value,
+  () => {
+    handleOutlineUpdate()
+  },
+  { deep: true, immediate: true },
+)
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
@@ -412,11 +435,19 @@ onUnmounted(() => {
         </button>
         <div class="header-info">
           <div v-if="editingTitle" class="title-edit-form" @click.stop>
-            <input v-model="titleInput" class="title-input" autofocus @keydown="handleTitleKeydown" @blur="saveTitle" />
+            <input
+              v-model="titleInput"
+              class="title-input"
+              autofocus
+              @keydown="handleTitleKeydown"
+              @blur="saveTitle"
+            />
             <button class="title-save-btn" @click="saveTitle">保存</button>
           </div>
           <template v-else>
-            <h2 class="chat-name" @dblclick="startEditTitle" :title="`双击编辑标题`">{{ chat.title }}</h2>
+            <h2 class="chat-name" @dblclick="startEditTitle" :title="`双击编辑标题`">
+              {{ chat.title }}
+            </h2>
             <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
           </template>
         </div>
@@ -435,11 +466,45 @@ onUnmounted(() => {
           <div v-if="showActions" class="actions-dropdown">
             <button @click="startEditTitle()">重命名对话</button>
             <button @click="openTagsEditor()">管理分类</button>
-            <button @click="togglePin(); showActions = false">{{ chat.pinned ? '取消置顶' : '置顶对话' }}</button>
-            <button @click="syncToFile(); showActions = false">同步到文件</button>
-            <button @click="$refs.fileInput.click(); showActions = false">从文件导入</button>
-            <input ref="fileInput" type="file" accept=".json,application/json" @change="handleFileImport" style="display: none;" />
-            <button @click="chatStore.exportJSON(); showActions = false">导出全部数据</button>
+            <button
+              @click="
+                togglePin()
+                showActions = false
+              "
+            >
+              {{ chat.pinned ? '取消置顶' : '置顶对话' }}
+            </button>
+            <button
+              @click="
+                syncToFile()
+                showActions = false
+              "
+            >
+              同步到文件
+            </button>
+            <button
+              @click="
+                $refs.fileInput.click()
+                showActions = false
+              "
+            >
+              从文件导入
+            </button>
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".json,application/json"
+              @change="handleFileImport"
+              style="display: none"
+            />
+            <button
+              @click="
+                chatStore.exportJSON()
+                showActions = false
+              "
+            >
+              导出全部数据
+            </button>
             <button class="danger" @click="deleteChat()">删除对话</button>
           </div>
 
@@ -468,7 +533,12 @@ onUnmounted(() => {
                 <span v-if="!chat.tags.length" class="no-tags">暂无分类</span>
               </div>
               <div class="add-tag-form">
-                <input v-model="tagInput" class="tag-input" placeholder="输入分类名称..." @keydown="handleTagKeydown" />
+                <input
+                  v-model="tagInput"
+                  class="tag-input"
+                  placeholder="输入分类名称..."
+                  @keydown="handleTagKeydown"
+                />
                 <button class="add-tag-btn" @click="addTag">添加</button>
               </div>
             </div>
@@ -512,7 +582,9 @@ onUnmounted(() => {
             :message="msg"
             :show-date="msg.showDate"
             :chat-id="chat.id"
-            :move-class="movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''"
+            :move-class="
+              movingMessageId === msg.id ? (moveDirection === 'up' ? 'move-up' : 'move-down') : ''
+            "
             :style="{ display: msg._visible ? 'block' : 'none' }"
             @edit="handleEdit"
             @delete="handleDelete"
@@ -527,7 +599,13 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <MessageInput ref="inputRef" :editing-message="editingMessage" :insert-target="insertTarget" @send="handleSend" @cancel-insert="insertTarget = null" />
+      <MessageInput
+        ref="inputRef"
+        :editing-message="editingMessage"
+        :insert-target="insertTarget"
+        @send="handleSend"
+        @cancel-insert="insertTarget = null"
+      />
     </div>
 
     <!-- 电脑端大纲侧边栏 -->

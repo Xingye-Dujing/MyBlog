@@ -19,10 +19,11 @@ const filteredChats = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   const list = chatStore.sortedChats
   if (!q) return list
-  return list.filter(c =>
-    c.title.toLowerCase().includes(q) ||
-    c.tags.some(t => t.toLowerCase().includes(q)) ||
-    c.messages.some(m => m.content.toLowerCase().includes(q))
+  return list.filter(
+    (c) =>
+      c.title.toLowerCase().includes(q) ||
+      c.tags.some((t) => t.toLowerCase().includes(q)) ||
+      c.messages.some((m) => m.content.toLowerCase().includes(q)),
   )
 })
 
@@ -30,9 +31,7 @@ const filteredChats = computed(() => {
 function getMatchingMessages(chat, query, limit = 2) {
   if (!query) return []
   const q = query.toLowerCase()
-  const matches = chat.messages
-    .filter(m => m.content.toLowerCase().includes(q))
-    .slice(0, limit)
+  const matches = chat.messages.filter((m) => m.content.toLowerCase().includes(q)).slice(0, limit)
   return matches
 }
 
@@ -40,14 +39,14 @@ function getMatchingMessages(chat, query, limit = 2) {
 const groupedChats = computed(() => {
   const groups = {
     untagged: [],
-    tagged: {}
+    tagged: {},
   }
 
-  filteredChats.value.forEach(chat => {
+  filteredChats.value.forEach((chat) => {
     if (chat.tags.length === 0) {
       groups.untagged.push(chat)
     } else {
-      chat.tags.forEach(tag => {
+      chat.tags.forEach((tag) => {
         if (!groups.tagged[tag]) {
           groups.tagged[tag] = []
         }
@@ -143,7 +142,10 @@ function cancelEditTitle(e) {
 
 function handleEditKey(e) {
   if (e.key === 'Enter') {
-    saveTitle(chatStore.chats.find(c => c.id === editingChatId.value), e)
+    saveTitle(
+      chatStore.chats.find((c) => c.id === editingChatId.value),
+      e,
+    )
   }
   if (e.key === 'Escape') {
     cancelEditTitle(e)
@@ -164,20 +166,33 @@ function handleEditKey(e) {
     </div>
 
     <div v-if="showNewChat" class="new-chat-form">
-      <input v-model="newChatTitle" class="new-chat-input" placeholder="输入对话标题..." autofocus
-        @keydown="handleNewChatKey">
+      <input
+        v-model="newChatTitle"
+        class="new-chat-input"
+        placeholder="输入对话标题..."
+        autofocus
+        @keydown="handleNewChatKey"
+      />
       <div class="new-chat-actions">
         <button class="btn-cancel" @click="cancelNewChat">取消</button>
-        <button class="btn-confirm" :disabled="!newChatTitle.trim()" @click="createChat">创建</button>
+        <button class="btn-confirm" :disabled="!newChatTitle.trim()" @click="createChat">
+          创建
+        </button>
       </div>
     </div>
 
     <div class="search-box">
-      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg
+        class="search-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
         <circle cx="11" cy="11" r="8" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
-      <input v-model="searchQuery" class="search-input" placeholder="搜索消息内容..." type="text">
+      <input v-model="searchQuery" class="search-input" placeholder="搜索消息内容..." type="text" />
       <button v-if="searchQuery" class="clear-search" @click="searchQuery = ''" title="清除搜索">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18" />
@@ -190,36 +205,66 @@ function handleEditKey(e) {
       <!-- Untagged chats -->
       <div v-if="groupedChats.untagged.length" class="chat-group">
         <div class="group-header" @click="toggleTagExpand('untagged')">
-          <svg class="expand-icon" :class="{ expanded: isExpanded('untagged') }" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2">
+          <svg
+            class="expand-icon"
+            :class="{ expanded: isExpanded('untagged') }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <polyline points="6 9 12 15 18 9" />
           </svg>
           <span>未分类</span>
           <span class="group-count">{{ groupedChats.untagged.length }}</span>
         </div>
         <div v-if="isExpanded('untagged')" class="group-content">
-          <div v-for="chat in groupedChats.untagged" :key="chat.id" class="chat-item"
-            :class="{ active: chat.id === activeChatId }" @click="selectChat(chat)">
+          <div
+            v-for="chat in groupedChats.untagged"
+            :key="chat.id"
+            class="chat-item"
+            :class="{ active: chat.id === activeChatId }"
+            @click="selectChat(chat)"
+          >
             <div class="chat-item-main">
               <div class="chat-item-header">
                 <span v-if="editingChatId === chat.id" class="edit-title-container" @click.stop>
-                  <input v-model="editingTitle" class="edit-title-input" autofocus @keydown="handleEditKey"
-                    @blur="saveTitle(chat, $event)" />
+                  <input
+                    v-model="editingTitle"
+                    class="edit-title-input"
+                    autofocus
+                    @keydown="handleEditKey"
+                    @blur="saveTitle(chat, $event)"
+                  />
                 </span>
                 <span v-else class="chat-title" @dblclick="startEditTitle(chat, $event)">
-                  <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <svg
+                    v-if="chat.pinned"
+                    class="pin-icon"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="none"
+                  >
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
                   {{ chat.title }}
                 </span>
                 <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
               </div>
-              <p v-if="searchQuery && getMatchingMessages(chat, searchQuery).length" class="chat-preview search-match">
-                <span v-for="(msg, idx) in getMatchingMessages(chat, searchQuery)" :key="msg.id"
-                  class="message-snippet">
+              <p
+                v-if="searchQuery && getMatchingMessages(chat, searchQuery).length"
+                class="chat-preview search-match"
+              >
+                <span
+                  v-for="(msg, idx) in getMatchingMessages(chat, searchQuery)"
+                  :key="msg.id"
+                  class="message-snippet"
+                >
                   <span v-if="idx > 0" class="snippet-separator"> · </span>
-                  <span class="snippet-text">{{ msg.content.substring(0, 60) }}{{ msg.content.length > 60 ? '...' : ''
-                    }}</span>
+                  <span class="snippet-text"
+                    >{{ msg.content.substring(0, 60)
+                    }}{{ msg.content.length > 60 ? '...' : '' }}</span
+                  >
                 </span>
               </p>
               <p v-else class="chat-preview">{{ getLastMessage(chat) }}</p>
@@ -231,36 +276,66 @@ function handleEditKey(e) {
       <!-- Tagged chats -->
       <div v-for="(chats, tag) in groupedChats.tagged" :key="tag" class="chat-group">
         <div class="group-header" @click="toggleTagExpand(tag)">
-          <svg class="expand-icon" :class="{ expanded: isExpanded(tag) }" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2">
+          <svg
+            class="expand-icon"
+            :class="{ expanded: isExpanded(tag) }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <polyline points="6 9 12 15 18 9" />
           </svg>
           <span>{{ tag }}</span>
           <span class="group-count">{{ chats.length }}</span>
         </div>
         <div v-if="isExpanded(tag)" class="group-content">
-          <div v-for="chat in chats" :key="chat.id" class="chat-item" :class="{ active: chat.id === activeChatId }"
-            @click="selectChat(chat)">
+          <div
+            v-for="chat in chats"
+            :key="chat.id"
+            class="chat-item"
+            :class="{ active: chat.id === activeChatId }"
+            @click="selectChat(chat)"
+          >
             <div class="chat-item-main">
               <div class="chat-item-header">
                 <span v-if="editingChatId === chat.id" class="edit-title-container" @click.stop>
-                  <input v-model="editingTitle" class="edit-title-input" autofocus @keydown="handleEditKey"
-                    @blur="saveTitle(chat, $event)" />
+                  <input
+                    v-model="editingTitle"
+                    class="edit-title-input"
+                    autofocus
+                    @keydown="handleEditKey"
+                    @blur="saveTitle(chat, $event)"
+                  />
                 </span>
                 <span v-else class="chat-title" @dblclick="startEditTitle(chat, $event)">
-                  <svg v-if="chat.pinned" class="pin-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <svg
+                    v-if="chat.pinned"
+                    class="pin-icon"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="none"
+                  >
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
                   {{ chat.title }}
                 </span>
                 <span class="chat-date">{{ formatDate(chat.updatedAt) }}</span>
               </div>
-              <p v-if="searchQuery && getMatchingMessages(chat, searchQuery).length" class="chat-preview search-match">
-                <span v-for="(msg, idx) in getMatchingMessages(chat, searchQuery)" :key="msg.id"
-                  class="message-snippet">
+              <p
+                v-if="searchQuery && getMatchingMessages(chat, searchQuery).length"
+                class="chat-preview search-match"
+              >
+                <span
+                  v-for="(msg, idx) in getMatchingMessages(chat, searchQuery)"
+                  :key="msg.id"
+                  class="message-snippet"
+                >
                   <span v-if="idx > 0" class="snippet-separator"> · </span>
-                  <span class="snippet-text">{{ msg.content.substring(0, 60) }}{{ msg.content.length > 60 ? '...' : ''
-                    }}</span>
+                  <span class="snippet-text"
+                    >{{ msg.content.substring(0, 60)
+                    }}{{ msg.content.length > 60 ? '...' : '' }}</span
+                  >
                 </span>
               </p>
               <p v-else class="chat-preview">{{ getLastMessage(chat) }}</p>

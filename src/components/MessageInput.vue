@@ -6,7 +6,7 @@ const emit = defineEmits(['send', 'cancel-insert'])
 const props = defineProps({
   editingMessage: { type: Object, default: null },
   insertTarget: { type: Object, default: null },
-  placeholder: { type: String, default: '写点什么... 支持 Markdown 语法' }
+  placeholder: { type: String, default: '写点什么... 支持 Markdown 语法' },
 })
 
 const content = ref('')
@@ -27,7 +27,7 @@ function insertMediaMarkdown(file) {
   const isVideo = file.type.startsWith('video/')
   const filename = file.name
   let markdown = ''
-  
+
   if (isVideo) {
     markdown = `<video src="..." controls style="max-width: 100%;"></video>`
   } else {
@@ -84,7 +84,11 @@ function handlePaste(e) {
       e.preventDefault()
       const file = items[i].getAsFile()
       if (file) {
-        const ext = file.name.includes('.') ? file.name.split('.').pop() : (type.startsWith('video/') ? 'mp4' : 'png')
+        const ext = file.name.includes('.')
+          ? file.name.split('.').pop()
+          : type.startsWith('video/')
+            ? 'mp4'
+            : 'png'
         const filename = `clipboard-${Date.now()}.${ext}`
         insertMediaMarkdown({ name: filename, type: type })
       }
@@ -169,12 +173,12 @@ defineExpose({ setContent, focus })
         <button class="cancel-btn" @click="cancelInsert">取消</button>
       </div>
       <div class="input-area" :class="{ 'drag-over': isDragOver }">
-        <textarea 
-          ref="textareaRef" 
-          v-model="content" 
-          :placeholder="isDragOver ? '释放以上传图片或视频...' : placeholder" 
+        <textarea
+          ref="textareaRef"
+          v-model="content"
+          :placeholder="isDragOver ? '释放以上传图片或视频...' : placeholder"
           rows="1"
-          @input="autoResize" 
+          @input="autoResize"
           @keydown="handleKeydown"
         ></textarea>
         <button class="send-btn" :disabled="!content.trim()" @click="send">

@@ -5,7 +5,7 @@ import { renderMarkdown } from '@/composables/useMarkdown'
 
 const props = defineProps({
   chatId: { type: String, required: true },
-  messageId: { type: String, required: true }
+  messageId: { type: String, required: true },
 })
 
 const commentStore = useCommentStore()
@@ -16,7 +16,8 @@ const isSubmitting = ref(false)
 const commentsRef = ref(null)
 
 const comments = computed(() => {
-  return commentStore.getMessageComments(props.chatId, props.messageId)
+  return commentStore
+    .getMessageComments(props.chatId, props.messageId)
     .sort((a, b) => a.timestamp - b.timestamp)
 })
 
@@ -98,8 +99,12 @@ function formatTime(timestamp) {
 
 <template>
   <div class="message-comments" ref="commentsRef">
-    <button class="comment-toggle-btn" @click="toggleComments" :class="{ 'has-comments': commentCount > 0 }"
-      title="查看评论">
+    <button
+      class="comment-toggle-btn"
+      @click="toggleComments"
+      :class="{ 'has-comments': commentCount > 0 }"
+      title="查看评论"
+    >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
@@ -122,7 +127,8 @@ function formatTime(timestamp) {
             <div class="comment-avatar">
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path
-                  d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                  d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+                />
               </svg>
             </div>
             <div class="comment-content">
@@ -134,7 +140,9 @@ function formatTime(timestamp) {
               <button class="comment-delete" @click="deleteComment(comment.id)" title="删除评论">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <path
+                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                  />
                 </svg>
               </button>
             </div>
@@ -143,10 +151,18 @@ function formatTime(timestamp) {
 
         <!-- Comment input -->
         <div class="comment-input-area">
-          <textarea v-model="newCommentContent" class="comment-input" placeholder="写下你的评论...（按 Enter 发送，Shift+Enter 换行）"
-            rows="2" @keydown="handleKeydown"></textarea>
-          <button class="submit-comment-btn" :disabled="!newCommentContent.trim() || isSubmitting"
-            @click="submitComment">
+          <textarea
+            v-model="newCommentContent"
+            class="comment-input"
+            placeholder="写下你的评论...（按 Enter 发送，Shift+Enter 换行）"
+            rows="2"
+            @keydown="handleKeydown"
+          ></textarea>
+          <button
+            class="submit-comment-btn"
+            :disabled="!newCommentContent.trim() || isSubmitting"
+            @click="submitComment"
+          >
             发送
           </button>
         </div>

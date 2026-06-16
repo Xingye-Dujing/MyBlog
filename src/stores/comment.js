@@ -9,22 +9,22 @@ export const useCommentStore = defineStore('comment', () => {
 
   // Get comments for a specific chat (function, not computed)
   function getChatComments(chatId) {
-    return comments.value.filter(c => c.chatId === chatId)
+    return comments.value.filter((c) => c.chatId === chatId)
   }
 
   // Get comments for a specific message (function, not computed)
   function getMessageComments(chatId, messageId) {
-    return comments.value.filter(c => c.chatId === chatId && c.messageId === messageId)
+    return comments.value.filter((c) => c.chatId === chatId && c.messageId === messageId)
   }
 
   // Get comment count for a chat (function, not computed)
   function getChatCommentCount(chatId) {
-    return comments.value.filter(c => c.chatId === chatId).length
+    return comments.value.filter((c) => c.chatId === chatId).length
   }
 
   // Get comment count for a message (function, not computed)
   function getMessageCommentCount(chatId, messageId) {
-    return comments.value.filter(c => c.chatId === chatId && c.messageId === messageId).length
+    return comments.value.filter((c) => c.chatId === chatId && c.messageId === messageId).length
   }
 
   async function init() {
@@ -80,7 +80,7 @@ export const useCommentStore = defineStore('comment', () => {
       content,
       author: '访客', // Default author name
       timestamp: Date.now(),
-      replies: [] // For future reply feature
+      replies: [], // For future reply feature
     }
     comments.value.push(comment)
     return comment
@@ -95,7 +95,7 @@ export const useCommentStore = defineStore('comment', () => {
       content,
       author: '访客',
       timestamp: Date.now(),
-      replies: []
+      replies: [],
     }
     comments.value.push(comment)
     return comment
@@ -103,7 +103,7 @@ export const useCommentStore = defineStore('comment', () => {
 
   // Delete a comment
   function deleteComment(commentId) {
-    const index = comments.value.findIndex(c => c.id === commentId)
+    const index = comments.value.findIndex((c) => c.id === commentId)
     if (index !== -1) {
       comments.value.splice(index, 1)
     }
@@ -111,12 +111,14 @@ export const useCommentStore = defineStore('comment', () => {
 
   // Delete all comments for a chat
   function deleteChatComments(chatId) {
-    comments.value = comments.value.filter(c => c.chatId !== chatId)
+    comments.value = comments.value.filter((c) => c.chatId !== chatId)
   }
 
   // Delete comments for a specific message
   function deleteMessageComments(chatId, messageId) {
-    comments.value = comments.value.filter(c => !(c.chatId === chatId && c.messageId === messageId))
+    comments.value = comments.value.filter(
+      (c) => !(c.chatId === chatId && c.messageId === messageId),
+    )
   }
 
   // Sync comments to file
@@ -125,7 +127,7 @@ export const useCommentStore = defineStore('comment', () => {
       const res = await fetch('/api/save-comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json;charset=utf-8;' },
-        body: JSON.stringify(comments.value)
+        body: JSON.stringify(comments.value),
       })
       return res.ok
     } catch {
@@ -136,7 +138,7 @@ export const useCommentStore = defineStore('comment', () => {
   // Filter out orphaned comments (comments whose chat/message no longer exists)
   function filterOrphanedComments(validChatIds, validMessageMap) {
     const beforeCount = comments.value.length
-    comments.value = comments.value.filter(c => {
+    comments.value = comments.value.filter((c) => {
       // Check if chat exists
       if (!validChatIds.includes(c.chatId)) {
         return false
@@ -152,7 +154,9 @@ export const useCommentStore = defineStore('comment', () => {
 
   // Export comments as JSON
   function exportJSON() {
-    const blob = new Blob([JSON.stringify(comments.value, null, 2)], { type: 'application/json;charset=utf-8;' })
+    const blob = new Blob([JSON.stringify(comments.value, null, 2)], {
+      type: 'application/json;charset=utf-8;',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -188,6 +192,6 @@ export const useCommentStore = defineStore('comment', () => {
     syncToFile,
     filterOrphanedComments,
     exportJSON,
-    importJSON
+    importJSON,
   }
 })
