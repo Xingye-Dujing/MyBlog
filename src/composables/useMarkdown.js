@@ -15,7 +15,7 @@ const md = new MarkdownIt({
           hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
           '</code></pre>'
         )
-      } catch (_) {
+      } catch {
         /* fallback below */
       }
     }
@@ -28,6 +28,17 @@ md.use(texmath, {
   delimiters: 'dollars',
   katexOptions: { throwOnError: false },
 })
+
+const defaultImageRender =
+  md.renderer.rules.image ||
+  function (tokens, idx, options, env, self) {
+    return self.renderToken(tokens, idx, options)
+  }
+
+md.renderer.rules.image = function (tokens, idx, options, env, self) {
+  tokens[idx].attrSet('loading', 'lazy')
+  return defaultImageRender(tokens, idx, options, env, self)
+}
 
 export function renderMarkdown(content) {
   if (!content) return ''
