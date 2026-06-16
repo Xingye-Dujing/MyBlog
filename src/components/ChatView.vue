@@ -401,7 +401,6 @@ onUnmounted(() => {
               <line x1="3" y1="18" x2="3.01" y2="18" />
             </svg>
             <span>文章导览</span>
-            <span class="summary-badge">{{ sections.length }}章</span>
           </summary>
           <OutlineSidebar
             :sections="sections"
@@ -1048,8 +1047,6 @@ onUnmounted(() => {
   }
 
   .header-btn {
-    width: 40px;
-    height: 40px;
     padding: 8px;
   }
 
@@ -1174,7 +1171,7 @@ onUnmounted(() => {
   }
 
   .search-input {
-    font-size: 16px;
+    font-size: 0.8rem;
   }
 }
 
