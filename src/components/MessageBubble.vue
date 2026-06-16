@@ -6,7 +6,6 @@ import { useCommentStore } from '@/stores/comment'
 const props = defineProps({
   message: { type: Object, required: true },
   showDate: { type: Boolean, default: false },
-  visible: { type: Boolean, default: true },
 })
 const commentStore = useCommentStore()
 const isCommentsExpanded = ref(false)
@@ -62,7 +61,7 @@ function formatTime(timestamp) {
 </script>
 
 <template>
-  <div v-show="visible" class="message-wrapper">
+  <div class="message-wrapper">
     <div v-if="showDate" class="date-separator">
       <span>{{ dateStr }}</span>
     </div>

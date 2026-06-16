@@ -25,15 +25,6 @@ const chat = computed(() => {
   return chatStore.chats.find((c) => c.id === id) || null
 })
 
-// 判断消息是否显示日期分隔线
-function shouldShowDate(msg, idx) {
-  if (idx === 0) return true
-  const prevMsg = chat.value.messages[idx - 1]
-  const d1 = new Date(msg.timestamp)
-  const d2 = new Date(prevMsg.timestamp)
-  return d1.toDateString() !== d2.toDateString()
-}
-
 // 判断消息是否可见（根据章节折叠状态）
 function isMessageVisible(msgIndex) {
   const section = sections.value.find(
@@ -41,6 +32,24 @@ function isMessageVisible(msgIndex) {
   )
   return !section?.collapsed
 }
+
+const messagesWithDates = computed(() => {
+  if (!chat.value) return []
+  const result = []
+  let lastDate = ''
+  for (let idx = 0; idx < chat.value.messages.length; idx++) {
+    const msg = chat.value.messages[idx]
+    const d = new Date(msg.timestamp)
+    const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    result.push({
+      ...msg,
+      showDate: dateKey !== lastDate,
+      _visible: isMessageVisible(idx),
+    })
+    lastDate = dateKey
+  }
+  return result
+})
 
 // 构建章节：基于消息的 outline.enabled 字段
 function buildSections() {
@@ -291,13 +300,13 @@ onUnmounted(() => {
           <div v-if="chat.tags.length" class="chat-tags-header">
             <span v-for="tag in chat.tags" :key="tag" class="header-tag">{{ tag }}</span>
           </div>
-          <MessageBubble
-            v-for="(msg, idx) in chat.messages"
-            :key="msg.id"
-            :message="msg"
-            :show-date="shouldShowDate(msg, idx)"
-            :visible="isMessageVisible(idx)"
-          />
+          <template v-for="msg in messagesWithDates" :key="msg.id">
+            <MessageBubble
+              v-if="msg._visible"
+              :message="msg"
+              :show-date="msg.showDate"
+            />
+          </template>
           <CommentSection :chat-id="chat.id" />
         </div>
       </div>
