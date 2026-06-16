@@ -3,6 +3,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useSections } from '@/composables/useSections'
+import { eagerLoadImagesInRange } from '@/utils/scrollHelper'
 import MessageBubble from '@/components/MessageBubble.vue'
 import CommentSection from '@/components/CommentSection.vue'
 import OutlineSidebar from '@/components/OutlineSidebar.vue'
@@ -78,14 +79,15 @@ function toggleSearch() {
   }
 }
 
-function navigateSearch(direction) {
+async function navigateSearch(direction) {
   const matches = messagesWithDates.value.filter((m) => m._searchMatch)
   if (!matches.length) return
-  currentMatchIndex.value =
-    (currentMatchIndex.value + direction + matches.length) % matches.length
+  currentMatchIndex.value = (currentMatchIndex.value + direction + matches.length) % matches.length
   const target = matches[currentMatchIndex.value]
   const el = messagesContainer.value?.querySelector(`[data-msg-id="${target.id}"]`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (!el) return
+  await eagerLoadImagesInRange(messagesContainer.value, el)
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 watch(searchQuery, () => {
@@ -105,15 +107,14 @@ function scrollToHashMessage() {
   const hash = route.hash
   if (!hash || !hash.startsWith('#msg-')) return
   const msgId = hash.slice(5)
-  nextTick(() => {
-    setTimeout(() => {
-      const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        el.classList.add('deep-link-highlight')
-        setTimeout(() => el.classList.remove('deep-link-highlight'), 1500)
-      }
-    }, 300)
+  nextTick(async () => {
+    await new Promise((r) => setTimeout(r, 300))
+    const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
+    if (!el) return
+    await eagerLoadImagesInRange(messagesContainer.value, el)
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.classList.add('deep-link-highlight')
+    setTimeout(() => el.classList.remove('deep-link-highlight'), 1500)
   })
 }
 

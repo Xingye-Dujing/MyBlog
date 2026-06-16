@@ -1,5 +1,6 @@
 import { ref, nextTick } from 'vue'
 import { getPlainText } from '@/composables/useMarkdown'
+import { eagerLoadImagesInRange } from '@/utils/scrollHelper'
 
 export function useSections(chat, messagesContainer) {
   const sections = ref([])
@@ -91,22 +92,28 @@ export function useSections(chat, messagesContainer) {
     const targetMsg = chat.value.messages[section.startMsgIndex]
     if (!targetMsg) return
 
-    nextTick(() => {
-      const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
+    nextTick(async () => {
+      const container = messagesContainer.value
+      if (!container) return
+
+      const messageEls = Array.from(container.querySelectorAll('.message-wrapper'))
       const targetIdx = chat.value.messages.findIndex((m) => m.id === targetMsg.id)
-      if (messageElements && messageElements[targetIdx]) {
-        messageElements[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'start' })
-        activeHeadingId.value = section.id
-        const el = messageElements[targetIdx]
-        if (el) {
-          setTimeout(() => {
-            el.classList.add('section-highlight')
-            setTimeout(() => {
-              el.classList.remove('section-highlight')
-            }, 800)
-          }, 100)
-        }
-      }
+      if (targetIdx === -1) return
+
+      const targetEl = messageEls[targetIdx]
+      if (!targetEl) return
+
+      await eagerLoadImagesInRange(container, targetEl)
+
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      activeHeadingId.value = section.id
+
+      setTimeout(() => {
+        targetEl.classList.add('section-highlight')
+        setTimeout(() => {
+          targetEl.classList.remove('section-highlight')
+        }, 800)
+      }, 100)
     })
   }
 
