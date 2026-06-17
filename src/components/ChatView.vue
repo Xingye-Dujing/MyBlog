@@ -165,7 +165,7 @@ onUnmounted(() => {
 
 <template>
   <div v-if="chat" class="chat-view" :class="{ 'has-outline': sections.length > 0 }">
-    <!-- 主要内容区域 -->
+    <!-- Main content area -->
     <div class="chat-main">
       <div class="chat-header">
         <button class="back-btn mobile-only" @click="router.push({ name: 'home' })">
@@ -183,7 +183,7 @@ onUnmounted(() => {
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
         </button>
-        <!-- 手机端：大纲导览开关按钮 -->
+        <!-- Mobile: outline toggle button -->
         <button
           v-if="isMobile && sections.length > 0"
           class="outline-toggle-btn"
@@ -238,7 +238,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 手机端大纲折叠面板（仅当有章节时显示） -->
+      <!-- Mobile outline panel (only when sections exist) -->
       <div
         v-if="isMobile && sections.length > 0 && showOutlinePanel"
         class="mobile-outline-container"
@@ -284,7 +284,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 电脑端大纲侧边栏 -->
+    <!-- Desktop outline sidebar -->
     <OutlineSidebar
       v-if="!isMobile && sections.length > 0"
       :sections="sections"
@@ -504,12 +504,12 @@ onUnmounted(() => {
 
   .chat-main {
     height: 100%;
-    min-height: 0; /* 关键：允许 flex 子项收缩 */
+    min-height: 0; /* Critical: allow flex children to shrink */
   }
 
   .messages-area {
     flex: 1;
-    min-height: 0; /* 关键：允许滚动 */
+    min-height: 0; /* Critical: allow scrolling */
     overflow-y: auto;
     padding: 8px 0;
   }
@@ -594,7 +594,7 @@ onUnmounted(() => {
   }
 }
 
-/* 手机端大纲折叠面板样式 */
+/* Mobile outline panel styles */
 .mobile-outline-container {
   border-bottom: 1px solid #e0e0e0;
   background: #fff;

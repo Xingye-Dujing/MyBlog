@@ -47,7 +47,7 @@
         </div>
       </div>
     </div>
-    <!-- 电脑端拖拽手柄 -->
+    <!-- Desktop resize handle -->
     <div v-if="!isMobile" class="resize-handle" @mousedown="startResize"></div>
   </div>
 </template>
@@ -63,7 +63,7 @@ defineProps({
 
 const emit = defineEmits(['toggle-section', 'jump-to'])
 
-// 宽度控制
+// Width control
 const STORAGE_KEY = 'outline-sidebar-width'
 const DEFAULT_WIDTH = 260
 const MIN_WIDTH = 180
@@ -255,7 +255,7 @@ function handleToggle(sectionId) {
   background: rgba(0, 0, 0, 0.05);
 }
 
-/* 手机端样式 */
+/* Mobile styles */
 .mobile-outline {
   width: 100% !important;
   position: sticky;
