@@ -36,5 +36,5 @@ export async function eagerLoadImagesInRange(container, targetEl) {
     })
   })
 
-  await Promise.race([Promise.all(loadPromises), new Promise((r) => setTimeout(r, 600))])
+  await Promise.race([Promise.all(loadPromises), new Promise((r) => setTimeout(r, 300))])
 }
