@@ -11,6 +11,24 @@ import { RouterView } from 'vue-router'
 </template>
 
 <style>
+@font-face {
+  font-family: APL;
+  src: local("APL385"), url(APL385.ttf)
+}
+
+.apl-code code {
+  font-family: APL !important;
+}
+
+.apl-block {
+  font-family: APL;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+  overflow-x: auto;
+  line-height: 1.2;
+}
+
 * {
   margin: 0;
   padding: 0;
