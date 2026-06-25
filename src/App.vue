@@ -13,7 +13,7 @@ import { RouterView } from 'vue-router'
 <style>
 @font-face {
   font-family: APL;
-  src: local("APL385"), url(APL385.ttf)
+  src: url('/public/APL385.ttf');
 }
 
 .apl-code code {
