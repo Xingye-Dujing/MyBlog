@@ -4,7 +4,7 @@
 
 在线访问我的博客：
 
-- https://xingye-blog.zh-cn.edgeone.cool
+- https://xingye-blog.xyz
 - 需翻墙：https://my-blog-eight-dun.vercel.app
 
 > 在线版本由 `production` 分支构建并部署，与当前 `main` 分支有所不同。两者的区别及各自作用，请阅读其中的 **「博客理念」对话**
@@ -97,4 +97,5 @@ src/
 
 ## 更新日志
 
-- 2023.06.12：添加了大纲导览功能
+- 2026.06.12：添加了大纲导览功能
+- 2026.06.16：添加了对话内搜索功能
