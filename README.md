@@ -7,6 +7,11 @@
 - 样式进行了部分调整
 - **不再使用 LocalStorage**，改为直接读取 `chats.json` 和 `comments.json`，保证每次打开页面都展示最新内容
 
+在线访问我的博客：
+
+- https://xingye-blog.xyz
+- 需翻墙：https://my-blog-eight-dun.vercel.app
+
 ## 效果图
 
 - **电脑端**（Windows 11 谷歌浏览器）
@@ -48,4 +53,6 @@
    npm run build
    ```
 
-4. 推荐使用 GitHub 搭配 Vercel/Edgeone 一键部署（我的在线版即采用此方式）
+4. 推荐使用 GitHub 搭配 Vercel 一键部署（我的在线版即采用此方式）
+
+5. 若要在国内能正常访问，那就买个域名再加上 Cloudflare 免费服务即可（详见博客里的 Vercel 对话）。
