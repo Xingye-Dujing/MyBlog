@@ -1,5 +1,141 @@
 [
   {
+    "id": "chat-1782646165769",
+    "title": "对 Qwen2.5-0.5B 进行细粒度情绪分类微调",
+    "createdAt": 1782646165769,
+    "updatedAt": 1782653206597,
+    "tags": [
+      "AI"
+    ],
+    "pinned": false,
+    "messages": [
+      {
+        "id": "msg-1782652528614-0y7k",
+        "content": "经测试，2024 版拯救者 Y7000P（16G 内存，8G显存，RTX4060，i7）可以流畅进行微调。一轮大概30多分钟。",
+        "timestamp": 1782652528614,
+        "editHistory": [
+          1782652548679
+        ],
+        "outline": {
+          "enabled": false,
+          "title": ""
+        }
+      },
+      {
+        "id": "msg-1782646231298-j5el",
+        "content": "OCEMOTION - 中文 7 分类细粒度情感分析数据集：https://aistudio.baidu.com/dataset/detail/100731/intro",
+        "timestamp": 1782646231298,
+        "editHistory": [],
+        "outline": {
+          "enabled": true,
+          "title": "OCEMOTION 数据集"
+        }
+      },
+      {
+        "id": "msg-1782647024968-ec48",
+        "content": "0. 翻墙，安装 Python 等\n1. 下载该项目到本地：https://github.com/hiyouga/LlamaFactory\n2. 下载 OCEMOTION 数据集到该项目下\n3. 创建 Python 虚拟环境\n4. 启动虚拟环境并运行 `pip install -e .[torch,metrics]` 安装包\n5. 如果有显卡，可使用 GPU 加速：（安装**自己电脑中** CUDA 版本对应的 PyTorch，比如我的 CUDA 是 11.2，那么我就可以使用 11.8 版本的，**小数点前的相同即可**）\n\n```python\npip uninstall torch torchvision torchaudio\npip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118\npython -c \"import torch; print(torch.cuda.is_available())\"\n```\n\n依次执行上面的指令，最后返回 `True` 即可",
+        "timestamp": 1782647024968,
+        "editHistory": [
+          1782647511444,
+          1782648449081,
+          1782649182572,
+          1782649564492,
+          1782649671980,
+          1782649688348,
+          1782649843045,
+          1782650066584,
+          1782650078941
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "预备工作"
+        }
+      },
+      {
+        "id": "msg-1782647129902-88fz",
+        "content": "6. LLaMA-Factory 需要特定格式的 JSON 数据。我们要将下载的 CSV 文件转换为 `train.json` 和 `dev.json`。新建一个 `convert.py` 文件，写入以下代码并运行：\n\n```python\nimport csv\nimport json\nimport random\n\ndata_list = []\n\n# 根据你的实际文件名修改\ninput_file = 'OCEMOTION.csv'\n\nwith open(input_file, 'r', encoding='utf-8') as f:\n    # 使用 csv.reader 读取，默认逗号分隔。但你的数据是制表符分隔，需要指定 delimiter='\\t'\n    reader = csv.reader(f, delimiter='\\t')\n\n    # 你的数据没有表头行，所以直接读取每一行\n    for row in reader:\n        # 根据样本格式：row[0] = 序号, row[1] = 文本内容, row[2] = 标签\n        # 注意：有些行可能包含特殊字符（如[生病]），直接保留即可\n        text = row[1].strip()  # 去除首尾空格\n        label = row[2].strip()  # 去除首尾空格\n\n        # 可选：过滤掉过短或无意义的文本\n        if len(text) < 2:\n            continue\n\n        data_list.append({\n            \"instruction\": \"请判断下面文本的情绪类别，从以下类别中选择：sadness、happiness、disgust、anger、like、surprise、fear。\",\n            \"input\": text,\n            \"output\": label\n        })\n\n# 打乱数据\nrandom.shuffle(data_list)\n\n# 将数据分成 90% 训练集和 10% 验证集\nsplit_index = int(len(data_list) * 0.9)\ntrain_data = data_list[:split_index]\ndev_data = data_list[split_index:]\n\nwith open('train.json', 'w', encoding='utf-8') as f:\n    json.dump(train_data, f, ensure_ascii=False, indent=2)\n\nwith open('dev.json', 'w', encoding='utf-8') as f:\n    json.dump(dev_data, f, ensure_ascii=False, indent=2)\n\nprint(f\"总数据: {len(data_list)} 条\")\nprint(f\"训练集: {len(train_data)} 条，验证集: {len(dev_data)} 条\")\n```",
+        "timestamp": 1782647129902,
+        "editHistory": [
+          1782647179598,
+          1782649575365
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "转换数据格式"
+        }
+      },
+      {
+        "id": "msg-1782647439380-s2ah",
+        "content": "7. 将生成的 `train.json` 和 `dev.json` 文件放入 LLaMA-Factory 的 `data` 目录，并编辑 `data/dataset_info.json` 文件，将其内容变为（删除原来的，加入下面的）：\n\n```json\n{\n  \"ocemotion\": {\n    \"file_name\": \"train.json\",\n    \"columns\": {\n      \"prompt\": \"instruction\",\n      \"response\": \"output\",\n      \"query\": \"input\"\n    }\n  }\n}\n```",
+        "timestamp": 1782647439380,
+        "editHistory": [
+          1782649580970,
+          1782652681181
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "配置数据集信息"
+        }
+      },
+      {
+        "id": "msg-1782647670926-qw9y",
+        "content": "8. 在该项目下，创建一个 YAML 配置文件 `train_qwen.yaml`：\n\n```\n# =========================\n# Model\n# =========================\nmodel_name_or_path: Qwen/Qwen2.5-0.5B\ntemplate: qwen\n\n# =========================\n# Dataset\n# =========================\ndataset: ocemotion\ndataset_dir: ./data\n\n# =========================\n# Finetuning\n# =========================\nstage: sft\ndo_train: true\n\nfinetuning_type: lora\n\n# LoRA\nlora_target: q_proj,v_proj\n\nlora_rank: 8\nlora_alpha: 16\nlora_dropout: 0.05\n\n# =========================\n# Output\n# =========================\noutput_dir: ./output_qwen\noverwrite_output_dir: true\n\n# =========================\n# Train\n# =========================\nper_device_train_batch_size: 2\ngradient_accumulation_steps: 4\n\nlearning_rate: 2e-4\nnum_train_epochs: 1\n\ncutoff_len: 128\n\nlr_scheduler_type: cosine\nwarmup_ratio: 0.03\n\nfp16: true\n\ngradient_checkpointing: true\n\n# =========================\n# Log\n# =========================\nlogging_steps: 20\nsave_strategy: epoch\nplot_loss: false\n```",
+        "timestamp": 1782647670926,
+        "editHistory": [
+          1782648178491,
+          1782648235042,
+          1782649587779,
+          1782650901791,
+          1782651512901,
+          1782651557857,
+          1782651810828
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "创建 YAML 配置文件"
+        }
+      },
+      {
+        "id": "msg-1782648418966-ebwp",
+        "content": "9. 执行训练命令（确保虚拟环境已激活）：（`llamafactory-cli` 已随第四步的 `pip` 安装完毕）\n\n```python\nllamafactory-cli train train_qwen.yaml\n```\n\n训练完成后，LoRA 适配器会保存在 `./output_qwen` 目录。",
+        "timestamp": 1782648418966,
+        "editHistory": [
+          1782649594288,
+          1782651497556,
+          1782651506338
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "执行训练命令"
+        }
+      },
+      {
+        "id": "msg-1782652186502-nnhd",
+        "content": "正在训练中......\n\n![01.png](/img/Qwen2.5/01.png)\n![02.png](/img/Qwen2.5/02.png)\n\n可以看到显存、内存都还有空余，我们大可以把训练挂后台继续其它的任务。",
+        "timestamp": 1782652186502,
+        "editHistory": [
+          1782652192060,
+          1782652384223,
+          1782653206597
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "正在训练中"
+        }
+      },
+      {
+        "id": "msg-1782652220238-98vj",
+        "content": "```\n[INFO|trainer.py:1469] 2026-06-28 21:03:46,671 >> ***** Running training *****\n[INFO|trainer.py:1470] 2026-06-28 21:03:46,671 >>   Num examples = 31,783\n[INFO|trainer.py:1471] 2026-06-28 21:03:46,671 >>   Num Epochs = 1\n[INFO|trainer.py:1472] 2026-06-28 21:03:46,671 >>   Num update steps per epoch = 3,973\n[INFO|trainer.py:1473] 2026-06-28 21:03:46,671 >>   Instantaneous batch size per device = 2\n[INFO|trainer.py:1476] 2026-06-28 21:03:46,671 >>   Total train batch size (w. parallel, distributed & accumulation) = 8\n[INFO|trainer.py:1477] 2026-06-28 21:03:46,671 >>   Gradient Accumulation steps = 4\n[INFO|trainer.py:1478] 2026-06-28 21:03:46,671 >>   Total optimization steps = 3,973\n[INFO|trainer.py:1479] 2026-06-28 21:03:46,676 >>   Number of trainable parameters = 540,672\n{'loss': '7.58', 'grad_norm': '19.88', 'learning_rate': '2.833e-05', 'epoch': '0.005034'}                              \n{'loss': '6.313', 'grad_norm': '13.64', 'learning_rate': '6e-05', 'epoch': '0.01007'}                                  \n{'loss': '4.213', 'grad_norm': '7.457', 'learning_rate': '9.333e-05', 'epoch': '0.0151'}                               \n{'loss': '3.455', 'grad_norm': '19.37', 'learning_rate': '0.0001267', 'epoch': '0.02014'}                              \n{'loss': '3.653', 'grad_norm': 'nan', 'learning_rate': '0.00015', 'epoch': '0.02517'}                                  \n{'loss': '3.84', 'grad_norm': '4.659', 'learning_rate': '0.0001783', 'epoch': '0.0302'}                                \n{'loss': '3.037', 'grad_norm': '8.104', 'learning_rate': '0.0002', 'epoch': '0.03524'}                                 \n{'loss': '2.764', 'grad_norm': '6.592', 'learning_rate': '0.0002', 'epoch': '0.04027'}                                 \n{'loss': '2.729', 'grad_norm': '6.036', 'learning_rate': '0.0001999', 'epoch': '0.04531'}                              \n{'loss': '2.59', 'grad_norm': '3.778', 'learning_rate': '0.0001999', 'epoch': '0.05034'}                               \n{'loss': '2.641', 'grad_norm': '6.99', 'learning_rate': '0.0001997', 'epoch': '0.05537'}                               \n{'loss': '2.617', 'grad_norm': '4.609', 'learning_rate': '0.0001996', 'epoch': '0.06041'}                              \n{'loss': '2.479', 'grad_norm': '3.483', 'learning_rate': '0.0001995', 'epoch': '0.06544'}                              \n{'loss': '2.505', 'grad_norm': '2.69', 'learning_rate': '0.0001993', 'epoch': '0.07048'} \n\n这些数据都是什么含义，为我输出成段文字，不要分点断句\n```\n\n从这段日志来看，你的模型已经**成功进入训练阶段**，并且训练过程是正常进行的，没有再出现之前的显存溢出问题。这些日志记录了模型训练过程中的整体配置以及每隔一定步数输出一次的训练状态，用于帮助我们判断训练是否正常、模型是否正在收敛以及当前的学习情况。\n\n开头的 `***** Running training *****` 表示训练正式开始。`Num examples = 31,783` 说明此次用于训练的数据集共有 31783 条样本。`Num Epochs = 1` 表示模型会完整遍历整个训练集一次，也就是训练一个 Epoch。`Num update steps per epoch = 3973` 表示在一个 Epoch 内，总共会进行 3973 次参数更新。由于梯度累积的存在，并不是每处理一个 Batch 就更新一次参数，而是累积一定次数之后再进行一次更新，因此更新步数会少于数据集总 Batch 数。\n\n`Instantaneous batch size per device = 2` 表示每一次送入显卡进行前向和反向传播的数据量为 2 条样本，这是由 `per_device_train_batch_size=2` 决定的。`Gradient Accumulation steps = 4` 表示模型会连续计算 4 个 Batch 的梯度后，再统一更新一次模型参数，因此等效于一次更新使用了 2×4=8 条样本。对应的 `Total train batch size = 8` 就是模型实际用于一次梯度更新的总 Batch 大小。这样的设置能够在显存有限的情况下模拟更大的 Batch，从而兼顾训练稳定性和显存占用。\n\n`Total optimization steps = 3973` 表示整个训练过程中，优化器一共会执行 3973 次参数更新。`Number of trainable parameters = 540,672` 则表示此次 LoRA 微调真正参与训练的参数只有 540672 个，而 Qwen2.5-0.5B 本身拥有约 5 亿参数，因此实际训练的参数不到模型总参数的千分之一。这正是 LoRA 微调的优势所在，它冻结了绝大多数原始模型参数，只训练新增的低秩矩阵，因此能够显著降低显存占用并提高训练速度。\n\n随后每一行形如 `{'loss': ..., 'grad_norm': ..., 'learning_rate': ..., 'epoch': ...}` 的日志表示当前一次训练记录。其中 `loss` 是损失函数值，用来衡量模型预测结果与真实标签之间的差距，数值越小通常表示模型学习效果越好。从你的日志来看，Loss 从最初的 **7.58** 很快下降到 **6.313**、**4.213**、**3.455**，随后继续下降到 **2.479** 左右，说明模型已经快速学习到了数据中的规律，并进入了正常收敛阶段。对于这种七分类情感分类任务，训练初期 Loss 快速下降是比较理想的现象。\n\n`grad_norm` 表示梯度范数，它反映了当前模型参数更新幅度的大小。正常情况下，梯度范数会随着训练不断变化，例如你的日志中出现了 19.88、13.64、7.457、6.592、3.778 等数值，说明模型更新幅度正在逐渐趋于稳定。中间有一次出现了 `grad_norm = nan`，单独出现一次通常不需要过于担心，因为后续梯度已经恢复为正常数值，训练也没有中断。如果后续频繁出现 `nan`，甚至 Loss 也变成 `nan`，那才说明学习率过高或者训练发生了数值不稳定。\n\n`learning_rate` 表示当前学习率。从日志可以看到，它从 **2.833×10⁻⁵** 逐渐增加到 **2×10⁻⁴**，随后基本保持在 **0.0002** 左右。这说明你采用的是带有 **Warmup** 的学习率策略，在训练开始阶段逐步提高学习率，避免模型刚开始训练时参数更新过大而导致不稳定；当 Warmup 结束后，学习率达到设定的最大值，再按照余弦退火策略缓慢下降，这是一种目前大模型微调中非常常见且稳定的学习率调度方式。\n\n最后的 `epoch` 表示当前已经完成的训练进度，例如 `epoch = 0.07048` 表示模型已经完成了约 **7.0%** 的训练，一个 Epoch 尚未结束。从目前的日志来看，Loss 持续下降，没有出现持续性的梯度异常，也没有出现显存溢出或训练中断，说明这套 **Qwen2.5-0.5B + LoRA** 配置已经能够稳定运行，并且模型正在有效学习你的七分类情感数据。从训练曲线判断，如果这种趋势能够保持到整个 Epoch 结束，你最终会得到一个能够完成七分类情感识别任务的 LoRA 微调模型。",
+        "timestamp": 1782652220238,
+        "editHistory": [],
+        "outline": {
+          "enabled": false,
+          "title": ""
+        }
+      }
+    ]
+  },
+  {
     "id": "chat-1782579380430",
     "title": "给我的旧电脑装 Debian 系统",
     "createdAt": 1782579380430,
@@ -3116,7 +3252,7 @@
     "id": "chat-1781344835039",
     "title": "总述",
     "createdAt": 1781344835039,
-    "updatedAt": 1782223995207,
+    "updatedAt": 1782645161924,
     "tags": [
       "可视化（数据图表 / 叙事）"
     ],
@@ -3142,6 +3278,18 @@
         "outline": {
           "enabled": true,
           "title": "推荐使用 Jupyter Notebook"
+        }
+      },
+      {
+        "id": "msg-1782645106875-ubhe",
+        "content": "纯 css 和 html 画时间轴：https://www.xingye-blog.xyz/charts/timeline-chart.html\n\n![06.png](/img/chartjs/06.png)",
+        "timestamp": 1782645106875,
+        "editHistory": [
+          1782645145977
+        ],
+        "outline": {
+          "enabled": true,
+          "title": "纯 css 和 html 画时间轴"
         }
       }
     ]
