@@ -1,0 +1,2188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZenCanvas</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+      :root {
+        --bg: #ffffff;
+        --text: #000000;
+        --text-dim: rgba(0, 0, 0, 0.35);
+        --text-faint: rgba(0, 0, 0, 0.12);
+        --border: #000000;
+        --border-dim: rgba(0, 0, 0, 0.15);
+        --border-faint: rgba(0, 0, 0, 0.06);
+        --hover: rgba(0, 0, 0, 0.04);
+        --active-bg: #000000;
+        --active-text: #ffffff;
+        --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+      }
+
+      body.theme-dark {
+        --bg: #000000;
+        --text: #ffffff;
+        --text-dim: rgba(255, 255, 255, 0.35);
+        --text-faint: rgba(255, 255, 255, 0.12);
+        --border: #ffffff;
+        --border-dim: rgba(255, 255, 255, 0.15);
+        --border-faint: rgba(255, 255, 255, 0.06);
+        --hover: rgba(255, 255, 255, 0.06);
+        --active-bg: #ffffff;
+        --active-text: #000000;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: var(--font-mono);
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+        user-select: none;
+        transition:
+          background-color 0.3s,
+          color 0.3s;
+        font-size: 13px;
+      }
+
+      ::selection {
+        background: rgba(0, 110, 255, 0.2);
+        color: inherit;
+      }
+      body.theme-dark ::selection {
+        background: rgba(80, 160, 255, 0.25);
+        color: inherit;
+      }
+
+      body.bg-void {
+        background: var(--bg);
+      }
+      body.bg-grid {
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+      body.bg-dots {
+        background-color: var(--bg);
+        background-image: radial-gradient(circle, var(--border-dim) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      body.bg-cross {
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 20px 20px;
+      }
+      body.bg-diagonal {
+        background-color: var(--bg);
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 28px,
+          var(--border-faint) 28px,
+          var(--border-faint) 29px
+        );
+      }
+
+      #menu-trigger {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        z-index: 1000;
+      }
+
+      #top-menu {
+        position: fixed;
+        top: -48px;
+        left: 0;
+        width: 100%;
+        height: 48px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        z-index: 999;
+        transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        padding: 0 16px;
+      }
+      #menu-trigger:hover ~ #top-menu,
+      #top-menu:hover,
+      #top-menu.pinned {
+        top: 0;
+      }
+
+      .menu-group {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 0 8px;
+        position: relative;
+      }
+      .menu-group + .menu-group::before {
+        content: '';
+        position: absolute;
+        left: -2px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1px;
+        height: 16px;
+        background: var(--border-dim);
+      }
+
+      .menu-btn {
+        color: var(--text-dim);
+        cursor: pointer;
+        padding: 6px 12px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+        background: transparent;
+      }
+      .menu-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .menu-btn.active {
+        color: var(--active-text);
+        background: var(--active-bg);
+        border-color: var(--border);
+      }
+
+      .menu-label {
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        padding: 0 6px;
+        font-weight: 500;
+      }
+
+      .pin-btn {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        cursor: pointer;
+        color: var(--text-faint);
+        font-size: 14px;
+        transition: all 0.15s;
+        margin-left: 4px;
+      }
+      .pin-btn:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .pin-btn.pinned {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+
+      .dropdown {
+        position: fixed;
+        top: 52px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 4px;
+        min-width: 200px;
+        z-index: 1001;
+        opacity: 0;
+        transform: translateY(-4px);
+        pointer-events: none;
+        transition: all 0.15s;
+      }
+      .dropdown.open {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: all;
+      }
+
+      .dd-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 10px;
+        cursor: pointer;
+        transition: all 0.1s;
+        font-size: 12px;
+        color: var(--text-dim);
+        border: 1px solid transparent;
+      }
+      .dd-item:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .dd-item.selected {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .dd-item.disabled {
+        opacity: 0.35;
+        pointer-events: none;
+      }
+      .dd-item .hint {
+        font-size: 10px;
+        color: var(--text-faint);
+      }
+
+      .dd-divider {
+        height: 1px;
+        background: var(--border-dim);
+        margin: 4px 0;
+      }
+      .dd-label {
+        padding: 8px 10px 4px;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        font-weight: 500;
+      }
+
+      #workspace {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+      }
+
+      /* ---- Base node styles (shared) ---- */
+      .node {
+        position: absolute;
+        min-width: 240px;
+        min-height: 120px;
+        width: 480px;
+        background: transparent;
+        border: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        transition:
+          border-width 0.1s,
+          border-color 0.3s;
+      }
+      .node:hover,
+      .node:focus-within {
+        border-width: 2px;
+      }
+
+      .node-header {
+        height: 32px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        cursor: grab;
+        flex-shrink: 0;
+        transition: opacity 0.2s;
+        opacity: 0;
+        background: var(--bg);
+      }
+      .node-header:active {
+        cursor: grabbing;
+      }
+      .node:hover .node-header,
+      .node:focus-within .node-header {
+        opacity: 1;
+      }
+
+      .node-title {
+        font-size: 10px;
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        font-weight: 500;
+        cursor: default;
+      }
+      .node-title-edit {
+        font-size: 10px;
+        letter-spacing: 1px;
+        color: var(--text);
+        text-transform: uppercase;
+        font-weight: 500;
+        font-family: var(--font-mono);
+        background: transparent;
+        border: 1px solid var(--border);
+        outline: none;
+        padding: 2px 6px;
+        width: 120px;
+      }
+
+      .node-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .node-action-btn {
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: var(--text-dim);
+        font-size: 12px;
+        font-family: var(--font-mono);
+        transition: all 0.1s;
+        border: 1px solid transparent;
+      }
+      .node-action-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .node-action-btn.close:hover {
+        color: var(--active-text);
+        background: var(--active-bg);
+      }
+
+      .node-content {
+        flex: 1;
+        padding: 20px 24px;
+        outline: none;
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 14px;
+        line-height: 1.8;
+        color: var(--text);
+        user-select: text;
+        cursor: text;
+        letter-spacing: 0.2px;
+        background: transparent;
+      }
+      .node-content:empty::before {
+        content: attr(data-placeholder);
+        color: var(--text-faint);
+        pointer-events: none;
+      }
+      .node-content::-webkit-scrollbar {
+        width: 4px;
+      }
+      .node-content::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .node-content::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+      }
+
+      .node-resize {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 20px;
+        height: 20px;
+        cursor: nwse-resize;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .node:hover .node-resize {
+        opacity: 1;
+      }
+      .node-resize::before {
+        content: '';
+        position: absolute;
+        bottom: 3px;
+        right: 3px;
+        width: 14px;
+        height: 14px;
+        background: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 3px,
+          var(--border) 3px,
+          var(--border) 4px
+        );
+        opacity: 0.5;
+      }
+      .node-resize:hover::before {
+        opacity: 1;
+      }
+      .node-resize::after {
+        display: none;
+      }
+
+      /* ---- Type-specific overrides ---- */
+      .node-image .node-content {
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        cursor: pointer;
+        user-select: none;
+      }
+      .node-image .node-content img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .node-image .node-content .img-placeholder {
+        color: var(--text-dim);
+        font-size: 12px;
+        letter-spacing: 1px;
+      }
+
+      .node-markdown .node-content {
+        padding: 16px 24px;
+        font-family: var(--font-mono);
+        font-size: 14px;
+        line-height: 1.8;
+        color: var(--text);
+        cursor: pointer;
+        user-select: text;
+        white-space: normal;
+        word-wrap: break-word;
+      }
+      .node-markdown .node-content h1,
+      .node-markdown .node-content h2,
+      .node-markdown .node-content h3 {
+        font-weight: 500;
+        letter-spacing: 0.5px;
+        margin: 0.8em 0 0.4em;
+      }
+      .node-markdown .node-content h1 {
+        font-size: 1.8em;
+        border-bottom: 1px solid var(--border-dim);
+        padding-bottom: 0.2em;
+      }
+      .node-markdown .node-content h2 {
+        font-size: 1.5em;
+      }
+      .node-markdown .node-content h3 {
+        font-size: 1.2em;
+      }
+      .node-markdown .node-content ul,
+      .node-markdown .node-content ol {
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+      }
+      .node-markdown .node-content li {
+        margin: 0.2em 0;
+      }
+      .node-markdown .node-content blockquote {
+        border-left: 3px solid var(--border);
+        padding-left: 1em;
+        margin: 0.5em 0;
+        color: var(--text-dim);
+      }
+      .node-markdown .node-content code {
+        background: var(--border-faint);
+        padding: 0.1em 0.4em;
+        border-radius: 2px;
+        font-size: 0.9em;
+      }
+      .node-markdown .node-content pre {
+        background: var(--border-faint);
+        padding: 0.8em;
+        overflow-x: auto;
+        border-radius: 2px;
+        margin: 0.5em 0;
+      }
+      .node-markdown .node-content pre code {
+        background: transparent;
+        padding: 0;
+      }
+      .node-markdown .node-content a {
+        color: var(--text);
+        text-decoration: underline;
+      }
+      .node-markdown .node-content strong {
+        font-weight: 600;
+      }
+      .node-markdown .node-content em {
+        font-style: italic;
+      }
+      .node-markdown .node-content p {
+        margin: 0.4em 0;
+      }
+
+      /* ----- Global modes ----- */
+      body.focus-mode .node {
+        opacity: 0.1;
+        transition: opacity 0.4s;
+      }
+      body.focus-mode .node:focus-within {
+        opacity: 1;
+        border-width: 2px;
+      }
+      body.focus-mode .node:hover {
+        opacity: 0.4;
+      }
+
+      body.reading-mode .node {
+        border-color: transparent !important;
+        border-width: 1px !important;
+      }
+      body.reading-mode .node:hover,
+      body.reading-mode .node:focus-within {
+        border-color: transparent !important;
+        border-width: 1px !important;
+      }
+      body.reading-mode .node-header {
+        display: none !important;
+      }
+      body.reading-mode .node-resize {
+        display: none !important;
+      }
+
+      #focus-indicator {
+        position: fixed;
+        top: 12px;
+        right: 16px;
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text);
+        opacity: 0;
+        transition: opacity 0.4s;
+        z-index: 50;
+        border: 1px solid var(--border);
+        padding: 4px 8px;
+        background: var(--bg);
+      }
+      body.focus-mode #focus-indicator.focus {
+        opacity: 1;
+      }
+      body.reading-mode #focus-indicator.reading {
+        opacity: 1;
+      }
+
+      /* Floating toolbar */
+      #floating-toolbar {
+        position: fixed;
+        display: none;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 6px;
+        z-index: 2000;
+        align-items: center;
+        flex-wrap: wrap;
+        max-width: 700px;
+      }
+      #floating-toolbar.visible {
+        display: flex;
+      }
+
+      .ft-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+        color: var(--text-dim);
+        cursor: pointer;
+        border: 1px solid transparent;
+        font-family: var(--font-mono);
+        background: transparent;
+        transition: all 0.1s;
+      }
+      .ft-btn:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .ft-btn.active {
+        color: var(--text);
+        border: 1px dashed var(--text);
+        background: transparent;
+      }
+      .ft-divider {
+        width: 1px;
+        height: 16px;
+        background: var(--border-dim);
+        margin: 0 4px;
+        flex-shrink: 0;
+      }
+
+      .ft-color-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 1px solid var(--border-dim);
+        transition: all 0.1s;
+        flex-shrink: 0;
+      }
+      .ft-color-dot:hover {
+        border-color: var(--border);
+        transform: scale(1.2);
+      }
+      .ft-color-dot.active {
+        border: 2px dashed var(--text);
+      }
+
+      .ft-section-label {
+        font-size: 8px;
+        letter-spacing: 1px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        padding: 0 4px;
+      }
+
+      .ft-lh-val {
+        font-size: 10px;
+        color: var(--text);
+        min-width: 24px;
+        text-align: center;
+        font-family: var(--font-mono);
+      }
+
+      #status-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        font-size: 10px;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        letter-spacing: 0.5px;
+        z-index: 100;
+        transition:
+          opacity 0.3s,
+          transform 0.3s;
+      }
+      #status-bar.hidden {
+        opacity: 0;
+        transform: translateY(100%);
+        pointer-events: none;
+      }
+      #status-bar.force-visible {
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+        pointer-events: all !important;
+      }
+
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.6s;
+      }
+      #splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .splash-logo {
+        font-family: var(--font-mono);
+        font-size: 28px;
+        font-weight: 400;
+        color: var(--text);
+        letter-spacing: 8px;
+        margin-bottom: 8px;
+      }
+      .splash-tagline {
+        font-size: 10px;
+        color: var(--text-dim);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-bottom: 40px;
+      }
+      .splash-enter {
+        padding: 10px 32px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .splash-enter:hover {
+        background: var(--active-bg);
+        color: var(--active-text);
+      }
+
+      #notification {
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%) translateY(10px);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 6px 16px;
+        font-size: 11px;
+        color: var(--text);
+        font-family: var(--font-mono);
+        z-index: 3000;
+        opacity: 0;
+        transition: all 0.2s;
+        pointer-events: none;
+      }
+      #notification.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      #context-menu {
+        position: fixed;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 4px;
+        min-width: 180px;
+        z-index: 2500;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.1s;
+      }
+      #context-menu.open {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      /* Custom confirm overlay */
+      #custom-confirm {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      #custom-confirm.active {
+        display: flex;
+      }
+      .confirm-box {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 32px 40px 28px;
+        max-width: 420px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      }
+      .confirm-box .msg {
+        font-family: var(--font-mono);
+        font-size: 14px;
+        letter-spacing: 1px;
+        color: var(--text);
+        margin-bottom: 28px;
+        line-height: 1.6;
+      }
+      .confirm-box .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+      .confirm-box .actions button {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        padding: 8px 24px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .confirm-box .actions button:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .confirm-box .actions button.confirm {
+        color: var(--active-text);
+        background: var(--active-bg);
+        border-color: var(--border);
+      }
+      .confirm-box .actions button.confirm:hover {
+        opacity: 0.8;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .node {
+        animation: fadeIn 0.2s ease;
+      }
+    </style>
+  </head>
+  <body class="bg-void">
+    <div id="splash">
+      <div class="splash-logo">ZENCANVAS</div>
+      <div class="splash-tagline">Wireframe Writing Environment</div>
+      <button class="splash-enter" onclick="enterApp()">Initialize</button>
+    </div>
+
+    <div id="focus-indicator" class="focus">FOCUS</div>
+    <div id="focus-indicator" class="reading" style="right: 90px">READING</div>
+    <div id="menu-trigger"></div>
+
+    <div id="top-menu">
+      <div class="menu-group">
+        <span class="menu-label">FILE</span>
+        <div class="menu-btn" onclick="createCenteredNode('text')">[ NEW ]</div>
+        <div class="menu-btn" onclick="createCenteredNode('image')">[ IMG ]</div>
+        <div class="menu-btn" onclick="createCenteredNode('markdown')">[ MD ]</div>
+        <div class="menu-btn" onclick="saveDocument()">[ SAVE ]</div>
+        <div class="menu-btn" onclick="loadDocument()">[ OPEN ]</div>
+        <div class="menu-btn" onclick="showDropdown('dd-export', this)">[ EXPORT ]</div>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">VIEW</span>
+        <div class="menu-btn" onclick="showDropdown('dd-bg', this)">[ BG ]</div>
+        <div class="menu-btn" id="btn-theme" onclick="toggleTheme()">[ LIGHT ]</div>
+        <div class="menu-btn" id="btn-focus" onclick="toggleFocusMode()">[ FOCUS ]</div>
+        <div class="menu-btn" id="btn-read" onclick="toggleReadingMode()">[ READ ]</div>
+      </div>
+      <div class="menu-group">
+        <div class="menu-btn" onclick="clearAll()">[ PURGE ]</div>
+        <div class="pin-btn" id="pin-btn" onclick="togglePin()" title="Pin menu bar">&#9660;</div>
+      </div>
+    </div>
+
+    <div class="dropdown" id="dd-bg">
+      <div class="dd-label">Background Pattern</div>
+      <div class="dd-item selected" data-bg="bg-void" onclick="setBg('bg-void', this)">
+        Void <span class="hint">pure</span>
+      </div>
+      <div class="dd-item" data-bg="bg-grid" onclick="setBg('bg-grid', this)">
+        Grid <span class="hint">mesh</span>
+      </div>
+      <div class="dd-item" data-bg="bg-dots" onclick="setBg('bg-dots', this)">
+        Dots <span class="hint">matrix</span>
+      </div>
+      <div class="dd-item" data-bg="bg-cross" onclick="setBg('bg-cross', this)">
+        Cross <span class="hint">target</span>
+      </div>
+      <div class="dd-item" data-bg="bg-diagonal" onclick="setBg('bg-diagonal', this)">
+        Diagonal <span class="hint">hatch</span>
+      </div>
+    </div>
+
+    <div class="dropdown" id="dd-export">
+      <div class="dd-label">Export Format</div>
+      <div class="dd-item" onclick="exportAs('txt')">Plain Text <span class="hint">.txt</span></div>
+      <div class="dd-item" onclick="exportAs('md')">Markdown <span class="hint">.md</span></div>
+      <div class="dd-item" onclick="exportAs('html')">HTML <span class="hint">.html</span></div>
+      <div class="dd-item" onclick="exportAs('json')">JSON <span class="hint">.json</span></div>
+    </div>
+
+    <!-- FLOATING TOOLBAR (only for text nodes) -->
+    <div id="floating-toolbar">
+      <span class="ft-section-label">STYLE</span>
+      <button class="ft-btn" data-cmd="bold"><b>B</b></button>
+      <button class="ft-btn" data-cmd="italic"><i>I</i></button>
+      <button class="ft-btn" data-cmd="underline"><u>U</u></button>
+      <button class="ft-btn" data-cmd="strikeThrough"><s>S</s></button>
+      <div class="ft-divider"></div>
+      <span class="ft-section-label">FONT</span>
+      <button class="ft-btn" data-ffont="mono">Mono</button>
+      <button class="ft-btn" data-ffont="sans">Sans</button>
+      <button class="ft-btn" data-ffont="serif">Serif</button>
+      <div class="ft-divider"></div>
+      <span class="ft-section-label">SIZE</span>
+      <button class="ft-btn" data-cmd="fontSizeDown">A-</button>
+      <button class="ft-btn" data-cmd="fontSizeUp">A+</button>
+      <div class="ft-divider"></div>
+      <span class="ft-section-label">LINE</span>
+      <button class="ft-btn" data-cmd="lineHeightDown">LH-</button>
+      <span class="ft-lh-val" id="ft-lh-val">1.8</span>
+      <button class="ft-btn" data-cmd="lineHeightUp">LH+</button>
+      <div class="ft-divider"></div>
+      <!-- ALIGN group -->
+      <span class="ft-section-label">ALIGN</span>
+      <button class="ft-btn" data-cmd="justifyLeft">L</button>
+      <button class="ft-btn" data-cmd="justifyCenter">C</button>
+      <button class="ft-btn" data-cmd="justifyRight">R</button>
+      <div class="ft-divider"></div>
+      <span class="ft-section-label">COLOR</span>
+      <div
+        class="ft-color-dot"
+        data-color="auto"
+        style="background: var(--text)"
+        title="Default"
+      ></div>
+      <div class="ft-color-dot" data-color="#888888" style="background: #888888" title="Gray"></div>
+      <div class="ft-color-dot" data-color="#cc3333" style="background: #cc3333" title="Red"></div>
+      <div class="ft-color-dot" data-color="#3366cc" style="background: #3366cc" title="Blue"></div>
+      <div
+        class="ft-color-dot"
+        data-color="#339933"
+        style="background: #339933"
+        title="Green"
+      ></div>
+      <div
+        class="ft-color-dot"
+        data-color="#cc6600"
+        style="background: #cc6600"
+        title="Orange"
+      ></div>
+      <div class="ft-divider"></div>
+      <button class="ft-btn" data-cmd="removeFormat" title="Clear formatting">CLR</button>
+    </div>
+
+    <!-- CONTEXT MENU -->
+    <div id="context-menu">
+      <div class="dd-item" onclick="createNodeAt(ctxX, ctxY, 'text')">New Text Node</div>
+      <div class="dd-item" onclick="createNodeAt(ctxX, ctxY, 'image')">New Image Node</div>
+      <div class="dd-item" onclick="createNodeAt(ctxX, ctxY, 'markdown')">New Markdown Node</div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" id="ctx-edit" onclick="ctxEdit()">Edit Content</div>
+      <div class="dd-item" id="ctx-copy-node" onclick="copyNode()">Copy Node</div>
+      <div class="dd-item" id="ctx-paste-node" onclick="pasteNode()">Paste Node</div>
+    </div>
+
+    <div id="workspace"></div>
+
+    <div id="status-bar">
+      <span id="stat-left">Ready</span>
+      <span id="stat-right">ZenCanvas</span>
+    </div>
+
+    <div id="notification"></div>
+
+    <!-- Custom Confirm Overlay -->
+    <div id="custom-confirm">
+      <div class="confirm-box">
+        <div class="msg" id="confirm-msg">Purge all nodes?</div>
+        <div class="actions">
+          <button id="confirm-cancel">Cancel</button>
+          <button id="confirm-ok" class="confirm">Purge</button>
+        </div>
+      </div>
+    </div>
+
+    <input
+      type="file"
+      id="file-input"
+      accept=".zc,.txt,.json"
+      style="display: none"
+      onchange="handleFileLoad(event)"
+    />
+
+    <script>
+      // ========== GLOBAL STATE ==========
+      const S = {
+        theme: 'light',
+        bg: 'bg-void',
+        focusMode: false,
+        readingMode: false,
+        menuPinned: false,
+        zCounter: 10,
+        nodeCounter: 0,
+      }
+
+      const DEFAULT_FONT = "'JetBrains Mono', monospace"
+      const DEFAULT_FONT_SIZE = 14
+      const DEFAULT_LINE_HEIGHT = 1.8
+
+      const fontMap = {
+        mono: "'JetBrains Mono', monospace",
+        sans: 'system-ui, -apple-system, sans-serif',
+        serif: "Georgia, 'Times New Roman', serif",
+      }
+
+      let ctxX = 0,
+        ctxY = 0
+      let ctxNode = null // right-clicked node
+      let clipboardNode = null // copied node data
+
+      // ========== LOCAL STORAGE ==========
+      function saveSettings() {
+        localStorage.setItem(
+          'zc-settings',
+          JSON.stringify({
+            theme: S.theme,
+            bg: S.bg,
+            menuPinned: S.menuPinned,
+            focusMode: S.focusMode,
+            readingMode: S.readingMode,
+          }),
+        )
+      }
+      function loadSettings() {
+        const saved = localStorage.getItem('zc-settings')
+        if (!saved) return
+        try {
+          const parsed = JSON.parse(saved)
+          Object.assign(S, parsed)
+        } catch (e) {}
+      }
+      function applySettings() {
+        document.body.classList.toggle('theme-dark', S.theme === 'dark')
+        document.getElementById('btn-theme').textContent =
+          S.theme === 'dark' ? '[ DARK ]' : '[ LIGHT ]'
+        document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
+        document.body.classList.add(S.bg)
+        document.querySelectorAll('#dd-bg .dd-item').forEach((el) => {
+          el.classList.toggle('selected', el.dataset.bg === S.bg)
+        })
+        document.getElementById('pin-btn').classList.toggle('pinned', S.menuPinned)
+        document.getElementById('top-menu').classList.toggle('pinned', S.menuPinned)
+        document.body.classList.toggle('focus-mode', S.focusMode)
+        document.getElementById('btn-focus').classList.toggle('active', S.focusMode)
+        document.body.classList.toggle('reading-mode', S.readingMode)
+        document.getElementById('btn-read').classList.toggle('active', S.readingMode)
+      }
+
+      // ========== SPLASH ==========
+      function enterApp() {
+        document.getElementById('splash').classList.add('fade-out')
+        setTimeout(() => (document.getElementById('splash').style.display = 'none'), 600)
+      }
+
+      function togglePin() {
+        S.menuPinned = !S.menuPinned
+        document.getElementById('top-menu').classList.toggle('pinned', S.menuPinned)
+        document.getElementById('pin-btn').classList.toggle('pinned', S.menuPinned)
+        saveSettings()
+      }
+
+      // ========== DROPDOWNS ==========
+      function showDropdown(id, btn) {
+        const dd = document.getElementById(id)
+        const wasOpen = dd.classList.contains('open')
+        closeAllDropdowns()
+        if (!wasOpen) {
+          const rect = btn.getBoundingClientRect()
+          dd.style.left = rect.left + 'px'
+          dd.style.top = '52px'
+          dd.classList.add('open')
+          btn.classList.add('active')
+          document.getElementById('status-bar').classList.add('force-visible')
+          if (!S.menuPinned) {
+            S.menuPinned = true
+            document.getElementById('top-menu').classList.add('pinned')
+            document.getElementById('pin-btn').classList.add('pinned')
+          }
+        }
+      }
+      function closeAllDropdowns() {
+        document.querySelectorAll('.dropdown').forEach((d) => d.classList.remove('open'))
+        document.querySelectorAll('.menu-btn').forEach((b) => {
+          if (b.id !== 'btn-focus' && b.id !== 'btn-read') {
+            b.classList.remove('active')
+          }
+        })
+        document.getElementById('context-menu').classList.remove('open')
+        const sb = document.getElementById('status-bar')
+        sb.classList.remove('force-visible')
+      }
+      document.addEventListener('click', (e) => {
+        if (
+          !e.target.closest('.dropdown') &&
+          !e.target.closest('.menu-btn') &&
+          !e.target.closest('.pin-btn')
+        ) {
+          closeAllDropdowns()
+        }
+      })
+
+      // ========== BACKGROUNDS ==========
+      function setBg(bg, el) {
+        document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
+        document.body.classList.add(bg)
+        if (S.theme === 'dark') document.body.classList.add('theme-dark')
+        S.bg = bg
+        document.querySelectorAll('#dd-bg .dd-item').forEach((i) => i.classList.remove('selected'))
+        if (el) el.classList.add('selected')
+        closeAllDropdowns()
+        saveSettings()
+      }
+
+      function toggleTheme() {
+        S.theme = S.theme === 'dark' ? 'light' : 'dark'
+        document.body.classList.toggle('theme-dark', S.theme === 'dark')
+        document.getElementById('btn-theme').textContent =
+          S.theme === 'dark' ? '[ DARK ]' : '[ LIGHT ]'
+        saveSettings()
+      }
+
+      // ========== FOCUS / READING MODE ==========
+      function toggleFocusMode() {
+        S.focusMode = !S.focusMode
+        document.body.classList.toggle('focus-mode', S.focusMode)
+        document.getElementById('btn-focus').classList.toggle('active', S.focusMode)
+        saveSettings()
+      }
+      function toggleReadingMode() {
+        S.readingMode = !S.readingMode
+        document.body.classList.toggle('reading-mode', S.readingMode)
+        document.getElementById('btn-read').classList.toggle('active', S.readingMode)
+        saveSettings()
+      }
+
+      // ========== AUTO-SAVE ==========
+      let autoSaveTimer = null
+      function debouncedAutoSave() {
+        clearTimeout(autoSaveTimer)
+        autoSaveTimer = setTimeout(() => {
+          const data = { nodes: [] }
+          document.querySelectorAll('.node').forEach((node) => {
+            const type = node.dataset.type || 'text'
+            const contentEl = node.querySelector('.node-content')
+            const titleEl = node.querySelector('.node-title')
+            const obj = {
+              type: type,
+              x: node.style.left,
+              y: node.style.top,
+              w: node.style.width,
+              h: node.style.height,
+              title: titleEl ? titleEl.textContent : '',
+            }
+            if (type === 'text') {
+              obj.content = contentEl ? contentEl.innerHTML : ''
+              obj.lh = contentEl ? contentEl.style.lineHeight : ''
+            } else if (type === 'image') {
+              const img = contentEl ? contentEl.querySelector('img') : null
+              obj.src = img ? img.src : ''
+            } else if (type === 'markdown') {
+              obj.source = contentEl ? contentEl.dataset.source || '' : ''
+            }
+            data.nodes.push(obj)
+          })
+          localStorage.setItem('zc-autosave', JSON.stringify(data))
+        }, 1000)
+      }
+
+      // ========== NOTIFICATION ==========
+      let notifyTimer = null
+      function notify(msg) {
+        const n = document.getElementById('notification')
+        n.textContent = msg
+        n.classList.add('show')
+        clearTimeout(notifyTimer)
+        notifyTimer = setTimeout(() => n.classList.remove('show'), 1600)
+      }
+
+      // ========== CUSTOM CONFIRM ==========
+      let confirmResolve = null
+      function showConfirm(message) {
+        return new Promise((resolve) => {
+          const overlay = document.getElementById('custom-confirm')
+          document.getElementById('confirm-msg').textContent = message
+          overlay.classList.add('active')
+          confirmResolve = resolve
+        })
+      }
+      document.getElementById('confirm-cancel').addEventListener('click', () => {
+        document.getElementById('custom-confirm').classList.remove('active')
+        if (confirmResolve) {
+          confirmResolve(false)
+          confirmResolve = null
+        }
+      })
+      document.getElementById('confirm-ok').addEventListener('click', () => {
+        document.getElementById('custom-confirm').classList.remove('active')
+        if (confirmResolve) {
+          confirmResolve(true)
+          confirmResolve = null
+        }
+      })
+
+      // ========== NODE CREATION ==========
+      function createCenteredNode(type) {
+        createNodeAt(window.innerWidth / 2 - 240, window.innerHeight / 2 - 150, type)
+        closeAllDropdowns()
+      }
+
+      function createNodeAt(x, y, type, data = null) {
+        S.nodeCounter++
+        const node = document.createElement('div')
+        node.className = 'node'
+        node.dataset.type = type
+        node.style.left = x + 'px'
+        node.style.top = y + 'px'
+        node.style.zIndex = ++S.zCounter
+        node.id = 'node-' + S.nodeCounter
+
+        const defaultTitle =
+          (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : 'MD') +
+          '_' +
+          String(S.nodeCounter).padStart(2, '0')
+        const title = data && data.title ? data.title : defaultTitle
+        if (data && data.w) node.style.width = data.w
+        if (data && data.h) node.style.height = data.h
+
+        // Build header
+        const header = document.createElement('div')
+        header.className = 'node-header'
+        header.innerHTML = `
+        <span class="node-title">${title}</span>
+        <div class="node-actions">
+            <div class="node-action-btn minimize">-</div>
+            <div class="node-action-btn close">x</div>
+        </div>
+    `
+        node.appendChild(header)
+
+        // Build content area
+        const content = document.createElement('div')
+        content.className = 'node-content'
+        content.setAttribute('contenteditable', 'false')
+        content.spellcheck = false
+
+        if (type === 'text') {
+          content.setAttribute('contenteditable', 'true')
+          content.dataset.placeholder = 'start typing...'
+          content.style.fontFamily = DEFAULT_FONT
+          content.style.fontSize = DEFAULT_FONT_SIZE + 'px'
+          content.style.lineHeight = data && data.lh ? data.lh : DEFAULT_LINE_HEIGHT
+          content.innerHTML = data && data.content ? data.content : ''
+          // enable inline formatting
+          content.addEventListener('input', debouncedAutoSave)
+          content.addEventListener('mouseup', () => setTimeout(handleTextSelection, 10))
+          content.addEventListener('keyup', (e) => {
+            if (e.shiftKey || e.key === 'Shift') setTimeout(handleTextSelection, 10)
+          })
+          // disable context menu inside text (handled globally)
+          content.addEventListener('contextmenu', (e) => e.preventDefault())
+        } else if (type === 'image') {
+          content.style.padding = '8px'
+          content.style.display = 'flex'
+          content.style.alignItems = 'center'
+          content.style.justifyContent = 'center'
+          content.style.cursor = 'pointer'
+          content.dataset.placeholder = 'double-click to set image URL'
+          const src = data && data.src ? data.src : ''
+          if (src) {
+            const img = document.createElement('img')
+            img.src = src
+            img.alt = 'image'
+            content.appendChild(img)
+          } else {
+            const placeholder = document.createElement('span')
+            placeholder.className = 'img-placeholder'
+            placeholder.textContent = 'double-click to set image URL'
+            content.appendChild(placeholder)
+          }
+          // double-click to edit inline
+          content.addEventListener('dblclick', function (e) {
+            e.stopPropagation()
+            if (this.querySelector('input')) return
+            const currentSrc = this.querySelector('img') ? this.querySelector('img').src : ''
+            const input = document.createElement('input')
+            input.type = 'text'
+            input.value = currentSrc
+            input.style.width = '80%'
+            input.style.padding = '4px 8px'
+            input.style.fontFamily = 'var(--font-mono)'
+            input.style.fontSize = '12px'
+            input.style.background = 'transparent'
+            input.style.border = '1px solid var(--border)'
+            input.style.color = 'var(--text)'
+            input.style.outline = 'none'
+            input.placeholder = 'image URL...'
+            this.innerHTML = ''
+            this.appendChild(input)
+            input.focus()
+            input.select()
+
+            const finish = (save) => {
+              if (!input.parentNode) return
+              const val = save ? input.value.trim() : ''
+              this.innerHTML = ''
+              if (val) {
+                const img = document.createElement('img')
+                img.src = val
+                img.alt = 'image'
+                this.appendChild(img)
+              } else {
+                const placeholder = document.createElement('span')
+                placeholder.className = 'img-placeholder'
+                placeholder.textContent = 'double-click to set image URL'
+                this.appendChild(placeholder)
+              }
+              debouncedAutoSave()
+            }
+            input.addEventListener('keydown', (ev) => {
+              ev.stopPropagation()
+              if (ev.key === 'Enter') {
+                ev.preventDefault()
+                finish(true)
+              }
+              if (ev.key === 'Escape') {
+                ev.preventDefault()
+                finish(false)
+              }
+            })
+            input.addEventListener('blur', () => finish(true))
+          })
+          // disable selection
+          content.addEventListener('selectstart', (e) => e.preventDefault())
+        } else if (type === 'markdown') {
+          content.style.padding = '16px 24px'
+          content.style.cursor = 'pointer'
+          content.dataset.source = data && data.source ? data.source : ''
+          content.dataset.placeholder = 'double-click to edit Markdown'
+          renderMarkdown(content)
+          // double-click to edit inline as textarea
+          content.addEventListener('dblclick', function (e) {
+            e.stopPropagation()
+            if (this.querySelector('textarea')) return
+            const currentSource = this.dataset.source || ''
+            const textarea = document.createElement('textarea')
+            textarea.value = currentSource
+            textarea.style.width = '100%'
+            textarea.style.height = '200px'
+            textarea.style.fontFamily = 'var(--font-mono)'
+            textarea.style.fontSize = '13px'
+            textarea.style.lineHeight = '1.6'
+            textarea.style.background = 'transparent'
+            textarea.style.border = '1px solid var(--border)'
+            textarea.style.color = 'var(--text)'
+            textarea.style.padding = '8px'
+            textarea.style.outline = 'none'
+            textarea.style.resize = 'vertical'
+            textarea.spellcheck = false
+            this.innerHTML = ''
+            this.appendChild(textarea)
+            textarea.focus()
+            textarea.select()
+
+            const finish = (save) => {
+              if (!textarea.parentNode) return
+              const val = save ? textarea.value : this.dataset.source || ''
+              this.dataset.source = val
+              renderMarkdown(this)
+              debouncedAutoSave()
+            }
+            textarea.addEventListener('keydown', (ev) => {
+              ev.stopPropagation()
+              if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                ev.preventDefault()
+                finish(true)
+              }
+              if (ev.key === 'Escape') {
+                ev.preventDefault()
+                finish(false)
+              }
+            })
+            textarea.addEventListener('blur', () => finish(true))
+          })
+        }
+
+        node.appendChild(content)
+
+        // Resize handle
+        const resize = document.createElement('div')
+        resize.className = 'node-resize'
+        node.appendChild(resize)
+
+        document.getElementById('workspace').appendChild(node)
+
+        // Initialize behaviors
+        initDrag(node)
+        initResize(node)
+        initNodeEvents(node)
+        initTitleEdit(node)
+
+        if (type === 'text' && !data)
+          setTimeout(() => node.querySelector('.node-content').focus(), 50)
+        updateStats()
+        debouncedAutoSave()
+        return node
+      }
+
+      // ========== TITLE EDIT (fixed) ==========
+      function initTitleEdit(node) {
+        const titleEl = node.querySelector('.node-title')
+        if (!titleEl) return
+        titleEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          const original = titleEl.textContent
+          const input = document.createElement('input')
+          input.type = 'text'
+          input.className = 'node-title-edit'
+          input.value = original
+          titleEl.replaceWith(input)
+          input.focus()
+          input.select()
+
+          let done = false
+
+          const confirm = () => {
+            if (done) return
+            done = true
+            if (!input.parentNode) return
+            const span = document.createElement('span')
+            span.className = 'node-title'
+            span.textContent = input.value.trim() || original
+            input.replaceWith(span)
+            initTitleEdit(node)
+            debouncedAutoSave()
+          }
+          const cancel = () => {
+            if (done) return
+            done = true
+            if (!input.parentNode) return
+            const span = document.createElement('span')
+            span.className = 'node-title'
+            span.textContent = original
+            input.replaceWith(span)
+            initTitleEdit(node)
+          }
+          input.addEventListener('keydown', (ev) => {
+            ev.stopPropagation()
+            if (ev.key === 'Enter') {
+              ev.preventDefault()
+              confirm()
+            }
+            if (ev.key === 'Escape') {
+              ev.preventDefault()
+              cancel()
+            }
+          })
+          input.addEventListener('blur', confirm)
+          input.addEventListener('mousedown', (ev) => ev.stopPropagation())
+        })
+      }
+
+      // ========== DRAG ==========
+      function initDrag(node) {
+        const header = node.querySelector('.node-header')
+        let sx,
+          sy,
+          ox,
+          oy,
+          dragging = false
+        header.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.node-action-btn') || e.target.closest('.node-title-edit')) return
+          dragging = true
+          sx = e.clientX
+          sy = e.clientY
+          ox = node.offsetLeft
+          oy = node.offsetTop
+          node.style.zIndex = ++S.zCounter
+          e.preventDefault()
+        })
+        document.addEventListener('mousemove', (e) => {
+          if (!dragging) return
+          node.style.left = ox + e.clientX - sx + 'px'
+          node.style.top = Math.max(0, oy + e.clientY - sy) + 'px'
+        })
+        document.addEventListener('mouseup', () => {
+          if (dragging) {
+            dragging = false
+            debouncedAutoSave()
+          }
+        })
+      }
+
+      // ========== RESIZE ==========
+      function initResize(node) {
+        const handle = node.querySelector('.node-resize')
+        let sx,
+          sy,
+          ow,
+          oh,
+          resizing = false
+        handle.addEventListener('mousedown', (e) => {
+          resizing = true
+          sx = e.clientX
+          sy = e.clientY
+          ow = node.offsetWidth
+          oh = node.offsetHeight
+          e.preventDefault()
+          e.stopPropagation()
+        })
+        document.addEventListener('mousemove', (e) => {
+          if (!resizing) return
+          node.style.width = Math.max(240, ow + e.clientX - sx) + 'px'
+          node.style.height = Math.max(120, oh + e.clientY - sy) + 'px'
+        })
+        document.addEventListener('mouseup', () => {
+          if (resizing) {
+            resizing = false
+            debouncedAutoSave()
+          }
+        })
+      }
+
+      // ========== NODE EVENTS ==========
+      function initNodeEvents(node) {
+        const content = node.querySelector('.node-content')
+        const closeBtn = node.querySelector('.node-action-btn.close')
+        const minBtn = node.querySelector('.node-action-btn.minimize')
+
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          node.remove()
+          updateStats()
+          debouncedAutoSave()
+        })
+        minBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const isHidden = content.style.display === 'none'
+          if (isHidden) {
+            content.style.display = ''
+            node.style.minHeight = ''
+            node.style.height = ''
+            node.querySelector('.node-resize').style.display = ''
+          } else {
+            content.style.display = 'none'
+            node.style.minHeight = '32px'
+            node.style.height = '32px'
+            node.querySelector('.node-resize').style.display = 'none'
+          }
+        })
+
+        node.addEventListener('mousedown', () => {
+          node.style.zIndex = ++S.zCounter
+        })
+      }
+
+      // ========== MARKDOWN RENDERER (lightweight) ==========
+      function renderMarkdown(container) {
+        const source = container.dataset.source || ''
+        if (!source.trim()) {
+          container.innerHTML =
+            '<span style="color:var(--text-dim);font-size:12px;letter-spacing:1px;">double-click to edit Markdown</span>'
+          return
+        }
+        let html = source
+
+        const lines = source.split('\n')
+        let result = []
+        let inCodeBlock = false
+        let codeBlockContent = []
+        let inList = false
+        let listItems = []
+        let listType = 'ul'
+
+        function flushList() {
+          if (listItems.length === 0) return
+          const tag = listType === 'ul' ? 'ul' : 'ol'
+          result.push(`<${tag}>${listItems.map((item) => `<li>${item}</li>`).join('')}</${tag}>`)
+          listItems = []
+          inList = false
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          let line = lines[i]
+
+          if (line.trim().startsWith('```')) {
+            if (!inCodeBlock) {
+              flushList()
+              inCodeBlock = true
+              codeBlockContent = []
+              continue
+            } else {
+              const code = codeBlockContent.join('\n')
+              result.push(`<pre><code>${escapeHtml(code)}</code></pre>`)
+              inCodeBlock = false
+              continue
+            }
+          }
+          if (inCodeBlock) {
+            codeBlockContent.push(line)
+            continue
+          }
+
+          const headingMatch = line.match(/^(#{1,3})\s+(.*)/)
+          if (headingMatch) {
+            flushList()
+            const level = headingMatch[1].length
+            const text = inlineMarkdown(headingMatch[2])
+            result.push(`<h${level}>${text}</h${level}>`)
+            continue
+          }
+
+          if (line.startsWith('> ')) {
+            flushList()
+            const text = inlineMarkdown(line.substring(2))
+            result.push(`<blockquote>${text}</blockquote>`)
+            continue
+          }
+
+          const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/)
+          const olMatch = line.match(/^(\s*)\d+\.\s+(.*)/)
+          if (ulMatch || olMatch) {
+            const isUl = !!ulMatch
+            const contentText = isUl ? ulMatch[2] : olMatch[2]
+            const trimmed = inlineMarkdown(contentText)
+            if (!inList) {
+              inList = true
+              listType = isUl ? 'ul' : 'ol'
+              listItems = [trimmed]
+            } else {
+              const newType = isUl ? 'ul' : 'ol'
+              if (newType === listType) {
+                listItems.push(trimmed)
+              } else {
+                flushList()
+                listType = newType
+                listItems = [trimmed]
+              }
+            }
+            continue
+          } else if (inList && line.trim() === '') {
+            flushList()
+            continue
+          } else {
+            if (inList) flushList()
+            if (line.trim() === '') {
+              result.push('')
+            } else {
+              result.push(`<p>${inlineMarkdown(line)}</p>`)
+            }
+          }
+        }
+        if (inList) flushList()
+
+        container.innerHTML = result.join('')
+      }
+
+      function inlineMarkdown(text) {
+        let s = escapeHtml(text)
+        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
+        s = s.replace(/`(.+?)`/g, '<code>$1</code>')
+        s = s.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
+        return s
+      }
+
+      function escapeHtml(text) {
+        const map = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;',
+        }
+        return text.replace(/[&<>"']/g, function (m) {
+          return map[m]
+        })
+      }
+
+      // ========== FLOATING TOOLBAR (for text nodes) ==========
+      const ftBar = document.getElementById('floating-toolbar')
+      let currentSelectionRange = null
+      let currentSelectionContainer = null
+
+      function handleTextSelection() {
+        const sel = window.getSelection()
+        if (!sel || sel.isCollapsed || !sel.rangeCount) {
+          ftBar.classList.remove('visible')
+          return
+        }
+        const range = sel.getRangeAt(0)
+        const container = range.commonAncestorContainer
+        const nodeContent =
+          container.nodeType === 1
+            ? container.closest('.node-content')
+            : container.parentElement?.closest('.node-content')
+        if (!nodeContent || !nodeContent.closest('.node[data-type="text"]')) {
+          ftBar.classList.remove('visible')
+          return
+        }
+
+        currentSelectionRange = range.cloneRange()
+        currentSelectionContainer = nodeContent
+
+        const lh = parseFloat(nodeContent.style.lineHeight) || DEFAULT_LINE_HEIGHT
+        document.getElementById('ft-lh-val').textContent = lh.toFixed(1)
+
+        updateToolbarState(nodeContent)
+
+        const rect = range.getBoundingClientRect()
+        let x = rect.left + rect.width / 2 - 300
+        let y = rect.top - 64
+        if (y < 8) y = rect.bottom + 8
+        if (x < 8) x = 8
+        if (x + 700 > window.innerWidth) x = window.innerWidth - 710
+        ftBar.style.left = x + 'px'
+        ftBar.style.top = y + 'px'
+        ftBar.classList.add('visible')
+      }
+
+      function updateToolbarState(tbContent) {
+        // Style buttons
+        document.querySelectorAll('.ft-btn[data-cmd]').forEach((btn) => {
+          const cmd = btn.dataset.cmd
+          let active = false
+          if (cmd === 'bold') active = document.queryCommandState('bold')
+          else if (cmd === 'italic') active = document.queryCommandState('italic')
+          else if (cmd === 'underline') active = document.queryCommandState('underline')
+          else if (cmd === 'strikeThrough') active = document.queryCommandState('strikeThrough')
+          // Alignment commands
+          else if (cmd === 'justifyLeft') active = document.queryCommandState('justifyLeft')
+          else if (cmd === 'justifyCenter') active = document.queryCommandState('justifyCenter')
+          else if (cmd === 'justifyRight') active = document.queryCommandState('justifyRight')
+          btn.classList.toggle('active', active)
+        })
+
+        // Font family detection
+        const sel = window.getSelection()
+        let activeFont = null
+        if (sel.rangeCount) {
+          let node = sel.getRangeAt(0).startContainer
+          while (node && node !== tbContent && node !== document.body) {
+            if (node.nodeType === 1 && node.style && node.style.fontFamily) {
+              const ff = node.style.fontFamily
+              for (const key in fontMap) {
+                if (ff.includes(fontMap[key].split(',')[0].replace(/['"]/g, ''))) {
+                  activeFont = key
+                  break
+                }
+              }
+              if (activeFont) break
+            }
+            node = node.parentNode
+          }
+        }
+        document.querySelectorAll('.ft-btn[data-ffont]').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.ffont === activeFont)
+        })
+      }
+
+      ftBar.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.ft-btn') || e.target.closest('.ft-color-dot')) {
+          e.preventDefault()
+        }
+      })
+
+      function restoreSelection() {
+        if (currentSelectionRange) {
+          const sel = window.getSelection()
+          sel.removeAllRanges()
+          sel.addRange(currentSelectionRange)
+        }
+      }
+
+      function wrapSelectionWithStyle(styleObj) {
+        restoreSelection()
+        const sel = window.getSelection()
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return null
+        const range = sel.getRangeAt(0)
+        const span = document.createElement('span')
+        Object.assign(span.style, styleObj)
+        try {
+          range.surroundContents(span)
+        } catch (e) {
+          span.appendChild(range.extractContents())
+          range.insertNode(span)
+        }
+        try {
+          const newRange = document.createRange()
+          newRange.selectNodeContents(span)
+          sel.removeAllRanges()
+          sel.addRange(newRange)
+          currentSelectionRange = newRange.cloneRange()
+        } catch (e) {}
+        return span
+      }
+
+      function findStyledAncestor(propName) {
+        const sel = window.getSelection()
+        if (!sel.rangeCount) return null
+        let node = sel.getRangeAt(0).startContainer
+        const tbContent = currentSelectionContainer
+        while (node && node !== tbContent && node !== document.body) {
+          if (node.nodeType === 1 && node.style && node.style[propName]) {
+            return node
+          }
+          node = node.parentNode
+        }
+        return null
+      }
+
+      function applyFontSize(delta) {
+        restoreSelection()
+        const sel = window.getSelection()
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return
+
+        const existing = findStyledAncestor('fontSize')
+        if (existing) {
+          const cur = parseFloat(existing.style.fontSize) || DEFAULT_FONT_SIZE
+          const next = Math.max(8, Math.min(96, cur + delta))
+          existing.style.fontSize = next + 'px'
+          notify('Size: ' + Math.round(next) + 'px')
+        } else {
+          const span = wrapSelectionWithStyle({ fontSize: DEFAULT_FONT_SIZE + delta + 'px' })
+          if (span) notify('Size: ' + (DEFAULT_FONT_SIZE + delta) + 'px')
+        }
+        debouncedAutoSave()
+      }
+
+      function applyLineHeight(delta) {
+        if (!currentSelectionContainer) return
+        const cur = parseFloat(currentSelectionContainer.style.lineHeight) || DEFAULT_LINE_HEIGHT
+        const next = Math.max(1.0, Math.min(3.5, +(cur + delta).toFixed(1)))
+        currentSelectionContainer.style.lineHeight = next
+        document.getElementById('ft-lh-val').textContent = next.toFixed(1)
+        notify('Line: ' + next.toFixed(1))
+        debouncedAutoSave()
+      }
+
+      function applyFontFamily(key) {
+        restoreSelection()
+        const sel = window.getSelection()
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return
+
+        const existing = findStyledAncestor('fontFamily')
+        if (existing) {
+          existing.style.fontFamily = fontMap[key]
+          notify('Font: ' + key)
+        } else {
+          wrapSelectionWithStyle({ fontFamily: fontMap[key] })
+          notify('Font: ' + key)
+        }
+        updateToolbarState(currentSelectionContainer)
+        debouncedAutoSave()
+      }
+
+      function applyColor(color) {
+        restoreSelection()
+        if (color === 'auto') {
+          const defaultColor = getComputedStyle(currentSelectionContainer).color
+          document.execCommand('foreColor', false, defaultColor)
+        } else {
+          document.execCommand('foreColor', false, color)
+        }
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+          currentSelectionRange = sel.getRangeAt(0).cloneRange()
+        }
+        debouncedAutoSave()
+      }
+
+      function execStyleCmd(cmd) {
+        restoreSelection()
+        if (cmd === 'fontSizeUp') applyFontSize(1)
+        else if (cmd === 'fontSizeDown') applyFontSize(-1)
+        else if (cmd === 'lineHeightUp') applyLineHeight(0.1)
+        else if (cmd === 'lineHeightDown') applyLineHeight(-0.1)
+        else if (cmd === 'removeFormat') {
+          document.execCommand('removeFormat', false, null)
+        } else {
+          document.execCommand(cmd, false, null)
+        }
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+          currentSelectionRange = sel.getRangeAt(0).cloneRange()
+        }
+        if (currentSelectionContainer) updateToolbarState(currentSelectionContainer)
+        debouncedAutoSave()
+      }
+
+      document.querySelectorAll('.ft-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault()
+          if (btn.dataset.cmd) execStyleCmd(btn.dataset.cmd)
+          else if (btn.dataset.ffont) applyFontFamily(btn.dataset.ffont)
+        })
+      })
+      document.querySelectorAll('.ft-color-dot').forEach((dot) => {
+        dot.addEventListener('click', (e) => {
+          e.preventDefault()
+          applyColor(dot.dataset.color)
+        })
+      })
+
+      document.addEventListener('mousedown', (e) => {
+        if (!e.target.closest('#floating-toolbar') && !e.target.closest('.node-content')) {
+          ftBar.classList.remove('visible')
+        }
+      })
+
+      // ========== CONTEXT MENU ==========
+      const ctxMenu = document.getElementById('context-menu')
+
+      document.addEventListener('contextmenu', (e) => {
+        const node = e.target.closest('.node')
+        ctxNode = node
+        ctxX = e.clientX
+        ctxY = e.clientY
+
+        document.getElementById('ctx-edit').style.display = node ? 'block' : 'none'
+        document.getElementById('ctx-copy-node').classList.toggle('disabled', !node)
+        document.getElementById('ctx-paste-node').classList.toggle('disabled', !clipboardNode)
+
+        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px'
+        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px'
+        ctxMenu.classList.add('open')
+        e.preventDefault()
+      })
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#context-menu')) {
+          ctxMenu.classList.remove('open')
+        }
+      })
+
+      function ctxEdit() {
+        if (!ctxNode) return
+        const type = ctxNode.dataset.type
+        const content = ctxNode.querySelector('.node-content')
+        if (type === 'image' || type === 'markdown') {
+          content.dispatchEvent(new Event('dblclick', { bubbles: true }))
+        } else if (type === 'text') {
+          content.focus()
+        }
+        ctxMenu.classList.remove('open')
+      }
+
+      function copyNode() {
+        if (!ctxNode) {
+          notify('No node selected')
+          return
+        }
+        const type = ctxNode.dataset.type
+        const content = ctxNode.querySelector('.node-content')
+        const title = ctxNode.querySelector('.node-title')
+        const obj = {
+          type: type,
+          w: ctxNode.style.width,
+          h: ctxNode.style.height,
+          title: title ? title.textContent : '',
+        }
+        if (type === 'text') {
+          obj.content = content ? content.innerHTML : ''
+          obj.lh = content ? content.style.lineHeight : ''
+        } else if (type === 'image') {
+          const img = content ? content.querySelector('img') : null
+          obj.src = img ? img.src : ''
+        } else if (type === 'markdown') {
+          obj.source = content ? content.dataset.source : ''
+        }
+        clipboardNode = obj
+        notify('Node copied')
+        ctxMenu.classList.remove('open')
+      }
+
+      function pasteNode() {
+        if (!clipboardNode) {
+          notify('Nothing to paste')
+          return
+        }
+        createNodeAt(ctxX - 40, ctxY - 20, clipboardNode.type, clipboardNode)
+        notify('Node pasted')
+        ctxMenu.classList.remove('open')
+      }
+
+      // ========== FILE OPERATIONS ==========
+      function saveDocument() {
+        const data = { nodes: [] }
+        document.querySelectorAll('.node').forEach((node) => {
+          const type = node.dataset.type
+          const content = node.querySelector('.node-content')
+          const title = node.querySelector('.node-title')
+          const obj = {
+            type: type,
+            x: node.style.left,
+            y: node.style.top,
+            w: node.style.width,
+            h: node.style.height,
+            title: title ? title.textContent : '',
+          }
+          if (type === 'text') {
+            obj.content = content ? content.innerHTML : ''
+            obj.lh = content ? content.style.lineHeight : ''
+          } else if (type === 'image') {
+            const img = content ? content.querySelector('img') : null
+            obj.src = img ? img.src : ''
+          } else if (type === 'markdown') {
+            obj.source = content ? content.dataset.source : ''
+          }
+          data.nodes.push(obj)
+        })
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'zencanvas-' + Date.now() + '.zc'
+        a.click()
+        notify('Saved')
+      }
+
+      function loadDocument() {
+        document.getElementById('file-input').click()
+      }
+      function handleFileLoad(e) {
+        const file = e.target.files[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result)
+            if (data.nodes) {
+              data.nodes.forEach((n) => {
+                createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
+              })
+              notify('Loaded ' + data.nodes.length + ' nodes')
+            }
+          } catch (err) {
+            notify('Invalid file')
+          }
+        }
+        reader.readAsText(file)
+        e.target.value = ''
+      }
+
+      function exportAs(fmt) {
+        const nodes = [...document.querySelectorAll('.node')]
+        let content = '',
+          filename = '',
+          mime = ''
+        if (fmt === 'txt') {
+          content = nodes
+            .map((node) => {
+              const t = node.querySelector('.node-title').textContent
+              const c = node.querySelector('.node-content')
+              const text =
+                node.dataset.type === 'text'
+                  ? c.innerText
+                  : node.dataset.type === 'markdown'
+                    ? c.dataset.source || ''
+                    : c.querySelector('img')
+                      ? c.querySelector('img').src
+                      : ''
+              return `# ${t}\n\n${text}`
+            })
+            .join('\n\n---\n\n')
+          filename = 'zencanvas.txt'
+          mime = 'text/plain'
+        } else if (fmt === 'md') {
+          content = nodes
+            .map((node) => {
+              const t = node.querySelector('.node-title').textContent
+              const c = node.querySelector('.node-content')
+              const md =
+                node.dataset.type === 'markdown'
+                  ? c.dataset.source || ''
+                  : node.dataset.type === 'text'
+                    ? c.innerText
+                    : c.querySelector('img')
+                      ? `![image](${c.querySelector('img').src})`
+                      : ''
+              return `## ${t}\n\n${md}`
+            })
+            .join('\n\n')
+          filename = 'zencanvas.md'
+          mime = 'text/markdown'
+        } else if (fmt === 'html') {
+          content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ZenCanvas Export</title></head><body>${nodes
+            .map((node) => {
+              const t = node.querySelector('.node-title').textContent
+              const c = node.querySelector('.node-content')
+              let body = ''
+              if (node.dataset.type === 'text') body = c.innerHTML
+              else if (node.dataset.type === 'markdown') body = c.innerHTML
+              else if (node.dataset.type === 'image') {
+                const img = c.querySelector('img')
+                body = img ? `<img src="${img.src}" style="max-width:100%">` : ''
+              }
+              return `<h2>${t}</h2><div>${body}</div><hr>`
+            })
+            .join('')}</body></html>`
+          filename = 'zencanvas.html'
+          mime = 'text/html'
+        } else if (fmt === 'json') {
+          const data = {
+            nodes: nodes.map((node) => ({
+              type: node.dataset.type,
+              title: node.querySelector('.node-title').textContent,
+              content:
+                node.dataset.type === 'text'
+                  ? node.querySelector('.node-content').innerText
+                  : node.dataset.type === 'markdown'
+                    ? node.querySelector('.node-content').dataset.source || ''
+                    : node.querySelector('.node-content').querySelector('img')
+                      ? node.querySelector('.node-content').querySelector('img').src
+                      : '',
+            })),
+          }
+          content = JSON.stringify(data, null, 2)
+          filename = 'zencanvas.json'
+          mime = 'application/json'
+        }
+        const blob = new Blob([content], { type: mime })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = filename
+        a.click()
+        closeAllDropdowns()
+        notify('Exported ' + fmt.toUpperCase())
+      }
+
+      // ========== PURGE with custom confirm ==========
+      async function clearAll() {
+        const confirmed = await showConfirm('Purge all nodes?')
+        if (!confirmed) return
+        document.querySelectorAll('.node').forEach((n) => n.remove())
+        updateStats()
+        debouncedAutoSave()
+        notify('All cleared')
+      }
+
+      function updateStats() {
+        const count = document.querySelectorAll('.node').length
+        document.getElementById('stat-left').textContent =
+          count + ' node' + (count === 1 ? '' : 's')
+      }
+
+      // ========== INIT ==========
+      loadSettings()
+      applySettings()
+
+      // Restore autosave
+      ;(function restoreAutosave() {
+        const saved = localStorage.getItem('zc-autosave')
+        if (!saved) return
+        try {
+          const data = JSON.parse(saved)
+          if (data.nodes && data.nodes.length) {
+            data.nodes.forEach((n) => {
+              createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
+            })
+          }
+        } catch (e) {}
+      })()
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeAllDropdowns()
+          ftBar.classList.remove('visible')
+        }
+      })
+
+      updateStats()
+    </script>
+  </body>
+</html>
