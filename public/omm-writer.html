@@ -4,10 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ZenCanvas</title>
-    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="icon" href="/icon.ico" type="image/x-icon">
+    <!-- html2canvas 与 jsPDF 的 CDN 引用 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
+    </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
 
+      /* ----- CSS 变量（浅色主题） ----- */
       :root {
         --bg: #ffffff;
         --text: #000000;
@@ -20,8 +26,16 @@
         --active-bg: #000000;
         --active-text: #ffffff;
         --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+        --port-size: 10px;
+        --port-color: #888;
+        --conn-color: #555;
+        --conn-width: 2px;
+        --node-bg: #ffffff;
+        --node-bg-transparent: transparent;
+        --show-node-bg: 1;
       }
 
+      /* ----- 深色主题 ----- */
       body.theme-dark {
         --bg: #000000;
         --text: #ffffff;
@@ -33,8 +47,12 @@
         --hover: rgba(255, 255, 255, 0.06);
         --active-bg: #ffffff;
         --active-text: #000000;
+        --port-color: #aaa;
+        --conn-color: #aaa;
+        --node-bg: #000000;
       }
 
+      /* ----- 全局重置 ----- */
       * {
         margin: 0;
         padding: 0;
@@ -49,9 +67,7 @@
         height: 100vh;
         width: 100vw;
         user-select: none;
-        transition:
-          background-color 0.3s,
-          color 0.3s;
+        transition: background-color 0.3s, color 0.3s;
         font-size: 13px;
       }
 
@@ -64,6 +80,7 @@
         color: inherit;
       }
 
+      /* ----- 背景图案 ----- */
       body.bg-void {
         background: var(--bg);
       }
@@ -98,6 +115,7 @@
         );
       }
 
+      /* ----- 菜单触发区（悬停显示） ----- */
       #menu-trigger {
         position: fixed;
         top: 0;
@@ -107,6 +125,7 @@
         z-index: 1000;
       }
 
+      /* ----- 顶部菜单栏 ----- */
       #top-menu {
         position: fixed;
         top: -48px;
@@ -118,10 +137,12 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 4px;
+        gap: 2px;
         z-index: 999;
         transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        padding: 0 16px;
+        padding: 0 12px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
       }
       #menu-trigger:hover ~ #top-menu,
       #top-menu:hover,
@@ -133,8 +154,9 @@
         display: flex;
         align-items: center;
         gap: 2px;
-        padding: 0 8px;
+        padding: 0 6px;
         position: relative;
+        flex-shrink: 0;
       }
       .menu-group + .menu-group::before {
         content: '';
@@ -143,21 +165,32 @@
         top: 50%;
         transform: translateY(-50%);
         width: 1px;
-        height: 16px;
+        height: 20px;
         background: var(--border-dim);
+      }
+
+      .menu-label {
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        padding: 0 4px;
+        font-weight: 500;
+        flex-shrink: 0;
       }
 
       .menu-btn {
         color: var(--text-dim);
         cursor: pointer;
-        padding: 6px 12px;
+        padding: 4px 10px;
         border: 1px solid transparent;
         transition: all 0.15s;
         font-family: var(--font-mono);
         font-size: 11px;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.4px;
         white-space: nowrap;
         background: transparent;
+        border-radius: 0;
       }
       .menu-btn:hover {
         color: var(--text);
@@ -169,14 +202,15 @@
         background: var(--active-bg);
         border-color: var(--border);
       }
-
-      .menu-label {
-        font-size: 9px;
-        letter-spacing: 1.5px;
-        color: var(--text-faint);
-        text-transform: uppercase;
-        padding: 0 6px;
-        font-weight: 500;
+      .menu-btn.toggle-on {
+        color: var(--active-text);
+        background: var(--active-bg);
+        border-color: var(--border);
+      }
+      .menu-btn.toggle-off {
+        color: var(--text-dim);
+        border-color: transparent;
+        background: transparent;
       }
 
       .pin-btn {
@@ -190,7 +224,9 @@
         color: var(--text-faint);
         font-size: 14px;
         transition: all 0.15s;
-        margin-left: 4px;
+        margin-left: 2px;
+        background: transparent;
+        font-family: var(--font-mono);
       }
       .pin-btn:hover {
         color: var(--text);
@@ -202,35 +238,42 @@
         background: var(--hover);
       }
 
+      /* ----- 下拉菜单 ----- */
       .dropdown {
         position: fixed;
         top: 52px;
         background: var(--bg);
         border: 1px solid var(--border);
         padding: 4px;
-        min-width: 200px;
+        min-width: 180px;
         z-index: 1001;
         opacity: 0;
         transform: translateY(-4px);
         pointer-events: none;
         transition: all 0.15s;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        max-height: 80vh;
+        overflow-y: auto;
       }
       .dropdown.open {
         opacity: 1;
         transform: translateY(0);
         pointer-events: all;
       }
-
       .dd-item {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 8px 10px;
+        padding: 6px 10px;
         cursor: pointer;
         transition: all 0.1s;
         font-size: 12px;
         color: var(--text-dim);
         border: 1px solid transparent;
+        font-family: var(--font-mono);
+        background: transparent;
+        width: 100%;
+        text-align: left;
       }
       .dd-item:hover {
         background: var(--hover);
@@ -241,29 +284,32 @@
         border-color: var(--border);
         background: var(--hover);
       }
-      .dd-item.disabled {
-        opacity: 0.35;
-        pointer-events: none;
-      }
       .dd-item .hint {
         font-size: 10px;
         color: var(--text-faint);
+        margin-left: 12px;
       }
-
       .dd-divider {
         height: 1px;
         background: var(--border-dim);
         margin: 4px 0;
       }
       .dd-label {
-        padding: 8px 10px 4px;
+        padding: 6px 10px 2px;
         font-size: 9px;
         text-transform: uppercase;
         letter-spacing: 1.5px;
         color: var(--text-faint);
         font-weight: 500;
+        font-family: var(--font-mono);
+      }
+      .dd-item .toggle-indicator {
+        font-size: 10px;
+        color: var(--text-dim);
+        margin-left: 8px;
       }
 
+      /* ----- 工作区与画布 ----- */
       #workspace {
         position: absolute;
         top: 0;
@@ -271,25 +317,84 @@
         width: 100%;
         height: 100%;
         z-index: 1;
+        overflow: hidden;
+        cursor: default;
       }
 
-      /* ---- Base node styles (shared) ---- */
+      #canvas-inner {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 10000px;
+        height: 10000px;
+        transform: translate(0px, 0px) scale(1);
+        transform-origin: 0 0;
+        will-change: transform;
+        background: transparent;
+      }
+
+      /* ----- SVG 连线层 ----- */
+      #svg-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 2;
+      }
+      #svg-layer line,
+      #svg-layer path {
+        pointer-events: stroke;
+        cursor: pointer;
+      }
+      #svg-layer .conn-line {
+        stroke: var(--conn-color);
+        stroke-width: var(--conn-width);
+        fill: none;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        transition: stroke 0.15s, stroke-width 0.15s;
+      }
+      #svg-layer .conn-line:hover {
+        stroke-width: 4px;
+        stroke: #ff3333;
+      }
+      #svg-layer .conn-line.temp {
+        stroke-dasharray: 6 4;
+        stroke: var(--text-dim);
+        stroke-width: 2px;
+      }
+      .conn-delete-hit {
+        stroke: transparent;
+        stroke-width: 14px;
+        fill: none;
+        pointer-events: stroke;
+        cursor: pointer;
+      }
+
+      /* ----- 节点样式 ----- */
       .node {
         position: absolute;
-        min-width: 240px;
-        min-height: 120px;
-        width: 480px;
-        background: transparent;
+        min-width: 200px;
+        min-height: 100px;
+        width: 400px;
+        background: var(--node-bg);
         border: 1px solid var(--border);
         display: flex;
         flex-direction: column;
-        transition:
-          border-width 0.1s,
-          border-color 0.3s;
+        transition: border-width 0.1s, border-color 0.3s, background 0.3s;
+        z-index: 10;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      }
+      .node.no-bg {
+        background: transparent !important;
+        box-shadow: none !important;
       }
       .node:hover,
       .node:focus-within {
         border-width: 2px;
+        z-index: 20;
       }
 
       .node-header {
@@ -312,6 +417,9 @@
       .node:focus-within .node-header {
         opacity: 1;
       }
+      .node.no-bg .node-header {
+        background: transparent;
+      }
 
       .node-title {
         font-size: 10px;
@@ -320,6 +428,7 @@
         text-transform: uppercase;
         font-weight: 500;
         cursor: default;
+        font-family: var(--font-mono);
       }
       .node-title-edit {
         font-size: 10px;
@@ -352,6 +461,7 @@
         font-family: var(--font-mono);
         transition: all 0.1s;
         border: 1px solid transparent;
+        background: transparent;
       }
       .node-action-btn:hover {
         color: var(--text);
@@ -375,6 +485,7 @@
         cursor: text;
         letter-spacing: 0.2px;
         background: transparent;
+        min-height: 60px;
       }
       .node-content:empty::before {
         content: attr(data-placeholder);
@@ -400,6 +511,7 @@
         cursor: nwse-resize;
         opacity: 0;
         transition: opacity 0.2s;
+        z-index: 5;
       }
       .node:hover .node-resize {
         opacity: 1;
@@ -423,17 +535,65 @@
       .node-resize:hover::before {
         opacity: 1;
       }
-      .node-resize::after {
-        display: none;
+
+      /* ----- 端口（连接点） ----- */
+      .node-port {
+        position: absolute;
+        width: var(--port-size);
+        height: var(--port-size);
+        border-radius: 50%;
+        background: var(--port-color);
+        border: 2px solid var(--bg);
+        box-shadow: 0 0 0 1px var(--border-dim);
+        z-index: 30;
+        opacity: 0;
+        transition: opacity 0.2s, transform 0.15s;
+        cursor: crosshair;
+        pointer-events: all;
+        left: 50%;
+        transform: translateX(-50%) scale(0.8);
+      }
+      .node:hover .node-port,
+      .node:focus-within .node-port,
+      .node.port-active .node-port {
+        opacity: 0.85;
+      }
+      .node-port:hover {
+        transform: translateX(-50%) scale(1.3);
+        opacity: 1 !important;
+        background: var(--text);
+      }
+      .node-port.top {
+        top: -6px;
+      }
+      .node-port.bottom {
+        bottom: -6px;
+      }
+      .node-port.connected {
+        background: var(--text);
+        box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text);
+      }
+      .node-port.dragging {
+        opacity: 1 !important;
+        transform: translateX(-50%) scale(1.5);
+        background: #3366cc;
+      }
+      .node-port.port-highlight {
+        opacity: 1 !important;
+        transform: translateX(-50%) scale(1.5);
+        background: #339933;
+      }
+      .node.no-bg .node-port {
+        border-color: var(--bg);
       }
 
-      /* ---- Type-specific overrides ---- */
+      /* ----- 特定类型的样式覆盖 ----- */
       .node-image .node-content {
         padding: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--bg);
+        background: transparent;
         cursor: pointer;
         user-select: none;
       }
@@ -523,17 +683,24 @@
         margin: 0.4em 0;
       }
 
-      /* ----- Global modes ----- */
+      /* ----- 全局模式 ----- */
       body.focus-mode .node {
         opacity: 0.1;
         transition: opacity 0.4s;
+      }
+      body.focus-mode .node:hover {
+        opacity: 0.4;
       }
       body.focus-mode .node:focus-within {
         opacity: 1;
         border-width: 2px;
       }
-      body.focus-mode .node:hover {
-        opacity: 0.4;
+      body.focus-mode #svg-layer .conn-line {
+        opacity: 0.1;
+        transition: opacity 0.4s, stroke 0.15s, stroke-width 0.15s;
+      }
+      body.focus-mode #svg-layer .conn-line:hover {
+        opacity: 1;
       }
 
       body.reading-mode .node {
@@ -551,6 +718,9 @@
       body.reading-mode .node-resize {
         display: none !important;
       }
+      body.reading-mode .node-port {
+        display: none !important;
+      }
 
       #focus-indicator {
         position: fixed;
@@ -566,6 +736,7 @@
         border: 1px solid var(--border);
         padding: 4px 8px;
         background: var(--bg);
+        pointer-events: none;
       }
       body.focus-mode #focus-indicator.focus {
         opacity: 1;
@@ -574,7 +745,7 @@
         opacity: 1;
       }
 
-      /* Floating toolbar */
+      /* ----- 浮动工具栏 ----- */
       #floating-toolbar {
         position: fixed;
         display: none;
@@ -585,11 +756,12 @@
         align-items: center;
         flex-wrap: wrap;
         max-width: 700px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        font-family: var(--font-mono);
       }
       #floating-toolbar.visible {
         display: flex;
       }
-
       .ft-btn {
         padding: 4px 8px;
         font-size: 11px;
@@ -616,7 +788,6 @@
         margin: 0 4px;
         flex-shrink: 0;
       }
-
       .ft-color-dot {
         width: 14px;
         height: 14px;
@@ -633,15 +804,14 @@
       .ft-color-dot.active {
         border: 2px dashed var(--text);
       }
-
       .ft-section-label {
         font-size: 8px;
         letter-spacing: 1px;
         color: var(--text-faint);
         text-transform: uppercase;
         padding: 0 4px;
+        font-family: var(--font-mono);
       }
-
       .ft-lh-val {
         font-size: 10px;
         color: var(--text);
@@ -650,6 +820,7 @@
         font-family: var(--font-mono);
       }
 
+      /* ----- 状态栏 ----- */
       #status-bar {
         position: fixed;
         bottom: 0;
@@ -667,9 +838,7 @@
         font-family: var(--font-mono);
         letter-spacing: 0.5px;
         z-index: 100;
-        transition:
-          opacity 0.3s,
-          transform 0.3s;
+        transition: opacity 0.3s, transform 0.3s;
       }
       #status-bar.hidden {
         opacity: 0;
@@ -682,6 +851,7 @@
         pointer-events: all !important;
       }
 
+      /* ----- 启动画面 ----- */
       #splash {
         position: fixed;
         inset: 0;
@@ -729,6 +899,7 @@
         color: var(--active-text);
       }
 
+      /* ----- 通知 ----- */
       #notification {
         position: fixed;
         bottom: 40px;
@@ -750,6 +921,7 @@
         transform: translateX(-50%) translateY(0);
       }
 
+      /* ----- 右键菜单 ----- */
       #context-menu {
         position: fixed;
         background: var(--bg);
@@ -760,13 +932,14 @@
         opacity: 0;
         pointer-events: none;
         transition: all 0.1s;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
       }
       #context-menu.open {
         opacity: 1;
         pointer-events: all;
       }
 
-      /* Custom confirm overlay */
+      /* ----- 确认弹窗 ----- */
       #custom-confirm {
         position: fixed;
         inset: 0;
@@ -828,6 +1001,41 @@
         opacity: 0.8;
       }
 
+      /* ----- 导出遮罩层 ----- */
+      #export-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9998;
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(4px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 16px;
+        color: #fff;
+        font-family: var(--font-mono);
+        font-size: 14px;
+        letter-spacing: 1px;
+      }
+      #export-overlay.active {
+        display: flex;
+      }
+      #export-overlay .spinner {
+        width: 32px;
+        height: 32px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ----- 动画 ----- */
       @keyframes fadeIn {
         from {
           opacity: 0;
@@ -839,324 +1047,1411 @@
       .node {
         animation: fadeIn 0.2s ease;
       }
+
+      /* ----- 工具类 ----- */
+      .hidden {
+        display: none !important;
+      }
     </style>
   </head>
   <body class="bg-void">
+    <!-- 启动画面 -->
     <div id="splash">
       <div class="splash-logo">ZENCANVAS</div>
-      <div class="splash-tagline">Wireframe Writing Environment</div>
-      <button class="splash-enter" onclick="enterApp()">Initialize</button>
+      <div class="splash-tagline" data-i18n="splash.tagline">Wireframe Writing Environment</div>
+      <button class="splash-enter" data-i18n="splash.enter" onclick="enterApp()">Initialize</button>
     </div>
 
-    <div id="focus-indicator" class="focus">FOCUS</div>
-    <div id="focus-indicator" class="reading" style="right: 90px">READING</div>
+    <!-- 模式指示器 -->
+    <div id="focus-indicator" class="focus" data-i18n="indicator.focus">FOCUS</div>
+    <div id="focus-indicator" class="reading" style="right: 90px" data-i18n="indicator.reading">READING</div>
+
+    <!-- 菜单触发区 -->
     <div id="menu-trigger"></div>
 
+    <!-- ===== 顶部菜单（使用 [ ] 括号重新设计） ===== -->
     <div id="top-menu">
+      <!-- 文件 -->
       <div class="menu-group">
-        <span class="menu-label">FILE</span>
-        <div class="menu-btn" onclick="createCenteredNode('text')">[ NEW ]</div>
-        <div class="menu-btn" onclick="createCenteredNode('image')">[ IMG ]</div>
-        <div class="menu-btn" onclick="createCenteredNode('markdown')">[ MD ]</div>
-        <div class="menu-btn" onclick="saveDocument()">[ SAVE ]</div>
-        <div class="menu-btn" onclick="loadDocument()">[ OPEN ]</div>
-        <div class="menu-btn" onclick="showDropdown('dd-export', this)">[ EXPORT ]</div>
+        <span class="menu-label" data-i18n="menu.file">FILE</span>
+        <div class="menu-btn" data-i18n="menu.new" onclick="createCenteredNode('text')">[ NEW ]</div>
+        <div class="menu-btn" data-i18n="menu.img" onclick="createCenteredNode('image')">[ IMG ]</div>
+        <div class="menu-btn" data-i18n="menu.md" onclick="createCenteredNode('markdown')">[ MD ]</div>
+        <div class="menu-btn" data-i18n="menu.save" onclick="saveDocument()">[ SAVE ]</div>
+        <div class="menu-btn" data-i18n="menu.open" onclick="loadDocument()">[ OPEN ]</div>
+        <div class="menu-btn" data-i18n="menu.export" onclick="showDropdown('dd-export', this)">[ EXPORT ]</div>
       </div>
+
+      <!-- 视图 -->
       <div class="menu-group">
-        <span class="menu-label">VIEW</span>
-        <div class="menu-btn" onclick="showDropdown('dd-bg', this)">[ BG ]</div>
+        <span class="menu-label" data-i18n="menu.view">VIEW</span>
+        <div class="menu-btn" data-i18n="menu.bg" onclick="showDropdown('dd-bg', this)">[ BG ]</div>
         <div class="menu-btn" id="btn-theme" onclick="toggleTheme()">[ LIGHT ]</div>
-        <div class="menu-btn" id="btn-focus" onclick="toggleFocusMode()">[ FOCUS ]</div>
-        <div class="menu-btn" id="btn-read" onclick="toggleReadingMode()">[ READ ]</div>
+        <div class="menu-btn" id="btn-focus" data-i18n="menu.focus" onclick="toggleFocusMode()">[ FOCUS ]</div>
+        <div class="menu-btn" id="btn-read" data-i18n="menu.read" onclick="toggleReadingMode()">[ READ ]</div>
+        <div class="menu-btn" data-i18n="menu.reset" onclick="resetView()">[ RESET ]</div>
       </div>
+
+      <!-- 设置 -->
       <div class="menu-group">
-        <div class="menu-btn" onclick="clearAll()">[ PURGE ]</div>
-        <div class="pin-btn" id="pin-btn" onclick="togglePin()" title="Pin menu bar">&#9660;</div>
+        <span class="menu-label" data-i18n="menu.settings">SETTINGS</span>
+        <div class="menu-btn" id="btn-node-bg" data-i18n="menu.nodebg" onclick="toggleNodeBackground()">[ NODE BG ]</div>
+        <div class="menu-btn" id="btn-lang" data-i18n="menu.lang" onclick="toggleLanguage()">[ 中文 ]</div>
+      </div>
+
+      <!-- 工具 -->
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.tools">TOOLS</span>
+        <div class="menu-btn" data-i18n="menu.purge" onclick="clearAll()">[ PURGE ]</div>
+        <div class="pin-btn" id="pin-btn" onclick="togglePin()" data-i18n-title="pin.title" title="Pin menu bar">▼</div>
       </div>
     </div>
 
+    <!-- 下拉菜单：背景 -->
     <div class="dropdown" id="dd-bg">
-      <div class="dd-label">Background Pattern</div>
-      <div class="dd-item selected" data-bg="bg-void" onclick="setBg('bg-void', this)">
-        Void <span class="hint">pure</span>
-      </div>
-      <div class="dd-item" data-bg="bg-grid" onclick="setBg('bg-grid', this)">
-        Grid <span class="hint">mesh</span>
-      </div>
-      <div class="dd-item" data-bg="bg-dots" onclick="setBg('bg-dots', this)">
-        Dots <span class="hint">matrix</span>
-      </div>
-      <div class="dd-item" data-bg="bg-cross" onclick="setBg('bg-cross', this)">
-        Cross <span class="hint">target</span>
-      </div>
-      <div class="dd-item" data-bg="bg-diagonal" onclick="setBg('bg-diagonal', this)">
-        Diagonal <span class="hint">hatch</span>
-      </div>
+      <div class="dd-label" data-i18n="dd.bg.label">Background Pattern</div>
+      <div class="dd-item selected" data-bg="bg-void" onclick="setBg('bg-void', this)"><span data-i18n="dd.bg.void">Void</span> <span class="hint" data-i18n="dd.bg.voidHint">pure</span></div>
+      <div class="dd-item" data-bg="bg-grid" onclick="setBg('bg-grid', this)"><span data-i18n="dd.bg.grid">Grid</span> <span class="hint" data-i18n="dd.bg.gridHint">mesh</span></div>
+      <div class="dd-item" data-bg="bg-dots" onclick="setBg('bg-dots', this)"><span data-i18n="dd.bg.dots">Dots</span> <span class="hint" data-i18n="dd.bg.dotsHint">matrix</span></div>
+      <div class="dd-item" data-bg="bg-cross" onclick="setBg('bg-cross', this)"><span data-i18n="dd.bg.cross">Cross</span> <span class="hint" data-i18n="dd.bg.crossHint">target</span></div>
+      <div class="dd-item" data-bg="bg-diagonal" onclick="setBg('bg-diagonal', this)"><span data-i18n="dd.bg.diagonal">Diagonal</span> <span class="hint" data-i18n="dd.bg.diagonalHint">hatch</span></div>
     </div>
 
+    <!-- 下拉菜单：导出 -->
     <div class="dropdown" id="dd-export">
-      <div class="dd-label">Export Format</div>
-      <div class="dd-item" onclick="exportAs('txt')">Plain Text <span class="hint">.txt</span></div>
-      <div class="dd-item" onclick="exportAs('md')">Markdown <span class="hint">.md</span></div>
-      <div class="dd-item" onclick="exportAs('html')">HTML <span class="hint">.html</span></div>
-      <div class="dd-item" onclick="exportAs('json')">JSON <span class="hint">.json</span></div>
+      <div class="dd-label" data-i18n="dd.export.label">Export Format</div>
+      <div class="dd-item" onclick="exportAs('txt')"><span data-i18n="dd.export.txt">Plain Text</span> <span class="hint">.txt</span></div>
+      <div class="dd-item" onclick="exportAs('md')"><span data-i18n="dd.export.md">Markdown</span> <span class="hint">.md</span></div>
+      <div class="dd-item" onclick="exportAs('html')"><span data-i18n="dd.export.html">HTML</span> <span class="hint">.html</span></div>
+      <div class="dd-item" onclick="exportAs('json')"><span data-i18n="dd.export.json">JSON</span> <span class="hint">.json</span></div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" onclick="exportPDF()"><span data-i18n="dd.export.pdf">PDF</span> <span class="hint">.pdf</span></div>
+      <div class="dd-item" onclick="exportPNG()"><span data-i18n="dd.export.png">PNG</span> <span class="hint">.png</span></div>
     </div>
 
-    <!-- FLOATING TOOLBAR (only for text nodes) -->
+    <!-- 浮动工具栏 -->
     <div id="floating-toolbar">
-      <span class="ft-section-label">STYLE</span>
+      <span class="ft-section-label" data-i18n="ft.style">Style</span>
       <button class="ft-btn" data-cmd="bold"><b>B</b></button>
       <button class="ft-btn" data-cmd="italic"><i>I</i></button>
       <button class="ft-btn" data-cmd="underline"><u>U</u></button>
       <button class="ft-btn" data-cmd="strikeThrough"><s>S</s></button>
       <div class="ft-divider"></div>
-      <span class="ft-section-label">FONT</span>
+      <span class="ft-section-label" data-i18n="ft.font">Font</span>
       <button class="ft-btn" data-ffont="mono">Mono</button>
       <button class="ft-btn" data-ffont="sans">Sans</button>
       <button class="ft-btn" data-ffont="serif">Serif</button>
       <div class="ft-divider"></div>
-      <span class="ft-section-label">SIZE</span>
-      <button class="ft-btn" data-cmd="fontSizeDown">A-</button>
+      <span class="ft-section-label" data-i18n="ft.size">Size</span>
+      <button class="ft-btn" data-cmd="fontSizeDown">A−</button>
       <button class="ft-btn" data-cmd="fontSizeUp">A+</button>
       <div class="ft-divider"></div>
-      <span class="ft-section-label">LINE</span>
-      <button class="ft-btn" data-cmd="lineHeightDown">LH-</button>
+      <span class="ft-section-label" data-i18n="ft.line">Line</span>
+      <button class="ft-btn" data-cmd="lineHeightDown">LH−</button>
       <span class="ft-lh-val" id="ft-lh-val">1.8</span>
       <button class="ft-btn" data-cmd="lineHeightUp">LH+</button>
       <div class="ft-divider"></div>
-      <!-- ALIGN group -->
-      <span class="ft-section-label">ALIGN</span>
+      <span class="ft-section-label" data-i18n="ft.align">Align</span>
       <button class="ft-btn" data-cmd="justifyLeft">L</button>
       <button class="ft-btn" data-cmd="justifyCenter">C</button>
       <button class="ft-btn" data-cmd="justifyRight">R</button>
       <div class="ft-divider"></div>
-      <span class="ft-section-label">COLOR</span>
-      <div
-        class="ft-color-dot"
-        data-color="auto"
-        style="background: var(--text)"
-        title="Default"
-      ></div>
-      <div class="ft-color-dot" data-color="#888888" style="background: #888888" title="Gray"></div>
-      <div class="ft-color-dot" data-color="#cc3333" style="background: #cc3333" title="Red"></div>
-      <div class="ft-color-dot" data-color="#3366cc" style="background: #3366cc" title="Blue"></div>
-      <div
-        class="ft-color-dot"
-        data-color="#339933"
-        style="background: #339933"
-        title="Green"
-      ></div>
-      <div
-        class="ft-color-dot"
-        data-color="#cc6600"
-        style="background: #cc6600"
-        title="Orange"
-      ></div>
+      <span class="ft-section-label" data-i18n="ft.color">Color</span>
+      <div class="ft-color-dot" data-color="auto" style="background: var(--text)" data-i18n-title="ft.color.default" title="Default"></div>
+      <div class="ft-color-dot" data-color="#888888" style="background: #888888" data-i18n-title="ft.color.gray" title="Gray"></div>
+      <div class="ft-color-dot" data-color="#cc3333" style="background: #cc3333" data-i18n-title="ft.color.red" title="Red"></div>
+      <div class="ft-color-dot" data-color="#3366cc" style="background: #3366cc" data-i18n-title="ft.color.blue" title="Blue"></div>
+      <div class="ft-color-dot" data-color="#339933" style="background: #339933" data-i18n-title="ft.color.green" title="Green"></div>
+      <div class="ft-color-dot" data-color="#cc6600" style="background: #cc6600" data-i18n-title="ft.color.orange" title="Orange"></div>
       <div class="ft-divider"></div>
-      <button class="ft-btn" data-cmd="removeFormat" title="Clear formatting">CLR</button>
+      <button class="ft-btn" data-cmd="removeFormat" data-i18n-title="ft.clr.title" title="Clear formatting">CLR</button>
     </div>
 
-    <!-- CONTEXT MENU -->
+    <!-- 右键菜单 -->
     <div id="context-menu">
-      <div class="dd-item" onclick="createNodeAt(ctxX, ctxY, 'text')">New Text Node</div>
-      <div class="dd-item" onclick="createNodeAt(ctxX, ctxY, 'image')">New Image Node</div>
-      <div class="dd-item" onclick="createNodeAt(ctxX, ctxY, 'markdown')">New Markdown Node</div>
+      <div class="dd-item" data-i18n="ctx.newText" onclick="createNodeAt(ctxX, ctxY, 'text')">New Text Node</div>
+      <div class="dd-item" data-i18n="ctx.newImage" onclick="createNodeAt(ctxX, ctxY, 'image')">New Image Node</div>
+      <div class="dd-item" data-i18n="ctx.newMarkdown" onclick="createNodeAt(ctxX, ctxY, 'markdown')">New Markdown Node</div>
       <div class="dd-divider"></div>
-      <div class="dd-item" id="ctx-edit" onclick="ctxEdit()">Edit Content</div>
-      <div class="dd-item" id="ctx-copy-node" onclick="copyNode()">Copy Node</div>
-      <div class="dd-item" id="ctx-paste-node" onclick="pasteNode()">Paste Node</div>
+      <div class="dd-item" id="ctx-edit" data-i18n="ctx.editContent" onclick="ctxEdit()">Edit Content</div>
+      <div class="dd-item" id="ctx-copy-node" data-i18n="ctx.copyNode" onclick="copyNode()">Copy Node</div>
+      <div class="dd-item" id="ctx-paste-node" data-i18n="ctx.pasteNode" onclick="pasteNode()">Paste Node</div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-i18n="ctx.clearConnections" onclick="clearAllConnections()">Clear All Connections</div>
     </div>
 
-    <div id="workspace"></div>
+    <!-- 工作区 -->
+    <div id="workspace">
+      <div id="canvas-inner">
+        <svg id="svg-layer"></svg>
+      </div>
+    </div>
 
+    <!-- 状态栏 -->
     <div id="status-bar">
-      <span id="stat-left">Ready</span>
-      <span id="stat-right">ZenCanvas</span>
+      <span id="stat-left" data-i18n="status.ready">Ready</span>
+      <span id="stat-right">ZenCanvas · ∞</span>
     </div>
 
+    <!-- 通知 -->
     <div id="notification"></div>
 
-    <!-- Custom Confirm Overlay -->
+    <!-- 确认对话框 -->
     <div id="custom-confirm">
       <div class="confirm-box">
         <div class="msg" id="confirm-msg">Purge all nodes?</div>
         <div class="actions">
-          <button id="confirm-cancel">Cancel</button>
-          <button id="confirm-ok" class="confirm">Purge</button>
+          <button id="confirm-cancel" data-i18n="confirm.cancel">Cancel</button>
+          <button id="confirm-ok" class="confirm" data-i18n="confirm.purge">Purge</button>
         </div>
       </div>
     </div>
 
-    <input
-      type="file"
-      id="file-input"
-      accept=".zc,.txt,.json"
-      style="display: none"
-      onchange="handleFileLoad(event)"
-    />
+    <!-- 导出遮罩层 -->
+    <div id="export-overlay">
+      <div class="spinner"></div>
+      <span data-i18n="export.exporting">Exporting…</span>
+    </div>
 
+    <!-- 文件输入 -->
+    <input type="file" id="file-input" accept=".zc,.txt,.json" style="display: none" onchange="handleFileLoad(event)" />
+
+    <!-- ============================================================ -->
+    <!-- JavaScript 脚本 -->
+    <!-- ============================================================ -->
     <script>
-      // ========== GLOBAL STATE ==========
+      // ================================================================
+      // 全局状态
+      // ================================================================
+
       const S = {
         theme: 'light',
         bg: 'bg-void',
         focusMode: false,
         readingMode: false,
         menuPinned: false,
+        nodeBgVisible: true,
         zCounter: 10,
         nodeCounter: 0,
+        scale: 1,
+        panX: 0,
+        panY: 0,
+        lang: 'en',
+      };
+
+      // ================================================================
+      // 国际化（中英文）
+      // ================================================================
+
+      const I18N = {
+        en: {
+          'splash.tagline': 'Wireframe Writing Environment',
+          'splash.enter': 'Initialize',
+          'indicator.focus': 'FOCUS',
+          'indicator.reading': 'READING',
+          'menu.file': 'FILE',
+          'menu.new': '[ NEW ]',
+          'menu.img': '[ IMG ]',
+          'menu.md': '[ MD ]',
+          'menu.save': '[ SAVE ]',
+          'menu.open': '[ OPEN ]',
+          'menu.export': '[ EXPORT ]',
+          'menu.view': 'VIEW',
+          'menu.bg': '[ BG ]',
+          'menu.themeLight': '[ LIGHT ]',
+          'menu.themeDark': '[ DARK ]',
+          'menu.focus': '[ FOCUS ]',
+          'menu.read': '[ READ ]',
+          'menu.reset': '[ RESET ]',
+          'menu.settings': 'SETTINGS',
+          'menu.nodebg': '[ NODE BG ]',
+          'menu.lang': '[ 中文 ]',
+          'menu.tools': 'TOOLS',
+          'menu.purge': '[ PURGE ]',
+          'pin.title': 'Pin menu bar',
+          'dd.bg.label': 'Background Pattern',
+          'dd.bg.void': 'Void',
+          'dd.bg.voidHint': 'pure',
+          'dd.bg.grid': 'Grid',
+          'dd.bg.gridHint': 'mesh',
+          'dd.bg.dots': 'Dots',
+          'dd.bg.dotsHint': 'matrix',
+          'dd.bg.cross': 'Cross',
+          'dd.bg.crossHint': 'target',
+          'dd.bg.diagonal': 'Diagonal',
+          'dd.bg.diagonalHint': 'hatch',
+          'dd.export.label': 'Export Format',
+          'dd.export.txt': 'Plain Text',
+          'dd.export.md': 'Markdown',
+          'dd.export.html': 'HTML',
+          'dd.export.json': 'JSON',
+          'dd.export.pdf': 'PDF',
+          'dd.export.png': 'PNG',
+          'ft.style': 'Style',
+          'ft.font': 'Font',
+          'ft.size': 'Size',
+          'ft.line': 'Line',
+          'ft.align': 'Align',
+          'ft.color': 'Color',
+          'ft.color.default': 'Default',
+          'ft.color.gray': 'Gray',
+          'ft.color.red': 'Red',
+          'ft.color.blue': 'Blue',
+          'ft.color.green': 'Green',
+          'ft.color.orange': 'Orange',
+          'ft.clr.title': 'Clear formatting',
+          'ctx.newText': 'New Text Node',
+          'ctx.newImage': 'New Image Node',
+          'ctx.newMarkdown': 'New Markdown Node',
+          'ctx.editContent': 'Edit Content',
+          'ctx.copyNode': 'Copy Node',
+          'ctx.pasteNode': 'Paste Node',
+          'ctx.clearConnections': 'Clear All Connections',
+          'status.ready': 'Ready',
+          'export.exporting': 'Exporting…',
+          'confirm.purgeAll': 'Purge all nodes and connections?',
+          'confirm.cancel': 'Cancel',
+          'confirm.purge': 'Purge',
+          'placeholder.startTyping': 'start typing…',
+          'placeholder.imageUrl': 'double-click to set image URL',
+          'placeholder.imageUrlInput': 'image URL…',
+          'placeholder.markdownEdit': 'double-click to edit Markdown',
+          'notify.nodeBgOn': 'Node background: ON',
+          'notify.nodeBgOff': 'Node background: OFF',
+          'notify.viewReset': 'View reset',
+          'notify.nodeRemoved': 'Node removed',
+          'notify.dragToConnect': "Drag to another node's port to connect",
+          'notify.connected': 'Connected!',
+          'notify.alreadyConnected': 'Already connected',
+          'notify.connectionCancelled': 'Connection cancelled',
+          'notify.connectionDeleted': 'Connection deleted',
+          'notify.allConnectionsCleared': 'All connections cleared',
+          'notify.size': 'Size: {0}px',
+          'notify.line': 'Line: {0}',
+          'notify.font': 'Font: {0}',
+          'notify.noNodeSelected': 'No node selected',
+          'notify.nodeCopied': 'Node copied',
+          'notify.nothingToPaste': 'Nothing to paste',
+          'notify.nodePasted': 'Node pasted',
+          'notify.saved': 'Saved',
+          'notify.loadedNodes': 'Loaded {0} nodes',
+          'notify.invalidFile': 'Invalid file',
+          'notify.exportedFormat': 'Exported {0}',
+          'notify.pdfExported': 'PDF exported',
+          'notify.pdfExportFailed': 'PDF export failed: {0}',
+          'notify.pngExported': 'PNG exported',
+          'notify.pngExportFailed': 'PNG export failed: {0}',
+          'notify.allCleared': 'All cleared',
+          'stats.text': '{0} node{1} · {2} conn{3}',
+        },
+        zh: {
+          'splash.tagline': '线框写作环境',
+          'splash.enter': '启动',
+          'indicator.focus': '专注',
+          'indicator.reading': '阅读',
+          'menu.file': '文件',
+          'menu.new': '[ 新建 ]',
+          'menu.img': '[ 图片 ]',
+          'menu.md': '[ MD ]',
+          'menu.save': '[ 保存 ]',
+          'menu.open': '[ 打开 ]',
+          'menu.export': '[ 导出 ]',
+          'menu.view': '视图',
+          'menu.bg': '[ 背景 ]',
+          'menu.themeLight': '[ 浅色 ]',
+          'menu.themeDark': '[ 深色 ]',
+          'menu.focus': '[ 专注 ]',
+          'menu.read': '[ 阅读 ]',
+          'menu.reset': '[ 重置 ]',
+          'menu.settings': '设置',
+          'menu.nodebg': '[ 节点背景 ]',
+          'menu.lang': '[ EN ]',
+          'menu.tools': '工具',
+          'menu.purge': '[ 清空 ]',
+          'pin.title': '固定菜单栏',
+          'dd.bg.label': '背景图案',
+          'dd.bg.void': '无',
+          'dd.bg.voidHint': '纯色',
+          'dd.bg.grid': '网格',
+          'dd.bg.gridHint': '网状',
+          'dd.bg.dots': '点阵',
+          'dd.bg.dotsHint': '矩阵',
+          'dd.bg.cross': '十字',
+          'dd.bg.crossHint': '靶心',
+          'dd.bg.diagonal': '斜纹',
+          'dd.bg.diagonalHint': '斜线',
+          'dd.export.label': '导出格式',
+          'dd.export.txt': '纯文本',
+          'dd.export.md': 'Markdown',
+          'dd.export.html': 'HTML',
+          'dd.export.json': 'JSON',
+          'dd.export.pdf': 'PDF',
+          'dd.export.png': 'PNG',
+          'ft.style': '样式',
+          'ft.font': '字体',
+          'ft.size': '大小',
+          'ft.line': '行高',
+          'ft.align': '对齐',
+          'ft.color': '颜色',
+          'ft.color.default': '默认',
+          'ft.color.gray': '灰色',
+          'ft.color.red': '红色',
+          'ft.color.blue': '蓝色',
+          'ft.color.green': '绿色',
+          'ft.color.orange': '橙色',
+          'ft.clr.title': '清除格式',
+          'ctx.newText': '新建文本节点',
+          'ctx.newImage': '新建图片节点',
+          'ctx.newMarkdown': '新建 Markdown 节点',
+          'ctx.editContent': '编辑内容',
+          'ctx.copyNode': '复制节点',
+          'ctx.pasteNode': '粘贴节点',
+          'ctx.clearConnections': '清除所有连线',
+          'status.ready': '就绪',
+          'export.exporting': '正在导出…',
+          'confirm.purgeAll': '确定要清空所有节点和连线吗？',
+          'confirm.cancel': '取消',
+          'confirm.purge': '清空',
+          'placeholder.startTyping': '开始输入…',
+          'placeholder.imageUrl': '双击设置图片链接',
+          'placeholder.imageUrlInput': '图片链接…',
+          'placeholder.markdownEdit': '双击编辑 Markdown',
+          'notify.nodeBgOn': '节点背景：开',
+          'notify.nodeBgOff': '节点背景：关',
+          'notify.viewReset': '视图已重置',
+          'notify.nodeRemoved': '节点已删除',
+          'notify.dragToConnect': '拖动到另一个节点的端口以连接',
+          'notify.connected': '已连接！',
+          'notify.alreadyConnected': '已经连接过了',
+          'notify.connectionCancelled': '已取消连接',
+          'notify.connectionDeleted': '连线已删除',
+          'notify.allConnectionsCleared': '所有连线已清除',
+          'notify.size': '字号：{0}px',
+          'notify.line': '行高：{0}',
+          'notify.font': '字体：{0}',
+          'notify.noNodeSelected': '未选中节点',
+          'notify.nodeCopied': '节点已复制',
+          'notify.nothingToPaste': '没有可粘贴的内容',
+          'notify.nodePasted': '节点已粘贴',
+          'notify.saved': '已保存',
+          'notify.loadedNodes': '已加载 {0} 个节点',
+          'notify.invalidFile': '文件无效',
+          'notify.exportedFormat': '已导出 {0}',
+          'notify.pdfExported': 'PDF 已导出',
+          'notify.pdfExportFailed': 'PDF 导出失败：{0}',
+          'notify.pngExported': 'PNG 已导出',
+          'notify.pngExportFailed': 'PNG 导出失败：{0}',
+          'notify.allCleared': '已全部清空',
+          'stats.text': '{0} 个节点 · {2} 条连接',
+        },
+      };
+
+      // 根据 key 获取当前语言的文本，支持 {0}{1}... 占位符替换
+      function t(key, ...args) {
+        const dict = I18N[S.lang] || I18N.en;
+        let str = dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+        args.forEach((a, i) => { str = str.replace('{' + i + '}', a); });
+        return str;
       }
 
-      const DEFAULT_FONT = "'JetBrains Mono', monospace"
-      const DEFAULT_FONT_SIZE = 14
-      const DEFAULT_LINE_HEIGHT = 1.8
+      // 应用当前语言到所有带 data-i18n / data-i18n-title 属性的元素，以及动态状态相关的文本
+      function applyI18n() {
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          el.textContent = t(el.dataset.i18n);
+        });
+        document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+          el.title = t(el.dataset.i18nTitle);
+        });
+        document.getElementById('pin-btn').title = t('pin.title');
+        document.getElementById('btn-lang').textContent = t('menu.lang');
+        updateThemeBtn();
+        refreshDynamicPlaceholders();
+        updateStats();
+      }
+
+      // 语言切换：在中文与英文之间切换，并保存设置
+      function toggleLanguage() {
+        S.lang = S.lang === 'en' ? 'zh' : 'en';
+        saveSettings();
+        applyI18n();
+      }
+
+      // 重新应用节点内提示文本（新建/图片/Markdown 空态占位符）在语言切换后
+      function refreshDynamicPlaceholders() {
+        document.querySelectorAll('.node').forEach((node) => {
+          const type = node.dataset.type;
+          const content = node.querySelector('.node-content');
+          if (!content) return;
+          if (type === 'text') {
+            content.dataset.placeholder = t('placeholder.startTyping');
+          } else if (type === 'image') {
+            content.dataset.placeholder = t('placeholder.imageUrl');
+            const ph = content.querySelector('.img-placeholder');
+            if (ph) ph.textContent = t('placeholder.imageUrl');
+          } else if (type === 'markdown') {
+            content.dataset.placeholder = t('placeholder.markdownEdit');
+            if (!((content.dataset.source || '').trim())) {
+              renderMarkdown(content);
+            }
+          }
+        });
+      }
+
+      const DEFAULT_FONT = "'JetBrains Mono', monospace";
+      const DEFAULT_FONT_SIZE = 14;
+      const DEFAULT_LINE_HEIGHT = 1.8;
 
       const fontMap = {
         mono: "'JetBrains Mono', monospace",
         sans: 'system-ui, -apple-system, sans-serif',
         serif: "Georgia, 'Times New Roman', serif",
-      }
+      };
 
       let ctxX = 0,
-        ctxY = 0
-      let ctxNode = null // right-clicked node
-      let clipboardNode = null // copied node data
+        ctxY = 0;
+      let ctxNode = null;
+      let clipboardNode = null;
+      let connections = [];
+      let connIdCounter = 0;
+      let selectedConnId = null;
 
-      // ========== LOCAL STORAGE ==========
-      function saveSettings() {
-        localStorage.setItem(
-          'zc-settings',
-          JSON.stringify({
-            theme: S.theme,
-            bg: S.bg,
-            menuPinned: S.menuPinned,
-            focusMode: S.focusMode,
-            readingMode: S.readingMode,
-          }),
-        )
-      }
-      function loadSettings() {
-        const saved = localStorage.getItem('zc-settings')
-        if (!saved) return
-        try {
-          const parsed = JSON.parse(saved)
-          Object.assign(S, parsed)
-        } catch (e) {}
-      }
-      function applySettings() {
-        document.body.classList.toggle('theme-dark', S.theme === 'dark')
-        document.getElementById('btn-theme').textContent =
-          S.theme === 'dark' ? '[ DARK ]' : '[ LIGHT ]'
-        document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
-        document.body.classList.add(S.bg)
-        document.querySelectorAll('#dd-bg .dd-item').forEach((el) => {
-          el.classList.toggle('selected', el.dataset.bg === S.bg)
-        })
-        document.getElementById('pin-btn').classList.toggle('pinned', S.menuPinned)
-        document.getElementById('top-menu').classList.toggle('pinned', S.menuPinned)
-        document.body.classList.toggle('focus-mode', S.focusMode)
-        document.getElementById('btn-focus').classList.toggle('active', S.focusMode)
-        document.body.classList.toggle('reading-mode', S.readingMode)
-        document.getElementById('btn-read').classList.toggle('active', S.readingMode)
-      }
+        // 带阈值的平移状态
+      let isPanning = false;
+      let panStartX = 0,
+        panStartY = 0;
+      let panStartPX = 0,
+        panStartPY = 0;
+      let panWasDragging = false;
+      const PAN_THRESHOLD = 5; // pixels
 
-      // ========== SPLASH ==========
+        // 端口拖拽
+      let portDrag = null;
+      let tempLine = null;
+
+        // 自动保存
+      let autoSaveTimer = null;
+      let notifyTimer = null;
+      let confirmResolve = null;
+
+      // ================================================================
+      // 启动画面
+      // ================================================================
+
       function enterApp() {
-        document.getElementById('splash').classList.add('fade-out')
-        setTimeout(() => (document.getElementById('splash').style.display = 'none'), 600)
+        document.getElementById('splash').classList.add('fade-out');
+        setTimeout(() => (document.getElementById('splash').style.display = 'none'), 600);
       }
+
+      // ================================================================
+      // 设置
+      // ================================================================
+
+      function saveSettings() {
+        const data = {
+          theme: S.theme,
+          bg: S.bg,
+          menuPinned: S.menuPinned,
+          focusMode: S.focusMode,
+          readingMode: S.readingMode,
+          nodeBgVisible: S.nodeBgVisible,
+          panX: S.panX,
+          panY: S.panY,
+          scale: S.scale,
+          lang: S.lang,
+        };
+        localStorage.setItem('zc-settings', JSON.stringify(data));
+      }
+
+      function loadSettings() {
+        const saved = localStorage.getItem('zc-settings');
+        if (!saved) return;
+        try {
+          const parsed = JSON.parse(saved);
+          const keys = ['theme', 'bg', 'menuPinned', 'focusMode', 'readingMode',
+            'nodeBgVisible', 'panX', 'panY', 'scale', 'lang'
+          ];
+          for (const k of keys) {
+            if (parsed[k] !== undefined) S[k] = parsed[k];
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      function applySettings() {
+        // 主题
+        document.body.classList.toggle('theme-dark', S.theme === 'dark');
+
+        // 背景
+        document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
+        document.body.classList.add(S.bg);
+        document.querySelectorAll('#dd-bg .dd-item').forEach((el) => {
+          el.classList.toggle('selected', el.dataset.bg === S.bg);
+        });
+
+        // 菜单固定
+        document.getElementById('pin-btn').classList.toggle('pinned', S.menuPinned);
+        document.getElementById('top-menu').classList.toggle('pinned', S.menuPinned);
+
+        // 专注/阅读模式
+        document.body.classList.toggle('focus-mode', S.focusMode);
+        document.getElementById('btn-focus').classList.toggle('active', S.focusMode);
+        document.body.classList.toggle('reading-mode', S.readingMode);
+        document.getElementById('btn-read').classList.toggle('active', S.readingMode);
+
+        // 节点背景
+        applyNodeBgSetting();
+
+        // 平移与缩放
+        applyTransform();
+
+        // 应用语言，并更新主题按钮等文本
+        applyI18n();
+      }
+
+      function applyTransform() {
+        const inner = document.getElementById('canvas-inner');
+        inner.style.transform = `translate(${S.panX}px, ${S.panY}px) scale(${S.scale})`;
+        // 重新渲染连线以匹配新的变换
+        renderAllConnections();
+      }
+
+      function updateThemeBtn() {
+        const btn = document.getElementById('btn-theme');
+        btn.textContent = S.theme === 'dark' ? t('menu.themeDark') : t('menu.themeLight');
+      }
+
+      // ================================================================
+      // 节点背景切换
+      // ================================================================
+
+      function toggleNodeBackground() {
+        S.nodeBgVisible = !S.nodeBgVisible;
+        applyNodeBgSetting();
+        saveSettings();
+        notify(S.nodeBgVisible ? t('notify.nodeBgOn') : t('notify.nodeBgOff'));
+        const btn = document.getElementById('btn-node-bg');
+        btn.classList.toggle('toggle-on', S.nodeBgVisible);
+        btn.classList.toggle('toggle-off', !S.nodeBgVisible);
+      }
+
+      function applyNodeBgSetting() {
+        const nodes = document.querySelectorAll('.node');
+        const btn = document.getElementById('btn-node-bg');
+        if (S.nodeBgVisible) {
+          nodes.forEach(n => n.classList.remove('no-bg'));
+          btn.classList.add('toggle-on');
+          btn.classList.remove('toggle-off');
+          btn.textContent = t('menu.nodebg');
+        } else {
+          nodes.forEach(n => n.classList.add('no-bg'));
+          btn.classList.remove('toggle-on');
+          btn.classList.add('toggle-off');
+          btn.textContent = t('menu.nodebg');
+        }
+        document.querySelectorAll('.node-port').forEach(p => {
+          p.style.borderColor = S.nodeBgVisible ? 'var(--bg)' : 'transparent';
+        });
+      }
+
+      // ================================================================
+      // 固定 / 下拉菜单
+      // ================================================================
 
       function togglePin() {
-        S.menuPinned = !S.menuPinned
-        document.getElementById('top-menu').classList.toggle('pinned', S.menuPinned)
-        document.getElementById('pin-btn').classList.toggle('pinned', S.menuPinned)
-        saveSettings()
+        S.menuPinned = !S.menuPinned;
+        document.getElementById('top-menu').classList.toggle('pinned', S.menuPinned);
+        document.getElementById('pin-btn').classList.toggle('pinned', S.menuPinned);
+        saveSettings();
       }
 
-      // ========== DROPDOWNS ==========
       function showDropdown(id, btn) {
-        const dd = document.getElementById(id)
-        const wasOpen = dd.classList.contains('open')
-        closeAllDropdowns()
+        const dd = document.getElementById(id);
+        const wasOpen = dd.classList.contains('open');
+        closeAllDropdowns();
         if (!wasOpen) {
-          const rect = btn.getBoundingClientRect()
-          dd.style.left = rect.left + 'px'
-          dd.style.top = '52px'
-          dd.classList.add('open')
-          btn.classList.add('active')
-          document.getElementById('status-bar').classList.add('force-visible')
+          const rect = btn.getBoundingClientRect();
+          dd.style.left = rect.left + 'px';
+          dd.style.top = '52px';
+          dd.classList.add('open');
+          btn.classList.add('active');
+          document.getElementById('status-bar').classList.add('force-visible');
           if (!S.menuPinned) {
-            S.menuPinned = true
-            document.getElementById('top-menu').classList.add('pinned')
-            document.getElementById('pin-btn').classList.add('pinned')
+            S.menuPinned = true;
+            document.getElementById('top-menu').classList.add('pinned');
+            document.getElementById('pin-btn').classList.add('pinned');
           }
         }
       }
-      function closeAllDropdowns() {
-        document.querySelectorAll('.dropdown').forEach((d) => d.classList.remove('open'))
-        document.querySelectorAll('.menu-btn').forEach((b) => {
-          if (b.id !== 'btn-focus' && b.id !== 'btn-read') {
-            b.classList.remove('active')
-          }
-        })
-        document.getElementById('context-menu').classList.remove('open')
-        const sb = document.getElementById('status-bar')
-        sb.classList.remove('force-visible')
-      }
-      document.addEventListener('click', (e) => {
-        if (
-          !e.target.closest('.dropdown') &&
-          !e.target.closest('.menu-btn') &&
-          !e.target.closest('.pin-btn')
-        ) {
-          closeAllDropdowns()
-        }
-      })
 
-      // ========== BACKGROUNDS ==========
-      function setBg(bg, el) {
-        document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
-        document.body.classList.add(bg)
-        if (S.theme === 'dark') document.body.classList.add('theme-dark')
-        S.bg = bg
-        document.querySelectorAll('#dd-bg .dd-item').forEach((i) => i.classList.remove('selected'))
-        if (el) el.classList.add('selected')
-        closeAllDropdowns()
-        saveSettings()
+      function closeAllDropdowns() {
+        document.querySelectorAll('.dropdown').forEach((d) => d.classList.remove('open'));
+        document.querySelectorAll('.menu-btn').forEach((b) => {
+          if (b.id !== 'btn-focus' && b.id !== 'btn-read' &&
+            b.id !== 'btn-node-bg' && b.id !== 'btn-theme') {
+            b.classList.remove('active');
+          }
+        });
+        document.getElementById('context-menu').classList.remove('open');
+        document.getElementById('status-bar').classList.remove('force-visible');
       }
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.dropdown') && !e.target.closest('.menu-btn') && !e.target.closest('.pin-btn')) {
+          closeAllDropdowns();
+        }
+      });
+
+      // ================================================================
+      // 背景
+      // ================================================================
+
+      function setBg(bg, el) {
+        document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
+        document.body.classList.add(bg);
+        if (S.theme === 'dark') document.body.classList.add('theme-dark');
+        S.bg = bg;
+        document.querySelectorAll('#dd-bg .dd-item').forEach((i) => i.classList.remove('selected'));
+        if (el) el.classList.add('selected');
+        closeAllDropdowns();
+        saveSettings();
+      }
+
+      // ================================================================
+      // 主题
+      // ================================================================
 
       function toggleTheme() {
-        S.theme = S.theme === 'dark' ? 'light' : 'dark'
-        document.body.classList.toggle('theme-dark', S.theme === 'dark')
-        document.getElementById('btn-theme').textContent =
-          S.theme === 'dark' ? '[ DARK ]' : '[ LIGHT ]'
-        saveSettings()
+        S.theme = S.theme === 'dark' ? 'light' : 'dark';
+        document.body.classList.toggle('theme-dark', S.theme === 'dark');
+        updateThemeBtn();
+        saveSettings();
+        renderAllConnections();
       }
 
-      // ========== FOCUS / READING MODE ==========
+      // ================================================================
+      // 专注 / 阅读模式
+      // ================================================================
+
       function toggleFocusMode() {
-        S.focusMode = !S.focusMode
-        document.body.classList.toggle('focus-mode', S.focusMode)
-        document.getElementById('btn-focus').classList.toggle('active', S.focusMode)
-        saveSettings()
-      }
-      function toggleReadingMode() {
-        S.readingMode = !S.readingMode
-        document.body.classList.toggle('reading-mode', S.readingMode)
-        document.getElementById('btn-read').classList.toggle('active', S.readingMode)
-        saveSettings()
+        S.focusMode = !S.focusMode;
+        document.body.classList.toggle('focus-mode', S.focusMode);
+        document.getElementById('btn-focus').classList.toggle('active', S.focusMode);
+        saveSettings();
       }
 
-      // ========== AUTO-SAVE ==========
-      let autoSaveTimer = null
+      function toggleReadingMode() {
+        S.readingMode = !S.readingMode;
+        document.body.classList.toggle('reading-mode', S.readingMode);
+        document.getElementById('btn-read').classList.toggle('active', S.readingMode);
+        saveSettings();
+        renderAllConnections();
+      }
+
+      // ================================================================
+      // 视图重置
+      // ================================================================
+
+      function resetView() {
+        S.panX = 0;
+        S.panY = 0;
+        S.scale = 1;
+        applyTransform();
+        saveSettings();
+        notify(t('notify.viewReset'));
+      }
+
+      // ================================================================
+      // 通知
+      // ================================================================
+
+      function notify(msg) {
+        const n = document.getElementById('notification');
+        n.textContent = msg;
+        n.classList.add('show');
+        clearTimeout(notifyTimer);
+        notifyTimer = setTimeout(() => n.classList.remove('show'), 1600);
+      }
+
+      // ================================================================
+      // 确认
+      // ================================================================
+
+      function showConfirm(message) {
+        return new Promise((resolve) => {
+          const overlay = document.getElementById('custom-confirm');
+          document.getElementById('confirm-msg').textContent = message;
+          overlay.classList.add('active');
+          confirmResolve = resolve;
+        });
+      }
+      document.getElementById('confirm-cancel').addEventListener('click', () => {
+        document.getElementById('custom-confirm').classList.remove('active');
+        if (confirmResolve) { confirmResolve(false);
+          confirmResolve = null; }
+      });
+      document.getElementById('confirm-ok').addEventListener('click', () => {
+        document.getElementById('custom-confirm').classList.remove('active');
+        if (confirmResolve) { confirmResolve(true);
+          confirmResolve = null; }
+      });
+
+      // ================================================================
+      // 节点创建
+      // ================================================================
+
+      function createCenteredNode(type) {
+        const vw = window.innerWidth,
+          vh = window.innerHeight;
+        const cx = vw / 2 - 200 - S.panX,
+          cy = vh / 2 - 150 - S.panY;
+        createNodeAt(cx, cy, type);
+        closeAllDropdowns();
+      }
+
+      function createNodeAt(x, y, type, data = null) {
+        S.nodeCounter++;
+        const node = document.createElement('div');
+        node.className = 'node';
+        if (!S.nodeBgVisible) node.classList.add('no-bg');
+        node.dataset.type = type;
+        node.style.left = x + 'px';
+        node.style.top = y + 'px';
+        node.style.zIndex = ++S.zCounter;
+        const id = 'node-' + S.nodeCounter;
+        node.id = id;
+
+        const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : 'MD') + '_' +
+          String(S.nodeCounter).padStart(2, '0');
+        const title = data && data.title ? data.title : defaultTitle;
+        if (data && data.w) node.style.width = data.w;
+        if (data && data.h) node.style.height = data.h;
+
+        // 头部
+        const header = document.createElement('div');
+        header.className = 'node-header';
+        header.innerHTML = `
+          <span class="node-title">${title}</span>
+          <div class="node-actions">
+            <div class="node-action-btn minimize">−</div>
+            <div class="node-action-btn close">×</div>
+          </div>
+        `;
+        node.appendChild(header);
+
+        // 端口
+        const portTop = document.createElement('div');
+        portTop.className = 'node-port top';
+        portTop.dataset.port = 'top';
+        portTop.dataset.nodeId = id;
+        if (!S.nodeBgVisible) portTop.style.borderColor = 'transparent';
+        node.appendChild(portTop);
+
+        const portBottom = document.createElement('div');
+        portBottom.className = 'node-port bottom';
+        portBottom.dataset.port = 'bottom';
+        portBottom.dataset.nodeId = id;
+        if (!S.nodeBgVisible) portBottom.style.borderColor = 'transparent';
+        node.appendChild(portBottom);
+
+        // 内容
+        const content = document.createElement('div');
+        content.className = 'node-content';
+        content.setAttribute('contenteditable', 'false');
+        content.spellcheck = false;
+
+        if (type === 'text') {
+          content.setAttribute('contenteditable', 'true');
+          content.dataset.placeholder = t('placeholder.startTyping');
+          content.style.fontFamily = DEFAULT_FONT;
+          content.style.fontSize = DEFAULT_FONT_SIZE + 'px';
+          content.style.lineHeight = data && data.lh ? data.lh : DEFAULT_LINE_HEIGHT;
+          content.innerHTML = data && data.content ? data.content : '';
+          content.addEventListener('input', debouncedAutoSave);
+          content.addEventListener('mouseup', () => setTimeout(handleTextSelection, 10));
+          content.addEventListener('keyup', (e) => {
+            if (e.shiftKey || e.key === 'Shift') setTimeout(handleTextSelection, 10);
+          });
+          content.addEventListener('contextmenu', (e) => e.preventDefault());
+        } else if (type === 'image') {
+          content.style.padding = '8px';
+          content.style.display = 'flex';
+          content.style.alignItems = 'center';
+          content.style.justifyContent = 'center';
+          content.style.cursor = 'pointer';
+          content.dataset.placeholder = t('placeholder.imageUrl');
+          const src = data && data.src ? data.src : '';
+          if (src) {
+            const img = document.createElement('img');
+            img.src = src;
+            img.alt = 'image';
+            content.appendChild(img);
+          } else {
+            const placeholder = document.createElement('span');
+            placeholder.className = 'img-placeholder';
+            placeholder.textContent = t('placeholder.imageUrl');
+            content.appendChild(placeholder);
+          }
+          content.addEventListener('dblclick', function(e) {
+            e.stopPropagation();
+            if (this.querySelector('input')) return;
+            const currentSrc = this.querySelector('img') ? this.querySelector('img').src : '';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = currentSrc;
+            input.style.width = '80%';
+            input.style.padding = '4px 8px';
+            input.style.fontFamily = 'var(--font-mono)';
+            input.style.fontSize = '12px';
+            input.style.background = 'transparent';
+            input.style.border = '1px solid var(--border)';
+            input.style.color = 'var(--text)';
+            input.style.outline = 'none';
+            input.placeholder = t('placeholder.imageUrlInput');
+            this.innerHTML = '';
+            this.appendChild(input);
+            input.focus();
+            input.select();
+            const finish = (save) => {
+              if (!input.parentNode) return;
+              const val = save ? input.value.trim() : '';
+              this.innerHTML = '';
+              if (val) {
+                const img = document.createElement('img');
+                img.src = val;
+                img.alt = 'image';
+                this.appendChild(img);
+              } else {
+                const placeholder = document.createElement('span');
+                placeholder.className = 'img-placeholder';
+                placeholder.textContent = t('placeholder.imageUrl');
+                this.appendChild(placeholder);
+              }
+              debouncedAutoSave();
+              renderAllConnections();
+            };
+            input.addEventListener('keydown', (ev) => {
+              ev.stopPropagation();
+              if (ev.key === 'Enter') { ev.preventDefault();
+                finish(true); }
+              if (ev.key === 'Escape') { ev.preventDefault();
+                finish(false); }
+            });
+            input.addEventListener('blur', () => finish(true));
+          });
+          content.addEventListener('selectstart', (e) => e.preventDefault());
+        } else if (type === 'markdown') {
+          content.style.padding = '16px 24px';
+          content.style.cursor = 'pointer';
+          content.dataset.source = data && data.source ? data.source : '';
+          content.dataset.placeholder = t('placeholder.markdownEdit');
+          renderMarkdown(content);
+          content.addEventListener('dblclick', function(e) {
+            e.stopPropagation();
+            if (this.querySelector('textarea')) return;
+            const currentSource = this.dataset.source || '';
+            const textarea = document.createElement('textarea');
+            textarea.value = currentSource;
+            textarea.style.width = '100%';
+            textarea.style.height = '200px';
+            textarea.style.fontFamily = 'var(--font-mono)';
+            textarea.style.fontSize = '13px';
+            textarea.style.lineHeight = '1.6';
+            textarea.style.background = 'transparent';
+            textarea.style.border = '1px solid var(--border)';
+            textarea.style.color = 'var(--text)';
+            textarea.style.padding = '8px';
+            textarea.style.outline = 'none';
+            textarea.style.resize = 'vertical';
+            textarea.spellcheck = false;
+            this.innerHTML = '';
+            this.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            const finish = (save) => {
+              if (!textarea.parentNode) return;
+              const val = save ? textarea.value : this.dataset.source || '';
+              this.dataset.source = val;
+              renderMarkdown(this);
+              debouncedAutoSave();
+              renderAllConnections();
+            };
+            textarea.addEventListener('keydown', (ev) => {
+              ev.stopPropagation();
+              if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault();
+                finish(true); }
+              if (ev.key === 'Escape') { ev.preventDefault();
+                finish(false); }
+            });
+            textarea.addEventListener('blur', () => finish(true));
+          });
+        }
+
+        node.appendChild(content);
+
+        // 调整大小手柄
+        const resize = document.createElement('div');
+        resize.className = 'node-resize';
+        node.appendChild(resize);
+
+        // 添加到画布
+        document.getElementById('canvas-inner').appendChild(node);
+
+        // 初始化行为
+        initDrag(node);
+        initResize(node);
+        initNodeEvents(node);
+        initTitleEdit(node);
+        initPortEvents(node);
+
+        if (type === 'text' && !data) setTimeout(() => node.querySelector('.node-content').focus(), 50);
+
+        updateStats();
+        debouncedAutoSave();
+        renderAllConnections();
+
+        // 监听大小变化
+        ro.observe(node);
+
+        return node;
+      }
+
+      // ================================================================
+      // 标题编辑
+      // ================================================================
+
+      function initTitleEdit(node) {
+        const titleEl = node.querySelector('.node-title');
+        if (!titleEl) return;
+        titleEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const original = titleEl.textContent;
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'node-title-edit';
+          input.value = original;
+          titleEl.replaceWith(input);
+          input.focus();
+          input.select();
+          let done = false;
+          const confirm = () => {
+            if (done) return;
+            done = true;
+            if (!input.parentNode) return;
+            const span = document.createElement('span');
+            span.className = 'node-title';
+            span.textContent = input.value.trim() || original;
+            input.replaceWith(span);
+            initTitleEdit(node);
+            debouncedAutoSave();
+          };
+          const cancel = () => {
+            if (done) return;
+            done = true;
+            if (!input.parentNode) return;
+            const span = document.createElement('span');
+            span.className = 'node-title';
+            span.textContent = original;
+            input.replaceWith(span);
+            initTitleEdit(node);
+          };
+          input.addEventListener('keydown', (ev) => {
+            ev.stopPropagation();
+            if (ev.key === 'Enter') { ev.preventDefault();
+              confirm(); }
+            if (ev.key === 'Escape') { ev.preventDefault();
+              cancel(); }
+          });
+          input.addEventListener('blur', confirm);
+          input.addEventListener('mousedown', (ev) => ev.stopPropagation());
+        });
+      }
+
+      // ================================================================
+      // 拖拽
+      // ================================================================
+
+      function initDrag(node) {
+        const header = node.querySelector('.node-header');
+        let sx, sy, ox, oy, dragging = false;
+        header.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.node-action-btn') || e.target.closest('.node-title-edit') ||
+            e.target.closest('.node-port')) return;
+          dragging = true;
+          sx = e.clientX;
+          sy = e.clientY;
+          ox = node.offsetLeft;
+          oy = node.offsetTop;
+          node.style.zIndex = ++S.zCounter;
+          e.preventDefault();
+        });
+        document.addEventListener('mousemove', (e) => {
+          if (!dragging) return;
+          node.style.left = ox + e.clientX - sx + 'px';
+          node.style.top = Math.max(0, oy + e.clientY - sy) + 'px';
+          renderAllConnections();
+        });
+        document.addEventListener('mouseup', () => {
+          if (dragging) {
+            dragging = false;
+            debouncedAutoSave();
+            renderAllConnections();
+          }
+        });
+      }
+
+      // ================================================================
+      // 调整大小
+      // ================================================================
+
+      function initResize(node) {
+        const handle = node.querySelector('.node-resize');
+        let sx, sy, ow, oh, resizing = false;
+        handle.addEventListener('mousedown', (e) => {
+          resizing = true;
+          sx = e.clientX;
+          sy = e.clientY;
+          ow = node.offsetWidth;
+          oh = node.offsetHeight;
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        document.addEventListener('mousemove', (e) => {
+          if (!resizing) return;
+          node.style.width = Math.max(200, ow + e.clientX - sx) + 'px';
+          node.style.height = Math.max(100, oh + e.clientY - sy) + 'px';
+          renderAllConnections();
+        });
+        document.addEventListener('mouseup', () => {
+          if (resizing) {
+            resizing = false;
+            debouncedAutoSave();
+            renderAllConnections();
+          }
+        });
+      }
+
+      // ================================================================
+      // 节点事件
+      // ================================================================
+
+      function initNodeEvents(node) {
+        const content = node.querySelector('.node-content');
+        const closeBtn = node.querySelector('.node-action-btn.close');
+        const minBtn = node.querySelector('.node-action-btn.minimize');
+
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = node.id;
+          connections = connections.filter(c => c.from !== id && c.to !== id);
+          node.remove();
+          renderAllConnections();
+          updateStats();
+          debouncedAutoSave();
+          notify(t('notify.nodeRemoved'));
+        });
+
+        minBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isHidden = content.style.display === 'none';
+          if (isHidden) {
+            content.style.display = '';
+            node.style.minHeight = '';
+            node.style.height = '';
+            node.querySelector('.node-resize').style.display = '';
+          } else {
+            content.style.display = 'none';
+            node.style.minHeight = '32px';
+            node.style.height = '32px';
+            node.querySelector('.node-resize').style.display = 'none';
+          }
+          renderAllConnections();
+        });
+
+        node.addEventListener('mousedown', () => {
+          node.style.zIndex = ++S.zCounter;
+        });
+      }
+
+      // ================================================================
+      // 端口（创建连接）
+      // ================================================================
+
+      function initPortEvents(node) {
+        const ports = node.querySelectorAll('.node-port');
+        ports.forEach(port => {
+          port.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const nodeId = port.dataset.nodeId;
+            const portType = port.dataset.port;
+            const isTop = portType === 'top';
+
+            // 记录画布内部坐标系中的端口坐标
+            portDrag = {
+              nodeId,
+              portType,
+              startX: node.offsetLeft + node.offsetWidth / 2,
+              startY: node.offsetTop + (isTop ? 0 : node.offsetHeight),
+              node: node,
+              port: port
+            };
+            port.classList.add('dragging');
+            const svg = document.getElementById('svg-layer');
+            tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            tempLine.setAttribute('class', 'conn-line temp');
+            const sx = portDrag.startX;
+            const sy = portDrag.startY;
+            tempLine.setAttribute('d', `M ${sx} ${sy} L ${sx} ${sy}`);
+            svg.appendChild(tempLine);
+            document.body.style.cursor = 'crosshair';
+            notify(t('notify.dragToConnect'));
+          });
+        });
+      }
+
+      // ---- 全局端口拖拽追踪 ----
+      document.addEventListener('mousemove', (e) => {
+        if (!portDrag || !tempLine) return;
+        // 将鼠标屏幕坐标转换为画布内部坐标（除以缩放比例）
+        const x = (e.clientX - S.panX) / S.scale;
+        const y = (e.clientY - S.panY) / S.scale;
+        const startX = portDrag.startX;
+        const startY = portDrag.startY;
+        const dx = x - startX;
+        const dy = y - startY;
+        const cp1x = startX + dx * 0.5;
+        const cp1y = startY;
+        const cp2x = startX + dx * 0.5;
+        const cp2y = y;
+        tempLine.setAttribute('d', `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x} ${y}`);
+        // 高亮附近端口（使用屏幕坐标进行碰撞检测）
+        document.querySelectorAll('.node-port').forEach(p => p.classList.remove('port-highlight'));
+        const target = getPortAt(e.clientX, e.clientY);
+        if (target && target.dataset.nodeId !== portDrag.nodeId) {
+          target.classList.add('port-highlight');
+          target.style.transform = 'translateX(-50%) scale(1.5)';
+        }
+      });
+
+      document.addEventListener('mouseup', (e) => {
+        if (!portDrag) return;
+        if (tempLine) { tempLine.remove();
+          tempLine = null; }
+        document.querySelectorAll('.node-port').forEach(p => {
+          p.classList.remove('dragging', 'port-highlight');
+          p.style.transform = '';
+        });
+        document.body.style.cursor = 'default';
+
+        const target = getPortAt(e.clientX, e.clientY);
+        if (target && target.dataset.nodeId !== portDrag.nodeId) {
+          const fromId = portDrag.nodeId;
+          const toId = target.dataset.nodeId;
+          const exists = connections.some(c => c.from === fromId && c.to === toId);
+          if (!exists) {
+            const conn = { id: 'conn-' + (++connIdCounter), from: fromId, to: toId };
+            connections.push(conn);
+            renderAllConnections();
+            debouncedAutoSave();
+            notify(t('notify.connected'));
+          } else {
+            notify(t('notify.alreadyConnected'));
+          }
+        } else {
+          notify(t('notify.connectionCancelled'));
+        }
+        portDrag = null;
+        renderAllConnections();
+      });
+
+      function getPortAt(cx, cy) {
+        const ports = document.querySelectorAll('.node-port');
+        for (const p of ports) {
+          const rect = p.getBoundingClientRect();
+          const dx = cx - (rect.left + rect.width / 2);
+          const dy = cy - (rect.top + rect.height / 2);
+          if (dx * dx + dy * dy < 400) return p;
+        }
+        return null;
+      }
+
+      // ================================================================
+      // 连线渲染（SVG）- 使用 offsetLeft/offsetTop 修复
+      // ================================================================
+
+      function renderAllConnections() {
+        const svg = document.getElementById('svg-layer');
+        const existing = svg.querySelectorAll('.conn-line:not(.temp)');
+        existing.forEach(el => el.remove());
+        const deleteHits = svg.querySelectorAll('.conn-delete-hit');
+        deleteHits.forEach(el => el.remove());
+
+        connections.forEach(conn => {
+          const fromNode = document.getElementById(conn.from);
+          const toNode = document.getElementById(conn.to);
+          if (!fromNode || !toNode) return;
+
+          // 使用 offsetLeft/offsetTop（相对于画布内部，不受缩放/平移影响）
+          const fromX = fromNode.offsetLeft + fromNode.offsetWidth / 2;
+          const fromY = fromNode.offsetTop + fromNode.offsetHeight;
+          const toX = toNode.offsetLeft + toNode.offsetWidth / 2;
+          const toY = toNode.offsetTop;
+
+          const dx = toX - fromX;
+          const dy = toY - fromY;
+          const cp1x = fromX + dx * 0.5;
+          const cp1y = fromY;
+          const cp2x = fromX + dx * 0.5;
+          const cp2y = toY;
+
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('class', 'conn-line');
+          path.dataset.connId = conn.id;
+          path.setAttribute('d', `M ${fromX} ${fromY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toX} ${toY}`);
+          svg.appendChild(path);
+
+          const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          hit.setAttribute('class', 'conn-delete-hit');
+          hit.dataset.connId = conn.id;
+          hit.setAttribute('d', `M ${fromX} ${fromY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toX} ${toY}`);
+          hit.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = hit.dataset.connId;
+            selectedConnId = id;
+            connections = connections.filter(c => c.id !== id);
+            renderAllConnections();
+            debouncedAutoSave();
+            notify(t('notify.connectionDeleted'));
+          });
+          hit.addEventListener('mouseenter', () => {
+            path.style.stroke = '#ff3333';
+            path.style.strokeWidth = '4px';
+          });
+          hit.addEventListener('mouseleave', () => {
+            path.style.stroke = '';
+            path.style.strokeWidth = '';
+          });
+          svg.appendChild(hit);
+        });
+      }
+
+      function clearAllConnections() {
+        connections = [];
+        renderAllConnections();
+        debouncedAutoSave();
+        notify(t('notify.allConnectionsCleared'));
+        document.getElementById('context-menu').classList.remove('open');
+      }
+
+      // ================================================================
+      // MARKDOWN 渲染器
+      // ================================================================
+
+      function renderMarkdown(container) {
+        const source = container.dataset.source || '';
+        if (!source.trim()) {
+          container.innerHTML =
+            '<span style="color:var(--text-dim);font-size:12px;letter-spacing:1px;">' + t('placeholder.markdownEdit') + '</span>';
+          return;
+        }
+        const lines = source.split('\n');
+        let result = [];
+        let inCodeBlock = false;
+        let codeBlockContent = [];
+        let inList = false;
+        let listItems = [];
+        let listType = 'ul';
+
+        function flushList() {
+          if (listItems.length === 0) return;
+          const tag = listType === 'ul' ? 'ul' : 'ol';
+          result.push(`<${tag}>${listItems.map((item) => `<li>${item}</li>`).join('')}</${tag}>`);
+          listItems = [];
+          inList = false;
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          let line = lines[i];
+          if (line.trim().startsWith('```')) {
+            if (!inCodeBlock) { flushList();
+              inCodeBlock = true;
+              codeBlockContent = [];
+              continue; } else {
+              const code = codeBlockContent.join('\n');
+              result.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+              inCodeBlock = false;
+              continue;
+            }
+          }
+          if (inCodeBlock) { codeBlockContent.push(line);
+            continue; }
+          const headingMatch = line.match(/^(#{1,3})\s+(.*)/);
+          if (headingMatch) {
+            flushList();
+            const level = headingMatch[1].length;
+            const text = inlineMarkdown(headingMatch[2]);
+            result.push(`<h${level}>${text}</h${level}>`);
+            continue;
+          }
+          if (line.startsWith('> ')) {
+            flushList();
+            const text = inlineMarkdown(line.substring(2));
+            result.push(`<blockquote>${text}</blockquote>`);
+            continue;
+          }
+          const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/);
+          const olMatch = line.match(/^(\s*)\d+\.\s+(.*)/);
+          if (ulMatch || olMatch) {
+            const isUl = !!ulMatch;
+            const contentText = isUl ? ulMatch[2] : olMatch[2];
+            const trimmed = inlineMarkdown(contentText);
+            if (!inList) { inList = true;
+              listType = isUl ? 'ul' : 'ol';
+              listItems = [trimmed]; } else {
+              const newType = isUl ? 'ul' : 'ol';
+              if (newType === listType) listItems.push(trimmed);
+              else { flushList();
+                listType = newType;
+                listItems = [trimmed]; }
+            }
+            continue;
+          } else if (inList && line.trim() === '') { flushList();
+            continue; } else {
+            if (inList) flushList();
+            if (line.trim() === '') result.push('');
+            else result.push(`<p>${inlineMarkdown(line)}</p>`);
+          }
+        }
+        if (inList) flushList();
+        container.innerHTML = result.join('');
+      }
+
+      function inlineMarkdown(text) {
+        let s = escapeHtml(text);
+        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        s = s.replace(/`(.+?)`/g, '<code>$1</code>');
+        s = s.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>');
+        return s;
+      }
+
+      function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+      }
+
+      // ================================================================
+      // 自动保存
+      // ================================================================
+
       function debouncedAutoSave() {
-        clearTimeout(autoSaveTimer)
+        clearTimeout(autoSaveTimer);
         autoSaveTimer = setTimeout(() => {
-          const data = { nodes: [] }
+          const data = { nodes: [], connections: connections.map(c => ({ from: c.from, to: c.to })) };
           document.querySelectorAll('.node').forEach((node) => {
-            const type = node.dataset.type || 'text'
-            const contentEl = node.querySelector('.node-content')
-            const titleEl = node.querySelector('.node-title')
+            const type = node.dataset.type;
+            const contentEl = node.querySelector('.node-content');
+            const titleEl = node.querySelector('.node-title');
             const obj = {
               type: type,
               x: node.style.left,
@@ -1164,1025 +2459,795 @@
               w: node.style.width,
               h: node.style.height,
               title: titleEl ? titleEl.textContent : '',
-            }
+              id: node.id,
+            };
             if (type === 'text') {
-              obj.content = contentEl ? contentEl.innerHTML : ''
-              obj.lh = contentEl ? contentEl.style.lineHeight : ''
+              obj.content = contentEl ? contentEl.innerHTML : '';
+              obj.lh = contentEl ? contentEl.style.lineHeight : '';
             } else if (type === 'image') {
-              const img = contentEl ? contentEl.querySelector('img') : null
-              obj.src = img ? img.src : ''
+              const img = contentEl ? contentEl.querySelector('img') : null;
+              obj.src = img ? img.src : '';
             } else if (type === 'markdown') {
-              obj.source = contentEl ? contentEl.dataset.source || '' : ''
+              obj.source = contentEl ? contentEl.dataset.source : '';
             }
-            data.nodes.push(obj)
-          })
-          localStorage.setItem('zc-autosave', JSON.stringify(data))
-        }, 1000)
+            data.nodes.push(obj);
+          });
+          localStorage.setItem('zc-autosave', JSON.stringify(data));
+          localStorage.setItem('zc-connections', JSON.stringify(connections.map(c => ({ from: c.from, to: c.to }))));
+        }, 800);
       }
 
-      // ========== NOTIFICATION ==========
-      let notifyTimer = null
-      function notify(msg) {
-        const n = document.getElementById('notification')
-        n.textContent = msg
-        n.classList.add('show')
-        clearTimeout(notifyTimer)
-        notifyTimer = setTimeout(() => n.classList.remove('show'), 1600)
-      }
+      // ================================================================
+      // 浮动工具栏
+      // ================================================================
 
-      // ========== CUSTOM CONFIRM ==========
-      let confirmResolve = null
-      function showConfirm(message) {
-        return new Promise((resolve) => {
-          const overlay = document.getElementById('custom-confirm')
-          document.getElementById('confirm-msg').textContent = message
-          overlay.classList.add('active')
-          confirmResolve = resolve
-        })
-      }
-      document.getElementById('confirm-cancel').addEventListener('click', () => {
-        document.getElementById('custom-confirm').classList.remove('active')
-        if (confirmResolve) {
-          confirmResolve(false)
-          confirmResolve = null
-        }
-      })
-      document.getElementById('confirm-ok').addEventListener('click', () => {
-        document.getElementById('custom-confirm').classList.remove('active')
-        if (confirmResolve) {
-          confirmResolve(true)
-          confirmResolve = null
-        }
-      })
-
-      // ========== NODE CREATION ==========
-      function createCenteredNode(type) {
-        createNodeAt(window.innerWidth / 2 - 240, window.innerHeight / 2 - 150, type)
-        closeAllDropdowns()
-      }
-
-      function createNodeAt(x, y, type, data = null) {
-        S.nodeCounter++
-        const node = document.createElement('div')
-        node.className = 'node'
-        node.dataset.type = type
-        node.style.left = x + 'px'
-        node.style.top = y + 'px'
-        node.style.zIndex = ++S.zCounter
-        node.id = 'node-' + S.nodeCounter
-
-        const defaultTitle =
-          (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : 'MD') +
-          '_' +
-          String(S.nodeCounter).padStart(2, '0')
-        const title = data && data.title ? data.title : defaultTitle
-        if (data && data.w) node.style.width = data.w
-        if (data && data.h) node.style.height = data.h
-
-        // Build header
-        const header = document.createElement('div')
-        header.className = 'node-header'
-        header.innerHTML = `
-        <span class="node-title">${title}</span>
-        <div class="node-actions">
-            <div class="node-action-btn minimize">-</div>
-            <div class="node-action-btn close">x</div>
-        </div>
-    `
-        node.appendChild(header)
-
-        // Build content area
-        const content = document.createElement('div')
-        content.className = 'node-content'
-        content.setAttribute('contenteditable', 'false')
-        content.spellcheck = false
-
-        if (type === 'text') {
-          content.setAttribute('contenteditable', 'true')
-          content.dataset.placeholder = 'start typing...'
-          content.style.fontFamily = DEFAULT_FONT
-          content.style.fontSize = DEFAULT_FONT_SIZE + 'px'
-          content.style.lineHeight = data && data.lh ? data.lh : DEFAULT_LINE_HEIGHT
-          content.innerHTML = data && data.content ? data.content : ''
-          // enable inline formatting
-          content.addEventListener('input', debouncedAutoSave)
-          content.addEventListener('mouseup', () => setTimeout(handleTextSelection, 10))
-          content.addEventListener('keyup', (e) => {
-            if (e.shiftKey || e.key === 'Shift') setTimeout(handleTextSelection, 10)
-          })
-          // disable context menu inside text (handled globally)
-          content.addEventListener('contextmenu', (e) => e.preventDefault())
-        } else if (type === 'image') {
-          content.style.padding = '8px'
-          content.style.display = 'flex'
-          content.style.alignItems = 'center'
-          content.style.justifyContent = 'center'
-          content.style.cursor = 'pointer'
-          content.dataset.placeholder = 'double-click to set image URL'
-          const src = data && data.src ? data.src : ''
-          if (src) {
-            const img = document.createElement('img')
-            img.src = src
-            img.alt = 'image'
-            content.appendChild(img)
-          } else {
-            const placeholder = document.createElement('span')
-            placeholder.className = 'img-placeholder'
-            placeholder.textContent = 'double-click to set image URL'
-            content.appendChild(placeholder)
-          }
-          // double-click to edit inline
-          content.addEventListener('dblclick', function (e) {
-            e.stopPropagation()
-            if (this.querySelector('input')) return
-            const currentSrc = this.querySelector('img') ? this.querySelector('img').src : ''
-            const input = document.createElement('input')
-            input.type = 'text'
-            input.value = currentSrc
-            input.style.width = '80%'
-            input.style.padding = '4px 8px'
-            input.style.fontFamily = 'var(--font-mono)'
-            input.style.fontSize = '12px'
-            input.style.background = 'transparent'
-            input.style.border = '1px solid var(--border)'
-            input.style.color = 'var(--text)'
-            input.style.outline = 'none'
-            input.placeholder = 'image URL...'
-            this.innerHTML = ''
-            this.appendChild(input)
-            input.focus()
-            input.select()
-
-            const finish = (save) => {
-              if (!input.parentNode) return
-              const val = save ? input.value.trim() : ''
-              this.innerHTML = ''
-              if (val) {
-                const img = document.createElement('img')
-                img.src = val
-                img.alt = 'image'
-                this.appendChild(img)
-              } else {
-                const placeholder = document.createElement('span')
-                placeholder.className = 'img-placeholder'
-                placeholder.textContent = 'double-click to set image URL'
-                this.appendChild(placeholder)
-              }
-              debouncedAutoSave()
-            }
-            input.addEventListener('keydown', (ev) => {
-              ev.stopPropagation()
-              if (ev.key === 'Enter') {
-                ev.preventDefault()
-                finish(true)
-              }
-              if (ev.key === 'Escape') {
-                ev.preventDefault()
-                finish(false)
-              }
-            })
-            input.addEventListener('blur', () => finish(true))
-          })
-          // disable selection
-          content.addEventListener('selectstart', (e) => e.preventDefault())
-        } else if (type === 'markdown') {
-          content.style.padding = '16px 24px'
-          content.style.cursor = 'pointer'
-          content.dataset.source = data && data.source ? data.source : ''
-          content.dataset.placeholder = 'double-click to edit Markdown'
-          renderMarkdown(content)
-          // double-click to edit inline as textarea
-          content.addEventListener('dblclick', function (e) {
-            e.stopPropagation()
-            if (this.querySelector('textarea')) return
-            const currentSource = this.dataset.source || ''
-            const textarea = document.createElement('textarea')
-            textarea.value = currentSource
-            textarea.style.width = '100%'
-            textarea.style.height = '200px'
-            textarea.style.fontFamily = 'var(--font-mono)'
-            textarea.style.fontSize = '13px'
-            textarea.style.lineHeight = '1.6'
-            textarea.style.background = 'transparent'
-            textarea.style.border = '1px solid var(--border)'
-            textarea.style.color = 'var(--text)'
-            textarea.style.padding = '8px'
-            textarea.style.outline = 'none'
-            textarea.style.resize = 'vertical'
-            textarea.spellcheck = false
-            this.innerHTML = ''
-            this.appendChild(textarea)
-            textarea.focus()
-            textarea.select()
-
-            const finish = (save) => {
-              if (!textarea.parentNode) return
-              const val = save ? textarea.value : this.dataset.source || ''
-              this.dataset.source = val
-              renderMarkdown(this)
-              debouncedAutoSave()
-            }
-            textarea.addEventListener('keydown', (ev) => {
-              ev.stopPropagation()
-              if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
-                ev.preventDefault()
-                finish(true)
-              }
-              if (ev.key === 'Escape') {
-                ev.preventDefault()
-                finish(false)
-              }
-            })
-            textarea.addEventListener('blur', () => finish(true))
-          })
-        }
-
-        node.appendChild(content)
-
-        // Resize handle
-        const resize = document.createElement('div')
-        resize.className = 'node-resize'
-        node.appendChild(resize)
-
-        document.getElementById('workspace').appendChild(node)
-
-        // Initialize behaviors
-        initDrag(node)
-        initResize(node)
-        initNodeEvents(node)
-        initTitleEdit(node)
-
-        if (type === 'text' && !data)
-          setTimeout(() => node.querySelector('.node-content').focus(), 50)
-        updateStats()
-        debouncedAutoSave()
-        return node
-      }
-
-      // ========== TITLE EDIT (fixed) ==========
-      function initTitleEdit(node) {
-        const titleEl = node.querySelector('.node-title')
-        if (!titleEl) return
-        titleEl.addEventListener('dblclick', (e) => {
-          e.stopPropagation()
-          e.preventDefault()
-          const original = titleEl.textContent
-          const input = document.createElement('input')
-          input.type = 'text'
-          input.className = 'node-title-edit'
-          input.value = original
-          titleEl.replaceWith(input)
-          input.focus()
-          input.select()
-
-          let done = false
-
-          const confirm = () => {
-            if (done) return
-            done = true
-            if (!input.parentNode) return
-            const span = document.createElement('span')
-            span.className = 'node-title'
-            span.textContent = input.value.trim() || original
-            input.replaceWith(span)
-            initTitleEdit(node)
-            debouncedAutoSave()
-          }
-          const cancel = () => {
-            if (done) return
-            done = true
-            if (!input.parentNode) return
-            const span = document.createElement('span')
-            span.className = 'node-title'
-            span.textContent = original
-            input.replaceWith(span)
-            initTitleEdit(node)
-          }
-          input.addEventListener('keydown', (ev) => {
-            ev.stopPropagation()
-            if (ev.key === 'Enter') {
-              ev.preventDefault()
-              confirm()
-            }
-            if (ev.key === 'Escape') {
-              ev.preventDefault()
-              cancel()
-            }
-          })
-          input.addEventListener('blur', confirm)
-          input.addEventListener('mousedown', (ev) => ev.stopPropagation())
-        })
-      }
-
-      // ========== DRAG ==========
-      function initDrag(node) {
-        const header = node.querySelector('.node-header')
-        let sx,
-          sy,
-          ox,
-          oy,
-          dragging = false
-        header.addEventListener('mousedown', (e) => {
-          if (e.target.closest('.node-action-btn') || e.target.closest('.node-title-edit')) return
-          dragging = true
-          sx = e.clientX
-          sy = e.clientY
-          ox = node.offsetLeft
-          oy = node.offsetTop
-          node.style.zIndex = ++S.zCounter
-          e.preventDefault()
-        })
-        document.addEventListener('mousemove', (e) => {
-          if (!dragging) return
-          node.style.left = ox + e.clientX - sx + 'px'
-          node.style.top = Math.max(0, oy + e.clientY - sy) + 'px'
-        })
-        document.addEventListener('mouseup', () => {
-          if (dragging) {
-            dragging = false
-            debouncedAutoSave()
-          }
-        })
-      }
-
-      // ========== RESIZE ==========
-      function initResize(node) {
-        const handle = node.querySelector('.node-resize')
-        let sx,
-          sy,
-          ow,
-          oh,
-          resizing = false
-        handle.addEventListener('mousedown', (e) => {
-          resizing = true
-          sx = e.clientX
-          sy = e.clientY
-          ow = node.offsetWidth
-          oh = node.offsetHeight
-          e.preventDefault()
-          e.stopPropagation()
-        })
-        document.addEventListener('mousemove', (e) => {
-          if (!resizing) return
-          node.style.width = Math.max(240, ow + e.clientX - sx) + 'px'
-          node.style.height = Math.max(120, oh + e.clientY - sy) + 'px'
-        })
-        document.addEventListener('mouseup', () => {
-          if (resizing) {
-            resizing = false
-            debouncedAutoSave()
-          }
-        })
-      }
-
-      // ========== NODE EVENTS ==========
-      function initNodeEvents(node) {
-        const content = node.querySelector('.node-content')
-        const closeBtn = node.querySelector('.node-action-btn.close')
-        const minBtn = node.querySelector('.node-action-btn.minimize')
-
-        closeBtn.addEventListener('click', (e) => {
-          e.stopPropagation()
-          node.remove()
-          updateStats()
-          debouncedAutoSave()
-        })
-        minBtn.addEventListener('click', (e) => {
-          e.stopPropagation()
-          const isHidden = content.style.display === 'none'
-          if (isHidden) {
-            content.style.display = ''
-            node.style.minHeight = ''
-            node.style.height = ''
-            node.querySelector('.node-resize').style.display = ''
-          } else {
-            content.style.display = 'none'
-            node.style.minHeight = '32px'
-            node.style.height = '32px'
-            node.querySelector('.node-resize').style.display = 'none'
-          }
-        })
-
-        node.addEventListener('mousedown', () => {
-          node.style.zIndex = ++S.zCounter
-        })
-      }
-
-      // ========== MARKDOWN RENDERER (lightweight) ==========
-      function renderMarkdown(container) {
-        const source = container.dataset.source || ''
-        if (!source.trim()) {
-          container.innerHTML =
-            '<span style="color:var(--text-dim);font-size:12px;letter-spacing:1px;">double-click to edit Markdown</span>'
-          return
-        }
-        let html = source
-
-        const lines = source.split('\n')
-        let result = []
-        let inCodeBlock = false
-        let codeBlockContent = []
-        let inList = false
-        let listItems = []
-        let listType = 'ul'
-
-        function flushList() {
-          if (listItems.length === 0) return
-          const tag = listType === 'ul' ? 'ul' : 'ol'
-          result.push(`<${tag}>${listItems.map((item) => `<li>${item}</li>`).join('')}</${tag}>`)
-          listItems = []
-          inList = false
-        }
-
-        for (let i = 0; i < lines.length; i++) {
-          let line = lines[i]
-
-          if (line.trim().startsWith('```')) {
-            if (!inCodeBlock) {
-              flushList()
-              inCodeBlock = true
-              codeBlockContent = []
-              continue
-            } else {
-              const code = codeBlockContent.join('\n')
-              result.push(`<pre><code>${escapeHtml(code)}</code></pre>`)
-              inCodeBlock = false
-              continue
-            }
-          }
-          if (inCodeBlock) {
-            codeBlockContent.push(line)
-            continue
-          }
-
-          const headingMatch = line.match(/^(#{1,3})\s+(.*)/)
-          if (headingMatch) {
-            flushList()
-            const level = headingMatch[1].length
-            const text = inlineMarkdown(headingMatch[2])
-            result.push(`<h${level}>${text}</h${level}>`)
-            continue
-          }
-
-          if (line.startsWith('> ')) {
-            flushList()
-            const text = inlineMarkdown(line.substring(2))
-            result.push(`<blockquote>${text}</blockquote>`)
-            continue
-          }
-
-          const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/)
-          const olMatch = line.match(/^(\s*)\d+\.\s+(.*)/)
-          if (ulMatch || olMatch) {
-            const isUl = !!ulMatch
-            const contentText = isUl ? ulMatch[2] : olMatch[2]
-            const trimmed = inlineMarkdown(contentText)
-            if (!inList) {
-              inList = true
-              listType = isUl ? 'ul' : 'ol'
-              listItems = [trimmed]
-            } else {
-              const newType = isUl ? 'ul' : 'ol'
-              if (newType === listType) {
-                listItems.push(trimmed)
-              } else {
-                flushList()
-                listType = newType
-                listItems = [trimmed]
-              }
-            }
-            continue
-          } else if (inList && line.trim() === '') {
-            flushList()
-            continue
-          } else {
-            if (inList) flushList()
-            if (line.trim() === '') {
-              result.push('')
-            } else {
-              result.push(`<p>${inlineMarkdown(line)}</p>`)
-            }
-          }
-        }
-        if (inList) flushList()
-
-        container.innerHTML = result.join('')
-      }
-
-      function inlineMarkdown(text) {
-        let s = escapeHtml(text)
-        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
-        s = s.replace(/`(.+?)`/g, '<code>$1</code>')
-        s = s.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
-        return s
-      }
-
-      function escapeHtml(text) {
-        const map = {
-          '&': '&amp;',
-          '<': '&lt;',
-          '>': '&gt;',
-          '"': '&quot;',
-          "'": '&#039;',
-        }
-        return text.replace(/[&<>"']/g, function (m) {
-          return map[m]
-        })
-      }
-
-      // ========== FLOATING TOOLBAR (for text nodes) ==========
-      const ftBar = document.getElementById('floating-toolbar')
-      let currentSelectionRange = null
-      let currentSelectionContainer = null
+      const ftBar = document.getElementById('floating-toolbar');
+      let currentSelectionRange = null;
+      let currentSelectionContainer = null;
 
       function handleTextSelection() {
-        const sel = window.getSelection()
-        if (!sel || sel.isCollapsed || !sel.rangeCount) {
-          ftBar.classList.remove('visible')
-          return
-        }
-        const range = sel.getRangeAt(0)
-        const container = range.commonAncestorContainer
-        const nodeContent =
-          container.nodeType === 1
-            ? container.closest('.node-content')
-            : container.parentElement?.closest('.node-content')
-        if (!nodeContent || !nodeContent.closest('.node[data-type="text"]')) {
-          ftBar.classList.remove('visible')
-          return
-        }
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) { ftBar.classList.remove('visible'); return; }
+        const range = sel.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        const nodeContent = container.nodeType === 1 ?
+          container.closest('.node-content') :
+          container.parentElement?.closest('.node-content');
+        if (!nodeContent || !nodeContent.closest('.node[data-type="text"]')) { ftBar.classList.remove('visible'); return; }
 
-        currentSelectionRange = range.cloneRange()
-        currentSelectionContainer = nodeContent
+        currentSelectionRange = range.cloneRange();
+        currentSelectionContainer = nodeContent;
 
-        const lh = parseFloat(nodeContent.style.lineHeight) || DEFAULT_LINE_HEIGHT
-        document.getElementById('ft-lh-val').textContent = lh.toFixed(1)
+        const lh = parseFloat(nodeContent.style.lineHeight) || DEFAULT_LINE_HEIGHT;
+        document.getElementById('ft-lh-val').textContent = lh.toFixed(1);
 
-        updateToolbarState(nodeContent)
+        updateToolbarState(nodeContent);
 
-        const rect = range.getBoundingClientRect()
-        let x = rect.left + rect.width / 2 - 300
-        let y = rect.top - 64
-        if (y < 8) y = rect.bottom + 8
-        if (x < 8) x = 8
-        if (x + 700 > window.innerWidth) x = window.innerWidth - 710
-        ftBar.style.left = x + 'px'
-        ftBar.style.top = y + 'px'
-        ftBar.classList.add('visible')
+        const rect = range.getBoundingClientRect();
+        let x = rect.left + rect.width / 2 - 300;
+        let y = rect.top - 64;
+        if (y < 8) y = rect.bottom + 8;
+        if (x < 8) x = 8;
+        if (x + 700 > window.innerWidth) x = window.innerWidth - 710;
+        ftBar.style.left = x + 'px';
+        ftBar.style.top = y + 'px';
+        ftBar.classList.add('visible');
       }
 
       function updateToolbarState(tbContent) {
-        // Style buttons
         document.querySelectorAll('.ft-btn[data-cmd]').forEach((btn) => {
-          const cmd = btn.dataset.cmd
-          let active = false
-          if (cmd === 'bold') active = document.queryCommandState('bold')
-          else if (cmd === 'italic') active = document.queryCommandState('italic')
-          else if (cmd === 'underline') active = document.queryCommandState('underline')
-          else if (cmd === 'strikeThrough') active = document.queryCommandState('strikeThrough')
-          // Alignment commands
-          else if (cmd === 'justifyLeft') active = document.queryCommandState('justifyLeft')
-          else if (cmd === 'justifyCenter') active = document.queryCommandState('justifyCenter')
-          else if (cmd === 'justifyRight') active = document.queryCommandState('justifyRight')
-          btn.classList.toggle('active', active)
-        })
-
-        // Font family detection
-        const sel = window.getSelection()
-        let activeFont = null
+          const cmd = btn.dataset.cmd;
+          let active = false;
+          if (cmd === 'bold') active = document.queryCommandState('bold');
+          else if (cmd === 'italic') active = document.queryCommandState('italic');
+          else if (cmd === 'underline') active = document.queryCommandState('underline');
+          else if (cmd === 'strikeThrough') active = document.queryCommandState('strikeThrough');
+          else if (cmd === 'justifyLeft') active = document.queryCommandState('justifyLeft');
+          else if (cmd === 'justifyCenter') active = document.queryCommandState('justifyCenter');
+          else if (cmd === 'justifyRight') active = document.queryCommandState('justifyRight');
+          btn.classList.toggle('active', active);
+        });
+        const sel = window.getSelection();
+        let activeFont = null;
         if (sel.rangeCount) {
-          let node = sel.getRangeAt(0).startContainer
+          let node = sel.getRangeAt(0).startContainer;
           while (node && node !== tbContent && node !== document.body) {
             if (node.nodeType === 1 && node.style && node.style.fontFamily) {
-              const ff = node.style.fontFamily
+              const ff = node.style.fontFamily;
               for (const key in fontMap) {
-                if (ff.includes(fontMap[key].split(',')[0].replace(/['"]/g, ''))) {
-                  activeFont = key
-                  break
-                }
+                if (ff.includes(fontMap[key].split(',')[0].replace(/['"]/g, ''))) { activeFont = key; break; }
               }
-              if (activeFont) break
+              if (activeFont) break;
             }
-            node = node.parentNode
+            node = node.parentNode;
           }
         }
         document.querySelectorAll('.ft-btn[data-ffont]').forEach((btn) => {
-          btn.classList.toggle('active', btn.dataset.ffont === activeFont)
-        })
+          btn.classList.toggle('active', btn.dataset.ffont === activeFont);
+        });
       }
 
       ftBar.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.ft-btn') || e.target.closest('.ft-color-dot')) {
-          e.preventDefault()
-        }
-      })
+        if (e.target.closest('.ft-btn') || e.target.closest('.ft-color-dot')) e.preventDefault();
+      });
 
       function restoreSelection() {
         if (currentSelectionRange) {
-          const sel = window.getSelection()
-          sel.removeAllRanges()
-          sel.addRange(currentSelectionRange)
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(currentSelectionRange);
         }
       }
 
       function wrapSelectionWithStyle(styleObj) {
-        restoreSelection()
-        const sel = window.getSelection()
-        if (!sel || sel.isCollapsed || !sel.rangeCount) return null
-        const range = sel.getRangeAt(0)
-        const span = document.createElement('span')
-        Object.assign(span.style, styleObj)
-        try {
-          range.surroundContents(span)
-        } catch (e) {
-          span.appendChild(range.extractContents())
-          range.insertNode(span)
+        restoreSelection();
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+        const range = sel.getRangeAt(0);
+        const span = document.createElement('span');
+        Object.assign(span.style, styleObj);
+        try { range.surroundContents(span); } catch (e) {
+          span.appendChild(range.extractContents());
+          range.insertNode(span);
         }
         try {
-          const newRange = document.createRange()
-          newRange.selectNodeContents(span)
-          sel.removeAllRanges()
-          sel.addRange(newRange)
-          currentSelectionRange = newRange.cloneRange()
+          const newRange = document.createRange();
+          newRange.selectNodeContents(span);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+          currentSelectionRange = newRange.cloneRange();
         } catch (e) {}
-        return span
+        return span;
       }
 
       function findStyledAncestor(propName) {
-        const sel = window.getSelection()
-        if (!sel.rangeCount) return null
-        let node = sel.getRangeAt(0).startContainer
-        const tbContent = currentSelectionContainer
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return null;
+        let node = sel.getRangeAt(0).startContainer;
+        const tbContent = currentSelectionContainer;
         while (node && node !== tbContent && node !== document.body) {
-          if (node.nodeType === 1 && node.style && node.style[propName]) {
-            return node
-          }
-          node = node.parentNode
+          if (node.nodeType === 1 && node.style && node.style[propName]) return node;
+          node = node.parentNode;
         }
-        return null
+        return null;
       }
 
       function applyFontSize(delta) {
-        restoreSelection()
-        const sel = window.getSelection()
-        if (!sel || sel.isCollapsed || !sel.rangeCount) return
-
-        const existing = findStyledAncestor('fontSize')
+        restoreSelection();
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+        const existing = findStyledAncestor('fontSize');
         if (existing) {
-          const cur = parseFloat(existing.style.fontSize) || DEFAULT_FONT_SIZE
-          const next = Math.max(8, Math.min(96, cur + delta))
-          existing.style.fontSize = next + 'px'
-          notify('Size: ' + Math.round(next) + 'px')
+          const cur = parseFloat(existing.style.fontSize) || DEFAULT_FONT_SIZE;
+          const next = Math.max(8, Math.min(96, cur + delta));
+          existing.style.fontSize = next + 'px';
+          notify(t('notify.size', Math.round(next)));
         } else {
-          const span = wrapSelectionWithStyle({ fontSize: DEFAULT_FONT_SIZE + delta + 'px' })
-          if (span) notify('Size: ' + (DEFAULT_FONT_SIZE + delta) + 'px')
+          const span = wrapSelectionWithStyle({ fontSize: DEFAULT_FONT_SIZE + delta + 'px' });
+          if (span) notify(t('notify.size', DEFAULT_FONT_SIZE + delta));
         }
-        debouncedAutoSave()
+        debouncedAutoSave();
       }
 
       function applyLineHeight(delta) {
-        if (!currentSelectionContainer) return
-        const cur = parseFloat(currentSelectionContainer.style.lineHeight) || DEFAULT_LINE_HEIGHT
-        const next = Math.max(1.0, Math.min(3.5, +(cur + delta).toFixed(1)))
-        currentSelectionContainer.style.lineHeight = next
-        document.getElementById('ft-lh-val').textContent = next.toFixed(1)
-        notify('Line: ' + next.toFixed(1))
-        debouncedAutoSave()
+        if (!currentSelectionContainer) return;
+        const cur = parseFloat(currentSelectionContainer.style.lineHeight) || DEFAULT_LINE_HEIGHT;
+        const next = Math.max(1.0, Math.min(3.5, +(cur + delta).toFixed(1)));
+        currentSelectionContainer.style.lineHeight = next;
+        document.getElementById('ft-lh-val').textContent = next.toFixed(1);
+        notify(t('notify.line', next.toFixed(1)));
+        debouncedAutoSave();
       }
 
       function applyFontFamily(key) {
-        restoreSelection()
-        const sel = window.getSelection()
-        if (!sel || sel.isCollapsed || !sel.rangeCount) return
-
-        const existing = findStyledAncestor('fontFamily')
-        if (existing) {
-          existing.style.fontFamily = fontMap[key]
-          notify('Font: ' + key)
-        } else {
-          wrapSelectionWithStyle({ fontFamily: fontMap[key] })
-          notify('Font: ' + key)
-        }
-        updateToolbarState(currentSelectionContainer)
-        debouncedAutoSave()
+        restoreSelection();
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+        const existing = findStyledAncestor('fontFamily');
+        if (existing) { existing.style.fontFamily = fontMap[key];
+          notify(t('notify.font', key)); } else { wrapSelectionWithStyle({ fontFamily: fontMap[key] });
+          notify(t('notify.font', key)); }
+        updateToolbarState(currentSelectionContainer);
+        debouncedAutoSave();
       }
 
       function applyColor(color) {
-        restoreSelection()
+        restoreSelection();
         if (color === 'auto') {
-          const defaultColor = getComputedStyle(currentSelectionContainer).color
-          document.execCommand('foreColor', false, defaultColor)
+          const defaultColor = getComputedStyle(currentSelectionContainer).color;
+          document.execCommand('foreColor', false, defaultColor);
         } else {
-          document.execCommand('foreColor', false, color)
+          document.execCommand('foreColor', false, color);
         }
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
-          currentSelectionRange = sel.getRangeAt(0).cloneRange()
-        }
-        debouncedAutoSave()
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) currentSelectionRange = sel.getRangeAt(0).cloneRange();
+        debouncedAutoSave();
       }
 
       function execStyleCmd(cmd) {
-        restoreSelection()
-        if (cmd === 'fontSizeUp') applyFontSize(1)
-        else if (cmd === 'fontSizeDown') applyFontSize(-1)
-        else if (cmd === 'lineHeightUp') applyLineHeight(0.1)
-        else if (cmd === 'lineHeightDown') applyLineHeight(-0.1)
-        else if (cmd === 'removeFormat') {
-          document.execCommand('removeFormat', false, null)
-        } else {
-          document.execCommand(cmd, false, null)
-        }
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
-          currentSelectionRange = sel.getRangeAt(0).cloneRange()
-        }
-        if (currentSelectionContainer) updateToolbarState(currentSelectionContainer)
-        debouncedAutoSave()
+        restoreSelection();
+        if (cmd === 'fontSizeUp') applyFontSize(1);
+        else if (cmd === 'fontSizeDown') applyFontSize(-1);
+        else if (cmd === 'lineHeightUp') applyLineHeight(0.1);
+        else if (cmd === 'lineHeightDown') applyLineHeight(-0.1);
+        else if (cmd === 'removeFormat') document.execCommand('removeFormat', false, null);
+        else document.execCommand(cmd, false, null);
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) currentSelectionRange = sel.getRangeAt(0).cloneRange();
+        if (currentSelectionContainer) updateToolbarState(currentSelectionContainer);
+        debouncedAutoSave();
       }
 
       document.querySelectorAll('.ft-btn').forEach((btn) => {
         btn.addEventListener('click', (e) => {
-          e.preventDefault()
-          if (btn.dataset.cmd) execStyleCmd(btn.dataset.cmd)
-          else if (btn.dataset.ffont) applyFontFamily(btn.dataset.ffont)
-        })
-      })
+          e.preventDefault();
+          if (btn.dataset.cmd) execStyleCmd(btn.dataset.cmd);
+          else if (btn.dataset.ffont) applyFontFamily(btn.dataset.ffont);
+        });
+      });
       document.querySelectorAll('.ft-color-dot').forEach((dot) => {
         dot.addEventListener('click', (e) => {
-          e.preventDefault()
-          applyColor(dot.dataset.color)
-        })
-      })
+          e.preventDefault();
+          applyColor(dot.dataset.color);
+        });
+      });
 
       document.addEventListener('mousedown', (e) => {
         if (!e.target.closest('#floating-toolbar') && !e.target.closest('.node-content')) {
-          ftBar.classList.remove('visible')
+          ftBar.classList.remove('visible');
+          const sel = window.getSelection();
+          if (sel) sel.removeAllRanges();
         }
-      })
+      });
 
-      // ========== CONTEXT MENU ==========
-      const ctxMenu = document.getElementById('context-menu')
+      // ================================================================
+      // 右键菜单
+      // ================================================================
+
+      const ctxMenu = document.getElementById('context-menu');
 
       document.addEventListener('contextmenu', (e) => {
-        const node = e.target.closest('.node')
-        ctxNode = node
-        ctxX = e.clientX
-        ctxY = e.clientY
+        // 如果刚结束平移拖拽，则忽略此次右键菜单
+        if (panWasDragging) {
+          panWasDragging = false;
+          e.preventDefault();
+          return;
+        }
+        const node = e.target.closest('.node');
+        ctxNode = node;
+        ctxX = e.clientX;
+        ctxY = e.clientY;
 
-        document.getElementById('ctx-edit').style.display = node ? 'block' : 'none'
-        document.getElementById('ctx-copy-node').classList.toggle('disabled', !node)
-        document.getElementById('ctx-paste-node').classList.toggle('disabled', !clipboardNode)
+        document.getElementById('ctx-edit').style.display = node ? 'block' : 'none';
+        document.getElementById('ctx-copy-node').classList.toggle('disabled', !node);
+        document.getElementById('ctx-paste-node').classList.toggle('disabled', !clipboardNode);
 
-        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px'
-        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px'
-        ctxMenu.classList.add('open')
-        e.preventDefault()
-      })
+        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
+        ctxMenu.classList.add('open');
+        e.preventDefault();
+      });
 
       document.addEventListener('click', (e) => {
-        if (!e.target.closest('#context-menu')) {
-          ctxMenu.classList.remove('open')
-        }
-      })
+        if (!e.target.closest('#context-menu')) ctxMenu.classList.remove('open');
+      });
 
       function ctxEdit() {
-        if (!ctxNode) return
-        const type = ctxNode.dataset.type
-        const content = ctxNode.querySelector('.node-content')
-        if (type === 'image' || type === 'markdown') {
-          content.dispatchEvent(new Event('dblclick', { bubbles: true }))
-        } else if (type === 'text') {
-          content.focus()
-        }
-        ctxMenu.classList.remove('open')
+        if (!ctxNode) return;
+        const type = ctxNode.dataset.type;
+        const content = ctxNode.querySelector('.node-content');
+        if (type === 'image' || type === 'markdown') content.dispatchEvent(new Event('dblclick', { bubbles: true }));
+        else if (type === 'text') content.focus();
+        ctxMenu.classList.remove('open');
       }
 
       function copyNode() {
-        if (!ctxNode) {
-          notify('No node selected')
-          return
-        }
-        const type = ctxNode.dataset.type
-        const content = ctxNode.querySelector('.node-content')
-        const title = ctxNode.querySelector('.node-title')
-        const obj = {
-          type: type,
-          w: ctxNode.style.width,
-          h: ctxNode.style.height,
-          title: title ? title.textContent : '',
-        }
-        if (type === 'text') {
-          obj.content = content ? content.innerHTML : ''
-          obj.lh = content ? content.style.lineHeight : ''
-        } else if (type === 'image') {
-          const img = content ? content.querySelector('img') : null
-          obj.src = img ? img.src : ''
-        } else if (type === 'markdown') {
-          obj.source = content ? content.dataset.source : ''
-        }
-        clipboardNode = obj
-        notify('Node copied')
-        ctxMenu.classList.remove('open')
+        if (!ctxNode) { notify(t('notify.noNodeSelected')); return; }
+        const type = ctxNode.dataset.type;
+        const content = ctxNode.querySelector('.node-content');
+        const title = ctxNode.querySelector('.node-title');
+        const obj = { type, w: ctxNode.style.width, h: ctxNode.style.height, title: title ? title.textContent : '' };
+        if (type === 'text') { obj.content = content ? content.innerHTML : '';
+          obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
+          const img = content ? content.querySelector('img') : null;
+          obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content.dataset.source : ''; }
+        clipboardNode = obj;
+        notify(t('notify.nodeCopied'));
+        ctxMenu.classList.remove('open');
       }
 
       function pasteNode() {
-        if (!clipboardNode) {
-          notify('Nothing to paste')
-          return
-        }
-        createNodeAt(ctxX - 40, ctxY - 20, clipboardNode.type, clipboardNode)
-        notify('Node pasted')
-        ctxMenu.classList.remove('open')
+        if (!clipboardNode) { notify(t('notify.nothingToPaste')); return; }
+        createNodeAt(ctxX - 40 - S.panX, ctxY - 20 - S.panY, clipboardNode.type, clipboardNode);
+        notify(t('notify.nodePasted'));
+        ctxMenu.classList.remove('open');
       }
 
-      // ========== FILE OPERATIONS ==========
+      // ================================================================
+      // 文件操作
+      // ================================================================
+
       function saveDocument() {
-        const data = { nodes: [] }
+        const data = { nodes: [], connections: connections.map(c => ({ from: c.from, to: c.to })) };
         document.querySelectorAll('.node').forEach((node) => {
-          const type = node.dataset.type
-          const content = node.querySelector('.node-content')
-          const title = node.querySelector('.node-title')
-          const obj = {
-            type: type,
-            x: node.style.left,
-            y: node.style.top,
-            w: node.style.width,
-            h: node.style.height,
-            title: title ? title.textContent : '',
-          }
-          if (type === 'text') {
-            obj.content = content ? content.innerHTML : ''
-            obj.lh = content ? content.style.lineHeight : ''
-          } else if (type === 'image') {
-            const img = content ? content.querySelector('img') : null
-            obj.src = img ? img.src : ''
-          } else if (type === 'markdown') {
-            obj.source = content ? content.dataset.source : ''
-          }
-          data.nodes.push(obj)
-        })
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = 'zencanvas-' + Date.now() + '.zc'
-        a.click()
-        notify('Saved')
+          const type = node.dataset.type;
+          const content = node.querySelector('.node-content');
+          const title = node.querySelector('.node-title');
+          const obj = { type, x: node.style.left, y: node.style.top, w: node.style.width, h: node.style.height,
+            title: title ? title.textContent : '', id: node.id };
+          if (type === 'text') { obj.content = content ? content.innerHTML : '';
+            obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
+            const img = content ? content.querySelector('img') : null;
+            obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content.dataset.source : ''; }
+          data.nodes.push(obj);
+        });
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'zencanvas-' + Date.now() + '.zc';
+        a.click();
+        notify(t('notify.saved'));
       }
 
-      function loadDocument() {
-        document.getElementById('file-input').click()
-      }
+      function loadDocument() { document.getElementById('file-input').click(); }
+
       function handleFileLoad(e) {
-        const file = e.target.files[0]
-        if (!file) return
-        const reader = new FileReader()
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
         reader.onload = (ev) => {
           try {
-            const data = JSON.parse(ev.target.result)
+            const data = JSON.parse(ev.target.result);
             if (data.nodes) {
               data.nodes.forEach((n) => {
-                createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
-              })
-              notify('Loaded ' + data.nodes.length + ' nodes')
+                createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n);
+              });
+              if (data.connections) {
+                connections = data.connections.map(c => ({ ...c, id: 'conn-' + (++connIdCounter) }));
+                renderAllConnections();
+              }
+              notify(t('notify.loadedNodes', data.nodes.length));
             }
-          } catch (err) {
-            notify('Invalid file')
-          }
-        }
-        reader.readAsText(file)
-        e.target.value = ''
+          } catch (err) { notify(t('notify.invalidFile')); }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
       }
 
       function exportAs(fmt) {
-        const nodes = [...document.querySelectorAll('.node')]
+        const nodes = [...document.querySelectorAll('.node')];
         let content = '',
           filename = '',
-          mime = ''
+          mime = '';
         if (fmt === 'txt') {
-          content = nodes
-            .map((node) => {
-              const t = node.querySelector('.node-title').textContent
-              const c = node.querySelector('.node-content')
-              const text =
-                node.dataset.type === 'text'
-                  ? c.innerText
-                  : node.dataset.type === 'markdown'
-                    ? c.dataset.source || ''
-                    : c.querySelector('img')
-                      ? c.querySelector('img').src
-                      : ''
-              return `# ${t}\n\n${text}`
-            })
-            .join('\n\n---\n\n')
-          filename = 'zencanvas.txt'
-          mime = 'text/plain'
+          content = nodes.map((node) => {
+            const t = node.querySelector('.node-title').textContent;
+            const c = node.querySelector('.node-content');
+            const text = node.dataset.type === 'text' ? c.innerText :
+              node.dataset.type === 'markdown' ? c.dataset.source || '' :
+              c.querySelector('img') ? c.querySelector('img').src : '';
+            return `# ${t}\n\n${text}`;
+          }).join('\n\n---\n\n');
+          filename = 'zencanvas.txt';
+          mime = 'text/plain';
         } else if (fmt === 'md') {
-          content = nodes
-            .map((node) => {
-              const t = node.querySelector('.node-title').textContent
-              const c = node.querySelector('.node-content')
-              const md =
-                node.dataset.type === 'markdown'
-                  ? c.dataset.source || ''
-                  : node.dataset.type === 'text'
-                    ? c.innerText
-                    : c.querySelector('img')
-                      ? `![image](${c.querySelector('img').src})`
-                      : ''
-              return `## ${t}\n\n${md}`
-            })
-            .join('\n\n')
-          filename = 'zencanvas.md'
-          mime = 'text/markdown'
+          content = nodes.map((node) => {
+            const t = node.querySelector('.node-title').textContent;
+            const c = node.querySelector('.node-content');
+            const md = node.dataset.type === 'markdown' ? c.dataset.source || '' :
+              node.dataset.type === 'text' ? c.innerText :
+              c.querySelector('img') ? `![image](${c.querySelector('img').src})` : '';
+            return `## ${t}\n\n${md}`;
+          }).join('\n\n');
+          filename = 'zencanvas.md';
+          mime = 'text/markdown';
         } else if (fmt === 'html') {
-          content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ZenCanvas Export</title></head><body>${nodes
-            .map((node) => {
-              const t = node.querySelector('.node-title').textContent
-              const c = node.querySelector('.node-content')
-              let body = ''
-              if (node.dataset.type === 'text') body = c.innerHTML
-              else if (node.dataset.type === 'markdown') body = c.innerHTML
-              else if (node.dataset.type === 'image') {
-                const img = c.querySelector('img')
-                body = img ? `<img src="${img.src}" style="max-width:100%">` : ''
-              }
-              return `<h2>${t}</h2><div>${body}</div><hr>`
-            })
-            .join('')}</body></html>`
-          filename = 'zencanvas.html'
-          mime = 'text/html'
+          content =
+            `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ZenCanvas Export</title></head><body>${nodes.map((node) => {
+            const t = node.querySelector('.node-title').textContent;
+            const c = node.querySelector('.node-content');
+            let body = '';
+            if (node.dataset.type === 'text') body = c.innerHTML;
+            else if (node.dataset.type === 'markdown') body = c.innerHTML;
+            else if (node.dataset.type === 'image') {
+              const img = c.querySelector('img');
+              body = img ? `<img src="${img.src}" style="max-width:100%">` : '';
+            }
+            return `<h2>${t}</h2><div>${body}</div><hr>`;
+          }).join('')}</body></html>`;
+          filename = 'zencanvas.html';
+          mime = 'text/html';
         } else if (fmt === 'json') {
           const data = {
             nodes: nodes.map((node) => ({
               type: node.dataset.type,
               title: node.querySelector('.node-title').textContent,
-              content:
-                node.dataset.type === 'text'
-                  ? node.querySelector('.node-content').innerText
-                  : node.dataset.type === 'markdown'
-                    ? node.querySelector('.node-content').dataset.source || ''
-                    : node.querySelector('.node-content').querySelector('img')
-                      ? node.querySelector('.node-content').querySelector('img').src
-                      : '',
+              content: node.dataset.type === 'text' ? node.querySelector('.node-content').innerText :
+                node.dataset.type === 'markdown' ? node.querySelector('.node-content').dataset.source || '' :
+                node.querySelector('.node-content').querySelector('img') ? node.querySelector('.node-content').querySelector(
+                  'img').src : '',
             })),
-          }
-          content = JSON.stringify(data, null, 2)
-          filename = 'zencanvas.json'
-          mime = 'application/json'
+          };
+          content = JSON.stringify(data, null, 2);
+          filename = 'zencanvas.json';
+          mime = 'application/json';
         }
-        const blob = new Blob([content], { type: mime })
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = filename
-        a.click()
-        closeAllDropdowns()
-        notify('Exported ' + fmt.toUpperCase())
+        const blob = new Blob([content], { type: mime });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        closeAllDropdowns();
+        notify(t('notify.exportedFormat', fmt.toUpperCase()));
       }
 
-      // ========== PURGE with custom confirm ==========
-      async function clearAll() {
-        const confirmed = await showConfirm('Purge all nodes?')
-        if (!confirmed) return
-        document.querySelectorAll('.node').forEach((n) => n.remove())
-        updateStats()
-        debouncedAutoSave()
-        notify('All cleared')
+      // ================================================================
+      // 导出 PDF / PNG（修复：仅捕获可见区域）
+      // ================================================================
+
+      function showExportOverlay() {
+        document.getElementById('export-overlay').classList.add('active');
       }
+
+      function hideExportOverlay() {
+        document.getElementById('export-overlay').classList.remove('active');
+      }
+
+      async function exportPDF() {
+        closeAllDropdowns();
+        showExportOverlay();
+        try {
+          const canvas = await captureCanvas();
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF('landscape', 'mm', 'a4');
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height);
+          const w = canvas.width * ratio;
+          const h = canvas.height * ratio;
+          const x = (pdfWidth - w) / 2;
+          const y = (pdfHeight - h) / 2;
+          pdf.addImage(imgData, 'JPEG', x, y, w, h);
+          pdf.save('zencanvas-' + Date.now() + '.pdf');
+          notify(t('notify.pdfExported'));
+        } catch (err) {
+          console.error(err);
+          notify(t('notify.pdfExportFailed', err.message));
+        } finally {
+          hideExportOverlay();
+        }
+      }
+
+      async function exportPNG() {
+        closeAllDropdowns();
+        showExportOverlay();
+        try {
+          const canvas = await captureCanvas();
+          const link = document.createElement('a');
+          link.download = 'zencanvas-' + Date.now() + '.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+          notify(t('notify.pngExported'));
+        } catch (err) {
+          console.error(err);
+          notify(t('notify.pngExportFailed', err.message));
+        } finally {
+          hideExportOverlay();
+        }
+      }
+
+      async function captureCanvas() {
+        const inner = document.getElementById('canvas-inner');
+        // 计算所有节点的边界框并加上一些内边距
+        const nodes = document.querySelectorAll('.node');
+        if (nodes.length === 0) {
+          // 备用方案：若无节点则捕获一小块区域
+          const canvas = await html2canvas(inner, {
+            backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            width: 800,
+            height: 600,
+            x: 0,
+            y: 0,
+          });
+          return canvas;
+        }
+
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        nodes.forEach(n => {
+          const left = n.offsetLeft;
+          const top = n.offsetTop;
+          const right = left + n.offsetWidth;
+          const bottom = top + n.offsetHeight;
+          if (left < minX) minX = left;
+          if (top < minY) minY = top;
+          if (right > maxX) maxX = right;
+          if (bottom > maxY) maxY = bottom;
+        });
+
+        // 添加内边距（各维度的10%，最小40px）
+        const padX = Math.max(40, (maxX - minX) * 0.1);
+        const padY = Math.max(40, (maxY - minY) * 0.1);
+        minX = Math.max(0, minX - padX);
+        minY = Math.max(0, minY - padY);
+        maxX = Math.min(10000, maxX + padX);
+        maxY = Math.min(10000, maxY + padY);
+
+        const width = maxX - minX;
+        const height = maxY - minY;
+
+        // 确保最小尺寸
+        const finalWidth = Math.max(200, width);
+        const finalHeight = Math.max(200, height);
+
+        // 临时显示所有折叠的内容
+        const hiddenContents = [];
+        document.querySelectorAll('.node .node-content').forEach(el => {
+          if (el.style.display === 'none') { hiddenContents.push(el);
+            el.style.display = ''; }
+        });
+
+        const wasReading = S.readingMode;
+        if (wasReading) {
+          document.body.classList.remove('reading-mode');
+          S.readingMode = false;
+        }
+
+        await new Promise(r => setTimeout(r, 100));
+
+        const canvas = await html2canvas(inner, {
+          backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          width: finalWidth,
+          height: finalHeight,
+          x: minX,
+          y: minY,
+          windowWidth: inner.scrollWidth,
+          windowHeight: inner.scrollHeight,
+        });
+
+        // 恢复隐藏的内容
+        hiddenContents.forEach(el => el.style.display = 'none');
+        if (wasReading) {
+          document.body.classList.add('reading-mode');
+          S.readingMode = true;
+        }
+        return canvas;
+      }
+
+      // ================================================================
+      // 清空
+      // ================================================================
+
+      async function clearAll() {
+        const confirmed = await showConfirm(t('confirm.purgeAll'));
+        if (!confirmed) return;
+        document.querySelectorAll('.node').forEach((n) => n.remove());
+        connections = [];
+        renderAllConnections();
+        updateStats();
+        debouncedAutoSave();
+        notify(t('notify.allCleared'));
+      }
+
+      // ================================================================
+      // 统计信息
+      // ================================================================
 
       function updateStats() {
-        const count = document.querySelectorAll('.node').length
-        document.getElementById('stat-left').textContent =
-          count + ' node' + (count === 1 ? '' : 's')
+        const count = document.querySelectorAll('.node').length;
+        document.getElementById('stat-left').textContent = t('stats.text', count, count === 1 ? '' : 's', connections.length, connections.length === 1 ? '' : 's');
       }
 
-      // ========== INIT ==========
-      loadSettings()
-      applySettings()
+      // ================================================================
+      // 画布平移（右键拖拽）+ 缩放（滚轮）
+      // ================================================================
 
-      // Restore autosave
-      ;(function restoreAutosave() {
-        const saved = localStorage.getItem('zc-autosave')
-        if (!saved) return
-        try {
-          const data = JSON.parse(saved)
-          if (data.nodes && data.nodes.length) {
-            data.nodes.forEach((n) => {
-              createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
-            })
+      (function initCanvasPanZoom() {
+        const workspace = document.getElementById('workspace');
+
+        // --- 带阈值的平移 ---
+        workspace.addEventListener('mousedown', (e) => {
+          if (e.button === 2) {
+            // 立即关闭任何打开的右键菜单
+            document.getElementById('context-menu').classList.remove('open');
+            isPanning = true;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            panStartPX = S.panX;
+            panStartPY = S.panY;
+            panWasDragging = false;
+            workspace.style.cursor = 'grabbing';
+            e.preventDefault();
           }
-        } catch (e) {}
-      })()
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (isPanning) {
+            const dx = e.clientX - panStartX;
+            const dy = e.clientY - panStartY;
+            if (Math.sqrt(dx * dx + dy * dy) > PAN_THRESHOLD) {
+              panWasDragging = true;
+            }
+            if (panWasDragging) {
+              S.panX = panStartPX + dx;
+              S.panY = panStartPY + dy;
+              applyTransform(); // this calls renderAllConnections
+              // 如果正在拖拽连线，更新临时连线
+              if (portDrag && tempLine) {
+                const x = (e.clientX - S.panX) / S.scale;
+                const y = (e.clientY - S.panY) / S.scale;
+                const startX = portDrag.startX;
+                const startY = portDrag.startY;
+                const dx2 = x - startX;
+                const dy2 = y - startY;
+                const cp1x = startX + dx2 * 0.5;
+                const cp1y = startY;
+                const cp2x = startX + dx2 * 0.5;
+                const cp2y = y;
+                tempLine.setAttribute('d', `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x} ${y}`);
+              }
+            }
+          }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+          if (isPanning) {
+            isPanning = false;
+            workspace.style.cursor = 'default';
+            if (panWasDragging) {
+              saveSettings();
+            }
+            // 如果拖拽未超过阈值，则允许弹出右键菜单（panWasDragging 为 false）
+            // 全局右键菜单处理函数会检查 panWasDragging
+          }
+        });
+
+        // --- 缩放（滚轮） ---
+        workspace.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -0.08 : 0.08;
+          const newScale = Math.min(3.0, Math.max(0.2, S.scale + delta));
+
+          const rect = workspace.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+
+          const cx = (mx - S.panX) / S.scale;
+          const cy = (my - S.panY) / S.scale;
+
+          S.scale = newScale;
+          S.panX = mx - cx * S.scale;
+          S.panY = my - cy * S.scale;
+
+          applyTransform(); // calls renderAllConnections
+          saveSettings();
+        }, { passive: false });
+
+        // --- 阻止画布默认右键菜单（由我们自行处理） ---
+        workspace.addEventListener('contextmenu', (e) => {
+          if (panWasDragging) {
+            panWasDragging = false;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          // 否则，交由全局处理函数处理
+        });
+      })();
+
+      // ================================================================
+      // 键盘快捷键
+      // ================================================================
 
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-          closeAllDropdowns()
-          ftBar.classList.remove('visible')
+          closeAllDropdowns();
+          ftBar.classList.remove('visible');
+          if (portDrag) {
+            if (tempLine) { tempLine.remove();
+              tempLine = null; }
+            document.querySelectorAll('.node-port').forEach(p => p.classList.remove('dragging', 'port-highlight'));
+            portDrag = null;
+            document.body.style.cursor = 'default';
+            notify(t('notify.connectionCancelled'));
+          }
         }
-      })
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          saveDocument();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+          e.preventDefault();
+          loadDocument();
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (selectedConnId) {
+            connections = connections.filter(c => c.id !== selectedConnId);
+            selectedConnId = null;
+            renderAllConnections();
+            debouncedAutoSave();
+            notify(t('notify.connectionDeleted'));
+          }
+        }
+      });
 
-      updateStats()
+      // ================================================================
+      // 用于连线的大小监听器（ResizeObserver）
+      // ================================================================
+
+      const ro = new ResizeObserver(() => {
+        renderAllConnections();
+      });
+
+      // DOM 就绪后监听已有节点
+      document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.node').forEach(n => ro.observe(n));
+      });
+
+      // 同时通过 MutationObserver 监听新节点
+      const mo = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+          m.addedNodes.forEach(n => {
+            if (n.classList && n.classList.contains('node')) ro.observe(n);
+          });
+        });
+      });
+      mo.observe(document.getElementById('canvas-inner'), { childList: true });
+
+      // ================================================================
+      // 初始化
+      // ================================================================
+
+      loadSettings();
+      applySettings();
+
+      // 恢复连线
+      (function restoreConnections() {
+        const saved = localStorage.getItem('zc-connections');
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            if (Array.isArray(data)) {
+              connections = data.map(c => ({ ...c, id: 'conn-' + (++connIdCounter) }));
+            }
+          } catch (e) {}
+        }
+      })();
+
+      // 恢复自动保存内容
+      (function restoreAutosave() {
+        const saved = localStorage.getItem('zc-autosave');
+        if (!saved) return;
+        try {
+          const data = JSON.parse(saved);
+          if (data.nodes && data.nodes.length) {
+            data.nodes.forEach((n) => {
+              createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n);
+            });
+            setTimeout(renderAllConnections, 150);
+          }
+        } catch (e) {}
+      })();
+
+      // 最终渲染与统计
+      setTimeout(() => {
+        renderAllConnections();
+        updateStats();
+        applyNodeBgSetting();
+      }, 200);
+
+      // 重写 createNodeAt 以监听新节点
+      const origCreateNode = createNodeAt;
+      createNodeAt = function(x, y, type, data) {
+        const node = origCreateNode.call(this, x, y, type, data);
+        setTimeout(() => ro.observe(node), 50);
+        return node;
+      };
+
+      // 修补节点删除逻辑以清理连线
+      const origRemove = Node.prototype.remove;
+      Node.prototype.remove = function() {
+        if (this.classList && this.classList.contains('node')) {
+          const id = this.id;
+          connections = connections.filter(c => c.from !== id && c.to !== id);
+          setTimeout(() => { renderAllConnections();
+            updateStats(); }, 10);
+        }
+        return origRemove.call(this);
+      };
+
+      console.log('ZenCanvas initialized.');
+      console.log('Connections:', connections.length);
+      console.log('Nodes:', document.querySelectorAll('.node').length);
     </script>
   </body>
 </html>
