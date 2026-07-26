@@ -52,6 +52,7 @@
             --conn-color: #555;
             --conn-width: 2px;
             --node-bg: #ffffff;
+            --title-font-size: 10px;
         }
         body.theme-dark {
             --bg: #000000;
@@ -402,7 +403,7 @@
             background: transparent;
         }
         .node-title {
-            font-size: 10px;
+            font-size: var(--title-font-size);
             letter-spacing: 1px;
             color: var(--text-dim);
             text-transform: uppercase;
@@ -411,7 +412,7 @@
             font-family: var(--font-mono);
         }
         .node-title-edit {
-            font-size: 10px;
+            font-size: var(--title-font-size);
             letter-spacing: 1px;
             color: var(--text);
             text-transform: uppercase;
@@ -704,6 +705,36 @@
         .node-math {
             border-left: 3px solid #3366cc !important;
         }
+        .node-todo {
+            border-left: 3px solid #cc6600 !important;
+        }
+        .node-todo .todo-checkbox {
+            width: 16px;
+            height: 16px;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 10px;
+            color: var(--text-dim);
+            transition: all 0.15s;
+            background: transparent;
+            flex-shrink: 0;
+        }
+        .node-todo .todo-checkbox:hover {
+            border-color: var(--text);
+            color: var(--text);
+        }
+        .node-todo .todo-checkbox.checked {
+            background: var(--active-bg);
+            color: var(--active-text);
+            border-color: var(--border);
+        }
+        .node-todo .node-content.todo-done {
+            opacity: 0.35;
+            text-decoration: line-through;
+        }
 
         /* Modes */
         body.focus-mode .node {
@@ -724,14 +755,22 @@
         body.focus-mode #svg-layer .conn-line:hover {
             opacity: 1;
         }
-        body.reading-mode .node {
+        body.reading-mode .node:not(.has-conn) {
             border-color: transparent !important;
-            border-width: 1px !important;
+            border-width: 0 !important;
+            box-shadow: none !important;
         }
-        body.reading-mode .node:hover,
-        body.reading-mode .node:focus-within {
-            border-color: transparent !important;
+        body.reading-mode .node.has-conn {
+            border-color: var(--border-dim) !important;
             border-width: 1px !important;
+            border-style: dashed !important;
+            box-shadow: none !important;
+        }
+        body.reading-mode .node.has-conn:hover,
+        body.reading-mode .node.has-conn:focus-within {
+            border-color: var(--border) !important;
+            border-width: 1px !important;
+            border-style: dashed !important;
         }
         body.reading-mode .node-header {
             display: none !important;
@@ -741,6 +780,28 @@
         }
         body.reading-mode .node-port {
             display: none !important;
+        }
+        body.reading-mode .node .node-content {
+            padding: 12px 18px;
+        }
+        body.reading-mode #svg-layer .conn-line {
+            opacity: 0.1;
+        }
+        body.reading-mode .node-todo {
+            border-left: 3px solid #cc6600 !important;
+        }
+        body.reading-mode .node-todo .node-header {
+            display: flex !important;
+            opacity: 0.5;
+        }
+        body.reading-mode .node-todo .node-header:hover {
+            opacity: 1;
+        }
+        body.reading-mode .node-todo .node-header .node-action-btn {
+            display: none !important;
+        }
+        body.reading-mode .node-todo .node-content.todo-done {
+            opacity: 0.25;
         }
         body.full-display .node-header,
         body.full-display .node:hover .node-header {
@@ -1118,6 +1179,7 @@
             <div class="menu-btn" data-action="newImage" data-i18n="menu.img"></div>
             <div class="menu-btn" data-action="newMarkdown" data-i18n="menu.md"></div>
             <div class="menu-btn" data-action="newMath" data-i18n="menu.math"></div>
+            <div class="menu-btn" data-action="newTodo" data-i18n="menu.todo"></div>
             <div class="menu-btn" data-action="save" data-i18n="menu.save"></div>
             <div class="menu-btn" data-action="load" data-i18n="menu.open"></div>
             <div class="menu-btn" data-action="showExport" data-i18n="menu.export"></div>
@@ -1134,6 +1196,8 @@
         <div class="menu-group">
             <span class="menu-label" data-i18n="menu.settings">设置</span>
             <div class="menu-btn toggle-off" id="btn-node-bg" data-action="toggleNodeBg" data-i18n="menu.nodebg">[ 节点背景 ]</div>
+            <div class="menu-btn" id="btn-title-fs-down" data-action="titleFontSizeDown" data-i18n="menu.titleFsDown">[ T− ]</div>
+            <div class="menu-btn" id="btn-title-fs-up" data-action="titleFontSizeUp" data-i18n="menu.titleFsUp">[ T+ ]</div>
             <div class="menu-btn" id="btn-lang" data-action="toggleLang">[ EN ]</div>
         </div>
         <div class="menu-group">
@@ -1208,6 +1272,7 @@
         <div class="dd-item" data-action="ctxNewImage"><span data-i18n="ctx.newImage">New Image Node</span></div>
         <div class="dd-item" data-action="ctxNewMarkdown"><span data-i18n="ctx.newMarkdown">New Markdown Node</span></div>
         <div class="dd-item" data-action="ctxNewMath"><span data-i18n="ctx.newMath">New Math Node</span></div>
+        <div class="dd-item" data-action="ctxNewTodo"><span data-i18n="ctx.newTodo">New TODO Node</span></div>
         <div class="dd-divider"></div>
         <div class="dd-item" id="ctx-edit" data-action="ctxEdit"><span data-i18n="ctx.editContent">Edit Content</span></div>
         <div class="dd-item" id="ctx-copy-node" data-action="ctxCopy"><span data-i18n="ctx.copyNode">Copy Node</span></div>
@@ -1294,6 +1359,7 @@
                     'menu.img': '[ IMG ]',
                     'menu.md': '[ MD ]',
                     'menu.math': '[ MATH ]',
+                    'menu.todo': '[ TODO ]',
                     'menu.save': '[ SAVE ]',
                     'menu.open': '[ OPEN ]',
                     'menu.export': '[ EXPORT ]',
@@ -1307,6 +1373,8 @@
                     'menu.reset': '[ RESET ]',
                     'menu.settings': 'SETTINGS',
                     'menu.nodebg': '[ NODE BG ]',
+                    'menu.titleFsDown': '[ T− ]',
+                    'menu.titleFsUp': '[ T+ ]',
                     'menu.lang': '[ 中文 ]',
                     'menu.tools': 'TOOLS',
                     'menu.purge': '[ PURGE ]',
@@ -1346,6 +1414,7 @@
                     'ctx.newImage': 'New Image Node',
                     'ctx.newMarkdown': 'New Markdown Node',
                     'ctx.newMath': 'New Math Node',
+                    'ctx.newTodo': 'New TODO Node',
                     'ctx.editContent': 'Edit Content',
                     'ctx.copyNode': 'Copy Node',
                     'ctx.pasteNode': 'Paste Node',
@@ -1373,6 +1442,7 @@
                     'notify.size': 'Size: {0}px',
                     'notify.line': 'Line: {0}',
                     'notify.font': 'Font: {0}',
+                    'notify.titleSize': 'Title size: {0}px',
                     'notify.noNodeSelected': 'No node selected',
                     'notify.nodeCopied': 'Node copied',
                     'notify.nothingToPaste': 'Nothing to paste',
@@ -1399,6 +1469,7 @@
                     'menu.img': '[ 图片 ]',
                     'menu.md': '[ MD ]',
                     'menu.math': '[ 公式 ]',
+                    'menu.todo': '[ 待办 ]',
                     'menu.save': '[ 保存 ]',
                     'menu.open': '[ 打开 ]',
                     'menu.export': '[ 导出 ]',
@@ -1412,6 +1483,8 @@
                     'menu.reset': '[ 重置 ]',
                     'menu.settings': '设置',
                     'menu.nodebg': '[ 节点背景 ]',
+                    'menu.titleFsDown': '[ T− ]',
+                    'menu.titleFsUp': '[ T+ ]',
                     'menu.lang': '[ EN ]',
                     'menu.tools': '工具',
                     'menu.purge': '[ 清空 ]',
@@ -1451,6 +1524,7 @@
                     'ctx.newImage': '新建图片节点',
                     'ctx.newMarkdown': '新建 Markdown 节点',
                     'ctx.newMath': '新建公式节点',
+                    'ctx.newTodo': '新建待办节点',
                     'ctx.editContent': '编辑内容',
                     'ctx.copyNode': '复制节点',
                     'ctx.pasteNode': '粘贴节点',
@@ -1478,6 +1552,7 @@
                     'notify.size': '字号：{0}px',
                     'notify.line': '行高：{0}',
                     'notify.font': '字体：{0}',
+                    'notify.titleSize': '标题字号：{0}px',
                     'notify.noNodeSelected': '未选中节点',
                     'notify.nodeCopied': '节点已复制',
                     'notify.nothingToPaste': '没有可粘贴的内容',
@@ -1506,6 +1581,7 @@
                 fullDisplay: false,
                 menuPinned: false,
                 nodeBgVisible: true,
+                titleFontSize: 10,
                 zCounter: 10,
                 nodeCounter: 0,
                 scale: 1,
@@ -1633,6 +1709,7 @@
                     const data = {
                         theme: AppState.theme,
                         bg: AppState.bg,
+                        titleFontSize: AppState.titleFontSize,
                         menuPinned: AppState.menuPinned,
                         focusMode: AppState.focusMode,
                         readingMode: AppState.readingMode,
@@ -1651,7 +1728,7 @@
                     try {
                         const parsed = JSON.parse(saved);
                         const keys = ['theme', 'bg', 'menuPinned', 'focusMode', 'readingMode', 'fullDisplay',
-                            'nodeBgVisible', 'panX', 'panY', 'scale', 'lang'
+                            'nodeBgVisible', 'titleFontSize', 'panX', 'panY', 'scale', 'lang'
                         ];
                         for (const k of keys) {
                             if (parsed[k] !== undefined) AppState[k] = parsed[k];
@@ -1679,6 +1756,8 @@
                     DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
                     // Node background
                     UIManager.applyNodeBg();
+                    // Title font size
+                    document.documentElement.style.setProperty('--title-font-size', AppState.titleFontSize + 'px');
                     // Transform
                     CanvasManager.applyTransform();
                     // I18n
@@ -1818,13 +1897,14 @@
                     node.className = 'node';
                     if (!AppState.nodeBgVisible) node.classList.add('no-bg');
                     node.dataset.type = type;
+                    if (type === 'todo') node.classList.add('node-todo');
                     node.style.left = x + 'px';
                     node.style.top = y + 'px';
                     node.style.zIndex = ++AppState.zCounter;
                     const id = 'node-' + AppState.nodeCounter;
                     node.id = id;
 
-                    const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : type === 'math' ? 'MATH' : 'MD') + '_' +
+                    const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : type === 'math' ? 'MATH' : type === 'todo' ? 'TODO' : 'MD') + '_' +
                         String(AppState.nodeCounter).padStart(2, '0');
                     const title = data && data.title ? data.title : defaultTitle;
                     if (data && data.w) node.style.width = data.w;
@@ -1833,13 +1913,21 @@
                     // Header
                     const header = document.createElement('div');
                     header.className = 'node-header';
-                    header.innerHTML = `
+                    let headerInner = `
                         <span class="node-title">${title}</span>
-                        <div class="node-actions">
+                        <div class="node-actions">`;
+                    if (type === 'todo') {
+                        const done = data && data.done ? true : false;
+                        headerInner += `
+                            <div class="todo-checkbox${done ? ' checked' : ''}" data-action="toggleTodo">${done ? '✓' : ''}</div>`;
+                        if (done) node.dataset.todoDone = '1';
+                    }
+                    headerInner += `
                             <div class="node-action-btn minimize" data-action="minimize">−</div>
                             <div class="node-action-btn close" data-action="closeNode">×</div>
                         </div>
                     `;
+                    header.innerHTML = headerInner;
                     node.appendChild(header);
 
                     // Font size controls for md/math
@@ -1909,7 +1997,10 @@
                         content.style.fontSize = fs + 'px';
                         content.dataset.fontSize = fs;
                     }
-                    if (type === 'text') {
+                    if (type === 'todo' && data && data.done) {
+                        content.classList.add('todo-done');
+                    }
+                    if (type === 'text' || type === 'todo') {
                         content.setAttribute('contenteditable', 'true');
                         content.dataset.placeholder = t('placeholder.startTyping');
                         content.style.fontFamily = CONFIG.DEFAULT_FONT;
@@ -2191,7 +2282,7 @@
                         const type = node.dataset.type;
                         const content = getNodeContent(node);
                         if (!content) return;
-                        if (type === 'text') {
+                        if (type === 'text' || type === 'todo') {
                             content.dataset.placeholder = t('placeholder.startTyping');
                         } else if (type === 'image') {
                             content.dataset.placeholder = t('placeholder.imageUrl');
@@ -2389,7 +2480,7 @@
                     const type = AppState.ctxNode.dataset.type;
                     const content = getNodeContent(AppState.ctxNode);
                     if (type === 'image' || type === 'markdown' || type === 'math') content.dispatchEvent(new Event('dblclick', { bubbles: true }));
-                    else if (type === 'text') content.focus();
+                    else if (type === 'text' || type === 'todo') content.focus();
                     DOM.contextMenu.classList.remove('open');
                 },
                 copyNode() {
@@ -2399,12 +2490,15 @@
                     const title = getNodeTitle(AppState.ctxNode);
                     const obj = { type, w: AppState.ctxNode.style.width, h: AppState.ctxNode.style.height, title: title ?
                             title.textContent : '', fontSize: content ? content.dataset.fontSize || '' : '' };
-                    if (type === 'text') { obj.content = content ? content.innerHTML : '';
+                    if (type === 'text' || type === 'todo') { obj.content = content ? content.innerHTML : '';
                         obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
                         obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
                             .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
                             .dataset.source : ''; }
+                    if (type === 'todo') {
+                        obj.done = AppState.ctxNode && AppState.ctxNode.dataset.todoDone === '1';
+                    }
                     AppState.clipboardNode = obj;
                     notify(t('notify.nodeCopied'));
                     DOM.contextMenu.classList.remove('open');
@@ -2489,6 +2583,15 @@
                     existing.forEach(el => el.remove());
                     const deleteHits = svg.querySelectorAll('.conn-delete-hit');
                     deleteHits.forEach(el => el.remove());
+
+                    // Mark nodes with connections
+                    getNodes().forEach(n => n.classList.remove('has-conn'));
+                    AppState.connections.forEach(conn => {
+                        const fn = getNodeById(conn.from);
+                        const tn = getNodeById(conn.to);
+                        if (fn) fn.classList.add('has-conn');
+                        if (tn) tn.classList.add('has-conn');
+                    });
 
                     AppState.connections.forEach(conn => {
                         const fromNode = getNodeById(conn.from);
@@ -2643,7 +2746,8 @@
                     const nodeContent = container.nodeType === 1 ?
                         container.closest('.node-content') :
                         container.parentElement?.closest('.node-content');
-                    if (!nodeContent || !nodeContent.closest('.node[data-type="text"]')) {
+                    const nodeType = nodeContent.closest('.node')?.dataset.type;
+                    if (!nodeContent || (nodeType !== 'text' && nodeType !== 'todo')) {
                         DOM.floatingToolbar.classList.remove('visible');
                         return;
                     }
@@ -3006,9 +3110,12 @@
                             id: node.id,
                             fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
                         };
-                        if (type === 'text') {
+                        if (type === 'text' || type === 'todo') {
                             obj.content = contentEl ? contentEl.innerHTML : '';
                             obj.lh = contentEl ? contentEl.style.lineHeight : '';
+                            if (type === 'todo') {
+                                obj.done = node.dataset.todoDone === '1';
+                            }
                         } else if (type === 'image') {
                             const img = contentEl ? contentEl.querySelector('img') : null;
                             obj.src = img ? img.src : '';
@@ -3070,8 +3177,9 @@
                     const title = getNodeTitle(node);
                     const obj = { type, x: node.style.left, y: node.style.top, w: node.style.width, h: node.style
                             .height, title: title ? title.textContent : '', id: node.id, fontSize: content ? content.dataset.fontSize || '' : '' };
-                    if (type === 'text') { obj.content = content ? content.innerHTML : '';
-                        obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
+                    if (type === 'text' || type === 'todo') { obj.content = content ? content.innerHTML : '';
+                        obj.lh = content ? content.style.lineHeight : '';
+                        if (type === 'todo') obj.done = node.dataset.todoDone === '1'; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
                         obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
                             .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
@@ -3140,6 +3248,9 @@
                             break;
                         case 'newMath':
                             NodeManager.createCenteredNode('math');
+                            break;
+                        case 'newTodo':
+                            NodeManager.createCenteredNode('todo');
                             break;
                         case 'save':
                             saveDocument();
@@ -3220,6 +3331,10 @@
                             NodeManager.createNodeAt(AppState.ctxX, AppState.ctxY, 'math');
                             DOM.contextMenu.classList.remove('open');
                             break;
+                        case 'ctxNewTodo':
+                            NodeManager.createNodeAt(AppState.ctxX, AppState.ctxY, 'todo');
+                            DOM.contextMenu.classList.remove('open');
+                            break;
                         case 'ctxEdit':
                             NodeManager.ctxEdit();
                             break;
@@ -3231,6 +3346,27 @@
                             break;
                         case 'clearConns':
                             ConnectionManager.clearAll();
+                            break;
+                        case 'toggleTodo':
+                            const tNode = target.closest('.node');
+                            if (tNode) {
+                                const checkbox = tNode.querySelector('.todo-checkbox');
+                                const content = getNodeContent(tNode);
+                                const isDone = tNode.dataset.todoDone === '1';
+                                if (isDone) {
+                                    delete tNode.dataset.todoDone;
+                                    checkbox.classList.remove('checked');
+                                    checkbox.textContent = '';
+                                    content.classList.remove('todo-done');
+                                } else {
+                                    tNode.dataset.todoDone = '1';
+                                    checkbox.classList.add('checked');
+                                    checkbox.textContent = '✓';
+                                    content.classList.add('todo-done');
+                                }
+                                ConnectionManager.renderAll();
+                                debouncedAutoSave();
+                            }
                             break;
                         case 'closeNode':
                             const node = target.closest('.node');
@@ -3262,6 +3398,14 @@
                                 }
                                 ConnectionManager.renderAll();
                             }
+                            break;
+                        case 'titleFontSizeUp':
+                        case 'titleFontSizeDown':
+                            const delta2 = action === 'titleFontSizeUp' ? 1 : -1;
+                            AppState.titleFontSize = Math.max(7, Math.min(24, (AppState.titleFontSize || 10) + delta2));
+                            document.documentElement.style.setProperty('--title-font-size', AppState.titleFontSize + 'px');
+                            Settings.save();
+                            notify(t('notify.titleSize', AppState.titleFontSize));
                             break;
                         case 'fontSizeUp':
                         case 'fontSizeDown':
