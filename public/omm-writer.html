@@ -53,6 +53,9 @@
             --conn-width: 2px;
             --node-bg: #ffffff;
             --title-font-size: 10px;
+            --content-font-size: 14px;
+            --content-line-height: 1.8;
+            --node-border-radius: 0px;
         }
         body.theme-dark {
             --bg: #000000;
@@ -364,9 +367,10 @@
             width: 400px;
             background: var(--node-bg);
             border: 1px solid var(--border);
+            border-radius: var(--node-border-radius);
             display: flex;
             flex-direction: column;
-            transition: border-width 0.1s, border-color 0.3s, background 0.3s;
+            transition: border-width 0.1s, border-color 0.3s, background 0.3s, border-radius 0.3s;
             z-index: 10;
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
         }
@@ -391,6 +395,8 @@
             transition: opacity 0.2s;
             opacity: 0;
             background: var(--bg);
+            border-top-left-radius: var(--node-border-radius);
+            border-top-right-radius: var(--node-border-radius);
         }
         .node-header:active {
             cursor: grabbing;
@@ -456,6 +462,8 @@
             padding: 20px 24px;
             outline: none;
             overflow-y: auto;
+            border-bottom-left-radius: var(--node-border-radius);
+            border-bottom-right-radius: var(--node-border-radius);
             font-family: var(--font-mono);
             font-size: 14px;
             line-height: 1.8;
@@ -1147,6 +1155,85 @@
         #ctx-edit.hidden {
             display: none !important;
         }
+        .dd-item-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px;
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            cursor: default;
+            gap: 8px;
+        }
+        .dd-item-row:hover {
+            background: var(--hover);
+        }
+        .settings-control {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .settings-btn {
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid var(--border-dim);
+            background: transparent;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            transition: all 0.1s;
+            user-select: none;
+        }
+        .settings-btn:hover {
+            border-color: var(--border);
+            color: var(--text);
+            background: var(--hover);
+        }
+        .settings-value {
+            min-width: 26px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text);
+            font-family: var(--font-mono);
+        }
+        .settings-colors {
+            display: flex;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .settings-colors .ft-color-dot {
+            width: 12px;
+            height: 12px;
+        }
+        #dd-settings {
+            min-width: 300px;
+        }
+        .settings-bg-options {
+            display: flex;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .settings-bg-dot {
+            display: block;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.1s;
+            background-color: var(--bg);
+        }
+        .settings-bg-dot:hover {
+            border-color: var(--text-dim);
+        }
+        .settings-bg-dot.active {
+            border-color: var(--text);
+        }
     </style>
 </head>
 <body class="bg-void">
@@ -1169,34 +1256,32 @@
     <!-- ===== Top Menu ===== -->
     <div id="top-menu">
         <div class="menu-group">
-            <span class="menu-label" data-i18n="menu.file">文件</span>
+            <span class="menu-label" data-i18n="menu.newLabel">新建</span>
             <div class="menu-btn" data-action="newText" data-i18n="menu.new"></div>
             <div class="menu-btn" data-action="newImage" data-i18n="menu.img"></div>
             <div class="menu-btn" data-action="newMarkdown" data-i18n="menu.md"></div>
             <div class="menu-btn" data-action="newMath" data-i18n="menu.math"></div>
             <div class="menu-btn" data-action="newTodo" data-i18n="menu.todo"></div>
+        </div>
+        <div class="menu-group">
+            <span class="menu-label" data-i18n="menu.file">文件</span>
             <div class="menu-btn" data-action="save" data-i18n="menu.save"></div>
             <div class="menu-btn" data-action="load" data-i18n="menu.open"></div>
             <div class="menu-btn" data-action="showExport" data-i18n="menu.export"></div>
         </div>
         <div class="menu-group">
-            <span class="menu-label" data-i18n="menu.view">视图</span>
-            <div class="menu-btn" data-action="showBg" data-i18n="menu.bg"></div>
-            <div class="menu-btn" id="btn-theme" data-action="toggleTheme">[ 浅色 ]</div>
+            <span class="menu-label" data-i18n="menu.mode">模式</span>
             <div class="menu-btn" id="btn-focus" data-action="toggleFocus" data-i18n="menu.focus"></div>
             <div class="menu-btn" id="btn-read" data-action="toggleRead" data-i18n="menu.read"></div>
             <div class="menu-btn" id="btn-full" data-action="toggleFull" data-i18n="menu.full"></div>
-            <div class="menu-btn" data-action="resetView" data-i18n="menu.reset"></div>
         </div>
         <div class="menu-group">
             <span class="menu-label" data-i18n="menu.settings">设置</span>
-            <div class="menu-btn toggle-off" id="btn-node-bg" data-action="toggleNodeBg" data-i18n="menu.nodebg">[ 节点背景 ]</div>
-            <div class="menu-btn" id="btn-title-fs-down" data-action="titleFontSizeDown" data-i18n="menu.titleFsDown">[ T− ]</div>
-            <div class="menu-btn" id="btn-title-fs-up" data-action="titleFontSizeUp" data-i18n="menu.titleFsUp">[ T+ ]</div>
-            <div class="menu-btn" id="btn-lang" data-action="toggleLang">[ EN ]</div>
+            <div class="menu-btn" data-action="showSettings" data-i18n="menu.styleSettings">[ 样式 ]</div>
         </div>
         <div class="menu-group">
             <span class="menu-label" data-i18n="menu.tools">工具</span>
+            <div class="menu-btn" data-action="resetView" data-i18n="menu.resetView"></div>
             <div class="menu-btn" data-action="purge" data-i18n="menu.purge"></div>
             <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" data-i18n-title="pin.title" title="固定菜单栏">▼</div>
         </div>
@@ -1221,6 +1306,38 @@
         <div class="dd-divider"></div>
         <div class="dd-item" data-action="exportPdf"><span data-i18n="dd.export.pdf">PDF</span> <span class="hint">.pdf</span></div>
         <div class="dd-item" data-action="exportPng"><span data-i18n="dd.export.png">PNG</span> <span class="hint">.png</span></div>
+    </div>
+
+    <!-- ===== Settings Dropdown ===== -->
+    <div class="dropdown" id="dd-settings">
+        <div class="dd-label" data-i18n="dd.settings.typo">Typography</div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.contentFs">Font Size</span><div class="settings-control"><span class="settings-value" id="sv-content-fs">14</span><span class="settings-btn" data-action="settingsContentFsDown">−</span><span class="settings-btn" data-action="settingsContentFsUp">+</span></div></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.contentLh">Line Height</span><div class="settings-control"><span class="settings-value" id="sv-content-lh">1.8</span><span class="settings-btn" data-action="settingsContentLhDown">−</span><span class="settings-btn" data-action="settingsContentLhUp">+</span></div></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.titleFs">Title Size</span><div class="settings-control"><span class="settings-value" id="sv-title-fs">10</span><span class="settings-btn" data-action="settingsTitleFsDown">−</span><span class="settings-btn" data-action="settingsTitleFsUp">+</span></div></div>
+        <div class="dd-divider"></div>
+        <div class="dd-label" data-i18n="dd.settings.appearance">Appearance</div>
+        <div class="dd-item" data-action="settingsToggleTheme"><span data-i18n="dd.settings.theme">Theme</span><span class="hint" id="sv-theme"></span></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.bg">Background</span><div class="settings-bg-options" id="sv-bg-options"><span class="settings-bg-dot active" data-bg="bg-void" title="Void" style="background:var(--bg);border:1px solid var(--border)"></span><span class="settings-bg-dot" data-bg="bg-grid" title="Grid" style="background-image:linear-gradient(var(--border-dim) 1px,transparent 1px),linear-gradient(90deg,var(--border-dim) 1px,transparent 1px);background-size:6px 6px"></span><span class="settings-bg-dot" data-bg="bg-dots" title="Dots" style="background-image:radial-gradient(circle,var(--text-dim) 1px,transparent 1px);background-size:5px 5px"></span><span class="settings-bg-dot" data-bg="bg-cross" title="Cross" style="background-image:linear-gradient(var(--border-dim) 1px,transparent 1px),linear-gradient(90deg,var(--border-dim) 1px,transparent 1px);background-size:6px 6px;background-position:3px 3px"></span><span class="settings-bg-dot" data-bg="bg-diagonal" title="Diagonal" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 5px,var(--border-dim) 5px,var(--border-dim) 6px)"></span></div></div>
+        <div class="dd-item" data-action="settingsToggleNodeBg"><span data-i18n="dd.settings.nodeBg">Node BG</span><span class="hint" id="sv-node-bg"></span></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.nodeRadius">Node Radius</span><div class="settings-control"><span class="settings-value" id="sv-node-radius">0</span><span class="settings-btn" data-action="settingsNodeRadiusDown">−</span><span class="settings-btn" data-action="settingsNodeRadiusUp">+</span></div></div>
+        <div class="dd-divider"></div>
+        <div class="dd-label" data-i18n="dd.settings.mode">Mode</div>
+        <div class="dd-item" data-action="settingsToggleFocus"><span data-i18n="dd.settings.focus">Focus</span><span class="hint" id="sv-focus"></span></div>
+        <div class="dd-item" data-action="settingsToggleRead"><span data-i18n="dd.settings.read">Reading</span><span class="hint" id="sv-read"></span></div>
+        <div class="dd-item" data-action="settingsToggleFull"><span data-i18n="dd.settings.full">Full Display</span><span class="hint" id="sv-full"></span></div>
+        <div class="dd-divider"></div>
+        <div class="dd-label" data-i18n="dd.settings.ports">Ports & Connections</div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.portSize">Port Size</span><div class="settings-control"><span class="settings-value" id="sv-port-size">10</span><span class="settings-btn" data-action="settingsPortSizeDown">−</span><span class="settings-btn" data-action="settingsPortSizeUp">+</span></div></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.portColor">Port Color</span><div class="settings-colors" id="sv-port-color"><div class="ft-color-dot active" data-color="#888888" style="background:#888888"></div><div class="ft-color-dot" data-color="#555555" style="background:#555555"></div><div class="ft-color-dot" data-color="#000000" style="background:#000000"></div><div class="ft-color-dot" data-color="#cc3333" style="background:#cc3333"></div><div class="ft-color-dot" data-color="#3366cc" style="background:#3366cc"></div><div class="ft-color-dot" data-color="#339933" style="background:#339933"></div><div class="ft-color-dot" data-color="#cc6600" style="background:#cc6600"></div></div></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.connColor">Conn Color</span><div class="settings-colors" id="sv-conn-color"><div class="ft-color-dot active" data-color="#555555" style="background:#555555"></div><div class="ft-color-dot" data-color="#888888" style="background:#888888"></div><div class="ft-color-dot" data-color="#000000" style="background:#000000"></div><div class="ft-color-dot" data-color="#cc3333" style="background:#cc3333"></div><div class="ft-color-dot" data-color="#3366cc" style="background:#3366cc"></div><div class="ft-color-dot" data-color="#339933" style="background:#339933"></div><div class="ft-color-dot" data-color="#cc6600" style="background:#cc6600"></div></div></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.connWidth">Conn Width</span><div class="settings-control"><span class="settings-value" id="sv-conn-width">2</span><span class="settings-btn" data-action="settingsConnWidthDown">−</span><span class="settings-btn" data-action="settingsConnWidthUp">+</span></div></div>
+        <div class="dd-divider"></div>
+        <div class="dd-label" data-i18n="dd.settings.layout">Layout</div>
+        <div class="dd-item" data-action="settingsTogglePin"><span data-i18n="dd.settings.menuPinned">Pin Menu</span><span class="hint" id="sv-menu-pinned"></span></div>
+        <div class="dd-item" data-action="settingsToggleStatusBar"><span data-i18n="dd.settings.statusBar">Status Bar</span><span class="hint" id="sv-status-bar"></span></div>
+        <div class="dd-item" data-action="settingsToggleLang"><span data-i18n="dd.settings.lang">Language</span><span class="hint" id="sv-lang"></span></div>
+        <div class="dd-divider"></div>
+        <div class="dd-item" data-action="settingsResetStyles" style="color:var(--text-dim)"><span data-i18n="dd.settings.resetStyles">Reset Styles</span></div>
     </div>
 
     <!-- ===== Floating Toolbar ===== -->
@@ -1286,7 +1403,7 @@
     <!-- ===== Status Bar ===== -->
     <div id="status-bar">
         <span id="stat-left" data-i18n="status.ready">Ready</span>
-        <span id="stat-right">ZenCanvas · ∞</span>
+        <span id="stat-right">ZenCanvas</span>
     </div>
 
     <!-- ===== Notification ===== -->
@@ -1349,8 +1466,9 @@
                     'indicator.focus': 'FOCUS',
                     'indicator.reading': 'READING',
                     'indicator.full': 'FULL',
+                    'menu.newLabel': 'NEW',
                     'menu.file': 'FILE',
-                    'menu.new': '[ NEW ]',
+                    'menu.new': '[ TEXT ]',
                     'menu.img': '[ IMG ]',
                     'menu.md': '[ MD ]',
                     'menu.math': '[ MATH ]',
@@ -1358,7 +1476,7 @@
                     'menu.save': '[ SAVE ]',
                     'menu.open': '[ OPEN ]',
                     'menu.export': '[ EXPORT ]',
-                    'menu.view': 'VIEW',
+                    'menu.mode': 'MODE',
                     'menu.bg': '[ BG ]',
                     'menu.themeLight': '[ LIGHT ]',
                     'menu.themeDark': '[ DARK ]',
@@ -1366,11 +1484,11 @@
                     'menu.read': '[ READ ]',
                     'menu.full': '[ FULL ]',
                     'menu.reset': '[ RESET ]',
+                    'menu.resetView': '[ RESET ]',
                     'menu.settings': 'SETTINGS',
                     'menu.nodebg': '[ NODE BG ]',
-                    'menu.titleFsDown': '[ T− ]',
-                    'menu.titleFsUp': '[ T+ ]',
                     'menu.lang': '[ 中文 ]',
+                    'menu.styleSettings': '[ STYLE ]',
                     'menu.tools': 'TOOLS',
                     'menu.purge': '[ PURGE ]',
                     'pin.title': 'Pin menu bar',
@@ -1392,6 +1510,29 @@
                     'dd.export.json': 'JSON',
                     'dd.export.pdf': 'PDF',
                     'dd.export.png': 'PNG',
+                    'dd.settings.typo': 'Typography',
+                    'dd.settings.contentFs': 'Font Size',
+                    'dd.settings.contentLh': 'Line Height',
+                    'dd.settings.titleFs': 'Title Size',
+                    'dd.settings.appearance': 'Appearance',
+                    'dd.settings.theme': 'Theme',
+                    'dd.settings.bg': 'Background',
+                    'dd.settings.nodeBg': 'Node BG',
+                    'dd.settings.nodeRadius': 'Node Radius',
+                    'dd.settings.mode': 'Mode',
+                    'dd.settings.focus': 'Focus',
+                    'dd.settings.read': 'Reading',
+                    'dd.settings.full': 'Full Display',
+                    'dd.settings.ports': 'Ports & Connections',
+                    'dd.settings.portSize': 'Port Size',
+                    'dd.settings.portColor': 'Port Color',
+                    'dd.settings.connColor': 'Conn Color',
+                    'dd.settings.connWidth': 'Conn Width',
+                    'dd.settings.layout': 'Layout',
+                    'dd.settings.menuPinned': 'Pin Menu',
+                    'dd.settings.statusBar': 'Status Bar',
+                    'dd.settings.lang': 'Language',
+                    'dd.settings.resetStyles': 'Reset Styles',
                     'ft.style': 'Style',
                     'ft.font': 'Font',
                     'ft.size': 'Size',
@@ -1451,6 +1592,7 @@
                     'notify.pngExported': 'PNG exported',
                     'notify.pngExportFailed': 'PNG export failed: {0}',
                     'notify.allCleared': 'All cleared',
+                    'notify.stylesReset': 'Styles reset',
                     'stats.text': '{0} node{1} · {2} conn{3}',
                 },
                 zh: {
@@ -1459,8 +1601,9 @@
                     'indicator.focus': '专注',
                     'indicator.reading': '阅读',
                     'indicator.full': '全部',
+                    'menu.newLabel': '新建',
                     'menu.file': '文件',
-                    'menu.new': '[ 新建 ]',
+                    'menu.new': '[ 文本 ]',
                     'menu.img': '[ 图片 ]',
                     'menu.md': '[ MD ]',
                     'menu.math': '[ 公式 ]',
@@ -1468,7 +1611,7 @@
                     'menu.save': '[ 保存 ]',
                     'menu.open': '[ 打开 ]',
                     'menu.export': '[ 导出 ]',
-                    'menu.view': '视图',
+                    'menu.mode': '模式',
                     'menu.bg': '[ 背景 ]',
                     'menu.themeLight': '[ 浅色 ]',
                     'menu.themeDark': '[ 深色 ]',
@@ -1476,11 +1619,11 @@
                     'menu.read': '[ 阅读 ]',
                     'menu.full': '[ 全部 ]',
                     'menu.reset': '[ 重置 ]',
+                    'menu.resetView': '[ 重置视图 ]',
                     'menu.settings': '设置',
                     'menu.nodebg': '[ 节点背景 ]',
-                    'menu.titleFsDown': '[ T− ]',
-                    'menu.titleFsUp': '[ T+ ]',
                     'menu.lang': '[ EN ]',
+                    'menu.styleSettings': '[ 样式 ]',
                     'menu.tools': '工具',
                     'menu.purge': '[ 清空 ]',
                     'pin.title': '固定菜单栏',
@@ -1502,6 +1645,29 @@
                     'dd.export.json': 'JSON',
                     'dd.export.pdf': 'PDF',
                     'dd.export.png': 'PNG',
+                    'dd.settings.typo': '排版',
+                    'dd.settings.contentFs': '正文字号',
+                    'dd.settings.contentLh': '行高',
+                    'dd.settings.titleFs': '标题字号',
+                    'dd.settings.appearance': '外观',
+                    'dd.settings.theme': '主题',
+                    'dd.settings.bg': '背景',
+                    'dd.settings.nodeBg': '节点背景',
+                    'dd.settings.nodeRadius': '圆角',
+                    'dd.settings.mode': '模式',
+                    'dd.settings.focus': '专注模式',
+                    'dd.settings.read': '阅读模式',
+                    'dd.settings.full': '全部显示',
+                    'dd.settings.ports': '端口与连线',
+                    'dd.settings.portSize': '端口大小',
+                    'dd.settings.portColor': '端口颜色',
+                    'dd.settings.connColor': '连线颜色',
+                    'dd.settings.connWidth': '连线粗细',
+                    'dd.settings.layout': '布局',
+                    'dd.settings.menuPinned': '固定菜单',
+                    'dd.settings.statusBar': '状态栏',
+                    'dd.settings.lang': '语言',
+                    'dd.settings.resetStyles': '重置样式',
                     'ft.style': '样式',
                     'ft.font': '字体',
                     'ft.size': '大小',
@@ -1561,6 +1727,7 @@
                     'notify.pngExported': 'PNG 已导出',
                     'notify.pngExportFailed': 'PNG 导出失败：{0}',
                     'notify.allCleared': '已全部清空',
+                    'notify.stylesReset': '样式已重置',
                     'stats.text': '{0} 个节点 · {2} 条连接',
                 },
             };
@@ -1574,9 +1741,17 @@
                 focusMode: false,
                 readingMode: false,
                 fullDisplay: false,
-                menuPinned: false,
+                menuPinned: true,
                 nodeBgVisible: true,
                 titleFontSize: 10,
+                contentFontSize: 14,
+                contentLineHeight: 1.8,
+                nodeBorderRadius: 0,
+                portSize: 10,
+                portColor: '#888888',
+                connColor: '#555555',
+                connWidth: 2,
+                statusBarVisible: true,
                 zCounter: 10,
                 nodeCounter: 0,
                 scale: 1,
@@ -1621,12 +1796,9 @@
                 get contextMenu() { return document.getElementById('context-menu'); },
                 get pinBtn() { return document.getElementById('pin-btn'); },
                 get topMenu() { return document.getElementById('top-menu'); },
-                get btnTheme() { return document.getElementById('btn-theme'); },
                 get btnFocus() { return document.getElementById('btn-focus'); },
                 get btnRead() { return document.getElementById('btn-read'); },
                 get btnFull() { return document.getElementById('btn-full'); },
-                get btnNodeBg() { return document.getElementById('btn-node-bg'); },
-                get btnLang() { return document.getElementById('btn-lang'); },
                 get ftLhVal() { return document.getElementById('ft-lh-val'); },
                 get splash() { return document.getElementById('splash'); },
                 get ctxEdit() { return document.getElementById('ctx-edit'); },
@@ -1684,7 +1856,7 @@
                         el.title = t(el.dataset.i18nTitle);
                     });
                     if (DOM.pinBtn) DOM.pinBtn.title = t('pin.title');
-                    if (DOM.btnLang) DOM.btnLang.textContent = t('menu.lang');
+                    UIManager.updateSettingsUI();
                     UIManager.updateThemeBtn();
                     NodeManager.refreshPlaceholders();
                     UIManager.updateStats();
@@ -1705,11 +1877,19 @@
                         theme: AppState.theme,
                         bg: AppState.bg,
                         titleFontSize: AppState.titleFontSize,
+                        contentFontSize: AppState.contentFontSize,
+                        contentLineHeight: AppState.contentLineHeight,
+                        nodeBorderRadius: AppState.nodeBorderRadius,
                         menuPinned: AppState.menuPinned,
                         focusMode: AppState.focusMode,
                         readingMode: AppState.readingMode,
                         fullDisplay: AppState.fullDisplay,
                         nodeBgVisible: AppState.nodeBgVisible,
+                        portSize: AppState.portSize,
+                        portColor: AppState.portColor,
+                        connColor: AppState.connColor,
+                        connWidth: AppState.connWidth,
+                        statusBarVisible: AppState.statusBarVisible,
                         panX: AppState.panX,
                         panY: AppState.panY,
                         scale: AppState.scale,
@@ -1723,7 +1903,9 @@
                     try {
                         const parsed = JSON.parse(saved);
                         const keys = ['theme', 'bg', 'menuPinned', 'focusMode', 'readingMode', 'fullDisplay',
-                            'nodeBgVisible', 'titleFontSize', 'panX', 'panY', 'scale', 'lang'
+                            'nodeBgVisible', 'titleFontSize', 'contentFontSize', 'contentLineHeight', 'nodeBorderRadius',
+                            'portSize', 'portColor', 'connColor', 'connWidth',
+                            'statusBarVisible', 'panX', 'panY', 'scale', 'lang'
                         ];
                         for (const k of keys) {
                             if (parsed[k] !== undefined) AppState[k] = parsed[k];
@@ -1744,19 +1926,35 @@
                     DOM.topMenu.classList.toggle('pinned', AppState.menuPinned);
                     // Focus / Reading / Full
                     document.body.classList.toggle('focus-mode', AppState.focusMode);
-                    DOM.btnFocus.classList.toggle('active', AppState.focusMode);
+                    if (DOM.btnFocus) DOM.btnFocus.classList.toggle('active', AppState.focusMode);
                     document.body.classList.toggle('reading-mode', AppState.readingMode);
-                    DOM.btnRead.classList.toggle('active', AppState.readingMode);
+                    if (DOM.btnRead) DOM.btnRead.classList.toggle('active', AppState.readingMode);
                     document.body.classList.toggle('full-display', AppState.fullDisplay);
-                    DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
+                    if (DOM.btnFull) DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
                     // Node background
                     UIManager.applyNodeBg();
                     // Title font size
                     document.documentElement.style.setProperty('--title-font-size', AppState.titleFontSize + 'px');
+                    // Content defaults
+                    document.documentElement.style.setProperty('--content-font-size', AppState.contentFontSize + 'px');
+                    document.documentElement.style.setProperty('--content-line-height', AppState.contentLineHeight);
+                    document.documentElement.style.setProperty('--node-border-radius', AppState.nodeBorderRadius + 'px');
+                    // Port size
+                    document.documentElement.style.setProperty('--port-size', AppState.portSize + 'px');
+                    // Port color
+                    document.documentElement.style.setProperty('--port-color', AppState.portColor);
+                    // Connection color
+                    document.documentElement.style.setProperty('--conn-color', AppState.connColor);
+                    // Connection width
+                    document.documentElement.style.setProperty('--conn-width', AppState.connWidth + 'px');
+                    // Status bar
+                    UIManager.applyStatusBar();
                     // Transform
                     CanvasManager.applyTransform();
                     // I18n
                     I18nManager.apply();
+                    // Settings UI
+                    UIManager.updateSettingsUI();
                 }
             };
 
@@ -1765,36 +1963,38 @@
             // ================================================================
             const UIManager = {
                 updateThemeBtn() {
-                    if (DOM.btnTheme) DOM.btnTheme.textContent = AppState.theme === 'dark' ? t('menu.themeDark') : t(
-                        'menu.themeLight');
+                    // theme now managed in settings panel
                 },
                 toggleTheme() {
                     AppState.theme = AppState.theme === 'dark' ? 'light' : 'dark';
                     document.body.classList.toggle('theme-dark', AppState.theme === 'dark');
-                    UIManager.updateThemeBtn();
                     Settings.save();
+                    UIManager.updateSettingsUI();
                     ConnectionManager.renderAll();
                 },
                 toggleFocus() {
                     AppState.focusMode = !AppState.focusMode;
                     document.body.classList.toggle('focus-mode', AppState.focusMode);
-                    DOM.btnFocus.classList.toggle('active', AppState.focusMode);
+                    if (DOM.btnFocus) DOM.btnFocus.classList.toggle('active', AppState.focusMode);
                     Settings.save();
+                    UIManager.updateSettingsUI();
                 },
                 toggleRead() {
                     AppState.readingMode = !AppState.readingMode;
                     document.body.classList.toggle('reading-mode', AppState.readingMode);
-                    DOM.btnRead.classList.toggle('active', AppState.readingMode);
-                    if (AppState.fullDisplay) { AppState.fullDisplay = false; document.body.classList.remove('full-display'); DOM.btnFull.classList.remove('active'); }
+                    if (DOM.btnRead) DOM.btnRead.classList.toggle('active', AppState.readingMode);
+                    if (AppState.fullDisplay) { AppState.fullDisplay = false; document.body.classList.remove('full-display'); if (DOM.btnFull) DOM.btnFull.classList.remove('active'); }
                     Settings.save();
+                    UIManager.updateSettingsUI();
                     ConnectionManager.renderAll();
                 },
                 toggleFull() {
                     AppState.fullDisplay = !AppState.fullDisplay;
                     document.body.classList.toggle('full-display', AppState.fullDisplay);
-                    DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
-                    if (AppState.readingMode) { AppState.readingMode = false; document.body.classList.remove('reading-mode'); DOM.btnRead.classList.remove('active'); }
+                    if (DOM.btnFull) DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
+                    if (AppState.readingMode) { AppState.readingMode = false; document.body.classList.remove('reading-mode'); if (DOM.btnRead) DOM.btnRead.classList.remove('active'); }
                     Settings.save();
+                    UIManager.updateSettingsUI();
                 },
                 toggleNodeBg() {
                     AppState.nodeBgVisible = !AppState.nodeBgVisible;
@@ -1804,17 +2004,10 @@
                 },
                 applyNodeBg() {
                     const nodes = getNodes();
-                    const btn = DOM.btnNodeBg;
                     if (AppState.nodeBgVisible) {
                         nodes.forEach(n => n.classList.remove('no-bg'));
-                        btn.classList.add('toggle-on');
-                        btn.classList.remove('toggle-off');
-                        btn.textContent = t('menu.nodebg');
                     } else {
                         nodes.forEach(n => n.classList.add('no-bg'));
-                        btn.classList.remove('toggle-on');
-                        btn.classList.add('toggle-off');
-                        btn.textContent = t('menu.nodebg');
                     }
                     document.querySelectorAll('.node-port').forEach(p => {
                         p.style.borderColor = AppState.nodeBgVisible ? 'var(--bg)' : 'transparent';
@@ -1837,6 +2030,15 @@
                     CanvasManager.applyTransform();
                     Settings.save();
                     notify(t('notify.viewReset'));
+                },
+                applyStatusBar() {
+                    const sb = document.getElementById('status-bar');
+                    if (AppState.statusBarVisible) {
+                        sb.classList.remove('hidden');
+                        sb.style.display = '';
+                    } else {
+                        sb.classList.add('hidden');
+                    }
                 },
                 updateStats() {
                     const count = getNodes().length;
@@ -1865,6 +2067,149 @@
                     DOM.topMenu.classList.toggle('pinned', AppState.menuPinned);
                     DOM.pinBtn.classList.toggle('pinned', AppState.menuPinned);
                     Settings.save();
+                },
+                updateSettingsUI() {
+                    document.getElementById('sv-content-fs').textContent = AppState.contentFontSize;
+                    document.getElementById('sv-content-lh').textContent = AppState.contentLineHeight.toFixed(1);
+                    document.getElementById('sv-title-fs').textContent = AppState.titleFontSize;
+                    document.getElementById('sv-node-radius').textContent = AppState.nodeBorderRadius;
+                    document.getElementById('sv-port-size').textContent = AppState.portSize;
+                    document.getElementById('sv-conn-width').textContent = AppState.connWidth;
+                    document.getElementById('sv-menu-pinned').textContent = AppState.menuPinned ? 'ON' : 'OFF';
+                    document.getElementById('sv-status-bar').textContent = AppState.statusBarVisible ? 'ON' : 'OFF';
+                    document.getElementById('sv-node-bg').textContent = AppState.nodeBgVisible ? 'ON' : 'OFF';
+                    document.getElementById('sv-theme').textContent = AppState.theme === 'dark' ? 'Dark' : 'Light';
+                    document.getElementById('sv-focus').textContent = AppState.focusMode ? 'ON' : 'OFF';
+                    document.getElementById('sv-read').textContent = AppState.readingMode ? 'ON' : 'OFF';
+                    document.getElementById('sv-full').textContent = AppState.fullDisplay ? 'ON' : 'OFF';
+                    document.getElementById('sv-lang').textContent = AppState.lang === 'zh' ? '中文' : 'EN';
+                    document.querySelectorAll('#sv-port-color .ft-color-dot').forEach(d => {
+                        d.classList.toggle('active', d.dataset.color === AppState.portColor);
+                    });
+                    document.querySelectorAll('#sv-conn-color .ft-color-dot').forEach(d => {
+                        d.classList.toggle('active', d.dataset.color === AppState.connColor);
+                    });
+                    document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach(d => {
+                        d.classList.toggle('active', d.dataset.bg === AppState.bg);
+                    });
+                },
+                changeTitleFontSize(delta) {
+                    AppState.titleFontSize = Math.max(7, Math.min(24, AppState.titleFontSize + delta));
+                    document.documentElement.style.setProperty('--title-font-size', AppState.titleFontSize + 'px');
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                    notify(t('notify.titleSize', AppState.titleFontSize));
+                },
+                changePortSize(delta) {
+                    AppState.portSize = Math.max(4, Math.min(20, AppState.portSize + delta));
+                    document.documentElement.style.setProperty('--port-size', AppState.portSize + 'px');
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                },
+                setPortColor(color) {
+                    AppState.portColor = color;
+                    document.documentElement.style.setProperty('--port-color', color);
+                    document.querySelectorAll('#sv-port-color .ft-color-dot').forEach(d => {
+                        d.classList.toggle('active', d.dataset.color === color);
+                    });
+                    Settings.save();
+                },
+                setConnColor(color) {
+                    AppState.connColor = color;
+                    document.documentElement.style.setProperty('--conn-color', color);
+                    document.querySelectorAll('#sv-conn-color .ft-color-dot').forEach(d => {
+                        d.classList.toggle('active', d.dataset.color === color);
+                    });
+                    Settings.save();
+                    ConnectionManager.renderAll();
+                },
+                changeConnWidth(delta) {
+                    AppState.connWidth = Math.max(1, Math.min(6, AppState.connWidth + delta * 0.5));
+                    AppState.connWidth = Math.round(AppState.connWidth * 10) / 10;
+                    document.documentElement.style.setProperty('--conn-width', AppState.connWidth + 'px');
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                    ConnectionManager.renderAll();
+                },
+                toggleSettingsStatusBar() {
+                    AppState.statusBarVisible = !AppState.statusBarVisible;
+                    UIManager.applyStatusBar();
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                },
+                toggleSettingsNodeBg() {
+                    UIManager.toggleNodeBg();
+                    UIManager.updateSettingsUI();
+                },
+                changeContentFontSize(delta) {
+                    AppState.contentFontSize = Math.max(8, Math.min(48, AppState.contentFontSize + delta));
+                    document.documentElement.style.setProperty('--content-font-size', AppState.contentFontSize + 'px');
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                },
+                changeContentLineHeight(delta) {
+                    AppState.contentLineHeight = Math.max(1.0, Math.min(3.5, +(AppState.contentLineHeight + delta).toFixed(1)));
+                    document.documentElement.style.setProperty('--content-line-height', AppState.contentLineHeight);
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                },
+                changeNodeRadius(delta) {
+                    AppState.nodeBorderRadius = Math.max(0, Math.min(24, AppState.nodeBorderRadius + delta));
+                    document.documentElement.style.setProperty('--node-border-radius', AppState.nodeBorderRadius + 'px');
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                },
+                settingsSetBg(bg) {
+                    document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
+                    document.body.classList.add(bg);
+                    if (AppState.theme === 'dark') document.body.classList.add('theme-dark');
+                    AppState.bg = bg;
+                    document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach(d => {
+                        d.classList.toggle('active', d.dataset.bg === bg);
+                    });
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                },
+                settingsToggleTheme() {
+                    AppState.theme = AppState.theme === 'dark' ? 'light' : 'dark';
+                    document.body.classList.toggle('theme-dark', AppState.theme === 'dark');
+                    Settings.save();
+                    UIManager.updateSettingsUI();
+                    ConnectionManager.renderAll();
+                },
+                settingsToggleFocus() {
+                    UIManager.toggleFocus();
+                    UIManager.updateSettingsUI();
+                },
+                settingsToggleRead() {
+                    UIManager.toggleRead();
+                    UIManager.updateSettingsUI();
+                },
+                settingsToggleFull() {
+                    UIManager.toggleFull();
+                    UIManager.updateSettingsUI();
+                },
+                settingsToggleLang() {
+                    I18nManager.toggle();
+                    UIManager.updateSettingsUI();
+                },
+                resetAllStyles() {
+                    AppState.contentFontSize = 14;
+                    AppState.contentLineHeight = 1.8;
+                    AppState.titleFontSize = 10;
+                    AppState.nodeBorderRadius = 0;
+                    AppState.nodeBgVisible = true;
+                    AppState.portSize = 10;
+                    AppState.portColor = '#888888';
+                    AppState.connColor = '#555555';
+                    AppState.connWidth = 2;
+                    AppState.statusBarVisible = true;
+                    AppState.theme = 'light';
+                    AppState.bg = 'bg-void';
+                    Settings.save();
+                    Settings.apply();
+                    UIManager.updateSettingsUI();
+                    notify(t('notify.stylesReset'));
                 },
             };
 
@@ -2006,8 +2351,8 @@
                         content.setAttribute('contenteditable', 'true');
                         content.dataset.placeholder = t('placeholder.startTyping');
                         content.style.fontFamily = CONFIG.DEFAULT_FONT;
-                        content.style.fontSize = (data && data.fontSize ? String(data.fontSize).replace('px', '') + 'px' : CONFIG.DEFAULT_FONT_SIZE + 'px');
-                        content.style.lineHeight = data && data.lh ? data.lh : CONFIG.DEFAULT_LINE_HEIGHT;
+                        content.style.fontSize = (data && data.fontSize ? String(data.fontSize).replace('px', '') + 'px' : AppState.contentFontSize + 'px');
+                        content.style.lineHeight = data && data.lh ? data.lh : AppState.contentLineHeight;
                         content.innerHTML = data && data.content ? data.content : '';
                         content.addEventListener('input', debouncedAutoSave);
                         content.addEventListener('mouseup', () => setTimeout(ToolbarManager.handleSelection, 10));
@@ -2760,7 +3105,7 @@
                     AppState.currentSelectionRange = range.cloneRange();
                     AppState.currentSelectionContainer = nodeContent;
 
-                    const lh = parseFloat(nodeContent.style.lineHeight) || CONFIG.DEFAULT_LINE_HEIGHT;
+                    const lh = parseFloat(nodeContent.style.lineHeight) || AppState.contentLineHeight;
                     DOM.ftLhVal.textContent = lh.toFixed(1);
 
                     ToolbarManager._updateToolbarState(nodeContent);
@@ -2853,7 +3198,7 @@
                     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
                     const existing = ToolbarManager._findStyledAncestor('fontSize');
                     if (existing) {
-                        const cur = parseFloat(existing.style.fontSize) || CONFIG.DEFAULT_FONT_SIZE;
+                        const cur = parseFloat(existing.style.fontSize) || AppState.contentFontSize;
                         const next = Math.max(8, Math.min(96, cur + delta));
                         existing.style.fontSize = next + 'px';
                         // Sync font size to ancestor strikethrough elements so line-through stays centered
@@ -2867,15 +3212,15 @@
                         }
                         notify(t('notify.size', Math.round(next)));
                     } else {
-                        const span = ToolbarManager._wrapSelectionWithStyle({ fontSize: CONFIG.DEFAULT_FONT_SIZE + delta + 'px' });
-                        if (span) notify(t('notify.size', CONFIG.DEFAULT_FONT_SIZE + delta));
+                        const span = ToolbarManager._wrapSelectionWithStyle({ fontSize: AppState.contentFontSize + delta + 'px' });
+                        if (span) notify(t('notify.size', AppState.contentFontSize + delta));
                     }
                     debouncedAutoSave();
                 },
                 applyLineHeight(delta) {
                     if (!AppState.currentSelectionContainer) return;
-                    const cur = parseFloat(AppState.currentSelectionContainer.style.lineHeight) || CONFIG
-                        .DEFAULT_LINE_HEIGHT;
+                    const cur = parseFloat(AppState.currentSelectionContainer.style.lineHeight) || AppState
+                        .contentLineHeight;
                     const next = Math.max(1.0, Math.min(3.5, +(cur + delta).toFixed(1)));
                     AppState.currentSelectionContainer.style.lineHeight = next;
                     DOM.ftLhVal.textContent = next.toFixed(1);
@@ -3149,8 +3494,7 @@
             function closeAllDropdowns() {
                 document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
                 document.querySelectorAll('.menu-btn').forEach(b => {
-                    if (b.id !== 'btn-focus' && b.id !== 'btn-read' && b.id !== 'btn-full' &&
-                        b.id !== 'btn-node-bg' && b.id !== 'btn-theme') {
+                if (b.id !== 'btn-focus' && b.id !== 'btn-read' && b.id !== 'btn-full') {
                         b.classList.remove('active');
                     }
                 });
@@ -3297,6 +3641,74 @@
                             break;
                         case 'purge':
                             NodeManager.clearAll();
+                            break;
+                        case 'showSettings':
+                            showDropdown('dd-settings', target);
+                            setTimeout(() => UIManager.updateSettingsUI(), 10);
+                            break;
+                        case 'settingsContentFsDown':
+                            UIManager.changeContentFontSize(-1);
+                            break;
+                        case 'settingsContentFsUp':
+                            UIManager.changeContentFontSize(1);
+                            break;
+                        case 'settingsContentLhDown':
+                            UIManager.changeContentLineHeight(-0.1);
+                            break;
+                        case 'settingsContentLhUp':
+                            UIManager.changeContentLineHeight(0.1);
+                            break;
+                        case 'settingsTitleFsDown':
+                            UIManager.changeTitleFontSize(-1);
+                            break;
+                        case 'settingsTitleFsUp':
+                            UIManager.changeTitleFontSize(1);
+                            break;
+                        case 'settingsPortSizeDown':
+                            UIManager.changePortSize(-1);
+                            break;
+                        case 'settingsPortSizeUp':
+                            UIManager.changePortSize(1);
+                            break;
+                        case 'settingsConnWidthDown':
+                            UIManager.changeConnWidth(-1);
+                            break;
+                        case 'settingsConnWidthUp':
+                            UIManager.changeConnWidth(1);
+                            break;
+                        case 'settingsNodeRadiusDown':
+                            UIManager.changeNodeRadius(-1);
+                            break;
+                        case 'settingsNodeRadiusUp':
+                            UIManager.changeNodeRadius(1);
+                            break;
+                        case 'settingsTogglePin':
+                            UIManager.togglePin();
+                            UIManager.updateSettingsUI();
+                            break;
+                        case 'settingsToggleStatusBar':
+                            UIManager.toggleSettingsStatusBar();
+                            break;
+                        case 'settingsToggleNodeBg':
+                            UIManager.toggleSettingsNodeBg();
+                            break;
+                        case 'settingsToggleTheme':
+                            UIManager.settingsToggleTheme();
+                            break;
+                        case 'settingsToggleFocus':
+                            UIManager.settingsToggleFocus();
+                            break;
+                        case 'settingsToggleRead':
+                            UIManager.settingsToggleRead();
+                            break;
+                        case 'settingsToggleFull':
+                            UIManager.settingsToggleFull();
+                            break;
+                        case 'settingsToggleLang':
+                            UIManager.settingsToggleLang();
+                            break;
+                        case 'settingsResetStyles':
+                            UIManager.resetAllStyles();
                             break;
                         case 'togglePin':
                             UIManager.togglePin();
@@ -3503,6 +3915,29 @@
                     dot.addEventListener('click', (e) => {
                         e.preventDefault();
                         ToolbarManager.applyColor(dot.dataset.color);
+                    });
+                });
+                // Settings bg option dots
+                document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach((dot) => {
+                    dot.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        UIManager.settingsSetBg(dot.dataset.bg);
+                    });
+                });
+                // Settings color dots (port color / conn color)
+                document.querySelectorAll('#sv-port-color .ft-color-dot').forEach((dot) => {
+                    dot.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        UIManager.setPortColor(dot.dataset.color);
+                    });
+                });
+                document.querySelectorAll('#sv-conn-color .ft-color-dot').forEach((dot) => {
+                    dot.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        UIManager.setConnColor(dot.dataset.color);
                     });
                 });
                 document.addEventListener('mousedown', (e) => {
