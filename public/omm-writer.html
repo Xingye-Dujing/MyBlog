@@ -457,6 +457,30 @@
             color: var(--active-text);
             background: var(--active-bg);
         }
+        .node-action-btn.lock-btn {
+            font-size: 11px;
+        }
+        .node-action-btn.lock-btn.locked {
+            color: var(--active-text);
+            background: var(--active-bg);
+        }
+        .node.locked {
+            opacity: 0.65;
+            border-style: dashed;
+        }
+        .node.locked .node-header {
+            cursor: default;
+        }
+        .node.locked .node-action-btn:not(.lock-btn) {
+            display: none !important;
+        }
+        .node.locked .node-resize {
+            display: none !important;
+        }
+        .node.locked .node-port {
+            pointer-events: none;
+            opacity: 0.3 !important;
+        }
         .node-content {
             flex: 1;
             padding: 20px 24px;
@@ -716,9 +740,12 @@
         .node-todo {
             border-left: 3px solid #cc6600 !important;
         }
+        .node.minimized .node-header {
+            border-radius: var(--node-border-radius);
+        }
         .node-todo .todo-checkbox {
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             border: 1px solid var(--border);
             display: flex;
             align-items: center;
@@ -1389,6 +1416,7 @@
         <div class="dd-item" id="ctx-edit" data-action="ctxEdit"><span data-i18n="ctx.editContent">Edit Content</span></div>
         <div class="dd-item" id="ctx-copy-node" data-action="ctxCopy"><span data-i18n="ctx.copyNode">Copy Node</span></div>
         <div class="dd-item" id="ctx-paste-node" data-action="ctxPaste"><span data-i18n="ctx.pasteNode">Paste Node</span></div>
+        <div class="dd-item" id="ctx-lock" data-action="ctxLock"><span data-i18n="ctx.lock">Lock Node</span></div>
         <div class="dd-divider"></div>
         <div class="dd-item" data-action="clearConns"><span data-i18n="ctx.clearConnections">Clear All Connections</span></div>
     </div>
@@ -1484,7 +1512,7 @@
                     'menu.read': '[ READ ]',
                     'menu.full': '[ FULL ]',
                     'menu.reset': '[ RESET ]',
-                    'menu.resetView': '[ RESET ]',
+                    'menu.resetView': '[ RESET ZOOM ]',
                     'menu.settings': 'SETTINGS',
                     'menu.nodebg': '[ NODE BG ]',
                     'menu.lang': '[ 中文 ]',
@@ -1554,6 +1582,8 @@
                     'ctx.editContent': 'Edit Content',
                     'ctx.copyNode': 'Copy Node',
                     'ctx.pasteNode': 'Paste Node',
+                    'ctx.lock': 'Lock Node',
+                    'ctx.unlock': 'Unlock Node',
                     'ctx.clearConnections': 'Clear All Connections',
                     'status.ready': 'Ready',
                     'export.exporting': 'Exporting…',
@@ -1619,7 +1649,7 @@
                     'menu.read': '[ 阅读 ]',
                     'menu.full': '[ 全部 ]',
                     'menu.reset': '[ 重置 ]',
-                    'menu.resetView': '[ 重置视图 ]',
+                    'menu.resetView': '[ 重置缩放 ]',
                     'menu.settings': '设置',
                     'menu.nodebg': '[ 节点背景 ]',
                     'menu.lang': '[ EN ]',
@@ -1689,6 +1719,8 @@
                     'ctx.editContent': '编辑内容',
                     'ctx.copyNode': '复制节点',
                     'ctx.pasteNode': '粘贴节点',
+                    'ctx.lock': '锁定节点',
+                    'ctx.unlock': '解锁节点',
                     'ctx.clearConnections': '清除所有连线',
                     'status.ready': '就绪',
                     'export.exporting': '正在导出…',
@@ -2249,7 +2281,6 @@
                     const title = data && data.title ? data.title : defaultTitle;
                     if (data && data.w) node.style.width = data.w;
                     if (data && data.h) node.style.height = data.h;
-
                     // Header
                     const header = document.createElement('div');
                     header.className = 'node-header';
@@ -2261,6 +2292,7 @@
                             <div class="todo-checkbox" data-action="toggleTodo"></div>`;
                     }
                     headerInner += `
+                            <div class="node-action-btn lock-btn" data-action="toggleLock">○</div>
                             <div class="node-action-btn minimize" data-action="minimize">−</div>
                             <div class="node-action-btn close" data-action="closeNode">×</div>
                         </div>
@@ -2315,6 +2347,13 @@
                             cb.textContent = '✓';
                             ct.classList.add('todo-done');
                         }
+                    }
+
+                    // Init locked state from saved data
+                    if (data && data.locked) {
+                        node.classList.add('locked');
+                        const lb = node.querySelector('.lock-btn');
+                        if (lb) { lb.classList.add('locked'); lb.textContent = '●'; }
                     }
 
                     // Init behaviors
@@ -2654,7 +2693,7 @@
                     let sx, sy, ox, oy, dragging = false;
                     header.addEventListener('mousedown', (e) => {
                         if (e.target.closest('.node-action-btn') || e.target.closest('.node-title-edit') ||
-                            e.target.closest('.node-port')) return;
+                            e.target.closest('.node-port') || node.classList.contains('locked')) return;
                         dragging = true;
                         sx = e.clientX;
                         sy = e.clientY;
@@ -2682,6 +2721,7 @@
                     const handle = node.querySelector('.node-resize');
                     let sx, sy, ow, oh, resizing = false;
                     handle.addEventListener('mousedown', (e) => {
+                        if (node.classList.contains('locked')) return;
                         resizing = true;
                         sx = e.clientX;
                         sy = e.clientY;
@@ -2723,17 +2763,20 @@
 
                     minBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
+                        if (node.classList.contains('locked')) return;
                         const isHidden = content.style.display === 'none';
                         if (isHidden) {
                             content.style.display = '';
                             node.style.minHeight = '';
                             node.style.height = '';
                             node.querySelector('.node-resize').style.display = '';
+                            node.classList.remove('minimized');
                         } else {
                             content.style.display = 'none';
                             node.style.minHeight = '32px';
                             node.style.height = '32px';
                             node.querySelector('.node-resize').style.display = 'none';
+                            node.classList.add('minimized');
                         }
                         ConnectionManager.renderAll();
                     });
@@ -3467,6 +3510,7 @@
                             h: node.style.height,
                             title: titleEl ? titleEl.textContent : '',
                             id: node.id,
+                            locked: node.classList.contains('locked'),
                             fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
                         };
                         if (type === 'text' || type === 'todo') {
@@ -3531,7 +3575,7 @@
                     const content = getNodeContent(node);
                     const title = getNodeTitle(node);
                     const obj = { type, x: node.style.left, y: node.style.top, w: node.style.width, h: node.style
-                            .height, title: title ? title.textContent : '', id: node.id, fontSize: content ? content.dataset.fontSize || '' : '' };
+                            .height, title: title ? title.textContent : '', id: node.id, locked: node.classList.contains('locked'), fontSize: content ? content.dataset.fontSize || '' : '' };
                     if (type === 'text' || type === 'todo') { obj.content = content ? content.innerHTML : '';
                         obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
@@ -3766,6 +3810,19 @@
                         case 'ctxPaste':
                             NodeManager.pasteNode();
                             break;
+                        case 'ctxLock':
+                            if (AppState.ctxNode) {
+                                const isLocked = AppState.ctxNode.classList.toggle('locked');
+                                const lb = AppState.ctxNode.querySelector('.lock-btn');
+                                if (lb) { lb.classList.toggle('locked', isLocked); lb.textContent = isLocked ? '●' : '○'; }
+                                const ct = getNodeContent(AppState.ctxNode);
+                                if (ct && (AppState.ctxNode.dataset.type === 'text' || AppState.ctxNode.dataset.type === 'todo')) {
+                                    ct.setAttribute('contenteditable', isLocked ? 'false' : 'true');
+                                }
+                                DOM.contextMenu.classList.remove('open');
+                                debouncedAutoSave();
+                            }
+                            break;
                         case 'clearConns':
                             ConnectionManager.clearAll();
                             break;
@@ -3811,6 +3868,19 @@
                                 notify(t('notify.nodeRemoved'));
                             }
                             break;
+                        case 'toggleLock':
+                            const lockedNode = target.closest('.node');
+                            if (lockedNode) {
+                                const isLocked = lockedNode.classList.toggle('locked');
+                                const lb = lockedNode.querySelector('.lock-btn');
+                                if (lb) { lb.classList.toggle('locked', isLocked); lb.textContent = isLocked ? '●' : '○'; }
+                                const ct = getNodeContent(lockedNode);
+                                if (ct && (lockedNode.dataset.type === 'text' || lockedNode.dataset.type === 'todo')) {
+                                    ct.setAttribute('contenteditable', isLocked ? 'false' : 'true');
+                                }
+                                debouncedAutoSave();
+                            }
+                            break;
                         case 'minimize':
                             const n = target.closest('.node');
                             if (n) {
@@ -3821,11 +3891,13 @@
                                     n.style.minHeight = '';
                                     n.style.height = '';
                                     n.querySelector('.node-resize').style.display = '';
+                                    n.classList.remove('minimized');
                                 } else {
                                     content.style.display = 'none';
                                     n.style.minHeight = '32px';
                                     n.style.height = '32px';
                                     n.querySelector('.node-resize').style.display = 'none';
+                                    n.classList.add('minimized');
                                 }
                                 ConnectionManager.renderAll();
                             }
@@ -3977,6 +4049,11 @@
                     if (copyItem) copyItem.classList.toggle('disabled', !node);
                     const pasteItem = DOM.ctxPaste;
                     if (pasteItem) pasteItem.classList.toggle('disabled', !AppState.clipboardNode);
+                    const lockItem = document.getElementById('ctx-lock');
+                    if (lockItem) {
+                        const isLocked = node && node.classList.contains('locked');
+                        lockItem.querySelector('span').textContent = t(isLocked ? 'ctx.unlock' : 'ctx.lock');
+                    }
                     const ctxMenu = DOM.contextMenu;
                     ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
                     ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
