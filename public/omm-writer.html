@@ -2329,7 +2329,17 @@
                     closeAllDropdowns();
                 },
                 createNodeAt(x, y, type, data) {
-                    AppState.nodeCounter++;
+                    let id;
+                    if (data && data.id) {
+                        id = data.id;
+                        const num = parseInt(id.split('-')[1]);
+                        if (!isNaN(num) && num > AppState.nodeCounter) {
+                            AppState.nodeCounter = num;
+                        }
+                    } else {
+                        id = 'node-' + (++AppState.nodeCounter);
+                    }
+
                     const node = document.createElement('div');
                     node.className = 'node';
                     if (!AppState.nodeBgVisible) node.classList.add('no-bg');
@@ -2339,7 +2349,6 @@
                     node.style.left = x + 'px';
                     node.style.top = y + 'px';
                     node.style.zIndex = ++AppState.zCounter;
-                    const id = 'node-' + AppState.nodeCounter;
                     node.id = id;
 
                     const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : type === 'math' ? 'MATH' : type === 'todo' ? 'TODO' : type === 'group' ? 'GROUP' : 'MD') + '_' +
@@ -3585,8 +3594,13 @@
                 },
                 async _captureCanvas() {
                     const inner = DOM.canvasInner;
-                    const nodes = getNodes();
-                    if (nodes.length === 0) {
+                    const allNodes = getNodes();
+                    const visibleNodes = [...allNodes].filter(n =>
+                        n.style.display !== 'none' &&
+                        !n.classList.contains('hidden-by-group-conn')
+                    );
+
+                    if (visibleNodes.length === 0) {
                         return await html2canvas(inner, {
                             backgroundColor: getComputedBg(),
                             scale: 2,
@@ -3602,7 +3616,7 @@
                         minY = Infinity,
                         maxX = -Infinity,
                         maxY = -Infinity;
-                    nodes.forEach(n => {
+                    visibleNodes.forEach(n => {
                         const left = n.offsetLeft,
                             top = n.offsetTop;
                         const right = left + n.offsetWidth,
@@ -3621,16 +3635,6 @@
                     const finalWidth = Math.max(200, maxX - minX);
                     const finalHeight = Math.max(200, maxY - minY);
 
-                    const hiddenContents = [];
-                    document.querySelectorAll('.node .node-content').forEach(el => {
-                        if (el.style.display === 'none') { hiddenContents.push(el);
-                            el.style.display = ''; }
-                    });
-                    const wasReading = AppState.readingMode;
-                    if (wasReading) { document.body.classList.remove('reading-mode');
-                        AppState.readingMode = false; }
-                    await new Promise(r => setTimeout(r, 100));
-
                     const canvas = await html2canvas(inner, {
                         backgroundColor: getComputedBg(),
                         scale: 2,
@@ -3643,10 +3647,6 @@
                         windowWidth: inner.scrollWidth,
                         windowHeight: inner.scrollHeight,
                     });
-
-                    hiddenContents.forEach(el => el.style.display = 'none');
-                    if (wasReading) { document.body.classList.add('reading-mode');
-                        AppState.readingMode = true; }
                     return canvas;
                 }
             };
@@ -3798,19 +3798,18 @@
                     try {
                         const data = JSON.parse(ev.target.result);
                         if (data.nodes) {
-                            data.nodes.forEach((n) => {
-                                NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n
-                                    .type, n);
-                            });
+                            getNodes().forEach(n => n.remove());
+                            AppState.connections = [];
+                            AppState.connIdCounter = 0;
+                            localStorage.setItem('zc-autosave', JSON.stringify(data));
                             if (data.connections) {
-                                AppState.connections = data.connections.map(c => ({ ...c, fromPort: c.fromPort || 'bottom', toPort: c.toPort || 'top', id: 'conn-' + (++AppState
-                                        .connIdCounter) }));
-                                ConnectionManager.renderAll();
+                                localStorage.setItem('zc-connections', JSON.stringify(data.connections));
                             }
-                            setTimeout(() => restoreCollapsedStates(), 200);
-                            notify(t('notify.loadedNodes', data.nodes.length));
+                            location.reload();
                         }
-                    } catch (_) { notify(t('notify.invalidFile')); }
+                    } catch (_) {
+                        notify(t('notify.invalidFile'));
+                    }
                 };
                 reader.readAsText(file);
                 e.target.value = '';
