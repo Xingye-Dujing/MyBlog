@@ -542,6 +542,24 @@
         .node-port.bottom {
             bottom: -6px;
         }
+        .node-port.left {
+            top: 50%;
+            left: -6px;
+            transform: translateY(-50%) scale(0.8);
+        }
+        .node-port.left:hover {
+            transform: translateY(-50%) scale(1.3);
+        }
+        .node-port.right {
+            top: 50%;
+            left: auto;
+            right: -6px;
+            transform: translateY(-50%) scale(0.8);
+        }
+        .node-port.right:hover {
+            transform: translateY(-50%) scale(1.3);
+        }
+
         .node-port.connected {
             background: var(--text);
             box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text);
@@ -1840,10 +1858,11 @@
                     }
 
                     // Ports
-                    const portTop = NodeManager._createPort(id, 'top');
-                    node.appendChild(portTop);
-                    const portBottom = NodeManager._createPort(id, 'bottom');
-                    node.appendChild(portBottom);
+                    const portTypes = ['top', 'bottom', 'left', 'right'];
+                    portTypes.forEach(pt => {
+                        const port = NodeManager._createPort(id, pt);
+                        node.appendChild(port);
+                    });
 
                     // Content
                     const content = document.createElement('div');
@@ -1886,14 +1905,15 @@
                 },
                 _buildContent(content, type, data) {
                     if (data && data.fontSize) {
-                        content.style.fontSize = data.fontSize;
-                        content.dataset.fontSize = data.fontSize;
+                        const fs = String(data.fontSize).replace('px', '');
+                        content.style.fontSize = fs + 'px';
+                        content.dataset.fontSize = fs;
                     }
                     if (type === 'text') {
                         content.setAttribute('contenteditable', 'true');
                         content.dataset.placeholder = t('placeholder.startTyping');
                         content.style.fontFamily = CONFIG.DEFAULT_FONT;
-                        content.style.fontSize = (data && data.fontSize) || CONFIG.DEFAULT_FONT_SIZE + 'px';
+                        content.style.fontSize = (data && data.fontSize ? String(data.fontSize).replace('px', '') + 'px' : CONFIG.DEFAULT_FONT_SIZE + 'px');
                         content.style.lineHeight = data && data.lh ? data.lh : CONFIG.DEFAULT_LINE_HEIGHT;
                         content.innerHTML = data && data.content ? data.content : '';
                         content.addEventListener('input', debouncedAutoSave);
@@ -2341,12 +2361,12 @@
                             e.preventDefault();
                             const nodeId = port.dataset.nodeId;
                             const portType = port.dataset.port;
-                            const isTop = portType === 'top';
+                            const pos = ConnectionManager.getPortPosition(node, portType);
                             AppState.portDrag = {
                                 nodeId,
                                 portType,
-                                startX: node.offsetLeft + node.offsetWidth / 2,
-                                startY: node.offsetTop + (isTop ? 0 : node.offsetHeight),
+                                startX: pos.x,
+                                startY: pos.y,
                                 node: node,
                                 port: port,
                             };
@@ -2413,6 +2433,48 @@
             // 10. CONNECTION MANAGER
             // ================================================================
             const ConnectionManager = {
+                getPortPosition(node, portType) {
+                    const l = node.offsetLeft, t = node.offsetTop, w = node.offsetWidth, h = node.offsetHeight;
+                    switch (portType) {
+                        case 'top': return { x: l + w / 2, y: t };
+                        case 'bottom': return { x: l + w / 2, y: t + h };
+                        case 'left': return { x: l, y: t + h / 2 };
+                        case 'right': return { x: l + w, y: t + h / 2 };
+                        default: return { x: l + w / 2, y: t + h / 2 };
+                    }
+                },
+                _getCurvePath(x1, y1, x2, y2, port1, port2) {
+                    const dx = x2 - x1, dy = y2 - y1;
+                    const absDx = Math.abs(dx), absDy = Math.abs(dy);
+                    const h1 = port1 === 'left' || port1 === 'right';
+                    const h2 = port2 === 'left' || port2 === 'right';
+                    const v1 = port1 === 'top' || port1 === 'bottom';
+                    const v2 = port2 === 'top' || port2 === 'bottom';
+                    let cp1x, cp1y, cp2x, cp2y;
+                    // Both horizontal (left↔right)
+                    if (h1 && h2) {
+                        const mid = (x1 + x2) / 2;
+                        cp1x = mid; cp1y = y1;
+                        cp2x = mid; cp2y = y2;
+                    }
+                    // Both vertical (top↔bottom)
+                    else if (v1 && v2) {
+                        const mid = (y1 + y2) / 2;
+                        cp1x = x1; cp1y = mid;
+                        cp2x = x2; cp2y = mid;
+                    }
+                    // Horizontal to vertical (e.g., left→top)
+                    else if (h1 && v2) {
+                        cp1x = x1; cp1y = y1 + dy * 0.5;
+                        cp2x = x1 + dx * 0.5; cp2y = y2;
+                    }
+                    // Vertical to horizontal (e.g., top→left)
+                    else {
+                        cp1x = x1 + dx * 0.5; cp1y = y1;
+                        cp2x = x2; cp2y = y1 + dy * 0.5;
+                    }
+                    return `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
+                },
                 renderAll() {
                     if (AppState.renderPending) return;
                     AppState.renderPending = true;
@@ -2433,28 +2495,24 @@
                         const toNode = getNodeById(conn.to);
                         if (!fromNode || !toNode) return;
 
-                        const fromX = fromNode.offsetLeft + fromNode.offsetWidth / 2;
-                        const fromY = fromNode.offsetTop + fromNode.offsetHeight;
-                        const toX = toNode.offsetLeft + toNode.offsetWidth / 2;
-                        const toY = toNode.offsetTop;
-
-                        const dx = toX - fromX,
-                            dy = toY - fromY;
-                        const cp1x = fromX + dx * 0.5,
-                            cp1y = fromY;
-                        const cp2x = fromX + dx * 0.5,
-                            cp2y = toY;
+                        const fromPort = conn.fromPort || 'bottom';
+                        const toPort = conn.toPort || 'top';
+                        const fromPos = ConnectionManager.getPortPosition(fromNode, fromPort);
+                        const toPos = ConnectionManager.getPortPosition(toNode, toPort);
+                        const fromX = fromPos.x, fromY = fromPos.y;
+                        const toX = toPos.x, toY = toPos.y;
+                        const d = ConnectionManager._getCurvePath(fromX, fromY, toX, toY, fromPort, toPort);
 
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('class', 'conn-line');
                         path.dataset.connId = conn.id;
-                        path.setAttribute('d', `M ${fromX} ${fromY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toX} ${toY}`);
+                        path.setAttribute('d', d);
                         svg.appendChild(path);
 
                         const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         hit.setAttribute('class', 'conn-delete-hit');
                         hit.dataset.connId = conn.id;
-                        hit.setAttribute('d', `M ${fromX} ${fromY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toX} ${toY}`);
+                        hit.setAttribute('d', d);
                         hit.addEventListener('click', (e) => {
                             e.stopPropagation();
                             const id = hit.dataset.connId;
@@ -2933,7 +2991,7 @@
                 clearTimeout(AppState.autoSaveTimer);
                 AppState.autoSaveTimer = setTimeout(() => {
                     const data = { nodes: [], connections: AppState.connections.map(c => ({ from: c.from,
-                            to: c.to })) };
+                            to: c.to, fromPort: c.fromPort, toPort: c.toPort })) };
                     getNodes().forEach(node => {
                         const type = node.dataset.type;
                         const contentEl = getNodeContent(node);
@@ -2963,7 +3021,7 @@
                     });
                     localStorage.setItem('zc-autosave', JSON.stringify(data));
                     localStorage.setItem('zc-connections', JSON.stringify(AppState.connections.map(c => ({ from: c
-                            .from, to: c.to }))));
+                            .from, to: c.to, fromPort: c.fromPort, toPort: c.toPort }))));
                 }, CONFIG.AUTO_SAVE_DELAY);
             }
 
@@ -3005,7 +3063,7 @@
             // 16. FILE OPERATIONS
             // ================================================================
             function saveDocument() {
-                const data = { nodes: [], connections: AppState.connections.map(c => ({ from: c.from, to: c.to })) };
+                const data = { nodes: [], connections: AppState.connections.map(c => ({ from: c.from, to: c.to, fromPort: c.fromPort, toPort: c.toPort })) };
                 getNodes().forEach(node => {
                     const type = node.dataset.type;
                     const content = getNodeContent(node);
@@ -3043,7 +3101,7 @@
                                     .type, n);
                             });
                             if (data.connections) {
-                                AppState.connections = data.connections.map(c => ({ ...c, id: 'conn-' + (++AppState
+                                AppState.connections = data.connections.map(c => ({ ...c, fromPort: c.fromPort || 'bottom', toPort: c.toPort || 'top', id: 'conn-' + (++AppState
                                         .connIdCounter) }));
                                 ConnectionManager.renderAll();
                             }
@@ -3348,14 +3406,19 @@
                             sy = AppState.portDrag.startY;
                         const dx = x - sx,
                             dy = y - sy;
-                        AppState.tempLine.setAttribute('d',
-                            `M ${sx} ${sy} C ${sx+dx*0.5} ${sy}, ${sx+dx*0.5} ${y}, ${x} ${y}`);
+                        const fromPort = AppState.portDrag.portType || 'bottom';
+                        const d = ConnectionManager._getCurvePath(sx, sy, x, y, fromPort, fromPort === 'top' ? 'bottom' : fromPort === 'bottom' ? 'top' : fromPort === 'left' ? 'right' : 'left');
+                        AppState.tempLine.setAttribute('d', d);
                         document.querySelectorAll('.node-port').forEach(p => p.classList.remove('port-highlight'));
                         const target = getPortAt(e.clientX, e.clientY);
                         if (target && target.dataset.nodeId !== AppState.portDrag.nodeId) {
                             target.classList.add('port-highlight');
-                            target.style.transform = 'translateX(-50%) scale(1.5)';
+                            target.style.transform = '';
+                            if (target.classList.contains('top') || target.classList.contains('bottom')) {
+                                target.style.transform = 'translateX(-50%) scale(1.5)';
+                            }
                         }
+
                     });
                 });
 
@@ -3373,9 +3436,13 @@
                     if (target && target.dataset.nodeId !== AppState.portDrag.nodeId) {
                         const fromId = AppState.portDrag.nodeId;
                         const toId = target.dataset.nodeId;
-                        const exists = AppState.connections.some(c => c.from === fromId && c.to === toId);
+                        const fromPort = AppState.portDrag.portType || 'bottom';
+                        const toPort = target.dataset.port || 'top';
+                        const exists = AppState.connections.some(c => c.from === fromId && c.to === toId &&
+                            c.fromPort === fromPort && c.toPort === toPort);
                         if (!exists) {
-                            const conn = { id: 'conn-' + (++AppState.connIdCounter), from: fromId, to: toId };
+                            const conn = { id: 'conn-' + (++AppState.connIdCounter), from: fromId, to: toId,
+                                fromPort: fromPort, toPort: toPort };
                             AppState.connections.push(conn);
                             ConnectionManager.renderAll();
                             debouncedAutoSave();
@@ -3422,7 +3489,7 @@
                     try {
                         const data = JSON.parse(savedConns);
                         if (Array.isArray(data)) {
-                            AppState.connections = data.map(c => ({ ...c, id: 'conn-' + (++AppState.connIdCounter) }));
+                            AppState.connections = data.map(c => ({ ...c, fromPort: c.fromPort || 'bottom', toPort: c.toPort || 'top', id: 'conn-' + (++AppState.connIdCounter) }));
                         }
                     } catch (_) {}
                 }
