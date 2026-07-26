@@ -732,8 +732,7 @@
             border-color: var(--border);
         }
         .node-todo .node-content.todo-done {
-            opacity: 0.35;
-            text-decoration: line-through;
+            opacity: 0.25;
         }
 
         /* Modes */
@@ -755,19 +754,14 @@
         body.focus-mode #svg-layer .conn-line:hover {
             opacity: 1;
         }
-        body.reading-mode .node:not(.has-conn) {
-            border-color: transparent !important;
-            border-width: 0 !important;
-            box-shadow: none !important;
-        }
-        body.reading-mode .node.has-conn {
+        body.reading-mode .node {
             border-color: var(--border-dim) !important;
             border-width: 1px !important;
             border-style: dashed !important;
             box-shadow: none !important;
         }
-        body.reading-mode .node.has-conn:hover,
-        body.reading-mode .node.has-conn:focus-within {
+        body.reading-mode .node:hover,
+        body.reading-mode .node:focus-within {
             border-color: var(--border) !important;
             border-width: 1px !important;
             border-style: dashed !important;
@@ -803,6 +797,7 @@
         body.reading-mode .node-todo .node-content.todo-done {
             opacity: 0.25;
         }
+
         body.full-display .node-header,
         body.full-display .node:hover .node-header {
             opacity: 1 !important;
@@ -1917,10 +1912,8 @@
                         <span class="node-title">${title}</span>
                         <div class="node-actions">`;
                     if (type === 'todo') {
-                        const done = data && data.done ? true : false;
                         headerInner += `
-                            <div class="todo-checkbox${done ? ' checked' : ''}" data-action="toggleTodo">${done ? '✓' : ''}</div>`;
-                        if (done) node.dataset.todoDone = '1';
+                            <div class="todo-checkbox" data-action="toggleTodo"></div>`;
                     }
                     headerInner += `
                             <div class="node-action-btn minimize" data-action="minimize">−</div>
@@ -1967,6 +1960,18 @@
 
                     DOM.canvasInner.appendChild(node);
 
+                    // Initialize TODO checkbox state from content strikethrough
+                    if (type === 'todo') {
+                        const cb = node.querySelector('.todo-checkbox');
+                        const ct = getNodeContent(node);
+                        const hasStrike = ct.querySelector('s, strike, [style*="line-through"]');
+                        if (hasStrike) {
+                            cb.classList.add('checked');
+                            cb.textContent = '✓';
+                            ct.classList.add('todo-done');
+                        }
+                    }
+
                     // Init behaviors
                     NodeManager._initDrag(node);
                     NodeManager._initResize(node);
@@ -1996,9 +2001,6 @@
                         const fs = String(data.fontSize).replace('px', '');
                         content.style.fontSize = fs + 'px';
                         content.dataset.fontSize = fs;
-                    }
-                    if (type === 'todo' && data && data.done) {
-                        content.classList.add('todo-done');
                     }
                     if (type === 'text' || type === 'todo') {
                         content.setAttribute('contenteditable', 'true');
@@ -2318,8 +2320,8 @@
                     });
                     document.addEventListener('mousemove', (e) => {
                         if (!dragging) return;
-                        node.style.left = ox + e.clientX - sx + 'px';
-                        node.style.top = Math.max(0, oy + e.clientY - sy) + 'px';
+                        node.style.left = ox + (e.clientX - sx) / AppState.scale + 'px';
+                        node.style.top = Math.max(0, oy + (e.clientY - sy) / AppState.scale) + 'px';
                         ConnectionManager.renderAll();
                     });
                     document.addEventListener('mouseup', () => {
@@ -2496,9 +2498,6 @@
                         obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
                             .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
                             .dataset.source : ''; }
-                    if (type === 'todo') {
-                        obj.done = AppState.ctxNode && AppState.ctxNode.dataset.todoDone === '1';
-                    }
                     AppState.clipboardNode = obj;
                     notify(t('notify.nodeCopied'));
                     DOM.contextMenu.classList.remove('open');
@@ -2752,6 +2751,12 @@
                         return;
                     }
 
+                    // Hide strikethrough for TODO nodes (only the checkbox controls it)
+                    const strikeBtn = DOM.floatingToolbar.querySelector('[data-cmd="strikeThrough"]');
+                    if (strikeBtn) {
+                        strikeBtn.style.display = nodeType === 'todo' ? 'none' : '';
+                    }
+
                     AppState.currentSelectionRange = range.cloneRange();
                     AppState.currentSelectionContainer = nodeContent;
 
@@ -2851,6 +2856,15 @@
                         const cur = parseFloat(existing.style.fontSize) || CONFIG.DEFAULT_FONT_SIZE;
                         const next = Math.max(8, Math.min(96, cur + delta));
                         existing.style.fontSize = next + 'px';
+                        // Sync font size to ancestor strikethrough elements so line-through stays centered
+                        let p = existing.parentNode;
+                        const container = AppState.currentSelectionContainer;
+                        while (p && p !== container && p !== document.body) {
+                            if (p.nodeType === 1 && (p.tagName === 'S' || p.tagName === 'STRIKE' || p.style.textDecoration === 'line-through')) {
+                                p.style.fontSize = next + 'px';
+                            }
+                            p = p.parentNode;
+                        }
                         notify(t('notify.size', Math.round(next)));
                     } else {
                         const span = ToolbarManager._wrapSelectionWithStyle({ fontSize: CONFIG.DEFAULT_FONT_SIZE + delta + 'px' });
@@ -3113,9 +3127,6 @@
                         if (type === 'text' || type === 'todo') {
                             obj.content = contentEl ? contentEl.innerHTML : '';
                             obj.lh = contentEl ? contentEl.style.lineHeight : '';
-                            if (type === 'todo') {
-                                obj.done = node.dataset.todoDone === '1';
-                            }
                         } else if (type === 'image') {
                             const img = contentEl ? contentEl.querySelector('img') : null;
                             obj.src = img ? img.src : '';
@@ -3178,8 +3189,7 @@
                     const obj = { type, x: node.style.left, y: node.style.top, w: node.style.width, h: node.style
                             .height, title: title ? title.textContent : '', id: node.id, fontSize: content ? content.dataset.fontSize || '' : '' };
                     if (type === 'text' || type === 'todo') { obj.content = content ? content.innerHTML : '';
-                        obj.lh = content ? content.style.lineHeight : '';
-                        if (type === 'todo') obj.done = node.dataset.todoDone === '1'; } else if (type === 'image') {
+                        obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
                         obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
                             .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
@@ -3352,18 +3362,27 @@
                             if (tNode) {
                                 const checkbox = tNode.querySelector('.todo-checkbox');
                                 const content = getNodeContent(tNode);
-                                const isDone = tNode.dataset.todoDone === '1';
-                                if (isDone) {
-                                    delete tNode.dataset.todoDone;
-                                    checkbox.classList.remove('checked');
-                                    checkbox.textContent = '';
-                                    content.classList.remove('todo-done');
-                                } else {
-                                    tNode.dataset.todoDone = '1';
+                                const sel = window.getSelection();
+                                const savedRange = sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+                                const range = document.createRange();
+                                range.selectNodeContents(content);
+                                sel.removeAllRanges();
+                                sel.addRange(range);
+                                document.execCommand('strikeThrough', false, null);
+                                sel.removeAllRanges();
+                                if (savedRange) { sel.addRange(savedRange); }
+                                // Update checkbox state based on whether strikethrough exists in content
+                                const hasStrike = content.querySelector('s, strike, [style*="line-through"]');
+                                if (hasStrike) {
                                     checkbox.classList.add('checked');
                                     checkbox.textContent = '✓';
                                     content.classList.add('todo-done');
+                                } else {
+                                    checkbox.classList.remove('checked');
+                                    checkbox.textContent = '';
+                                    content.classList.remove('todo-done');
                                 }
+                                content.focus();
                                 ConnectionManager.renderAll();
                                 debouncedAutoSave();
                             }
