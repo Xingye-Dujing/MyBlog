@@ -724,6 +724,21 @@
         body.reading-mode .node-port {
             display: none !important;
         }
+        body.full-display .node-header,
+        body.full-display .node:hover .node-header {
+            opacity: 1 !important;
+        }
+        body.full-display .node-port,
+        body.full-display .node:hover .node-port {
+            opacity: 0.85 !important;
+        }
+        body.full-display .node-resize,
+        body.full-display .node:hover .node-resize {
+            opacity: 1 !important;
+        }
+        body.full-display .node {
+            border-width: 2px !important;
+        }
         #focus-indicator {
             position: fixed;
             top: 12px;
@@ -744,6 +759,9 @@
             opacity: 1;
         }
         body.reading-mode #focus-indicator.reading {
+            opacity: 1;
+        }
+        body.full-display #focus-indicator.full {
             opacity: 1;
         }
 
@@ -1069,6 +1087,7 @@
     <!-- ===== Indicators ===== -->
     <div id="focus-indicator" class="focus" data-i18n="indicator.focus">FOCUS</div>
     <div id="focus-indicator" class="reading" style="right:90px" data-i18n="indicator.reading">READING</div>
+    <div id="focus-indicator" class="full" style="right:170px" data-i18n="indicator.full">FULL</div>
 
     <!-- ===== Menu Trigger ===== -->
     <div id="menu-trigger"></div>
@@ -1091,6 +1110,7 @@
             <div class="menu-btn" id="btn-theme" data-action="toggleTheme">[ 浅色 ]</div>
             <div class="menu-btn" id="btn-focus" data-action="toggleFocus" data-i18n="menu.focus"></div>
             <div class="menu-btn" id="btn-read" data-action="toggleRead" data-i18n="menu.read"></div>
+            <div class="menu-btn" id="btn-full" data-action="toggleFull" data-i18n="menu.full"></div>
             <div class="menu-btn" data-action="resetView" data-i18n="menu.reset"></div>
         </div>
         <div class="menu-group">
@@ -1250,6 +1270,7 @@
                     'splash.enter': 'Initialize',
                     'indicator.focus': 'FOCUS',
                     'indicator.reading': 'READING',
+                    'indicator.full': 'FULL',
                     'menu.file': 'FILE',
                     'menu.new': '[ NEW ]',
                     'menu.img': '[ IMG ]',
@@ -1264,6 +1285,7 @@
                     'menu.themeDark': '[ DARK ]',
                     'menu.focus': '[ FOCUS ]',
                     'menu.read': '[ READ ]',
+                    'menu.full': '[ FULL ]',
                     'menu.reset': '[ RESET ]',
                     'menu.settings': 'SETTINGS',
                     'menu.nodebg': '[ NODE BG ]',
@@ -1353,6 +1375,7 @@
                     'splash.enter': '启动',
                     'indicator.focus': '专注',
                     'indicator.reading': '阅读',
+                    'indicator.full': '全部',
                     'menu.file': '文件',
                     'menu.new': '[ 新建 ]',
                     'menu.img': '[ 图片 ]',
@@ -1367,6 +1390,7 @@
                     'menu.themeDark': '[ 深色 ]',
                     'menu.focus': '[ 专注 ]',
                     'menu.read': '[ 阅读 ]',
+                    'menu.full': '[ 全部 ]',
                     'menu.reset': '[ 重置 ]',
                     'menu.settings': '设置',
                     'menu.nodebg': '[ 节点背景 ]',
@@ -1461,6 +1485,7 @@
                 bg: 'bg-void',
                 focusMode: false,
                 readingMode: false,
+                fullDisplay: false,
                 menuPinned: false,
                 nodeBgVisible: true,
                 zCounter: 10,
@@ -1510,6 +1535,7 @@
                 get btnTheme() { return document.getElementById('btn-theme'); },
                 get btnFocus() { return document.getElementById('btn-focus'); },
                 get btnRead() { return document.getElementById('btn-read'); },
+                get btnFull() { return document.getElementById('btn-full'); },
                 get btnNodeBg() { return document.getElementById('btn-node-bg'); },
                 get btnLang() { return document.getElementById('btn-lang'); },
                 get ftLhVal() { return document.getElementById('ft-lh-val'); },
@@ -1592,6 +1618,7 @@
                         menuPinned: AppState.menuPinned,
                         focusMode: AppState.focusMode,
                         readingMode: AppState.readingMode,
+                        fullDisplay: AppState.fullDisplay,
                         nodeBgVisible: AppState.nodeBgVisible,
                         panX: AppState.panX,
                         panY: AppState.panY,
@@ -1605,7 +1632,7 @@
                     if (!saved) return;
                     try {
                         const parsed = JSON.parse(saved);
-                        const keys = ['theme', 'bg', 'menuPinned', 'focusMode', 'readingMode',
+                        const keys = ['theme', 'bg', 'menuPinned', 'focusMode', 'readingMode', 'fullDisplay',
                             'nodeBgVisible', 'panX', 'panY', 'scale', 'lang'
                         ];
                         for (const k of keys) {
@@ -1625,11 +1652,13 @@
                     // Menu pin
                     DOM.pinBtn.classList.toggle('pinned', AppState.menuPinned);
                     DOM.topMenu.classList.toggle('pinned', AppState.menuPinned);
-                    // Focus / Reading
+                    // Focus / Reading / Full
                     document.body.classList.toggle('focus-mode', AppState.focusMode);
                     DOM.btnFocus.classList.toggle('active', AppState.focusMode);
                     document.body.classList.toggle('reading-mode', AppState.readingMode);
                     DOM.btnRead.classList.toggle('active', AppState.readingMode);
+                    document.body.classList.toggle('full-display', AppState.fullDisplay);
+                    DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
                     // Node background
                     UIManager.applyNodeBg();
                     // Transform
@@ -1664,8 +1693,16 @@
                     AppState.readingMode = !AppState.readingMode;
                     document.body.classList.toggle('reading-mode', AppState.readingMode);
                     DOM.btnRead.classList.toggle('active', AppState.readingMode);
+                    if (AppState.fullDisplay) { AppState.fullDisplay = false; document.body.classList.remove('full-display'); DOM.btnFull.classList.remove('active'); }
                     Settings.save();
                     ConnectionManager.renderAll();
+                },
+                toggleFull() {
+                    AppState.fullDisplay = !AppState.fullDisplay;
+                    document.body.classList.toggle('full-display', AppState.fullDisplay);
+                    DOM.btnFull.classList.toggle('active', AppState.fullDisplay);
+                    if (AppState.readingMode) { AppState.readingMode = false; document.body.classList.remove('reading-mode'); DOM.btnRead.classList.remove('active'); }
+                    Settings.save();
                 },
                 toggleNodeBg() {
                     AppState.nodeBgVisible = !AppState.nodeBgVisible;
@@ -1787,6 +1824,21 @@
                     `;
                     node.appendChild(header);
 
+                    // Font size controls for md/math
+                    if (type === 'markdown' || type === 'math') {
+                        const actions = header.querySelector('.node-actions');
+                        const fsUp = document.createElement('div');
+                        fsUp.className = 'node-action-btn';
+                        fsUp.textContent = 'A+';
+                        fsUp.dataset.action = 'fontSizeUp';
+                        const fsDown = document.createElement('div');
+                        fsDown.className = 'node-action-btn';
+                        fsDown.textContent = 'A−';
+                        fsDown.dataset.action = 'fontSizeDown';
+                        actions.insertBefore(fsDown, actions.firstChild);
+                        actions.insertBefore(fsUp, actions.firstChild);
+                    }
+
                     // Ports
                     const portTop = NodeManager._createPort(id, 'top');
                     node.appendChild(portTop);
@@ -1833,11 +1885,15 @@
                     return port;
                 },
                 _buildContent(content, type, data) {
+                    if (data && data.fontSize) {
+                        content.style.fontSize = data.fontSize;
+                        content.dataset.fontSize = data.fontSize;
+                    }
                     if (type === 'text') {
                         content.setAttribute('contenteditable', 'true');
                         content.dataset.placeholder = t('placeholder.startTyping');
                         content.style.fontFamily = CONFIG.DEFAULT_FONT;
-                        content.style.fontSize = CONFIG.DEFAULT_FONT_SIZE + 'px';
+                        content.style.fontSize = (data && data.fontSize) || CONFIG.DEFAULT_FONT_SIZE + 'px';
                         content.style.lineHeight = data && data.lh ? data.lh : CONFIG.DEFAULT_LINE_HEIGHT;
                         content.innerHTML = data && data.content ? data.content : '';
                         content.addEventListener('input', debouncedAutoSave);
@@ -2322,7 +2378,7 @@
                     const content = getNodeContent(AppState.ctxNode);
                     const title = getNodeTitle(AppState.ctxNode);
                     const obj = { type, w: AppState.ctxNode.style.width, h: AppState.ctxNode.style.height, title: title ?
-                            title.textContent : '' };
+                            title.textContent : '', fontSize: content ? content.dataset.fontSize || '' : '' };
                     if (type === 'text') { obj.content = content ? content.innerHTML : '';
                         obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
@@ -2890,6 +2946,7 @@
                             h: node.style.height,
                             title: titleEl ? titleEl.textContent : '',
                             id: node.id,
+                            fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
                         };
                         if (type === 'text') {
                             obj.content = contentEl ? contentEl.innerHTML : '';
@@ -2916,7 +2973,7 @@
             function closeAllDropdowns() {
                 document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
                 document.querySelectorAll('.menu-btn').forEach(b => {
-                    if (b.id !== 'btn-focus' && b.id !== 'btn-read' &&
+                    if (b.id !== 'btn-focus' && b.id !== 'btn-read' && b.id !== 'btn-full' &&
                         b.id !== 'btn-node-bg' && b.id !== 'btn-theme') {
                         b.classList.remove('active');
                     }
@@ -2954,7 +3011,7 @@
                     const content = getNodeContent(node);
                     const title = getNodeTitle(node);
                     const obj = { type, x: node.style.left, y: node.style.top, w: node.style.width, h: node.style
-                            .height, title: title ? title.textContent : '', id: node.id };
+                            .height, title: title ? title.textContent : '', id: node.id, fontSize: content ? content.dataset.fontSize || '' : '' };
                     if (type === 'text') { obj.content = content ? content.innerHTML : '';
                         obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
@@ -3046,6 +3103,9 @@
                             break;
                         case 'toggleRead':
                             UIManager.toggleRead();
+                            break;
+                        case 'toggleFull':
+                            UIManager.toggleFull();
                             break;
                         case 'resetView':
                             UIManager.resetView();
@@ -3143,6 +3203,21 @@
                                     n.querySelector('.node-resize').style.display = 'none';
                                 }
                                 ConnectionManager.renderAll();
+                            }
+                            break;
+                        case 'fontSizeUp':
+                        case 'fontSizeDown':
+                            const fn = target.closest('.node');
+                            if (fn) {
+                                const fc = getNodeContent(fn);
+                                if (!fc) break;
+                                const cur = parseFloat(fc.dataset.fontSize) || 14;
+                                const delta = action === 'fontSizeUp' ? 2 : -2;
+                                const next = Math.max(8, Math.min(72, cur + delta));
+                                fc.style.fontSize = next + 'px';
+                                fc.dataset.fontSize = next;
+                                notify(t('notify.size', next));
+                                debouncedAutoSave();
                             }
                             break;
                         default:
