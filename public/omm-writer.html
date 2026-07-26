@@ -9,6 +9,28 @@
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
     </script>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [
+                    ['$', '$'],
+                    ['\\(', '\\)']
+                ],
+                displayMath: [
+                    ['$$', '$$'],
+                    ['\\[', '\\]']
+                ]
+            },
+            svg: {
+                fontCache: 'global'
+            },
+            options: {
+                enableMenu: false
+            }
+        };
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
 
@@ -632,6 +654,38 @@
         .node-markdown .node-content p {
             margin: 0.4em 0;
         }
+        .node-math .node-content {
+            padding: 20px 24px;
+            font-family: var(--font-mono);
+            font-size: 16px;
+            line-height: 1.8;
+            color: var(--text);
+            cursor: pointer;
+            user-select: text;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 60px;
+            overflow-x: auto;
+        }
+        .node-math .node-content .math-placeholder {
+            color: var(--text-dim);
+            font-size: 12px;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+        .node-math .node-content mjx-container {
+            text-align: center !important;
+        }
+        .node-math .node-content textarea {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .node-math {
+            border-left: 3px solid #3366cc !important;
+        }
 
         /* Modes */
         body.focus-mode .node {
@@ -1026,6 +1080,7 @@
             <div class="menu-btn" data-action="newText" data-i18n="menu.new"></div>
             <div class="menu-btn" data-action="newImage" data-i18n="menu.img"></div>
             <div class="menu-btn" data-action="newMarkdown" data-i18n="menu.md"></div>
+            <div class="menu-btn" data-action="newMath" data-i18n="menu.math"></div>
             <div class="menu-btn" data-action="save" data-i18n="menu.save"></div>
             <div class="menu-btn" data-action="load" data-i18n="menu.open"></div>
             <div class="menu-btn" data-action="showExport" data-i18n="menu.export"></div>
@@ -1114,6 +1169,7 @@
         <div class="dd-item" data-action="ctxNewText"><span data-i18n="ctx.newText">New Text Node</span></div>
         <div class="dd-item" data-action="ctxNewImage"><span data-i18n="ctx.newImage">New Image Node</span></div>
         <div class="dd-item" data-action="ctxNewMarkdown"><span data-i18n="ctx.newMarkdown">New Markdown Node</span></div>
+        <div class="dd-item" data-action="ctxNewMath"><span data-i18n="ctx.newMath">New Math Node</span></div>
         <div class="dd-divider"></div>
         <div class="dd-item" id="ctx-edit" data-action="ctxEdit"><span data-i18n="ctx.editContent">Edit Content</span></div>
         <div class="dd-item" id="ctx-copy-node" data-action="ctxCopy"><span data-i18n="ctx.copyNode">Copy Node</span></div>
@@ -1198,6 +1254,7 @@
                     'menu.new': '[ NEW ]',
                     'menu.img': '[ IMG ]',
                     'menu.md': '[ MD ]',
+                    'menu.math': '[ MATH ]',
                     'menu.save': '[ SAVE ]',
                     'menu.open': '[ OPEN ]',
                     'menu.export': '[ EXPORT ]',
@@ -1248,6 +1305,7 @@
                     'ctx.newText': 'New Text Node',
                     'ctx.newImage': 'New Image Node',
                     'ctx.newMarkdown': 'New Markdown Node',
+                    'ctx.newMath': 'New Math Node',
                     'ctx.editContent': 'Edit Content',
                     'ctx.copyNode': 'Copy Node',
                     'ctx.pasteNode': 'Paste Node',
@@ -1261,6 +1319,7 @@
                     'placeholder.imageUrl': 'double-click to set image URL',
                     'placeholder.imageUrlInput': 'image URL…',
                     'placeholder.markdownEdit': 'double-click to edit Markdown',
+                    'placeholder.mathEdit': 'double-click to edit LaTeX',
                     'notify.nodeBgOn': 'Node background: ON',
                     'notify.nodeBgOff': 'Node background: OFF',
                     'notify.viewReset': 'View reset',
@@ -1298,6 +1357,7 @@
                     'menu.new': '[ 新建 ]',
                     'menu.img': '[ 图片 ]',
                     'menu.md': '[ MD ]',
+                    'menu.math': '[ 公式 ]',
                     'menu.save': '[ 保存 ]',
                     'menu.open': '[ 打开 ]',
                     'menu.export': '[ 导出 ]',
@@ -1348,6 +1408,7 @@
                     'ctx.newText': '新建文本节点',
                     'ctx.newImage': '新建图片节点',
                     'ctx.newMarkdown': '新建 Markdown 节点',
+                    'ctx.newMath': '新建公式节点',
                     'ctx.editContent': '编辑内容',
                     'ctx.copyNode': '复制节点',
                     'ctx.pasteNode': '粘贴节点',
@@ -1361,6 +1422,7 @@
                     'placeholder.imageUrl': '双击设置图片链接',
                     'placeholder.imageUrlInput': '图片链接…',
                     'placeholder.markdownEdit': '双击编辑 Markdown',
+                    'placeholder.mathEdit': '双击编辑 LaTeX 公式',
                     'notify.nodeBgOn': '节点背景：开',
                     'notify.nodeBgOff': '节点背景：关',
                     'notify.viewReset': '视图已重置',
@@ -1707,7 +1769,7 @@
                     const id = 'node-' + AppState.nodeCounter;
                     node.id = id;
 
-                    const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : 'MD') + '_' +
+                    const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : type === 'math' ? 'MATH' : 'MD') + '_' +
                         String(AppState.nodeCounter).padStart(2, '0');
                     const title = data && data.title ? data.title : defaultTitle;
                     if (data && data.w) node.style.width = data.w;
@@ -1901,6 +1963,50 @@
                             });
                             textarea.addEventListener('blur', () => finish(true));
                         });
+                    } else if (type === 'math') {
+                        content.dataset.source = data && data.source ? data.source : '';
+                        NodeManager._renderMath(content);
+                        content.addEventListener('dblclick', function(e) {
+                            e.stopPropagation();
+                            if (this.querySelector('textarea')) return;
+                            const currentSource = this.dataset.source || '';
+                            const textarea = document.createElement('textarea');
+                            textarea.value = currentSource;
+                            Object.assign(textarea.style, {
+                                width: '100%',
+                                minHeight: '120px',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '14px',
+                                lineHeight: '1.6',
+                                background: 'transparent',
+                                border: '1px solid var(--border)',
+                                color: 'var(--text)',
+                                padding: '8px',
+                                outline: 'none',
+                                resize: 'vertical',
+                            });
+                            textarea.spellcheck = false;
+                            this.innerHTML = '';
+                            this.appendChild(textarea);
+                            textarea.focus();
+                            textarea.select();
+                            const finish = (save) => {
+                                if (!textarea.parentNode) return;
+                                const val = save ? textarea.value : this.dataset.source || '';
+                                this.dataset.source = val;
+                                NodeManager._renderMath(this);
+                                debouncedAutoSave();
+                                ConnectionManager.renderAll();
+                            };
+                            textarea.addEventListener('keydown', (ev) => {
+                                ev.stopPropagation();
+                                if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault();
+                                    finish(true); }
+                                if (ev.key === 'Escape') { ev.preventDefault();
+                                    finish(false); }
+                            });
+                            textarea.addEventListener('blur', () => finish(true));
+                        });
                     }
                 },
                 _renderMarkdown(container) {
@@ -1980,6 +2086,9 @@
                     }
                     if (inList) flushList();
                     container.innerHTML = result.join('');
+                    if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
+                        MathJax.typesetPromise([container]).catch(() => {});
+                    }
                 },
                 _inlineMarkdown(text) {
                     let s = escapeHtml(text);
@@ -1988,6 +2097,18 @@
                     s = s.replace(/`(.+?)`/g, '<code>$1</code>');
                     s = s.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>');
                     return s;
+                },
+                _renderMath(container) {
+                    const source = container.dataset.source || '';
+                    if (!source.trim()) {
+                        container.innerHTML =
+                            `<span class="math-placeholder">${t('placeholder.mathEdit')}</span>`;
+                        return;
+                    }
+                    container.innerHTML = `<div style="padding:8px 0;">$$${escapeHtml(source)}$$</div>`;
+                    if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
+                        MathJax.typesetPromise([container]).catch(() => {});
+                    }
                 },
                 refreshPlaceholders() {
                     document.querySelectorAll('.node').forEach(node => {
@@ -2004,6 +2125,11 @@
                             content.dataset.placeholder = t('placeholder.markdownEdit');
                             if (!((content.dataset.source || '').trim())) {
                                 NodeManager._renderMarkdown(content);
+                            }
+                        } else if (type === 'math') {
+                            content.dataset.placeholder = t('placeholder.mathEdit');
+                            if (!((content.dataset.source || '').trim())) {
+                                NodeManager._renderMath(content);
                             }
                         }
                     });
@@ -2186,7 +2312,7 @@
                     if (!AppState.ctxNode) return;
                     const type = AppState.ctxNode.dataset.type;
                     const content = getNodeContent(AppState.ctxNode);
-                    if (type === 'image' || type === 'markdown') content.dispatchEvent(new Event('dblclick', { bubbles: true }));
+                    if (type === 'image' || type === 'markdown' || type === 'math') content.dispatchEvent(new Event('dblclick', { bubbles: true }));
                     else if (type === 'text') content.focus();
                     DOM.contextMenu.classList.remove('open');
                 },
@@ -2201,6 +2327,7 @@
                         obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
                         obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
+                            .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
                             .dataset.source : ''; }
                     AppState.clipboardNode = obj;
                     notify(t('notify.nodeCopied'));
@@ -2580,6 +2707,7 @@
                             const c = getNodeContent(node);
                             const text = node.dataset.type === 'text' ? c.innerText :
                                 node.dataset.type === 'markdown' ? c.dataset.source || '' :
+                                node.dataset.type === 'math' ? c.dataset.source || '' :
                                 c.querySelector('img') ? c.querySelector('img').src : '';
                             return `# ${t}\n\n${text}`;
                         }).join('\n\n---\n\n');
@@ -2590,6 +2718,7 @@
                             const t = getNodeTitle(node).textContent;
                             const c = getNodeContent(node);
                             const md = node.dataset.type === 'markdown' ? c.dataset.source || '' :
+                                node.dataset.type === 'math' ? c.dataset.source || '' :
                                 node.dataset.type === 'text' ? c.innerText :
                                 c.querySelector('img') ? `![image](${c.querySelector('img').src})` : '';
                             return `## ${t}\n\n${md}`;
@@ -2604,6 +2733,7 @@
                                 let body = '';
                                 if (node.dataset.type === 'text') body = c.innerHTML;
                                 else if (node.dataset.type === 'markdown') body = c.innerHTML;
+                                else if (node.dataset.type === 'math') body = c.innerHTML;
                                 else if (node.dataset.type === 'image') {
                                     const img = c.querySelector('img');
                                     body = img ? `<img src="${img.src}" style="max-width:100%">` : '';
@@ -2619,6 +2749,7 @@
                                 title: getNodeTitle(node).textContent,
                                 content: node.dataset.type === 'text' ? getNodeContent(node).innerText :
                                     node.dataset.type === 'markdown' ? getNodeContent(node).dataset.source || '' :
+                                    node.dataset.type === 'math' ? getNodeContent(node).dataset.source || '' :
                                     getNodeContent(node).querySelector('img') ? getNodeContent(node).querySelector(
                                         'img').src : '',
                             })),
@@ -2768,6 +2899,8 @@
                             obj.src = img ? img.src : '';
                         } else if (type === 'markdown') {
                             obj.source = contentEl ? contentEl.dataset.source : '';
+                        } else if (type === 'math') {
+                            obj.source = contentEl ? contentEl.dataset.source : '';
                         }
                         data.nodes.push(obj);
                     });
@@ -2826,6 +2959,7 @@
                         obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
                         obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
+                            .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
                             .dataset.source : ''; }
                     data.nodes.push(obj);
                 });
@@ -2888,6 +3022,9 @@
                             break;
                         case 'newMarkdown':
                             NodeManager.createCenteredNode('markdown');
+                            break;
+                        case 'newMath':
+                            NodeManager.createCenteredNode('math');
                             break;
                         case 'save':
                             saveDocument();
@@ -2959,6 +3096,10 @@
                             break;
                         case 'ctxNewMarkdown':
                             NodeManager.createNodeAt(AppState.ctxX, AppState.ctxY, 'markdown');
+                            DOM.contextMenu.classList.remove('open');
+                            break;
+                        case 'ctxNewMath':
+                            NodeManager.createNodeAt(AppState.ctxX, AppState.ctxY, 'math');
                             DOM.contextMenu.classList.remove('open');
                             break;
                         case 'ctxEdit':
