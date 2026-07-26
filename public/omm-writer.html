@@ -298,6 +298,12 @@
             background: var(--border-dim);
             margin: 4px 0;
         }
+        .ctx-group-only {
+            display: none;
+        }
+        .conn-group-hidden {
+            display: none;
+        }
         .dd-label {
             padding: 6px 10px 2px;
             font-size: 9px;
@@ -398,6 +404,9 @@
             border-top-left-radius: var(--node-border-radius);
             border-top-right-radius: var(--node-border-radius);
         }
+        .node.minimized .node-header {
+            border-radius: var(--node-border-radius);
+        }
         .node-header:active {
             cursor: grabbing;
         }
@@ -456,6 +465,28 @@
         .node-action-btn.close:hover {
             color: var(--active-text);
             background: var(--active-bg);
+        }
+        .node-group {
+            border-left: 3px solid #339933 !important;
+            background: var(--bg);
+            min-height: 48px;
+        }
+        .node-group .collapse-indicator {
+            font-size: 10px;
+            margin-right: 6px;
+            cursor: pointer;
+            color: var(--text-dim);
+            transition: transform 0.15s;
+            display: inline-block;
+        }
+        .node-group .collapse-indicator:hover {
+            color: var(--text);
+        }
+        .node-group .collapse-indicator.collapsed {
+            transform: rotate(-90deg);
+        }
+        .node.hidden-by-group-conn {
+            display: none !important;
         }
         .node-action-btn.lock-btn {
             font-size: 11px;
@@ -831,6 +862,9 @@
         }
         body.reading-mode .node-todo .node-content.todo-done {
             opacity: 0.25;
+        }
+        body.reading-mode .node-group {
+            border-left: 3px solid #339933 !important;
         }
 
         body.full-display .node-header,
@@ -1289,6 +1323,7 @@
             <div class="menu-btn" data-action="newMarkdown" data-i18n="menu.md"></div>
             <div class="menu-btn" data-action="newMath" data-i18n="menu.math"></div>
             <div class="menu-btn" data-action="newTodo" data-i18n="menu.todo"></div>
+            <div class="menu-btn" data-action="newGroup" data-i18n="menu.group"></div>
         </div>
         <div class="menu-group">
             <span class="menu-label" data-i18n="menu.file">文件</span>
@@ -1412,6 +1447,8 @@
         <div class="dd-item" data-action="ctxNewMarkdown"><span data-i18n="ctx.newMarkdown">New Markdown Node</span></div>
         <div class="dd-item" data-action="ctxNewMath"><span data-i18n="ctx.newMath">New Math Node</span></div>
         <div class="dd-item" data-action="ctxNewTodo"><span data-i18n="ctx.newTodo">New TODO Node</span></div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" data-action="ctxNewGroup"><span data-i18n="ctx.newGroup">New Group Node</span></div>
         <div class="dd-divider"></div>
         <div class="dd-item" id="ctx-edit" data-action="ctxEdit"><span data-i18n="ctx.editContent">Edit Content</span></div>
         <div class="dd-item" id="ctx-copy-node" data-action="ctxCopy"><span data-i18n="ctx.copyNode">Copy Node</span></div>
@@ -1501,6 +1538,7 @@
                     'menu.md': '[ MD ]',
                     'menu.math': '[ MATH ]',
                     'menu.todo': '[ TODO ]',
+                    'menu.group': '[ GROUP ]',
                     'menu.save': '[ SAVE ]',
                     'menu.open': '[ OPEN ]',
                     'menu.export': '[ EXPORT ]',
@@ -1583,6 +1621,9 @@
                     'ctx.copyNode': 'Copy Node',
                     'ctx.pasteNode': 'Paste Node',
                     'ctx.lock': 'Lock Node',
+                    'ctx.assignGroup': '▼ Assign to Group',
+                    'ctx.removeGroup': 'Remove from Group',
+                    'ctx.newGroup': 'New Group Node',
                     'ctx.unlock': 'Unlock Node',
                     'ctx.clearConnections': 'Clear All Connections',
                     'status.ready': 'Ready',
@@ -1638,6 +1679,7 @@
                     'menu.md': '[ MD ]',
                     'menu.math': '[ 公式 ]',
                     'menu.todo': '[ 待办 ]',
+                    'menu.group': '[ 分组 ]',
                     'menu.save': '[ 保存 ]',
                     'menu.open': '[ 打开 ]',
                     'menu.export': '[ 导出 ]',
@@ -1720,6 +1762,9 @@
                     'ctx.copyNode': '复制节点',
                     'ctx.pasteNode': '粘贴节点',
                     'ctx.lock': '锁定节点',
+                    'ctx.assignGroup': '▼ 分配到分组',
+                    'ctx.removeGroup': '从分组移除',
+                    'ctx.newGroup': '新建分组节点',
                     'ctx.unlock': '解锁节点',
                     'ctx.clearConnections': '清除所有连线',
                     'status.ready': '就绪',
@@ -1808,7 +1853,6 @@
                 panWasDragging: false,
                 currentSelectionRange: null,
                 currentSelectionContainer: null,
-                // rAF flags
                 renderPending: false,
                 portDragPending: false,
             };
@@ -2270,13 +2314,14 @@
                     if (!AppState.nodeBgVisible) node.classList.add('no-bg');
                     node.dataset.type = type;
                     if (type === 'todo') node.classList.add('node-todo');
+                    if (type === 'group') node.classList.add('node-group');
                     node.style.left = x + 'px';
                     node.style.top = y + 'px';
                     node.style.zIndex = ++AppState.zCounter;
                     const id = 'node-' + AppState.nodeCounter;
                     node.id = id;
 
-                    const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : type === 'math' ? 'MATH' : type === 'todo' ? 'TODO' : 'MD') + '_' +
+                    const defaultTitle = (type === 'text' ? 'TEXT' : type === 'image' ? 'IMAGE' : type === 'math' ? 'MATH' : type === 'todo' ? 'TODO' : type === 'group' ? 'GROUP' : 'MD') + '_' +
                         String(AppState.nodeCounter).padStart(2, '0');
                     const title = data && data.title ? data.title : defaultTitle;
                     if (data && data.w) node.style.width = data.w;
@@ -2285,14 +2330,14 @@
                     const header = document.createElement('div');
                     header.className = 'node-header';
                     let headerInner = `
-                        <span class="node-title">${title}</span>
-                        <div class="node-actions">`;
+                          <span class="node-title">${type === 'group' ? '<span class="collapse-indicator" data-action="toggleGroup">▼</span>' : ''}${title}</span>
+                          <div class="node-actions">`;
                     if (type === 'todo') {
                         headerInner += `
-                            <div class="todo-checkbox" data-action="toggleTodo"></div>`;
+                              <div class="todo-checkbox" data-action="toggleTodo"></div>`;
                     }
                     headerInner += `
-                            <div class="node-action-btn lock-btn" data-action="toggleLock">○</div>
+                              <div class="node-action-btn lock-btn" data-action="toggleLock">○</div>
                             <div class="node-action-btn minimize" data-action="minimize">−</div>
                             <div class="node-action-btn close" data-action="closeNode">×</div>
                         </div>
@@ -2356,6 +2401,26 @@
                         if (lb) { lb.classList.add('locked'); lb.textContent = '●'; }
                     }
 
+                    // Init minimized state
+                    if (data && data.minimized) {
+                        const mc = getNodeContent(node);
+                        if (mc) {
+                            mc.style.display = 'none';
+                            node.style.minHeight = '32px';
+                            node.style.height = '32px';
+                            const resize = node.querySelector('.node-resize');
+                            if (resize) resize.style.display = 'none';
+                            node.classList.add('minimized');
+                        }
+                    }
+
+                    // Init group collapsed state (children will be restored by restoreCollapsedStates)
+                    if (type === 'group' && data && data.collapsed) {
+                        node.dataset.groupCollapsed = 'true';
+                        const ci = node.querySelector('.collapse-indicator');
+                        if (ci) ci.classList.add('collapsed');
+                    }
+
                     // Init behaviors
                     NodeManager._initDrag(node);
                     NodeManager._initResize(node);
@@ -2386,7 +2451,8 @@
                         content.style.fontSize = fs + 'px';
                         content.dataset.fontSize = fs;
                     }
-                    if (type === 'text' || type === 'todo') {
+                    // text, todo, group are all editable text nodes
+                    if (type === 'text' || type === 'todo' || type === 'group') {
                         content.setAttribute('contenteditable', 'true');
                         content.dataset.placeholder = t('placeholder.startTyping');
                         content.style.fontFamily = CONFIG.DEFAULT_FONT;
@@ -2668,7 +2734,7 @@
                         const type = node.dataset.type;
                         const content = getNodeContent(node);
                         if (!content) return;
-                        if (type === 'text' || type === 'todo') {
+                        if (type === 'text' || type === 'todo' || type === 'group') {
                             content.dataset.placeholder = t('placeholder.startTyping');
                         } else if (type === 'image') {
                             content.dataset.placeholder = t('placeholder.imageUrl');
@@ -2704,8 +2770,24 @@
                     });
                     document.addEventListener('mousemove', (e) => {
                         if (!dragging) return;
-                        node.style.left = ox + (e.clientX - sx) / AppState.scale + 'px';
-                        node.style.top = Math.max(0, oy + (e.clientY - sy) / AppState.scale) + 'px';
+                        const newLeft = ox + (e.clientX - sx) / AppState.scale;
+                        const newTop = Math.max(0, oy + (e.clientY - sy) / AppState.scale);
+                        const dx = newLeft - parseFloat(node.style.left || 0);
+                        const dy = newTop - parseFloat(node.style.top || 0);
+                        node.style.left = newLeft + 'px';
+                        node.style.top = newTop + 'px';
+                        // Sync move group children (both directions)
+                        if (node.dataset.type === 'group') {
+                            const nodeId = node.id;
+                            AppState.connections.filter(c => c.from === nodeId || c.to === nodeId).forEach(c => {
+                                const childId = c.from === nodeId ? c.to : c.from;
+                                const child = document.getElementById(childId);
+                                if (child && !child.classList.contains('locked')) {
+                                    child.style.left = (parseFloat(child.style.left) + dx) + 'px';
+                                    child.style.top = (parseFloat(child.style.top) + dy) + 'px';
+                                }
+                            });
+                        }
                         ConnectionManager.renderAll();
                     });
                     document.addEventListener('mouseup', () => {
@@ -2765,19 +2847,58 @@
                         e.stopPropagation();
                         if (node.classList.contains('locked')) return;
                         const isHidden = content.style.display === 'none';
+                        // Toggle this node's minimized state
                         if (isHidden) {
+                            // Restore
                             content.style.display = '';
                             node.style.minHeight = '';
                             node.style.height = '';
                             node.querySelector('.node-resize').style.display = '';
                             node.classList.remove('minimized');
                         } else {
+                            // Minimize
                             content.style.display = 'none';
                             node.style.minHeight = '32px';
                             node.style.height = '32px';
                             node.querySelector('.node-resize').style.display = 'none';
                             node.classList.add('minimized');
                         }
+
+                        // If this is a group node, also minimize all connected children (both directions)
+                        if (node.dataset.type === 'group') {
+                            const nodeId = node.id;
+                            const childIds = new Set();
+                            AppState.connections.forEach(conn => {
+                                if (conn.from === nodeId) childIds.add(conn.to);
+                                else if (conn.to === nodeId) childIds.add(conn.from);
+                            });
+                            childIds.forEach(id => {
+                                const child = document.getElementById(id);
+                                if (child && !child.classList.contains('locked')) {
+                                    const childContent = getNodeContent(child);
+                                    if (childContent) {
+                                        // Apply the same minimized state as parent
+                                        if (isHidden) {
+                                            // Parent was restored, so restore child too
+                                            childContent.style.display = '';
+                                            child.style.minHeight = '';
+                                            child.style.height = '';
+                                            child.querySelector('.node-resize').style.display = '';
+                                            child.classList.remove('minimized');
+                                        } else {
+                                            // Parent minimized, minimize child
+                                            childContent.style.display = 'none';
+                                            child.style.minHeight = '32px';
+                                            child.style.height = '32px';
+                                            child.querySelector('.node-resize').style.display = 'none';
+                                            child.classList.add('minimized');
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        // Save state immediately
+                        debouncedAutoSave();
                         ConnectionManager.renderAll();
                     });
 
@@ -2870,7 +2991,7 @@
                     const type = AppState.ctxNode.dataset.type;
                     const content = getNodeContent(AppState.ctxNode);
                     if (type === 'image' || type === 'markdown' || type === 'math') content.dispatchEvent(new Event('dblclick', { bubbles: true }));
-                    else if (type === 'text' || type === 'todo') content.focus();
+                    else if (type === 'text' || type === 'todo' || type === 'group') content.focus();
                     DOM.contextMenu.classList.remove('open');
                 },
                 copyNode() {
@@ -2880,12 +3001,17 @@
                     const title = getNodeTitle(AppState.ctxNode);
                     const obj = { type, w: AppState.ctxNode.style.width, h: AppState.ctxNode.style.height, title: title ?
                             title.textContent : '', fontSize: content ? content.dataset.fontSize || '' : '' };
-                    if (type === 'text' || type === 'todo') { obj.content = content ? content.innerHTML : '';
-                        obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
+                    if (type === 'text' || type === 'todo' || type === 'group') {
+                        obj.content = content ? content.innerHTML : '';
+                        obj.lh = content ? content.style.lineHeight : '';
+                    } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
-                        obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
-                            .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
-                            .dataset.source : ''; }
+                        obj.src = img ? img.src : '';
+                    } else if (type === 'markdown') {
+                        obj.source = content ? content.dataset.source : '';
+                    } else if (type === 'math') {
+                        obj.source = content ? content.dataset.source : '';
+                    }
                     AppState.clipboardNode = obj;
                     notify(t('notify.nodeCopied'));
                     DOM.contextMenu.classList.remove('open');
@@ -2984,6 +3110,13 @@
                         const fromNode = getNodeById(conn.from);
                         const toNode = getNodeById(conn.to);
                         if (!fromNode || !toNode) return;
+
+                        // Skip rendering if either endpoint is hidden (hidden-by-group-conn)
+                        const fromHidden = fromNode.classList.contains('hidden-by-group-conn');
+                        const toHidden = toNode.classList.contains('hidden-by-group-conn');
+                        if (fromHidden || toHidden) {
+                            return; // connection not drawn
+                        }
 
                         const fromPort = conn.fromPort || 'bottom';
                         const toPort = conn.toPort || 'top';
@@ -3134,7 +3267,7 @@
                         container.closest('.node-content') :
                         container.parentElement?.closest('.node-content');
                     const nodeType = nodeContent.closest('.node')?.dataset.type;
-                    if (!nodeContent || (nodeType !== 'text' && nodeType !== 'todo')) {
+                    if (!nodeContent || (nodeType !== 'text' && nodeType !== 'todo' && nodeType !== 'group')) {
                         DOM.floatingToolbar.classList.remove('visible');
                         return;
                     }
@@ -3508,12 +3641,14 @@
                             y: node.style.top,
                             w: node.style.width,
                             h: node.style.height,
-                            title: titleEl ? titleEl.textContent : '',
+                            title: titleEl ? titleEl.textContent.replace(/^▼/, '').trim() : '',
                             id: node.id,
                             locked: node.classList.contains('locked'),
+                            minimized: node.classList.contains('minimized'),
+                            collapsed: node.dataset.groupCollapsed === 'true' || undefined,
                             fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
                         };
-                        if (type === 'text' || type === 'todo') {
+                        if (type === 'text' || type === 'todo' || type === 'group') {
                             obj.content = contentEl ? contentEl.innerHTML : '';
                             obj.lh = contentEl ? contentEl.style.lineHeight : '';
                         } else if (type === 'image') {
@@ -3575,13 +3710,18 @@
                     const content = getNodeContent(node);
                     const title = getNodeTitle(node);
                     const obj = { type, x: node.style.left, y: node.style.top, w: node.style.width, h: node.style
-                            .height, title: title ? title.textContent : '', id: node.id, locked: node.classList.contains('locked'), fontSize: content ? content.dataset.fontSize || '' : '' };
-                    if (type === 'text' || type === 'todo') { obj.content = content ? content.innerHTML : '';
-                        obj.lh = content ? content.style.lineHeight : ''; } else if (type === 'image') {
+                            .height, title: title ? title.textContent.replace(/^▼/, '').trim() : '', id: node.id, locked: node.classList.contains('locked'), minimized: node.classList.contains('minimized'), collapsed: node.dataset.groupCollapsed === 'true' || undefined, fontSize: content ? content.dataset.fontSize || '' : '' };
+                    if (type === 'text' || type === 'todo' || type === 'group') {
+                        obj.content = content ? content.innerHTML : '';
+                        obj.lh = content ? content.style.lineHeight : '';
+                    } else if (type === 'image') {
                         const img = content ? content.querySelector('img') : null;
-                        obj.src = img ? img.src : ''; } else if (type === 'markdown') { obj.source = content ? content
-                            .dataset.source : ''; } else if (type === 'math') { obj.source = content ? content
-                            .dataset.source : ''; }
+                        obj.src = img ? img.src : '';
+                    } else if (type === 'markdown') {
+                        obj.source = content ? content.dataset.source : '';
+                    } else if (type === 'math') {
+                        obj.source = content ? content.dataset.source : '';
+                    }
                     data.nodes.push(obj);
                 });
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -3593,6 +3733,33 @@
             }
 
             function loadDocument() { DOM.fileInput.click(); }
+
+            function restoreCollapsedStates() {
+                // Clear all hidden-by-group-conn state first
+                document.querySelectorAll('.node').forEach(n => {
+                    n.classList.remove('hidden-by-group-conn');
+                    n.style.display = '';
+                });
+                // Then re-apply collapse state for groups
+                getNodes().forEach(node => {
+                    if (node.dataset.type === 'group' && node.dataset.groupCollapsed === 'true') {
+                        const nodeId = node.id;
+                        AppState.connections.forEach(conn => {
+                            let childId = null;
+                            if (conn.from === nodeId) childId = conn.to;
+                            else if (conn.to === nodeId) childId = conn.from;
+                            if (childId) {
+                                const child = document.getElementById(childId);
+                                if (child && !child.classList.contains('locked')) {
+                                    child.classList.add('hidden-by-group-conn');
+                                    child.style.display = 'none';
+                                }
+                            }
+                        });
+                    }
+                });
+                ConnectionManager.renderAll();
+            }
 
             function handleFileLoad(e) {
                 const file = e.target.files[0];
@@ -3611,6 +3778,7 @@
                                         .connIdCounter) }));
                                 ConnectionManager.renderAll();
                             }
+                            setTimeout(() => restoreCollapsedStates(), 200);
                             notify(t('notify.loadedNodes', data.nodes.length));
                         }
                     } catch (_) { notify(t('notify.invalidFile')); }
@@ -3649,6 +3817,9 @@
                             break;
                         case 'newTodo':
                             NodeManager.createCenteredNode('todo');
+                            break;
+                        case 'newGroup':
+                            NodeManager.createCenteredNode('group');
                             break;
                         case 'save':
                             saveDocument();
@@ -3801,6 +3972,10 @@
                             NodeManager.createNodeAt(AppState.ctxX, AppState.ctxY, 'todo');
                             DOM.contextMenu.classList.remove('open');
                             break;
+                        case 'ctxNewGroup':
+                            NodeManager.createNodeAt(AppState.ctxX, AppState.ctxY, 'group');
+                            DOM.contextMenu.classList.remove('open');
+                            break;
                         case 'ctxEdit':
                             NodeManager.ctxEdit();
                             break;
@@ -3816,7 +3991,7 @@
                                 const lb = AppState.ctxNode.querySelector('.lock-btn');
                                 if (lb) { lb.classList.toggle('locked', isLocked); lb.textContent = isLocked ? '●' : '○'; }
                                 const ct = getNodeContent(AppState.ctxNode);
-                                if (ct && (AppState.ctxNode.dataset.type === 'text' || AppState.ctxNode.dataset.type === 'todo')) {
+                                if (ct && (AppState.ctxNode.dataset.type === 'text' || AppState.ctxNode.dataset.type === 'todo' || AppState.ctxNode.dataset.type === 'group')) {
                                     ct.setAttribute('contenteditable', isLocked ? 'false' : 'true');
                                 }
                                 DOM.contextMenu.classList.remove('open');
@@ -3875,9 +4050,47 @@
                                 const lb = lockedNode.querySelector('.lock-btn');
                                 if (lb) { lb.classList.toggle('locked', isLocked); lb.textContent = isLocked ? '●' : '○'; }
                                 const ct = getNodeContent(lockedNode);
-                                if (ct && (lockedNode.dataset.type === 'text' || lockedNode.dataset.type === 'todo')) {
+                                if (ct && (lockedNode.dataset.type === 'text' || lockedNode.dataset.type === 'todo' || lockedNode.dataset.type === 'group')) {
                                     ct.setAttribute('contenteditable', isLocked ? 'false' : 'true');
                                 }
+                                debouncedAutoSave();
+                            }
+                            break;
+                        case 'toggleGroup':
+                            const gn = target.closest('.node');
+                            if (gn) {
+                                const isCollapsed = gn.dataset.groupCollapsed === 'true';
+                                const nodeId = gn.id;
+                                // Find all connected nodes (both directions)
+                                const childIds = new Set();
+                                AppState.connections.forEach(conn => {
+                                    if (conn.from === nodeId) childIds.add(conn.to);
+                                    else if (conn.to === nodeId) childIds.add(conn.from);
+                                });
+                                if (isCollapsed) {
+                                    // Expand: remove hidden class from children
+                                    delete gn.dataset.groupCollapsed;
+                                    gn.querySelector('.collapse-indicator').classList.remove('collapsed');
+                                    childIds.forEach(id => {
+                                        const child = document.getElementById(id);
+                                        if (child) {
+                                            child.classList.remove('hidden-by-group-conn');
+                                            child.style.display = '';
+                                        }
+                                    });
+                                } else {
+                                    // Collapse: hide children
+                                    gn.dataset.groupCollapsed = 'true';
+                                    gn.querySelector('.collapse-indicator').classList.add('collapsed');
+                                    childIds.forEach(id => {
+                                        const child = document.getElementById(id);
+                                        if (child && !child.classList.contains('locked')) {
+                                            child.classList.add('hidden-by-group-conn');
+                                            child.style.display = 'none';
+                                        }
+                                    });
+                                }
+                                ConnectionManager.renderAll();
                                 debouncedAutoSave();
                             }
                             break;
@@ -3886,6 +4099,7 @@
                             if (n) {
                                 const content = getNodeContent(n);
                                 const isHidden = content.style.display === 'none';
+                                // Toggle this node's minimized state
                                 if (isHidden) {
                                     content.style.display = '';
                                     n.style.minHeight = '';
@@ -3899,7 +4113,41 @@
                                     n.querySelector('.node-resize').style.display = 'none';
                                     n.classList.add('minimized');
                                 }
+
+                                // If this is a group node, also minimize all connected children (both directions)
+                                if (n.dataset.type === 'group') {
+                                    const nodeId = n.id;
+                                    const childIds = new Set();
+                                    AppState.connections.forEach(conn => {
+                                        if (conn.from === nodeId) childIds.add(conn.to);
+                                        else if (conn.to === nodeId) childIds.add(conn.from);
+                                    });
+                                    childIds.forEach(id => {
+                                        const child = document.getElementById(id);
+                                        if (child && !child.classList.contains('locked')) {
+                                            const childContent = getNodeContent(child);
+                                            if (childContent) {
+                                                if (isHidden) {
+                                                    // Parent restored → restore child
+                                                    childContent.style.display = '';
+                                                    child.style.minHeight = '';
+                                                    child.style.height = '';
+                                                    child.querySelector('.node-resize').style.display = '';
+                                                    child.classList.remove('minimized');
+                                                } else {
+                                                    // Parent minimized → minimize child
+                                                    childContent.style.display = 'none';
+                                                    child.style.minHeight = '32px';
+                                                    child.style.height = '32px';
+                                                    child.querySelector('.node-resize').style.display = 'none';
+                                                    child.classList.add('minimized');
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
                                 ConnectionManager.renderAll();
+                                debouncedAutoSave();
                             }
                             break;
                         case 'titleFontSizeUp':
@@ -4179,7 +4427,14 @@
                                 NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n
                                     .type, n);
                             });
-                            setTimeout(() => ConnectionManager.renderAll(), 150);
+                            if (data.connections) {
+                                AppState.connections = data.connections.map(c => ({ ...c, fromPort: c.fromPort || 'bottom', toPort: c.toPort || 'top', id: 'conn-' + (++AppState
+                                        .connIdCounter) }));
+                            }
+                            setTimeout(() => {
+                                ConnectionManager.renderAll();
+                                restoreCollapsedStates();
+                            }, 250);
                         }
                     } catch (_) {}
                 }
