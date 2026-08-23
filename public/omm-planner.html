@@ -8,8 +8,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
     </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
-
         :root {
             --bg: #ffffff;
             --text: #000000;
@@ -23,7 +21,7 @@
             --active-text: #ffffff;
             --accent-red: #cc3333;
             --accent-green: #339933;
-            --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+            --font-mono: 'SimSun', '宋体', 'NSimSun', 'Songti SC', 'STSong', serif;
             --zoom: 1;
             --radius: 0px;
         }
@@ -58,11 +56,8 @@
             font-size: 13px;
         }
         ::selection {
-            background: rgba(0, 110, 255, 0.2);
+            background: rgba(136, 136, 136, 0.3);
             color: inherit;
-        }
-        body.theme-dark ::selection {
-            background: rgba(80, 160, 255, 0.25);
         }
         button {
             font-family: var(--font-mono);
@@ -186,14 +181,12 @@
             color: var(--text);
             font-family: var(--font-mono);
             font-size: 10px;
-            padding: 3px 6px;
+            padding: 3px 8px;
             outline: none;
             cursor: pointer;
-            color-scheme: light;
             border-radius: var(--radius);
-        }
-        body.theme-dark .menu-date {
-            color-scheme: dark;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
         }
         .pin-btn {
             width: 28px;
@@ -435,6 +428,10 @@
             display: flex;
             flex-direction: column;
             z-index: 1;
+            transition: padding-top 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        body:not(.menu-pinned) #main {
+            padding-top: 14px;
         }
         #cal-head {
             display: flex;
@@ -443,6 +440,11 @@
             padding-bottom: 14px;
             flex-shrink: 0;
             gap: 12px;
+        }
+        .ch-left {
+            display: flex;
+            align-items: center;
+            min-width: 0;
         }
         #ch-title {
             font-size: 26px;
@@ -895,28 +897,36 @@
 
         #editor {
             position: fixed;
-            top: 0;
-            right: -380px;
-            width: 360px;
-            max-width: 92vw;
-            bottom: 0;
+            width: 320px;
+            max-width: calc(100vw - 24px);
             background: var(--bg);
-            border-left: 1px solid var(--border);
-            z-index: 1500;
-            transition: right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid var(--border);
+            z-index: 2000;
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+            transition: opacity 0.16s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
             display: flex;
             flex-direction: column;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
         }
         #editor.open {
-            right: 0;
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
         }
         .ed-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px 20px;
+            padding: 12px 16px;
             border-bottom: 1px solid var(--border-dim);
             flex-shrink: 0;
+            cursor: grab;
+            user-select: none;
+        }
+        .ed-head.dragging {
+            cursor: grabbing;
         }
         .ed-mode {
             font-size: 10px;
@@ -943,10 +953,11 @@
         .ed-body {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 16px;
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 14px;
+            max-height: 62vh;
         }
         .ed-body::-webkit-scrollbar {
             width: 4px;
@@ -1080,6 +1091,444 @@
         .ed-btn.danger:hover {
             color: var(--accent-red);
             border-color: var(--accent-red);
+        }
+
+        /* ===== Fake inputs & custom pickers ===== */
+        .fake-input {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            user-select: none;
+        }
+        .fake-input::after {
+            content: '▾';
+            color: var(--text-faint);
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+        .fake-input:hover {
+            border-color: var(--text);
+        }
+        .picker-pop {
+            position: fixed;
+            z-index: 2600;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+            padding: 10px;
+            display: none;
+            min-width: 232px;
+        }
+        .picker-pop.open {
+            display: block;
+            animation: ddIn 0.16s ease;
+        }
+        .pk-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .pk-title {
+            font-size: 12px;
+            color: var(--text);
+        }
+        .pk-nav {
+            width: 22px;
+            height: 22px;
+            border: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-dim);
+            font-size: 12px;
+            transition: all 0.12s;
+        }
+        .pk-nav:hover {
+            background: var(--active-bg);
+            color: var(--active-text);
+            border-color: var(--border);
+        }
+        .pk-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+        }
+        .pk-wd {
+            font-size: 9px;
+            color: var(--text-faint);
+            text-align: center;
+            padding: 2px 0 4px;
+        }
+        .pk-day {
+            height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            transition: all 0.1s;
+        }
+        .pk-day:hover {
+            border-color: var(--border);
+            color: var(--text);
+        }
+        .pk-day.other {
+            opacity: 0.3;
+        }
+        .pk-day.today {
+            border-color: var(--border-dim);
+        }
+        .pk-day.sel {
+            background: var(--active-bg);
+            color: var(--active-text);
+            border-color: var(--border);
+        }
+        .pk-cols {
+            display: flex;
+            gap: 8px;
+        }
+        .pk-col {
+            max-height: 216px;
+            overflow-y: auto;
+            width: 66px;
+            border: 1px solid var(--border-faint);
+        }
+        .pk-col::-webkit-scrollbar {
+            width: 4px;
+        }
+        .pk-col::-webkit-scrollbar-thumb {
+            background: var(--border-dim);
+        }
+        .pk-opt {
+            padding: 5px 0;
+            text-align: center;
+            font-size: 11px;
+            cursor: pointer;
+            color: var(--text-dim);
+        }
+        .pk-opt:hover {
+            background: var(--hover);
+            color: var(--text);
+        }
+        .pk-opt.active {
+            background: var(--active-bg);
+            color: var(--active-text);
+        }
+        .pk-clear {
+            margin-top: 8px;
+            text-align: center;
+            font-size: 10px;
+            letter-spacing: 1px;
+            color: var(--text-faint);
+            cursor: pointer;
+            border: 1px dashed var(--border-dim);
+            padding: 4px;
+            transition: all 0.12s;
+        }
+        .pk-clear:hover {
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        /* ===== Multi-select & Focus view ===== */
+        .cell.msel {
+            background: var(--hover);
+            box-shadow: inset 0 0 0 1px var(--border-dim);
+        }
+        .wcol.msel .wc-num {
+            background: var(--hover);
+            color: var(--text);
+        }
+        #multi-pill {
+            position: fixed;
+            left: 50%;
+            bottom: 44px;
+            transform: translateX(-50%) translateY(8px);
+            z-index: 1200;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: stretch;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #multi-pill.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0);
+        }
+        #multi-pill .mp-count {
+            padding: 7px 14px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            border-right: 1px solid var(--border-dim);
+            white-space: nowrap;
+        }
+        #multi-pill .mp-btn {
+            padding: 7px 14px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            color: var(--text-dim);
+            white-space: nowrap;
+            transition: all 0.12s;
+        }
+        #multi-pill .mp-btn:hover {
+            color: var(--active-text);
+            background: var(--active-bg);
+        }
+        #multi-pill .mp-btn.go {
+            color: var(--text);
+        }
+        #focus-bar {
+            display: none;
+            align-items: center;
+            border: 1px solid var(--border);
+            padding: 5px 13px;
+            margin-right: 16px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--text);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        #focus-bar.show {
+            display: inline-flex;
+        }
+        #focus-bar:hover {
+            background: var(--active-bg);
+            color: var(--active-text);
+        }
+        .v-focus {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid var(--border-dim);
+            overflow: hidden;
+        }
+        .frow {
+            flex: 1;
+            display: grid;
+            min-height: 0;
+        }
+        .fcard {
+            border-right: 1px solid var(--border-faint);
+            border-bottom: 1px solid var(--border-faint);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .frow .fcard:last-child {
+            border-right: none;
+        }
+        .frow:last-child .fcard {
+            border-bottom: none;
+        }
+        .fcard-head {
+            padding: 0.7em 0.8em;
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: baseline;
+            gap: 0.5em;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .fc-num {
+            font-size: 1.5em;
+            font-weight: 500;
+        }
+        .fcard-items {
+            flex: 1;
+            padding: 0.6em;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4em;
+            overflow-y: auto;
+        }
+        .fcard-items::-webkit-scrollbar {
+            width: 4px;
+        }
+        .fcard-items::-webkit-scrollbar-thumb {
+            background: var(--border-dim);
+        }
+        .fcard-items .chip {
+            flex-wrap: wrap;
+            padding: 0.45em 0.6em;
+            font-size: 0.85em;
+        }
+        .fcard-items .chip .chip-title {
+            white-space: normal;
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* ===== View swap animations ===== */
+        #calendar.sw-out {
+            animation: swOut 0.17s ease forwards;
+        }
+        #calendar.sw-in {
+            animation: swIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #calendar.sw-back-out {
+            animation: swBackOut 0.17s ease forwards;
+        }
+        #calendar.sw-back-in {
+            animation: swBackIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes swOut {
+            to {
+                opacity: 0;
+                transform: scale(0.93);
+            }
+        }
+        @keyframes swIn {
+            from {
+                opacity: 0;
+                transform: scale(0.93);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        @keyframes swBackOut {
+            to {
+                opacity: 0;
+                transform: scale(1.07);
+            }
+        }
+        @keyframes swBackIn {
+            from {
+                opacity: 0;
+                transform: scale(1.07);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* ===== Slide transitions & overlay closing ===== */
+        #calendar.sl-out-l {
+            animation: slOutL 0.16s ease forwards;
+        }
+        #calendar.sl-in-r {
+            animation: slInR 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #calendar.sl-out-r {
+            animation: slOutR 0.16s ease forwards;
+        }
+        #calendar.sl-in-l {
+            animation: slInL 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes slOutL {
+            to {
+                opacity: 0;
+                transform: translateX(-32px);
+            }
+        }
+        @keyframes slInR {
+            from {
+                opacity: 0;
+                transform: translateX(32px);
+            }
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+        @keyframes slOutR {
+            to {
+                opacity: 0;
+                transform: translateX(32px);
+            }
+        }
+        @keyframes slInL {
+            from {
+                opacity: 0;
+                transform: translateX(-32px);
+            }
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+        .dropdown.closing,
+        .picker-pop.closing,
+        #editor.closing {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transform: scale(0.96) !important;
+            transition: opacity 0.14s ease, transform 0.14s ease;
+        }
+
+        /* ===== Today / selection inversion fixes ===== */
+        .wcol.today .wc-num,
+        .wcol.today.wkend .wc-num {
+            background: var(--active-bg);
+            color: var(--active-text);
+        }
+        .cell.today .d-num,
+        .cell.other.today .d-num {
+            background: var(--active-bg);
+            color: var(--active-text);
+            opacity: 1;
+        }
+        .fcard.today .fc-num {
+            background: var(--active-bg);
+            color: var(--active-text);
+            padding: 0 0.35em;
+        }
+        .fcard.today .fcard-head {
+            border-bottom-color: var(--border-dim);
+        }
+        .wcol.msel .wc-num {
+            background: var(--hover);
+            color: var(--text);
+        }
+        .wcol.msel.today .wc-num {
+            background: var(--active-bg);
+            color: var(--active-text);
+        }
+        .cell.msel.today {
+            box-shadow: inset 0 0 0 2px var(--text);
+        }
+
+        /* ===== Extended radius coverage ===== */
+        #editor,
+        .picker-pop,
+        #multi-pill,
+        #focus-bar,
+        .confirm-box,
+        .modal-box,
+        .wcol-add,
+        .pk-day,
+        .pk-opt,
+        .pk-clear,
+        .settings-btn,
+        .settings-bg-dot {
+            border-radius: var(--radius);
+        }
+        #multi-pill,
+        #focus-bar {
+            overflow: hidden;
+        }
+
+        /* hover inversion fix (ID-specificity beats bare :hover) */
+        #multi-pill .mp-btn:hover {
+            background: var(--active-bg);
+            color: var(--active-text);
         }
 
         #status-bar {
@@ -1428,13 +1877,7 @@
             <div class="menu-btn" data-action="prev" data-i18n-title="menu.prevTitle" title="上一个月 / 周（←）">‹</div>
             <div class="menu-btn" data-action="today" data-i18n="menu.today"></div>
             <div class="menu-btn" data-action="next" data-i18n-title="menu.nextTitle" title="下一个月 / 周（→）">›</div>
-            <input type="date" class="menu-date" id="goto-date" />
-        </div>
-        <div class="menu-group">
-            <span class="menu-label" data-i18n="menu.newLabel">新建</span>
-            <div class="menu-btn" data-action="newTodo" data-i18n="menu.todo"></div>
-            <div class="menu-btn" data-action="newEvent" data-i18n="menu.event"></div>
-            <div class="menu-btn" data-action="newNote" data-i18n="menu.note"></div>
+            <div class="menu-btn menu-date" id="goto-date" data-picker="goto">—</div>
         </div>
         <div class="menu-group">
             <span class="menu-label" data-i18n="menu.tools">工具</span>
@@ -1492,7 +1935,8 @@
     <!-- ===== Main ===== -->
     <div id="main">
         <header id="cal-head">
-            <div>
+            <div class="ch-left">
+                <span id="focus-bar" data-action="focusExit"><span data-i18n="focus.back">‹ 返回</span></span>
                 <span id="ch-title">—</span>
                 <span id="ch-sub"></span>
             </div>
@@ -1503,14 +1947,14 @@
 
     <!-- ===== Editor Drawer ===== -->
     <aside id="editor">
-        <div class="ed-head">
+        <div class="ed-head" id="ed-head">
             <span class="ed-mode" id="ed-mode">NEW</span>
             <span class="ed-close" data-action="editorClose">×</span>
         </div>
         <div class="ed-body">
             <div class="ed-field">
                 <span class="ed-label" data-i18n="ed.date">日期</span>
-                <input type="date" class="ed-input" id="ed-date" />
+                <div class="ed-input fake-input" id="ed-date" data-picker="date">—</div>
             </div>
             <div class="ed-field">
                 <span class="ed-label" data-i18n="ed.type">类型</span>
@@ -1522,7 +1966,7 @@
             </div>
             <div class="ed-field" id="ed-time-row">
                 <span class="ed-label" data-i18n="ed.time">时间</span>
-                <input type="time" class="ed-input" id="ed-time" />
+                <div class="ed-input fake-input" id="ed-time" data-picker="time">--:--</div>
             </div>
             <div class="ed-field">
                 <span class="ed-label" data-i18n="ed.title">标题</span>
@@ -1588,6 +2032,17 @@
 
     <!-- ===== File Input ===== -->
     <input type="file" id="file-input" accept=".json" style="display:none" />
+
+    <!-- ===== Custom Pickers ===== -->
+    <div class="picker-pop" id="pop-date"></div>
+    <div class="picker-pop" id="pop-time"></div>
+
+    <!-- ===== Multi-select Pill ===== -->
+    <div id="multi-pill">
+        <span class="mp-count" id="mp-count">0</span>
+        <div class="mp-btn go" data-action="focusEnter" data-i18n="focus.pillGo">聚焦</div>
+        <div class="mp-btn" data-action="focusClear" data-i18n="focus.pillClear">清除</div>
+    </div>
 
     <script>
         (function() {
@@ -1716,7 +2171,14 @@
                     'title.month': '{0}年{1}月',
                     'sub.lunar': '农历{0}{1}年',
                     'week.range': '{0}月{1}日 – {2}月{3}日',
-                    'hk.rows': '上/下一期|← →|今天|T|切换 月/周/列表|M W L|新建待办|N|搜索|/|缩放|Ctrl+滚轮 或 + −|关闭弹层|Esc',
+                    'picker.clear': '清空',
+                    'focus.title': '聚焦',
+                    'focus.pillGo': '聚焦所选',
+                    'focus.pillClear': '清除',
+                    'focus.back': '‹ 返回',
+                    'focus.days': '{0} 天',
+                    'focus.range': '{0} – {1}',
+                    'hk.rows': '移动选格|↑ ↓ ← →|上/下一期|A D|切换视图|W S|多选日期|Ctrl+点击|范围多选|Shift+点击|聚焦所选|Enter|今天|T|新建待办|N|搜索|/|缩放|Ctrl+滚轮 或 + −|关闭 / 返回|Esc',
                 },
                 en: {
                     'splash.tagline': 'Minimal Planner',
@@ -1823,7 +2285,14 @@
                     'title.month': '{1} {0}',
                     'sub.lunar': 'Year of the {1} ({0})',
                     'week.range': '{0}/{1} – {2}/{3}',
-                    'hk.rows': 'Prev / Next period|← →|Today|T|Switch M/W/L|M W L|New todo|N|Search|/|Zoom|Ctrl+Wheel or + −|Close overlays|Esc',
+                    'picker.clear': 'Clear',
+                    'focus.title': 'FOCUS',
+                    'focus.pillGo': 'Focus selected',
+                    'focus.pillClear': 'Clear',
+                    'focus.back': '‹ Back',
+                    'focus.days': '{0} days',
+                    'focus.range': '{0} – {1}',
+                    'hk.rows': 'Move selection|↑ ↓ ← →|Prev / Next period|A D|Cycle view|W S|Multi-select day|Ctrl+Click|Range select|Shift+Click|Focus selected|Enter|Today|T|New todo|N|Search|/|Zoom|Ctrl+Wheel or + −|Close / Back|Esc',
                 },
             };
 
@@ -1845,9 +2314,18 @@
                 view: 'month',
                 cursor: new Date(),
                 selDate: null,
+                lastSelDs: null,
+                multiSel: [],
+                focusMode: false,
+                savedView: 'month',
+                focusOrigin: 'center',
                 lastType: 'todo',
                 editing: null,
+                edAnchor: null,
+                edDateVal: '',
+                edTimeVal: '',
                 dragPayload: null,
+                swapping: false,
                 notifyTimer: null,
                 confirmResolve: null,
             };
@@ -1963,6 +2441,34 @@
                 a.download = name;
                 a.click();
                 setTimeout(function() { URL.revokeObjectURL(a.href); }, 3000);
+            }
+
+            function placePopup(el, anchor) {
+                const pw = el.offsetWidth || 320;
+                const ph = el.offsetHeight || 400;
+                const vw = window.innerWidth, vh = window.innerHeight;
+                let x, y, origin = 'center center';
+                if (anchor && anchor.getBoundingClientRect && anchor.offsetWidth) {
+                    const r = anchor.getBoundingClientRect();
+                    x = r.right + 14;
+                    origin = 'left center';
+                    if (x + pw > vw - 10) {
+                        x = r.left - pw - 14;
+                        origin = 'right center';
+                    }
+                    if (x < 10) {
+                        x = Math.min(Math.max(10, r.left), Math.max(10, vw - pw - 10));
+                        origin = 'bottom center';
+                    }
+                    y = r.top - 4;
+                    if (y + ph > vh - 40) y = Math.max(54, vh - ph - 36);
+                } else {
+                    x = (vw - pw) / 2;
+                    y = Math.max(80, (vh - ph) / 2 - 30);
+                }
+                el.style.left = Math.round(x) + 'px';
+                el.style.top = Math.round(y) + 'px';
+                el.style.transformOrigin = origin;
             }
 
             // ================================================================
@@ -2122,6 +2628,7 @@
                     DOM.statusBar.classList.toggle('hidden', !S.statusBarVisible);
                     DOM.topMenu.classList.toggle('pinned', S.menuPinned);
                     DOM.pinBtn.classList.toggle('pinned', S.menuPinned);
+                    document.body.classList.toggle('menu-pinned', S.menuPinned);
                     const btnMap = { month: 'btn-month', week: 'btn-week', list: 'btn-list' };
                     ['btn-month', 'btn-week', 'btn-list'].forEach(function(id) {
                         const el = document.getElementById(id);
@@ -2213,10 +2720,122 @@
             }
 
             // ================================================================
+            // 7.5 CUSTOM PICKERS (date & time)
+            // ================================================================
+            const Picker = {
+                ctx: null,
+                open(kind, anchor, value, cb) {
+                    this.close();
+                    this.ctx = { kind: kind, anchor: anchor, cb: cb, y: null, m: null, hh: '09', mm: '00', value: value || '' };
+                    if (kind === 'date') {
+                        const d = value ? pd(value) : new Date();
+                        this.ctx.y = d.getFullYear();
+                        this.ctx.m = d.getMonth() + 1;
+                    }
+                    if (kind === 'time' && value && /^\d{2}:\d{2}$/.test(value)) {
+                        const p = value.split(':');
+                        this.ctx.hh = p[0];
+                        this.ctx.mm = p[1];
+                    }
+                    document.getElementById('pop-' + kind).classList.remove('closing');
+                    document.getElementById('pop-' + kind).classList.add('open');
+                    this.render();
+                    placePopup(document.getElementById('pop-' + kind), anchor);
+                },
+                render() {
+                    const c = this.ctx;
+                    if (!c) return;
+                    const pop = document.getElementById('pop-' + c.kind);
+                    pop.innerHTML = c.kind === 'date' ? Picker.dateHTML(c) : Picker.timeHTML(c);
+                    pop.querySelectorAll('[data-pick]').forEach(function(b) {
+                        b.addEventListener('click', function(ev) {
+                            ev.stopPropagation();
+                            Picker.onPick(b);
+                        });
+                    });
+                },
+                onPick(b) {
+                    const c = this.ctx;
+                    if (!c) return;
+                    const v = b.dataset.pick;
+                    if (v === '@clear') { this.close(); c.cb('', true); return; }
+                    if (v === '@nav') {
+                        c.m += parseInt(b.dataset.dir, 10);
+                        if (c.m < 1) { c.m = 12; c.y--; }
+                        if (c.m > 12) { c.m = 1; c.y++; }
+                        this.render();
+                        return;
+                    }
+                    if (c.kind === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+                        this.close();
+                        c.cb(v, false);
+                        return;
+                    }
+                    if (c.kind === 'time') {
+                        if (b.dataset.part === 'h') { c.hh = v; this.render(); return; }
+                        c.mm = v;
+                        this.close();
+                        c.cb(c.hh + ':' + v, false);
+                    }
+                },
+                dateHTML(c) {
+                    const wds = t('wd.row').split('|').map(function(w) {
+                        return S.lang === 'zh' ? w.charAt(1) : w.charAt(0);
+                    });
+                    let html = '<div class="pk-head">' +
+                        '<div class="pk-nav" data-pick="@nav" data-dir="-1">‹</div>' +
+                        '<span class="pk-title">' + c.y + ' / ' + pad(c.m) + '</span>' +
+                        '<div class="pk-nav" data-pick="@nav" data-dir="1">›</div></div>';
+                    html += '<div class="pk-grid">';
+                    weekdayRow().forEach(function(w, i) {
+                        html += '<div class="pk-wd">' + esc(wds[i]) + '</div>';
+                    });
+                    const first = new Date(c.y, c.m - 1, 1);
+                    const lead = dowIndex(first);
+                    const start = addD(first, -lead);
+                    const tds = todayDS();
+                    for (let i = 0; i < 42; i++) {
+                        const d = addD(start, i);
+                        const ds = fmt(d);
+                        const cls = ['pk-day'];
+                        if (d.getMonth() + 1 !== c.m) cls.push('other');
+                        if (ds === tds) cls.push('today');
+                        if (ds === c.value) cls.push('sel');
+                        html += '<div class="' + cls.join(' ') + '" data-pick="' + ds + '">' + d.getDate() + '</div>';
+                    }
+                    html += '</div>';
+                    return html;
+                },
+                timeHTML(c) {
+                    let hours = '', minutes = '';
+                    for (let h = 0; h < 24; h++) {
+                        const hv = pad(h);
+                        hours += '<div class="pk-opt' + (hv === c.hh ? ' active' : '') +
+                            '" data-pick="' + hv + '" data-part="h">' + hv + '</div>';
+                    }
+                    for (let m = 0; m < 60; m++) {
+                        const mv = pad(m);
+                        minutes += '<div class="pk-opt' + (mv === c.mm ? ' active' : '') +
+                            '" data-pick="' + mv + '" data-part="m">' + mv + '</div>';
+                    }
+                    return '<div class="pk-cols"><div class="pk-col" data-hh="' + c.hh + '">' + hours + '</div>' +
+                        '<div class="pk-col">' + minutes + '</div></div>' +
+                        '<div class="pk-clear" data-pick="@clear">' + esc(t('picker.clear')) + '</div>';
+                },
+                close() {
+                    document.querySelectorAll('.picker-pop.open').forEach(function(p) {
+                        softHide(p);
+                    });
+                    this.ctx = null;
+                }
+            };
+
+            // ================================================================
             // 8. RENDERER
             // ================================================================
             const Render = {
                 all() {
+                    Picker.close();
                     Render.header();
                     Render.status();
                     const cal = DOM.calendar;
@@ -2224,7 +2843,15 @@
                     cal.className = '';
                     if (S.view === 'month') cal.appendChild(Render.month());
                     else if (S.view === 'week') cal.appendChild(Render.week());
+                    else if (S.view === 'focus') cal.appendChild(Render.focus());
                     else cal.appendChild(Render.list());
+                    if (S.multiSel.length && !S.focusMode) {
+                        DOM.calendar.querySelectorAll('.cell,.wcol').forEach(function(z) {
+                            z.classList.toggle('msel', S.multiSel.indexOf(z.dataset.date) >= 0);
+                        });
+                    }
+                    UIMgr.syncFocusUI();
+                    syncViewButtons();
                 },
                 header() {
                     const c = S.cursor;
@@ -2235,10 +2862,21 @@
                         DOM.chTitle.textContent = t('week.range', s0.getMonth() + 1, s0.getDate(), e6.getMonth() + 1, e6.getDate());
                         DOM.chSub.textContent = c.getFullYear();
                     } else {
-                        DOM.chTitle.textContent = t('title.month', c.getFullYear(), months[c.getMonth()]);
+                        DOM.chTitle.textContent = S.lang === 'zh'
+                            ? t('title.month', c.getFullYear(), c.getMonth() + 1)
+                            : months[c.getMonth()] + ' ' + c.getFullYear();
                         const lun = solarToLunar(c.getFullYear(), c.getMonth() + 1, 1);
                         DOM.chSub.textContent = lun ? t('sub.lunar', gzYear(lun.y), animalYear(lun.y)) : '';
                     }
+                    if (S.focusMode && S.multiSel.length) {
+                        const days = S.multiSel.slice().sort();
+                        DOM.chTitle.textContent = t('focus.title');
+                        DOM.chSub.textContent = days.length === 1
+                            ? days[0]
+                            : t('focus.days', days.length) + ' · ' +
+                                t('focus.range', days[0].slice(5), days[days.length - 1].slice(5));
+                    }
+                    DOM.gotoDate.textContent = fmt(S.cursor);
                     const y = c.getFullYear(), m = c.getMonth() + 1;
                     let total = 0, todos = 0, done = 0;
                     Object.keys(Store.events).forEach(function(ds) {
@@ -2403,6 +3041,48 @@
                     wrap.innerHTML = html;
                     return wrap;
                 },
+                focus() {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'v-focus';
+                    const days = S.multiSel.slice().sort();
+                    if (!days.length) {
+                        wrap.innerHTML = '<div class="list-placeholder">' + esc(t('view.emptyMonth')) + '</div>';
+                        return wrap;
+                    }
+                    const wdn = t('wd.row').split('|');
+                    const n = days.length;
+                    const rows = Math.max(1, Math.min(6, Math.ceil(Math.sqrt(n))));
+                    const base = Math.floor(n / rows);
+                    const extra = n % rows;
+                    const tds = todayDS();
+                    function cardHTML(ds) {
+                        const d = pd(ds);
+                        const info = dayInfo(ds);
+                        const lunCls = info.tagType === 'fest' ? ' fest' : info.tagType === 'term' ? ' term' : '';
+                        const lunTxt = info.tag || info.lunarText;
+                        const items = Render.visibleList(ds);
+                        let chips = '';
+                        items.forEach(function(ev) { chips += Render.chipHTML(ds, ev, true); });
+                        if (!items.length) chips = '<div class="empty-hint">' + esc(t('view.emptyDay')) + '</div>';
+                        return '<div class="fcard' + (ds === tds ? ' today' : '') + '" data-date="' + ds + '">' +
+                            '<div class="fcard-head">' +
+                            '<span class="fc-num">' + (d.getMonth() + 1) + '.' + pad(d.getDate()) + '</span>' +
+                            '<span class="wc-dow">' + esc(wdn[(d.getDay() + 6) % 7]) + '</span>' +
+                            '<span class="wc-lunar' + lunCls + '">' + esc(lunTxt) + '</span></div>' +
+                            '<div class="fcard-items">' + chips + '</div></div>';
+                    }
+                    let html = '';
+                    let idx = 0;
+                    for (let r = 0; r < rows; r++) {
+                        const size = base + (r < extra ? 1 : 0);
+                        if (size <= 0) break;
+                        html += '<div class="frow" style="grid-template-columns:repeat(' + size + ',1fr)">';
+                        for (let k = 0; k < size; k++) html += cardHTML(days[idx++]);
+                        html += '</div>';
+                    }
+                    wrap.innerHTML = html;
+                    return wrap;
+                },
                 flashCell(ds) {
                     const el = DOM.calendar.querySelector('.cell[data-date="' + ds + '"]');
                     if (!el) return;
@@ -2414,21 +3094,26 @@
             // ================================================================
             // 9. EDITOR
             // ================================================================
+            let ED_GUARD = false;
+            let edGuardTimer = null;
             const Editor = {
                 open(opts) {
                     opts = opts || {};
                     S.editing = opts.id ? { date: opts.date, id: opts.id } : null;
+                    S.edAnchor = opts.anchor || null;
                     let ev = { type: opts.type || S.lastType || 'todo', title: '', note: '', time: '', color: '#888888' };
                     if (S.editing) {
                         const found = Store.find(S.editing.date, S.editing.id);
                         if (found) ev = found;
                     }
                     DOM.edMode.textContent = S.editing ? t('ed.modeEdit') : t('ed.modeNew');
-                    DOM.edDate.value = opts.date || todayDS();
+                    S.edDateVal = opts.date || todayDS();
+                    S.edTimeVal = ev.time || '';
+                    DOM.edDate.textContent = S.edDateVal;
+                    DOM.edTime.textContent = S.edTimeVal || '--:--';
                     DOM.edSeg.querySelectorAll('button').forEach(function(b) {
                         b.classList.toggle('active', b.dataset.t === ev.type);
                     });
-                    DOM.edTime.value = ev.time || '';
                     DOM.edTitle.value = ev.title || '';
                     DOM.edNote.value = ev.note || '';
                     DOM.edColors.querySelectorAll('.ft-color-dot').forEach(function(dotEl) {
@@ -2436,11 +3121,18 @@
                     });
                     Editor.syncTimeRow(ev.type);
                     DOM.edDelete.classList.toggle('hidden', !S.editing);
-                    DOM.editor.classList.add('open');
-                    setTimeout(function() { DOM.edTitle.focus(); }, 250);
+                    const pop = DOM.editor;
+                    pop.classList.remove('closing');
+                    pop.classList.add('open');
+                    ED_GUARD = true;
+                    clearTimeout(edGuardTimer);
+                    edGuardTimer = setTimeout(function() { ED_GUARD = false; }, 80);
+                    requestAnimationFrame(function() { placePopup(pop, S.edAnchor); });
+                    setTimeout(function() { DOM.edTitle.focus(); }, 180);
                 },
                 close() {
-                    DOM.editor.classList.remove('open');
+                    Picker.close();
+                    softHide(DOM.editor);
                     S.editing = null;
                 },
                 currentType() {
@@ -2455,7 +3147,7 @@
                     DOM.edTimeRow.style.display = type === 'note' ? 'none' : '';
                 },
                 save() {
-                    const newDS = DOM.edDate.value;
+                    const newDS = S.edDateVal;
                     if (!/^\d{4}-\d{2}-\d{2}$/.test(newDS || '')) return;
                     const type = Editor.currentType();
                     const title = DOM.edTitle.value.trim() ||
@@ -2466,7 +3158,7 @@
                         type: type,
                         title: title,
                         note: DOM.edNote.value.trim(),
-                        time: DOM.edTime.value || '',
+                        time: S.edTimeVal || '',
                         color: Editor.currentColor(),
                         created: old ? (old.created || Date.now()) : Date.now(),
                         done: old ? !!old.done : false
@@ -2502,27 +3194,225 @@
             // ================================================================
             // 10. NAVIGATION & VIEW OPTIONS
             // ================================================================
+            function syncViewButtons() {
+                const map = { month: 'btn-month', week: 'btn-week', list: 'btn-list' };
+                const cur = map[S.focusMode ? S.savedView : S.view];
+                ['btn-month', 'btn-week', 'btn-list'].forEach(function(id) {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.toggle('active', id === cur);
+                });
+            }
+
             const Nav = {
                 go(delta) {
                     const c = S.cursor;
-                    if (S.view === 'week') S.cursor = addD(c, delta * 7);
-                    else S.cursor = new Date(c.getFullYear(), c.getMonth() + delta, 1);
-                    Settings.apply();
+                    S.cursor = S.view === 'week'
+                        ? addD(c, delta * 7)
+                        : new Date(c.getFullYear(), c.getMonth() + delta, 1);
+                    Picker.close();
+                    Focus.reset(false);
+                    Settings.save();
+                    syncViewButtons();
+                    swapView(function() { Render.all(); }, delta > 0 ? 'next' : 'prev');
                 },
                 today() {
+                    Picker.close();
+                    Focus.reset(true);
                     S.cursor = new Date();
                     S.selDate = todayDS();
-                    Settings.apply();
+                    S.lastSelDs = S.selDate;
+                    Settings.save();
+                    swapView(function() { Render.all(); }, 'forward');
                 },
                 goTo(ds) {
-                    S.cursor = pd(ds);
+                    const c = S.cursor;
+                    const d = pd(ds);
+                    let anim = 'forward';
+                    if (S.view === 'week') {
+                        const diff = Math.round((startOfWeek(d) - startOfWeek(c)) / 604800000);
+                        anim = diff > 0 ? 'next' : diff < 0 ? 'prev' : 'forward';
+                    } else {
+                        const a = d.getFullYear() * 12 + d.getMonth();
+                        const b = c.getFullYear() * 12 + c.getMonth();
+                        anim = a > b ? 'next' : a < b ? 'prev' : 'forward';
+                    }
+                    Picker.close();
+                    Focus.reset(false);
+                    S.cursor = d;
                     S.selDate = ds;
-                    Settings.apply();
-                    if (S.view === 'month') setTimeout(function() { Render.flashCell(ds); }, 60);
+                    S.lastSelDs = ds;
+                    Settings.save();
+                    swapView(function() {
+                        Render.all();
+                        if (S.view === 'month') setTimeout(function() { Render.flashCell(ds); }, 90);
+                    }, anim);
                 },
                 setView(v) {
+                    if (v === (S.focusMode ? S.savedView : S.view)) return;
+                    Picker.close();
+                    Focus.reset(false);
                     S.view = v;
-                    Settings.apply();
+                    Settings.save();
+                    syncViewButtons();
+                    swapView(function() { Render.all(); }, 'back');
+                },
+                cycle(dir) {
+                    const order = ['month', 'week', 'list'];
+                    const cur = S.focusMode ? S.savedView : S.view;
+                    let i = order.indexOf(cur);
+                    i = (i + dir + order.length) % order.length;
+                    Nav.setView(order[i]);
+                }
+            };
+
+            function moveSel(dc, dr) {
+                if (!S.selDate && !S.lastSelDs) S.lastSelDs = todayDS();
+                const step = dc + dr * 7;
+                const cur = pd(S.selDate || S.lastSelDs);
+                const d = addD(cur, step);
+                const nd = fmt(d);
+                if (S.focusMode) Focus.exit();
+                if (dc !== 0 && d.getMonth() !== cur.getMonth()) {
+                    Nav.go(dc > 0 ? 1 : -1);
+                    S.selDate = nd;
+                    S.lastSelDs = nd;
+                    return;
+                }
+                if (S.view === 'month') {
+                    if (!DOM.calendar.querySelector('.cell[data-date="' + nd + '"]')) Nav.go(step > 0 ? 1 : -1);
+                } else if (S.view === 'week') {
+                    if (fmt(startOfWeek(S.cursor)) !== fmt(startOfWeek(d))) Nav.go(step > 0 ? 1 : -1);
+                } else {
+                    if (d.getMonth() !== S.cursor.getMonth()) Nav.go(step > 0 ? 1 : -1);
+                }
+                S.selDate = nd;
+                S.lastSelDs = nd;
+                requestAnimationFrame(function() {
+                    const el = DOM.calendar.querySelector('.cell[data-date="' + nd + '"],.wcol[data-date="' + nd + '"]');
+                    if (!el) return;
+                    const prev = DOM.calendar.querySelector('.sel');
+                    if (prev) prev.classList.remove('sel');
+                    el.classList.add('sel');
+                    el.scrollIntoView({ block: 'nearest' });
+                });
+            }
+
+            const SWAP_ANIMS = {
+                forward: ['sw-out', 'sw-in'],
+                back: ['sw-back-out', 'sw-back-in'],
+                next: ['sl-out-l', 'sl-in-r'],
+                prev: ['sl-out-r', 'sl-in-l']
+            };
+
+            function swapView(build, anim) {
+                const cal = DOM.calendar;
+                const pair = SWAP_ANIMS[anim] || SWAP_ANIMS.forward;
+                if (S.swapping) { build(); return; }
+                S.swapping = true;
+                cal.style.transformOrigin = anim === 'forward' ? (S.focusOrigin || 'center center') : 'center center';
+                cal.classList.add(pair[0]);
+                setTimeout(function() {
+                    build();
+                    cal.classList.remove(pair[0]);
+                    void cal.offsetWidth;
+                    cal.classList.add(pair[1]);
+                    setTimeout(function() {
+                        cal.classList.remove(pair[1]);
+                        cal.style.transformOrigin = '';
+                        S.swapping = false;
+                    }, 310);
+                }, 170);
+            }
+
+            function softHide(el) {
+                if (!el || !el.classList.contains('open')) return;
+                el.classList.add('closing');
+                setTimeout(function() {
+                    el.classList.remove('open', 'closing');
+                }, 150);
+            }
+
+            // ================================================================
+            // 10.5 FOCUS MODE (multi-select days)
+            // ================================================================
+            const Focus = {
+                reset(keepSel) {
+                    if (S.focusMode) {
+                        S.focusMode = false;
+                        S.multiSel.length = 0;
+                        S.view = S.savedView || 'month';
+                    } else if (!keepSel) {
+                        S.multiSel.length = 0;
+                    }
+                    UIMgr.syncFocusUI();
+                },
+                toggleDay(ds, e) {
+                    if (e && e.shiftKey && S.lastSelDs) {
+                        const a = S.lastSelDs < ds ? S.lastSelDs : ds;
+                        const b = S.lastSelDs < ds ? ds : S.lastSelDs;
+                        let cur = pd(a);
+                        const end = pd(b);
+                        while (fmt(cur) <= fmt(end)) {
+                            const k = fmt(cur);
+                            if (S.multiSel.indexOf(k) < 0) S.multiSel.push(k);
+                            cur = addD(cur, 1);
+                        }
+                    } else {
+                        const i = S.multiSel.indexOf(ds);
+                        if (i >= 0) S.multiSel.splice(i, 1);
+                        else S.multiSel.push(ds);
+                    }
+                    if (S.multiSel.length > 31) S.multiSel.length = 31;
+                    S.lastSelDs = ds;
+                    Focus.paint();
+                },
+                paint() {
+                    DOM.calendar.querySelectorAll('[data-date]').forEach(function(z) {
+                        if (!z.classList.contains('cell') && !z.classList.contains('wcol')) return;
+                        z.classList.toggle('msel', S.multiSel.indexOf(z.dataset.date) >= 0);
+                    });
+                    UIMgr.syncFocusUI();
+                },
+                clear() {
+                    S.multiSel.length = 0;
+                    Focus.paint();
+                },
+                origin() {
+                    const zone = document.getElementById('main').getBoundingClientRect();
+                    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                    S.multiSel.forEach(function(ds) {
+                        const el = DOM.calendar.querySelector('[data-date="' + ds + '"]');
+                        if (!el) return;
+                        const r = el.getBoundingClientRect();
+                        if (r.left < x0) x0 = r.left;
+                        if (r.top < y0) y0 = r.top;
+                        if (r.right > x1) x1 = r.right;
+                        if (r.bottom > y1) y1 = r.bottom;
+                    });
+                    if (x0 === Infinity) return 'center center';
+                    return Math.round((x0 + x1) / 2 - zone.left) + 'px ' +
+                        Math.round(Math.max(0, (y0 + y1) / 2 - zone.top)) + 'px';
+                },
+                enter() {
+                    if (!S.multiSel.length || S.focusMode) return;
+                    S.savedView = S.view === 'focus' ? S.savedView : S.view;
+                    S.focusOrigin = Focus.origin();
+                    S.focusMode = true;
+                    swapView(function() {
+                        S.view = 'focus';
+                        Render.all();
+                    }, 'forward');
+                },
+                exit() {
+                    if (!S.focusMode) return;
+                    S.focusMode = false;
+                    S.focusOrigin = 'center center';
+                    const v = S.savedView || 'month';
+                    swapView(function() {
+                        S.multiSel.length = 0;
+                        S.view = v;
+                        Render.all();
+                    }, 'back');
                 }
             };
 
@@ -2798,7 +3688,9 @@
                 },
                 closeModal() { DOM.modal.classList.remove('open'); },
                 closeDropdowns() {
-                    document.querySelectorAll('.dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+                    document.querySelectorAll('.dropdown.open').forEach(function(d) {
+                        softHide(d);
+                    });
                     document.querySelectorAll('.menu-btn.active').forEach(function(b) {
                         if (['btn-month', 'btn-week', 'btn-list'].indexOf(b.id) < 0) b.classList.remove('active');
                     });
@@ -2834,10 +3726,23 @@
                         d.classList.toggle('active', d.dataset.bg === S.bg);
                     });
                 },
+                syncFocusUI() {
+                    const pill = document.getElementById('multi-pill');
+                    const bar = document.getElementById('focus-bar');
+                    const n = S.multiSel.length;
+                    if (!S.focusMode && n > 0) {
+                        pill.classList.add('show');
+                        document.getElementById('mp-count').textContent = t('focus.days', n);
+                    } else {
+                        pill.classList.remove('show');
+                    }
+                    bar.classList.toggle('show', S.focusMode);
+                },
                 togglePin() {
                     S.menuPinned = !S.menuPinned;
                     DOM.topMenu.classList.toggle('pinned', S.menuPinned);
                     DOM.pinBtn.classList.toggle('pinned', S.menuPinned);
+                    document.body.classList.toggle('menu-pinned', S.menuPinned);
                     Settings.save();
                 }
             };
@@ -2856,13 +3761,20 @@
                 prev() { Nav.go(-1); },
                 next() { Nav.go(1); },
                 today() { Nav.today(); },
-                newTodo() { Editor.open({ date: todayDS(), type: 'todo' }); },
-                newEvent() { Editor.open({ date: todayDS(), type: 'event' }); },
-                newNote() { Editor.open({ date: todayDS(), type: 'note' }); },
+                newTodo(el) { Editor.open({ date: todayDS(), type: 'todo', anchor: el }); },
+                newEvent(el) { Editor.open({ date: todayDS(), type: 'event', anchor: el }); },
+                newNote(el) { Editor.open({ date: todayDS(), type: 'note', anchor: el }); },
                 quickadd(el) {
                     const host = el.closest('[data-date]');
-                    Editor.open({ date: host ? host.dataset.date : todayDS(), type: S.lastType || 'todo' });
+                    Editor.open({
+                        date: host ? host.dataset.date : todayDS(),
+                        type: S.lastType || 'todo',
+                        anchor: host || el
+                    });
                 },
+                focusEnter() { Focus.enter(); },
+                focusClear() { Focus.clear(); },
+                focusExit() { Focus.exit(); },
                 showSearch(el) { SearchMgr.open(el); },
                 showStats() { StatsMgr.show(); },
                 showExport(el) { UIMgr.showDropdown('dd-export', el); },
@@ -2944,6 +3856,29 @@
                 document.addEventListener('click', function(e) {
                     const sr = e.target.closest('.sr-item');
                     if (sr) { SearchMgr.pick(sr.dataset.date, sr.dataset.id); return; }
+                    const pk = e.target.closest('[data-picker]');
+                    if (pk) {
+                        const kind = pk.dataset.picker;
+                        const wasOpenId = Picker.ctx && Picker.ctx.kind === kind ? true : false;
+                        Picker.close();
+                        if (wasOpenId) return;
+                        if (kind === 'date') {
+                            Picker.open('date', pk, S.edDateVal, function(v) {
+                                S.edDateVal = v;
+                                DOM.edDate.textContent = v;
+                            });
+                        } else if (kind === 'time') {
+                            Picker.open('time', pk, S.edTimeVal, function(v) {
+                                S.edTimeVal = v;
+                                DOM.edTime.textContent = v || '--:--';
+                            });
+                        } else if (kind === 'goto') {
+                            Picker.open('date', pk, fmt(S.cursor), function(v) {
+                                Nav.goTo(v);
+                            });
+                        }
+                        return;
+                    }
                     const target = e.target.closest('[data-action]');
                     if (target) {
                         if (target.dataset.action === 'toggle') {
@@ -2958,8 +3893,18 @@
                         if (fn) fn(target);
                         return;
                     }
-                    if (!e.target.closest('.dropdown') && !e.target.closest('.menu-btn') &&
-                        !e.target.closest('.pin-btn')) {
+                    const inDD = e.target.closest('.dropdown');
+                    const inMenuBtn = e.target.closest('.menu-btn') || e.target.closest('.pin-btn');
+                    const inOverlay = e.target.closest('#custom-confirm.active') ||
+                        e.target.closest('#modal.open');
+                    if (!ED_GUARD && !inOverlay &&
+                        !e.target.closest('#editor') && !e.target.closest('.picker-pop')) {
+                        if (DOM.editor.classList.contains('open') && !e.target.closest('[data-action="editorClose"]')) {
+                            Editor.close();
+                        }
+                    }
+                    if (!inOverlay) Picker.close();
+                    if (!inDD && !inMenuBtn && !inOverlay) {
                         UIMgr.closeDropdowns();
                     }
                 });
@@ -2967,27 +3912,38 @@
                 const cal = DOM.calendar;
                 cal.addEventListener('click', function(e) {
                     if (e.target.closest('[data-action="toggle"]') || e.target.closest('[data-action="quickadd"]')) return;
+                    const mzone = e.target.closest('.cell,.wcol');
+                    if (mzone && (e.ctrlKey || e.metaKey || e.shiftKey) &&
+                        !e.target.closest('.chip')) {
+                        Focus.toggleDay(mzone.dataset.date, e);
+                        return;
+                    }
                     const chip = e.target.closest('.chip,.ag-item');
                     if (chip) {
-                        Editor.open({ date: chip.dataset.date, id: chip.dataset.id });
+                        Editor.open({ date: chip.dataset.date, id: chip.dataset.id, anchor: chip });
                         return;
                     }
                     const agHead = e.target.closest('.ag-head');
                     if (agHead) {
-                        Editor.open({ date: agHead.closest('[data-date]').dataset.date, type: S.lastType || 'todo' });
+                        Editor.open({
+                            date: agHead.closest('[data-date]').dataset.date,
+                            type: S.lastType || 'todo',
+                            anchor: agHead
+                        });
                         return;
                     }
-                    const cell = e.target.closest('.cell');
+                    const cell = e.target.closest('.cell,.wcol');
                     if (cell) {
                         S.selDate = cell.dataset.date;
-                        cal.querySelectorAll('.cell.sel').forEach(function(c) { c.classList.remove('sel'); });
+                        S.lastSelDs = cell.dataset.date;
+                        cal.querySelectorAll('.sel').forEach(function(c) { c.classList.remove('sel'); });
                         cell.classList.add('sel');
                     }
                 });
                 cal.addEventListener('dblclick', function(e) {
                     if (e.target.closest('.chip,.ag-item,[data-action]')) return;
                     const zone = e.target.closest('.cell,.wcol,.ag-day');
-                    if (zone) Editor.open({ date: zone.dataset.date, type: S.lastType || 'todo' });
+                    if (zone) Editor.open({ date: zone.dataset.date, type: S.lastType || 'todo', anchor: zone });
                 });
 
                 cal.addEventListener('dragstart', function(e) {
@@ -3038,9 +3994,32 @@
                     if (e.key === 'Escape') UIMgr.closeDropdowns();
                 });
 
-                DOM.gotoDate.addEventListener('change', function() {
-                    if (this.value) Nav.goTo(this.value);
-                });
+                (function() {
+                    const head = document.getElementById('ed-head');
+                    const pop = DOM.editor;
+                    let sx, sy, ox, oy, dragging = false;
+                    head.addEventListener('mousedown', function(e) {
+                        if (e.target.closest('.ed-close')) return;
+                        dragging = true;
+                        head.classList.add('dragging');
+                        sx = e.clientX;
+                        sy = e.clientY;
+                        ox = pop.offsetLeft;
+                        oy = pop.offsetTop;
+                        e.preventDefault();
+                    });
+                    document.addEventListener('mousemove', function(e) {
+                        if (!dragging) return;
+                        pop.style.left = Math.max(6, Math.min(window.innerWidth - 80, ox + e.clientX - sx)) + 'px';
+                        pop.style.top = Math.max(6, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
+                    });
+                    document.addEventListener('mouseup', function() {
+                        if (dragging) {
+                            dragging = false;
+                            head.classList.remove('dragging');
+                        }
+                    });
+                })();
 
                 DOM.fileInput.addEventListener('change', function(e) {
                     if (e.target.files[0]) IO.importJSON(e.target.files[0]);
@@ -3100,21 +4079,39 @@
                             if (S.confirmResolve) { S.confirmResolve(false); S.confirmResolve = null; }
                             return;
                         }
+                        if (Picker.ctx) { Picker.close(); return; }
                         if (DOM.modal.classList.contains('open')) { UIMgr.closeModal(); return; }
                         if (DOM.editor.classList.contains('open')) { Editor.close(); return; }
+                        if (S.focusMode) { Focus.exit(); return; }
+                        if (S.multiSel.length) { Focus.clear(); return; }
                         UIMgr.closeDropdowns();
                         return;
                     }
                     const tag = (e.target.tagName || '').toLowerCase();
                     if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
                     switch (e.key) {
-                        case 'ArrowLeft': Nav.go(-1); break;
-                        case 'ArrowRight': Nav.go(1); break;
+                        case 'ArrowLeft': e.preventDefault(); moveSel(-1, 0); break;
+                        case 'ArrowRight': e.preventDefault(); moveSel(1, 0); break;
+                        case 'ArrowUp': e.preventDefault(); moveSel(0, -1); break;
+                        case 'ArrowDown': e.preventDefault(); moveSel(0, 1); break;
+                        case 'a': case 'A': Nav.go(-1); break;
+                        case 'd': case 'D': Nav.go(1); break;
+                        case 'w': case 'W': Nav.cycle(-1); break;
+                        case 's': case 'S': Nav.cycle(1); break;
                         case 't': case 'T': Nav.today(); break;
-                        case 'm': case 'M': Nav.setView('month'); break;
-                        case 'w': case 'W': Nav.setView('week'); break;
-                        case 'l': case 'L': Nav.setView('list'); break;
-                        case 'n': case 'N': Editor.open({ date: todayDS(), type: S.lastType }); break;
+                        case 'n': case 'N':
+                            Editor.open({
+                                date: S.selDate || todayDS(),
+                                type: S.lastType,
+                                anchor: DOM.calendar.querySelector('.sel')
+                            });
+                            break;
+                        case 'Enter':
+                            if (!DOM.editor.classList.contains('open') &&
+                                !DOM.modal.classList.contains('open') && S.multiSel.length) {
+                                Focus.enter();
+                            }
+                            break;
                         case '/':
                             e.preventDefault();
                             SearchMgr.open(document.querySelector('[data-action="showSearch"]'));
