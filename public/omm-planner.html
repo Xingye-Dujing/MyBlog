@@ -526,6 +526,9 @@
         .cell.sel {
             box-shadow: inset 0 0 0 1px var(--border-dim);
         }
+        .wcol.sel {
+            box-shadow: inset 0 0 0 1px var(--border-dim);
+        }
         .cell.drag-over,
         .wcol.drag-over {
             box-shadow: inset 0 0 0 2px var(--text);
@@ -719,10 +722,7 @@
             font-size: 1.15em;
             font-weight: 500;
             padding: 0 0.35em;
-        }
-        .wcol.today .wc-num {
-            background: var(--active-bg);
-            color: var(--active-text);
+            border: 1px solid transparent;
         }
         .wc-lunar {
             font-size: 0.68em;
@@ -737,9 +737,6 @@
         }
         .wc-lunar.term {
             color: var(--accent-green);
-        }
-        .wcol.wkend .wc-num {
-            color: var(--text-dim);
         }
         .wcol-add {
             position: absolute;
@@ -824,7 +821,7 @@
             align-items: baseline;
             gap: 1em;
             margin-bottom: 0.7em;
-            cursor: pointer;
+            cursor: default;
             flex-wrap: wrap;
         }
         .ag-date {
@@ -861,9 +858,12 @@
             border-left: 2px solid var(--c, #888888);
             background: var(--hover);
             margin-bottom: 0.35em;
-            cursor: pointer;
+            cursor: default;
             font-size: 0.92em;
             border-radius: var(--radius);
+        }
+        .v-list .tbox {
+            cursor: default;
         }
         .ag-item .tdot {
             margin-top: 0.45em;
@@ -1189,14 +1189,32 @@
             color: var(--active-text);
             border-color: var(--border);
         }
+        .picker-pop.pop-time {
+            min-width: 280px;
+        }
         .pk-cols {
             display: flex;
-            gap: 8px;
+            gap: 10px;
+            width: 100%;
+        }
+        .pk-colwrap {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .pk-lab {
+            font-size: 9px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            text-align: center;
+            padding-bottom: 6px;
         }
         .pk-col {
-            max-height: 216px;
+            max-height: 252px;
             overflow-y: auto;
-            width: 66px;
+            flex: 1;
             border: 1px solid var(--border-faint);
         }
         .pk-col::-webkit-scrollbar {
@@ -1206,9 +1224,9 @@
             background: var(--border-dim);
         }
         .pk-opt {
-            padding: 5px 0;
+            padding: 8px 0;
             text-align: center;
-            font-size: 11px;
+            font-size: 12px;
             cursor: pointer;
             color: var(--text-dim);
         }
@@ -1473,12 +1491,37 @@
             transition: opacity 0.14s ease, transform 0.14s ease;
         }
 
-        /* ===== Today / selection inversion fixes ===== */
+        /* ===== Week column number states — final precedence ===== */
+        .wcol .wc-num {
+            color: var(--text);
+        }
+        .wcol.wkend .wc-num {
+            color: var(--text-dim);
+        }
+        .wcol.sel .wc-num {
+            border-color: var(--text);
+        }
+        .wcol.sel.wkend .wc-num {
+            color: var(--text-dim);
+        }
         .wcol.today .wc-num,
         .wcol.today.wkend .wc-num {
             background: var(--active-bg);
             color: var(--active-text);
+            border-color: transparent;
         }
+        .wcol.msel .wc-num {
+            background: var(--hover);
+        }
+        .wcol.msel.wkend .wc-num {
+            color: var(--text-dim);
+        }
+        .wcol.msel.today .wc-num {
+            background: var(--active-bg);
+            color: var(--active-text);
+        }
+
+        /* ===== Today / selection inversion fixes (month & focus) ===== */
         .cell.today .d-num,
         .cell.other.today .d-num {
             background: var(--active-bg);
@@ -1492,14 +1535,6 @@
         }
         .fcard.today .fcard-head {
             border-bottom-color: var(--border-dim);
-        }
-        .wcol.msel .wc-num {
-            background: var(--hover);
-            color: var(--text);
-        }
-        .wcol.msel.today .wc-num {
-            background: var(--active-bg);
-            color: var(--active-text);
         }
         .cell.msel.today {
             box-shadow: inset 0 0 0 2px var(--text);
@@ -1574,7 +1609,7 @@
         .splash-logo {
             font-family: var(--font-mono);
             font-size: 30px;
-            font-weight: 400;
+            font-weight: 700;
             color: var(--text);
             letter-spacing: 10px;
             margin-bottom: 8px;
@@ -2152,6 +2187,7 @@
                     'notify.zoom': '缩放：{0}%',
                     'notify.radius': '圆角：{0}px',
                     'notify.stylesReset': '样式已重置',
+                    'notify.listReadonly': '列表视图仅供查看 · 请切换到月/周视图新建',
                     'status.streak': '连续打卡 {0} 天',
                     'status.todayItems': '今日待办 {0}/{1}',
                     'status.noneToday': '今日无安排',
@@ -2172,13 +2208,15 @@
                     'sub.lunar': '农历{0}{1}年',
                     'week.range': '{0}月{1}日 – {2}月{3}日',
                     'picker.clear': '清空',
+                    'picker.hour': '时',
+                    'picker.minute': '分',
                     'focus.title': '聚焦',
                     'focus.pillGo': '聚焦所选',
                     'focus.pillClear': '清除',
                     'focus.back': '‹ 返回',
                     'focus.days': '{0} 天',
                     'focus.range': '{0} – {1}',
-                    'hk.rows': '移动选格|↑ ↓ ← →|上/下一期|A D|切换视图|W S|多选日期|Ctrl+点击|范围多选|Shift+点击|聚焦所选|Enter|今天|T|新建待办|N|搜索|/|缩放|Ctrl+滚轮 或 + −|关闭 / 返回|Esc',
+                    'hk.rows': '移动选格（月/周）|← → ↑ ↓|上/下一期|A D|切换视图|W S|多选日期|Ctrl+点击|范围多选|Shift+点击|聚焦多选|Enter|聚焦当前格 / 返回|F|今天|T|新建待办（月/周）|N|搜索|/|缩放|Ctrl+滚轮 或 + −|关闭 / 返回|Esc|列表视图|只读，滚动查看',
                 },
                 en: {
                     'splash.tagline': 'Minimal Planner',
@@ -2266,6 +2304,7 @@
                     'notify.zoom': 'Zoom: {0}%',
                     'notify.radius': 'Radius: {0}px',
                     'notify.stylesReset': 'Styles reset',
+                    'notify.listReadonly': 'List view is read-only · switch to Month/Week to add entries',
                     'status.streak': 'Streak {0}d',
                     'status.todayItems': 'Todos today {0}/{1}',
                     'status.noneToday': 'Nothing today',
@@ -2286,13 +2325,15 @@
                     'sub.lunar': 'Year of the {1} ({0})',
                     'week.range': '{0}/{1} – {2}/{3}',
                     'picker.clear': 'Clear',
+                    'picker.hour': 'HR',
+                    'picker.minute': 'MIN',
                     'focus.title': 'FOCUS',
                     'focus.pillGo': 'Focus selected',
                     'focus.pillClear': 'Clear',
                     'focus.back': '‹ Back',
                     'focus.days': '{0} days',
                     'focus.range': '{0} – {1}',
-                    'hk.rows': 'Move selection|↑ ↓ ← →|Prev / Next period|A D|Cycle view|W S|Multi-select day|Ctrl+Click|Range select|Shift+Click|Focus selected|Enter|Today|T|New todo|N|Search|/|Zoom|Ctrl+Wheel or + −|Close / Back|Esc',
+                    'hk.rows': 'Move selection (month/week)|Arrows|Prev / Next period|A D|Cycle view|W S|Multi-select|Ctrl+Click|Range select|Shift+Click|Focus selection|Enter|Focus selected day / back|F|Today|T|New todo (month/week)|N|Search|/|Zoom|Ctrl+Wheel or + −|Close / Back|Esc|List view|Read-only, scroll to browse',
                 },
             };
 
@@ -2737,10 +2778,12 @@
                         this.ctx.hh = p[0];
                         this.ctx.mm = p[1];
                     }
-                    document.getElementById('pop-' + kind).classList.remove('closing');
-                    document.getElementById('pop-' + kind).classList.add('open');
+                    const pop = document.getElementById('pop-' + kind);
+                    pop._sh = null;
+                    pop.classList.remove('closing', 'pop-date', 'pop-time');
+                    pop.classList.add('open', kind === 'time' ? 'pop-time' : 'pop-date');
                     this.render();
-                    placePopup(document.getElementById('pop-' + kind), anchor);
+                    placePopup(pop, anchor);
                 },
                 render() {
                     const c = this.ctx;
@@ -2752,6 +2795,10 @@
                             ev.stopPropagation();
                             Picker.onPick(b);
                         });
+                    });
+                    pop.querySelectorAll('.pk-col').forEach(function(colEl) {
+                        const act = colEl.querySelector('.pk-opt.active');
+                        if (act && act.scrollIntoView) act.scrollIntoView({ block: 'center' });
                     });
                 },
                 onPick(b) {
@@ -2818,8 +2865,11 @@
                         minutes += '<div class="pk-opt' + (mv === c.mm ? ' active' : '') +
                             '" data-pick="' + mv + '" data-part="m">' + mv + '</div>';
                     }
-                    return '<div class="pk-cols"><div class="pk-col" data-hh="' + c.hh + '">' + hours + '</div>' +
-                        '<div class="pk-col">' + minutes + '</div></div>' +
+                    return '<div class="pk-cols">' +
+                        '<div class="pk-colwrap"><div class="pk-lab">' + esc(t('picker.hour')) + '</div>' +
+                        '<div class="pk-col">' + hours + '</div></div>' +
+                        '<div class="pk-colwrap"><div class="pk-lab">' + esc(t('picker.minute')) + '</div>' +
+                        '<div class="pk-col">' + minutes + '</div></div></div>' +
                         '<div class="pk-clear" data-pick="@clear">' + esc(t('picker.clear')) + '</div>';
                 },
                 close() {
@@ -2852,6 +2902,10 @@
                     }
                     UIMgr.syncFocusUI();
                     syncViewButtons();
+                    requestAnimationFrame(function() {
+                        const el = DOM.calendar.querySelector('.sel');
+                        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+                    });
                 },
                 header() {
                     const c = S.cursor;
@@ -2927,6 +2981,12 @@
                         '<span class="chip-title">' + esc(ev.title) + '</span>' + note + '</div>';
                 },
                 month() {
+                    const pref = S.cursor.getFullYear() + '-' + pad(S.cursor.getMonth() + 1);
+                    if (!S.selDate || S.selDate.slice(0, 7) !== pref) {
+                        const tds = todayDS();
+                        S.selDate = tds.slice(0, 7) === pref ? tds : fmt(S.cursor);
+                        S.lastSelDs = S.selDate;
+                    }
                     const wrap = document.createElement('div');
                     wrap.className = 'v-month';
                     let whtml = '<div class="weekdays" style="grid-template-columns:repeat(7,1fr)">';
@@ -2970,6 +3030,12 @@
                     const wrap = document.createElement('div');
                     wrap.className = 'v-week';
                     const s0 = startOfWeek(S.cursor);
+                    const wStart = fmt(s0), wEnd = fmt(addD(s0, 6));
+                    if (!S.selDate || S.selDate < wStart || S.selDate > wEnd) {
+                        const tds = todayDS();
+                        S.selDate = (tds >= wStart && tds <= wEnd) ? tds : fmt(S.cursor);
+                        S.lastSelDs = S.selDate;
+                    }
                     const tds = todayDS();
                     const wds = weekdayRow();
                     let html = '';
@@ -2986,7 +3052,8 @@
                         items.forEach(function(ev) { chips += Render.chipHTML(ds, ev, true); });
                         if (!items.length) chips = '<div class="empty-hint">' + esc(t('view.emptyDay')) + '</div>';
                         html += '<div class="wcol' + (isToday ? ' today' : '') +
-                            ((realDow === 0 || realDow === 6) ? ' wkend' : '') + '" data-date="' + ds + '">' +
+                            ((realDow === 0 || realDow === 6) ? ' wkend' : '') +
+                            (S.selDate === ds ? ' sel' : '') + '" data-date="' + ds + '">' +
                             '<div class="wcol-head"><span class="wc-dow">' + esc(wds[dowIndex(d)].name) + '</span>' +
                             '<span class="wc-num">' + d.getDate() + '</span>' +
                             '<span class="wc-lunar' + lunCls + '">' + esc(lunTxt) + '</span>' +
@@ -3021,11 +3088,11 @@
                         items.forEach(function(ev) {
                             const cls = ev.type === 'todo' && ev.done ? ' done' : '';
                             const left = ev.type === 'todo'
-                                ? '<span class="tbox' + (ev.done ? ' checked' : '') + '" data-action="toggle">' + (ev.done ? '✓' : '') + '</span>'
+                                ? '<span class="tbox' + (ev.done ? ' checked' : '') + '">' + (ev.done ? '✓' : '') + '</span>'
                                 : '<span class="tdot"></span>';
                             const time = ev.time ? '<span class="chip-time">' + esc(ev.time) + '</span>' : '';
-                            rows += '<div class="ag-item' + cls + '" draggable="true" data-date="' + ds +
-                                '" data-id="' + ev.id + '" style="--c:' + ev.color + '">' + left + time +
+                            rows += '<div class="ag-item' + cls + '" style="--c:' + ev.color + '">' +
+                                left + time +
                                 '<div class="ag-main"><span class="ag-title">' + esc(ev.title) + '</span>' +
                                 (ev.note ? '<span class="ag-note">' + esc(ev.note) + '</span>' : '') + '</div></div>';
                         });
@@ -3096,6 +3163,7 @@
             // ================================================================
             let ED_GUARD = false;
             let edGuardTimer = null;
+            let edSwapTimer = null;
             const Editor = {
                 open(opts) {
                     opts = opts || {};
@@ -3122,13 +3190,27 @@
                     Editor.syncTimeRow(ev.type);
                     DOM.edDelete.classList.toggle('hidden', !S.editing);
                     const pop = DOM.editor;
-                    pop.classList.remove('closing');
-                    pop.classList.add('open');
+                    pop._sh = null;
                     ED_GUARD = true;
                     clearTimeout(edGuardTimer);
                     edGuardTimer = setTimeout(function() { ED_GUARD = false; }, 80);
-                    requestAnimationFrame(function() { placePopup(pop, S.edAnchor); });
-                    setTimeout(function() { DOM.edTitle.focus(); }, 180);
+                    clearTimeout(edSwapTimer);
+                    const wasOpen = pop.classList.contains('open');
+                    if (wasOpen) {
+                        pop.classList.add('closing');
+                        edSwapTimer = setTimeout(function() {
+                            placePopup(pop, S.edAnchor);
+                            pop.classList.remove('open', 'closing');
+                            void pop.offsetWidth;
+                            pop.classList.add('open');
+                            setTimeout(function() { DOM.edTitle.focus(); }, 120);
+                        }, 150);
+                    } else {
+                        pop.classList.remove('closing');
+                        pop.classList.add('open');
+                        requestAnimationFrame(function() { placePopup(pop, S.edAnchor); });
+                        setTimeout(function() { DOM.edTitle.focus(); }, 180);
+                    }
                 },
                 close() {
                     Picker.close();
@@ -3266,18 +3348,48 @@
             };
 
             function moveSel(dc, dr) {
+                if (S.view === 'list') return;
                 if (!S.selDate && !S.lastSelDs) S.lastSelDs = todayDS();
-                const step = dc + dr * 7;
                 const cur = pd(S.selDate || S.lastSelDs);
+                const step = dc + dr * 7;
+                if (S.focusMode) Focus.exit();
+
+                if (dc !== 0 && S.view === 'month') {
+                    const mat = monthMatrix(S.cursor.getFullYear(), S.cursor.getMonth() + 1);
+                    const first = new Date(S.cursor.getFullYear(), S.cursor.getMonth(), 1);
+                    let idx = -1;
+                    for (let i = 0; i < mat.cells.length; i++) {
+                        if (fmt(mat.cells[i]) === fmt(cur)) { idx = i; break; }
+                    }
+                    if (idx < 0) {
+                        idx = dowIndex(first) + Math.round((cur - first) / 86400000);
+                    }
+                    const row = Math.floor(idx / 7);
+                    const col = idx % 7;
+                    if ((dc < 0 && col === 0) || (dc > 0 && col === 6)) {
+                        const dir = dc > 0 ? 1 : -1;
+                        const nm = new Date(S.cursor.getFullYear(), S.cursor.getMonth() + dir, 1);
+                        const nmat = monthMatrix(nm.getFullYear(), nm.getMonth() + 1);
+                        const nr = Math.min(row, nmat.weeks - 1);
+                        const target = nmat.cells[nr * 7 + (dc > 0 ? 0 : 6)];
+                        Nav.go(dir);
+                        S.selDate = fmt(target);
+                        S.lastSelDs = S.selDate;
+                        return;
+                    }
+                } else if (dc !== 0 && S.view === 'week') {
+                    const cpos = dowIndex(cur);
+                    if ((dc < 0 && cpos === 0) || (dc > 0 && cpos === 6)) {
+                        const target = addD(startOfWeek(S.cursor), dc > 0 ? 7 : -1);
+                        Nav.go(dc);
+                        S.selDate = fmt(target);
+                        S.lastSelDs = S.selDate;
+                        return;
+                    }
+                }
+
                 const d = addD(cur, step);
                 const nd = fmt(d);
-                if (S.focusMode) Focus.exit();
-                if (dc !== 0 && d.getMonth() !== cur.getMonth()) {
-                    Nav.go(dc > 0 ? 1 : -1);
-                    S.selDate = nd;
-                    S.lastSelDs = nd;
-                    return;
-                }
                 if (S.view === 'month') {
                     if (!DOM.calendar.querySelector('.cell[data-date="' + nd + '"]')) Nav.go(step > 0 ? 1 : -1);
                 } else if (S.view === 'week') {
@@ -3288,7 +3400,8 @@
                 S.selDate = nd;
                 S.lastSelDs = nd;
                 requestAnimationFrame(function() {
-                    const el = DOM.calendar.querySelector('.cell[data-date="' + nd + '"],.wcol[data-date="' + nd + '"]');
+                    const el = DOM.calendar.querySelector(
+                        '.cell[data-date="' + nd + '"],.wcol[data-date="' + nd + '"]');
                     if (!el) return;
                     const prev = DOM.calendar.querySelector('.sel');
                     if (prev) prev.classList.remove('sel');
@@ -3324,11 +3437,14 @@
                 }, 170);
             }
 
+            let SH_TOKEN = 0;
             function softHide(el) {
                 if (!el || !el.classList.contains('open')) return;
+                const my = ++SH_TOKEN;
+                el._sh = my;
                 el.classList.add('closing');
                 setTimeout(function() {
-                    el.classList.remove('open', 'closing');
+                    if (el._sh === my) el.classList.remove('open', 'closing');
                 }, 150);
             }
 
@@ -3375,6 +3491,16 @@
                 },
                 clear() {
                     S.multiSel.length = 0;
+                    Focus.paint();
+                },
+                single() {
+                    if (S.focusMode) { Focus.exit(); return; }
+                    const ds = S.selDate || S.lastSelDs || todayDS();
+                    S.savedView = S.view;
+                    S.multiSel.length = 0;
+                    S.multiSel.push(ds);
+                    S.lastSelDs = ds;
+                    Focus.enter();
                     Focus.paint();
                 },
                 origin() {
@@ -3701,6 +3827,7 @@
                     UIMgr.closeDropdowns();
                     if (wasOpen) return;
                     dd.classList.add('open');
+                    dd._sh = null;
                     const rect = btn.getBoundingClientRect();
                     const w = dd.offsetWidth || 300;
                     dd.style.top = (rect.bottom + 6) + 'px';
@@ -3911,6 +4038,7 @@
 
                 const cal = DOM.calendar;
                 cal.addEventListener('click', function(e) {
+                    if (S.view === 'list') return;
                     if (e.target.closest('[data-action="toggle"]') || e.target.closest('[data-action="quickadd"]')) return;
                     const mzone = e.target.closest('.cell,.wcol');
                     if (mzone && (e.ctrlKey || e.metaKey || e.shiftKey) &&
@@ -3941,12 +4069,14 @@
                     }
                 });
                 cal.addEventListener('dblclick', function(e) {
+                    if (S.view === 'list') return;
                     if (e.target.closest('.chip,.ag-item,[data-action]')) return;
                     const zone = e.target.closest('.cell,.wcol,.ag-day');
                     if (zone) Editor.open({ date: zone.dataset.date, type: S.lastType || 'todo', anchor: zone });
                 });
 
                 cal.addEventListener('dragstart', function(e) {
+                    if (S.view === 'list') { e.preventDefault(); return; }
                     const chip = e.target.closest('[draggable="true"]');
                     if (!chip) return;
                     S.dragPayload = { from: chip.dataset.date, id: chip.dataset.id };
@@ -4100,6 +4230,7 @@
                         case 's': case 'S': Nav.cycle(1); break;
                         case 't': case 'T': Nav.today(); break;
                         case 'n': case 'N':
+                            if (S.view === 'list') { notify(t('notify.listReadonly')); break; }
                             Editor.open({
                                 date: S.selDate || todayDS(),
                                 type: S.lastType,
@@ -4110,6 +4241,12 @@
                             if (!DOM.editor.classList.contains('open') &&
                                 !DOM.modal.classList.contains('open') && S.multiSel.length) {
                                 Focus.enter();
+                            }
+                            break;
+                        case 'f': case 'F':
+                            if (!DOM.editor.classList.contains('open') &&
+                                !DOM.modal.classList.contains('open')) {
+                                Focus.single();
                             }
                             break;
                         case '/':
