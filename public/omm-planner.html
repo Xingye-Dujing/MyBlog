@@ -1368,9 +1368,10 @@
             z-index: 60;
             background: var(--bg);
             border: 1px solid var(--border);
+            border-radius: var(--radius);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
             max-height: 132px;
-            overflow-y: auto;
+            overflow: hidden;
             display: none;
         }
         .tag-sug.open {
@@ -1388,6 +1389,24 @@
         .tag-sug-item.hl {
             background: var(--active-bg);
             color: var(--active-text);
+        }
+        #ed-past-row .dd-item {
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            cursor: pointer;
+            user-select: none;
+        }
+        #ed-past-row .dd-item:hover {
+            border-color: var(--border);
+        }
+        #ed-past-row .hint {
+            color: var(--text-dim);
+        }
+        .pk-day.dis {
+            color: var(--text-faint);
+            opacity: 0.35;
+            cursor: default;
+            pointer-events: none;
         }
         select.ed-input {
             cursor: pointer;
@@ -1958,6 +1977,7 @@
             transform: translateX(-50%) translateY(10px);
             background: var(--bg);
             border: 1px solid var(--border);
+            border-radius: var(--radius);
             padding: 6px 16px;
             font-size: calc(11px * var(--fscale));
             color: var(--text);
@@ -2350,6 +2370,13 @@
                     <button type="button" data-r="dates" data-i18n="rep.dates">指定日</button>
                 </div>
             </div>
+            <div class="ed-field" id="ed-past-row">
+                <div class="dd-item" id="ed-past-toggle"><span data-i18n="ed.past">渲染基准日之前的重复</span><span class="hint" id="ed-past-hint">ON</span></div>
+            </div>
+            <div class="ed-field" id="ed-end-row" style="display:none">
+                <span class="ed-label" data-i18n="ed.end">截止日期</span>
+                <div class="ed-input fake-input" id="ed-end" data-picker="enddate">—</div>
+            </div>
             <div class="ed-field" id="ed-dates-row" style="display:none">
                 <span class="ed-label" data-i18n="ed.pickdates">指定日期</span>
                 <div class="ed-input fake-input" id="ed-dates" data-picker="multidate">—</div>
@@ -2434,6 +2461,7 @@
     <div class="picker-pop" id="pop-date"></div>
     <div class="picker-pop" id="pop-time"></div>
     <div class="picker-pop" id="pop-multidate"></div>
+    <div class="picker-pop" id="pop-enddate"></div>
 
     <!-- ===== Multi-select Pill ===== -->
     <div id="multi-pill">
@@ -2513,6 +2541,7 @@
                     'dd.settings.festival': '节日节气',
                     'dd.settings.hidedone': '隐藏已完成',
                     'dd.settings.statusbar': '状态栏',
+                    'dd.settings.past': '渲染基准日之前的重复',
                     'dd.settings.lang': '语言',
                     'dd.settings.help': '快捷键',
                     'dd.settings.resetStyles': '重置样式',
@@ -2525,6 +2554,8 @@
                     'ed.note': '备注',
                     'ed.color': '颜色',
                     'ed.repeat': '重复',
+                    'ed.past': '渲染基准日之前的重复',
+                    'ed.end': '截止日期',
                     'ed.pickdates': '指定日期',
                     'ed.tag': '标签 / 分类',
                     'ed.priority': '优先级',
@@ -2658,6 +2689,7 @@
                     'dd.settings.festival': 'Festivals & Terms',
                     'dd.settings.hidedone': 'Hide Completed',
                     'dd.settings.statusbar': 'Status Bar',
+                    'dd.settings.past': 'Render Pre-base Repeats',
                     'dd.settings.lang': 'Language',
                     'dd.settings.help': 'Shortcuts',
                     'dd.settings.resetStyles': 'Reset Styles',
@@ -2670,6 +2702,8 @@
                     'ed.note': 'Note',
                     'ed.color': 'Color',
                     'ed.repeat': 'Repeat',
+                    'ed.past': 'Render Pre-base Repeats',
+                    'ed.end': 'End Date',
                     'ed.pickdates': 'Specific dates',
                     'ed.tag': 'Tag / Category',
                     'ed.priority': 'Priority',
@@ -2840,6 +2874,11 @@
                 get edAddSub() { return document.getElementById('ed-add-sub'); },
                 get edRepeatRow() { return document.getElementById('ed-repeat-row'); },
                 get edRepeat() { return document.getElementById('ed-repeat'); },
+                get edPastToggle() { return document.getElementById('ed-past-toggle'); },
+                get edPastHint() { return document.getElementById('ed-past-hint'); },
+                get edPastRow() { return document.getElementById('ed-past-row'); },
+                get edEndRow() { return document.getElementById('ed-end-row'); },
+                get edEnd() { return document.getElementById('ed-end'); },
                 get edDatesRow() { return document.getElementById('ed-dates-row'); },
                 get edDates() { return document.getElementById('ed-dates'); },
                 get edTag() { return document.getElementById('ed-tag'); },
@@ -2948,10 +2987,12 @@
                     tag: String(r.tag || ''),
                     subtasks: normSubtasks(r.subtasks),
                     created: r.created || 0,
+                    renderPast: r.renderPast !== undefined ? !!r.renderPast : true,
                     doneMap: (r.doneMap && typeof r.doneMap === 'object') ? r.doneMap : {},
                     rrule: {
                         mode: ['daily', 'weekly', 'monthly', 'dates'].indexOf(rr.mode) >= 0 ? rr.mode : 'daily',
                         start: /^\d{4}-\d{2}-\d{2}$/.test(rr.start) ? rr.start : '',
+                        end: /^\d{4}-\d{2}-\d{2}$/.test(rr.end) ? rr.end : '',
                         dates: Array.isArray(rr.dates) ? rr.dates.filter(function(ds) {
                             return /^\d{4}-\d{2}-\d{2}$/.test(ds);
                         }) : []
@@ -3406,7 +3447,9 @@
                 byId(id) { return Store.recurs.find(function(r) { return r.id === id; }) || null; },
                 match(r, ds) {
                     const rr = r.rrule;
-                    if (rr.start && ds < rr.start) return false;
+                    // Per-rule control: when OFF, occurrences before the rule's base date are suppressed
+                    if (!r.renderPast && rr.start && ds < rr.start) return false;
+                    if (rr.end && ds > rr.end) return false;
                     if (rr.mode === 'daily') return true;
                     if (rr.mode === 'weekly') {
                         if (!rr.start) return false;
@@ -3456,10 +3499,14 @@
             // ================================================================
             const Picker = {
                 ctx: null,
-                open(kind, anchor, value, cb, locked) {
+                open(kind, anchor, value, cb, locked, minDS) {
                     this.close();
-                    this.ctx = { kind: kind, anchor: anchor, cb: cb, y: null, m: null, hh: '09', mm: '00', value: value || '' };
-                    if (kind === 'date') {
+                    this.ctx = {
+                        kind: kind, anchor: anchor, cb: cb, y: null, m: null,
+                        hh: '09', mm: '00', value: value || '',
+                        minDS: /^\d{4}-\d{2}-\d{2}$/.test(minDS || '') ? minDS : ''
+                    };
+                    if (kind === 'date' || kind === 'enddate') {
                         const d = value ? pd(value) : new Date();
                         this.ctx.y = d.getFullYear();
                         this.ctx.m = d.getMonth() + 1;
@@ -3490,7 +3537,7 @@
                     const c = this.ctx;
                     if (!c) return;
                     const pop = document.getElementById('pop-' + c.kind);
-                    const isCal = c.kind === 'date' || c.kind === 'multidate';
+                    const isCal = c.kind === 'date' || c.kind === 'multidate' || c.kind === 'enddate';
                     pop.innerHTML = isCal ? Picker.dateHTML(c) : Picker.timeHTML(c);
                     pop.querySelectorAll('[data-pick]').forEach(function(b) {
                         b.addEventListener('click', function(ev) {
@@ -3517,6 +3564,7 @@
                         if (v === '@clear') { c.dates = []; this.render(); return; }
                         if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
                             if (v === c.locked) return;
+                            if (c.minDS && v < c.minDS) return;
                             const i = c.dates.indexOf(v);
                             if (i >= 0) c.dates.splice(i, 1); else c.dates.push(v);
                             this.render();
@@ -3525,13 +3573,24 @@
                     }
                     if (v === '@clear') { this.close(); c.cb('', true); return; }
                     if (v === '@nav') {
-                        c.m += parseInt(b.dataset.dir, 10);
+                        const dir = parseInt(b.dataset.dir, 10);
+                        if (c.minDS) {
+                            let ty = c.y, tm = c.m + dir;
+                            if (tm < 1) { tm = 12; ty--; }
+                            if (tm > 12) { tm = 1; ty++; }
+                            const curKey = c.y + '-' + pad(c.m);
+                            const tgtKey = ty + '-' + pad(tm);
+                            const minKey = c.minDS.slice(0, 7);
+                            if (tgtKey < minKey && tgtKey < curKey) return;
+                        }
+                        c.m += dir;
                         if (c.m < 1) { c.m = 12; c.y--; }
                         if (c.m > 12) { c.m = 1; c.y++; }
                         this.render();
                         return;
                     }
-                    if (c.kind === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+                    if ((c.kind === 'date' || c.kind === 'enddate') &&
+                        /^\d{4}-\d{2}-\d{2}$/.test(v)) {
                         this.close();
                         c.cb(v, false);
                         return;
@@ -3564,6 +3623,7 @@
                         const ds = fmt(d);
                         const cls = ['pk-day'];
                         if (d.getMonth() + 1 !== c.m) cls.push('other');
+                        if (c.minDS && ds < c.minDS) cls.push('dis');
                         if (ds === tds) cls.push('today');
                         if (c.kind === 'multidate' ? c.dates.indexOf(ds) >= 0 : ds === c.value) cls.push('sel');
                         html += '<div class="' + cls.join(' ') + '" data-pick="' + ds + '">' + d.getDate() + '</div>';
@@ -3574,6 +3634,10 @@
                             '<span class="pk-clear" data-pick="@clear">' + esc(t('picker.clear')) + '</span>' +
                             '<span class="pk-clear pk-done" data-pick="@ok">' + esc(t('picker.done')) +
                             ' (' + c.dates.length + ')</span></div>';
+                    }
+                    if (c.kind === 'enddate') {
+                        html += '<div class="pk-multi-foot">' +
+                            '<span class="pk-clear" data-pick="@clear">' + esc(t('picker.clear')) + '</span></div>';
                     }
                     return html;
                 },
@@ -3974,15 +4038,21 @@
                         repMode = ['daily', 'weekly', 'monthly', 'dates'].indexOf(rule.rrule.mode) >= 0
                             ? rule.rrule.mode : 'daily';
                         S.edDates = rule.rrule.dates.slice();
+                        S.edEndVal = rule.rrule.end || '';
                     } else {
                         S.edDates = [];
+                        S.edEndVal = '';
                     }
                     S.edRepeat = repMode;
+                    S.edRenderPast = (S.editing && S.editing.virt && rule)
+                        ? rule.renderPast !== false
+                        : true;
                     DOM.edRepeat.querySelectorAll('button').forEach(function(b) {
                         b.classList.toggle('active', b.dataset.r === repMode);
                     });
-                    DOM.edDatesRow.style.display = repMode === 'dates' ? '' : 'none';
-                    Editor.updateDatesLabel();
+                    Editor.syncPastHint();
+                    Editor.updateEndLabel();
+                    Editor.syncRepeatRows();
                     DOM.edDateRow.style.display = (S.editing && S.editing.virt) ? 'none' : '';
                     DOM.edSeg.querySelectorAll('button').forEach(function(b) {
                         b.classList.toggle('active', b.dataset.t === ev.type);
@@ -4090,6 +4160,19 @@
                     S.edSubs.forEach(function(s) { if (s.title.trim() && s.done) dn++; });
                     DOM.edSubProgress.textContent = total ? dn + '/' + total : '';
                 },
+                syncPastHint() {
+                    DOM.edPastHint.textContent = S.edRenderPast ? t('on') : t('off');
+                },
+                syncRepeatRows() {
+                    const m = S.edRepeat;
+                    DOM.edPastRow.style.display = m === 'none' ? 'none' : '';
+                    DOM.edDatesRow.style.display = m === 'dates' ? '' : 'none';
+                    DOM.edEndRow.style.display =
+                        (m === 'daily' || m === 'weekly' || m === 'monthly') ? '' : 'none';
+                },
+                updateEndLabel() {
+                    DOM.edEnd.textContent = S.edEndVal || '—';
+                },
                 updateDatesLabel() {
                     const n = S.edDates.length;
                     if (!n) { DOM.edDates.textContent = '—'; return; }
@@ -4124,8 +4207,14 @@
                         const r = Rules.byId(S.editing.id);
                         if (!r) { Editor.close(); return; }
                         Object.assign(r, common);
+                        r.renderPast = S.edRenderPast !== false;
                         if (['daily', 'weekly', 'monthly', 'dates'].indexOf(S.edRepeat) >= 0) {
                             r.rrule.mode = S.edRepeat;
+                        }
+                        if (['daily', 'weekly', 'monthly'].indexOf(S.edRepeat) >= 0) {
+                            r.rrule.end = /^\d{4}-\d{2}-\d{2}$/.test(S.edEndVal || '') ? S.edEndVal : '';
+                        } else {
+                            r.rrule.end = '';
                         }
                         if (r.rrule.mode === 'dates') {
                             if (!S.edDates.length) { notify(t('notify.noDates')); return; }
@@ -4144,15 +4233,19 @@
                             notify(t('notify.noDates'));
                             return;
                         }
+                        const rrStart = /^\d{4}-\d{2}-\d{2}$/.test(S.edDateVal || '') ? S.edDateVal : todayDS();
                         const rr = {
                             mode: S.edRepeat,
-                            start: /^\d{4}-\d{2}-\d{2}$/.test(S.edDateVal || '') ? S.edDateVal : todayDS(),
+                            start: rrStart,
+                            end: (S.edRepeat !== 'dates' && /^\d{4}-\d{2}-\d{2}$/.test(S.edEndVal || ''))
+                                ? S.edEndVal : '',
                             dates: S.edRepeat === 'dates' ? S.edDates.slice() : []
                         };
                         Store.recurs.push(Object.assign({
                             id: uid(),
                             created: Date.now(),
                             doneMap: {},
+                            renderPast: S.edRenderPast !== false,
                             rrule: rr
                         }, common));
                         Store.persist();
@@ -5037,7 +5130,11 @@
             function bindGlobalEvents() {
                 document.addEventListener('click', function(e) {
                     const sr = e.target.closest('.sr-item');
-                    if (sr) { SearchMgr.pick(sr.dataset.date, sr.dataset.id); return; }
+                    if (sr) {
+                        UIMgr.closeDropdowns();
+                        SearchMgr.pick(sr.dataset.date, sr.dataset.id);
+                        return;
+                    }
                     const pk = e.target.closest('[data-picker]');
                     if (pk) {
                         const kind = pk.dataset.picker;
@@ -5058,14 +5155,43 @@
                             Picker.open('date', pk, fmt(S.cursor), function(v) {
                                 Nav.goTo(v);
                             });
+                        } else if (kind === 'enddate') {
+                            Picker.open('enddate', pk, S.edEndVal, function(v) {
+                                S.edEndVal = v;
+                                Editor.updateEndLabel();
+                            });
                         } else if (kind === 'multidate') {
+                            const virtRule = (S.editing && S.editing.virt) ? Rules.byId(S.editing.id) : null;
+                            const baseDS = virtRule ? virtRule.rrule.start : S.edDateVal;
+                            const minDS = (!S.edRenderPast && /^\d{4}-\d{2}-\d{2}$/.test(baseDS || '')) ? baseDS : '';
                             Picker.open('multidate', pk, S.edDates.join(','), function(v) {
                                 S.edDates = v ? v.split(',').filter(Boolean) : [];
                                 Editor.updateDatesLabel();
-                            }, S.edDateVal);
+                            }, S.edDateVal, minDS);
                         }
                         return;
                     }
+
+                    const inEditor = !!e.target.closest('#editor');
+                    const inPop = !!e.target.closest('.picker-pop');
+                    const inOverlay = !!(e.target.closest('#custom-confirm.active') ||
+                        e.target.closest('#modal.open'));
+                    const inDD = !!e.target.closest('.dropdown');
+
+                    // Clicking anywhere outside a float dismisses it — including menu-bar clicks
+                    if (!inOverlay && !inPop && !inEditor) {
+                        if (!ED_GUARD && DOM.editor.classList.contains('open')) Editor.close();
+                        Picker.close();
+                    } else if (inEditor) {
+                        Picker.close();
+                    }
+                    const openerBtn = e.target.closest(
+                        '[data-action="showExport"],[data-action="showSettings"],[data-action="showSearch"]');
+                    if (!inDD && !inOverlay && !openerBtn) {
+                        UIMgr.closeDropdowns();
+                    }
+                    if (inOverlay || inPop) return;
+
                     const target = e.target.closest('[data-action]');
                     if (target) {
                         if (target.dataset.action === 'toggle') {
@@ -5078,21 +5204,6 @@
                         }
                         const fn = ACTIONS[target.dataset.action];
                         if (fn) fn(target);
-                        return;
-                    }
-                    const inDD = e.target.closest('.dropdown');
-                    const inMenuBtn = e.target.closest('.menu-btn') || e.target.closest('.pin-btn');
-                    const inOverlay = e.target.closest('#custom-confirm.active') ||
-                        e.target.closest('#modal.open');
-                    if (!ED_GUARD && !inOverlay &&
-                        !e.target.closest('#editor') && !e.target.closest('.picker-pop')) {
-                        if (DOM.editor.classList.contains('open') && !e.target.closest('[data-action="editorClose"]')) {
-                            Editor.close();
-                        }
-                    }
-                    if (!inOverlay) Picker.close();
-                    if (!inDD && !inMenuBtn && !inOverlay) {
-                        UIMgr.closeDropdowns();
                     }
                 });
 
@@ -5297,7 +5408,11 @@
                         }
                         Editor.updateDatesLabel();
                     }
-                    DOM.edDatesRow.style.display = S.edRepeat === 'dates' ? '' : 'none';
+                    Editor.syncRepeatRows();
+                });
+                DOM.edPastToggle.addEventListener('click', function() {
+                    S.edRenderPast = !S.edRenderPast;
+                    Editor.syncPastHint();
                 });
                 DOM.edSubs.addEventListener('click', function(e) {
                     e.stopPropagation();
