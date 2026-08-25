@@ -287,6 +287,10 @@
         .qa-s { font-size: calc(10px * var(--fscale)); color: var(--text-dim); margin-top: 3px; letter-spacing: 0.5px; }
         .qa:hover .qa-s { color: var(--active-text); opacity: 0.65; }
         .qa-a { font-size: calc(16px * var(--fscale)); opacity: 0.45; transition: all 0.18s; }
+        .qa-a svg { width: 14px; height: 14px; display: block; }
+        .back-bar svg, .pk-nav svg { width: 12px; height: 12px; display: block; }
+        .mini-btn svg:last-child { margin-left: 4px; margin-right: 0; }
+        .ed-btn svg { width: 11px; height: 11px; vertical-align: -1.5px; margin-left: 5px; }
         .qa:hover .qa-a { opacity: 1; transform: translateX(3px); }
 
         /* ===== Words view ===== */
@@ -469,7 +473,7 @@
         .qz-q { text-align: center; margin: 4vh 0 26px; }
         .qz-word { font-family: var(--font-en); font-size: calc(30px * var(--fscale)); font-weight: 600; letter-spacing: 1px; }
         .qz-meaning { font-size: calc(16px * var(--fscale)); line-height: 1.8; max-width: 90%; margin: 0 auto; }
-        .qz-ph { font-size: calc(13px * var(--fscale)); color: var(--text-dim); margin-top: 8px; }
+        .qz-ph { font-size: calc(13px * var(--fscale)); color: var(--text-dim); margin: 12px; }
         .opt {
             display: flex; align-items: center; gap: 12px; border: 1px solid var(--border-dim);
             padding: 12px 16px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
@@ -584,6 +588,7 @@
             background: var(--bg); border: 1px solid var(--border); width: min(580px, 96vw);
             max-height: 88vh; display: flex; flex-direction: column;
             box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22); animation: popIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            border-radius: var(--radius); overflow: hidden;
         }
         @keyframes popIn {
             from { opacity: 0; transform: scale(0.93) translateY(12px); }
@@ -611,7 +616,7 @@
         .confirm-box {
             background: var(--bg); border: 1px solid var(--border); padding: 32px 40px 28px;
             max-width: 430px; width: 90%; text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-            animation: popIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: popIn 0.24s cubic-bezier(0.16, 1, 0.3, 1); border-radius: var(--radius);
         }
         .confirm-box .msg { font-family: var(--font-mono); font-size: calc(14px * var(--fscale)); letter-spacing: 1px; color: var(--text); margin-bottom: 28px; line-height: 1.7; }
         .confirm-box .actions { display: flex; gap: 12px; justify-content: center; }
@@ -1034,7 +1039,7 @@
     <div id="main">
         <header id="head">
             <div class="ch-left">
-                <span class="back-bar hidden" id="back-bar" data-action="goBack">‹ 返回</span>
+                <span class="back-bar hidden" id="back-bar" data-action="goBack">返回</span>
                 <span id="ch-title">总览</span>
                 <span id="ch-sub"></span>
             </div>
@@ -1659,6 +1664,8 @@
                 pause: '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>',
                 prev: '<line x1="7" y1="5" x2="7" y2="19"/><polygon points="18,5 9,12 18,19" fill="currentColor" stroke="none"/>',
                 next: '<line x1="17" y1="5" x2="17" y2="19"/><polygon points="6,5 15,12 6,19" fill="currentColor" stroke="none"/>',
+                chevL: '<polyline points="14.5 5 8 12 14.5 19"/>',
+                chevR: '<polyline points="9.5 5 16 12 9.5 19"/>',
                 loop: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
                 spk: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>'
             };
@@ -1780,6 +1787,8 @@
                 $('#sv-phon').textContent = st.showPhon ? 'ON' : 'OFF';
                 $('#sv-rate').textContent = st.ttsRate.toFixed(2);
                 $('#sv-statusbar').textContent = st.statusbar ? 'ON' : 'OFF';
+                const sn = $('#sv-shownote');
+                if (sn) sn.textContent = st.showNote ? 'ON' : 'OFF';
                 updateExamLabel();
             }
 
@@ -2058,9 +2067,9 @@
                 }
                 $('#pop-exam').innerHTML =
                     '<div class="pk-head">' +
-                        '<span class="pk-nav" data-action="epPrev">‹</span>' +
+                        '<span class="pk-nav" data-action="epPrev">' + ICO('chevL') + '</span>' +
                         '<span class="pk-title">' + EP.y + ' 年 ' + pad(EP.m + 1) + ' 月</span>' +
-                        '<span class="pk-nav" data-action="epNext">›</span>' +
+                        '<span class="pk-nav" data-action="epNext">' + ICO('chevR') + '</span>' +
                     '</div>' +
                     '<div class="pk-grid">' + wds + cells + '</div>';
             }
@@ -2151,10 +2160,10 @@
                             '</div></div>' +
                         '<div class="panel"><div class="panel-h"><span class="panel-t">快速开始</span></div>' +
                             '<div class="qa-grid">' +
-                                '<button class="qa" data-action="qaReview"><span><span class="qa-n">开始复习</span><br><span class="qa-s">' + due + ' 个词已到期</span></span><span class="qa-a">›</span></button>' +
-                                '<button class="qa" data-action="qaLearn"><span><span class="qa-n">学习新词</span><br><span class="qa-s">还可学 ' + nl + ' 个</span></span><span class="qa-a">›</span></button>' +
-                                '<button class="qa" data-action="go" data-v="quiz"><span><span class="qa-n">随机测验</span><br><span class="qa-s">选择 · 拼写双模式</span></span><span class="qa-a">›</span></button>' +
-                                '<button class="qa" data-action="qaDict"><span><span class="qa-n">听力听写</span><br><span class="qa-s">' + Listen.allItems().length + ' 套资源可用</span></span><span class="qa-a">›</span></button>' +
+                                '<button class="qa" data-action="qaReview"><span><span class="qa-n">开始复习</span><br><span class="qa-s">' + due + ' 个词已到期</span></span><span class="qa-a">' + ICO('chevR') + '</span></button>' +
+                                '<button class="qa" data-action="qaLearn"><span><span class="qa-n">学习新词</span><br><span class="qa-s">还可学 ' + nl + ' 个</span></span><span class="qa-a">' + ICO('chevR') + '</span></button>' +
+                                '<button class="qa" data-action="go" data-v="quiz"><span><span class="qa-n">随机测验</span><br><span class="qa-s">选择 · 拼写双模式</span></span><span class="qa-a">' + ICO('chevR') + '</span></button>' +
+                                '<button class="qa" data-action="qaDict"><span><span class="qa-n">听力听写</span><br><span class="qa-s">' + Listen.allItems().length + ' 套资源可用</span></span><span class="qa-a">' + ICO('chevR') + '</span></button>' +
                             '</div></div>' +
                     '</div>';
 
@@ -2363,7 +2372,7 @@
                 DICT = null;
                 save();
                 modalClose();
-                notify('已导入 «' + name + '»：' + dedup.length + ' 词');
+                notify('已导入 "' + name + '"：' + dedup.length + ' 词');
                 switchView('words');
             }
 
@@ -2561,7 +2570,7 @@
                                 '<span style="flex:1"></span>' +
                                 '<button class="mini-btn" data-action="lsZh">译文:开</button>' +
                                 (L.qs.length ? '<button class="mini-btn" data-action="lsQuizBtn">做题</button>' : '') +
-                                '<button class="mini-btn solid" data-action="lsToDict">听写此篇 ›</button>' +
+                                '<button class="mini-btn solid" data-action="lsToDict">听写此篇 ' + ICO('chevR') + '</button>' +
                             '</div>' +
                             (L.audioName && !hasAudio ? '<div class="fmt-hint" style="margin-bottom:10px;display:flex;gap:10px;align-items:center">音频文件未加载（刷新页面后需重新选择）<button class="mini-btn" data-action="lsBind">选择本地音频</button></div>' : '') +
                             '<div class="transport">' +
@@ -2760,7 +2769,7 @@
                 Listen._all = null;
                 save();
                 modalClose();
-                notify('已导入 «' + title + '»：' + parsed.segs.length + ' 句');
+                notify('已导入 "' + title + '"：' + parsed.segs.length + ' 句');
                 Listen.mode = 'lib';
                 refreshView();
             }
@@ -2851,7 +2860,7 @@
                         res.tokens.map(tk => tk.miss ? '<span class="w-miss">' + esc(tk.t) + '</span>' :
                             (tk.ok ? '<span class="w-ok">' + esc(tk.t) + '</span>' : '<span class="w-bad" data-c="' + esc(tk.c || '') + '">' + esc(tk.t) + '</span>')).join(' ') +
                         '<div class="dict-score">得分 <b>' + pct + '%</b>　正确 ' + res.match + ' / ' + res.total + ' 词　漏掉：' + (res.miss.length ? esc(res.miss.join(' · ')) : '无') + '</div>';
-                    $('#d-foot').innerHTML = '<button class="ed-btn primary" data-action="dNext">下一句 ›</button>';
+                    $('#d-foot').innerHTML = '<button class="ed-btn primary" data-action="dNext">' + ICO('chevR') + ' 下一句</button>';
                     if (pct >= 80) { burst(innerWidth / 2, innerHeight * 0.42); buzz([10, 40, 14]); } else buzz([16, 30, 16]);
                     save(); updateStatus();
                 },
@@ -2879,7 +2888,7 @@
                     const out = $('#d-out');
                     out.classList.remove('hidden');
                     out.innerHTML = '<span class="w-miss">原句：' + esc(correct) + '</span><div class="dict-score">已跳过，计入错词</div>';
-                    $('#d-foot').innerHTML = '<button class="ed-btn primary" data-action="dNext">下一句 ›</button>';
+                    $('#d-foot').innerHTML = '<button class="ed-btn primary" data-action="dNext">' + ICO('chevR') + ' 下一句</button>';
                     save(); updateStatus();
                 },
                 next() {
@@ -2957,7 +2966,7 @@
                 if (!b) return;
                 if (asTxt) download(b.name + '.txt', b.w.map(e => [e[0], e[1], e[2], e[3]].join('\t')).join('\r\n'));
                 else download(b.name + '.json', JSON.stringify(b.w, null, 1), 'application/json');
-                notify('«' + b.name + '» 已导出');
+                notify('"' + b.name + '" 已导出');
             }
             function importBackupFile(file) {
                 const rd = new FileReader();
@@ -3035,14 +3044,14 @@
                     $('#v-flash').innerHTML =
                         '<div class="setup-box">' +
                             '<div class="setup-title">准备开始</div>' +
-                            '<div class="setup-note">词书 «' + esc(b.name) + '»<br>待复习 <b>' + due + '</b> 词 · 可学新词 <b>' + nl + '</b> 词（上限 ' + S.set.dailyNew + '）</div>' +
+                            '<div class="setup-note">词书 "' + esc(b.name) + '"<br>待复习 <b>' + due + '</b> 词 · 可学新词 <b>' + nl + '</b> 词（上限 ' + S.set.dailyNew + '）</div>' +
                             '<div class="seg" style="justify-content:center">' +
                                 '<button data-action="fStart" data-m="mix" class="active">混合学习</button>' +
                                 '<button data-action="fStart" data-m="review">只复习</button>' +
                                 '<button data-action="fStart" data-m="new">只学新词</button>' +
                             '</div>' +
                             '<div class="setup-note">认识 → 进入下一记忆盒 · 模糊 → 明天再见<br>不认识 → 10 分钟后重新排队<br>快捷键：空格翻卡 / 1 不认识 / 2 模糊 / 3 认识 / S 发音</div>' +
-                            (due + nl === 0 ? '<button class="ed-btn primary" data-action="fStart" data-m="all">词库已清空，自由复习 ›</button>' : '') +
+                            (due + nl === 0 ? '<button class="ed-btn primary" data-action="fStart" data-m="all">自由复习 ' + ICO('chevR') + '</button>' : '') +
                         '</div>';
                     this.started = false;
                     this.done = false;
@@ -3229,7 +3238,7 @@
                                 '<button data-action="qScope" data-s="new" class="' + (this.scope === 'new' ? 'active' : '') + '">未学</button>' +
                                 '<button data-action="qScope" data-s="star" class="' + (this.scope === 'star' ? 'active' : '') + '">★ 难点</button>' +
                             '</div></div>' +
-                            '<button class="ed-btn primary" data-action="quizStart" style="margin-top:8px">开始测验 ›</button>' +
+                            '<button class="ed-btn primary" data-action="quizStart" style="margin-top:8px">开始测验 ' + ICO('chevR') + '</button>' +
                         '</div>';
                 },
 
@@ -3324,7 +3333,7 @@
                     hid.value = val;
                     this.bindSpellInput();
                     if (!this.sp.checked) setTimeout(() => { try { hid.focus(); } catch (er) { } }, 30);
-                    TT.speak(w);
+                    if (S.set.autoSpeak) TT.speak(w);
                 },
 
                 bindSpellInput() {
@@ -3389,7 +3398,7 @@
                     this.record(ok, this.sp.q);
                     setTimeout(() => {
                         $('#sp-fb').insertAdjacentHTML('beforeend',
-                            '<div style="margin-top:10px"><button class="mini-btn solid" data-action="spNext">下一题 ›</button></div>');
+                            '<div style="margin-top:10px"><button class="mini-btn solid" data-action="spNext">' + ICO('chevR') + ' 下一题</button></div>');
                     }, 450);
                 },
 
@@ -3430,7 +3439,7 @@
                     this.markBoxes(this.sp.e[0], '');
                     setTimeout(() => {
                         fb.insertAdjacentHTML('beforeend',
-                            '<div style="margin-top:10px"><button class="mini-btn solid" data-action="spNext">下一题 ›</button></div>');
+                            '<div style="margin-top:10px"><button class="mini-btn solid" data-action="spNext">' + ICO('chevR') + ' 下一题</button></div>');
                     }, 300);
                 },
 
@@ -3544,6 +3553,7 @@
                 },
                 togglePin() { S.set.pinned = !S.set.pinned; applyAll(); save(); },
                 showSettings(t) { openDrop(t, $('#dd-settings')); },
+                showExportDd(t) { openDrop(t, $('#dd-export')); },
                 ttsTest() {
                     notify('正在测试发音，请留意音量与网络…');
                     TT.speak('Hello world. This is a voice test.', {
@@ -3599,7 +3609,12 @@
                 rateUp() { S.set.ttsRate = clamp(+(S.set.ttsRate + 0.05).toFixed(2), 0.5, 1.5); applyAll(); save(); },
                 toggleAutoSpeak() { S.set.autoSpeak = !S.set.autoSpeak; applyAll(); save(); notify(S.set.autoSpeak ? '卡片自动发音已开启' : '卡片自动发音已关闭'); },
                 togglePhon() { S.set.showPhon = !S.set.showPhon; applyAll(); save(); refreshView(); },
-                toggleShowNote() { S.set.showNote = !S.set.showNote; applyAll(); save(); notify(S.set.showNote ? '背卡将显示我的备注' : '背卡不再显示备注'); },
+                toggleShowNote() {
+                    S.set.showNote = !S.set.showNote;
+                    applyAll(); save();
+                    $$('.fb-note').forEach(n => { n.style.display = S.set.showNote ? '' : 'none'; });
+                    notify(S.set.showNote ? '背卡将显示我的备注（即时生效）' : '背卡不再显示备注（即时生效）');
+                },
                 toggleStatusbar() { S.set.statusbar = !S.set.statusbar; applyAll(); save(); },
                 setBg(t) { S.set.bg = t.dataset.bg; applyAll(); save(); },
                 resetStyles() {
@@ -3636,7 +3651,7 @@
                     const id = 'u' + Date.now();
                     S.books[id] = { id, name, builtin: false, w: [] };
                     DICT = null;
-                    save(); modalClose(); notify('已创建 «' + name + '»');
+                    save(); modalClose(); notify('已创建 "' + name + '"');
                     refreshView();
                 },
 
@@ -3652,15 +3667,15 @@
                         const p = ensureProg(e[0]);
                         p.b = Math.max(p.b, 1);
                         p.seen = Math.max(p.seen, 1);
-                        notify('«' + e[0] + '» 标记为学习中');
+                        notify('"' + e[0] + '" 标记为学习中');
                     } else if (m === 'learning') {
                         const p = ensureProg(e[0]);
                         p.b = 5;
                         p.due = Date.now() + IV[5] * DAY;
-                        notify('«' + e[0] + '» 标记为已掌握');
+                        notify('"' + e[0] + '" 标记为已掌握');
                     } else {
                         delete S.prog[nkey(e[0])];
-                        notify('«' + e[0] + '» 已重置为未学');
+                        notify('"' + e[0] + '" 已重置为未学');
                     }
                     save();
                     t.className = 'wd-st ck ' + mastery(e[0]);
@@ -3718,7 +3733,7 @@
                 },
                 wdReset() {
                     if (!DR) return;
-                    confirmBox('重置 «' + DR.e[0] + '» 的学习进度？', () => {
+                    confirmBox('重置 "' + DR.e[0] + '" 的学习进度？', () => {
                         delete S.prog[nkey(DR.e[0])];
                         save(); openDrawer(DR.e, DR.b); refreshView();
                     });
@@ -3726,7 +3741,7 @@
                 wdDel() {
                     if (!DR) return;
                     const bId = DR.b, w = DR.e[0];
-                    confirmBox('从词书中删除 «' + w + '» ？', () => {
+                    confirmBox('从词书中删除 "' + w + '" ？', () => {
                         const b = S.books[bId];
                         b.w = b.w.filter(x => x[0] !== w);
                         DICT = null;
@@ -3769,7 +3784,7 @@
                 bmDelete(t) {
                     const id = t.closest('.bm-row').dataset.id;
                     const b = S.books[id];
-                    confirmBox('删除词书 «' + b.name + '»（' + b.w.length + ' 词）？', () => {
+                    confirmBox('删除词书 "' + b.name + '"（' + b.w.length + ' 词）？', () => {
                         delete S.books[id];
                         if (S.activeBook === id) S.activeBook = 'cet6';
                         if (WV.book === id) WV.book = S.activeBook;
@@ -3844,7 +3859,7 @@
                     t.textContent = '✓ 已排期';
                     t.disabled = true;
                     t.style.opacity = 0.4;
-                    notify('«' + t.dataset.w + '» 已加入今日复习');
+                    notify('"' + t.dataset.w + '" 已加入今日复习');
                 },
 
                 lsOpen(t) { Listen.openPlay(t.dataset.id); },
@@ -3852,7 +3867,7 @@
                 lsDelete(t) {
                     const id = t.dataset.id;
                     const it = S.listen.find(x => x.id === id);
-                    confirmBox('删除资源 «' + (it ? it.title : '') + '» ？', () => {
+                    confirmBox('删除资源 "' + (it ? it.title : '') + '" ？', () => {
                         S.listen = S.listen.filter(x => x.id !== id);
                         if (AUD[id]) { URL.revokeObjectURL(AUD[id]); delete AUD[id]; }
                         Listen._all = null;
@@ -3939,7 +3954,7 @@
                 popFav() {
                     const w = $('#wpop').dataset.w;
                     const hit = dictLookup(w)[0];
-                    if (hit && addToFav(hit.e)) notify('«' + hit.e[0] + '» 已加入生词本');
+                    if (hit && addToFav(hit.e)) notify('"' + hit.e[0] + '" 已加入生词本');
                     else notify('未找到词条或已在生词本中');
                     hidePop();
                 },
@@ -4046,6 +4061,8 @@
 
                 const ttBtn = document.querySelector('[data-action="ttsTest"]');
                 if (ttBtn) ttBtn.innerHTML = ICO('spk') + ' 测试发音';
+                const backBar = document.getElementById('back-bar');
+                if (backBar) backBar.innerHTML = ICO('chevL') + '<span style="margin-left:6px">返回</span>';
 
                 $('#confirm-ok').addEventListener('click', () => {
                     $('#custom-confirm').classList.remove('active');
