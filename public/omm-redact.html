@@ -426,12 +426,15 @@
         #sidebar.collapsed #sidebar-toggle {
             position: fixed;
             left: 0;
-            top: 50px;
-            width: 24px;
-            height: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 48px;
             border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-            border-left: 1px solid var(--border);
+            border: 1px solid var(--border-faint);
+            border-left: none;
             z-index: 100;
+            background: var(--bg-secondary);
         }
 
         #sidebar-section {
@@ -640,13 +643,17 @@
         #doc-toolbar {
             display: flex;
             align-items: center;
+            justify-content: flex-start;
             gap: 3px;
             padding: 5px 12px;
             border-bottom: 1px solid var(--border);
             background: var(--bg);
             flex-shrink: 0;
             flex-wrap: wrap;
-            transition: background var(--transition);
+            transition: background var(--transition), justify-content 0.2s;
+        }
+        body.sidebar-collapsed #doc-toolbar {
+            justify-content: center;
         }
         #doc-toolbar .tool-btn {
             font-size: 10px;
@@ -680,7 +687,6 @@
 
         #doc-pages {
             position: relative;
-            max-width: 1000px;
             width: 100%;
             margin: 0 auto;
             --view-scale: 1;
@@ -1276,22 +1282,23 @@
             background: rgba(80, 160, 255, 0.20) !important;
         }
 
-        /* 侧边栏折叠按钮修正 */
+        /* 侧边栏折叠按钮 */
         #sidebar-toggle {
             position: absolute;
-            right: -28px;
-            top: 12px;
-            width: 28px;
-            height: 28px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-left: none;
-            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 40px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-faint);
+            border-right: none;
+            border-radius: var(--radius-sm) 0 0 var(--radius-sm);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: 10px;
             color: var(--text-dim);
             transition: all 0.2s;
             z-index: 20;
@@ -1300,6 +1307,7 @@
         #sidebar-toggle:hover {
             background: var(--hover);
             color: var(--text);
+            width: 18px;
         }
 
         /* 敏感词按钮文字居中 */
@@ -1447,14 +1455,13 @@
                     <span id="page-jump-total">/ 0</span>
                 </div>
                 <div class="tool-sep"></div>
-                <div class="tool-btn" data-action="openSearch" title="搜索 (Ctrl+F)">🔍</div>
+                <div class="tool-btn" data-action="openSearch" title="搜索 (Ctrl+F)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="7"/><line x1="15.5" y1="15.5" x2="21" y2="21"/></svg></div>
                 <div class="tool-sep"></div>
                 <div class="tool-btn pdf-only" data-action="setSelectTool">选词</div>
                 <div class="tool-sep pdf-only"></div>
                 <div class="tool-btn" data-action="exportText">导出文本</div>
                 <div class="tool-btn" data-action="exportPDF">导出 PDF</div>
                 <div class="tool-btn" data-action="exportRedactedPDF">脱敏 PDF</div>
-                <div style="flex:1;"></div>
                 <span id="cursor-info">就绪</span>
             </div>
 
@@ -1931,6 +1938,7 @@
                 applyRadius();
                 if (S.sidebarCollapsed) {
                     DOM.sidebar.classList.add('collapsed');
+                    document.body.classList.add('sidebar-collapsed');
                 }
             }
 
@@ -1958,7 +1966,12 @@
             function toggleSidebar() {
                 S.sidebarCollapsed = !S.sidebarCollapsed;
                 DOM.sidebar.classList.toggle('collapsed', S.sidebarCollapsed);
+                document.body.classList.toggle('sidebar-collapsed', S.sidebarCollapsed);
                 DOM.sidebarToggle.textContent = S.sidebarCollapsed ? '▶' : '◀';
+                if (S.sidebarCollapsed) {
+                    DOM.sidebar.style.width = '';
+                    DOM.sidebar.style.minWidth = '';
+                }
                 saveSettings();
             }
 
@@ -2095,11 +2108,12 @@
             function searchInPdfTextLayer(textLayer, query, pageIdx) {
                 var spans = textLayer.querySelectorAll('span');
                 var matchCount = 0;
-                var re = new RegExp(escapeRegex(query), 'gi');
 
                 spans.forEach(function(span) {
                     var text = span.textContent;
-                    if (!text || !re.test(text)) return;
+                    if (!text) return;
+                    var re = new RegExp(escapeRegex(query), 'gi');
+                    if (!re.test(text)) return;
                     re.lastIndex = 0;
 
                     var pageEl = span.closest('.doc-page');
