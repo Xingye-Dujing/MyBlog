@@ -1,0 +1,3787 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZenRedact · 文档脱敏工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js">
+    </script>
+    <style>
+        /* ===== RESET & VARIABLES ===== */
+
+        :root {
+            --bg: #f9f9fa;
+            --bg-secondary: #f0f0f2;
+            --text: #1e1e1e;
+            --text-dim: rgba(0, 0, 0, 0.45);
+            --text-faint: rgba(0, 0, 0, 0.15);
+            --border: #d4d4d8;
+            --border-dim: rgba(0, 0, 0, 0.08);
+            --border-faint: rgba(0, 0, 0, 0.04);
+            --hover: rgba(0, 0, 0, 0.03);
+            --active-bg: rgba(0, 0, 0, 0.06);
+            --active-text: #1e1e1e;
+            --accent: #1a1a1a;
+            --accent-red: #c0392b;
+            --radius: 4px;
+            --radius-sm: 3px;
+            --font: 'SimSun', '宋体', 'NSimSun', 'Songti SC', serif;
+            --font-mono: 'SimSun', '宋体', serif;
+            --sidebar-w: 270px;
+            --page-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
+            --page-shadow-hover: 0 6px 24px rgba(0, 0, 0, 0.08);
+            --transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        body.theme-dark {
+            --bg: #121214;
+            --bg-secondary: #1a1a1e;
+            --text: #ececec;
+            --text-dim: rgba(255, 255, 255, 0.40);
+            --text-faint: rgba(255, 255, 255, 0.10);
+            --border: #2c2c30;
+            --border-dim: rgba(255, 255, 255, 0.06);
+            --border-faint: rgba(255, 255, 255, 0.03);
+            --hover: rgba(255, 255, 255, 0.03);
+            --active-bg: rgba(255, 255, 255, 0.08);
+            --active-text: #ececec;
+            --page-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+            --page-shadow-hover: 0 6px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: var(--font);
+            font-size: 13px;
+            background: var(--bg);
+            color: var(--text);
+            transition: background var(--transition), color var(--transition);
+            -webkit-font-smoothing: antialiased;
+        }
+        ::selection {
+            background: rgba(44, 107, 158, 0.20);
+            color: inherit;
+        }
+        body.theme-dark ::selection {
+            background: rgba(80, 160, 255, 0.15);
+        }
+
+        /* scrollbars */
+        *::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        *::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        *::-webkit-scrollbar-thumb {
+            background: var(--border-dim);
+            border-radius: 4px;
+        }
+        *::-webkit-scrollbar-thumb:hover {
+            background: var(--text-faint);
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-dim) transparent;
+        }
+
+        /* ===== SPLASH ===== */
+        #splash {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        #splash.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .splash-logo {
+            font-family: var(--font-mono);
+            font-size: 32px;
+            font-weight: 400;
+            letter-spacing: 10px;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .splash-tagline {
+            font-size: 10px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 36px;
+        }
+        .splash-enter {
+            padding: 10px 36px;
+            background: var(--active-bg);
+            color: var(--active-text);
+            border: 1px solid var(--border);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: var(--radius);
+        }
+        .splash-enter:hover {
+            opacity: 0.7;
+            transform: scale(1.02);
+        }
+
+        /* ===== TOP MENU ===== */
+        #menu-trigger {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            z-index: 1000;
+        }
+        #top-menu {
+            position: fixed;
+            top: -48px;
+            left: 0;
+            width: 100%;
+            height: 42px;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* 水平居中 */
+            padding: 0 16px;
+            gap: 4px;
+            z-index: 999;
+            transition: top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            backdrop-filter: blur(12px);
+            background: rgba(255, 255, 255, 0.88);
+        }
+        body.theme-dark #top-menu {
+            background: rgba(18, 18, 20, 0.90);
+        }
+        #menu-trigger:hover~#top-menu,
+        #top-menu:hover,
+        #top-menu.pinned {
+            top: 0;
+        }
+        body.menu-pinned #app-layout {
+            padding-top: 42px;
+        }
+
+        .menu-group {
+            display: flex;
+            align-items: center;
+            gap: 1px;
+            padding: 0 4px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .menu-group+.menu-group::before {
+            content: '';
+            position: absolute;
+            left: -2px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 1px;
+            height: 18px;
+            background: var(--border-dim);
+        }
+        .menu-label {
+            font-size: 8px;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            padding: 0 3px;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+        .menu-btn {
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 4px 12px;
+            border: none;
+            font-family: var(--font);
+            font-size: 11px;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            background: transparent;
+            border-radius: var(--radius-sm);
+            transition: all 0.15s;
+            position: relative;
+        }
+        .menu-btn:hover {
+            color: var(--text);
+            background: var(--hover);
+        }
+        /* 选中样式：左竖线 + 淡背景 */
+        .menu-btn.active {
+            color: var(--active-text);
+            background: var(--active-bg);
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            box-shadow: inset 2px 0 0 var(--text);
+            padding-left: 10px;
+        }
+
+        .pin-btn {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid transparent;
+            cursor: pointer;
+            color: var(--text-faint);
+            font-size: 14px;
+            background: transparent;
+            border-radius: var(--radius-sm);
+            transition: all 0.15s;
+            margin-left: 6px;
+            flex-shrink: 0;
+        }
+        .pin-btn:hover {
+            color: var(--text);
+            border-color: var(--border-dim);
+        }
+        .pin-btn.pinned {
+            color: var(--text);
+            border-color: var(--border);
+            background: var(--hover);
+        }
+
+        /* ===== DROPDOWN ===== */
+        .dropdown {
+            position: fixed;
+            top: 46px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 4px;
+            min-width: 180px;
+            z-index: 1001;
+            opacity: 0;
+            transform: translateY(-4px);
+            pointer-events: none;
+            transition: all 0.15s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+            max-height: 80vh;
+            overflow-y: auto;
+            border-radius: var(--radius-sm);
+        }
+        .dropdown.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: all;
+        }
+        .dd-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-dim);
+            border: 1px solid transparent;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+            border-radius: var(--radius-sm);
+            transition: all 0.1s;
+            font-family: var(--font);
+        }
+        .dd-item:hover {
+            background: var(--hover);
+            color: var(--text);
+        }
+        .dd-item .hint {
+            font-size: 9px;
+            color: var(--text-faint);
+            margin-left: 12px;
+        }
+        .dd-divider {
+            height: 1px;
+            background: var(--border-dim);
+            margin: 4px 0;
+        }
+        .dd-label {
+            padding: 6px 10px 2px;
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1.8px;
+            color: var(--text-faint);
+            font-weight: 500;
+        }
+        .dd-item-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px;
+            font-size: 12px;
+            color: var(--text-dim);
+            gap: 8px;
+        }
+        .dd-item-row:hover {
+            background: var(--hover);
+        }
+        .settings-control {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .settings-btn {
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid var(--border-dim);
+            background: transparent;
+            color: var(--text-dim);
+            font-family: var(--font);
+            font-size: 14px;
+            transition: all 0.1s;
+            user-select: none;
+            border-radius: var(--radius-sm);
+        }
+        .settings-btn:hover {
+            border-color: var(--border);
+            color: var(--text);
+            background: var(--hover);
+        }
+        .settings-value {
+            min-width: 32px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text);
+            font-family: var(--font-mono);
+        }
+
+        /* ===== LAYOUT ===== */
+        #app-layout {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            display: flex;
+            flex-direction: row;
+            transition: padding-top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* ===== SIDEBAR ===== */
+        #sidebar {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-faint);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+            padding: 8px 0 6px;
+            transition: transform 0.3s ease, margin 0.3s ease, width 0.3s ease;
+            position: relative;
+        }
+        #sidebar.collapsed {
+            transform: translateX(-100%);
+            margin-right: -var(--sidebar-w);
+            width: 0;
+            min-width: 0;
+            overflow: hidden;
+            border-right: none;
+        }
+
+        #sidebar-section {
+            padding: 0 12px 10px;
+            border-bottom: 1px solid var(--border-faint);
+        }
+        #sidebar-section:last-child {
+            border-bottom: none;
+            flex: 1;
+            min-height: 0;
+        }
+        #sidebar-title {
+            font-size: 8px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .file-info .fname {
+            font-weight: 500;
+            color: var(--text);
+            word-break: break-all;
+            font-size: 13px;
+        }
+        .file-info .fmeta {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .tool-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+        .tool-btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            font-family: var(--font);
+            background: transparent;
+            color: var(--text-dim);
+            transition: all 0.12s;
+            letter-spacing: 0.2px;
+            border-radius: var(--radius-sm);
+        }
+        .tool-btn:hover {
+            color: var(--text);
+            border-color: var(--border-dim);
+            background: var(--hover);
+        }
+        .tool-btn.active {
+            color: var(--active-text);
+            background: var(--active-bg);
+            border-color: var(--border);
+            position: relative;
+            box-shadow: inset 0 -2px 0 var(--text);
+        }
+        .tool-btn.danger {
+            color: var(--accent-red);
+        }
+        .tool-btn.danger:hover {
+            border-color: var(--accent-red);
+            background: rgba(192, 57, 43, 0.06);
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3px 0;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+        .toggle-switch {
+            width: 28px;
+            height: 15px;
+            border: 1px solid var(--border-dim);
+            cursor: pointer;
+            position: relative;
+            transition: all 0.15s;
+            flex-shrink: 0;
+            border-radius: 10px;
+            background: var(--bg);
+        }
+        .toggle-switch.on {
+            background: var(--active-bg);
+            border-color: var(--border);
+        }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 1px;
+            left: 1px;
+            width: 11px;
+            height: 11px;
+            background: var(--text-dim);
+            border-radius: 50%;
+            transition: all 0.15s;
+        }
+        .toggle-switch.on::after {
+            left: 14px;
+            background: #5a6a7a;
+        }
+        body.theme-dark .toggle-switch.on::after {
+            background: #8a9aaa;
+        }
+
+        .word-list {
+            width: 100%;
+            min-height: 60px;
+            max-height: 120px;
+            background: transparent;
+            border: 1px solid var(--border-dim);
+            padding: 10px 14px;
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+            border-radius: var(--radius-sm);
+            transition: border 0.15s;
+        }
+        .word-list:focus {
+            border-color: var(--text);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+        .stat-row .val {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .match-list {
+            max-height: 100px;
+            overflow-y: auto;
+            border: 1px solid var(--border-faint);
+            margin-top: 4px;
+            border-radius: var(--radius-sm);
+        }
+        .match-item {
+            padding: 3px 8px;
+            font-size: 11px;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-faint);
+            display: flex;
+            justify-content: space-between;
+            transition: background 0.1s;
+        }
+        .match-item:hover {
+            background: var(--hover);
+            color: var(--text);
+        }
+        .match-item .match-word {
+            color: var(--accent-red);
+            font-weight: 500;
+        }
+        .match-item .match-count {
+            color: var(--text-faint);
+        }
+
+        #log-panel {
+            flex: 1;
+            min-height: 0;
+            font-size: 10px;
+            color: var(--text-dim);
+            line-height: 1.7;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .log-entry {
+            padding: 1px 0;
+            border-bottom: 1px solid var(--border-faint);
+        }
+        .log-entry .log-time {
+            color: var(--text-faint);
+        }
+        .log-entry .log-err {
+            color: var(--accent-red);
+        }
+
+        /* ===== DOCUMENT AREA ===== */
+        #doc-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-secondary);
+            transition: background var(--transition);
+            margin-left: 0;
+            /* 与侧边栏的边距已通过 border 自然贴合 */;
+        }
+
+        #doc-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 5px 12px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            transition: background var(--transition);
+        }
+        #doc-toolbar .tool-btn {
+            font-size: 10px;
+            padding: 3px 9px;
+        }
+        .tool-sep {
+            width: 1px;
+            height: 16px;
+            background: var(--border-dim);
+            margin: 0 4px;
+        }
+        #doc-toolbar .tool-btn.pdf-only {
+            display: none;
+        }
+        body.pdf-mode #doc-toolbar .tool-btn.pdf-only,
+        body.pdf-mode .tool-sep.pdf-only {
+            display: flex;
+        }
+
+        #doc-viewport {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: auto;
+            position: relative;
+            background: var(--bg-secondary);
+            padding: 14px 16px;
+            transition: background var(--transition);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #doc-pages {
+            position: relative;
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+            --view-scale: 1;
+            flex-shrink: 0;
+        }
+
+        /* ===== DOCUMENT PAGE ===== */
+        .doc-page {
+            position: relative;
+            width: 100%;
+            max-width: 794px;
+            margin: 0 auto 20px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 32px 40px;
+            box-shadow: var(--page-shadow);
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+        body.theme-dark .doc-page {
+            background: #141416;
+            border-color: #2a2a2e;
+        }
+        .doc-page:hover {
+            box-shadow: var(--page-shadow-hover);
+        }
+
+        .doc-page.pdf {
+            padding: 0;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            width: calc(794px * var(--view-scale));
+            max-width: none;
+            margin-left: auto;
+            margin-right: auto;
+            box-shadow: var(--page-shadow);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        body.theme-dark .doc-page.pdf {
+            background: #0e0e10;
+            border-color: #2a2a2e;
+        }
+        .doc-page.pdf .page-num {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            padding: 1px 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            border-radius: 10px;
+            font-size: 9px;
+            letter-spacing: 0.5px;
+            z-index: 7;
+            user-select: none;
+        }
+        body.theme-dark .doc-page.pdf .page-num {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .pdf-placeholder {
+            border: 1px dashed var(--border);
+        }
+
+        .doc-page-img-wrap {
+            position: relative;
+            line-height: 0;
+        }
+        .doc-page-img {
+            width: 100%;
+            height: auto;
+            display: block;
+            user-select: none;
+            -webkit-user-drag: none;
+            image-rendering: auto;
+        }
+
+        /* PDF text layer — native selection */
+        .pdf-text-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 6;
+        }
+        .pdf-text-layer span {
+            position: absolute;
+            white-space: pre;
+            color: transparent;
+            cursor: text;
+            transform-origin: 0 0;
+            font-family: sans-serif;
+            line-height: 1.2;
+        }
+        .pdf-text-layer.active {
+            pointer-events: auto;
+        }
+        .pdf-text-layer.active span {
+            color: transparent;
+        }
+        .pdf-text-layer ::selection {
+            background: rgba(44, 107, 158, 0.30);
+            color: var(--text);
+        }
+        body.theme-dark .pdf-text-layer ::selection {
+            background: rgba(80, 160, 255, 0.20);
+        }
+
+        /* Redaction canvas overlay */
+        .redact-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            z-index: 5;
+            pointer-events: auto;
+        }
+        .redact-canvas.select-mode {
+            pointer-events: none !important;
+        }
+
+        /* ===== REDACTION STATES ===== */
+        .redact-rect-applied {
+            fill: #000000;
+        }
+        body.theme-dark .redact-rect-applied {
+            fill: #1a1a1a;
+        }
+
+        /* ===== TEXT PAGES ===== */
+        .doc-page-text {
+            font-family: 'SimSun', '宋体', 'Songti SC', serif;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #222;
+            white-space: pre-wrap;
+            word-break: break-word;
+            position: relative;
+        }
+        body.theme-dark .doc-page-text {
+            color: #ddd;
+        }
+
+        .page-num {
+            text-align: right;
+            font-size: 10px;
+            color: var(--text-faint);
+            margin-bottom: 4px;
+            user-select: none;
+        }
+
+        /* ===== DROP ZONE ===== */
+        #drop-zone {
+            position: absolute;
+            inset: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 10px;
+            border-radius: 6px;
+        }
+        #drop-zone.active {
+            display: flex;
+        }
+        .drop-icon {
+            font-size: 42px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .drop-text {
+            font-size: 15px;
+            color: #fff;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .drop-hint {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* ===== STATUS BAR ===== */
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+            font-size: 9px;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            letter-spacing: 0.5px;
+            z-index: 100;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        #status-bar.hidden {
+            opacity: 0;
+            transform: translateY(100%);
+            pointer-events: none;
+        }
+
+        /* ===== NOTIFICATION (自定义) ===== */
+        #notification {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 6px 20px;
+            font-size: 12px;
+            color: var(--text);
+            font-family: var(--font);
+            z-index: 3000;
+            opacity: 0;
+            transition: all 0.25s;
+            pointer-events: none;
+            white-space: nowrap;
+            border-radius: var(--radius-sm);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.92);
+        }
+        body.theme-dark #notification {
+            background: rgba(18, 18, 20, 0.92);
+        }
+        #notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ===== CONFIRM (自定义) ===== */
+        #custom-confirm {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.30);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        #custom-confirm.active {
+            display: flex;
+        }
+        .confirm-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 28px 36px 24px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10);
+            border-radius: var(--radius-sm);
+        }
+        .confirm-box .msg {
+            font-family: var(--font);
+            font-size: 13px;
+            letter-spacing: 0.5px;
+            color: var(--text);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        .confirm-box .actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .confirm-box .actions button {
+            font-family: var(--font);
+            font-size: 10px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 7px 22px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.15s;
+            border-radius: var(--radius-sm);
+        }
+        .confirm-box .actions button:hover {
+            color: var(--text);
+            border-color: var(--border);
+            background: var(--hover);
+        }
+        .confirm-box .actions button.confirm {
+            color: var(--active-text);
+            background: var(--active-bg);
+            border-color: var(--border);
+        }
+
+        /* ===== EXPORT OVERLAY ===== */
+        #export-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 14px;
+            color: #fff;
+            font-family: var(--font);
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+        #export-overlay.active {
+            display: flex;
+        }
+        #export-overlay .spinner {
+            width: 30px;
+            height: 30px;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ===== PROGRESS ===== */
+        .progress-bar {
+            width: 100%;
+            height: 3px;
+            background: var(--border-dim);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 6px 0 2px;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .hidden {
+            display: none !important;
+        }
+
+        /* ===== LOADING POPUP ===== */
+        #loading-popup {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        #loading-popup.active {
+            display: flex;
+        }
+        .loading-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 28px 36px 24px;
+            max-width: 420px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10);
+            border-radius: var(--radius);
+        }
+        .loading-box .loading-title {
+            font-family: var(--font);
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .loading-box .loading-filename {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            word-break: break-all;
+        }
+        .loading-box .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--border-dim);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        .loading-box .progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+            width: 0%;
+            border-radius: 4px;
+        }
+        .loading-box .loading-info {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 6px;
+            font-family: var(--font-mono);
+        }
+
+        /* ===== SIDEBAR RESIZE HANDLE ===== */
+        #sidebar-resize {
+            position: absolute;
+            right: -3px;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            cursor: col-resize;
+            z-index: 10;
+            transition: background 0.15s;
+        }
+        #sidebar-resize:hover,
+        #sidebar-resize.dragging {
+            background: var(--border);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 820px) {
+            #sidebar {
+                display: none;
+            }
+            #sidebar.mobile-show {
+                display: flex;
+                position: fixed;
+                left: 0;
+                top: 42px;
+                bottom: 22px;
+                width: 260px;
+                z-index: 500;
+                box-shadow: 4px 0 24px rgba(0, 0, 0, 0.10);
+                background: var(--bg);
+            }
+            .doc-page {
+                padding: 20px 16px;
+            }
+            .doc-page.pdf {
+                width: 100% !important;
+            }
+            #doc-toolbar {
+                padding: 4px 8px;
+                gap: 2px;
+            }
+            #doc-toolbar .tool-btn {
+                font-size: 9px;
+                padding: 2px 6px;
+            }
+            #sidebar-toggle {
+                display: none;
+            }
+        }
+
+        /* ===== UTILITY ===== */
+        .bg-void {
+            background: var(--bg-secondary);
+        }
+        .bg-grid {
+            background-color: var(--bg-secondary);
+            background-image: linear-gradient(var(--border-faint) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+        .bg-dots {
+            background-color: var(--bg-secondary);
+            background-image: radial-gradient(circle, var(--border-dim) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .bg-diagonal {
+            background-color: var(--bg-secondary);
+            background-image: repeating-linear-gradient(45deg,
+                    transparent, transparent 24px,
+                    var(--border-faint) 24px, var(--border-faint) 25px);
+        }
+
+        #file-input {
+            display: none;
+        }
+        #cursor-info {
+            font-size: 9px;
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+
+        .pdf-text-layer.active span::selection {
+            background: rgba(44, 107, 158, 0.30) !important;
+            color: var(--text) !important;
+        }
+        body.theme-dark .pdf-text-layer.active span::selection {
+            background: rgba(80, 160, 255, 0.20) !important;
+        }
+
+        /* 侧边栏折叠按钮修正 */
+        #sidebar-toggle {
+            position: absolute;
+            right: -20px;
+            top: 12px;
+            width: 20px;
+            height: 20px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-left: none;
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: var(--text-dim);
+            transition: all 0.2s;
+            z-index: 12;
+            line-height: 1;
+        }
+        #sidebar-toggle:hover {
+            background: var(--hover);
+            color: var(--text);
+        }
+        #sidebar.collapsed+#sidebar-toggle {
+            right: -20px;
+            border-left: 1px solid var(--border);
+            border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+        }
+
+        /* 敏感词按钮文字居中 */
+        #sidebar-section .tool-grid .tool-btn,
+        #sidebar-section [data-action] {
+            text-align: center;
+            justify-content: center;
+            display: inline-flex;
+            align-items: center;
+        }
+        #sidebar-section .tool-grid .tool-btn {
+            display: inline-flex;
+        }
+    </style>
+</head>
+<body class="bg-void menu-pinned">
+
+    <!-- SPLASH -->
+    <div id="splash">
+        <div class="splash-logo">ZENREDACT</div>
+        <div class="splash-tagline">文档脱敏工具</div>
+        <button class="splash-enter" data-action="enter">启动</button>
+    </div>
+
+    <!-- TOP MENU -->
+    <div id="menu-trigger"></div>
+    <div id="top-menu">
+        <div class="menu-group">
+            <span class="menu-label">文件</span>
+            <div class="menu-btn" data-action="loadFile">打开</div>
+            <div class="menu-btn" data-action="loadSample">示例</div>
+        </div>
+        <div class="menu-group">
+            <span class="menu-label">工具</span>
+            <div class="menu-btn" data-action="autoRedact">自动脱敏</div>
+            <div class="menu-btn" data-action="clearAll">清除全部</div>
+        </div>
+        <div class="menu-group">
+            <span class="menu-label">导出</span>
+            <div class="menu-btn" data-action="exportText">导出文本</div>
+            <div class="menu-btn" data-action="exportPDF">导出 PDF</div>
+            <div class="menu-btn" data-action="exportRedactedPDF">脱敏 PDF</div>
+        </div>
+        <div class="menu-group">
+            <span class="menu-label">设置</span>
+            <div class="menu-btn" data-action="showSettings">样式</div>
+        </div>
+        <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" title="固定菜单栏">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v5.76l2 3.24H7z"/></svg>
+        </div>
+    </div>
+
+    <!-- SETTINGS DROPDOWN -->
+    <div class="dropdown" id="dd-settings">
+        <div class="dd-label">外观</div>
+        <div class="dd-item" data-action="settingsToggleTheme"><span>主题</span><span class="hint" id="sv-theme">Light</span></div>
+        <div class="dd-divider"></div>
+        <div class="dd-label">圆角</div>
+        <div class="dd-item-row">
+            <span>边角半径</span>
+            <div class="settings-control">
+                <div class="settings-btn" data-action="radiusMinus">−</div>
+                <span class="settings-value" id="sv-radius">0px</span>
+                <div class="settings-btn" data-action="radiusPlus">+</div>
+            </div>
+        </div>
+        <div class="dd-divider"></div>
+        <div class="dd-label">背景</div>
+        <div class="dd-item" data-bg="bg-void" data-action="setBg"><span>Void</span><span class="hint">pure</span></div>
+        <div class="dd-item" data-bg="bg-grid" data-action="setBg"><span>Grid</span><span class="hint">mesh</span></div>
+        <div class="dd-item" data-bg="bg-dots" data-action="setBg"><span>Dots</span><span class="hint">matrix</span></div>
+        <div class="dd-item" data-bg="bg-diagonal" data-action="setBg"><span>Diagonal</span><span class="hint">hatch</span></div>
+    </div>
+
+    <!-- APP -->
+    <div id="app-layout">
+        <!-- SIDEBAR -->
+        <div id="sidebar">
+            <div id="sidebar-section" style="position:relative;">
+                <div id="sidebar-title" style="display:inline-block;">文件信息</div>
+                <div id="sidebar-toggle" data-action="toggleSidebar" title="折叠侧边栏">◀</div>
+                <div id="sidebar-resize" title="拖动调整宽度"></div>
+                <div class="file-info">
+                    <div class="fname" id="fname">未加载文件</div>
+                    <div class="fmeta" id="fmeta">请打开文档开始脱敏</div>
+                </div>
+                <div id="file-type-info" style="margin-top:3px;font-size:9px;color:var(--text-faint);"></div>
+                <div class="progress-bar hidden" id="progress-bar"><div class="fill" id="progress-fill"></div></div>
+            </div>
+
+            <div id="sidebar-section">
+                <div id="sidebar-title">脱敏工具</div>
+                <div class="tool-grid">
+                    <div class="tool-btn active" data-tool="rect">矩形</div>
+                    <div class="tool-btn" data-tool="mosaic">马赛克</div>
+                    <div class="tool-btn" data-tool="pixel">像素</div>
+                    <div class="tool-btn" data-tool="eraser">擦除</div>
+                    <div class="tool-btn" data-tool="select">选择</div>
+                </div>
+                <div style="margin-top:6px;">
+                    <div class="toggle-row"><span>锁定已脱敏区</span><div class="toggle-switch on" id="toggle-lock" data-action="toggleLock"></div></div>
+                    <div class="toggle-row"><span>显示页码</span><div class="toggle-switch on" id="toggle-pageshow" data-action="togglePageNum"></div></div>
+                    <div class="toggle-row"><span>自动分页</span><div class="toggle-switch on" id="toggle-autopage" data-action="toggleAutoPage"></div></div>
+                </div>
+            </div>
+
+            <div id="sidebar-section">
+                <div id="sidebar-title">敏感词列表</div>
+                <textarea class="word-list" id="word-list" placeholder="每行一个敏感词&#10;支持正则表达式&#10;例如：&#10;张三&#10;李四&#10;机密&#10;内部资料"></textarea>
+                <div style="display:flex;gap:4px;margin-top:5px;">
+                    <div class="tool-btn" data-action="loadWords" style="flex:1;text-align:center;justify-content:center;">加载</div>
+                    <div class="tool-btn" data-action="saveWords" style="flex:1;text-align:center;justify-content:center;">保存</div>
+                    <div class="tool-btn" data-action="clearWords" style="flex:1;text-align:center;justify-content:center;">清空</div>
+                </div>
+            </div>
+
+            <div id="sidebar-section">
+                <div id="sidebar-title">匹配结果</div>
+                <div class="stat-row"><span>文档字数</span><span class="val" id="stat-chars">-</span></div>
+                <div class="stat-row"><span>总行数</span><span class="val" id="stat-lines">-</span></div>
+                <div class="stat-row"><span>总页数</span><span class="val" id="stat-pages">-</span></div>
+                <div class="stat-row"><span>脱敏区域</span><span class="val" id="stat-redacts">0</span></div>
+                <div class="match-list" id="match-list"><div style="padding:8px;font-size:11px;color:var(--text-faint);">等待加载文档…</div></div>
+            </div>
+
+            <div id="sidebar-section" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+                <div id="sidebar-title">操作日志</div>
+                <div id="log-panel">系统已就绪</div>
+            </div>
+        </div>
+
+        <!-- DOCUMENT AREA -->
+        <div id="doc-area">
+            <div id="doc-toolbar">
+                <div class="tool-btn active" data-tool="rect">矩形</div>
+                <div class="tool-btn" data-tool="mosaic">马赛克</div>
+                <div class="tool-btn" data-tool="pixel">像素</div>
+                <div class="tool-btn" data-tool="eraser">擦除</div>
+                <div class="tool-sep"></div>
+                <div class="tool-btn" data-action="undoRedact">撤销</div>
+                <div class="tool-btn" data-action="redoRedact">重做</div>
+                <div class="tool-sep"></div>
+                <div class="tool-btn" data-action="autoRedact">自动脱敏</div>
+                <div class="tool-btn" data-action="clearAll">清除</div>
+                <div class="tool-sep"></div>
+                <div class="tool-btn" data-action="zoomOut">−</div>
+                <div class="tool-btn" data-action="zoomReset" id="zoom-label">100%</div>
+                <div class="tool-btn" data-action="zoomIn">＋</div>
+                <div class="tool-sep"></div>
+                <div class="tool-btn pdf-only" data-action="setSelectTool">选词</div>
+                <div class="tool-sep pdf-only"></div>
+                <div class="tool-btn" data-action="exportText">导出文本</div>
+                <div class="tool-btn" data-action="exportPDF">导出 PDF</div>
+                <div class="tool-btn" data-action="exportRedactedPDF">脱敏 PDF</div>
+                <div style="flex:1;"></div>
+                <span id="cursor-info">就绪</span>
+            </div>
+
+            <div id="doc-viewport">
+                <div id="doc-pages">
+                    <div style="text-align:center;padding:60px 20px;color:var(--text-dim);">
+                        <div style="font-size:15px;letter-spacing:1px;margin-bottom:6px;">打开文档开始脱敏</div>
+                        <div style="font-size:11px;">支持 TXT / PDF / DOCX · 大文件流式读取 · 敏感词自动脱敏</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DROP ZONE -->
+    <div id="drop-zone">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">释放文件以打开</div>
+        <div class="drop-hint">支持 TXT / PDF / DOCX · 大文件流式读取</div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div id="status-bar">
+        <span id="stat-left">就绪</span>
+        <span id="stat-right">ZENREDACT</span>
+    </div>
+
+    <!-- NOTIFICATION -->
+    <div id="notification"></div>
+
+    <!-- CONFIRM -->
+    <div id="custom-confirm">
+        <div class="confirm-box">
+            <div class="msg" id="confirm-msg">确定清除所有脱敏区域？此操作不可恢复。</div>
+            <div class="actions">
+                <button id="confirm-cancel">取消</button>
+                <button id="confirm-ok" class="confirm">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOADING POPUP -->
+    <div id="loading-popup">
+        <div class="loading-box">
+            <div class="loading-title">正在加载文件…</div>
+            <div class="loading-filename" id="loading-filename"></div>
+            <div class="progress-bar"><div class="fill" id="loading-progress-fill"></div></div>
+            <div class="loading-info" id="loading-info">准备中…</div>
+        </div>
+    </div>
+
+    <!-- EXPORT OVERLAY -->
+    <div id="export-overlay">
+        <div class="spinner"></div>
+        <span>正在生成脱敏文件…</span>
+    </div>
+
+    <input type="file" id="file-input" accept=".txt,.pdf,.docx,.doc,.md,.csv,.log,.xml,.json,.html,.js,.ts,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.sh,.bat,.ps1,.sql,.yaml,.yml,.toml,.ini,.cfg,.conf,.jsonl,.nfo,.rst,.adoc,.tex,.css,.scss,.less,.svg,.rtf" />
+
+    <script>
+        (function() {
+            'use strict';
+
+            /* ============================================================
+               CONFIG
+               ============================================================ */
+            var CONFIG = {
+                CHUNK_SIZE: 1024 * 1024,
+                MAX_LINES_PREVIEW: 100000,
+                FONT_SIZE: 14,
+                LINE_HEIGHT: 1.8,
+                PAGE_PADDING_X: 40,
+                PAGE_PADDING_Y: 32,
+                UNDO_LIMIT: 80,
+                NOTIFY_DURATION: 2000,
+                PDF_RENDER_SCALE: 2.8,
+                PDF_MAX_PAGES: 200,
+                PDF_INITIAL_RENDER: 5,
+                PDF_LAZY_BUFFER: 3,
+            };
+
+            /* ============================================================
+               STATE
+               ============================================================ */
+            var S = {
+                theme: 'light',
+                bg: 'bg-void',
+                tool: 'rect',
+                textSelect: false,
+                pinned: true,
+                radius: 4,
+                lockRedacts: true,
+                showPageNum: true,
+                autoPage: true,
+                file: null,
+                fileName: '',
+                fileSize: 0,
+                fileType: '',
+                text: '',
+                lines: [],
+                pages: [],
+                redacts: [],
+                redactIdCounter: 0,
+                undoStack: [],
+                redoStack: [],
+                isProcessing: false,
+                isDrawing: false,
+                drawStart: null,
+                matchResults: [],
+                charCount: 0,
+                totalPages: 0,
+                worker: null,
+                pdfMode: false,
+                pdfPages: [],
+                pdfJsDoc: null,
+                pdfBytes: null,
+                viewScale: 1,
+                docxHtml: null,
+                sidebarCollapsed: false,
+                lazyRenderQueue: [],
+                lazyRendering: false,
+                renderedPages: {},
+                lazyObserver: null,
+            };
+
+            var dragLeaveCounter = 0;
+            var resizeTimer = null;
+            var scrollRAF = null;
+            var zoomRenderTimer = null;
+
+            /* ============================================================
+               DOM REFS
+               ============================================================ */
+            var $ = function(sel) { return document.querySelector(sel); };
+            var $$ = function(sel) { return document.querySelectorAll(sel); };
+
+            var DOM = {
+                splash: $('#splash'),
+                topMenu: $('#top-menu'),
+                docViewport: $('#doc-viewport'),
+                docPages: $('#doc-pages'),
+                dropZone: $('#drop-zone'),
+                fileInput: $('#file-input'),
+                wordList: $('#word-list'),
+                matchList: $('#match-list'),
+                statusLeft: $('#stat-left'),
+                statusRight: $('#stat-right'),
+                notification: $('#notification'),
+                confirmOverlay: $('#custom-confirm'),
+                confirmMsg: $('#confirm-msg'),
+                exportOverlay: $('#export-overlay'),
+                cursorInfo: $('#cursor-info'),
+                logPanel: $('#log-panel'),
+                fname: $('#fname'),
+                fmeta: $('#fmeta'),
+                fileTypeInfo: $('#file-type-info'),
+                progressBar: $('#progress-bar'),
+                progressFill: $('#progress-fill'),
+                statChars: $('#stat-chars'),
+                statLines: $('#stat-lines'),
+                statPages: $('#stat-pages'),
+                statRedacts: $('#stat-redacts'),
+                zoomLabel: $('#zoom-label'),
+                sidebar: $('#sidebar'),
+                sidebarToggle: $('#sidebar-toggle'),
+                loadingPopup: $('#loading-popup'),
+                loadingFilename: $('#loading-filename'),
+                loadingProgressFill: $('#loading-progress-fill'),
+                loadingInfo: $('#loading-info'),
+                sidebarResize: $('#sidebar-resize'),
+            };
+
+            /* ============================================================
+               UTILITY
+               ============================================================ */
+            function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;'); }
+
+            function escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+            function genId() { return 'r' + (++S.redactIdCounter); }
+
+            function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+            function makeRedact(nx1, ny1, nx2, ny2, type, pageIdx, wordMatch) {
+                return {
+                    id: genId(),
+                    pageIdx: pageIdx,
+                    nx1: clamp01(Math.min(nx1, nx2)),
+                    ny1: clamp01(Math.min(ny1, ny2)),
+                    nx2: clamp01(Math.max(nx1, nx2)),
+                    ny2: clamp01(Math.max(ny1, ny2)),
+                    type: type || 'rect',
+                    wordMatch: wordMatch || null,
+                    applied: false,
+                    timestamp: Date.now(),
+                };
+            }
+
+            function getRedactPixelRect(r, W, H) {
+                if (r.nx1 !== undefined && r.nx1 !== null) {
+                    var x1 = Math.min(r.nx1, r.nx2) * W,
+                        y1 = Math.min(r.ny1, r.ny2) * H;
+                    var x2 = Math.max(r.nx1, r.nx2) * W,
+                        y2 = Math.max(r.ny1, r.ny2) * H;
+                    return { x1: x1, y1: y1, x2: x2, y2: y2, w: x2 - x1, h: y2 - y1 };
+                }
+                return { x1: r.x1, y1: r.y1, x2: r.x2, y2: r.y2, w: r.x2 - r.x1, h: r.y2 - r.y1 };
+            }
+
+            function formatSize(bytes) {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / 1048576).toFixed(1) + ' MB';
+            }
+
+            function formatCount(n) {
+                if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+                if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+                return String(n);
+            }
+
+            function getToolLabel() {
+                var map = { rect: '矩形', mosaic: '马赛克', pixel: '像素化', eraser: '擦除', select: '选择' };
+                return map[S.tool] || '遮罩';
+            }
+
+            function getToolCursor() {
+                if (S.tool === 'select' || S.tool === 'eraser') return 'default';
+                return 'crosshair';
+            }
+
+            function log(msg, isErr) {
+                var time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                var entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = '<span class="log-time">[' + time + ']</span> ' + (isErr ? '<span class="log-err">' :
+                    '') + escapeHtml(msg) + (isErr ? '</span>' : '');
+                DOM.logPanel.appendChild(entry);
+                DOM.logPanel.scrollTop = DOM.logPanel.scrollHeight;
+                while (DOM.logPanel.children.length > 200) DOM.logPanel.removeChild(DOM.logPanel.firstChild);
+            }
+
+            function notify(msg, duration) {
+                DOM.notification.textContent = msg;
+                DOM.notification.classList.add('show');
+                clearTimeout(notify._timer);
+                notify._timer = setTimeout(function() { DOM.notification.classList.remove('show'); }, duration || CONFIG
+                    .NOTIFY_DURATION);
+            }
+
+            function showConfirm(msg) {
+                return new Promise(function(resolve) {
+                    DOM.confirmMsg.textContent = msg;
+                    DOM.confirmOverlay.classList.add('active');
+                    DOM.confirmOverlay._resolve = resolve;
+                });
+            }
+
+            function setProgress(pct) {
+                DOM.progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+            }
+
+            function showProgress() { DOM.progressBar.classList.remove('hidden'); }
+
+            function hideProgress() { DOM.progressBar.classList.add('hidden'); }
+
+            function showLoadingPopup(filename) {
+                DOM.loadingFilename.textContent = filename;
+                DOM.loadingProgressFill.style.width = '0%';
+                DOM.loadingInfo.textContent = '准备中…';
+                DOM.loadingPopup.classList.add('active');
+            }
+
+            function hideLoadingPopup() {
+                DOM.loadingPopup.classList.remove('active');
+            }
+
+            function setLoadingInfo(text) {
+                DOM.loadingInfo.textContent = text;
+            }
+
+            function handleError(context, err) {
+                console.error('[' + context + ']', err);
+                var msg = (err && err.message) ? err.message : '未知错误';
+                var truncated = msg.length > 200 ? msg.substring(0, 200) + '…' : msg;
+                notify('错误: ' + context + ' - ' + truncated);
+                log('错误 [' + context + ']: ' + truncated, true);
+                if (err && err.stack) log('堆栈: ' + err.stack.substring(0, 400), true);
+                S.isProcessing = false;
+                hideProgress();
+                hideLoadingPopup();
+                showDropZone(false);
+                DOM.statusLeft.textContent = '错误: ' + context;
+            }
+
+            /* ============================================================
+               WORKER
+               ============================================================ */
+            function createWorker() {
+                var code = [
+                    'self.onmessage = function(e) {',
+                    '  var d = e.data;',
+                    '  try {',
+                    '    switch(d.type) {',
+                    '      case "buildPages": {',
+                    '        var text = d.text, autoPage = d.autoPage, charWidth = d.charWidth || 10;',
+                    '        var fontSize = d.fontSize || 14, lineHeight = d.lineHeight || 1.8;',
+                    '        var padX = d.pagePadX || 40, padY = d.pagePadY || 32, maxH = d.maxPageH || 800;',
+                    '        var lines = text.split(/\\r\\n|\\r|\\n/);',
+                    '        var result = [], cur = { lines: [], pageNum: 0 }, y = padY, lc = 0, tc = 0;',
+                    '        for (var i = 0; i < lines.length; i++) {',
+                    '          var t = lines[i], wl = Math.max(1, Math.ceil(t.length / (charWidth * 1.4)));',
+                    '          var bh = wl * fontSize * lineHeight;',
+                    '          if (autoPage && y + bh > maxH && cur.lines.length > 0) {',
+                    '            cur.pageNum = result.length; result.push(cur);',
+                    '            cur = { lines: [], pageNum: result.length }; y = padY;',
+                    '          }',
+                    '          cur.lines.push({ text: t, y: y, height: bh, wrappedCount: wl, sourceIndex: i });',
+                    '          y += bh + 2; lc++; tc += t.length;',
+                    '          if (i % 500 === 0) self.postMessage({ type: "progress", pct: Math.round((i/lines.length)*50) });',
+                    '        }',
+                    '        if (cur.lines.length > 0) { cur.pageNum = result.length; result.push(cur); }',
+                    '        self.postMessage({ type: "pagesResult", pages: result, totalPages: result.length, totalLines: lc, totalChars: tc });',
+                    '        break;',
+                    '      }',
+                    '      case "findMatches": {',
+                    '        var words = d.words, lines = d.lines;',
+                    '        var counts = {}; words.forEach(function(w){ counts[w] = 0; });',
+                    '        for (var i = 0; i < lines.length; i++) {',
+                    '          for (var j = 0; j < words.length; j++) {',
+                    '            var w = words[j];',
+                    '            try { var re = new RegExp(escapeRegex(w), "gi"); var m = lines[i].text.match(re); if (m) counts[w] = (counts[w]||0) + m.length; } catch(_){}',
+                    '          }',
+                    '          if (i % 200 === 0) self.postMessage({ type: "matchProgress", pct: Math.round((i/lines.length)*50+50) });',
+                    '        }',
+                    '        var res = Object.entries(counts).filter(function(e){ return e[1] > 0; });',
+                    '        res.sort(function(a,b){ return b[1] - a[1]; });',
+                    '        self.postMessage({ type: "matchesResult", results: res });',
+                    '        break;',
+                    '      }',
+                    '      case "computeRedacts": {',
+                    '        var word = d.word, lines = d.lines, pages = d.pages;',
+                    '        var cw = d.charWidth || 10, fs = d.fontSize || 14, lh = d.lineHeight || 1.8;',
+                    '        var padX = d.pagePadX || 40, padY = d.pagePadY || 32;',
+                    '        var re = new RegExp(escapeRegex(word), "gi");',
+                    '        var redacts = [];',
+                    '        for (var i = 0; i < lines.length; i++) {',
+                    '          var matches = [...lines[i].text.matchAll(re)];',
+                    '          if (matches.length === 0) continue;',
+                    '          var pageIdx = -1;',
+                    '          for (var pi = 0; pi < pages.length; pi++) {',
+                    '            for (var li = 0; li < pages[pi].lines.length; li++) {',
+                    '              if (pages[pi].lines[li].sourceIndex === i) { pageIdx = pi; break; }',
+                    '            } if (pageIdx >= 0) break;',
+                    '          }',
+                    '          if (pageIdx < 0) continue;',
+                    '          var page = pages[pageIdx], baseY = padY;',
+                    '          for (var li = 0; li < i && li < page.lines.length; li++) baseY += page.lines[li].height + 2;',
+                    '          matches.forEach(function(m){',
+                    '            var so = m.index, eo = m.index + m[0].length;',
+                    '            var ax = padX + (so / 80) * fs * 0.6, aw = (eo - so) * fs * 0.6;',
+                    '            redacts.push({ id: "r"+Date.now()+Math.random(), pageIdx: pageIdx,',
+                    '              x1: Math.max(0, ax), y1: Math.max(0, baseY),',
+                    '              x2: Math.max(0, ax+aw), y2: Math.max(0, baseY+fs*lh),',
+                    '              type: "rect", wordMatch: { word: word, match: m[0] }, applied: false, timestamp: Date.now() });',
+                    '          });',
+                    '        }',
+                    '        self.postMessage({ type: "redactsResult", redacts: redacts });',
+                    '        break;',
+                    '      }',
+                    '    }',
+                    '  } catch(err) { self.postMessage({ type: "error", message: err.message, stack: err.stack }); }',
+                    '};',
+                    'function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&"); }',
+                ].join('\n');
+                if (S.worker) { S.worker.terminate();
+                    S.worker = null; }
+                var blob = new Blob([code], { type: 'application/javascript' });
+                S.worker = new Worker(URL.createObjectURL(blob));
+                return S.worker;
+            }
+
+            function destroyWorker() { if (S.worker) { S.worker.terminate();
+                    S.worker = null; } }
+
+            /* ============================================================
+               SETTINGS
+               ============================================================ */
+            function applyTheme() { document.body.classList.toggle('theme-dark', S.theme === 'dark'); }
+
+            function applyBg() {
+                document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
+                document.body.classList.add(S.bg);
+            }
+
+            function toggleTheme() {
+                S.theme = S.theme === 'dark' ? 'light' : 'dark';
+                applyTheme();
+                saveSettings();
+                notify(S.theme === 'dark' ? '深色主题' : '浅色主题');
+                $('#sv-theme').textContent = S.theme === 'dark' ? 'Dark' : 'Light';
+            }
+
+            function togglePin() {
+                var btn = $('#pin-btn');
+                S.pinned = !S.pinned;
+                DOM.topMenu.classList.toggle('pinned', S.pinned);
+                btn.classList.toggle('pinned', S.pinned);
+                document.body.classList.toggle('menu-pinned', S.pinned);
+                saveSettings();
+                notify(S.pinned ? '已固定菜单栏' : '已取消固定');
+            }
+
+            function setBg(bg) {
+                document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
+                document.body.classList.add(bg);
+                S.bg = bg;
+                saveSettings();
+            }
+
+            function applyRadius() {
+                var r = S.radius || 0;
+                document.documentElement.style.setProperty('--radius', r + 'px');
+                document.documentElement.style.setProperty('--radius-sm', r + 'px');
+                var rv = document.getElementById('sv-radius');
+                if (rv) rv.textContent = r + 'px';
+            }
+
+            function saveSettings() {
+                try {
+                    var sidebarW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 270;
+                    localStorage.setItem('zr-settings', JSON.stringify({ theme: S.theme, bg: S.bg, tool: S.tool,
+                        pinned: S.pinned, radius: S.radius, sidebarCollapsed: S.sidebarCollapsed, sidebarW: sidebarW }));
+                } catch (_) {}
+            }
+
+            function loadSettings() {
+                try {
+                    var d = JSON.parse(localStorage.getItem('zr-settings') || '{}');
+                    S.theme = d.theme || 'light';
+                    S.bg = d.bg || 'bg-void';
+                    S.tool = d.tool || 'rect';
+                    if (S.tool === 'select') S.tool = 'rect';
+                    S.pinned = (d.pinned === false) ? false : true;
+                    S.radius = d.radius || 4;
+                    S.sidebarCollapsed = d.sidebarCollapsed || false;
+                    if (d.sidebarW) {
+                        document.documentElement.style.setProperty('--sidebar-w', d.sidebarW + 'px');
+                    }
+                } catch (_) {}
+                applyTheme();
+                applyBg();
+                applyRadius();
+                if (S.sidebarCollapsed) {
+                    DOM.sidebar.classList.add('collapsed');
+                }
+            }
+
+            function toggleLock() {
+                S.lockRedacts = !S.lockRedacts;
+                var el = $('#toggle-lock');
+                el.classList.toggle('on', S.lockRedacts);
+                $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+            }
+
+            function togglePageNum() {
+                S.showPageNum = !S.showPageNum;
+                var el = $('#toggle-pageshow');
+                el.classList.toggle('on', S.showPageNum);
+                renderDocument();
+            }
+
+            function toggleAutoPage() {
+                S.autoPage = !S.autoPage;
+                var el = $('#toggle-autopage');
+                el.classList.toggle('on', S.autoPage);
+                if (S.text) rebuildPages();
+            }
+
+            function toggleSidebar() {
+                S.sidebarCollapsed = !S.sidebarCollapsed;
+                DOM.sidebar.classList.toggle('collapsed', S.sidebarCollapsed);
+                DOM.sidebarToggle.textContent = S.sidebarCollapsed ? '▶' : '◀';
+                saveSettings();
+            }
+
+            /* ============================================================
+               FILE LOADING
+               ============================================================ */
+            function showDropZone(show) { DOM.dropZone.classList.toggle('active', show); }
+
+            async function loadFile(file) {
+                if (!file) return;
+                try {
+                    DOM.fileInput.value = '';
+                    log('加载文件: ' + file.name + ' (' + formatSize(file.size) + ')');
+                    DOM.statusLeft.textContent = '加载: ' + file.name;
+                    showLoadingPopup(file.name);
+                    showProgress();
+                    setProgress(0);
+                    // Cleanup lazy rendering from previous file
+                    if (S.lazyObserver) { S.lazyObserver.disconnect(); S.lazyObserver = null; }
+                    S.lazyRenderQueue = [];
+                    S.lazyRendering = false;
+                    S.renderedPages = {};
+
+                    var ext = file.name.split('.').pop().toLowerCase();
+                    S.fileType = ext;
+                    S.pdfMode = false;
+                    S.docxHtml = null;
+
+                    if (ext === 'pdf') {
+                        await loadPDF(file);
+                    } else if (ext === 'docx' || ext === 'doc') {
+                        await loadDOCX(file);
+                    } else {
+                        await loadTextFile(file);
+                    }
+
+                    S.file = file;
+                    S.fileName = file.name;
+                    S.fileSize = file.size;
+                    DOM.fname.textContent = file.name;
+                    DOM.fileTypeInfo.textContent = '格式: ' + ext.toUpperCase() + ' · ' + formatSize(file.size);
+
+                    hideProgress();
+                    hideLoadingPopup();
+                    DOM.fmeta.textContent = formatSize(file.size) + ' · ' + S.charCount + ' 字符 · ' + S.lines.length +
+                        ' 行';
+                    notify('已加载: ' + file.name);
+                    log('加载完成: ' + S.charCount + ' 字符, ' + S.lines.length + ' 行, ' + S.totalPages + ' 页');
+                    DOM.statusLeft.textContent = '已加载: ' + file.name;
+                    if (!S.pdfMode) { S.viewScale = 1;
+                        S.pdfJsDoc = null; }
+                    applyPdfMode();
+                    renderDocument();
+                    updateStats();
+                    autoDetectMatches();
+                } catch (err) {
+                    hideProgress();
+                    hideLoadingPopup();
+                    handleError('文件加载失败', err);
+                }
+            }
+
+            async function loadTextFile(file) {
+                setLoadingInfo('读取文本文件…');
+                S.text = await (file.size > CONFIG.CHUNK_SIZE * 2 ? loadFileStreaming(file) : loadFileRead(file));
+                setLoadingInfo('处理文本内容…');
+                processText();
+            }
+
+            function loadFileRead(file) {
+                return new Promise(function(resolve, reject) {
+                    var r = new FileReader();
+                    r.onload = function(e) { resolve(e.target.result); };
+                    r.onerror = function() { reject(new Error('读取失败')); };
+                    r.readAsText(file);
+                });
+            }
+
+            async function loadFileStreaming(file) {
+                return new Promise(function(resolve, reject) {
+                    var result = '',
+                        offset = 0,
+                        chunk = CONFIG.CHUNK_SIZE;
+
+                    function next() {
+                        if (offset >= file.size) { resolve(result); return; }
+                        var slice = file.slice(offset, offset + chunk);
+                        var r = new FileReader();
+                        r.onload = function(e) {
+                            result += e.target.result;
+                            offset += chunk;
+                            if (offset % (chunk * 4) === 0) {
+                                var pct = Math.round((offset / file.size) * 100);
+                                DOM.statusLeft.textContent = '加载: ' + formatSize(offset) + ' / ' + formatSize(file.size);
+                                setProgress(pct);
+                                setLoadingInfo('读取中… ' + formatSize(offset) + ' / ' + formatSize(file.size) + ' (' + pct + '%)');
+                            }
+                            setTimeout(next, 0);
+                        };
+                        r.onerror = function() { reject(new Error('流式读取失败')); };
+                        r.readAsText(slice);
+                    }
+                    next();
+                });
+            }
+
+            function loadFileReadAsArrayBuffer(file) {
+                return new Promise(function(resolve, reject) {
+                    var r = new FileReader();
+                    r.onload = function(e) { resolve(e.target.result); };
+                    r.onerror = function() { reject(new Error('读取失败')); };
+                    r.readAsArrayBuffer(file);
+                });
+            }
+
+            /* ============================================================
+               PDF LOADING — high quality + fix undefined img error
+               ============================================================ */
+            async function loadPDF(file) {
+                if (!window.pdfjsLib) throw new Error('PDF 渲染库未加载');
+                try {
+                    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc =
+                            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+                    }
+                    showProgress();
+                    setProgress(0);
+                    setLoadingInfo('读取文件…');
+                    var ab = await loadFileReadAsArrayBuffer(file);
+                    S.pdfBytes = ab.slice(0);
+                    var bufCopy = ab.slice(0);
+                    setProgress(5);
+
+                    var pdfDoc = await pdfjsLib.getDocument({ data: bufCopy }).promise;
+                    var numPages = Math.min(pdfDoc.numPages, CONFIG.PDF_MAX_PAGES);
+                    log('PDF 加载: ' + pdfDoc.numPages + ' 页 (显示 ' + numPages + ' 页)');
+
+                    var pdfPages = [];
+                    var fullTextParts = [];
+
+                    // Phase 1: Parse all pages (text extraction only — fast)
+                    for (var i = 0; i < numPages; i++) {
+                        var page = await pdfDoc.getPage(i + 1);
+                        var baseViewport = page.getViewport({ scale: 1 });
+                        var textContent = await page.getTextContent();
+                        var items = [];
+                        textContent.items.forEach(function(it) {
+                            if (!it.str || !it.str.trim()) return;
+                            var fs = Math.hypot(it.transform[2], it.transform[3]) || CONFIG.FONT_SIZE;
+                            var w = (typeof it.width === 'number' && it.width > 0) ? it.width : it.str.length * fs * 0.5;
+                            var h = (typeof it.height === 'number' && it.height > 0) ? it.height : fs;
+                            items.push({ str: it.str, x: it.transform[4], y: it.transform[5], w: w, h: h, fontSize: fs });
+                        });
+                        fullTextParts.push(items.map(function(t) { return t.str; }).join(' '));
+                        pdfPages.push({
+                            img: '',
+                            imgW: 0,
+                            imgH: 0,
+                            vw: baseViewport.width,
+                            vh: baseViewport.height,
+                            textItems: items,
+                            displayW: 0,
+                            displayH: 0,
+                        });
+                        var textPct = Math.round(((i + 1) / numPages) * 30);
+                        setProgress(textPct);
+                        setLoadingInfo('解析文本 ' + (i + 1) + ' / ' + numPages + ' 页 (' + textPct + '%)');
+                        if (i % 3 === 2) await new Promise(function(r) { requestAnimationFrame(r); });
+                    }
+
+                    S.pdfJsDoc = pdfDoc;
+                    S.pdfPages = pdfPages;
+                    S.pages = pdfPages.map(function(p, idx) {
+                        return { pageNum: idx, img: '', imgW: 0, imgH: 0, vw: p.vw, vh: p.vh, textItems: p.textItems,
+                            lines: [], displayW: 0, displayH: 0 };
+                    });
+                    S.viewScale = 1;
+                    S.renderedPages = {};
+
+                    // Phase 2: Render first N pages immediately
+                    var renderCount = Math.min(numPages, CONFIG.PDF_INITIAL_RENDER);
+                    var renderScale = CONFIG.PDF_RENDER_SCALE * (window.devicePixelRatio || 1);
+                    setProgress(30);
+                    setLoadingInfo('渲染前 ' + renderCount + ' 页…');
+                    await renderPdfPages(renderScale, Array.from({length: renderCount}, function(_, i) { return i; }),
+                        function(done, total, pageIdx) {
+                            var pct = 30 + Math.round((done / total) * 40);
+                            setProgress(pct);
+                            setLoadingInfo('渲染第 ' + (pageIdx + 1) + ' 页 (' + done + '/' + total + ')');
+                        }
+                    );
+
+                    // Phase 3: Build text data
+                    S.text = fullTextParts.join('\n');
+                    S.lines = S.text.split(/\r\n|\r|\n/).map(function(line, idx) {
+                        return { text: line, index: idx, length: line.length };
+                    });
+                    S.charCount = S.text.length;
+                    S.pdfMode = true;
+                    S.totalPages = pdfPages.length;
+                    S.fileType = 'pdf';
+                    setProgress(70);
+                    setLoadingInfo('渲染完成，准备显示…');
+
+                    // Render document with lazy placeholders
+                    renderDocument();
+                    setupLazyRendering(renderScale);
+                    setProgress(100);
+                    setLoadingInfo('加载完成');
+                    log('PDF 解析完成: ' + pdfPages.length + ' 页 (已渲染 ' + renderCount + ' 页，其余按需加载)');
+                    hideProgress();
+                    DOM.fmeta.textContent = formatSize(file.size) + ' · ' + S.charCount + ' 字符 · ' + S.pages.length + ' 页';
+                } catch (err) {
+                    S.pdfMode = false;
+                    throw new Error('PDF解析失败: ' + err.message);
+                }
+            }
+
+            async function renderPdfPages(scale, pageIndices, onProgress) {
+                if (!S.pdfJsDoc) return;
+                var indices = pageIndices || S.pdfPages.map(function(_, i) { return i; });
+                var total = indices.length;
+                for (var pi = 0; pi < total; pi++) {
+                    var i = indices[pi];
+                    if (i >= S.pdfPages.length) continue;
+                    var page = await S.pdfJsDoc.getPage(i + 1);
+                    var viewport = page.getViewport({ scale: scale });
+                    var canvas = document.createElement('canvas');
+                    canvas.width = Math.ceil(viewport.width);
+                    canvas.height = Math.ceil(viewport.height);
+                    var ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                    var p = S.pdfPages[i];
+                    p.img = canvas.toDataURL('image/png');
+                    p.imgW = canvas.width;
+                    p.imgH = canvas.height;
+                    p.vw = page.getViewport({ scale: 1 }).width;
+                    p.vh = page.getViewport({ scale: 1 }).height;
+                    S.renderedPages[i] = true;
+                    var pp = S.pages[i];
+                    if (pp) {
+                        pp.img = p.img;
+                        pp.imgW = p.imgW;
+                        pp.imgH = p.imgH;
+                        pp.vw = p.vw;
+                        pp.vh = p.vh;
+                    }
+                    if (onProgress) {
+                        onProgress(pi + 1, total, i);
+                    }
+                    if (i % 2 === 0) await new Promise(function(r) { requestAnimationFrame(r); });
+                }
+            }
+
+            /* ============================================================
+               LAZY PDF RENDERING — render pages on demand
+               ============================================================ */
+            async function renderSinglePdfPage(pageIdx) {
+                if (!S.pdfJsDoc || S.renderedPages[pageIdx]) return;
+                if (pageIdx < 0 || pageIdx >= S.pdfPages.length) return;
+                try {
+                    var scale = S._renderScale || (CONFIG.PDF_RENDER_SCALE * S.viewScale * (window.devicePixelRatio || 1));
+                    var page = await S.pdfJsDoc.getPage(pageIdx + 1);
+                    var viewport = page.getViewport({ scale: scale });
+                    var canvas = document.createElement('canvas');
+                    canvas.width = Math.ceil(viewport.width);
+                    canvas.height = Math.ceil(viewport.height);
+                    var ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                    var p = S.pdfPages[pageIdx];
+                    p.img = canvas.toDataURL('image/png');
+                    p.imgW = canvas.width;
+                    p.imgH = canvas.height;
+                    p.vw = page.getViewport({ scale: 1 }).width;
+                    p.vh = page.getViewport({ scale: 1 }).height;
+                    S.renderedPages[pageIdx] = true;
+                    var pp = S.pages[pageIdx];
+                    if (pp) {
+                        pp.img = p.img;
+                        pp.imgW = p.imgW;
+                        pp.imgH = p.imgH;
+                        pp.vw = p.vw;
+                        pp.vh = p.vh;
+                    }
+                    // Update DOM: replace placeholder with real image
+                    updateLazyPageDOM(pageIdx);
+                } catch (err) {
+                    console.error('渲染第' + (pageIdx + 1) + '页失败:', err);
+                }
+            }
+
+            function updateLazyPageDOM(pageIdx) {
+                var el = getPageEl(pageIdx);
+                if (!el) return;
+                var page = S.pages[pageIdx];
+                if (!page || !page.img) return;
+                var wrap = el.querySelector('.doc-page-img-wrap');
+                if (!wrap) return;
+                // Replace placeholder content with image
+                var existingImg = wrap.querySelector('.doc-page-img');
+                if (existingImg) {
+                    existingImg.src = page.img;
+                } else {
+                    // Remove placeholder, add real image
+                    var placeholder = wrap.querySelector('.pdf-placeholder');
+                    if (placeholder) placeholder.remove();
+                    var img = document.createElement('img');
+                    img.className = 'doc-page-img';
+                    img.src = page.img;
+                    img.alt = '第 ' + (pageIdx + 1) + ' 页';
+                    img.onload = function() { layoutPdfPage(pageIdx, wrap); };
+                    wrap.insertBefore(img, wrap.firstChild);
+                }
+                // Rebuild text layer and canvas
+                layoutPdfPage(pageIdx, wrap);
+            }
+
+            function setupLazyRendering(renderScale) {
+                // Cleanup previous observer
+                if (S.lazyObserver) {
+                    S.lazyObserver.disconnect();
+                    S.lazyObserver = null;
+                }
+                S.lazyRenderQueue = [];
+                S.lazyRendering = false;
+                S._renderScale = renderScale;
+
+                var buffer = CONFIG.PDF_LAZY_BUFFER;
+                var renderingSet = {};
+
+                function getVisibleRange() {
+                    var viewport = DOM.docViewport;
+                    if (!viewport) return { start: 0, end: buffer };
+                    var vpTop = viewport.scrollTop;
+                    var vpBottom = vpTop + viewport.clientHeight;
+                    var start = S.totalPages, end = 0;
+                    for (var i = 0; i < S.totalPages; i++) {
+                        var el = getPageEl(i);
+                        if (!el) continue;
+                        var rect = el.getBoundingClientRect();
+                        var vpRect = viewport.getBoundingClientRect();
+                        var elTop = rect.top - vpRect.top + vpTop;
+                        var elBottom = elTop + rect.height;
+                        if (elTop <= vpBottom + buffer * 800 && elBottom >= vpTop - buffer * 800) {
+                            if (i < start) start = i;
+                            if (i > end) end = i;
+                        }
+                    }
+                    return { start: start, end: end };
+                }
+
+                async function processQueue() {
+                    if (S.lazyRendering || S.lazyRenderQueue.length === 0) return;
+                    S.lazyRendering = true;
+                    while (S.lazyRenderQueue.length > 0) {
+                        var idx = S.lazyRenderQueue.shift();
+                        if (S.renderedPages[idx]) continue;
+                        if (renderingSet[idx]) continue;
+                        renderingSet[idx] = true;
+                        await renderSinglePdfPage(idx);
+                        // Small yield between renders
+                        await new Promise(function(r) { requestAnimationFrame(r); });
+                    }
+                    S.lazyRendering = false;
+                }
+
+                function checkAndQueue() {
+                    var range = getVisibleRange();
+                    if (range.start > range.end) return;
+                    for (var i = range.start; i <= range.end; i++) {
+                        if (!S.renderedPages[i] && !renderingSet[i] && S.lazyRenderQueue.indexOf(i) === -1) {
+                            S.lazyRenderQueue.push(i);
+                        }
+                    }
+                    // Sort by distance from viewport center for priority
+                    var vpMid = (DOM.docViewport.scrollTop + DOM.docViewport.clientHeight / 2);
+                    var elCache = {};
+                    function getElTop(idx) {
+                        if (elCache[idx] !== undefined) return elCache[idx];
+                        var el = getPageEl(idx);
+                        if (!el) { elCache[idx] = Infinity; return Infinity; }
+                        var rect = el.getBoundingClientRect();
+                        var vpRect = DOM.docViewport.getBoundingClientRect();
+                        elCache[idx] = rect.top - vpRect.top + DOM.docViewport.scrollTop;
+                        return elCache[idx];
+                    }
+                    S.lazyRenderQueue.sort(function(a, b) {
+                        return Math.abs(getElTop(a) - vpMid) - Math.abs(getElTop(b) - vpMid);
+                    });
+                    processQueue();
+                }
+
+                // Use scroll + IntersectionObserver
+                var observerCallback = function(entries) {
+                    entries.forEach(function(entry) {
+                        if (entry.isIntersecting) {
+                            var idx = parseInt(entry.target.dataset.pageIdx);
+                            if (!isNaN(idx) && !S.renderedPages[idx] && renderingSet[idx] !== true) {
+                                if (S.lazyRenderQueue.indexOf(idx) === -1) {
+                                    S.lazyRenderQueue.push(idx);
+                                }
+                                processQueue();
+                            }
+                        }
+                    });
+                };
+
+                S.lazyObserver = new IntersectionObserver(observerCallback, {
+                    root: DOM.docViewport,
+                    rootMargin: '800px 0px',
+                    threshold: 0,
+                });
+
+                // Observe all page elements
+                for (var i = 0; i < S.totalPages; i++) {
+                    var el = getPageEl(i);
+                    if (el) S.lazyObserver.observe(el);
+                }
+
+                // Also check on scroll for priority updates
+                DOM.docViewport.addEventListener('scroll', checkAndQueue);
+            }
+
+            /* ============================================================
+               DOCX LOADING
+               ============================================================ */
+            async function loadDOCX(file) {
+                if (!window.mammoth) throw new Error('Mammoth 库未加载 (DOCX 解析需要)');
+                try {
+                    showProgress();
+                    setProgress(10);
+                    setLoadingInfo('读取 DOCX 文件…');
+                    var ab = await loadFileReadAsArrayBuffer(file);
+                    setProgress(40);
+                    setLoadingInfo('解析文档内容…');
+
+                    var result = await mammoth.convertToHtml({ arrayBuffer: ab });
+                    var html = result.value;
+                    S.docxHtml = html;
+                    var rawResult = await mammoth.extractRawText({ arrayBuffer: ab });
+                    var rawText = rawResult.value;
+
+                    S.text = rawText || '';
+                    S.fileType = 'docx';
+                    processText();
+                    setProgress(90);
+                    DOM.fmeta.textContent = formatSize(file.size) + ' · ' + S.charCount + ' 字符 · ' + S.lines.length +
+                        ' 行';
+                    log('DOCX 加载成功 (原生HTML渲染)');
+                    S.docxHtml = html;
+                    renderDocument();
+                } catch (err) {
+                    throw new Error('DOCX解析失败: ' + err.message);
+                }
+            }
+
+            /* ============================================================
+               TEXT PROCESSING
+               ============================================================ */
+            function processText() {
+                var raw = S.text.split(/\r\n|\r|\n/);
+                S.lines = raw.map(function(line, i) { return { text: line, index: i, length: line.length }; });
+                S.charCount = S.text.length;
+                rebuildPages();
+            }
+
+            function rebuildPages() {
+                showProgress();
+                setProgress(0);
+
+                if (S.worker) {
+                    S.worker.onmessage = function(e) {
+                        var d = e.data;
+                        if (d.type === 'pagesResult') {
+                            S.pages = d.pages;
+                            S.totalPages = d.totalPages;
+                            S.charCount = d.totalChars;
+                            setProgress(100);
+                            setLoadingInfo('分页完成: ' + S.totalPages + ' 页');
+                            setTimeout(function() { hideProgress(); }, 200);
+                        }
+                        if (d.type === 'progress') {
+                            setProgress(d.pct);
+                            setLoadingInfo('分页处理中… ' + d.pct + '%');
+                        }
+                        if (d.type === 'error') { hideProgress();
+                            handleError('分页处理失败', new Error(d.message)); }
+                    };
+                    S.worker.postMessage({
+                        type: 'buildPages',
+                        text: S.text,
+                        autoPage: S.autoPage,
+                        viewportW: DOM.docViewport.clientWidth - 48,
+                        charWidth: 10,
+                        fontSize: CONFIG.FONT_SIZE,
+                        lineHeight: CONFIG.LINE_HEIGHT,
+                        pagePadX: CONFIG.PAGE_PADDING_X,
+                        pagePadY: CONFIG.PAGE_PADDING_Y,
+                        maxPageH: 800,
+                    });
+                } else {
+                    var vp = DOM.docViewport,
+                        pw = Math.min(vp.clientWidth - 48, 794);
+                    var cw = Math.floor((pw - CONFIG.PAGE_PADDING_X * 2) / 10);
+                    S.pages = [];
+                    var cur = { lines: [], pageNum: 0 },
+                        y = CONFIG.PAGE_PADDING_Y;
+                    for (var i = 0; i < S.lines.length; i++) {
+                        var ln = S.lines[i],
+                            wl = Math.max(1, Math.ceil(ln.text.length / Math.max(1, cw * 1.4)));
+                        var bh = wl * CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT;
+                        if (S.autoPage && y + bh > 800 && cur.lines.length > 0) {
+                            cur.pageNum = S.pages.length;
+                            S.pages.push(cur);
+                            cur = { lines: [], pageNum: S.pages.length };
+                            y = CONFIG.PAGE_PADDING_Y;
+                        }
+                        cur.lines.push({ text: ln.text, y: y, height: bh, wrappedCount: wl, sourceIndex: ln.index });
+                        y += bh + 2;
+                    }
+                    if (cur.lines.length > 0) { cur.pageNum = S.pages.length;
+                        S.pages.push(cur); }
+                    S.totalPages = S.pages.length;
+                    setProgress(100);
+                    setTimeout(function() { hideProgress(); }, 200);
+                }
+            }
+
+            /* ============================================================
+               MATCH & REDACT
+               ============================================================ */
+            function getSensitiveWords() {
+                var t = DOM.wordList.value.trim();
+                if (!t) return [];
+                return t.split(/[\n,，;；\r]+/).map(function(w) { return w.trim(); }).filter(function(w) { return w.length >
+                        0; });
+            }
+
+            function autoDetectMatches() {
+                var words = getSensitiveWords();
+                S.matchResults = [];
+                if (words.length === 0 || S.lines.length === 0) {
+                    DOM.matchList.innerHTML =
+                    '<div style="padding:8px;font-size:11px;color:var(--text-faint);">输入敏感词后自动检测</div>';
+                    return;
+                }
+
+                var counts = {};
+                words.forEach(function(w) { counts[w] = 0; });
+
+                if (S.lines.length > 500 && S.worker) {
+                    S.worker.onmessage = function(e) {
+                        var d = e.data;
+                        if (d.type === 'matchesResult') { S.matchResults = d.results;
+                            renderMatchList(); }
+                        if (d.type === 'matchProgress') setProgress(d.pct);
+                        if (d.type === 'error') handleError('匹配失败', new Error(d.message));
+                    };
+                    S.worker.postMessage({ type: 'findMatches', words: words, lines: S.lines });
+                } else {
+                    S.lines.forEach(function(line) {
+                        words.forEach(function(word) {
+                            try {
+                                var re = new RegExp(escapeRegex(word), 'gi');
+                                var m = line.text.match(re);
+                                if (m) counts[word] = (counts[word] || 0) + m.length;
+                            } catch (_) {}
+                        });
+                    });
+                    S.matchResults = Object.entries(counts).filter(function(e) { return e[1] > 0; });
+                    S.matchResults.sort(function(a, b) { return b[1] - a[1]; });
+                    renderMatchList();
+                }
+            }
+
+            function renderMatchList() {
+                if (S.matchResults.length === 0) {
+                    DOM.matchList.innerHTML =
+                    '<div style="padding:8px;font-size:11px;color:var(--text-faint);">未发现匹配</div>';
+                    return;
+                }
+                var total = S.matchResults.reduce(function(s, e) { return s + e[1]; }, 0);
+                var html = '<div style="padding:4px 8px;font-size:10px;color:var(--text-dim);border-bottom:1px solid var(--border-faint);">共 ' +
+                    total + ' 处匹配</div>';
+                S.matchResults.forEach(function(entry) {
+                    var w = entry[0],
+                        c = entry[1];
+                    html += '<div class="match-item"><span class="match-word">' + escapeHtml(w) +
+                        '</span><span class="match-count">' + c + ' 次</span></div>';
+                });
+                DOM.matchList.innerHTML = html;
+                DOM.matchList.querySelectorAll('.match-item').forEach(function(el) {
+                    el.addEventListener('click', function() {
+                        var w = el.querySelector('.match-word').textContent;
+                        redactWord(w);
+                    });
+                });
+            }
+
+            function redactWord(word) {
+                if (!word) return;
+                if (S.pdfMode) { autoRedactWordPDF(word); return; }
+                if (S.lines.length === 0) return;
+                try {
+                    addUndoSnapshot();
+                    var re = new RegExp(escapeRegex(word), 'gi');
+                    var added = 0;
+
+                    if (S.worker) {
+                        S.worker.onmessage = function(e) {
+                            var d = e.data;
+                            if (d.type === 'redactsResult') {
+                                d.redacts.forEach(function(r) { r.applied = true; });
+                                S.redacts = S.redacts.concat(d.redacts);
+                                added = d.redacts.length;
+                                updateRedactCount();
+                                $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                                notify('已为 "' + word + '" 添加 ' + added + ' 处遮罩');
+                                log('自动脱敏 "' + word + '": ' + added + ' 处');
+                            }
+                            if (d.type === 'error') handleError('脱敏失败', new Error(d.message));
+                        };
+                        S.worker.postMessage({
+                            type: 'computeRedacts',
+                            word: word,
+                            lines: S.lines,
+                            pages: S.pages,
+                            charWidth: 10,
+                            fontSize: CONFIG.FONT_SIZE,
+                            lineHeight: CONFIG.LINE_HEIGHT,
+                            pagePadX: CONFIG.PAGE_PADDING_X,
+                            pagePadY: CONFIG.PAGE_PADDING_Y,
+                        });
+                    } else {
+                        S.lines.forEach(function(line, li) {
+                            var matches = [...line.text.matchAll(re)];
+                            if (matches.length === 0) return;
+                            var pi = findPageForLine(li);
+                            if (pi < 0) return;
+                            var page = S.pages[pi];
+                            if (!page) return;
+                            var baseY = CONFIG.PAGE_PADDING_Y;
+                            for (var ii = 0; ii < li && ii < page.lines.length; ii++) baseY += page.lines[ii]
+                            .height + 2;
+                            matches.forEach(function(m) {
+                                var so = m.index,
+                                    eo = m.index + m[0].length;
+                                var ax = CONFIG.PAGE_PADDING_X + (so / 80) * CONFIG.FONT_SIZE * 0.6;
+                                var aw = (eo - so) * CONFIG.FONT_SIZE * 0.6;
+                                var ah = CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT * 1.3;
+                                S.redacts.push({
+                                    id: genId(),
+                                    pageIdx: pi,
+                                    nx1: ax / 1000,
+                                    ny1: baseY / 1400,
+                                    nx2: (ax + aw) / 1000,
+                                    ny2: (baseY + ah) / 1400,
+                                    type: 'rect',
+                                    wordMatch: { word: word, match: m[0] },
+                                    applied: true,
+                                    timestamp: Date.now(),
+                                });
+                                added++;
+                            });
+                        });
+                        updateRedactCount();
+                        $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                        notify('已为 "' + word + '" 添加 ' + added + ' 处遮罩');
+                        log('自动脱敏 "' + word + '": ' + added + ' 处');
+                    }
+                } catch (err) { handleError('自动脱敏失败', err); }
+            }
+
+            function autoRedactWordPDF(word) {
+                if (!word || !S.pdfMode || S.pdfPages.length === 0) return;
+                addUndoSnapshot();
+                var added = 0;
+                S.pdfPages.forEach(function(page, pi) {
+                    var dw = page.displayW || page.vw;
+                    if (!dw) { log('PDF 第 ' + (pi + 1) + ' 页未渲染，跳过', true); return; }
+                    var scale = dw / page.vw;
+                    var lineMap = {};
+                    page.textItems.forEach(function(it) {
+                        var key = Math.round(it.y / 2);
+                        if (!lineMap[key]) lineMap[key] = [];
+                        lineMap[key].push(it);
+                    });
+                    Object.keys(lineMap).forEach(function(key) {
+                        var items = lineMap[key].sort(function(a, b) { return a.x - b.x; });
+                        var lineText = '',
+                            charX = [];
+                        items.forEach(function(it) {
+                            var s = it.str;
+                            var cw = (it.w && s.length) ? (it.w / s.length) : (it.fontSize * 0.6);
+                            for (var c = 0; c < s.length; c++) { lineText += s[c];
+                                charX.push({ x: it.x + c * cw, w: cw }); }
+                            lineText += ' ';
+                            charX.push({ x: it.x + s.length * cw, w: 0 });
+                        });
+                        if (!lineText.trim()) return;
+                        var rgx = new RegExp(escapeRegex(word), 'gi');
+                        var m;
+                        while ((m = rgx.exec(lineText)) !== null) {
+                            var so = m.index,
+                                eo = m.index + m[0].length;
+                            if (so >= charX.length) break;
+                            var first = charX[so],
+                                lastIdx = Math.min(eo - 1, charX.length - 1);
+                            var last = charX[lastIdx];
+                            if (!first || !last) { rgx.lastIndex = eo; continue; }
+                            var x1v = first.x,
+                                x2v = last.x + last.w;
+                            var minY = Infinity,
+                                maxYH = -Infinity;
+                            items.forEach(function(it) { minY = Math.min(minY, it.y);
+                                maxYH = Math.max(maxYH, it.y + it.h); });
+                            if (!isFinite(minY)) { minY = items[0].y;
+                                maxYH = items[0].y + items[0].h; }
+                            var mx = 2,
+                                my = 2;
+                            var ny1 = (page.vh - maxYH - my) / page.vh;
+                            var ny2 = (page.vh - minY + my) / page.vh;
+                            var r = makeRedact((x1v - mx) / page.vw, ny1, (x2v + mx) / page.vw, ny2, 'rect', pi, {
+                                word: word,
+                                match: m[0]
+                            });
+                            r.applied = true;
+                            S.redacts.push(r);
+                            added++;
+                        }
+                    });
+                });
+                updateRedactCount();
+                $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                notify('已为 "' + word + '" 添加 ' + added + ' 处遮罩');
+                log('PDF 自动脱敏 "' + word + '": ' + added + ' 处');
+            }
+
+            function findPageForLine(lineIdx) {
+                for (var pi = 0; pi < S.pages.length; pi++) {
+                    for (var li = 0; li < S.pages[pi].lines.length; li++) {
+                        if (S.pages[pi].lines[li].sourceIndex === lineIdx) return pi;
+                    }
+                }
+                return -1;
+            }
+
+            function autoRedactAll() {
+                var words = getSensitiveWords();
+                if (words.length === 0) { notify('请输入敏感词列表'); return; }
+                showConfirm('将为 ' + words.length + ' 个敏感词添加遮罩，确定继续？').then(function(ok) {
+                    if (!ok) return;
+                    S.isProcessing = true;
+                    DOM.statusLeft.textContent = '自动脱敏中…';
+                    notify('自动脱敏进行中…');
+                    showProgress();
+                    setProgress(0);
+                    var total = 0;
+                    words.forEach(function(word, wi) {
+                        if (S.pdfMode) autoRedactWordPDF(word);
+                        else redactWord(word);
+                        setProgress(Math.round(((wi + 1) / words.length) * 100));
+                    });
+                    S.isProcessing = false;
+                    hideProgress();
+                    notify('自动脱敏完成，共 ' + S.redacts.length + ' 处遮罩');
+                    DOM.statusLeft.textContent = '脱敏完成: ' + S.redacts.length + ' 处';
+                    log('自动脱敏完成: ' + S.redacts.length + ' 处');
+                }).catch(function() {});
+            }
+
+            /* ============================================================
+               UNDO / REDO
+               ============================================================ */
+            function addUndoSnapshot() {
+                S.undoStack.push(JSON.stringify(S.redacts));
+                if (S.undoStack.length > CONFIG.UNDO_LIMIT) S.undoStack.shift();
+                S.redoStack = [];
+            }
+
+            function undoRedact() {
+                if (S.undoStack.length === 0) { notify('没有可撤销的操作'); return; }
+                S.redoStack.push(JSON.stringify(S.redacts));
+                S.redacts = JSON.parse(S.undoStack.pop());
+                updateRedactCount();
+                $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                notify('已撤销');
+            }
+
+            function redoRedact() {
+                if (S.redoStack.length === 0) { notify('没有可重做的操作'); return; }
+                S.undoStack.push(JSON.stringify(S.redacts));
+                S.redacts = JSON.parse(S.redoStack.pop());
+                updateRedactCount();
+                $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                notify('已重做');
+            }
+
+            /* ============================================================
+               CANVAS DRAWING — with preview and hover effect
+               ============================================================ */
+            function drawExistingRedacts(canvas) {
+                var ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var page = S.pages[pageIdx];
+                if (!page) return;
+                var rect = canvas.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+                var dpr = window.devicePixelRatio || 1;
+                var newW = Math.round(rect.width * dpr);
+                var newH = Math.round(rect.height * dpr);
+                if (canvas.width !== newW || canvas.height !== newH) {
+                    canvas.width = newW;
+                    canvas.height = newH;
+                }
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = rect.height + 'px';
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, rect.width, rect.height);
+
+                var pageRedacts = S.redacts.filter(function(r) { return r.pageIdx === pageIdx; });
+                if (pageRedacts.length === 0) return;
+
+                var W = rect.width,
+                    H = rect.height;
+                pageRedacts.forEach(function(r) {
+                    var rr = getRedactPixelRect(r, W, H);
+                    if (rr.w < 1 || rr.h < 1) return;
+                    if (r.applied) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fillRect(rr.x1, rr.y1, rr.w, rr.h);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                        ctx.lineWidth = 0.5;
+                        ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h);
+                    } else {
+                        ctx.fillStyle = 'rgba(192,57,43,0.08)';
+                        ctx.fillRect(rr.x1, rr.y1, rr.w, rr.h);
+                        ctx.setLineDash([4, 4]);
+                        ctx.strokeStyle = '#c0392b';
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h);
+                        ctx.setLineDash([]);
+                    }
+                });
+            }
+
+            /* ============================================================
+               MOUSE EVENTS
+               ============================================================ */
+            function getPageEl(pageIdx) {
+                return DOM.docPages.querySelector('.doc-page[data-page-idx="' + pageIdx + '"]');
+            }
+
+            function onCanvasMouseDown(e) {
+                if (S.isProcessing) return;
+                var canvas = e.currentTarget;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+
+                if (S.tool === 'eraser') {
+                    var hit = findRedactAt(pageIdx, x, y, rect.width, rect.height);
+                    if (hit) {
+                        addUndoSnapshot();
+                        S.redacts = S.redacts.filter(function(r) { return r.id !== hit.id; });
+                        updateRedactCount();
+                        drawExistingRedacts(canvas);
+                        notify('已擦除遮罩区域');
+                        log('擦除遮罩: ' + hit.id);
+                    }
+                    return;
+                }
+                if (S.tool === 'select') {
+                    return;
+                }
+                S.isDrawing = true;
+                S.drawStart = { x: x, y: y, pageIdx: pageIdx };
+                S.drawCanvas = canvas;
+            }
+
+            function onCanvasMouseMove(e) {
+                var canvas = e.currentTarget;
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                DOM.cursorInfo.textContent = '页' + (pageIdx + 1) + ' (' + Math.round(x) + ', ' + Math.round(y) + ')';
+                if (!S.isDrawing || !S.drawStart) return;
+                drawExistingRedacts(canvas);
+                var ctx = canvas.getContext('2d');
+                var dpr = window.devicePixelRatio || 1;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.setLineDash([4, 4]);
+                ctx.strokeStyle = '#c0392b';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(S.drawStart.x, S.drawStart.y, x - S.drawStart.x, y - S.drawStart.y);
+                ctx.setLineDash([]);
+                var w = Math.abs(x - S.drawStart.x),
+                    h = Math.abs(y - S.drawStart.y);
+                DOM.cursorInfo.textContent = '区域: ' + Math.round(w) + '×' + Math.round(h) + ' px';
+            }
+
+            function onCanvasMouseUp(e) {
+                if (!S.isDrawing || !S.drawStart) { S.isDrawing = false;
+                    S.drawStart = null; return; }
+                var canvas = e.currentTarget;
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var pageIdx = S.drawStart.pageIdx;
+                var x1 = S.drawStart.x,
+                    y1 = S.drawStart.y,
+                    x2 = x,
+                    y2 = y;
+                var w = Math.abs(x2 - x1),
+                    h = Math.abs(y2 - y1);
+
+                if (w > 4 && h > 4) {
+                    addUndoSnapshot();
+                    var r = makeRedact(x1 / rect.width, y1 / rect.height, x2 / rect.width, y2 / rect.height,
+                        (S.tool === 'select' ? 'rect' : S.tool), pageIdx, null);
+                    r.applied = false;
+                    S.redacts.push(r);
+                    updateRedactCount();
+                    log('添加' + getToolLabel() + '遮罩(预览): ' + r.id);
+                }
+                S.isDrawing = false;
+                S.drawStart = null;
+                S.drawCanvas = null;
+                drawExistingRedacts(canvas);
+            }
+
+            function findRedactAt(pageIdx, x, y, W, H) {
+                var m = 8;
+                for (var i = S.redacts.length - 1; i >= 0; i--) {
+                    var r = S.redacts[i];
+                    if (r.pageIdx !== pageIdx) continue;
+                    var rr = getRedactPixelRect(r, W, H);
+                    if (x >= rr.x1 - m && x <= rr.x2 + m && y >= rr.y1 - m && y <= rr.y2 + m) return r;
+                }
+                return null;
+            }
+
+            function onCanvasDblClick(e) {
+                var canvas = e.currentTarget;
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var hit = findRedactAt(pageIdx, x, y, rect.width, rect.height);
+                if (hit && !hit.applied) {
+                    addUndoSnapshot();
+                    hit.applied = true;
+                    updateRedactCount();
+                    drawExistingRedacts(canvas);
+                    notify('已应用遮罩');
+                    log('应用遮罩: ' + hit.id);
+                } else if (hit && hit.applied) {
+                    notify('遮罩已应用');
+                }
+            }
+
+            // Hover effect for preview redactions: show applied state on hover.
+            // We'll handle this by redrawing canvas with a hover flag? Simpler: use CSS on canvas.
+            // We'll add a class to canvas when mouse is over a preview rect.
+            function onCanvasMouseOver(e) {
+                if (S.tool === 'select') return;
+                var canvas = e.currentTarget;
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var hit = findRedactAt(pageIdx, x, y, rect.width, rect.height);
+                if (hit && !hit.applied) {
+                    canvas.style.cursor = 'pointer';
+                    drawExistingRedactsWithHover(canvas, hit);
+                } else {
+                    canvas.style.cursor = getToolCursor();
+                }
+            }
+
+            function drawExistingRedactsWithHover(canvas, hoverRedact) {
+                var ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var page = S.pages[pageIdx];
+                if (!page) return;
+                var rect = canvas.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+                var dpr = window.devicePixelRatio || 1;
+                var newW = Math.round(rect.width * dpr);
+                var newH = Math.round(rect.height * dpr);
+                if (canvas.width !== newW || canvas.height !== newH) {
+                    canvas.width = newW;
+                    canvas.height = newH;
+                }
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = rect.height + 'px';
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, rect.width, rect.height);
+
+                var pageRedacts = S.redacts.filter(function(r) { return r.pageIdx === pageIdx; });
+                var W = rect.width,
+                    H = rect.height;
+                pageRedacts.forEach(function(r) {
+                    var rr = getRedactPixelRect(r, W, H);
+                    if (rr.w < 1 || rr.h < 1) return;
+                    if (r.applied) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fillRect(rr.x1, rr.y1, rr.w, rr.h);
+                    } else if (r.id === hoverRedact.id) {
+                        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                        ctx.fillRect(rr.x1, rr.y1, rr.w, rr.h);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h);
+                    } else {
+                        ctx.fillStyle = 'rgba(192,57,43,0.08)';
+                        ctx.fillRect(rr.x1, rr.y1, rr.w, rr.h);
+                        ctx.setLineDash([4, 4]);
+                        ctx.strokeStyle = '#c0392b';
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h);
+                        ctx.setLineDash([]);
+                    }
+                });
+            }
+
+            function onCanvasMouseLeave(e) {
+                var canvas = e.currentTarget;
+                canvas.style.cursor = getToolCursor();
+                drawExistingRedacts(canvas);
+            }
+
+            /* ============================================================
+               PDF TEXT SELECTION → QUICK REDACT (fixed offset)
+               ============================================================ */
+            function handlePdfTextSelection() {
+                var sel = window.getSelection();
+                if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+                var created = 0;
+                for (var ri = 0; ri < sel.rangeCount; ri++) {
+                    var range = sel.getRangeAt(ri);
+                    var node = range.startContainer;
+                    var layer = (node && node.nodeType === 3) ? node.parentElement.closest('.pdf-text-layer') : null;
+                    if (!layer) continue;
+                    var wrap = layer.closest('.doc-page-img-wrap');
+                    var pageEl = layer.closest('.doc-page');
+                    if (!wrap || !pageEl) continue;
+                    var pageIdx = parseInt(pageEl.dataset.pageIdx);
+                    var wr = wrap.getBoundingClientRect();
+                    var rects = range.getClientRects();
+                    for (var k = 0; k < rects.length; k++) {
+                        var rc = rects[k];
+                        var x1 = rc.left - wr.left,
+                            y1 = rc.top - wr.top;
+                        var x2 = rc.right - wr.left,
+                            y2 = rc.bottom - wr.top;
+                        if (x2 - x1 < 2 || y2 - y1 < 2) continue;
+                        var r = makeRedact(x1 / wr.width, y1 / wr.height, x2 / wr.width, y2 / wr.height, 'rect', pageIdx,
+                            null);
+                        r.applied = true;
+                        S.redacts.push(r);
+                        created++;
+                    }
+                }
+                if (created > 0) {
+                    sel.removeAllRanges();
+                    addUndoSnapshot();
+                    updateRedactCount();
+                    $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                    notify('已遮盖选中文字 (' + created + ' 处)');
+                    log('选词遮盖: ' + created + ' 处');
+                }
+            }
+
+            /* ============================================================
+               RENDER DOCUMENT
+               ============================================================ */
+            function renderDocument() {
+                DOM.docPages.innerHTML = '';
+
+                if (S.docxHtml && S.fileType === 'docx') {
+                    var container = document.createElement('div');
+                    container.className = 'docx-container';
+                    container.style.cssText =
+                        'max-width:794px;margin:0 auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:32px 40px;box-shadow:var(--page-shadow);';
+                    container.innerHTML = S.docxHtml;
+                    var style = document.createElement('style');
+                    style.textContent =
+                        '.docx-container p{margin:0 0 0.5em 0;line-height:1.7;}.docx-container h1,.docx-container h2,.docx-container h3,.docx-container h4{margin:0.8em 0 0.3em;font-weight:500;}.docx-container table{border-collapse:collapse;width:100%;margin:0.6em 0;}.docx-container td,.docx-container th{border:1px solid var(--border);padding:4px 8px;}.docx-container img{max-width:100%;height:auto;}';
+                    container.appendChild(style);
+                    var wrapDiv = document.createElement('div');
+                    wrapDiv.style.position = 'relative';
+                    wrapDiv.appendChild(container);
+                    var canvasOverlay = document.createElement('canvas');
+                    canvasOverlay.className = 'redact-canvas';
+                    canvasOverlay.style.cssText =
+                        'position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;z-index:5;pointer-events:auto;';
+                    canvasOverlay.dataset.pageIdx = '0';
+                    canvasOverlay.addEventListener('mousedown', onCanvasMouseDown);
+                    canvasOverlay.addEventListener('mousemove', onCanvasMouseMove);
+                    canvasOverlay.addEventListener('mouseup', onCanvasMouseUp);
+                    canvasOverlay.addEventListener('mouseleave', onCanvasMouseUp);
+                    canvasOverlay.addEventListener('dblclick', onCanvasDblClick);
+                    canvasOverlay.addEventListener('mouseover', onCanvasMouseOver);
+                    canvasOverlay.addEventListener('mouseout', onCanvasMouseLeave);
+                    wrapDiv.appendChild(canvasOverlay);
+                    DOM.docPages.appendChild(wrapDiv);
+                    S.pages = [{ pageNum: 0, lines: S.lines, displayW: 794, displayH: 1120 }];
+                    S.totalPages = 1;
+                    requestAnimationFrame(function() {
+                        var c = wrapDiv.querySelector('.redact-canvas');
+                        if (c) drawExistingRedacts(c);
+                    });
+                    updateStats();
+                    return;
+                }
+
+                S.pages.forEach(function(page, pageIdx) {
+                    var isPdf = S.pdfMode && page.vw;
+                    var pageEl = document.createElement('div');
+                    pageEl.className = 'doc-page' + (isPdf ? ' pdf' : '');
+                    pageEl.dataset.pageIdx = pageIdx;
+
+                    if (S.showPageNum) {
+                        var badge = document.createElement('div');
+                        badge.className = 'page-num';
+                        badge.textContent = '第 ' + (pageIdx + 1) + ' 页';
+                        pageEl.appendChild(badge);
+                    }
+
+                    if (isPdf) {
+                        var wrap = document.createElement('div');
+                        wrap.className = 'doc-page-img-wrap';
+
+                        if (page.img) {
+                            // Already rendered
+                            var img = document.createElement('img');
+                            img.className = 'doc-page-img';
+                            img.src = page.img;
+                            img.alt = '第 ' + (pageIdx + 1) + ' 页';
+                            img.onload = (function(pIdx, wEl) { return function() { layoutPdfPage(pIdx, wEl); }; })(pageIdx, wrap);
+                            wrap.appendChild(img);
+                        } else {
+                            // Lazy placeholder — correct aspect ratio
+                            var aspectRatio = page.vh / page.vw;
+                            var placeholderW = 794;
+                            var placeholderH = Math.round(placeholderW * aspectRatio);
+                            var placeholder = document.createElement('div');
+                            placeholder.className = 'pdf-placeholder';
+                            placeholder.style.cssText = 'width:100%;padding-bottom:' + (aspectRatio * 100) + '%;background:var(--bg);display:flex;align-items:center;justify-content:center;position:relative;min-height:200px;';
+                            var label = document.createElement('div');
+                            label.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--text-faint);font-family:var(--font);';
+                            label.textContent = '第 ' + (pageIdx + 1) + ' 页 — 滚动到此处加载';
+                            placeholder.appendChild(label);
+                            wrap.appendChild(placeholder);
+                        }
+
+                        var canvas = document.createElement('canvas');
+                        canvas.className = 'redact-canvas';
+                        canvas.style.cssText =
+                            'position:absolute;top:0;left:0;width:100%;height:100%;cursor:' + getToolCursor() +
+                            ';z-index:5;pointer-events:' + (S.textSelect ? 'none' : 'auto') + ';';
+                        canvas.dataset.pageIdx = pageIdx;
+                        canvas.addEventListener('mousedown', onCanvasMouseDown);
+                        canvas.addEventListener('mousemove', onCanvasMouseMove);
+                        canvas.addEventListener('mouseup', onCanvasMouseUp);
+                        canvas.addEventListener('mouseleave', onCanvasMouseUp);
+                        canvas.addEventListener('dblclick', onCanvasDblClick);
+                        canvas.addEventListener('mouseover', onCanvasMouseOver);
+                        canvas.addEventListener('mouseout', onCanvasMouseLeave);
+                        wrap.appendChild(canvas);
+
+                        var layer = document.createElement('div');
+                        layer.className = 'pdf-text-layer';
+                        layer.dataset.pageIdx = pageIdx;
+                        wrap.appendChild(layer);
+
+                        pageEl.appendChild(wrap);
+                    } else {
+                        var textContainer = document.createElement('div');
+                        textContainer.className = 'doc-page-text';
+                        textContainer.style.fontFamily = 'SimSun, 宋体, Songti SC, serif';
+                        textContainer.style.fontSize = CONFIG.FONT_SIZE + 'px';
+                        textContainer.style.lineHeight = CONFIG.LINE_HEIGHT;
+
+                        var fullText = '';
+                        page.lines.forEach(function(line) { fullText += line.text + '\n'; });
+                        if (fullText.endsWith('\n')) fullText = fullText.slice(0, -1);
+                        textContainer.textContent = fullText;
+
+                        pageEl.appendChild(textContainer);
+
+                        var canvas = document.createElement('canvas');
+                        canvas.className = 'redact-canvas';
+                        canvas.style.cssText =
+                            'position:absolute;top:0;left:0;width:100%;height:100%;cursor:' + getToolCursor() +
+                            ';z-index:5;pointer-events:auto;';
+                        canvas.dataset.pageIdx = pageIdx;
+                        canvas.addEventListener('mousedown', onCanvasMouseDown);
+                        canvas.addEventListener('mousemove', onCanvasMouseMove);
+                        canvas.addEventListener('mouseup', onCanvasMouseUp);
+                        canvas.addEventListener('mouseleave', onCanvasMouseUp);
+                        canvas.addEventListener('dblclick', onCanvasDblClick);
+                        canvas.addEventListener('mouseover', onCanvasMouseOver);
+                        canvas.addEventListener('mouseout', onCanvasMouseLeave);
+                        pageEl.appendChild(canvas);
+                    }
+
+                    DOM.docPages.appendChild(pageEl);
+                });
+
+                requestAnimationFrame(function() {
+                    S.pages.forEach(function(page, pageIdx) {
+                        if (!page.img) return;
+                        var el = getPageEl(pageIdx);
+                        if (!el) return;
+                        var wrap = el.querySelector('.doc-page-img-wrap');
+                        if (!wrap) return;
+                        layoutPdfPage(pageIdx, wrap);
+                    });
+                    $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                });
+                updateStats();
+            }
+
+            function layoutPdfPage(pageIdx, wrap) {
+                var page = S.pages[pageIdx];
+                if (!page) return;
+                var w = wrap.clientWidth,
+                    h = wrap.clientHeight;
+                if (!w || !h) return;
+                page.displayW = w;
+                page.displayH = h;
+                if (S.pdfPages[pageIdx]) {
+                    S.pdfPages[pageIdx].displayW = w;
+                    S.pdfPages[pageIdx].displayH = h;
+                }
+                if (page.img) {
+                    buildPdfTextLayer(pageIdx, wrap);
+                }
+                var c = wrap.querySelector('.redact-canvas');
+                if (c) drawExistingRedacts(c);
+            }
+
+            function buildPdfTextLayer(pageIdx, wrap) {
+                var layer = wrap.querySelector('.pdf-text-layer');
+                if (!layer) return;
+                layer.innerHTML = '';
+                var meta = S.pdfPages[pageIdx];
+                if (!meta || !meta.textItems || !meta.displayW) return;
+                var W = meta.displayW,
+                    H = meta.displayH;
+                var sx = W / meta.vw,
+                    sy = H / meta.vh;
+                meta.textItems.forEach(function(it) {
+                    var span = document.createElement('span');
+                    var baseline = (meta.vh - it.y) * sy;
+                    var top = baseline - it.h * sy;
+                    span.textContent = it.str;
+                    span.style.left = (it.x * sx) + 'px';
+                    span.style.top = (top < 0 ? 0 : top) + 'px';
+                    span.style.fontSize = (it.fontSize * sy) + 'px';
+                    span.style.fontFamily = 'sans-serif';
+                    layer.appendChild(span);
+                });
+                layer.classList.toggle('active', S.textSelect);
+            }
+
+            function updatePdfSelectMode() {
+                var on = (S.pdfMode && S.textSelect);
+                $$('.pdf-text-layer').forEach(function(l) { l.classList.toggle('active', on); });
+                $$('.redact-canvas').forEach(function(c) {
+                    c.style.pointerEvents = (S.pdfMode && on) ? 'none' : 'auto';
+                    c.classList.toggle('select-mode', S.pdfMode && on);
+                });
+            }
+
+            function applyPdfMode() {
+                document.body.classList.toggle('pdf-mode', !!S.pdfMode);
+                DOM.docPages.style.setProperty('--view-scale', (S.viewScale || 1));
+                updateZoomLabel();
+                updatePdfSelectMode();
+            }
+
+            function updateZoomLabel() {
+                if (DOM.zoomLabel) DOM.zoomLabel.textContent = Math.round((S.viewScale || 1) * 100) + '%';
+            }
+
+            function setPdfViewScale(scale) {
+                S.viewScale = Math.max(0.4, Math.min(4, scale));
+                applyPdfMode();
+                clearTimeout(zoomRenderTimer);
+                zoomRenderTimer = setTimeout(function() {
+                    if (!S.pdfJsDoc) return;
+                    var rs = CONFIG.PDF_RENDER_SCALE * S.viewScale * (window.devicePixelRatio || 1);
+                    S._renderScale = rs;
+                    // Re-render only already-rendered pages at new resolution
+                    var renderedIndices = Object.keys(S.renderedPages).map(Number).filter(function(i) {
+                        return S.renderedPages[i];
+                    });
+                    if (renderedIndices.length === 0) {
+                        renderDocument();
+                        return;
+                    }
+                    // Clear rendered status for re-render
+                    renderedIndices.forEach(function(i) { S.renderedPages[i] = false; });
+                    S.lazyRenderQueue = [];
+                    S.lazyRendering = false;
+                    var renderSet = {};
+                    async function rerender() {
+                        for (var pi = 0; pi < renderedIndices.length; pi++) {
+                            var idx = renderedIndices[pi];
+                            if (renderSet[idx]) continue;
+                            renderSet[idx] = true;
+                            await renderSinglePdfPage(idx);
+                            await new Promise(function(r) { requestAnimationFrame(r); });
+                        }
+                        // Re-setup lazy rendering for remaining pages
+                        setupLazyRendering(rs);
+                    }
+                    rerender();
+                }, 300);
+            }
+
+            /* ============================================================
+               TOOL MANAGEMENT
+               ============================================================ */
+            function setTool(tool) {
+                S.tool = tool;
+                S.textSelect = (tool === 'select');
+                $$('[data-tool]').forEach(function(b) { b.classList.toggle('active', b.dataset.tool === tool); });
+                $$('.redact-canvas').forEach(function(c) {
+                    c.style.cursor = getToolCursor();
+                    if (S.textSelect) {
+                        c.style.pointerEvents = 'none';
+                        c.classList.add('select-mode');
+                    } else {
+                        c.style.pointerEvents = 'auto';
+                        c.classList.remove('select-mode');
+                    }
+                });
+                $$('[data-action="setSelectTool"]').forEach(function(b) {
+                    b.classList.toggle('active', S.textSelect);
+                });
+                updatePdfSelectMode();
+                saveSettings();
+            }
+
+            /* ============================================================
+               EXPORT
+               ============================================================ */
+            async function exportText() {
+                if (S.redacts.length === 0) { notify('没有需要导出的脱敏内容'); return; }
+                try {
+                    DOM.exportOverlay.classList.add('active');
+                    DOM.statusLeft.textContent = '生成脱敏文本…';
+                    var text = await buildRedactedText();
+                    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    var base = S.fileName.replace(/\.[^.]+$/, '') || 'document';
+                    a.download = base + '_脱敏.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    DOM.exportOverlay.classList.remove('active');
+                    notify('脱敏文本已导出');
+                    log('导出脱敏文本成功');
+                    DOM.statusLeft.textContent = '导出完成';
+                } catch (err) {
+                    DOM.exportOverlay.classList.remove('active');
+                    handleError('导出失败', err);
+                }
+            }
+
+            async function buildRedactedText() {
+                var result = S.text;
+                var wordBased = S.redacts.filter(function(r) { return r.wordMatch && r.wordMatch.word && r.applied; });
+                var seen = {};
+                wordBased.forEach(function(r) {
+                    var w = r.wordMatch.word;
+                    if (seen[w]) return;
+                    seen[w] = true;
+                    try { result = result.replace(new RegExp(escapeRegex(w), 'gi'), '[已隐去]'); } catch (_) {}
+                });
+                var areaRedacts = S.redacts.filter(function(r) { return !r.wordMatch && r.applied; });
+                if (areaRedacts.length > 0) {
+                    result += '\n\n--- 以下区域已脱敏 ---\n';
+                    areaRedacts.forEach(function(r) {
+                        var rr = getRedactPixelRect(r, 1000, 1400);
+                        result += '[遮罩区域: x:' + Math.round(rr.x1) + ' y:' + Math.round(rr.y1) + '-' + Math.round(rr
+                            .x2) + '-' + Math.round(rr.y2) + ']\n';
+                    });
+                }
+                return result;
+            }
+
+            async function exportPDF() {
+                if (S.pdfMode) {
+                    var bn = (S.fileName.replace(/\.[^.]+$/, '') || 'document') + '_脱敏';
+                    await buildImagePDF(bn);
+                    return;
+                }
+                if (S.redacts.length === 0) { notify('没有需要导出的脱敏内容'); return; }
+                try {
+                    DOM.exportOverlay.classList.add('active');
+                    DOM.statusLeft.textContent = '生成PDF…';
+                    var { jsPDF } = window.jspdf;
+                    var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                    var pw = doc.internal.pageSize.getWidth() - 20,
+                        fs = 10,
+                        lh = fs * 1.8,
+                        pad = 10;
+                    var text = S.text;
+                    var wb = S.redacts.filter(function(r) { return r.wordMatch && r.wordMatch.word && r.applied; });
+                    var seen = {};
+                    wb.forEach(function(r) {
+                        var w = r.wordMatch.word;
+                        if (seen[w]) return;
+                        seen[w] = true;
+                        try { text = text.replace(new RegExp(escapeRegex(w), 'gi'), '[已隐去]'); } catch (_) {}
+                    });
+                    var lines = text.split(/\r\n|\r|\n/);
+                    var y = pad;
+                    for (var i = 0; i < lines.length; i++) {
+                        if (y + lh > doc.internal.pageSize.getHeight() - pad) { doc.addPage();
+                            y = pad; }
+                        doc.setFontSize(fs);
+                        doc.setTextColor(0, 0, 0);
+                        doc.text(lines[i], pad, y + fs);
+                        y += lh;
+                    }
+                    var base = S.fileName.replace(/\.[^.]+$/, '') || 'document';
+                    doc.save(base + '_脱敏.pdf');
+                    DOM.exportOverlay.classList.remove('active');
+                    notify('PDF已导出');
+                    log('导出PDF成功');
+                    DOM.statusLeft.textContent = 'PDF导出完成';
+                } catch (err) {
+                    DOM.exportOverlay.classList.remove('active');
+                    handleError('PDF导出失败', err);
+                }
+            }
+
+            async function exportRedactedPDF() {
+                try {
+                    DOM.exportOverlay.classList.add('active');
+                    DOM.statusLeft.textContent = '生成不可逆脱敏PDF…';
+                    notify('生成不可逆脱敏PDF…');
+                    var base = S.fileName.replace(/\.[^.]+$/, '') || 'document';
+                    if (S.pdfMode) {
+                        await buildImagePDF(base + '_脱敏PDF');
+                    } else {
+                        await exportIrreversiblePDFFromText(base);
+                    }
+                    DOM.exportOverlay.classList.remove('active');
+                    notify('不可逆脱敏PDF已导出');
+                    log('不可逆脱敏PDF导出成功');
+                    DOM.statusLeft.textContent = '脱敏PDF导出完成';
+                } catch (err) {
+                    DOM.exportOverlay.classList.remove('active');
+                    handleError('脱敏PDF导出失败', err);
+                }
+            }
+
+            async function exportIrreversiblePDFFromText(baseName) {
+                var { jsPDF } = window.jspdf;
+                var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                var pw = doc.internal.pageSize.getWidth() - 20,
+                    fs = 10,
+                    lh = fs * 1.8,
+                    pad = 10;
+                var text = S.text;
+                var wb = S.redacts.filter(function(r) { return r.wordMatch && r.wordMatch.word && r.applied; });
+                var seen = {};
+                wb.forEach(function(r) {
+                    var w = r.wordMatch.word;
+                    if (seen[w]) return;
+                    seen[w] = true;
+                    try { text = text.replace(new RegExp(escapeRegex(w), 'gi'), '[已隐去]'); } catch (_) {}
+                });
+                var lines = text.split(/\r\n|\r|\n/);
+                var y = pad;
+                for (var i = 0; i < lines.length; i++) {
+                    if (y + lh > doc.internal.pageSize.getHeight() - pad) { doc.addPage();
+                        y = pad; }
+                    doc.setFontSize(fs);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(lines[i], pad, y + fs);
+                    y += lh;
+                }
+                doc.save(baseName + '_脱敏PDF.pdf');
+            }
+
+            async function buildImagePDF(baseName) {
+                if (S.pdfPages.length === 0) { notify('没有可导出的PDF页面'); return; }
+                if (!window.PDFLib) throw new Error('PDF 编辑库未加载');
+                if (!S.pdfBytes) throw new Error('原始 PDF 数据丢失，请重新打开文件');
+                try {
+                    DOM.exportOverlay.classList.add('active');
+                    DOM.statusLeft.textContent = '生成脱敏PDF(矢量编辑)…';
+                    notify('正在直接编辑 PDF…');
+                    var pdfLib = window.PDFLib;
+                    var pdfDoc = await pdfLib.PDFDocument.load(S.pdfBytes.slice(0));
+                    var pages = pdfDoc.getPages();
+
+                    for (var pi = 0; pi < S.pdfPages.length; pi++) {
+                        if (pi >= pages.length) continue;
+                        var meta = S.pdfPages[pi];
+                        var page = pages[pi];
+                        var pageRedacts = S.redacts.filter(function(r) { return r.pageIdx === pi && r.applied; });
+                        pageRedacts.forEach(function(r) {
+                            var x = Math.min(r.nx1, r.nx2) * meta.vw;
+                            var x2 = Math.max(r.nx1, r.nx2) * meta.vw;
+                            var yTop = Math.min(r.ny1, r.ny2) * meta.vh;
+                            var yBot = Math.max(r.ny1, r.ny2) * meta.vh;
+                            page.drawRectangle({
+                                x: x,
+                                y: meta.vh - yBot,
+                                width: x2 - x,
+                                height: yBot - yTop,
+                                color: pdfLib.rgb(0, 0, 0),
+                                borderWidth: 0,
+                            });
+                        });
+                        setProgress(Math.round(((pi + 1) / S.pdfPages.length) * 100));
+                    }
+
+                    var bytes = await pdfDoc.save();
+                    var blob = new Blob([bytes], { type: 'application/pdf' });
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = baseName + '.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    DOM.exportOverlay.classList.remove('active');
+                    notify('脱敏PDF已导出');
+                    log('脱敏PDF导出成功');
+                    DOM.statusLeft.textContent = '脱敏PDF导出完成';
+                } catch (err) {
+                    DOM.exportOverlay.classList.remove('active');
+                    handleError('脱敏PDF导出失败', err);
+                }
+            }
+
+            /* ============================================================
+               CLEAR ALL
+               ============================================================ */
+            function clearAllRedacts() {
+                showConfirm('确定清除所有脱敏区域？此操作不可恢复。').then(function(ok) {
+                    if (ok) {
+                        addUndoSnapshot();
+                        S.redacts = [];
+                        updateRedactCount();
+                        $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                        notify('已清除所有遮罩');
+                        log('已清除所有遮罩');
+                    }
+                }).catch(function() {});
+            }
+
+            function updateRedactCount() {
+                var applied = S.redacts.filter(function(r) { return r.applied; }).length;
+                DOM.statRedacts.textContent = applied.toString();
+            }
+
+            function updateStats() {
+                DOM.statChars.textContent = S.charCount > 0 ? formatCount(S.charCount) : '-';
+                DOM.statLines.textContent = S.lines.length > 0 ? formatCount(S.lines.length) : '-';
+                DOM.statPages.textContent = S.totalPages > 0 ? S.totalPages.toString() : '-';
+                updateRedactCount();
+            }
+
+            /* ============================================================
+               SAMPLE
+               ============================================================ */
+            function loadSample() {
+                // Cleanup lazy rendering from previous file
+                if (S.lazyObserver) { S.lazyObserver.disconnect(); S.lazyObserver = null; }
+                S.lazyRenderQueue = [];
+                S.lazyRendering = false;
+                S.renderedPages = {};
+                var t =
+                    '各位老师好：\n今年大学生创新大赛项目在评审环节，项目计划书、PPT、相关视频等材料中需要隐去学校名称、参赛选手姓名等敏感信息，尤其是推荐参加省赛的项目，请重点关注。关于名额分配的相关情况，这两天会发通知具体安排。\n\n项目名称：基于人工智能的智慧教育平台\n指导老师：张明、李华、王芳\n参赛选手：张伟、刘洋、陈静、赵磊、王小红\n学校名称：XX大学计算机科学与工程学院\n项目编号：2025-AI-0042\n参赛类别：创新创业类\n\n项目简介：\n本项目致力于开发一款基于人工智能技术的智慧教育平台，通过深度学习算法实现个性化教学推荐、智能作业批改和学情分析等功能。平台已申请3项发明专利，已发表核心期刊论文2篇。\n\n核心技术：\n1. 基于Transformer的多模态学习分析模型\n2. 自适应学习路径推荐算法\n3. 隐私保护下的联邦学习框架\n\n预期成果：\n1. 发表SCI/EI论文3篇\n2. 申请软件著作权2项\n3. 获得省级以上创新创业奖项\n\n经费预算：\n总经费：45万元\n其中：设备费15万元，材料费8万元，差旅费5万元，劳务费12万元，其他5万元\n\n备注：\n本项目中涉及的内部测试数据、核心算法代码等属于机密信息，未经许可不得对外公开。\n\n感谢各位老师的指导与支持！';
+                S.text = t;
+                S.fileName = '示例项目计划书.txt';
+                S.fileSize = t.length;
+                S.fileType = 'txt';
+                S.pdfMode = false;
+                S.docxHtml = null;
+                processText();
+                DOM.wordList.value = '张伟\n刘洋\n陈静\n赵磊\n王小红\nXX大学\n张明\n李华\n王芳\n机密';
+                autoDetectMatches();
+                DOM.fname.textContent = S.fileName;
+                DOM.fileTypeInfo.textContent = '格式: TXT · ' + formatSize(S.fileSize);
+                DOM.fmeta.textContent = formatSize(S.fileSize) + ' · ' + S.charCount + ' 字符 · ' + S.lines.length +
+                ' 行';
+                renderDocument();
+                updateStats();
+                notify('已加载示例文档');
+                log('已加载示例项目计划书');
+                DOM.statusLeft.textContent = '已加载: ' + S.fileName;
+            }
+
+            /* ============================================================
+               WORD LIST MANAGEMENT
+               ============================================================ */
+            function loadWordList() {
+                try {
+                    var saved = localStorage.getItem('zr-words');
+                    if (saved) { DOM.wordList.value = saved;
+                        notify('已加载保存的敏感词列表');
+                        autoDetectMatches(); } else notify('没有找到保存的敏感词列表');
+                } catch (err) { handleError('加载敏感词列表失败', err); }
+            }
+
+            function saveWordList() {
+                try {
+                    var words = DOM.wordList.value.trim();
+                    if (!words) { notify('敏感词列表为空'); return; }
+                    localStorage.setItem('zr-words', words);
+                    notify('敏感词列表已保存');
+                    autoDetectMatches();
+                } catch (err) { handleError('保存敏感词列表失败', err); }
+            }
+
+            function clearWordList() {
+                DOM.wordList.value = '';
+                S.matchResults = [];
+                DOM.matchList.innerHTML =
+                '<div style="padding:8px;font-size:11px;color:var(--text-faint);">等待加载文档…</div>';
+                localStorage.removeItem('zr-words');
+                notify('敏感词列表已清空');
+            }
+
+            /* ============================================================
+               EVENTS
+               ============================================================ */
+            function initEvents() {
+                // Top menu
+                $$('#top-menu [data-action]').forEach(function(el) {
+                    el.addEventListener('click', function() {
+                        var a = el.dataset.action;
+                        if (a === 'loadFile') DOM.fileInput.click();
+                        else if (a === 'loadSample') loadSample();
+                        else if (a === 'autoRedact') autoRedactAll();
+                        else if (a === 'clearAll') clearAllRedacts();
+                        else if (a === 'exportText') exportText();
+                        else if (a === 'exportPDF') exportPDF();
+                        else if (a === 'exportRedactedPDF') exportRedactedPDF();
+                        else if (a === 'showSettings') toggleSettingsDropdown();
+                        else if (a === 'togglePin') togglePin();
+                    });
+                });
+
+                // Tool buttons
+                $$('[data-tool]').forEach(function(el) {
+                    el.addEventListener('click', function() { setTool(el.dataset.tool); });
+                });
+
+                // Sidebar actions
+                $$('#sidebar [data-action]').forEach(function(el) {
+                    el.addEventListener('click', function() {
+                        var a = el.dataset.action;
+                        if (a === 'loadWords') loadWordList();
+                        else if (a === 'saveWords') saveWordList();
+                        else if (a === 'clearWords') clearWordList();
+                        else if (a === 'undoRedact') undoRedact();
+                        else if (a === 'redoRedact') redoRedact();
+                        else if (a === 'toggleSidebar') toggleSidebar();
+                    });
+                });
+
+                // Sidebar toggle button (also in sidebar)
+                DOM.sidebarToggle.addEventListener('click', toggleSidebar);
+
+                // Doc toolbar actions
+                $$('#doc-toolbar [data-action]').forEach(function(el) {
+                    el.addEventListener('click', function() {
+                        var a = el.dataset.action;
+                        if (a === 'autoRedact') autoRedactAll();
+                        else if (a === 'clearAll') clearAllRedacts();
+                        else if (a === 'exportText') exportText();
+                        else if (a === 'exportPDF') exportPDF();
+                        else if (a === 'exportRedactedPDF') exportRedactedPDF();
+                        else if (a === 'undoRedact') undoRedact();
+                        else if (a === 'redoRedact') redoRedact();
+                        else if (a === 'zoomIn') setPdfViewScale((S.viewScale || 1) + 0.2);
+                        else if (a === 'zoomOut') setPdfViewScale((S.viewScale || 1) - 0.2);
+                        else if (a === 'zoomReset') setPdfViewScale(1);
+                        else if (a === 'setSelectTool') { setTool('select'); }
+                    });
+                });
+
+                // PDF text selection → quick redact
+                document.addEventListener('mouseup', function() {
+                    if (S.pdfMode && S.textSelect) { setTimeout(handlePdfTextSelection, 10); }
+                });
+
+                // Toggles
+                $$('.toggle-switch').forEach(function(el) {
+                    el.addEventListener('click', function() {
+                        el.classList.toggle('on');
+                        var a = el.dataset.action;
+                        if (a === 'toggleLock') { S.lockRedacts = el.classList.contains('on');
+                            $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); }); } else if (
+                            a === 'togglePageNum') { S.showPageNum = el.classList.contains('on');
+                            renderDocument(); } else if (a === 'toggleAutoPage') { S.autoPage = el.classList
+                                .contains('on'); if (S.text) rebuildPages(); }
+                    });
+                });
+
+                // Word list auto-detect
+                var wdt;
+                DOM.wordList.addEventListener('input', function() {
+                    clearTimeout(wdt);
+                    wdt = setTimeout(function() { autoDetectMatches(); if (DOM.wordList.value.trim())
+                            saveWordList(); }, 500);
+                });
+
+                // File input
+                DOM.fileInput.addEventListener('change', function(e) {
+                    var f = e.target.files[0];
+                    if (f) loadFile(f);
+                });
+
+                // Drag and drop
+                var da = $('#doc-area');
+                da.addEventListener('dragenter', function(e) { e.preventDefault();
+                    dragLeaveCounter = 0;
+                    showDropZone(true); });
+                da.addEventListener('dragover', function(e) { e.preventDefault(); });
+                da.addEventListener('dragleave', function(e) { e.preventDefault();
+                    dragLeaveCounter++;
+                    if (dragLeaveCounter > 1) showDropZone(false); });
+                da.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    dragLeaveCounter = 0;
+                    showDropZone(false);
+                    var f = e.dataTransfer.files[0];
+                    if (f) loadFile(f);
+                });
+
+                document.addEventListener('dragover', function(e) { e.preventDefault(); });
+                document.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    showDropZone(false);
+                    var f = e.dataTransfer.files[0];
+                    if (f) loadFile(f);
+                });
+
+                // Confirm
+                $('#confirm-cancel').addEventListener('click', function() {
+                    DOM.confirmOverlay.classList.remove('active');
+                    if (DOM.confirmOverlay._resolve) DOM.confirmOverlay._resolve(false);
+                });
+                $('#confirm-ok').addEventListener('click', function() {
+                    DOM.confirmOverlay.classList.remove('active');
+                    if (DOM.confirmOverlay._resolve) DOM.confirmOverlay._resolve(true);
+                });
+
+                // Keyboard
+                document.addEventListener('keydown', function(e) {
+                    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+                        if (e.ctrlKey && e.key === 's') { e.preventDefault();
+                            saveWordList(); }
+                        return;
+                    }
+                    var k = e.key.toLowerCase();
+                    if (k === 'r' && !e.ctrlKey && !e.metaKey) setTool('rect');
+                    else if (k === 'm') setTool('mosaic');
+                    else if (k === 'p') setTool('pixel');
+                    else if (k === 'e' && !e.ctrlKey && !e.metaKey) setTool('eraser');
+                    else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault();
+                        undoRedact(); } else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault();
+                        redoRedact(); } else if (k === 'escape') { $$('.dropdown.open').forEach(function(d) { d
+                            .classList.remove('open'); }); }
+                });
+
+                // Resize
+                window.addEventListener('resize', function() {
+                    if (S.pages.length > 0) {
+                        clearTimeout(resizeTimer);
+                        resizeTimer = setTimeout(function() {
+                            if (!S.pdfMode && !S.docxHtml) rebuildPages();
+                            renderDocument();
+                        }, 200);
+                    }
+                });
+
+                // Scroll redraw
+                DOM.docViewport.addEventListener('scroll', function() {
+                    if (scrollRAF) cancelAnimationFrame(scrollRAF);
+                    scrollRAF = requestAnimationFrame(function() {
+                        $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                    });
+                });
+
+                // Close dropdowns
+                document.addEventListener('click', function(e) {
+                    if (!e.target.closest('.dropdown') && !e.target.closest('#top-menu [data-action="showSettings"]')) {
+                        $$('.dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+                    }
+                });
+
+                // Settings dropdown items
+                document.addEventListener('click', function(e) {
+                    var item = e.target.closest('.dropdown .dd-item, .dropdown .settings-btn');
+                    if (!item) return;
+                    var a = item.dataset.action;
+                    if (a === 'settingsToggleTheme') { toggleTheme();
+                        $$('.dropdown.open').forEach(function(d) { d.classList.remove('open'); }); } else if (a ===
+                        'setBg') { setBg(item.dataset.bg);
+                        $$('.dropdown.open').forEach(function(d) { d.classList.remove('open'); }); } else if (a ===
+                        'radiusPlus') { S.radius = Math.min(24, (S.radius || 0) + 2);
+                        applyRadius();
+                        saveSettings(); } else if (a === 'radiusMinus') { S.radius = Math.max(0, (S.radius || 0) -
+                            2);
+                        applyRadius();
+                        saveSettings(); }
+                });
+
+                // Splash enter
+                document.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('splash-enter')) {
+                        DOM.splash.classList.add('fade-out');
+                        setTimeout(function() { DOM.splash.style.display = 'none'; }, 500);
+                    }
+                });
+
+                // Ctrl+S to save words globally
+                document.addEventListener('keydown', function(e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                        if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+                            e.preventDefault();
+                            saveWordList();
+                        }
+                    }
+                });
+
+                // Sidebar resize
+                var sidebarResizeEl = DOM.sidebarResize;
+                if (sidebarResizeEl) {
+                    var isResizing = false;
+                    var startX = 0;
+                    var startW = 0;
+                    sidebarResizeEl.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        isResizing = true;
+                        startX = e.clientX;
+                        startW = DOM.sidebar.offsetWidth;
+                        sidebarResizeEl.classList.add('dragging');
+                        document.body.style.cursor = 'col-resize';
+                        document.body.style.userSelect = 'none';
+                    });
+                    document.addEventListener('mousemove', function(e) {
+                        if (!isResizing) return;
+                        var diff = e.clientX - startX;
+                        var newW = Math.max(180, Math.min(500, startW + diff));
+                        document.documentElement.style.setProperty('--sidebar-w', newW + 'px');
+                        DOM.sidebar.style.width = newW + 'px';
+                        DOM.sidebar.style.minWidth = newW + 'px';
+                    });
+                    document.addEventListener('mouseup', function() {
+                        if (!isResizing) return;
+                        isResizing = false;
+                        sidebarResizeEl.classList.remove('dragging');
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        saveSettings();
+                    });
+                }
+            }
+
+            function toggleSettingsDropdown() {
+                var dd = $('#dd-settings');
+                var open = dd.classList.toggle('open');
+                $('#sv-theme').textContent = S.theme === 'dark' ? 'Dark' : 'Light';
+                if (open) {
+                    var btn = document.querySelector('#top-menu [data-action="showSettings"]');
+                    var r = btn.getBoundingClientRect();
+                    dd.style.top = (r.bottom + 6) + 'px';
+                    dd.style.left = Math.max(8, Math.min(r.left, window.innerWidth - dd.offsetWidth - 8)) + 'px';
+                    dd.style.right = 'auto';
+                }
+            }
+
+            /* ============================================================
+               INIT
+               ============================================================ */
+            function init() {
+                try {
+                    loadSettings();
+                    var pinBtn = $('#pin-btn');
+                    if (S.pinned) {
+                        DOM.topMenu.classList.add('pinned');
+                        pinBtn.classList.add('pinned');
+                        document.body.classList.add('menu-pinned');
+                    } else {
+                        DOM.topMenu.classList.remove('pinned');
+                        pinBtn.classList.remove('pinned');
+                        document.body.classList.remove('menu-pinned');
+                    }
+                    applyRadius();
+                    setTool(S.tool);
+                    initEvents();
+                    DOM.wordList.value = localStorage.getItem('zr-words') || '';
+                    createWorker();
+                    log('系统就绪 · 支持 TXT/PDF/DOCX');
+                    log('遮罩默认为「预览」状态，双击应用');
+                    DOM.statusLeft.textContent = '就绪';
+                    DOM.statusRight.textContent = 'ZENREDACT';
+                    setTimeout(function() {
+                        var eb = DOM.splash.querySelector('.splash-enter');
+                        if (eb) eb.focus();
+                    }, 100);
+                } catch (err) { handleError('初始化失败', err); }
+            }
+
+            window.addEventListener('beforeunload', function() {
+                destroyWorker();
+                if (S.lazyObserver) { S.lazyObserver.disconnect(); S.lazyObserver = null; }
+            });
+
+            init();
+
+        })();
+    </script>
+</body>
+</html>
