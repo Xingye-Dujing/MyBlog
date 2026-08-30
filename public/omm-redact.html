@@ -1396,8 +1396,8 @@
                     <div class="tool-btn active" data-tool="rect">矩形</div>
                     <div class="tool-btn" data-tool="mosaic">马赛克</div>
                     <div class="tool-btn" data-tool="pixel">像素</div>
-                    <div class="tool-btn" data-tool="eraser">擦除</div>
                     <div class="tool-btn" data-tool="select">选择</div>
+                    <div class="tool-btn" data-tool="eraser">擦除</div>
                 </div>
                 <div style="margin-top:6px;">
                     <div class="toggle-row"><span>锁定已脱敏区</span><div class="toggle-switch on" id="toggle-lock" data-action="toggleLock"></div></div>
@@ -1438,6 +1438,7 @@
                 <div class="tool-btn active" data-tool="rect">矩形</div>
                 <div class="tool-btn" data-tool="mosaic">马赛克</div>
                 <div class="tool-btn" data-tool="pixel">像素</div>
+                <div class="tool-btn" data-tool="select">选择</div>
                 <div class="tool-btn" data-tool="eraser">擦除</div>
                 <div class="tool-sep"></div>
                 <div class="tool-btn" data-action="undoRedact">撤销</div>
@@ -3000,23 +3001,25 @@
                 if (!page) return;
                 var rect = canvas.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0) return;
+                var drawW = (page.displayW > 0) ? page.displayW : rect.width;
+                var drawH = (page.displayH > 0) ? page.displayH : rect.height;
                 var dpr = window.devicePixelRatio || 1;
-                var newW = Math.round(rect.width * dpr);
-                var newH = Math.round(rect.height * dpr);
+                var newW = Math.round(drawW * dpr);
+                var newH = Math.round(drawH * dpr);
                 if (canvas.width !== newW || canvas.height !== newH) {
                     canvas.width = newW;
                     canvas.height = newH;
                 }
-                canvas.style.width = rect.width + 'px';
-                canvas.style.height = rect.height + 'px';
+                canvas.style.width = drawW + 'px';
+                canvas.style.height = drawH + 'px';
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                ctx.clearRect(0, 0, rect.width, rect.height);
+                ctx.clearRect(0, 0, drawW, drawH);
 
                 var pageRedacts = S.redacts.filter(function(r) { return r.pageIdx === pageIdx; });
                 if (pageRedacts.length === 0) return;
 
-                var W = rect.width,
-                    H = rect.height;
+                var W = drawW,
+                    H = drawH;
                 pageRedacts.forEach(function(r) {
                     var rr = getRedactPixelRect(r, W, H);
                     if (rr.w < 1 || rr.h < 1) return;
@@ -3049,12 +3052,16 @@
                 if (S.isProcessing) return;
                 var canvas = e.currentTarget;
                 var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var page = S.pages[pageIdx];
+                void canvas.offsetHeight;
                 var rect = canvas.getBoundingClientRect();
+                var W = (page && page.displayW > 0) ? page.displayW : rect.width;
+                var H = (page && page.displayH > 0) ? page.displayH : rect.height;
                 var x = e.clientX - rect.left;
                 var y = e.clientY - rect.top;
 
                 if (S.tool === 'eraser') {
-                    var hit = findRedactAt(pageIdx, x, y, rect.width, rect.height);
+                    var hit = findRedactAt(pageIdx, x, y, W, H);
                     if (hit) {
                         addUndoSnapshot();
                         S.redacts = S.redacts.filter(function(r) { return r.id !== hit.id; });
@@ -3075,6 +3082,7 @@
 
             function onCanvasMouseMove(e) {
                 var canvas = e.currentTarget;
+                void canvas.offsetHeight;
                 var rect = canvas.getBoundingClientRect();
                 var x = e.clientX - rect.left;
                 var y = e.clientY - rect.top;
@@ -3099,10 +3107,14 @@
                 if (!S.isDrawing || !S.drawStart) { S.isDrawing = false;
                     S.drawStart = null; return; }
                 var canvas = e.currentTarget;
+                var pageIdx = S.drawStart.pageIdx;
+                var page = S.pages[pageIdx];
+                void canvas.offsetHeight;
                 var rect = canvas.getBoundingClientRect();
+                var W = (page && page.displayW > 0) ? page.displayW : rect.width;
+                var H = (page && page.displayH > 0) ? page.displayH : rect.height;
                 var x = e.clientX - rect.left;
                 var y = e.clientY - rect.top;
-                var pageIdx = S.drawStart.pageIdx;
                 var x1 = S.drawStart.x,
                     y1 = S.drawStart.y,
                     x2 = x,
@@ -3112,7 +3124,7 @@
 
                 if (w > 4 && h > 4) {
                     addUndoSnapshot();
-                    var r = makeRedact(x1 / rect.width, y1 / rect.height, x2 / rect.width, y2 / rect.height,
+                    var r = makeRedact(x1 / W, y1 / H, x2 / W, y2 / H,
                         (S.tool === 'select' ? 'rect' : S.tool), pageIdx, null);
                     r.applied = false;
                     S.redacts.push(r);
@@ -3138,11 +3150,15 @@
 
             function onCanvasDblClick(e) {
                 var canvas = e.currentTarget;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var page = S.pages[pageIdx];
+                void canvas.offsetHeight;
                 var rect = canvas.getBoundingClientRect();
+                var W = (page && page.displayW > 0) ? page.displayW : rect.width;
+                var H = (page && page.displayH > 0) ? page.displayH : rect.height;
                 var x = e.clientX - rect.left;
                 var y = e.clientY - rect.top;
-                var pageIdx = parseInt(canvas.dataset.pageIdx);
-                var hit = findRedactAt(pageIdx, x, y, rect.width, rect.height);
+                var hit = findRedactAt(pageIdx, x, y, W, H);
                 if (hit && !hit.applied) {
                     addUndoSnapshot();
                     hit.applied = true;
@@ -3161,11 +3177,15 @@
             function onCanvasMouseOver(e) {
                 if (S.tool === 'select') return;
                 var canvas = e.currentTarget;
+                var pageIdx = parseInt(canvas.dataset.pageIdx);
+                var page = S.pages[pageIdx];
+                void canvas.offsetHeight;
                 var rect = canvas.getBoundingClientRect();
+                var W = (page && page.displayW > 0) ? page.displayW : rect.width;
+                var H = (page && page.displayH > 0) ? page.displayH : rect.height;
                 var x = e.clientX - rect.left;
                 var y = e.clientY - rect.top;
-                var pageIdx = parseInt(canvas.dataset.pageIdx);
-                var hit = findRedactAt(pageIdx, x, y, rect.width, rect.height);
+                var hit = findRedactAt(pageIdx, x, y, W, H);
                 if (hit && !hit.applied) {
                     canvas.style.cursor = 'pointer';
                     drawExistingRedactsWithHover(canvas, hit);
@@ -3182,21 +3202,23 @@
                 if (!page) return;
                 var rect = canvas.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0) return;
+                var drawW = (page.displayW > 0) ? page.displayW : rect.width;
+                var drawH = (page.displayH > 0) ? page.displayH : rect.height;
                 var dpr = window.devicePixelRatio || 1;
-                var newW = Math.round(rect.width * dpr);
-                var newH = Math.round(rect.height * dpr);
+                var newW = Math.round(drawW * dpr);
+                var newH = Math.round(drawH * dpr);
                 if (canvas.width !== newW || canvas.height !== newH) {
                     canvas.width = newW;
                     canvas.height = newH;
                 }
-                canvas.style.width = rect.width + 'px';
-                canvas.style.height = rect.height + 'px';
+                canvas.style.width = drawW + 'px';
+                canvas.style.height = drawH + 'px';
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                ctx.clearRect(0, 0, rect.width, rect.height);
+                ctx.clearRect(0, 0, drawW, drawH);
 
                 var pageRedacts = S.redacts.filter(function(r) { return r.pageIdx === pageIdx; });
-                var W = rect.width,
-                    H = rect.height;
+                var W = drawW,
+                    H = drawH;
                 pageRedacts.forEach(function(r) {
                     var rr = getRedactPixelRect(r, W, H);
                     if (rr.w < 1 || rr.h < 1) return;
@@ -3243,7 +3265,10 @@
                     var pageEl = layer.closest('.doc-page');
                     if (!wrap || !pageEl) continue;
                     var pageIdx = parseInt(pageEl.dataset.pageIdx);
+                    var page = S.pages[pageIdx];
                     var wr = wrap.getBoundingClientRect();
+                    var W = (page && page.displayW > 0) ? page.displayW : wr.width;
+                    var H = (page && page.displayH > 0) ? page.displayH : wr.height;
                     var rects = range.getClientRects();
                     for (var k = 0; k < rects.length; k++) {
                         var rc = rects[k];
@@ -3252,7 +3277,7 @@
                         var x2 = rc.right - wr.left,
                             y2 = rc.bottom - wr.top;
                         if (x2 - x1 < 2 || y2 - y1 < 2) continue;
-                        var r = makeRedact(x1 / wr.width, y1 / wr.height, x2 / wr.width, y2 / wr.height, 'rect', pageIdx,
+                        var r = makeRedact(x1 / W, y1 / H, x2 / W, y2 / H, 'rect', pageIdx,
                             null);
                         r.applied = true;
                         S.redacts.push(r);
