@@ -94,13 +94,22 @@ watch(searchQuery, () => {
   currentMatchIndex.value = 0
 })
 
+const OUTLINE_STORAGE_KEY = 'outline-panel-visible'
+
 function toggleOutlinePanel() {
   showOutlinePanel.value = !showOutlinePanel.value
+  localStorage.setItem(OUTLINE_STORAGE_KEY, String(showOutlinePanel.value))
 }
 
 function handleResize() {
   isMobile.value = window.innerWidth <= 768
-  if (!isMobile.value) showOutlinePanel.value = true
+}
+
+function handleKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+    e.preventDefault()
+    toggleOutlinePanel()
+  }
 }
 
 function scrollToHashMessage() {
@@ -153,12 +162,19 @@ watch(
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeydown)
   attachScrollListener()
   scrollToHashMessage()
+
+  const saved = localStorage.getItem(OUTLINE_STORAGE_KEY)
+  if (saved === 'false') {
+    showOutlinePanel.value = false
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeydown)
   detachScrollListener()
 })
 </script>
@@ -286,7 +302,7 @@ onUnmounted(() => {
 
     <!-- Desktop outline sidebar -->
     <OutlineSidebar
-      v-if="!isMobile && sections.length > 0"
+      v-if="!isMobile && sections.length > 0 && showOutlinePanel"
       :sections="sections"
       :active-heading-id="activeHeadingId"
       :is-mobile="false"

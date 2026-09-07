@@ -108,14 +108,6 @@ onUnmounted(() => {
       @mousedown="startResize"
     ></div>
 
-    <!-- Collapse toggle button -->
-    <button
-      v-if="!isMobile()"
-      class="toggle-sidebar-btn"
-      @click="toggleSidebar"
-      :title="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
-    ></button>
-
     <ChatView v-if="hasActiveChat" class="chat-panel" />
 
     <div v-else class="empty-state">
@@ -187,7 +179,7 @@ onUnmounted(() => {
 
 /* Resize handle */
 .resize-handle {
-  width: 6px;
+  width: 3px;
   height: 100%;
   cursor: ew-resize;
   background: transparent;
@@ -203,31 +195,6 @@ onUnmounted(() => {
 
 .resize-handle.resizing {
   background: linear-gradient(to right, transparent, rgba(64, 158, 255, 0.1), transparent);
-}
-
-/* Toggle sidebar button */
-.toggle-sidebar-btn {
-  position: absolute;
-  top: 8px;
-  right: 16px;
-  z-index: 20;
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid #e0e0e0;
-  background: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666;
-  transition: all 0.2s;
-}
-
-.toggle-sidebar-btn:hover {
-  border-color: #000;
-  color: #000;
-  background: #fafafa;
 }
 
 @media (max-width: 768px) {
@@ -249,10 +216,6 @@ onUnmounted(() => {
   }
 
   .resize-handle {
-    display: none;
-  }
-
-  .toggle-sidebar-btn {
     display: none;
   }
 }

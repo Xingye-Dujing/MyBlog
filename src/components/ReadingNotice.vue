@@ -35,6 +35,7 @@ function dismiss() {
           <div class="notice-body">
             <p>电脑端推荐将浏览器缩放至 <strong>90%</strong> 阅读博客，以获得最佳排版效果。</p>
             <p>推荐按 <strong>F11</strong> 全屏浏览，获得更沉浸的阅读体验。</p>
+            <p>快捷键：<strong>Ctrl+B</strong> 折叠/展开左侧文章列表，<strong>Ctrl+O</strong> 折叠/展开右侧大纲导览。</p>
           </div>
           <div class="notice-footer">
             <button class="notice-btn" @click="dismiss">不再提醒</button>
