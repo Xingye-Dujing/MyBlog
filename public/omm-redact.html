@@ -76,7 +76,6 @@
         }
         ::selection {
             background: rgba(44, 107, 158, 0.20);
-            color: inherit;
         }
         body.theme-dark ::selection {
             background: rgba(80, 160, 255, 0.15);
@@ -540,10 +539,10 @@
         }
         .toggle-switch.on::after {
             left: 14px;
-            background: #a08060;
+            background: #555;
         }
         body.theme-dark .toggle-switch.on::after {
-            background: #c4a882;
+            background: #999;
         }
 
         .word-list {
@@ -793,7 +792,7 @@
         }
         .pdf-text-layer ::selection {
             background: rgba(44, 107, 158, 0.30);
-            color: var(--text);
+            color: transparent;
         }
         body.theme-dark .pdf-text-layer ::selection {
             background: rgba(80, 160, 255, 0.20);
@@ -1274,14 +1273,6 @@
             white-space: nowrap;
         }
 
-        .pdf-text-layer.active span::selection {
-            background: rgba(44, 107, 158, 0.30) !important;
-            color: var(--text) !important;
-        }
-        body.theme-dark .pdf-text-layer.active span::selection {
-            background: rgba(80, 160, 255, 0.20) !important;
-        }
-
         /* 侧边栏折叠按钮 */
         #sidebar-toggle {
             position: absolute;
@@ -1479,7 +1470,6 @@
 
     <!-- DROP ZONE -->
     <div id="drop-zone">
-        <div class="drop-icon">📄</div>
         <div class="drop-text">释放文件以打开</div>
         <div class="drop-hint">支持 TXT / PDF / DOCX · 大文件流式读取</div>
     </div>
@@ -2054,6 +2044,7 @@
 
                 var pageEls = DOM.docPages.querySelectorAll('.doc-page');
                 var totalMatches = 0;
+                var renderedPages = {};
 
                 pageEls.forEach(function(pageEl) {
                     var pageIdx = parseInt(pageEl.dataset.pageIdx, 10);
@@ -2065,7 +2056,22 @@
                     } else if (textLayer) {
                         totalMatches += searchInPdfTextLayer(textLayer, query, pageIdx);
                     }
+                    renderedPages[pageIdx] = true;
                 });
+
+                if (S.pdfMode && S.pdfPages) {
+                    S.pdfPages.forEach(function(page, pi) {
+                        if (renderedPages[pi]) return;
+                        if (!page.textItems || page.textItems.length === 0) return;
+                        var re = new RegExp(escapeRegex(query), 'gi');
+                        page.textItems.forEach(function(it) {
+                            if (!it.str) return;
+                            re.lastIndex = 0;
+                            var m;
+                            while ((m = re.exec(it.str)) !== null) { totalMatches++; }
+                        });
+                    });
+                }
 
                 searchState.matches = DOM.docPages.querySelectorAll('.search-highlight');
                 if (searchState.matches.length > 0) {
@@ -2870,9 +2876,7 @@
                 addUndoSnapshot();
                 var added = 0;
                 S.pdfPages.forEach(function(page, pi) {
-                    var dw = page.displayW || page.vw;
-                    if (!dw) { log('PDF 第 ' + (pi + 1) + ' 页未渲染，跳过', true); return; }
-                    var scale = dw / page.vw;
+                    if (!page.vw || !page.vh) return;
                     var lineMap = {};
                     page.textItems.forEach(function(it) {
                         var key = Math.round(it.y / 2);
