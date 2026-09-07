@@ -1,8 +1,10 @@
 <script setup>
 import { RouterView } from 'vue-router'
+import ReadingNotice from '@/components/ReadingNotice.vue'
 </script>
 
 <template>
+  <ReadingNotice />
   <router-view v-slot="{ Component, route }">
     <transition name="page-fade" mode="out-in">
       <component :is="Component" :key="route.name === 'chat' ? 'home' : route.path" />
