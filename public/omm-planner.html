@@ -671,6 +671,11 @@
             color: var(--active-text);
             border-color: var(--border);
         }
+        .tbox.failed {
+            background: var(--accent-red);
+            color: #ffffff;
+            border-color: var(--accent-red);
+        }
         .tdot {
             width: 0.55em;
             height: 0.55em;
@@ -695,6 +700,11 @@
         }
         .chip.done {
             opacity: 0.4;
+        }
+        .chip.failed .chip-title,
+        .ag-item.failed .ag-title {
+            text-decoration: line-through;
+            opacity: 0.5;
         }
         .chip-note {
             font-size: 0.9em;
@@ -1309,6 +1319,38 @@
             display: flex;
             align-items: center;
             gap: 7px;
+        }
+        .sub-row[draggable="true"] {
+            cursor: grab;
+        }
+        .sub-row[draggable="true"]:active {
+            cursor: grabbing;
+        }
+        .sub-drag {
+            width: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-faint);
+            cursor: grab;
+            flex-shrink: 0;
+            font-size: 10px;
+            letter-spacing: 1px;
+            user-select: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .sub-row:hover .sub-drag {
+            opacity: 1;
+        }
+        .sub-drag:active {
+            cursor: grabbing;
+        }
+        .sub-row.sub-ins-b {
+            box-shadow: inset 0 2px 0 var(--text);
+        }
+        .sub-row.sub-ins-a {
+            box-shadow: inset 0 -2px 0 var(--text);
         }
         .sub-row .sub-check {
             cursor: pointer;
@@ -3551,7 +3593,7 @@
             function normSubtasks(list) {
                 if (!Array.isArray(list)) return [];
                 return list.filter(function(s) { return s; }).map(function(s) {
-                    return { id: String(s.id || uid()), title: String(s.title || ''), done: !!s.done };
+                    return { id: String(s.id || uid()), title: String(s.title || ''), done: s.done === 'failed' ? 'failed' : !!s.done };
                 });
             }
 
@@ -4008,7 +4050,7 @@
                     let todos = 0,
                         done = 0;
                     arr.forEach(function(e) {
-                        if (e.type === 'todo') { todos++; if (e.done) done++; }
+                        if (e.type === 'todo') { todos++; if (e.done === true) done++; }
                     });
                     return { total: arr.length, todos: todos, done: done };
                 },
@@ -4016,7 +4058,7 @@
                     const arr = this.day(ds);
                     let i;
                     for (i = 0; i < arr.length; i++) {
-                        if (arr[i].type === 'todo' && arr[i].done) return true;
+                        if (arr[i].type === 'todo' && arr[i].done === true) return true;
                     }
                     const virt = Rules.instancesOn(ds);
                     for (i = 0; i < virt.length; i++) {
@@ -4128,7 +4170,7 @@
                         priority: r.priority,
                         tag: r.tag,
                         subtasks: r.subtasks,
-                        done: !!r.doneMap[ds],
+                        done: r.doneMap[ds] === true ? true : r.doneMap[ds] === 'failed' ? 'failed' : false,
                         created: r.created || 0,
                         order: -1,
                         _virt: true,
@@ -4430,7 +4472,7 @@
                 visibleList(ds) {
                     const arr = Store.sorted(ds);
                     if (!S.hideDone) return arr;
-                    return arr.filter(function(e) { return !(e.type === 'todo' && e.done); });
+                    return arr.filter(function(e) { return !(e.type === 'todo' && e.done === true); });
                 },
                 badgesHTML(ev) {
                     const p = ev.priority || 'mid';
@@ -4445,16 +4487,19 @@
                     if (!ev.subtasks || !ev.subtasks.length) return '';
                     const total = ev.subtasks.length;
                     let dn = 0;
-                    ev.subtasks.forEach(function(s) { if (s.done) dn++; });
+                    ev.subtasks.forEach(function(s) { if (s.done === true) dn++; });
                     const pc = Math.round(dn / total * 100);
                     return '<span class="chip-prog" title="' + dn + '/' + total + '">' +
                         '<i style="width:' + pc + '%"></i></span>';
                 },
                 chipHTML(ds, ev, expanded) {
-                    const cls = ev.type === 'todo' && ev.done ? ' done' : '';
+                    const isDone = ev.done === true;
+                    const isFailed = ev.done === 'failed';
+                    const cls = ev.type === 'todo' && isDone ? ' done' :
+                        ev.type === 'todo' && isFailed ? ' failed' : '';
                     const left = ev.type === 'todo' ?
-                        '<span class="tbox' + (ev.done ? ' checked' : '') + '" data-action="toggle">' + (ev.done ? '✓' :
-                            '') + '</span>' :
+                        '<span class="tbox' + (isDone ? ' checked' : isFailed ? ' failed' : '') + '" data-action="toggle">' +
+                        (isDone ? '✓' : isFailed ? '×' : '') + '</span>' :
                         '<span class="tdot"></span>';
                     const time = ev.time ? '<span class="chip-time">' + esc(ev.time) + '</span>' : '';
                     const rep = ev._virt ?
@@ -4579,10 +4624,13 @@
                         if (info.tag && info.tag !== info.lunarText) lunParts.push(info.tag);
                         let rows = '';
                         items.forEach(function(ev) {
-                            const cls = ev.type === 'todo' && ev.done ? ' done' : '';
+                            const isDone = ev.done === true;
+                            const isFailed = ev.done === 'failed';
+                            const cls = ev.type === 'todo' && isDone ? ' done' :
+                                ev.type === 'todo' && isFailed ? ' failed' : '';
                             const left = ev.type === 'todo' ?
-                                '<span class="tbox' + (ev.done ? ' checked' : '') + '">' + (ev.done ? '✓' :
-                                    '') + '</span>' :
+                                '<span class="tbox' + (isDone ? ' checked' : isFailed ? ' failed' : '') + '">' +
+                                (isDone ? '✓' : isFailed ? '×' : '') + '</span>' :
                                 '<span class="tdot"></span>';
                             const time = ev.time ? '<span class="chip-time">' + esc(ev.time) + '</span>' : '';
                             rows += '<div class="ag-item' + cls + '" style="--c:' + ev.color + '">' +
@@ -4721,7 +4769,7 @@
                     S.edRepeat = 'none';
                     S.edDates = [];
                     S.edSubs = (ev.subtasks || []).map(function(s) {
-                        return { id: s.id, title: s.title, done: !!s.done };
+                        return { id: s.id, title: s.title, done: s.done === 'failed' ? 'failed' : !!s.done };
                     });
                     DOM.edDate.textContent = S.edDateVal;
                     DOM.edTime.textContent = S.edTimeVal || '--:--';
@@ -4836,12 +4884,15 @@
                     const wrap = DOM.edSubs;
                     let html = '';
                     S.edSubs.forEach(function(s, i) {
-                        html += '<div class="sub-row" data-si="' + i + '">' +
-                            '<span class="tbox sub-check' + (s.done ? ' checked' : '') + '">' +
-                            (s.done ? '✓' : '') + '</span>' +
+                        const isDone = s.done === true;
+                        const isFailed = s.done === 'failed';
+                        html += '<div class="sub-row" data-si="' + i + '" draggable="true">' +
+                            '<span class="tbox sub-check' + (isDone ? ' checked' : isFailed ? ' failed' : '') + '">' +
+                            (isDone ? '✓' : isFailed ? '×' : '') + '</span>' +
                             '<input type="text" class="sub-title" data-i18n-placeholder="sub.placeholder" placeholder="' +
                             esc(t('sub.placeholder')) + '" value="' + esc(s.title) + '" />' +
-                            '<span class="sub-del">×</span></div>';
+                            '<span class="sub-del">×</span>' +
+                            '<span class="sub-drag">⠿</span></div>';
                     });
                     wrap.innerHTML = html;
                     Editor.syncProg();
@@ -4849,7 +4900,7 @@
                 syncProg() {
                     const total = S.edSubs.filter(function(s) { return s.title.trim(); }).length;
                     let dn = 0;
-                    S.edSubs.forEach(function(s) { if (s.title.trim() && s.done) dn++; });
+                    S.edSubs.forEach(function(s) { if (s.title.trim() && s.done === true) dn++; });
                     DOM.edSubProgress.textContent = total ? dn + '/' + total : '';
                 },
                 syncPastHint() {
@@ -4892,7 +4943,7 @@
                         tag: DOM.edTag.value.trim(),
                         subtasks: S.edSubs
                             .filter(function(s) { return s.title.trim(); })
-                            .map(function(s) { return { id: s.id, title: s.title.trim(), done: !!s.done }; })
+                            .map(function(s) { return { id: s.id, title: s.title.trim(), done: s.done === 'failed' ? 'failed' : !!s.done }; })
                     };
                     if (S.editing && S.editing.virt) {
                         const r = Rules.byId(S.editing.id);
@@ -4996,14 +5047,15 @@
                         const r = Rules.byId(sid.slice(0, at));
                         const day = sid.slice(at + 1);
                         if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
-                        r.doneMap[day] = !r.doneMap[day];
+                        const cur = r.doneMap[day];
+                        r.doneMap[day] = cur === true ? 'failed' : cur === 'failed' ? false : true;
                         Store.persist();
                         Render.all();
                         return;
                     }
                     const ev = Store.find(ds, id);
                     if (!ev || ev.type !== 'todo') return;
-                    ev.done = !ev.done;
+                    ev.done = ev.done === true ? 'failed' : ev.done === 'failed' ? false : true;
                     Store.persist();
                     Render.all();
                 }
@@ -5532,7 +5584,7 @@
                         if (info.tag) head += ' · ' + info.tag;
                         out += '## ' + head + '\n\n';
                         items.forEach(function(ev) {
-                            if (ev.type === 'todo') out += '- [' + (ev.done ? 'x' : ' ') + '] ';
+                            if (ev.type === 'todo') out += '- [' + (ev.done === true ? 'x' : ev.done === 'failed' ? '!' : ' ') + '] ';
                             else if (ev.type === 'event') out += '- **' + (ev.time || '--:--') + '** ';
                             else out += '- ';
                             out += ev.title;
@@ -6047,6 +6099,25 @@
                         }
                     }
                 });
+                cal.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                });
+                cal.addEventListener('mousedown', function(e) {
+                    if (e.button !== 2 || S.view === 'list') return;
+                    if (e.target.closest('[data-action="toggle"]') || e.target.closest('[data-action="quickadd"]'))
+                        return;
+                    const mzone = e.target.closest('.cell,.wcol');
+                    const isMobile = window.innerWidth <= 720;
+                    if (mzone && !e.target.closest('.chip')) {
+                        if (isMobile) {
+                            S.selDate = mzone.dataset.date;
+                            S.lastSelDs = mzone.dataset.date;
+                            Focus.single();
+                        } else {
+                            Focus.toggleDay(mzone.dataset.date, e);
+                        }
+                    }
+                });
                 cal.addEventListener('dblclick', function(e) {
                     if (S.view === 'list') return;
                     if (e.target.closest('.chip,.ag-item,[data-action]')) return;
@@ -6059,6 +6130,7 @@
                     const chip = e.target.closest('[draggable="true"]');
                     if (!chip) return;
                     S.dragPayload = { from: chip.dataset.date, id: chip.dataset.id };
+                    S.dragEdgeTimer = null;
                     e.dataTransfer.setData('text/plain', 'zenplan');
                     e.dataTransfer.effectAllowed = 'move';
                 });
@@ -6070,10 +6142,32 @@
                     });
                     S.lineEl = null;
                 }
+                function clearDragEdge() {
+                    if (S.dragEdgeTimer) { clearInterval(S.dragEdgeTimer); S.dragEdgeTimer = null; }
+                }
+                function checkDragEdge(x, y) {
+                    if (!S.dragPayload) { clearDragEdge(); return; }
+                    var rect = cal.getBoundingClientRect();
+                    var edge = 48;
+                    var dir = 0;
+                    if (y < rect.top + edge) dir = -1;
+                    else if (y > rect.bottom - edge) dir = 1;
+                    else if (x < rect.left + edge) dir = -1;
+                    else if (x > rect.right - edge) dir = 1;
+                    if (dir && !S.dragEdgeTimer) {
+                        S.dragEdgeTimer = setInterval(function() {
+                            if (!S.dragPayload) { clearDragEdge(); return; }
+                            Nav.go(dir);
+                        }, 1000);
+                    } else if (!dir) {
+                        clearDragEdge();
+                    }
+                }
                 cal.addEventListener('dragover', function(e) {
                     const zone = e.target.closest('.cell,.wcol,.fcard');
                     if (!zone || !S.dragPayload) return;
                     e.preventDefault();
+                    checkDragEdge(e.clientX, e.clientY);
                     e.dataTransfer.dropEffect = 'move';
                     zone.classList.add('drag-over');
                     let line = null,
@@ -6124,11 +6218,13 @@
                         }
                     }
                     S.dragPayload = null;
+                    clearDragEdge();
                     clearDragMarks();
                     if (!handled && !zone) return;
                 });
                 cal.addEventListener('dragend', function() {
                     S.dragPayload = null;
+                    clearDragEdge();
                     clearDragMarks();
                 });
 
@@ -6235,7 +6331,8 @@
                     const i = +row.dataset.si;
                     if (!S.edSubs[i]) return;
                     if (e.target.closest('.sub-check')) {
-                        S.edSubs[i].done = !S.edSubs[i].done;
+                        const cur = S.edSubs[i].done;
+                        S.edSubs[i].done = cur === true ? 'failed' : cur === 'failed' ? false : true;
                         Editor.renderSubs();
                     } else if (e.target.closest('.sub-del')) {
                         S.edSubs.splice(i, 1);
@@ -6253,6 +6350,73 @@
                     e.stopPropagation();
                     Editor.addSubtask();
                 });
+                (function() {
+                    let dragIdx = null;
+                    let onHandle = false;
+                    function clearSubDrag() {
+                        DOM.edSubs.querySelectorAll('.sub-ins-a,.sub-ins-b').forEach(function(r) {
+                            r.classList.remove('sub-ins-a', 'sub-ins-b');
+                        });
+                    }
+                    DOM.edSubs.addEventListener('mousedown', function(e) {
+                        onHandle = !!e.target.closest('.sub-drag');
+                    });
+                    DOM.edSubs.addEventListener('dragstart', function(e) {
+                        if (!onHandle) { e.preventDefault(); return; }
+                        const row = e.target.closest('.sub-row');
+                        if (!row) return;
+                        dragIdx = +row.dataset.si;
+                        e.dataTransfer.setData('text/plain', 'subdrag');
+                        e.dataTransfer.effectAllowed = 'move';
+                        row.style.opacity = '0.4';
+                    });
+                    DOM.edSubs.addEventListener('dragover', function(e) {
+                        if (dragIdx === null) return;
+                        const row = e.target.closest('.sub-row');
+                        if (!row) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        clearSubDrag();
+                        const ti = +row.dataset.si;
+                        const r = row.getBoundingClientRect();
+                        const before = e.clientY < r.top + r.height / 2;
+                        if (ti !== dragIdx) {
+                            row.classList.add(before ? 'sub-ins-b' : 'sub-ins-a');
+                        }
+                    });
+                    DOM.edSubs.addEventListener('dragleave', function(e) {
+                        const row = e.target.closest('.sub-row');
+                        if (row && !row.contains(e.relatedTarget)) {
+                            row.classList.remove('sub-ins-a', 'sub-ins-b');
+                        }
+                    });
+                    DOM.edSubs.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        const row = e.target.closest('.sub-row');
+                        if (dragIdx === null || !row) { clearSubDrag(); return; }
+                        const ti = +row.dataset.si;
+                        const r = row.getBoundingClientRect();
+                        const before = e.clientY < r.top + r.height / 2;
+                        if (ti === dragIdx) { clearSubDrag(); return; }
+                        const item = S.edSubs.splice(dragIdx, 1)[0];
+                        let insertAt;
+                        if (before) {
+                            insertAt = ti > dragIdx ? ti - 1 : ti;
+                        } else {
+                            insertAt = ti > dragIdx ? ti : ti + 1;
+                        }
+                        S.edSubs.splice(insertAt, 0, item);
+                        dragIdx = null;
+                        clearSubDrag();
+                        Editor.renderSubs();
+                    });
+                    DOM.edSubs.addEventListener('dragend', function() {
+                        dragIdx = null;
+                        onHandle = false;
+                        clearSubDrag();
+                        DOM.edSubs.querySelectorAll('.sub-row').forEach(function(r) { r.style.opacity = ''; });
+                    });
+                })();
                 DOM.edAddSub.addEventListener('click', function() { Editor.addSubtask(); });
                 DOM.edTag.addEventListener('input', function() { Editor.renderTagSug(this.value); });
                 DOM.edTag.addEventListener('focus', function() { Editor.renderTagSug(this.value); });
