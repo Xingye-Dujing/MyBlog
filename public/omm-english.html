@@ -120,10 +120,10 @@
         .pin-btn {
             width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
             border: 1px solid transparent; cursor: pointer; color: var(--text-faint);
-            font-size: calc(14px * var(--fscale)); transition: all 0.15s; margin-left: 2px;
-            background: transparent; font-family: var(--font-mono); flex-shrink: 0;
-            border-radius: var(--radius);
+            transition: all 0.15s; margin-left: 2px;
+            background: transparent; flex-shrink: 0; border-radius: var(--radius);
         }
+        .pin-btn svg { width: 14px; height: 14px; }
         .pin-btn:hover { color: var(--text); border-color: var(--border-dim); }
         .pin-btn.pinned { color: var(--text); border-color: var(--border); background: var(--hover); }
 
@@ -264,8 +264,19 @@
         .cd-lab { font-size: calc(10px * var(--fscale)); letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; margin-top: 2px; }
         .cd-date { font-size: calc(11px * var(--fscale)); color: var(--text-faint); margin-top: 8px; }
         .bars { display: flex; align-items: flex-end; gap: 5px; height: 108px; padding-top: 6px; }
-        .bar { flex: 1; background: var(--border-dim); min-height: 2px; position: relative; transition: height 0.65s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s; }
+        .bar { flex: 1; background: var(--border-dim); min-height: 2px; position: relative; transition: height 0.65s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s; cursor: default; }
         .bar:hover { background: var(--text); }
+        .bar-tip {
+            position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+            background: var(--bg); border: 1px solid var(--border); padding: 8px 12px;
+            font-size: calc(11px * var(--fscale)); white-space: nowrap; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s; z-index: 10; line-height: 1.6;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); border-radius: var(--radius);
+        }
+        .bar:hover > .bar-tip { opacity: 1; }
+        .bar-tip-date { color: var(--text-dim); letter-spacing: 1px; margin-bottom: 3px; }
+        .bar-tip-total { font-weight: 600; font-size: calc(13px * var(--fscale)); }
+        .bar-tip-detail { color: var(--text-dim); margin-top: 2px; }
         .bar.today { outline: 1px dashed var(--text-dim); outline-offset: 2px; }
         .bars-x { display: flex; gap: 5px; margin-top: 6px; }
         .bars-x span { flex: 1; text-align: center; font-size: calc(8px * var(--fscale)); color: var(--text-faint); }
@@ -474,6 +485,15 @@
         .gb.again:hover { color: var(--accent-red); border-color: var(--accent-red); background: transparent; }
         .gb.hard:hover { color: var(--accent-orange); border-color: var(--accent-orange); background: transparent; }
         .gb.good:hover { color: var(--accent-green); border-color: var(--accent-green); background: transparent; }
+        .gb.flash { animation: gradeFlash 0.4s ease; }
+        .gb.flash.again { color: var(--accent-red); border-color: var(--accent-red); }
+        .gb.flash.hard { color: var(--accent-orange); border-color: var(--accent-orange); }
+        .gb.flash.good { color: var(--accent-green); border-color: var(--accent-green); }
+        @keyframes gradeFlash {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
         .done-num { font-size: calc(42px * var(--fscale)); font-weight: 600; text-align: center; }
         .shake { animation: shakeX 0.45s; }
         @keyframes shakeX {
@@ -593,7 +613,8 @@
         }
         .w-ok { color: var(--accent-green); }
         .w-bad { color: var(--accent-red); text-decoration: line-through 1px; }
-        .w-ans { font-size: 0.86em; margin-left: 3px; opacity: 0.7; text-decoration: none; color: var(--accent-red); }
+        .w-ans { font-size: 0.86em; margin-left: 3px; opacity: 0.7; text-decoration: none; color: var(--accent-red); display: inline-flex; align-items: center; gap: 3px; }
+        .w-ans svg { width: 11px; height: 11px; flex-shrink: 0; }
         .w-miss { color: var(--text-faint); font-style: italic; }
         .dict-score { font-size: calc(11px * var(--fscale)); letter-spacing: 1.5px; color: var(--text-dim); margin-top: 8px; text-transform: uppercase; }
         .dict-score b { font-weight: 600; }
@@ -742,6 +763,163 @@
         .bn-item.active { color: var(--text); }
         .bn-item.active .bn-g { transform: scale(1.2); }
 
+        /* ---- Typing Practice ---- */
+        .ty-wrap {
+            display: flex; flex-direction: column; align-items: center; gap: 28px;
+            padding: 32px 16px 40px; min-height: 100%; position: relative; overflow: hidden;
+        }
+        .ty-stats {
+            display: flex; gap: 24px; align-items: center; justify-content: center;
+            flex-wrap: wrap;
+        }
+        .ty-stat {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            font-size: calc(13px * var(--fscale)); color: var(--text-dim); min-width: 64px;
+        }
+        .ty-stat .ty-sv {
+            font-size: calc(28px * var(--fscale)); font-weight: 700; color: var(--text);
+            font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
+        }
+        .ty-stat .ty-sv.wpm { color: var(--accent-green); }
+        .ty-stat .ty-sv.acc { color: var(--accent); }
+        .ty-stat .ty-sv.combo { color: var(--accent-orange); }
+        .ty-stat .ty-sv.combo.hot { color: var(--accent-red); animation: comboPulse 0.35s ease; }
+
+        .ty-correct-wrap {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            width: 100%; max-width: 600px;
+        }
+        .ty-word-display {
+            font-size: calc(14px * var(--fscale)); color: var(--text-dim); letter-spacing: 2px;
+            text-transform: uppercase; margin-bottom: 4px;
+        }
+        .ty-word {
+            display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+            position: relative;
+        }
+        .ty-box {
+            width: calc(42px * var(--fscale)); height: calc(52px * var(--fscale));
+            border: 2px solid var(--border-dim); border-radius: var(--radius);
+            display: flex; align-items: center; justify-content: center;
+            font-size: calc(22px * var(--fscale)); font-weight: 600;
+            text-transform: uppercase; color: var(--text-dim);
+            transition: border-color 0.12s, color 0.12s, transform 0.1s, background 0.12s;
+            position: relative; user-select: none;
+        }
+        .ty-box.cur {
+            border-color: var(--accent); color: var(--text);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+        }
+        .ty-box.ok {
+            border-color: var(--accent-green); color: var(--accent-green); background: color-mix(in srgb, var(--accent-green) 8%, transparent);
+        }
+        .ty-box.bad {
+            border-color: var(--accent-red); color: var(--accent-red); background: color-mix(in srgb, var(--accent-red) 8%, transparent);
+            animation: tyShake 0.3s ease;
+        }
+        .ty-box.correct-burst {
+            animation: correctBurst 0.4s ease;
+        }
+
+        .ty-phon {
+            font-size: calc(14px * var(--fscale)); color: var(--text-dim); margin-top: 2px;
+        }
+        .ty-meaning {
+            font-size: calc(16px * var(--fscale)); color: var(--text); font-weight: 500;
+            margin-top: 4px; text-align: center;
+        }
+        .ty-example {
+            font-size: calc(13px * var(--fscale)); color: var(--text-dim);
+            text-align: center; max-width: 480px; line-height: 1.5; margin-top: 6px;
+        }
+        .ty-example em {
+            color: var(--text); font-style: normal; font-weight: 600;
+        }
+
+        .ty-hint-row {
+            display: flex; gap: 8px; align-items: center; justify-content: center;
+            margin-top: 8px;
+        }
+        .ty-hint-btn {
+            padding: 6px 14px; font-size: calc(12px * var(--fscale)); border-radius: var(--radius);
+            border: 1px solid var(--border-dim); background: transparent; color: var(--text-dim);
+            cursor: pointer; transition: all 0.15s;
+        }
+        .ty-hint-btn:hover { border-color: var(--text-dim); color: var(--text); }
+
+        .ty-combo-float {
+            position: fixed; pointer-events: none; z-index: 100;
+            font-size: calc(36px * var(--fscale)); font-weight: 800;
+            color: var(--accent-orange); text-shadow: 0 2px 12px rgba(255, 159, 67, 0.5);
+            animation: comboFloat 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+        }
+
+        .ty-done {
+            display: flex; flex-direction: column; align-items: center; gap: 20px;
+            padding: 40px 20px; text-align: center;
+        }
+        .ty-done-title {
+            font-size: calc(24px * var(--fscale)); font-weight: 700;
+        }
+        .ty-done-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            width: 100%; max-width: 360px;
+        }
+        .ty-done-stat {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: 12px; background: var(--hover); border-radius: var(--radius);
+        }
+        .ty-done-stat .tds-label { font-size: calc(11px * var(--fscale)); color: var(--text-dim); }
+        .ty-done-stat .tds-val { font-size: calc(22px * var(--fscale)); font-weight: 700; }
+
+        .ty-word-break {
+            display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+            animation: tyBreak 0.35s ease forwards;
+        }
+        .ty-word-break .ty-box {
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+        }
+
+        .ty-particle {
+            position: fixed; pointer-events: none; z-index: 200;
+            width: 6px; height: 6px; border-radius: 50%;
+            animation: tyParticle 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+        }
+
+        @keyframes tyShake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-6px) rotate(-2deg); }
+            40% { transform: translateX(5px) rotate(1deg); }
+            60% { transform: translateX(-3px) rotate(-1deg); }
+            80% { transform: translateX(2px); }
+        }
+        @keyframes correctBurst {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.2); box-shadow: 0 0 16px color-mix(in srgb, var(--accent-green) 40%, transparent); }
+            100% { transform: scale(1); }
+        }
+        @keyframes comboFloat {
+            0% { opacity: 1; transform: translateY(0) scale(0.8); }
+            40% { opacity: 1; transform: translateY(-20px) scale(1.1); }
+            100% { opacity: 0; transform: translateY(-60px) scale(0.6); }
+        }
+        @keyframes comboPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        @keyframes tyParticle {
+            0% { opacity: 1; transform: translate(0, 0) scale(1); }
+            100% { opacity: 0; transform: translate(var(--px), var(--py)) scale(0); }
+        }
+        @keyframes tyBreak {
+            0% { transform: none; }
+            30% { transform: scale(1.05); }
+            100% { transform: scale(0.95); opacity: 0.6; }
+        }
+
         @media (max-width: 860px) {
             .home-grid { grid-template-columns: 1fr 1fr; }
             .home-grid .hg-bars { grid-column: span 2; }
@@ -780,6 +958,9 @@
             .transport { row-gap: 8px; }
             .tp-btn.has-txt span { font-size: calc(11px * var(--fscale)); }
             .spell-boxes { flex-wrap: wrap; justify-content: center; }
+            .ty-box { width: calc(36px * var(--fscale)); height: calc(44px * var(--fscale)); font-size: calc(18px * var(--fscale)); }
+            .ty-stats { gap: 14px; }
+            .ty-done-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
         }
 
         /* ===== Mobile polish: no scrollbars / no horizontal overflow ===== */
@@ -965,6 +1146,7 @@
             border: 1.5px solid; border-radius: var(--radius); font-size: calc(14px * var(--fscale));
             flex-shrink: 0;
         }
+        .sp-result-icon svg { width: 14px; height: 14px; }
         .sp-result.ok .sp-result-icon { color: var(--accent-green); border-color: var(--accent-green); }
         .sp-result.bad .sp-result-icon { color: var(--accent-red); border-color: var(--accent-red); }
         .sp-result-label { font-weight: 600; text-transform: uppercase; letter-spacing: 2px; }
@@ -982,6 +1164,7 @@
             font-size: calc(12px * var(--fscale)); color: var(--text-dim); text-align: center;
             border-top: 1px solid var(--border-faint); padding-top: 10px;
         }
+        .sp-correct-line svg { width: 12px; height: 12px; vertical-align: -2px; }
         .sp-correct-line b { color: var(--text); font-weight: 600; font-family: var(--font-en); letter-spacing: 1px; }
 
         /* ===== Impact / tactile feedback ===== */
@@ -1057,6 +1240,7 @@
             <div class="menu-btn" id="btn-flash" data-action="go" data-v="flash">背单词</div>
             <div class="menu-btn" id="btn-quiz" data-action="go" data-v="quiz">测验</div>
             <div class="menu-btn" id="btn-listen" data-action="go" data-v="listen">听力</div>
+            <div class="menu-btn" id="btn-typing" data-action="go" data-v="typing">打字</div>
         </div>
         <div class="menu-group">
             <span class="menu-label">工具</span>
@@ -1069,7 +1253,7 @@
             <span class="menu-label">设置</span>
             <div class="menu-btn" data-action="showSettings">样式</div>
         </div>
-        <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" title="固定菜单栏">▼</div>
+        <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" title="固定菜单栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
     </div>
 
     <!-- Export dropdown -->
@@ -1102,7 +1286,7 @@
         <div class="dd-divider"></div>
         <div class="dd-label">语音</div>
         <div class="fmt-hint" id="sv-tts-mode" style="margin:2px 10px 4px;padding:5px 9px;"></div>
-        <div style="margin:0 10px 6px"><button class="mini-btn solid" data-action="ttsTest">► 测试发音</button></div>
+        <div style="margin:0 10px 6px"><button class="mini-btn solid" data-action="ttsTest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-2px;margin-right:4px"><polygon points="8,5 20,12 8,19" fill="currentColor" stroke="none"/></svg> 测试发音</button></div>
 
         <div class="dd-item-row"><span>发音语速</span><div class="settings-control"><span class="settings-value" id="sv-rate">0.95</span><span class="settings-btn" data-action="rateDown">−</span><span class="settings-btn" data-action="rateUp">+</span></div></div>
         <div class="dd-divider"></div>
@@ -1133,6 +1317,7 @@
             <section class="view" id="v-flash"></section>
             <section class="view" id="v-quiz"></section>
             <section class="view" id="v-listen"></section>
+            <section class="view" id="v-typing"></section>
         </div>
     </div>
 
@@ -1143,6 +1328,7 @@
         <button class="bn-item" data-action="go" data-v="flash"><span class="bn-g">▤</span>背卡</button>
         <button class="bn-item" data-action="go" data-v="quiz"><span class="bn-g">✎</span>测验</button>
         <button class="bn-item" data-action="go" data-v="listen"><span class="bn-g">▷</span>听力</button>
+        <button class="bn-item" data-action="go" data-v="typing"><span class="bn-g">⌨</span>打字</button>
         <button class="bn-item" data-action="openMore"><span class="bn-g">⋯</span>更多</button>
     </nav>
 
@@ -2099,7 +2285,7 @@
                 curView = v;
                 $$('.view').forEach(s => s.classList.remove('on'));
                 $('#v-' + v).classList.add('on');
-                ['home', 'words', 'flash', 'quiz', 'listen'].forEach(x => {
+                ['home', 'words', 'flash', 'quiz', 'listen', 'typing'].forEach(x => {
                     const mb = $('#btn-' + x);
                     if (mb) mb.classList.toggle('active', x === v);
                 });
@@ -2115,6 +2301,7 @@
                 else if (v === 'flash') Flash.render();
                 else if (v === 'quiz') Quiz.render();
                 else if (v === 'listen') Listen.render();
+                else if (v === 'typing') Typing.render();
                 updateHead();
                 updateStatus();
             }
@@ -2125,9 +2312,10 @@
                     words: b ? b.name + ' · ' + (b.w ? b.w.length : 0) + ' 词' : '',
                     flash: Flash.info(),
                     quiz: Quiz.info(),
-                    listen: Listen.info()
+                    listen: Listen.info(),
+                    typing: Typing.info()
                 };
-                const titleMap = { home: '总览', words: '词书', flash: '背单词', quiz: '测验', listen: '听力练习' };
+                const titleMap = { home: '总览', words: '词书', flash: '背单词', quiz: '测验', listen: '听力练习', typing: '打字练习' };
                 $('#ch-title').textContent = titleMap[curView] || '';
                 $('#ch-sub').textContent = subMap[curView] || '';
                 $('#back-bar').classList.toggle('hidden', !(curView === 'listen' && Listen.mode !== 'lib'));
@@ -2224,6 +2412,9 @@
                 let barsHtml = '', labelsHtml = '';
                 const vals = [];
                 const days = [];
+                const learned = [];
+                const reviewed = [];
+                const dayLabels = [];
                 for (let i = 13; i >= 0; i--) {
                     const d = new Date();
                     d.setDate(d.getDate() - i);
@@ -2231,9 +2422,18 @@
                     const s = S.days[k] || {};
                     vals.push((s.l || 0) + (s.r || 0));
                     days.push(k === dayKey());
+                    learned.push(s.l || 0);
+                    reviewed.push(s.r || 0);
+                    dayLabels.push((d.getMonth() + 1) + '/' + d.getDate());
                 }
                 const mx = Math.max(10, ...vals);
-                vals.forEach((v, i) => { barsHtml += '<div class="bar' + (days[i] ? ' today' : '') + '" title="' + v + '" style="height:2%"></div>'; });
+                vals.forEach((v, i) => {
+                    const cls = 'bar' + (days[i] ? ' today' : '');
+                    const tipHtml = '<div class="bar-tip"><div class="bar-tip-date">' + dayLabels[i] + '</div>' +
+                        '<div class="bar-tip-total">' + v + ' 词次</div>' +
+                        '<div class="bar-tip-detail">学习 ' + learned[i] + ' · 复习 ' + reviewed[i] + '</div></div>';
+                    barsHtml += '<div class="' + cls + '" style="height:2%">' + tipHtml + '</div>';
+                });
                 vals.forEach((v, i) => { labelsHtml += '<span>' + new Date(Date.now() - (13 - i) * DAY).getDate() + '</span>'; });
 
                 const totalPct = st.total ? Math.round(st.ms / st.total * 100) : 0;
@@ -3104,10 +3304,313 @@
             }
 
             // ============================================================
-            // FLASHCARDS (SRS)
+            // TYPING PRACTICE
             // ============================================================
+            const Typing = {
+                words: [], idx: 0, pos: 0,
+                typed: [], stats: { total: 0, correct: 0, wrong: 0, startTime: 0, wpm: 0 },
+                combo: 0, maxCombo: 0,
+                done: false, active: false, wordCount: 20,
+                _lastWpmTick: 0,
+
+                info() { return this.active ? this.stats.correct + '/' + this.stats.total : ''; },
+
+                build() {
+                    const words = activeWords();
+                    this.words = shuffle(words).slice(0, this.wordCount);
+                    this.idx = 0; this.pos = 0;
+                    this.typed = [];
+                    this.stats = { total: 0, correct: 0, wrong: 0, startTime: Date.now(), wpm: 0 };
+                    this.combo = 0; this.maxCombo = 0;
+                    this.done = false; this.active = true;
+                },
+
+                render() {
+                    if (!this.active) {
+                        $('#v-typing').innerHTML =
+                            '<div class="ty-wrap">' +
+                                '<div class="setup-box" style="max-width:380px">' +
+                                    '<div class="setup-title">打字练习</div>' +
+                                    '<p style="color:var(--text-dim);text-align:center;margin:8px 0 16px;font-size:calc(13px*var(--fscale));line-height:1.5">逐个字母拼写单词，提升拼写熟练度与打字速度</p>' +
+                                    '<button class="ed-btn primary" data-action="tyStart" style="width:100%">开始练习</button>' +
+                                '</div>' +
+                            '</div>';
+                        return;
+                    }
+                    if (this.done) { this.renderDone(); return; }
+                    const w = this.words[this.idx];
+                    const word = w[0].toLowerCase();
+                    const phon = w[1] || '';
+                    const meaning = w[2] || '';
+                    const example = w[3] || '';
+
+                    let boxesHtml = '';
+                    for (let i = 0; i < word.length; i++) {
+                        let cls = 'ty-box';
+                        if (i < this.pos) {
+                            cls += this.typed[i].ok ? ' ok' : ' bad';
+                        } else if (i === this.pos) {
+                            cls += ' cur';
+                        }
+                        const ch = i < this.pos ? this.typed[i].ch : (i === this.pos ? '_' : '');
+                        boxesHtml += '<div class="' + cls + '" id="ty-b' + i + '">' + ch + '</div>';
+                    }
+
+                    const acc = this.stats.total > 0 ? Math.round(this.stats.correct / this.stats.total * 100) : 100;
+                    const elapsed = (Date.now() - this.stats.startTime) / 60000;
+                    this.stats.wpm = elapsed > 0 ? Math.round(this.stats.correct / 5 / elapsed) : 0;
+                    const comboCls = this.maxCombo >= 5 ? ' hot' : '';
+
+                    let exHtml = '';
+                    if (example) {
+                        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const highlighted = example.replace(new RegExp('\\b' + escaped + '\\w*', 'gi'), '<em>$&</em>');
+                        exHtml = '<div class="ty-example">' + highlighted + '</div>';
+                    }
+
+                    $('#v-typing').innerHTML =
+                        '<div class="ty-wrap">' +
+                            '<div class="ty-stats">' +
+                                '<div class="ty-stat"><span class="ty-sv wpm" id="ty-wpm">' + this.stats.wpm + '</span><span>WPM</span></div>' +
+                                '<div class="ty-stat"><span class="ty-sv acc" id="ty-acc">' + acc + '%</span><span>准确率</span></div>' +
+                                '<div class="ty-stat"><span class="ty-sv combo' + comboCls + '" id="ty-combo">' + (this.combo > 0 ? this.combo + 'x' : '-') + '</span><span>连击</span></div>' +
+                                '<div class="ty-stat"><span class="ty-sv" id="ty-prog">' + (this.idx + 1) + '/' + this.words.length + '</span><span>进度</span></div>' +
+                            '</div>' +
+                            '<div class="ty-correct-wrap">' +
+                                '<div class="ty-word-display">' + phon + '</div>' +
+                                '<div class="ty-word" id="ty-word">' + boxesHtml + '</div>' +
+                                '<div class="ty-meaning">' + meaning + '</div>' +
+                                exHtml +
+                            '</div>' +
+                        '</div>';
+                },
+
+                renderDone() {
+                    const dur = Math.max(1, Math.round((Date.now() - this.stats.startTime) / 1000));
+                    const wpm = dur > 0 ? Math.round(this.stats.correct / 5 / (dur / 60)) : 0;
+                    const acc = this.stats.total > 0 ? Math.round(this.stats.correct / this.stats.total * 100) : 100;
+                    const grade = acc >= 95 && wpm >= 40 ? 'S' : acc >= 85 && wpm >= 30 ? 'A' : acc >= 70 ? 'B' : 'C';
+                    const gradeColor = grade === 'S' ? 'var(--accent-green)' : grade === 'A' ? 'var(--accent)' : grade === 'B' ? 'var(--accent-orange)' : 'var(--accent-red)';
+                    $('#v-typing').innerHTML =
+                        '<div class="ty-wrap">' +
+                            '<div class="ty-done">' +
+                                '<div class="ty-done-title" style="color:' + gradeColor + '">' + grade + ' 级</div>' +
+                                '<div class="ty-done-grid">' +
+                                    '<div class="ty-done-stat"><span class="tds-label">WPM</span><span class="tds-val" style="color:var(--accent-green)">' + wpm + '</span></div>' +
+                                    '<div class="ty-done-stat"><span class="tds-label">准确率</span><span class="tds-val" style="color:var(--accent)">' + acc + '%</span></div>' +
+                                    '<div class="ty-done-stat"><span class="tds-label">最高连击</span><span class="tds-val" style="color:var(--accent-orange)">' + this.maxCombo + '</span></div>' +
+                                    '<div class="ty-done-stat"><span class="tds-label">总键数</span><span class="tds-val">' + this.stats.total + '</span></div>' +
+                                    '<div class="ty-done-stat"><span class="tds-label">正确</span><span class="tds-val" style="color:var(--accent-green)">' + this.stats.correct + '</span></div>' +
+                                    '<div class="ty-done-stat"><span class="tds-label">用时</span><span class="tds-val">' + dur + 's</span></div>' +
+                                '</div>' +
+                                '<button class="ed-btn primary" data-action="tyStart" style="margin-top:8px;width:100%">再来一轮</button>' +
+                                '<button class="ed-btn" data-action="tyHome" style="width:100%">返回总览</button>' +
+                            '</div>' +
+                        '</div>';
+                },
+
+                start() {
+                    this.build();
+                    this.render();
+                    this._lastWpmTick = Date.now();
+                },
+
+                hit(ch) {
+                    if (this.done || !this.active) return;
+                    const w = this.words[this.idx];
+                    const word = w[0].toLowerCase();
+                    if (this.pos >= word.length) return;
+
+                    const expected = word[this.pos];
+                    const ok = ch === expected;
+
+                    this.typed[this.pos] = { ch, ok };
+                    this.stats.total++;
+
+                    if (ok) {
+                        this.stats.correct++;
+                        this.combo++;
+                        if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+                        this.pos++;
+                        this._flashBox(this.pos - 1, true);
+                        this._spawnParticles(this.pos - 1, ok);
+                        buzz([8]);
+                        if (this.pos >= word.length) {
+                            this._completeWord();
+                        } else {
+                            this.render();
+                            this._updateStats();
+                        }
+                    } else {
+                        this.stats.wrong++;
+                        this.combo = 0;
+                        this.pos++;
+                        this._flashBox(this.pos - 1, false);
+                        buzz([18]);
+                        if (this.pos >= word.length) {
+                            this._completeWord();
+                        } else {
+                            this.render();
+                            this._updateStats();
+                        }
+                    }
+                },
+
+                backspace() {
+                    if (this.done || !this.active || this.pos === 0) return;
+                    this.pos--;
+                    this.typed.pop();
+                    this.render();
+                },
+
+                skip() {
+                    if (this.done || !this.active) return;
+                    this.stats.total++;
+                    this.combo = 0;
+                    this._nextWord();
+                },
+
+                _completeWord() {
+                    this.stats.total++;
+                    const el = $('#ty-word');
+                    if (el) {
+                        el.classList.add('ty-word-break');
+                        this._burstCenter();
+                    }
+                    setTimeout(() => this._nextWord(), 400);
+                },
+
+                _nextWord() {
+                    this.idx++;
+                    this.pos = 0;
+                    this.typed = [];
+                    if (this.idx >= this.words.length) {
+                        this.done = true;
+                    }
+                    this.render();
+                    this._updateStats();
+                },
+
+                _flashBox(i, ok) {
+                    const el = document.getElementById('ty-b' + i);
+                    if (!el) return;
+                    el.classList.remove('cur');
+                    el.classList.add(ok ? 'ok' : 'bad');
+                    if (ok) {
+                        el.classList.add('correct-burst');
+                    }
+                },
+
+                _spawnParticles(i, ok) {
+                    const el = document.getElementById('ty-b' + i);
+                    if (!el) return;
+                    const rect = el.getBoundingClientRect();
+                    const cx = rect.left + rect.width / 2;
+                    const cy = rect.top + rect.height / 2;
+                    const colors = ok
+                        ? ['var(--accent-green)', '#4ade80', '#86efac', '#bbf7d0']
+                        : ['var(--accent-red)', '#fca5a5', '#fecaca'];
+                    const count = ok ? 10 : 4;
+                    for (let p = 0; p < count; p++) {
+                        const dot = document.createElement('div');
+                        dot.className = 'ty-particle';
+                        const angle = (Math.PI * 2 / count) * p + (Math.random() - 0.5) * 0.5;
+                        const dist = 30 + Math.random() * 50;
+                        dot.style.left = cx + 'px';
+                        dot.style.top = cy + 'px';
+                        dot.style.background = colors[p % colors.length];
+                        dot.style.setProperty('--px', Math.cos(angle) * dist + 'px');
+                        dot.style.setProperty('--py', Math.sin(angle) * dist + 'px');
+                        dot.style.width = (4 + Math.random() * 4) + 'px';
+                        dot.style.height = dot.style.width;
+                        document.body.appendChild(dot);
+                        setTimeout(() => dot.remove(), 650);
+                    }
+                },
+
+                _burstCenter() {
+                    const el = $('#ty-word');
+                    if (!el) return;
+                    const rect = el.getBoundingClientRect();
+                    const cx = rect.left + rect.width / 2;
+                    const cy = rect.top + rect.height / 2;
+                    for (let p = 0; p < 16; p++) {
+                        const dot = document.createElement('div');
+                        dot.className = 'ty-particle';
+                        const angle = (Math.PI * 2 / 16) * p;
+                        const dist = 40 + Math.random() * 60;
+                        dot.style.left = cx + 'px';
+                        dot.style.top = cy + 'px';
+                        dot.style.background = ['var(--accent-green)', 'var(--accent)', '#4ade80', '#60a5fa'][p % 4];
+                        dot.style.setProperty('--px', Math.cos(angle) * dist + 'px');
+                        dot.style.setProperty('--py', Math.sin(angle) * dist + 'px');
+                        dot.style.width = (5 + Math.random() * 5) + 'px';
+                        dot.style.height = dot.style.width;
+                        document.body.appendChild(dot);
+                        setTimeout(() => dot.remove(), 650);
+                    }
+                },
+
+                _showComboFloat() {
+                    if (this.combo < 3) return;
+                    const el = document.createElement('div');
+                    el.className = 'ty-combo-float';
+                    el.textContent = this.combo + 'x 连击!';
+                    el.style.left = '50%';
+                    el.style.top = '40%';
+                    el.style.transform = 'translateX(-50%)';
+                    document.body.appendChild(el);
+                    setTimeout(() => el.remove(), 850);
+                },
+
+                _updateStats() {
+                    const wpmEl = $('#ty-wpm');
+                    const accEl = $('#ty-acc');
+                    const comboEl = $('#ty-combo');
+                    const progEl = $('#ty-prog');
+                    if (wpmEl) {
+                        const elapsed = (Date.now() - this.stats.startTime) / 60000;
+                        this.stats.wpm = elapsed > 0 ? Math.round(this.stats.correct / 5 / elapsed) : 0;
+                        wpmEl.textContent = this.stats.wpm;
+                    }
+                    if (accEl) {
+                        const acc = this.stats.total > 0 ? Math.round(this.stats.correct / this.stats.total * 100) : 100;
+                        accEl.textContent = acc + '%';
+                    }
+                    if (comboEl) {
+                        comboEl.textContent = this.combo > 0 ? this.combo + 'x' : '-';
+                        comboEl.className = 'ty-sv combo' + (this.combo >= 5 ? ' hot' : '');
+                        if (this.combo >= 5) this._showComboFloat();
+                    }
+                    if (progEl) progEl.textContent = (this.idx + 1) + '/' + this.words.length;
+                },
+
+                hint() {
+                    if (this.done || !this.active) return;
+                    const w = this.words[this.idx];
+                    const word = w[0].toLowerCase();
+                    if (this.pos >= word.length) return;
+                    this.typed[this.pos] = { ch: word[this.pos], ok: true };
+                    this.stats.total++;
+                    this.stats.correct++;
+                    this.combo++;
+                    if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+                    this.pos++;
+                    this._flashBox(this.pos - 1, true);
+                    buzz([10]);
+                    if (this.pos >= word.length) {
+                        this._completeWord();
+                    } else {
+                        this.render();
+                        this._updateStats();
+                    }
+                }
+            };
+
+            // ============================================================
+            // FLASHCARDS (SRS)
             const Flash = {
-                q: [], i: 0, flipped: false, done: false,
+                q: [], i: 0, flipped: false, done: false, grading: false,
                 sRight: 0, sAgain: 0, started: false,
                 t0: 0, streak: 0, best: 0, _goalToasted: false,
 
@@ -3230,7 +3733,8 @@
                 },
 
                 grade(g) {
-                    if (this.done || this.i >= this.q.length) return;
+                    if (this.done || this.i >= this.q.length || this.grading) return;
+                    this.grading = true;
                     if (!this.flipped) this.flip();
                     const it = this.q[this.i];
                     gradeWord(it.e[0], g);
@@ -3254,8 +3758,9 @@
                         }
                         setTimeout(() => {
                             card.classList.remove('nope', 'nice');
-                            card.classList.add(g === 0 ? 'slide-r' : 'slide-l');
+                            card.classList.add(g === 0 ? 'slide-l' : 'slide-r');
                             setTimeout(() => {
+                                this.grading = false;
                                 this.i++;
                                 if (this.i >= this.q.length) { this.done = true; }
                                 this.render();
@@ -3577,7 +4082,7 @@
                             '<div class="sp-result bad">' +
                                 '<div class="sp-result-head"><span class="sp-result-icon">✗</span><span class="sp-result-label">拼写有误</span></div>' +
                                 '<div class="sp-diff">' + diffHtml + '</div>' +
-                                '<div class="sp-correct-line">正确拼写 → <b>' + esc(e[0]) + '</b></div>' +
+                                '<div class="sp-correct-line">正确拼写 ' + ICO('arrowR') + ' <b>' + esc(e[0]) + '</b></div>' +
                                 '<div style="display:flex;gap:10px;justify-content:center;margin-top:6px">' +
                                     '<button class="mini-btn" data-action="spRetry">↻ 重试</button>' +
                                     '<button class="mini-btn solid" data-action="spNext">' + ICO('chevR') + ' 下一题</button>' +
@@ -3652,7 +4157,7 @@
                         '<div class="sp-result bad">' +
                             '<div class="sp-result-head"><span class="sp-result-icon">SKIP</span><span class="sp-result-label">已跳过</span></div>' +
                             '<div class="sp-diff"><span class="dl dl-miss">' + esc(this.sp.e[0]) + '</span></div>' +
-                            '<div class="sp-correct-line">正确拼写 → <b>' + esc(this.sp.e[0]) + '</b> · 已加入错词列表</div>' +
+                            '<div class="sp-correct-line">正确拼写 ' + ICO('arrowR') + ' <b>' + esc(this.sp.e[0]) + '</b> · 已加入错词列表</div>' +
                             '<div style="text-align:center;margin-top:6px"><button class="mini-btn solid" data-action="spNext">' + ICO('chevR') + ' 下一题</button></div>' +
                         '</div>';
                     this.markBoxes(this.sp.e[0], '');
@@ -3818,8 +4323,8 @@
                 showHelp() {
                     modalOpen('快捷键说明',
                         '<div class="hk-grid">' +
-                            [['空格', '翻卡 / 播放暂停'], ['1 / 2 / 3', '不认识 / 模糊 / 认识'], ['S', '发音当前单词或句子'],
-                            ['← / →', '听力上一句 / 下一句'], ['Ctrl+Enter', '听写提交'], ['Esc', '关闭弹窗 / 抽屉'],
+                            [['空格', '翻卡 / 播放暂停'], ['1 / 2 / 3', '不认识 / 模糊 / 认识'], ['← / →', '不认识 / 认识（翻卡后）'], ['S', '发音当前单词或句子'],
+                            ['A / B / C / D', '四选一快速选择'], ['← / →', '听力上一句 / 下一句（听力页）'], ['Ctrl+Enter', '听写提交'], ['Esc', '关闭弹窗 / 抽屉'],
                             ['?', '本说明']].map(r => '<div class="hk-row"><span>' + r[1] + '</span><span class="hk-key">' + r[0] + '</span></div>').join('') +
                         '</div>');
                 },
@@ -4063,7 +4568,7 @@
                 qScope(t) { Quiz.scope = t.dataset.s; refreshSetupSeg(t); },
                 quizStart() { Quiz.start(); },
                 quizSpeak() { TT.speak(Quiz.mode === 'spell' && Quiz.sp ? Quiz.sp.e[0] : (Quiz.qs[Quiz.qi] ? Quiz.qs[Quiz.qi].e[0] : '')); },
-                optPick(t) { Quiz.pick(+t.dataset.i); },
+                optPick(t) { Quiz.pick(typeof t === 'number' ? t : +t.dataset.i); },
                 spCheck() { Quiz.checkSpell(); },
                 spRetry() { Quiz.spellRetry(); },
                 spFocus() { const h = $('#sp-hid'); if (h) { try { h.focus(); } catch (e) { } } },
@@ -4071,6 +4576,8 @@
                 spSay() { if (Quiz.sp) TT.speak(Quiz.sp.e[0]); },
                 spSkip() { Quiz.skipSpell(); },
                 spNext() { Quiz.qi++; Quiz.nextSpell(); },
+                tyStart() { Typing.start(); },
+                tyHome() { Typing.active = false; switchView('home'); },
                 quizReset() { Quiz.reset(); Quiz.render(); updateHead(); },
                 quizWrongAll() {
                     if (!Quiz.wrongList.length) return;
@@ -4241,24 +4748,36 @@
                 if (t.closest('#more-sheet') && a !== 'openMore') ACT.closeMore();
             });
 
+            function flashGradeBtn(g) {
+                const cls = ['again', 'hard', 'good'][g];
+                const btn = document.querySelector('.gb.' + cls);
+                if (!btn) return;
+                btn.classList.remove('flash');
+                void btn.offsetWidth;
+                btn.classList.add('flash');
+                setTimeout(() => btn.classList.remove('flash'), 420);
+            }
+
             document.addEventListener('keydown', e => {
                 const tag = (e.target.tagName || '').toUpperCase();
-                const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+                const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
                 if (e.key === 'Escape') {
                     if ($('#custom-confirm').classList.contains('active')) { $('#custom-confirm').classList.remove('active'); return; }
                     closePops();
                     if ($('#modal').classList.contains('open')) { modalClose(); return; }
                     if ($('#drawer').classList.contains('open')) { drawerClose(); return; }
                     hidePop(); closeDrops();
-                    if (typing) e.target.blur();
+                    if (isInput) e.target.blur();
                     return;
                 }
-                if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
-                if (curView === 'flash' && Flash.started && !Flash.done) {
+                if (isInput || e.ctrlKey || e.metaKey || e.altKey) return;
+                if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
                     if (e.code === 'Space') { e.preventDefault(); Flash.flip(); return; }
-                    if (e.key === '1') { Flash.grade(0); return; }
-                    if (e.key === '2') { Flash.grade(1); return; }
-                    if (e.key === '3') { Flash.grade(2); return; }
+                    if (e.key === '1') { Flash.grade(0); flashGradeBtn(0); return; }
+                    if (e.key === '2') { Flash.grade(1); flashGradeBtn(1); return; }
+                    if (e.key === '3') { Flash.grade(2); flashGradeBtn(2); return; }
+                    if (e.key === 'ArrowLeft') { Flash.grade(0); flashGradeBtn(0); return; }
+                    if (e.key === 'ArrowRight') { Flash.grade(2); flashGradeBtn(2); return; }
                     if (e.key.toLowerCase() === 's') { Flash.speakCurrent(); return; }
                 }
                 if (curView === 'listen' && Listen.mode === 'play') {
@@ -4268,6 +4787,21 @@
                 }
                 if (curView === 'listen' && Listen.mode === 'dict' && Dict.d) {
                     if (e.key.toLowerCase() === 's') { Dict.play(false); return; }
+                }
+                if (curView === 'quiz' && Quiz.mode === 'choice' && Quiz.qs.length && Quiz.qi < Quiz.qs.length) {
+                    const optEls = document.querySelectorAll('#opts .opt');
+                    const locked = optEls.length && optEls[0].classList.contains('locked');
+                    if (!locked) {
+                        const keyMap = { a: 0, b: 1, c: 2, d: 3, '1': 0, '2': 1, '3': 2, '4': 3 };
+                        const idx = keyMap[e.key.toLowerCase()];
+                        if (idx !== undefined && idx < optEls.length) { ACT.optPick(idx); return; }
+                    }
+                }
+                if (curView === 'typing' && Typing.active && !Typing.done) {
+                    if (e.key === 'Backspace') { e.preventDefault(); Typing.backspace(); return; }
+                    if (e.key === 'Tab') { e.preventDefault(); Typing.hint(); return; }
+                    if (e.key === ' ') { e.preventDefault(); Typing.skip(); return; }
+                    if (/^[a-zA-Z]$/.test(e.key)) { Typing.hit(e.key.toLowerCase()); return; }
                 }
                 if (e.key === '?') { ACT.showHelp(); }
             });
