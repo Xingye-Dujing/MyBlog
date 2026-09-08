@@ -267,7 +267,7 @@
         .bar { flex: 1; background: var(--border-dim); min-height: 2px; position: relative; transition: height 0.65s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s; cursor: default; }
         .bar:hover { background: var(--text); }
         .bar-tip {
-            position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: calc(100% + 8px); left: 10%; transform: translateX(-50%);
             background: var(--bg); border: 1px solid var(--border); padding: 8px 12px;
             font-size: calc(11px * var(--fscale)); white-space: nowrap; pointer-events: none;
             opacity: 0; transition: opacity 0.15s; z-index: 10; line-height: 1.6;
@@ -423,9 +423,19 @@
         .ed-btn.danger:hover { color: var(--accent-red); border-color: var(--accent-red); }
 
         /* ===== Flashcards ===== */
-        .setup-box { max-width: 480px; margin: 6vh auto 0; display: flex; flex-direction: column; gap: 14px; }
-        .setup-title { text-align: center; font-size: calc(15px * var(--fscale)); letter-spacing: 2px; margin-bottom: 6px; }
+        .setup-box { max-width: 520px; margin: 6vh auto 0; display: flex; flex-direction: column; gap: 18px; }
+        .setup-title { text-align: center; font-size: calc(16px * var(--fscale)); letter-spacing: 2px; margin-bottom: 4px; }
         .setup-note { text-align: center; font-size: calc(11px * var(--fscale)); color: var(--text-faint); letter-spacing: 0.5px; line-height: 1.8; }
+        .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .setup-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+        .setup-grid .sg-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border: 1px solid var(--border-dim); font-size: calc(12px * var(--fscale)); cursor: pointer; transition: all 0.15s; color: var(--text-dim); background: transparent; border-radius: var(--radius); gap: 6px; }
+        .setup-grid .sg-item:hover { border-color: var(--text); color: var(--text); }
+        .setup-grid .sg-item.active { border-color: var(--text); color: var(--text); font-weight: 500; }
+        .setup-grid .sg-item.disabled { opacity: 0.35; cursor: not-allowed; }
+        .setup-grid .sg-item .sg-cnt { font-size: calc(10px * var(--fscale)); opacity: 0.6; flex-shrink: 0; }
+        .setup-divider { height: 1px; background: var(--border-faint); margin: 2px 0; }
+        .setup-hint { font-size: calc(11px * var(--fscale)); color: var(--text-faint); text-align: center; margin-top: -6px; }
+        .seg-wrap .seg { flex-wrap: wrap; }
         .fc-wrap { max-width: 720px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; padding-top: 4px; }
         .fc-meta { display: flex; align-items: center; font-size: calc(10px * var(--fscale)); letter-spacing: 1.5px; color: var(--text-dim); text-transform: uppercase; }
         .fc-segs { display: flex; gap: 3px; flex: 1; margin: 0 14px; }
@@ -434,7 +444,7 @@
         .fc-segs i.cur { background: var(--text-dim); }
         .fc-zone { flex: 1; display: flex; align-items: center; justify-content: center; perspective: 1400px; padding: 18px 0; min-height: 0; }
         .fc-card {
-            position: relative; width: min(560px, 92%); height: min(340px, 100%);
+            position: relative; width: min(620px, 92%); height: min(400px, 100%);
             transform-style: preserve-3d; transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
             cursor: pointer; max-height: 420px;
         }
@@ -473,6 +483,10 @@
         .fb-meaning { font-size: calc(17px * var(--fscale)); color: var(--text); }
         .fb-ex { font-family: var(--font-en); font-size: calc(12px * var(--fscale)); color: var(--text-dim); font-style: italic; text-align: center; max-width: 88%; margin-top: 16px; line-height: 1.8; border-top: 1px solid var(--border-faint); padding-top: 12px; cursor: pointer; }
         .fb-ex:hover { color: var(--text); }
+        .fb-ex-zh {
+            font-size: calc(12px * var(--fscale)); color: var(--text-dim);
+            text-align: center; max-width: 88%; margin-top: 8px; line-height: 1.7;
+        }
         .grade-row { display: flex; gap: 10px; justify-content: center; padding-bottom: 16px; }
         .gb {
             min-width: 130px; padding: 11px 0; background: transparent; cursor: pointer;
@@ -534,6 +548,7 @@
         .opt.wrong .ol { border-color: var(--accent-red); }
         .opt-ans { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 14px; font-size: 0.88em; opacity: 0.8; color: var(--text-dim); font-weight: 400; }
         .opt-ans svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .opt-src { margin-left: 12px; font-size: 0.85em; color: var(--text-dim); }
         .opt.dim-off { opacity: 0.35; pointer-events: none; }
         .opt.locked { pointer-events: none; }
         .result-ring { display: flex; flex-direction: column; align-items: center; margin: 5vh auto 18px; }
@@ -821,12 +836,56 @@
             animation: correctBurst 0.4s ease;
         }
 
+        .ty-sent-boxes {
+            display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+            gap: 4px; max-width: 600px;
+        }
+        .ty-word-grp {
+            display: flex; gap: 4px; flex-shrink: 0;
+        }
+        .ty-sent-boxes .ty-box {
+            width: calc(26px * var(--fscale)); height: calc(34px * var(--fscale));
+            font-size: calc(15px * var(--fscale)); flex-shrink: 0;
+        }
+        .ty-sent-boxes .ty-space {
+            width: calc(14px * var(--fscale)); border-color: transparent; background: transparent;
+            flex-shrink: 0;
+        }
+        .ty-sent-boxes .ty-space::after {
+            content: ''; display: flex; width: 6px; height: 2px;
+            background: var(--border-dim); margin: auto; border-radius: 1px;
+        }
+        .ty-sent-boxes .ty-space.ok::after { background: var(--accent-green); }
+        .ty-sent-boxes .ty-space.bad::after { background: var(--accent-red); }
+        .ty-sent-boxes .ty-space.cur::after {
+            background: var(--accent); animation: caretB 1.05s steps(1) infinite;
+        }
+
+        .ty-mode-row {
+            display: flex; gap: 8px; justify-content: center; align-items: center;
+        }
+
         .ty-phon {
             font-size: calc(14px * var(--fscale)); color: var(--text-dim); margin-top: 2px;
         }
         .ty-meaning {
             font-size: calc(16px * var(--fscale)); color: var(--text); font-weight: 500;
             margin-top: 4px; text-align: center;
+        }
+        .ty-sent-hint {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            margin-top: 8px;
+        }
+        .ty-sent-meaning {
+            font-size: calc(15px * var(--fscale)); color: var(--text); font-weight: 500;
+            text-align: center;
+        }
+        .ty-sent-ex {
+            font-size: calc(13px * var(--fscale)); color: var(--text-dim);
+            text-align: center; max-width: 520px; line-height: 1.6;
+        }
+        .ty-sent-ex em {
+            color: var(--text); font-style: normal; font-weight: 600;
         }
         .ty-example {
             font-size: calc(13px * var(--fscale)); color: var(--text-dim);
@@ -959,6 +1018,8 @@
             .tp-btn.has-txt span { font-size: calc(11px * var(--fscale)); }
             .spell-boxes { flex-wrap: wrap; justify-content: center; }
             .ty-box { width: calc(36px * var(--fscale)); height: calc(44px * var(--fscale)); font-size: calc(18px * var(--fscale)); }
+            .ty-sent-boxes .ty-box { width: calc(22px * var(--fscale)); height: calc(28px * var(--fscale)); font-size: calc(13px * var(--fscale)); }
+            .ty-sent-boxes .ty-space { width: calc(10px * var(--fscale)); }
             .ty-stats { gap: 14px; }
             .ty-done-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
         }
@@ -1412,307 +1473,307 @@
             // DATA · CET-6 core words [word, phonetic, meaning, example]
             // ============================================================
             const WORDS = [
-                ['abandon', 'əˈbændən', 'vt. 放弃，抛弃；n. 放纵', 'He abandoned the plan at the last minute.'],
-                ['abolish', 'əˈbɒlɪʃ', 'vt. 废除，取消', 'The new government abolished the outdated law.'],
-                ['abrupt', 'əˈbrʌpt', 'adj. 突然的，唐突的', 'The meeting came to an abrupt end.'],
-                ['absurd', 'əbˈsɜːd', 'adj. 荒谬的，荒唐的', 'It is absurd to blame the weather for the delay.'],
-                ['abundance', 'əˈbʌndəns', 'n. 丰富，充裕', 'The region has an abundance of natural resources.'],
-                ['accumulate', 'əˈkjuːmjəleɪt', 'v. 积累，积聚', 'She accumulated a large fortune through hard work.'],
-                ['acquaint', 'əˈkweɪnt', 'vt. 使熟悉，使认识', 'Please acquaint yourself with the safety rules.'],
-                ['adhere', 'ədˈhɪə', 'vi. 粘附；坚持，遵守', 'Employees must adhere to the company policy.'],
-                ['administer', 'ədˈmɪnɪstə', 'vt. 管理，执行；给予', 'The fund is administered by the ministry.'],
-                ['advocate', 'ˈædvəkeɪt', 'vt. 提倡，主张；n. 拥护者', 'Experts advocate a balanced diet for children.'],
-                ['aggravate', 'ˈæɡrəveɪt', 'vt. 加重，恶化', 'Stress can aggravate the illness.'],
-                ['alleviate', 'əˈliːvieɪt', 'vt. 减轻，缓解', 'The medicine alleviated his pain quickly.'],
-                ['allocate', 'ˈæləkeɪt', 'vt. 分配，拨给', 'More funds were allocated to rural schools.'],
-                ['ambiguous', 'æmˈbɪɡjuəs', 'adj. 模棱两可的，含糊的', 'His answer was deliberately ambiguous.'],
-                ['analogy', 'əˈnælədʒi', 'n. 类比，类推', 'The teacher drew an analogy between the heart and a pump.'],
-                ['anonymous', 'əˈnɒnɪməs', 'adj. 匿名的', 'The donation was made by an anonymous donor.'],
-                ['anticipate', 'ænˈtɪsɪpeɪt', 'vt. 预期，预料', 'We anticipate strong demand for the product.'],
-                ['applaud', 'əˈplɔːd', 'v. 鼓掌欢迎；称赞', 'The audience applauded loudly after the speech.'],
-                ['arbitrary', 'ˈɑːbɪtrəri', 'adj. 任意的，武断的', 'The choice of colors seemed completely arbitrary.'],
-                ['articulate', 'ɑːˈtɪkjuleɪt', 'adj. 善于表达的；vt. 清晰表达', 'She is articulate about her research goals.'],
-                ['ascend', 'əˈsend', 'v. 上升，攀登', 'The plane ascended into the clouds.'],
-                ['ascribe', 'əˈskraɪb', 'vt. 归因于', 'He ascribes his success to sheer luck.'],
-                ['assault', 'əˈsɔːlt', 'n./vt. 攻击，袭击', 'The city survived an assault of criticism.'],
-                ['assert', 'əˈsɜːt', 'vt. 断言，维护', 'She asserted that the data was reliable.'],
-                ['asset', 'ˈæset', 'n. 资产；有价值的人或物', 'Fluency in English is a great asset.'],
-                ['assimilate', 'əˈsɪməleɪt', 'v. 吸收，同化', 'Children assimilate new ideas quickly.'],
-                ['attain', 'əˈteɪn', 'vt. 达到，获得', 'He attained the rank of professor at thirty.'],
-                ['authentic', 'ɔːˈθentɪk', 'adj. 真实的，可靠的', 'The museum displays authentic ancient coins.'],
-                ['avert', 'əˈvɜːt', 'vt. 避免，转移', 'Quick action averted a serious accident.'],
-                ['barren', 'ˈbærən', 'adj. 贫瘠的，不结果实的', 'Nothing grows on this barren land.'],
-                ['betray', 'bɪˈtreɪ', 'vt. 背叛；泄露', 'He would never betray his friends.'],
-                ['bewilder', 'bɪˈwɪldə', 'vt. 使迷惑', 'The complicated map bewildered the tourists.'],
-                ['bias', 'ˈbaɪəs', 'n. 偏见；vt. 使有偏见', 'The report was criticized for political bias.'],
-                ['bleak', 'bliːk', 'adj. 荒凉的；黯淡的', 'The forecast for the economy remains bleak.'],
-                ['blunder', 'ˈblʌndə', 'n. 大错；vi. 犯大错', 'Shipping the wrong order was a serious blunder.'],
-                ['boost', 'buːst', 'vt. 提高，推动；n. 促进', 'The ad campaign boosted sales sharply.'],
-                ['breach', 'briːtʃ', 'n./vt. 违反，破坏', 'Leaking the document was a breach of trust.'],
-                ['brisk', 'brɪsk', 'adj. 轻快的；兴隆的', 'They took a brisk walk before breakfast.'],
-                ['brutal', 'ˈbruːtl', 'adj. 残忍的，野蛮的', 'The team faced brutal competition.'],
-                ['casualty', 'ˈkæʒuəlti', 'n. 伤亡人员；受害者', 'There were no casualties in the fire.'],
-                ['catastrophe', 'kəˈtæstrəfi', 'n. 大灾难', 'Losing the files would be a catastrophe.'],
-                ['cater', 'ˈkeɪtə', 'vi. 迎合，满足需要', 'The cafe caters mainly to students.'],
-                ['cherish', 'ˈtʃerɪʃ', 'vt. 珍惜，怀有', 'She cherishes the memory of her college years.'],
-                ['chronic', 'ˈkrɒnɪk', 'adj. 慢性的，长期的', 'He suffers from chronic back pain.'],
-                ['circulate', 'ˈsɜːkjəleɪt', 'v. 循环，传播', 'Rumors began to circulate around campus.'],
-                ['cite', 'saɪt', 'vt. 引用，举例子', 'The lawyer cited two previous cases.'],
-                ['cling', 'klɪŋ', 'vi. 紧握；坚持', 'Wet clothes clung to his body.'],
-                ['coincide', 'ˌkəʊɪnˈsaɪd', 'vi. 同时发生；一致', 'My views coincide with hers on this issue.'],
-                ['collaborate', 'kəˈlæbəreɪt', 'vi. 合作，协作', 'The two labs collaborated on the project.'],
-                ['collide', 'kəˈlaɪd', 'vi. 碰撞；冲突', 'The two trains collided near the station.'],
-                ['commence', 'kəˈmens', 'v. 开始', 'The ceremony will commence at nine sharp.'],
-                ['compatible', 'kəmˈpætəbl', 'adj. 兼容的；合得来的', 'The software is compatible with most systems.'],
-                ['compensate', 'ˈkɒmpenseɪt', 'v. 补偿，弥补', 'Nothing can compensate for the lost time.'],
-                ['competent', 'ˈkɒmpɪtənt', 'adj. 有能力的，胜任的', 'She is highly competent in her field.'],
-                ['compile', 'kəmˈpaɪl', 'vt. 编写，汇编', 'He compiled a dictionary of slang terms.'],
-                ['comply', 'kəmˈplaɪ', 'vi. 遵从，服从', 'All factories must comply with the regulations.'],
-                ['compulsory', 'kəmˈpʌlsəri', 'adj. 强制的，义务的', 'English is a compulsory subject here.'],
-                ['conceive', 'kənˈsiːv', 'v. 构想，设想；怀孕', 'He conceived a bold plan for the startup.'],
-                ['condemn', 'kənˈdem', 'vt. 谴责，判刑', 'World leaders condemned the attack.'],
-                ['confidential', 'ˌkɒnfɪˈdenʃl', 'adj. 机密的', 'The report contains confidential information.'],
-                ['conform', 'kənˈfɔːm', 'vi. 符合，遵照', 'The design conforms to safety standards.'],
-                ['consecutive', 'kənˈsekjətiv', 'adj. 连续的', 'It rained for five consecutive days.'],
-                ['consensus', 'kənˈsensəs', 'n. 共识', 'The board reached a consensus on the budget.'],
-                ['consolidate', 'kənˈsɒlɪdeɪt', 'v. 巩固，合并', 'The company consolidated its market position.'],
-                ['conspicuous', 'kənˈspɪkjuəs', 'adj. 显眼的，惹人注目的', 'His red jacket made him conspicuous in the crowd.'],
-                ['contaminate', 'kənˈtæmɪneɪt', 'vt. 污染', 'The river was contaminated by industrial waste.'],
-                ['contemplate', 'ˈkɒntəmpleɪt', 'vt. 沉思，考虑', 'She contemplated changing her major.'],
-                ['contradict', 'ˌkɒntrəˈdɪkt', 'vt. 反驳，与…矛盾', 'The witnesses contradicted each other.'],
-                ['converge', 'kənˈvɜːdʒ', 'vi. 汇聚，聚集', 'Thousands of fans converged on the stadium.'],
-                ['corrupt', 'kəˈrʌpt', 'adj. 腐败的；vt. 使腐化', 'Corrupt officials were brought to justice.'],
-                ['counterpart', 'ˈkaʊntəpɑːt', 'n. 对应的人或物', 'The minister met his French counterpart.'],
-                ['criterion', 'kraɪˈtɪəriən', 'n. 标准，准则', 'Grades are only one criterion for admission.'],
-                ['crucial', 'ˈkruːʃl', 'adj. 至关重要的', 'Timing is crucial to the success of the plan.'],
-                ['cumulative', 'ˈkjuːmjələtiv', 'adj. 累积的', 'The cumulative effect of stress is harmful.'],
-                ['curb', 'kɜːb', 'vt. 控制，约束；n. 路缘', 'New measures aim to curb air pollution.'],
-                ['deceive', 'dɪˈsiːv', 'v. 欺骗', 'He deceived us about his true intentions.'],
-                ['dedicate', 'ˈdedɪkeɪt', 'vt. 奉献，致力于', 'She dedicated herself to medical research.'],
-                ['degrade', 'dɪˈɡreɪd', 'v. 降低，使降级；退化', 'Plastic waste degrades the marine environment.'],
-                ['deliberate', 'dɪˈlɪbərət', 'adj. 故意的；深思熟虑的', 'It was a deliberate attempt to mislead voters.'],
-                ['denote', 'dɪˈnəʊt', 'vt. 表示，意味着', 'In chess, a capital letter denotes a piece.'],
-                ['deprive', 'dɪˈpraɪv', 'vt. 剥夺', 'No one should deprive children of education.'],
-                ['designate', 'ˈdezɪɡneɪt', 'vt. 指定，任命', 'The area was designated a national park.'],
-                ['deteriorate', 'dɪˈtɪəriəreɪt', 'vi. 恶化，变坏', 'His health deteriorated rapidly last winter.'],
-                ['deviate', 'ˈdiːvieɪt', 'vi. 偏离，违背', 'The pilot deviated from the planned route.'],
-                ['devise', 'dɪˈvaɪz', 'vt. 设计，想出', 'They devised a new method to save energy.'],
-                ['differentiate', 'ˌdɪfəˈrenʃieɪt', 'v. 区分，区别', 'Can you differentiate the twin brothers?'],
-                ['dilemma', 'dɪˈlemə', 'n. 困境，进退两难', 'She faced the dilemma of work versus family.'],
-                ['diminish', 'dɪˈmɪnɪʃ', 'v. 减少，缩小', 'The medicine gradually diminished the pain.'],
-                ['discard', 'dɪsˈkɑːd', 'vt. 丢弃，抛弃', 'Do not discard receipts before checking them.'],
-                ['discern', 'dɪˈsɜːn', 'vt. 辨别，察觉', 'I could discern a figure in the fog.'],
-                ['disclose', 'dɪsˈkləʊz', 'vt. 披露，透露', 'The company refused to disclose the deal value.'],
-                ['discrepancy', 'dɪsˈkrepənsi', 'n. 差异，不符', 'There is a discrepancy between the two reports.'],
-                ['disguise', 'dɪsˈɡaɪz', 'n./vt. 伪装，掩饰', 'He escaped in the disguise of a guard.'],
-                ['dismay', 'dɪsˈmeɪ', 'n. 沮丧；vt. 使失望', 'To her dismay, the flight was canceled again.'],
-                ['disperse', 'dɪˈspɜːs', 'v. 分散，驱散', 'The police dispersed the crowd peacefully.'],
-                ['distort', 'dɪˈstɔːt', 'vt. 歪曲，扭曲', 'Media coverage often distorts the facts.'],
-                ['divert', 'daɪˈvɜːt', 'vt. 转移，使转向', 'Traffic was diverted after the bridge closed.'],
-                ['drastic', 'ˈdræstɪk', 'adj. 激烈的，严厉的', 'Drastic measures were taken to cut costs.'],
-                ['dubious', 'ˈdjuːbiəs', 'adj. 可疑的，半信半疑的', 'He made some dubious business deals.'],
-                ['duplicate', 'ˈdjuːplɪkeɪt', 'vt. 复制；n. 复制品', 'Please duplicate the file before editing.'],
-                ['eccentric', 'ɪkˈsentrɪk', 'adj. 古怪的；n. 怪人', 'The professor is famous for his eccentric habits.'],
-                ['elevate', 'ˈelɪveɪt', 'vt. 提升，举起', 'Reading can elevate the mind.'],
-                ['elicit', 'ɪˈlɪsɪt', 'vt. 引出，诱出', 'The question elicited a heated discussion.'],
-                ['eligible', 'ˈelɪdʒəbl', 'adj. 有资格的', 'Students over eighteen are eligible to vote.'],
-                ['embark', 'ɪmˈbɑːk', 'vi. 上船；着手', 'He embarked on a career in journalism.'],
-                ['eminent', 'ˈemɪnənt', 'adj. 杰出的，著名的', 'An eminent scientist gave the opening lecture.'],
-                ['endeavor', 'ɪnˈdevə', 'n./vi. 努力，尽力', 'Scientific endeavor requires patience.'],
-                ['enhance', 'ɪnˈhɑːns', 'vt. 提高，增强', 'The software enhances photo quality instantly.'],
-                ['entitle', 'ɪnˈtaɪtl', 'vt. 使有权；给题名', 'The ticket entitles you to a free meal.'],
-                ['essence', 'ˈesns', 'n. 本质，精髓', 'Time is of the essence in emergencies.'],
-                ['eternal', 'ɪˈtɜːnl', 'adj. 永恒的', 'She dreamed of eternal youth.'],
-                ['evoke', 'ɪˈvəʊk', 'vt. 唤起，引起', 'The song evoked memories of her hometown.'],
-                ['exaggerate', 'ɪɡˈzædʒəreɪt', 'v. 夸张，夸大', 'Do not exaggerate the difficulties.'],
-                ['exert', 'ɪɡˈzɜːt', 'vt. 施加，发挥', 'Parents exert a huge influence on children.'],
-                ['explicit', 'ɪkˈsplɪsɪt', 'adj. 明确的，清楚的', 'The instructions were explicit and easy to follow.'],
-                ['exquisite', 'ɪkˈskwɪzɪt', 'adj. 精美的，精致的', 'The palace contains exquisite carvings.'],
-                ['extinct', 'ɪkˈstɪŋkt', 'adj. 灭绝的，熄灭的', 'Dinosaurs have been extinct for millions of years.'],
-                ['extinguish', 'ɪkˈstɪŋɡwɪʃ', 'vt. 熄灭，扑灭', 'Firefighters extinguished the blaze within an hour.'],
-                ['extract', 'ɪkˈstrækt', 'vt. 提取，抽出；n. 摘录', 'Oil is extracted from these tiny seeds.'],
-                ['fabricate', 'ˈfæbrɪkeɪt', 'vt. 编造，制造', 'He fabricated an excuse to skip the meeting.'],
-                ['facilitate', 'fəˈsɪlɪteɪt', 'vt. 促进，使便利', 'Computers facilitate learning in many ways.'],
-                ['feasible', 'ˈfiːzəbl', 'adj. 可行的', 'Is the project financially feasible?'],
-                ['feeble', 'ˈfiːbl', 'adj. 虚弱的，无力的', 'His feeble excuse convinced nobody.'],
-                ['flaw', 'flɔː', 'n. 缺陷，瑕疵', 'There is a fundamental flaw in your argument.'],
-                ['formulate', 'ˈfɔːmjuleɪt', 'vt. 制定，系统地阐述', 'They formulated a strategy for the campaign.'],
-                ['foster', 'ˈfɒstə', 'vt. 培养，促进；寄养', 'The club fosters interest in science.'],
-                ['fraud', 'frɔːd', 'n. 欺诈，骗局', 'He was arrested for tax fraud.'],
-                ['frustrate', 'frʌˈstreɪt', 'vt. 使沮丧，挫败', 'Delays frustrated travelers at the airport.'],
-                ['gloomy', 'ˈɡluːmi', 'adj. 阴暗的，忧郁的', 'The report paints a gloomy picture of the future.'],
-                ['hamper', 'ˈhæmpə', 'vt. 妨碍，阻碍', 'Bad weather hampered rescue efforts.'],
-                ['hazard', 'ˈhæzəd', 'n. 危险，危害', 'Wet floors are a common hazard in hospitals.'],
-                ['hinder', 'ˈhɪndə', 'vt. 阻碍，妨碍', 'Fear of failure hinders many students.'],
-                ['homogeneous', 'ˌhɒməˈdʒiːniəs', 'adj. 同质的，同类的', 'The population is remarkably homogeneous.'],
-                ['hostile', 'ˈhɒstaɪl', 'adj. 敌对的，不友好的', 'The proposal met a hostile reception.'],
-                ['humidity', 'hjuːˈmɪdəti', 'n. 湿度，湿气', 'High humidity makes summer days unbearable.'],
-                ['hypothesis', 'haɪˈpɒθəsɪs', 'n. 假设，假说', 'The experiment supported our hypothesis.'],
-                ['ignite', 'ɪɡˈnaɪt', 'vt. 点燃；激起', 'The speech ignited public anger.'],
-                ['immerse', 'ɪˈmɜːs', 'vt. 浸没，沉浸', 'She immersed herself in study for weeks.'],
-                ['immune', 'ɪˈmjuːn', 'adj. 免疫的；不受影响的', 'No one is immune to the virus.'],
-                ['impair', 'ɪmˈpeə', 'vt. 损害，削弱', 'Smoking impairs your lung function.'],
-                ['imperative', 'ɪmˈperətiv', 'adj. 必要的，紧急的；n. 必要的事', 'It is imperative to act immediately.'],
-                ['implement', 'ˈɪmplɪment', 'vt. 实施，执行；n. 工具', 'The school implemented a new grading system.'],
-                ['implicit', 'ɪmˈplɪsɪt', 'adj. 含蓄的，暗含的', 'There was an implicit criticism in her reply.'],
-                ['impose', 'ɪmˈpəʊz', 'vt. 强加，征税', 'The state imposed a tax on sugary drinks.'],
-                ['indignant', 'ɪnˈdɪɡnənt', 'adj. 愤慨的', 'Residents were indignant about the rising fees.'],
-                ['indulge', 'ɪnˈdʌldʒ', 'v. 放纵，沉溺', 'On weekends she indulges in chocolate cake.'],
-                ['inherent', 'ɪnˈhɪərənt', 'adj. 固有的，内在的', 'Risk is inherent in any investment.'],
-                ['initiate', 'ɪˈnɪʃieɪt', 'vt. 开始，发起', 'The government initiated a housing program.'],
-                ['innovation', 'ˌɪnəˈveɪʃn', 'n. 创新，革新', 'Innovation drives the tech industry forward.'],
-                ['integral', 'ˈɪntɪɡrəl', 'adj. 不可缺少的，完整的', 'Practice is an integral part of learning music.'],
-                ['integrate', 'ˈɪntɪɡreɪt', 'v. 使成整体，融合', 'The app integrates maps with travel guides.'],
-                ['intellect', 'ˈɪntəlekt', 'n. 智力，才智', 'She is a woman of formidable intellect.'],
-                ['intermittent', 'ˌɪntəˈmɪtnt', 'adj. 间歇的，断断续续的', 'Intermittent rain lasted all week.'],
-                ['intervene', 'ˌɪntəˈviːn', 'vi. 干预，介入', 'The teacher intervened before the argument escalated.'],
-                ['intimidate', 'ɪnˈtɪmɪdeɪt', 'vt. 恐吓，威胁', 'Do not let the exam intimidate you.'],
-                ['intricate', 'ˈɪntrɪkət', 'adj. 错综复杂的', 'The watch has an intricate mechanism.'],
-                ['intuition', 'ˌɪntjuˈɪʃn', 'n. 直觉', 'Her intuition told her something was wrong.'],
-                ['invalid', 'ɪnˈvælɪd', 'adj. 无效的，作废的', 'Your password is invalid, please retry.'],
-                ['jeopardize', 'ˈdʒepədaɪz', 'vt. 危及，损害', 'Careless driving jeopardizes everyones safety.'],
-                ['justifiable', 'ˈdʒʌstɪfaɪəbl', 'adj. 有道理的，可辩护的', 'Anger is justifiable in such circumstances.'],
-                ['latent', 'ˈleɪtnt', 'adj. 潜在的，潜伏的', 'He has a latent talent for painting.'],
-                ['legitimate', 'lɪˈdʒɪtɪmət', 'adj. 合法的，正当的', 'Both sides have legitimate concerns.'],
-                ['liability', 'ˌlaɪəˈbɪləti', 'n. 责任，债务；不利条件', 'The company accepted liability for the accident.'],
-                ['linger', 'ˈlɪŋɡə', 'vi. 逗留，徘徊', 'The smell of paint lingered for days.'],
-                ['literacy', 'ˈlɪtərəsi', 'n. 读写能力，素养', 'The program promotes digital literacy among seniors.'],
-                ['lubricate', 'ˈluːbrɪkeɪt', 'vt. 润滑', 'Lubricate the machine parts regularly.'],
-                ['magnify', 'ˈmæɡnɪfaɪ', 'vt. 放大，扩大', 'The microscope magnifies the sample four hundred times.'],
-                ['manifest', 'ˈmænɪfest', 'vt. 表明；adj. 明显的', 'Stress often manifests itself as fatigue.'],
-                ['manipulate', 'məˈnɪpjuleɪt', 'vt. 操纵，控制', 'Advertisers manipulate consumers with clever images.'],
-                ['mediate', 'ˈmiːdieɪt', 'v. 调解，斡旋', 'The UN offered to mediate between the two sides.'],
-                ['merge', 'mɜːdʒ', 'v. 合并，融入', 'The two banks will merge next month.'],
-                ['mingled', 'ˈmɪŋɡld', 'v. 混合，交往', 'Guests mingled freely at the reception.'],
-                ['minimize', 'ˈmɪnɪmaɪz', 'vt. 最小化，把…估计得最低', 'Wear a helmet to minimize the risk of injury.'],
-                ['momentum', 'məʊˈmentəm', 'n. 势头，动量', 'The reform movement gained momentum quickly.'],
-                ['monopoly', 'məˈnɒpəli', 'n. 垄断，专营', 'The company enjoys a monopoly on local transport.'],
-                ['mortgage', 'ˈmɔːɡɪdʒ', 'n./vt. 抵押贷款', 'They took out a mortgage to buy the house.'],
-                ['multitude', 'ˈmʌltɪtjuːd', 'n. 大量，群众', 'A multitude of factors shaped his decision.'],
-                ['mutual', 'ˈmjuːtʃuəl', 'adj. 相互的，共同的', 'Their partnership is based on mutual respect.'],
-                ['naive', 'naɪˈiːv', 'adj. 天真的，幼稚的', 'It was naive of him to trust strangers so easily.'],
-                ['negotiate', 'nɪˈɡəʊʃieɪt', 'v. 谈判，协商', 'The union negotiated a pay rise with management.'],
-                ['notable', 'ˈnəʊtəbl', 'adj. 值得注意的，著名的', 'The year saw notable progress in medicine.'],
-                ['nourish', 'ˈnʌrɪʃ', 'vt. 滋养，培育', 'Good books nourish the mind.'],
-                ['nuisance', 'ˈnjuːsns', 'n. 讨厌的人或物', 'Mosquitoes are a real nuisance in summer.'],
-                ['obscure', 'əbˈskjʊə', 'adj. 晦涩的，不出名的；vt. 掩盖', 'The origin of the custom remains obscure.'],
-                ['obsession', 'əbˈseʃn', 'n. 痴迷，困扰', 'Fitness has become an obsession with him.'],
-                ['offset', 'ˈɒfset', 'vt. 抵消，补偿', 'Higher wages were offset by rising prices.'],
-                ['oppress', 'əˈpres', 'vt. 压迫，压抑', 'The heat oppressed us all afternoon.'],
-                ['originate', 'əˈrɪdʒɪneɪt', 'vi. 起源于', 'The fire originated in the basement.'],
-                ['overwhelm', 'ˌəʊvəˈwelm', 'vt. 压倒，淹没', 'Do not allow the workload to overwhelm you.'],
-                ['paradox', 'ˈpærədɒks', 'n. 悖论，自相矛盾', 'It is a paradox that busy people find more time.'],
-                ['partial', 'ˈpɑːʃl', 'adj. 部分的；偏袒的', 'The reform was only a partial success.'],
-                ['patent', 'ˈpeɪtnt', 'n. 专利；vt. 取得专利', 'He filed a patent for his invention.'],
-                ['peculiar', 'pɪˈkjuːliə', 'adj. 奇怪的，特有的', 'The fruit has a peculiar smell.'],
-                ['perceive', 'pəˈsiːv', 'vt. 察觉，理解', 'Children perceive the world differently from adults.'],
-                ['perpetual', 'pəˈpetʃuəl', 'adj. 永久的，持续的', 'He lives in a perpetual fear of failure.'],
-                ['perplex', 'pəˈpleks', 'vt. 使困惑', 'The sudden question perplexed the candidate.'],
-                ['persist', 'pəˈsɪst', 'vi. 坚持，持续', 'If the pain persists, see a doctor.'],
-                ['pledge', 'pledʒ', 'n./vt. 承诺，保证', 'The government pledged to reduce poverty.'],
-                ['ponder', 'ˈpɒndə', 'v. 思考，沉思', 'She pondered over the job offer all weekend.'],
-                ['portray', 'pɔːˈtreɪ', 'vt. 描绘，扮演', 'The film portrays city life realistically.'],
-                ['potent', 'ˈpəʊtnt', 'adj. 有效的，强有力的', 'This is a potent argument against the plan.'],
-                ['precede', 'prɪˈsiːd', 'vt. 在…之前', 'A short speech preceded the award ceremony.'],
-                ['predominant', 'prɪˈdɒmɪnənt', 'adj. 主要的，占优势的', 'Blue is the predominant color in his paintings.'],
-                ['preliminary', 'prɪˈlɪmɪnəri', 'adj. 初步的，预备的', 'Preliminary results look promising.'],
-                ['premise', 'ˈpremɪs', 'n. 前提；pl. 经营场址', 'The argument rests on a false premise.'],
-                ['prescribe', 'prɪˈskraɪb', 'vt. 开处方，规定', 'The doctor prescribed antibiotics for the infection.'],
-                ['prestige', 'preˈstiːʒ', 'n. 声望，威望', 'The university enjoys high international prestige.'],
-                ['presume', 'prɪˈzjuːm', 'vt. 假定，推测', 'I presume you have heard the news.'],
-                ['prevail', 'prɪˈveɪl', 'vi. 盛行，获胜', 'Justice prevailed in the end.'],
-                ['probe', 'prəʊb', 'v. 探查；n. 探测器', 'Scientists probed the causes of the disease.'],
-                ['proclaim', 'prəˈkleɪm', 'vt. 宣布，声明', 'The country proclaimed its independence in 1960.'],
-                ['proficient', 'prəˈfɪʃnt', 'adj. 熟练的，精通的', 'She is proficient in three languages.'],
-                ['prolong', 'prəˈlɒŋ', 'vt. 延长', 'The treatment may prolong the patients life.'],
-                ['propel', 'prəˈpel', 'vt. 推进，驱动', 'Curiosity propelled him toward a life of research.'],
-                ['prospect', 'ˈprɒspekt', 'n. 前景，可能性', 'Graduates face bright employment prospects.'],
-                ['provoke', 'prəˈvəʊk', 'vt. 激怒，引起', 'His remarks provoked a fierce debate.'],
-                ['qualitative', 'ˈkwɒlɪtətiv', 'adj. 定性的，性质的', 'The study combines qualitative and quantitative methods.'],
-                ['quantify', 'ˈkwɒntɪfaɪ', 'vt. 量化，确定数量', 'It is hard to quantify the value of friendship.'],
-                ['quota', 'ˈkwəʊtə', 'n. 配额，限额', 'Each department has a monthly sales quota.'],
-                ['radiant', 'ˈreɪdiənt', 'adj. 容光焕发的，光芒四射的', 'She looked radiant on graduation day.'],
-                ['random', 'ˈrændəm', 'adj. 随机的，任意的', 'The app selects ten random words daily.'],
-                ['rational', 'ˈræʃnəl', 'adj. 理性的，合理的', 'Make a rational decision, not an emotional one.'],
-                ['reconcile', 'ˈrekənsaɪl', 'vt. 调和，使一致', 'How do you reconcile work and study?'],
-                ['refute', 'rɪˈfjuːt', 'vt. 驳斥，反驳', 'The data refutes the earlier claims.'],
-                ['reinforce', 'ˌriːɪnˈfɔːs', 'vt. 加强，强化', 'Review reinforces what you have learned.'],
-                ['render', 'ˈrendə', 'vt. 使成为；提供，翻译', 'The storm rendered the road impassable.'],
-                ['reside', 'rɪˈzaɪd', 'vi. 居住；存在于', 'The family resides in the suburbs.'],
-                ['restrain', 'rɪˈstreɪn', 'vt. 抑制，约束', 'He could barely restrain his laughter.'],
-                ['retain', 'rɪˈteɪn', 'vt. 保留，保持', 'The soil retains moisture for weeks.'],
-                ['retrieve', 'rɪˈtriːv', 'vt. 取回，检索', 'I retrieved the deleted file from backups.'],
-                ['reverse', 'rɪˈvɜːs', 'v. 颠倒，逆转；n. 反面', 'They reversed the decision after protests.'],
-                ['revive', 'rɪˈvaɪv', 'v. 复苏，复兴', 'The festival revived old local traditions.'],
-                ['rigorous', 'ˈrɪɡərəs', 'adj. 严格的，严密的', 'The drug passed rigorous safety tests.'],
-                ['ritual', 'ˈrɪtʃuəl', 'n. 仪式，例行公事', 'Morning coffee is part of her daily ritual.'],
-                ['robust', 'rəʊˈbʌst', 'adj. 强健的，稳固的', 'The economy shows robust growth this quarter.'],
-                ['sanction', 'ˈsæŋkʃn', 'n. 制裁，批准；vt. 认可', 'Economic sanctions failed to change the policy.'],
-                ['saturate', 'ˈsætʃəreɪt', 'vt. 使饱和，浸透', 'The market is saturated with similar apps.'],
-                ['scrutiny', 'ˈskruːtəni', 'n. 仔细审查', 'The deal is under close regulatory scrutiny.'],
-                ['segregate', 'ˈseɡrɪɡeɪt', 'vt. 分离，隔离', 'Waste should be segregated at the source.'],
-                ['sentiment', 'ˈsentɪmənt', 'n. 情绪，观点，感伤', 'Public sentiment shifted against the project.'],
-                ['shatter', 'ˈʃætə', 'v. 打碎，使破灭', 'The loss shattered their confidence.'],
-                ['simulate', 'ˈsɪmjuleɪt', 'vt. 模拟，模仿', 'The lab simulates weightless conditions.'],
-                ['simultaneous', 'ˌsɪmlˈteɪniəs', 'adj. 同时的', 'The event features simultaneous translation.'],
-                ['skeptical', 'ˈskeptɪkl', 'adj. 怀疑的', 'Experts are skeptical about the claimed results.'],
-                ['slack', 'slæk', 'adj. 松弛的，萧条的；n. 淡季', 'Business is slack during the winter months.'],
-                ['solemn', 'ˈsɒləm', 'adj. 庄严的，严肃的', 'He made a solemn promise to his mother.'],
-                ['sophisticated', 'səˈfɪstɪkeɪtɪd', 'adj. 先进的，复杂老练的', 'The lab uses sophisticated equipment.'],
-                ['spectacle', 'ˈspektəkl', 'n. 景象，壮观场面', 'The sunrise over the peaks was a stunning spectacle.'],
-                ['speculate', 'ˈspekjuleɪt', 'v. 推测，投机', 'Journalists speculate about the ministers resignation.'],
-                ['spontaneous', 'spɒnˈteɪniəs', 'adj. 自发的，自然的', 'The audience burst into spontaneous applause.'],
-                ['stagger', 'ˈstæɡə', 'v. 蹒跚；使吃惊；错开', 'Office hours are staggered to reduce crowding.'],
-                ['stationary', 'ˈsteɪʃənri', 'adj. 静止的，固定的', 'A stationary car blocked the lane.'],
-                ['strain', 'streɪn', 'n. 压力，拉伤；v. 拉紧', 'The crisis put a strain on public services.'],
-                ['subordinate', 'səˈbɔːdɪnət', 'adj. 从属的；n. 下级', 'Individual goals are subordinate to team goals.'],
-                ['subsidy', 'ˈsʌbsidi', 'n. 补贴，津贴', 'Farmers receive a subsidy for green farming.'],
-                ['substantial', 'səbˈstænʃl', 'adj. 大量的，实质的', 'The project requires a substantial investment.'],
-                ['subtle', 'ˈsʌtl', 'adj. 微妙的，细微的', 'There is a subtle difference between the two words.'],
-                ['succession', 'səkˈseʃn', 'n. 连续，继任', 'Questions came in quick succession.'],
-                ['superficial', 'ˌsuːpəˈfɪʃl', 'adj. 肤浅的，表面的', 'His understanding of economics is superficial.'],
-                ['supervise', 'ˈsuːpəvaɪz', 'vt. 监督，指导', 'Interns supervise the morning exercises.'],
-                ['supplement', 'ˈsʌplɪmənt', 'n. 补充，增刊；vt. 增补', 'She supplements her income with freelance work.'],
-                ['suppress', 'səˈpres', 'vt. 镇压，抑制', 'He suppressed a smile during the speech.'],
-                ['surge', 'sɜːdʒ', 'n./vi. 激增，汹涌', 'There was a surge in online orders last month.'],
-                ['surpass', 'səˈpɑːs', 'vt. 超过，胜过', 'The sequel surpassed the original film.'],
-                ['susceptible', 'səˈseptəbl', 'adj. 易受影响的，易感的', 'Children are susceptible to cold weather.'],
-                ['suspend', 'səˈspend', 'vt. 暂停，悬挂', 'Flights were suspended due to heavy fog.'],
-                ['sustain', 'səˈsteɪn', 'vt. 维持，承受', 'The soil cannot sustain intensive farming forever.'],
-                ['symmetry', 'ˈsɪmətri', 'n. 对称', 'The building is admired for its perfect symmetry.'],
-                ['tackle', 'ˈtækl', 'vt. 解决，对付；n. 用具', 'We must tackle the problem at its root.'],
-                ['tedious', 'ˈtiːdiəs', 'adj. 单调乏味的', 'Data entry is tedious but necessary.'],
-                ['tentative', 'ˈtentətiv', 'adj. 试探性的，暂定的', 'We reached a tentative agreement yesterday.'],
-                ['terminate', 'ˈtɜːmɪneɪt', 'v. 终止，结束', 'The contract terminates in December.'],
-                ['testify', 'ˈtestɪfaɪ', 'v. 作证，证明', 'Two witnesses testified against the driver.'],
-                ['thrive', 'θraɪv', 'vi. 兴旺，茁壮成长', 'These plants thrive in warm climates.'],
-                ['timid', 'ˈtɪmɪd', 'adj. 胆怯的，怯懦的', 'Do not be timid about asking questions.'],
-                ['tolerant', 'ˈtɒlərənt', 'adj. 宽容的，耐受的', 'She is tolerant of different opinions.'],
-                ['toxic', 'ˈtɒksɪk', 'adj. 有毒的', 'The factory released toxic chemicals into the river.'],
-                ['tranquil', 'ˈtræŋkwɪl', 'adj. 宁静的', 'We spent a tranquil evening by the lake.'],
-                ['transaction', 'trænˈzækʃn', 'n. 交易，事务', 'All transactions are recorded securely.'],
-                ['transit', 'ˈtrænzɪt', 'n. 运输，运送', 'The goods were damaged in transit.'],
-                ['transparent', 'trænsˈpærənt', 'adj. 透明的，公开的', 'The hiring process should be transparent.'],
-                ['tribute', 'ˈtrɪbjuːt', 'n. 致敬，贡品', 'The concert paid tribute to late musicians.'],
-                ['trigger', 'ˈtrɪɡə', 'vt. 引发，触发；n. 扳机', 'The news triggered panic selling.'],
-                ['trivial', 'ˈtrɪviəl', 'adj. 琐碎的，不重要的', 'Do not waste time on trivial matters.'],
-                ['turbulent', 'ˈtɜːbjələnt', 'adj. 动荡的，湍急的', 'The country went through a turbulent period.'],
-                ['unanimous', 'juˈnænɪməs', 'adj. 全体一致的', 'The jury reached a unanimous verdict.'],
-                ['underestimate', 'ˌʌndərˈestɪmeɪt', 'vt. 低估', 'Never underestimate the power of practice.'],
-                ['undergo', 'ˌʌndəˈɡəʊ', 'vt. 经历，接受', 'The bridge must undergo strict inspections.'],
-                ['underlying', 'ˌʌndəˈlaɪɪŋ', 'adj. 潜在的，根本的', 'We must address the underlying causes of crime.'],
-                ['utilize', 'ˈjuːtəlaɪz', 'vt. 利用', 'The system utilizes solar energy efficiently.'],
-                ['verge', 'vɜːdʒ', 'n. 边缘', 'She was on the verge of tears.'],
-                ['verify', 'ˈverɪfaɪ', 'vt. 核实，查证', 'Please verify your email address.'],
-                ['versatile', 'ˈvɜːsətaɪl', 'adj. 多才多艺的，多用途的', 'Eggs are a versatile ingredient in cooking.'],
-                ['vicinity', 'vɪˈsɪnəti', 'n. 附近，邻近地区', 'Three schools lie in the vicinity of the park.'],
-                ['vigorous', 'ˈvɪɡərəs', 'adj. 有力的，精力充沛的', 'Vigorous exercise improves sleep quality.'],
-                ['virtual', 'ˈvɜːtʃuəl', 'adj. 虚拟的，事实上的', 'The museum offers virtual tours online.'],
-                ['vulnerable', 'ˈvʌlnərəbl', 'adj. 易受伤害的，脆弱的', 'Elderly people are vulnerable to the flu.'],
-                ['wary', 'ˈweəri', 'adj. 谨慎的，警惕的', 'Be wary of emails asking for passwords.'],
-                ['wholesome', 'ˈhəʊlsəm', 'adj. 有益健康的', 'The camp provides wholesome food for kids.'],
-                ['wither', 'ˈwɪðə', 'v. 枯萎，凋谢', 'Flowers withered without water.'],
-                ['yield', 'jiːld', 'v. 屈服；产出；n. 产量', 'The talks yielded a peace agreement.']
+                ['abandon', 'əˈbændən', 'vt. 放弃，抛弃；n. 放纵', 'He abandoned the plan at the last minute.', '他在最后一刻放弃了这个计划。'],
+                ['abolish', 'əˈbɒlɪʃ', 'vt. 废除，取消', 'The new government abolished the outdated law.', '新政府废除了那条过时的法律。'],
+                ['abrupt', 'əˈbrʌpt', 'adj. 突然的，唐突的', 'The meeting came to an abrupt end.', '会议突然结束了。'],
+                ['absurd', 'əbˈsɜːd', 'adj. 荒谬的，荒唐的', 'It is absurd to blame the weather for the delay.', '把延误归咎于天气是荒谬的。'],
+                ['abundance', 'əˈbʌndəns', 'n. 丰富，充裕', 'The region has an abundance of natural resources.', '该地区拥有丰富的自然资源。'],
+                ['accumulate', 'əˈkjuːmjəleɪt', 'v. 积累，积聚', 'She accumulated a large fortune through hard work.', '她通过努力工作积累了大量财富。'],
+                ['acquaint', 'əˈkweɪnt', 'vt. 使熟悉，使认识', 'Please acquaint yourself with the safety rules.', '请熟悉安全规则。'],
+                ['adhere', 'ədˈhɪə', 'vi. 粘附；坚持，遵守', 'Employees must adhere to the company policy.', '员工必须遵守公司政策。'],
+                ['administer', 'ədˈmɪnɪstə', 'vt. 管理，执行；给予', 'The fund is administered by the ministry.', '该基金由教育部管理。'],
+                ['advocate', 'ˈædvəkeɪt', 'vt. 提倡，主张；n. 拥护者', 'Experts advocate a balanced diet for children.', '专家提倡儿童均衡饮食。'],
+                ['aggravate', 'ˈæɡrəveɪt', 'vt. 加重，恶化', 'Stress can aggravate the illness.', '压力会加重病情。'],
+                ['alleviate', 'əˈliːvieɪt', 'vt. 减轻，缓解', 'The medicine alleviated his pain quickly.', '药物迅速缓解了他的疼痛。'],
+                ['allocate', 'ˈæləkeɪt', 'vt. 分配，拨给', 'More funds were allocated to rural schools.', '更多资金被拨给了农村学校。'],
+                ['ambiguous', 'æmˈbɪɡjuəs', 'adj. 模棱两可的，含糊的', 'His answer was deliberately ambiguous.', '他的回答故意含糊其辞。'],
+                ['analogy', 'əˈnælədʒi', 'n. 类比，类推', 'The teacher drew an analogy between the heart and a pump.', '老师把心脏和水泵作了类比。'],
+                ['anonymous', 'əˈnɒnɪməs', 'adj. 匿名的', 'The donation was made by an anonymous donor.', '这笔捐款来自一位匿名捐赠者。'],
+                ['anticipate', 'ænˈtɪsɪpeɪt', 'vt. 预期，预料', 'We anticipate strong demand for the product.', '我们预计该产品需求旺盛。'],
+                ['applaud', 'əˈplɔːd', 'v. 鼓掌欢迎；称赞', 'The audience applauded loudly after the speech.', '观众在演讲后热烈鼓掌。'],
+                ['arbitrary', 'ˈɑːbɪtrəri', 'adj. 任意的，武断的', 'The choice of colors seemed completely arbitrary.', '颜色的选择看起来完全是随意的。'],
+                ['articulate', 'ɑːˈtɪkjuleɪt', 'adj. 善于表达的；vt. 清晰表达', 'She is articulate about her research goals.', '她清晰地表达了自己的研究目标。'],
+                ['ascend', 'əˈsend', 'v. 上升，攀登', 'The plane ascended into the clouds.', '飞机升入云层。'],
+                ['ascribe', 'əˈskraɪb', 'vt. 归因于', 'He ascribes his success to sheer luck.', '他把自己的成功完全归因于运气。'],
+                ['assault', 'əˈsɔːlt', 'n./vt. 攻击，袭击', 'The city survived an assault of criticism.', '这座城市经受住了批评的冲击。'],
+                ['assert', 'əˈsɜːt', 'vt. 断言，维护', 'She asserted that the data was reliable.', '她断言这些数据是可靠的。'],
+                ['asset', 'ˈæset', 'n. 资产；有价值的人或物', 'Fluency in English is a great asset.', '流利的英语是一大优势。'],
+                ['assimilate', 'əˈsɪməleɪt', 'v. 吸收，同化', 'Children assimilate new ideas quickly.', '孩子们很快就能吸收新思想。'],
+                ['attain', 'əˈteɪn', 'vt. 达到，获得', 'He attained the rank of professor at thirty.', '他在三十岁时获得了教授头衔。'],
+                ['authentic', 'ɔːˈθentɪk', 'adj. 真实的，可靠的', 'The museum displays authentic ancient coins.', '博物馆展出的是真正的古币。'],
+                ['avert', 'əˈvɜːt', 'vt. 避免，转移', 'Quick action averted a serious accident.', '迅速的行动避免了一场严重事故。'],
+                ['barren', 'ˈbærən', 'adj. 贫瘠的，不结果实的', 'Nothing grows on this barren land.', '这片贫瘠的土地上什么也长不出来。'],
+                ['betray', 'bɪˈtreɪ', 'vt. 背叛；泄露', 'He would never betray his friends.', '他绝不会背叛自己的朋友。'],
+                ['bewilder', 'bɪˈwɪldə', 'vt. 使迷惑', 'The complicated map bewildered the tourists.', '复杂的地图让游客们困惑不已。'],
+                ['bias', 'ˈbaɪəs', 'n. 偏见；vt. 使有偏见', 'The report was criticized for political bias.', '这份报告因政治偏见而受到批评。'],
+                ['bleak', 'bliːk', 'adj. 荒凉的；黯淡的', 'The forecast for the economy remains bleak.', '经济前景依然黯淡。'],
+                ['blunder', 'ˈblʌndə', 'n. 大错；vi. 犯大错', 'Shipping the wrong order was a serious blunder.', '发错订单是一个严重的失误。'],
+                ['boost', 'buːst', 'vt. 提高，推动；n. 促进', 'The ad campaign boosted sales sharply.', '广告宣传活动大幅提升了销售额。'],
+                ['breach', 'briːtʃ', 'n./vt. 违反，破坏', 'Leaking the document was a breach of trust.', '泄露文件是违背信任的行为。'],
+                ['brisk', 'brɪsk', 'adj. 轻快的；兴隆的', 'They took a brisk walk before breakfast.', '他们在早餐前快步走了一段。'],
+                ['brutal', 'ˈbruːtl', 'adj. 残忍的，野蛮的', 'The team faced brutal competition.', '团队面临着激烈的竞争。'],
+                ['casualty', 'ˈkæʒuəlti', 'n. 伤亡人员；受害者', 'There were no casualties in the fire.', '火灾中没有人员伤亡。'],
+                ['catastrophe', 'kəˈtæstrəfi', 'n. 大灾难', 'Losing the files would be a catastrophe.', '丢失这些文件将是一场灾难。'],
+                ['cater', 'ˈkeɪtə', 'vi. 迎合，满足需要', 'The cafe caters mainly to students.', '这家咖啡馆主要面向学生。'],
+                ['cherish', 'ˈtʃerɪʃ', 'vt. 珍惜，怀有', 'She cherishes the memory of her college years.', '她珍藏着大学时代的回忆。'],
+                ['chronic', 'ˈkrɒnɪk', 'adj. 慢性的，长期的', 'He suffers from chronic back pain.', '他患有慢性背痛。'],
+                ['circulate', 'ˈsɜːkjəleɪt', 'v. 循环，传播', 'Rumors began to circulate around campus.', '谣言开始在校园里传播。'],
+                ['cite', 'saɪt', 'vt. 引用，举例子', 'The lawyer cited two previous cases.', '律师引用了两个先前的案例。'],
+                ['cling', 'klɪŋ', 'vi. 紧握；坚持', 'Wet clothes clung to his body.', '湿衣服紧贴在他身上。'],
+                ['coincide', 'ˌkəʊɪnˈsaɪd', 'vi. 同时发生；一致', 'My views coincide with hers on this issue.', '在这个问题上我的观点和她一致。'],
+                ['collaborate', 'kəˈlæbəreɪt', 'vi. 合作，协作', 'The two labs collaborated on the project.', '两个实验室在该项目上进行了合作。'],
+                ['collide', 'kəˈlaɪd', 'vi. 碰撞；冲突', 'The two trains collided near the station.', '两列火车在车站附近相撞。'],
+                ['commence', 'kəˈmens', 'v. 开始', 'The ceremony will commence at nine sharp.', '典礼将在九点整开始。'],
+                ['compatible', 'kəmˈpætəbl', 'adj. 兼容的；合得来的', 'The software is compatible with most systems.', '该软件与大多数系统兼容。'],
+                ['compensate', 'ˈkɒmpenseɪt', 'v. 补偿，弥补', 'Nothing can compensate for the lost time.', '什么都无法弥补失去的时间。'],
+                ['competent', 'ˈkɒmpɪtənt', 'adj. 有能力的，胜任的', 'She is highly competent in her field.', '她在自己的领域非常能干。'],
+                ['compile', 'kəmˈpaɪl', 'vt. 编写，汇编', 'He compiled a dictionary of slang terms.', '他编写了一本俚语词典。'],
+                ['comply', 'kəmˈplaɪ', 'vi. 遵从，服从', 'All factories must comply with the regulations.', '所有工厂必须遵守相关规定。'],
+                ['compulsory', 'kəmˈpʌlsəri', 'adj. 强制的，义务的', 'English is a compulsory subject here.', '英语在这里是必修科目。'],
+                ['conceive', 'kənˈsiːv', 'v. 构想，设想；怀孕', 'He conceived a bold plan for the startup.', '他为这家初创公司构想了一个大胆的计划。'],
+                ['condemn', 'kənˈdem', 'vt. 谴责，判刑', 'World leaders condemned the attack.', '世界各国领导人谴责了这次袭击。'],
+                ['confidential', 'ˌkɒnfɪˈdenʃl', 'adj. 机密的', 'The report contains confidential information.', '这份报告包含机密信息。'],
+                ['conform', 'kənˈfɔːm', 'vi. 符合，遵照', 'The design conforms to safety standards.', '该设计符合安全标准。'],
+                ['consecutive', 'kənˈsekjətiv', 'adj. 连续的', 'It rained for five consecutive days.', '连续下了五天雨。'],
+                ['consensus', 'kənˈsensəs', 'n. 共识', 'The board reached a consensus on the budget.', '董事会就预算达成了共识。'],
+                ['consolidate', 'kənˈsɒlɪdeɪt', 'v. 巩固，合并', 'The company consolidated its market position.', '公司巩固了其市场地位。'],
+                ['conspicuous', 'kənˈspɪkjuəs', 'adj. 显眼的，惹人注目的', 'His red jacket made him conspicuous in the crowd.', '他的红夹克使他在人群中很显眼。'],
+                ['contaminate', 'kənˈtæmɪneɪt', 'vt. 污染', 'The river was contaminated by industrial waste.', '河流被工业废物污染了。'],
+                ['contemplate', 'ˈkɒntəmpleɪt', 'vt. 沉思，考虑', 'She contemplated changing her major.', '她考虑过转专业。'],
+                ['contradict', 'ˌkɒntrəˈdɪkt', 'vt. 反驳，与…矛盾', 'The witnesses contradicted each other.', '证人们互相矛盾。'],
+                ['converge', 'kənˈvɜːdʒ', 'vi. 汇聚，聚集', 'Thousands of fans converged on the stadium.', '数千名球迷汇聚在体育场。'],
+                ['corrupt', 'kəˈrʌpt', 'adj. 腐败的；vt. 使腐化', 'Corrupt officials were brought to justice.', '腐败官员被绳之以法。'],
+                ['counterpart', 'ˈkaʊntəpɑːt', 'n. 对应的人或物', 'The minister met his French counterpart.', '部长会见了他的法国同行。'],
+                ['criterion', 'kraɪˈtɪəriən', 'n. 标准，准则', 'Grades are only one criterion for admission.', '成绩只是录取的一个标准。'],
+                ['crucial', 'ˈkruːʃl', 'adj. 至关重要的', 'Timing is crucial to the success of the plan.', '时机对计划的成功至关重要。'],
+                ['cumulative', 'ˈkjuːmjələtiv', 'adj. 累积的', 'The cumulative effect of stress is harmful.', '压力的累积效应是有害的。'],
+                ['curb', 'kɜːb', 'vt. 控制，约束；n. 路缘', 'New measures aim to curb air pollution.', '新措施旨在遏制空气污染。'],
+                ['deceive', 'dɪˈsiːv', 'v. 欺骗', 'He deceived us about his true intentions.', '他在真实意图上欺骗了我们。'],
+                ['dedicate', 'ˈdedɪkeɪt', 'vt. 奉献，致力于', 'She dedicated herself to medical research.', '她致力于医学研究。'],
+                ['degrade', 'dɪˈɡreɪd', 'v. 降低，使降级；退化', 'Plastic waste degrades the marine environment.', '塑料垃圾破坏海洋环境。'],
+                ['deliberate', 'dɪˈlɪbərət', 'adj. 故意的；深思熟虑的', 'It was a deliberate attempt to mislead voters.', '这是故意误导选民的行为。'],
+                ['denote', 'dɪˈnəʊt', 'vt. 表示，意味着', 'In chess, a capital letter denotes a piece.', '在国际象棋中，大写字母表示一个棋子。'],
+                ['deprive', 'dɪˈpraɪv', 'vt. 剥夺', 'No one should deprive children of education.', '任何人都不应剥夺儿童受教育的权利。'],
+                ['designate', 'ˈdezɪɡneɪt', 'vt. 指定，任命', 'The area was designated a national park.', '该地区被指定为国家公园。'],
+                ['deteriorate', 'dɪˈtɪəriəreɪt', 'vi. 恶化，变坏', 'His health deteriorated rapidly last winter.', '去年冬天他的健康状况迅速恶化。'],
+                ['deviate', 'ˈdiːvieɪt', 'vi. 偏离，违背', 'The pilot deviated from the planned route.', '飞行员偏离了预定航线。'],
+                ['devise', 'dɪˈvaɪz', 'vt. 设计，想出', 'They devised a new method to save energy.', '他们设计了一种新的节能方法。'],
+                ['differentiate', 'ˌdɪfəˈrenʃieɪt', 'v. 区分，区别', 'Can you differentiate the twin brothers?', '你能区分这对双胞胎兄弟吗？'],
+                ['dilemma', 'dɪˈlemə', 'n. 困境，进退两难', 'She faced the dilemma of work versus family.', '她面临着工作与家庭的两难抉择。'],
+                ['diminish', 'dɪˈmɪnɪʃ', 'v. 减少，缩小', 'The medicine gradually diminished the pain.', '药物逐渐减轻了疼痛。'],
+                ['discard', 'dɪsˈkɑːd', 'vt. 丢弃，抛弃', 'Do not discard receipts before checking them.', '核对前不要丢弃收据。'],
+                ['discern', 'dɪˈsɜːn', 'vt. 辨别，察觉', 'I could discern a figure in the fog.', '我在雾中隐约看到一个人影。'],
+                ['disclose', 'dɪsˈkləʊz', 'vt. 披露，透露', 'The company refused to disclose the deal value.', '公司拒绝透露交易金额。'],
+                ['discrepancy', 'dɪsˈkrepənsi', 'n. 差异，不符', 'There is a discrepancy between the two reports.', '两份报告之间存在差异。'],
+                ['disguise', 'dɪsˈɡaɪz', 'n./vt. 伪装，掩饰', 'He escaped in the disguise of a guard.', '他伪装成警卫逃跑了。'],
+                ['dismay', 'dɪsˈmeɪ', 'n. 沮丧；vt. 使失望', 'To her dismay, the flight was canceled again.', '令她沮丧的是，航班又取消了。'],
+                ['disperse', 'dɪˈspɜːs', 'v. 分散，驱散', 'The police dispersed the crowd peacefully.', '警察和平驱散了人群。'],
+                ['distort', 'dɪˈstɔːt', 'vt. 歪曲，扭曲', 'Media coverage often distorts the facts.', '媒体报道经常歪曲事实。'],
+                ['divert', 'daɪˈvɜːt', 'vt. 转移，使转向', 'Traffic was diverted after the bridge closed.', '桥梁关闭后交通被改道。'],
+                ['drastic', 'ˈdræstɪk', 'adj. 激烈的，严厉的', 'Drastic measures were taken to cut costs.', '采取了严厉措施来削减成本。'],
+                ['dubious', 'ˈdjuːbiəs', 'adj. 可疑的，半信半疑的', 'He made some dubious business deals.', '他做了一些可疑的商业交易。'],
+                ['duplicate', 'ˈdjuːplɪkeɪt', 'vt. 复制；n. 复制品', 'Please duplicate the file before editing.', '编辑前请复制文件。'],
+                ['eccentric', 'ɪkˈsentrɪk', 'adj. 古怪的；n. 怪人', 'The professor is famous for his eccentric habits.', '这位教授以古怪的习惯闻名。'],
+                ['elevate', 'ˈelɪveɪt', 'vt. 提升，举起', 'Reading can elevate the mind.', '阅读可以提升心灵。'],
+                ['elicit', 'ɪˈlɪsɪt', 'vt. 引出，诱出', 'The question elicited a heated discussion.', '这个问题引发了一场激烈的讨论。'],
+                ['eligible', 'ˈelɪdʒəbl', 'adj. 有资格的', 'Students over eighteen are eligible to vote.', '年满十八岁的学生有资格投票。'],
+                ['embark', 'ɪmˈbɑːk', 'vi. 上船；着手', 'He embarked on a career in journalism.', '他开始了新闻事业。'],
+                ['eminent', 'ˈemɪnənt', 'adj. 杰出的，著名的', 'An eminent scientist gave the opening lecture.', '一位著名科学家作了开幕演讲。'],
+                ['endeavor', 'ɪnˈdevə', 'n./vi. 努力，尽力', 'Scientific endeavor requires patience.', '科学研究需要耐心。'],
+                ['enhance', 'ɪnˈhɑːns', 'vt. 提高，增强', 'The software enhances photo quality instantly.', '该软件可以即时提升照片质量。'],
+                ['entitle', 'ɪnˈtaɪtl', 'vt. 使有权；给题名', 'The ticket entitles you to a free meal.', '凭这张票你可以免费用餐。'],
+                ['essence', 'ˈesns', 'n. 本质，精髓', 'Time is of the essence in emergencies.', '在紧急情况下时间至关重要。'],
+                ['eternal', 'ɪˈtɜːnl', 'adj. 永恒的', 'She dreamed of eternal youth.', '她梦想着永远年轻。'],
+                ['evoke', 'ɪˈvəʊk', 'vt. 唤起，引起', 'The song evoked memories of her hometown.', '这首歌唤起了她对家乡的回忆。'],
+                ['exaggerate', 'ɪɡˈzædʒəreɪt', 'v. 夸张，夸大', 'Do not exaggerate the difficulties.', '不要夸大困难。'],
+                ['exert', 'ɪɡˈzɜːt', 'vt. 施加，发挥', 'Parents exert a huge influence on children.', '父母对孩子有巨大的影响。'],
+                ['explicit', 'ɪkˈsplɪsɪt', 'adj. 明确的，清楚的', 'The instructions were explicit and easy to follow.', '说明明确且易于遵循。'],
+                ['exquisite', 'ɪkˈskwɪzɪt', 'adj. 精美的，精致的', 'The palace contains exquisite carvings.', '宫殿内有精美的雕刻。'],
+                ['extinct', 'ɪkˈstɪŋkt', 'adj. 灭绝的，熄灭的', 'Dinosaurs have been extinct for millions of years.', '恐龙已经灭绝数百万年了。'],
+                ['extinguish', 'ɪkˈstɪŋɡwɪʃ', 'vt. 熄灭，扑灭', 'Firefighters extinguished the blaze within an hour.', '消防员在一小时内扑灭了大火。'],
+                ['extract', 'ɪkˈstrækt', 'vt. 提取，抽出；n. 摘录', 'Oil is extracted from these tiny seeds.', '油从这些小种子里提取。'],
+                ['fabricate', 'ˈfæbrɪkeɪt', 'vt. 编造，制造', 'He fabricated an excuse to skip the meeting.', '他编造了一个借口来逃避会议。'],
+                ['facilitate', 'fəˈsɪlɪteɪt', 'vt. 促进，使便利', 'Computers facilitate learning in many ways.', '计算机在很多方面促进了学习。'],
+                ['feasible', 'ˈfiːzəbl', 'adj. 可行的', 'Is the project financially feasible?', '这个项目在经济上可行吗？'],
+                ['feeble', 'ˈfiːbl', 'adj. 虚弱的，无力的', 'His feeble excuse convinced nobody.', '他那站不住脚的借口没能说服任何人。'],
+                ['flaw', 'flɔː', 'n. 缺陷，瑕疵', 'There is a fundamental flaw in your argument.', '你的论点有一个根本性的缺陷。'],
+                ['formulate', 'ˈfɔːmjuleɪt', 'vt. 制定，系统地阐述', 'They formulated a strategy for the campaign.', '他们为竞选活动制定了策略。'],
+                ['foster', 'ˈfɒstə', 'vt. 培养，促进；寄养', 'The club fosters interest in science.', '该俱乐部培养对科学的兴趣。'],
+                ['fraud', 'frɔːd', 'n. 欺诈，骗局', 'He was arrested for tax fraud.', '他因税务欺诈被捕。'],
+                ['frustrate', 'frʌˈstreɪt', 'vt. 使沮丧，挫败', 'Delays frustrated travelers at the airport.', '延误让机场的旅客感到沮丧。'],
+                ['gloomy', 'ˈɡluːmi', 'adj. 阴暗的，忧郁的', 'The report paints a gloomy picture of the future.', '这份报告描绘了一幅黯淡的未来图景。'],
+                ['hamper', 'ˈhæmpə', 'vt. 妨碍，阻碍', 'Bad weather hampered rescue efforts.', '恶劣天气妨碍了救援工作。'],
+                ['hazard', 'ˈhæzəd', 'n. 危险，危害', 'Wet floors are a common hazard in hospitals.', '地面湿滑是医院常见的安全隐患。'],
+                ['hinder', 'ˈhɪndə', 'vt. 阻碍，妨碍', 'Fear of failure hinders many students.', '对失败的恐惧阻碍了许多学生。'],
+                ['homogeneous', 'ˌhɒməˈdʒiːniəs', 'adj. 同质的，同类的', 'The population is remarkably homogeneous.', '该地区的人口非常同质化。'],
+                ['hostile', 'ˈhɒstaɪl', 'adj. 敌对的，不友好的', 'The proposal met a hostile reception.', '该提案遭到了敌意的对待。'],
+                ['humidity', 'hjuːˈmɪdəti', 'n. 湿度，湿气', 'High humidity makes summer days unbearable.', '高湿度使夏天难以忍受。'],
+                ['hypothesis', 'haɪˈpɒθəsɪs', 'n. 假设，假说', 'The experiment supported our hypothesis.', '实验支持了我们的假设。'],
+                ['ignite', 'ɪɡˈnaɪt', 'vt. 点燃；激起', 'The speech ignited public anger.', '这篇演讲激起了公众的愤怒。'],
+                ['immerse', 'ɪˈmɜːs', 'vt. 浸没，沉浸', 'She immersed herself in study for weeks.', '她沉浸于学习数周。'],
+                ['immune', 'ɪˈmjuːn', 'adj. 免疫的；不受影响的', 'No one is immune to the virus.', '没有人对这种病毒有免疫力。'],
+                ['impair', 'ɪmˈpeə', 'vt. 损害，削弱', 'Smoking impairs your lung function.', '吸烟会损害你的肺功能。'],
+                ['imperative', 'ɪmˈperətiv', 'adj. 必要的，紧急的；n. 必要的事', 'It is imperative to act immediately.', '必须立即采取行动。'],
+                ['implement', 'ˈɪmplɪment', 'vt. 实施，执行；n. 工具', 'The school implemented a new grading system.', '学校实施了新的评分制度。'],
+                ['implicit', 'ɪmˈplɪsɪt', 'adj. 含蓄的，暗含的', 'There was an implicit criticism in her reply.', '她的回复中含有隐含的批评。'],
+                ['impose', 'ɪmˈpəʊz', 'vt. 强加，征税', 'The state imposed a tax on sugary drinks.', '政府对含糖饮料征税。'],
+                ['indignant', 'ɪnˈdɪɡnənt', 'adj. 愤慨的', 'Residents were indignant about the rising fees.', '居民对不断上涨的费用感到愤慨。'],
+                ['indulge', 'ɪnˈdʌldʒ', 'v. 放纵，沉溺', 'On weekends she indulges in chocolate cake.', '周末她会享用巧克力蛋糕。'],
+                ['inherent', 'ɪnˈhɪərənt', 'adj. 固有的，内在的', 'Risk is inherent in any investment.', '任何投资都固有风险。'],
+                ['initiate', 'ɪˈnɪʃieɪt', 'vt. 开始，发起', 'The government initiated a housing program.', '政府启动了一项住房计划。'],
+                ['innovation', 'ˌɪnəˈveɪʃn', 'n. 创新，革新', 'Innovation drives the tech industry forward.', '创新推动着科技产业前进。'],
+                ['integral', 'ˈɪntɪɡrəl', 'adj. 不可缺少的，完整的', 'Practice is an integral part of learning music.', '练习是学习音乐不可或缺的部分。'],
+                ['integrate', 'ˈɪntɪɡreɪt', 'v. 使成整体，融合', 'The app integrates maps with travel guides.', '该应用将地图与旅游指南融合在一起。'],
+                ['intellect', 'ˈɪntəlekt', 'n. 智力，才智', 'She is a woman of formidable intellect.', '她是一位才智非凡的女性。'],
+                ['intermittent', 'ˌɪntəˈmɪtnt', 'adj. 间歇的，断断续续的', 'Intermittent rain lasted all week.', '断断续续的雨持续了一整周。'],
+                ['intervene', 'ˌɪntəˈviːn', 'vi. 干预，介入', 'The teacher intervened before the argument escalated.', '老师在争论升级前进行了干预。'],
+                ['intimidate', 'ɪnˈtɪmɪdeɪt', 'vt. 恐吓，威胁', 'Do not let the exam intimidate you.', '不要让考试吓到你。'],
+                ['intricate', 'ˈɪntrɪkət', 'adj. 错综复杂的', 'The watch has an intricate mechanism.', '这块手表有着精密的机械结构。'],
+                ['intuition', 'ˌɪntjuˈɪʃn', 'n. 直觉', 'Her intuition told her something was wrong.', '她的直觉告诉她出了问题。'],
+                ['invalid', 'ɪnˈvælɪd', 'adj. 无效的，作废的', 'Your password is invalid, please retry.', '密码无效，请重试。'],
+                ['jeopardize', 'ˈdʒepədaɪz', 'vt. 危及，损害', 'Careless driving jeopardizes everyones safety.', '粗心驾驶危及每个人的安全。'],
+                ['justifiable', 'ˈdʒʌstɪfaɪəbl', 'adj. 有道理的，可辩护的', 'Anger is justifiable in such circumstances.', '在这种情况下愤怒是有道理的。'],
+                ['latent', 'ˈleɪtnt', 'adj. 潜在的，潜伏的', 'He has a latent talent for painting.', '他有潜在的绘画天赋。'],
+                ['legitimate', 'lɪˈdʒɪtɪmət', 'adj. 合法的，正当的', 'Both sides have legitimate concerns.', '双方都有合理的关切。'],
+                ['liability', 'ˌlaɪəˈbɪləti', 'n. 责任，债务；不利条件', 'The company accepted liability for the accident.', '公司承担了事故的责任。'],
+                ['linger', 'ˈlɪŋɡə', 'vi. 逗留，徘徊', 'The smell of paint lingered for days.', '油漆的味道持续了好几天。'],
+                ['literacy', 'ˈlɪtərəsi', 'n. 读写能力，素养', 'The program promotes digital literacy among seniors.', '该项目提升老年人的数字素养。'],
+                ['lubricate', 'ˈluːbrɪkeɪt', 'vt. 润滑', 'Lubricate the machine parts regularly.', '定期给机器零件上润滑油。'],
+                ['magnify', 'ˈmæɡnɪfaɪ', 'vt. 放大，扩大', 'The microscope magnifies the sample four hundred times.', '显微镜将样本放大四百倍。'],
+                ['manifest', 'ˈmænɪfest', 'vt. 表明；adj. 明显的', 'Stress often manifests itself as fatigue.', '压力常以疲劳的形式表现出来。'],
+                ['manipulate', 'məˈnɪpjuleɪt', 'vt. 操纵，控制', 'Advertisers manipulate consumers with clever images.', '广告商用巧妙的图像操纵消费者。'],
+                ['mediate', 'ˈmiːdieɪt', 'v. 调解，斡旋', 'The UN offered to mediate between the two sides.', '联合国提出在双方之间进行调解。'],
+                ['merge', 'mɜːdʒ', 'v. 合并，融入', 'The two banks will merge next month.', '两家银行将于下月合并。'],
+                ['mingled', 'ˈmɪŋɡld', 'v. 混合，交往', 'Guests mingled freely at the reception.', '宾客们在招待会上自由交流。'],
+                ['minimize', 'ˈmɪnɪmaɪz', 'vt. 最小化，把…估计得最低', 'Wear a helmet to minimize the risk of injury.', '戴上头盔以最大程度降低受伤风险。'],
+                ['momentum', 'məʊˈmentəm', 'n. 势头，动量', 'The reform movement gained momentum quickly.', '改革运动迅速获得了势头。'],
+                ['monopoly', 'məˈnɒpəli', 'n. 垄断，专营', 'The company enjoys a monopoly on local transport.', '该公司垄断了当地交通运输。'],
+                ['mortgage', 'ˈmɔːɡɪdʒ', 'n./vt. 抵押贷款', 'They took out a mortgage to buy the house.', '他们申请了抵押贷款来买房。'],
+                ['multitude', 'ˈmʌltɪtjuːd', 'n. 大量，群众', 'A multitude of factors shaped his decision.', '众多因素影响了他的决定。'],
+                ['mutual', 'ˈmjuːtʃuəl', 'adj. 相互的，共同的', 'Their partnership is based on mutual respect.', '他们的合作关系建立在相互尊重的基础上。'],
+                ['naive', 'naɪˈiːv', 'adj. 天真的，幼稚的', 'It was naive of him to trust strangers so easily.', '他如此轻易地信任陌生人真是太天真了。'],
+                ['negotiate', 'nɪˈɡəʊʃieɪt', 'v. 谈判，协商', 'The union negotiated a pay rise with management.', '工会与管理层协商了加薪事宜。'],
+                ['notable', 'ˈnəʊtəbl', 'adj. 值得注意的，著名的', 'The year saw notable progress in medicine.', '这一年医学取得了显著进步。'],
+                ['nourish', 'ˈnʌrɪʃ', 'vt. 滋养，培育', 'Good books nourish the mind.', '好书滋养心灵。'],
+                ['nuisance', 'ˈnjuːsns', 'n. 讨厌的人或物', 'Mosquitoes are a real nuisance in summer.', '夏天蚊子真让人讨厌。'],
+                ['obscure', 'əbˈskjʊə', 'adj. 晦涩的，不出名的；vt. 掩盖', 'The origin of the custom remains obscure.', '这一习俗的起源仍然不明。'],
+                ['obsession', 'əbˈseʃn', 'n. 痴迷，困扰', 'Fitness has become an obsession with him.', '健身已成为他的一种执念。'],
+                ['offset', 'ˈɒfset', 'vt. 抵消，补偿', 'Higher wages were offset by rising prices.', '工资增长被物价上涨抵消了。'],
+                ['oppress', 'əˈpres', 'vt. 压迫，压抑', 'The heat oppressed us all afternoon.', '炎热整个下午都让人透不过气。'],
+                ['originate', 'əˈrɪdʒɪneɪt', 'vi. 起源于', 'The fire originated in the basement.', '火灾起源于地下室。'],
+                ['overwhelm', 'ˌəʊvəˈwelm', 'vt. 压倒，淹没', 'Do not allow the workload to overwhelm you.', '不要让工作量压垮你。'],
+                ['paradox', 'ˈpærədɒks', 'n. 悖论，自相矛盾', 'It is a paradox that busy people find more time.', '忙碌的人反而有更多时间，这是一个悖论。'],
+                ['partial', 'ˈpɑːʃl', 'adj. 部分的；偏袒的', 'The reform was only a partial success.', '改革只取得了部分成功。'],
+                ['patent', 'ˈpeɪtnt', 'n. 专利；vt. 取得专利', 'He filed a patent for his invention.', '他为自己的发明申请了专利。'],
+                ['peculiar', 'pɪˈkjuːliə', 'adj. 奇怪的，特有的', 'The fruit has a peculiar smell.', '这种水果有一种奇特的气味。'],
+                ['perceive', 'pəˈsiːv', 'vt. 察觉，理解', 'Children perceive the world differently from adults.', '孩子感知世界的方式与成人不同。'],
+                ['perpetual', 'pəˈpetʃuəl', 'adj. 永久的，持续的', 'He lives in a perpetual fear of failure.', '他一直生活在对失败的恐惧中。'],
+                ['perplex', 'pəˈpleks', 'vt. 使困惑', 'The sudden question perplexed the candidate.', '这个突然的问题让候选人困惑不已。'],
+                ['persist', 'pəˈsɪst', 'vi. 坚持，持续', 'If the pain persists, see a doctor.', '如果疼痛持续，请就医。'],
+                ['pledge', 'pledʒ', 'n./vt. 承诺，保证', 'The government pledged to reduce poverty.', '政府承诺减少贫困。'],
+                ['ponder', 'ˈpɒndə', 'v. 思考，沉思', 'She pondered over the job offer all weekend.', '整个周末她都在反复考虑那份工作邀请。'],
+                ['portray', 'pɔːˈtreɪ', 'vt. 描绘，扮演', 'The film portrays city life realistically.', '这部电影真实地描绘了城市生活。'],
+                ['potent', 'ˈpəʊtnt', 'adj. 有效的，强有力的', 'This is a potent argument against the plan.', '这是反对该计划的有力论据。'],
+                ['precede', 'prɪˈsiːd', 'vt. 在…之前', 'A short speech preceded the award ceremony.', '颁奖典礼前有一段简短的演讲。'],
+                ['predominant', 'prɪˈdɒmɪnənt', 'adj. 主要的，占优势的', 'Blue is the predominant color in his paintings.', '蓝色是他画作中的主色调。'],
+                ['preliminary', 'prɪˈlɪmɪnəri', 'adj. 初步的，预备的', 'Preliminary results look promising.', '初步结果看起来很有希望。'],
+                ['premise', 'ˈpremɪs', 'n. 前提；pl. 经营场址', 'The argument rests on a false premise.', '这个论点建立在错误的前提上。'],
+                ['prescribe', 'prɪˈskraɪb', 'vt. 开处方，规定', 'The doctor prescribed antibiotics for the infection.', '医生开了抗生素来治疗感染。'],
+                ['prestige', 'preˈstiːʒ', 'n. 声望，威望', 'The university enjoys high international prestige.', '该大学享有很高的国际声望。'],
+                ['presume', 'prɪˈzjuːm', 'vt. 假定，推测', 'I presume you have heard the news.', '我想你已经听说了这个消息。'],
+                ['prevail', 'prɪˈveɪl', 'vi. 盛行，获胜', 'Justice prevailed in the end.', '正义最终获胜了。'],
+                ['probe', 'prəʊb', 'v. 探查；n. 探测器', 'Scientists probed the causes of the disease.', '科学家们探查了这种疾病的成因。'],
+                ['proclaim', 'prəˈkleɪm', 'vt. 宣布，声明', 'The country proclaimed its independence in 1960.', '该国于1960年宣布独立。'],
+                ['proficient', 'prəˈfɪʃnt', 'adj. 熟练的，精通的', 'She is proficient in three languages.', '她精通三种语言。'],
+                ['prolong', 'prəˈlɒŋ', 'vt. 延长', 'The treatment may prolong the patients life.', '这种治疗可以延长病人的生命。'],
+                ['propel', 'prəˈpel', 'vt. 推进，驱动', 'Curiosity propelled him toward a life of research.', '好奇心驱使他走上了研究之路。'],
+                ['prospect', 'ˈprɒspekt', 'n. 前景，可能性', 'Graduates face bright employment prospects.', '毕业生面临良好的就业前景。'],
+                ['provoke', 'prəˈvəʊk', 'vt. 激怒，引起', 'His remarks provoked a fierce debate.', '他的话引发了一场激烈的辩论。'],
+                ['qualitative', 'ˈkwɒlɪtətiv', 'adj. 定性的，性质的', 'The study combines qualitative and quantitative methods.', '该研究结合了定性和定量方法。'],
+                ['quantify', 'ˈkwɒntɪfaɪ', 'vt. 量化，确定数量', 'It is hard to quantify the value of friendship.', '很难量化友谊的价值。'],
+                ['quota', 'ˈkwəʊtə', 'n. 配额，限额', 'Each department has a monthly sales quota.', '每个部门都有月度销售配额。'],
+                ['radiant', 'ˈreɪdiənt', 'adj. 容光焕发的，光芒四射的', 'She looked radiant on graduation day.', '她毕业那天看起来光彩照人。'],
+                ['random', 'ˈrændəm', 'adj. 随机的，任意的', 'The app selects ten random words daily.', '该应用每天随机选取十个单词。'],
+                ['rational', 'ˈræʃnəl', 'adj. 理性的，合理的', 'Make a rational decision, not an emotional one.', '做出理性的决定，而不是情绪化的决定。'],
+                ['reconcile', 'ˈrekənsaɪl', 'vt. 调和，使一致', 'How do you reconcile work and study?', '你如何兼顾工作和学习？'],
+                ['refute', 'rɪˈfjuːt', 'vt. 驳斥，反驳', 'The data refutes the earlier claims.', '数据驳斥了之前的说法。'],
+                ['reinforce', 'ˌriːɪnˈfɔːs', 'vt. 加强，强化', 'Review reinforces what you have learned.', '复习巩固你所学的知识。'],
+                ['render', 'ˈrendə', 'vt. 使成为；提供，翻译', 'The storm rendered the road impassable.', '暴风雨使道路无法通行。'],
+                ['reside', 'rɪˈzaɪd', 'vi. 居住；存在于', 'The family resides in the suburbs.', '这家人住在郊区。'],
+                ['restrain', 'rɪˈstreɪn', 'vt. 抑制，约束', 'He could barely restrain his laughter.', '他几乎忍不住笑出来。'],
+                ['retain', 'rɪˈteɪn', 'vt. 保留，保持', 'The soil retains moisture for weeks.', '土壤能保持数周的水分。'],
+                ['retrieve', 'rɪˈtriːv', 'vt. 取回，检索', 'I retrieved the deleted file from backups.', '我从备份中恢复了已删除的文件。'],
+                ['reverse', 'rɪˈvɜːs', 'v. 颠倒，逆转；n. 反面', 'They reversed the decision after protests.', '抗议后他们撤销了该决定。'],
+                ['revive', 'rɪˈvaɪv', 'v. 复苏，复兴', 'The festival revived old local traditions.', '这个节日复兴了当地古老的传统。'],
+                ['rigorous', 'ˈrɪɡərəs', 'adj. 严格的，严密的', 'The drug passed rigorous safety tests.', '这种药物通过了严格的安全测试。'],
+                ['ritual', 'ˈrɪtʃuəl', 'n. 仪式，例行公事', 'Morning coffee is part of her daily ritual.', '早晨的咖啡是她日常例行的一部分。'],
+                ['robust', 'rəʊˈbʌst', 'adj. 强健的，稳固的', 'The economy shows robust growth this quarter.', '本季度经济表现出强劲增长。'],
+                ['sanction', 'ˈsæŋkʃn', 'n. 制裁，批准；vt. 认可', 'Economic sanctions failed to change the policy.', '经济制裁未能改变该政策。'],
+                ['saturate', 'ˈsætʃəreɪt', 'vt. 使饱和，浸透', 'The market is saturated with similar apps.', '市场上充斥着类似的应用。'],
+                ['scrutiny', 'ˈskruːtəni', 'n. 仔细审查', 'The deal is under close regulatory scrutiny.', '这笔交易正在接受严格的监管审查。'],
+                ['segregate', 'ˈseɡrɪɡeɪt', 'vt. 分离，隔离', 'Waste should be segregated at the source.', '垃圾应在源头进行分类。'],
+                ['sentiment', 'ˈsentɪmənt', 'n. 情绪，观点，感伤', 'Public sentiment shifted against the project.', '公众情绪转向反对该项目。'],
+                ['shatter', 'ˈʃætə', 'v. 打碎，使破灭', 'The loss shattered their confidence.', '这次失败粉碎了他们的信心。'],
+                ['simulate', 'ˈsɪmjuleɪt', 'vt. 模拟，模仿', 'The lab simulates weightless conditions.', '实验室模拟失重环境。'],
+                ['simultaneous', 'ˌsɪmlˈteɪniəs', 'adj. 同时的', 'The event features simultaneous translation.', '该活动提供同声传译。'],
+                ['skeptical', 'ˈskeptɪkl', 'adj. 怀疑的', 'Experts are skeptical about the claimed results.', '专家们对所声称的结果持怀疑态度。'],
+                ['slack', 'slæk', 'adj. 松弛的，萧条的；n. 淡季', 'Business is slack during the winter months.', '冬季几个月生意很清淡。'],
+                ['solemn', 'ˈsɒləm', 'adj. 庄严的，严肃的', 'He made a solemn promise to his mother.', '他向母亲庄严承诺。'],
+                ['sophisticated', 'səˈfɪstɪkeɪtɪd', 'adj. 先进的，复杂老练的', 'The lab uses sophisticated equipment.', '实验室使用先进的设备。'],
+                ['spectacle', 'ˈspektəkl', 'n. 景象，壮观场面', 'The sunrise over the peaks was a stunning spectacle.', '山峰上的日出是一幅令人惊叹的景象。'],
+                ['speculate', 'ˈspekjuleɪt', 'v. 推测，投机', 'Journalists speculate about the ministers resignation.', '记者们推测部长辞职的原因。'],
+                ['spontaneous', 'spɒnˈteɪniəs', 'adj. 自发的，自然的', 'The audience burst into spontaneous applause.', '观众自发地爆发出掌声。'],
+                ['stagger', 'ˈstæɡə', 'v. 蹒跚；使吃惊；错开', 'Office hours are staggered to reduce crowding.', '错开上班时间以减少拥挤。'],
+                ['stationary', 'ˈsteɪʃənri', 'adj. 静止的，固定的', 'A stationary car blocked the lane.', '一辆停着的汽车挡住了车道。'],
+                ['strain', 'streɪn', 'n. 压力，拉伤；v. 拉紧', 'The crisis put a strain on public services.', '这场危机给公共服务带来了压力。'],
+                ['subordinate', 'səˈbɔːdɪnət', 'adj. 从属的；n. 下级', 'Individual goals are subordinate to team goals.', '个人目标从属于团队目标。'],
+                ['subsidy', 'ˈsʌbsidi', 'n. 补贴，津贴', 'Farmers receive a subsidy for green farming.', '农民因绿色农业获得补贴。'],
+                ['substantial', 'səbˈstænʃl', 'adj. 大量的，实质的', 'The project requires a substantial investment.', '该项目需要大量投资。'],
+                ['subtle', 'ˈsʌtl', 'adj. 微妙的，细微的', 'There is a subtle difference between the two words.', '这两个词之间有细微差别。'],
+                ['succession', 'səkˈseʃn', 'n. 连续，继任', 'Questions came in quick succession.', '问题接踵而来。'],
+                ['superficial', 'ˌsuːpəˈfɪʃl', 'adj. 肤浅的，表面的', 'His understanding of economics is superficial.', '他对经济学的理解很肤浅。'],
+                ['supervise', 'ˈsuːpəvaɪz', 'vt. 监督，指导', 'Interns supervise the morning exercises.', '实习生监督早操。'],
+                ['supplement', 'ˈsʌplɪmənt', 'n. 补充，增刊；vt. 增补', 'She supplements her income with freelance work.', '她通过自由职业来增加收入。'],
+                ['suppress', 'səˈpres', 'vt. 镇压，抑制', 'He suppressed a smile during the speech.', '他在演讲时忍住了微笑。'],
+                ['surge', 'sɜːdʒ', 'n./vi. 激增，汹涌', 'There was a surge in online orders last month.', '上个月网上订单激增。'],
+                ['surpass', 'səˈpɑːs', 'vt. 超过，胜过', 'The sequel surpassed the original film.', '续集超越了原作。'],
+                ['susceptible', 'səˈseptəbl', 'adj. 易受影响的，易感的', 'Children are susceptible to cold weather.', '儿童容易受寒冷天气影响。'],
+                ['suspend', 'səˈspend', 'vt. 暂停，悬挂', 'Flights were suspended due to heavy fog.', '航班因大雾暂停。'],
+                ['sustain', 'səˈsteɪn', 'vt. 维持，承受', 'The soil cannot sustain intensive farming forever.', '土壤无法永远承受密集耕作。'],
+                ['symmetry', 'ˈsɪmətri', 'n. 对称', 'The building is admired for its perfect symmetry.', '这座建筑因其完美的对称性而受到赞赏。'],
+                ['tackle', 'ˈtækl', 'vt. 解决，对付；n. 用具', 'We must tackle the problem at its root.', '我们必须从根源上解决问题。'],
+                ['tedious', 'ˈtiːdiəs', 'adj. 单调乏味的', 'Data entry is tedious but necessary.', '数据录入虽然乏味但很必要。'],
+                ['tentative', 'ˈtentətiv', 'adj. 试探性的，暂定的', 'We reached a tentative agreement yesterday.', '我们昨天达成了初步协议。'],
+                ['terminate', 'ˈtɜːmɪneɪt', 'v. 终止，结束', 'The contract terminates in December.', '合同于十二月终止。'],
+                ['testify', 'ˈtestɪfaɪ', 'v. 作证，证明', 'Two witnesses testified against the driver.', '两名证人指证了那位司机。'],
+                ['thrive', 'θraɪv', 'vi. 兴旺，茁壮成长', 'These plants thrive in warm climates.', '这些植物在温暖气候中茁壮成长。'],
+                ['timid', 'ˈtɪmɪd', 'adj. 胆怯的，怯懦的', 'Do not be timid about asking questions.', '不要害怕提问。'],
+                ['tolerant', 'ˈtɒlərənt', 'adj. 宽容的，耐受的', 'She is tolerant of different opinions.', '她能容忍不同的意见。'],
+                ['toxic', 'ˈtɒksɪk', 'adj. 有毒的', 'The factory released toxic chemicals into the river.', '工厂向河里排放了有毒化学物质。'],
+                ['tranquil', 'ˈtræŋkwɪl', 'adj. 宁静的', 'We spent a tranquil evening by the lake.', '我们在湖边度过了一个宁静的夜晚。'],
+                ['transaction', 'trænˈzækʃn', 'n. 交易，事务', 'All transactions are recorded securely.', '所有交易都被安全记录。'],
+                ['transit', 'ˈtrænzɪt', 'n. 运输，运送', 'The goods were damaged in transit.', '货物在运输途中受损。'],
+                ['transparent', 'trænsˈpærənt', 'adj. 透明的，公开的', 'The hiring process should be transparent.', '招聘流程应当公开透明。'],
+                ['tribute', 'ˈtrɪbjuːt', 'n. 致敬，贡品', 'The concert paid tribute to late musicians.', '音乐会向已故音乐家致敬。'],
+                ['trigger', 'ˈtrɪɡə', 'vt. 引发，触发；n. 扳机', 'The news triggered panic selling.', '这则消息引发了恐慌性抛售。'],
+                ['trivial', 'ˈtrɪviəl', 'adj. 琐碎的，不重要的', 'Do not waste time on trivial matters.', '不要把时间浪费在琐事上。'],
+                ['turbulent', 'ˈtɜːbjələnt', 'adj. 动荡的，湍急的', 'The country went through a turbulent period.', '该国经历了一段动荡时期。'],
+                ['unanimous', 'juˈnænɪməs', 'adj. 全体一致的', 'The jury reached a unanimous verdict.', '陪审团达成了全体一致的裁决。'],
+                ['underestimate', 'ˌʌndərˈestɪmeɪt', 'vt. 低估', 'Never underestimate the power of practice.', '永远不要低估练习的力量。'],
+                ['undergo', 'ˌʌndəˈɡəʊ', 'vt. 经历，接受', 'The bridge must undergo strict inspections.', '桥梁必须经过严格的检查。'],
+                ['underlying', 'ˌʌndəˈlaɪɪŋ', 'adj. 潜在的，根本的', 'We must address the underlying causes of crime.', '我们必须解决犯罪的根本原因。'],
+                ['utilize', 'ˈjuːtəlaɪz', 'vt. 利用', 'The system utilizes solar energy efficiently.', '该系统高效利用太阳能。'],
+                ['verge', 'vɜːdʒ', 'n. 边缘', 'She was on the verge of tears.', '她快要哭出来了。'],
+                ['verify', 'ˈverɪfaɪ', 'vt. 核实，查证', 'Please verify your email address.', '请验证你的电子邮件地址。'],
+                ['versatile', 'ˈvɜːsətaɪl', 'adj. 多才多艺的，多用途的', 'Eggs are a versatile ingredient in cooking.', '鸡蛋是烹饪中用途广泛的食材。'],
+                ['vicinity', 'vɪˈsɪnəti', 'n. 附近，邻近地区', 'Three schools lie in the vicinity of the park.', '公园附近有三所学校。'],
+                ['vigorous', 'ˈvɪɡərəs', 'adj. 有力的，精力充沛的', 'Vigorous exercise improves sleep quality.', '剧烈运动能改善睡眠质量。'],
+                ['virtual', 'ˈvɜːtʃuəl', 'adj. 虚拟的，事实上的', 'The museum offers virtual tours online.', '博物馆提供在线虚拟参观。'],
+                ['vulnerable', 'ˈvʌlnərəbl', 'adj. 易受伤害的，脆弱的', 'Elderly people are vulnerable to the flu.', '老年人容易感染流感。'],
+                ['wary', 'ˈweəri', 'adj. 谨慎的，警惕的', 'Be wary of emails asking for passwords.', '对要求提供密码的邮件要保持警惕。'],
+                ['wholesome', 'ˈhəʊlsəm', 'adj. 有益健康的', 'The camp provides wholesome food for kids.', '夏令营为孩子们提供健康的食物。'],
+                ['wither', 'ˈwɪðə', 'v. 枯萎，凋谢', 'Flowers withered without water.', '花没有水就枯萎了。'],
+                ['yield', 'jiːld', 'v. 屈服；产出；n. 产量', 'The talks yielded a peace agreement.', '谈判达成了和平协议。']
             ];
 
             // ============================================================
@@ -2222,7 +2283,7 @@
             function ensureNotes(word) {
                 if (!S.notes) S.notes = {};
                 const k = nkey(word);
-                if (!S.notes[k]) S.notes[k] = { ex: '', zh: '', story: '' };
+                if (!S.notes[k]) S.notes[k] = { ex: '', zh: '', story: '', exZh: '' };
                 return S.notes[k];
             }
             function inFav(word) {
@@ -2603,7 +2664,8 @@
                     '</div>' +
                     '<div class="dr-pos">' + parsePos(entry[2]).map(g => '<div class="dr-pos-row"><span class="dr-pos-tag" data-pos="' + esc(g.pos.replace(/[^a-z]/gi, '')) + '">' + esc(g.pos) + '</span><span class="dr-meaning">' + esc(g.meaning) + '</span></div>').join('') + '</div>' +
                     (entry[3] ? '<div class="dr-ex" data-action="wdSpeakEx" style="cursor:pointer">' + esc(entry[3]) + '</div>' : '') +
-                    '<div class="ed-field" style="margin-top:6px"><span class="ed-label">我的备注（例句 / 补充释义 / 与这个词的故事）</span>' +
+                    '<div class="ed-field" style="margin-top:6px"><span class="ed-label">我的备注</span>' +
+                        (entry[3] ? '<input class="ed-input" id="dn-exzh" placeholder="例句翻译…（显示在卡片背面例句下方）" value="' + esc(entry[4] || note.exZh || '') + '" />' : '') +
                         '<textarea class="ed-area" id="dn-ex" rows="2" placeholder="补充例句…">' + esc(note.ex) + '</textarea>' +
                         '<input class="ed-input" id="dn-zh" placeholder="中文联想 / 词根词缀…" value="' + esc(note.zh) + '" />' +
                         '<textarea class="ed-area" id="dn-story" rows="3" placeholder="我和这个词的故事、记忆钩子…">' + esc(note.story) + '</textarea>' +
@@ -3311,30 +3373,111 @@
                 typed: [], stats: { total: 0, correct: 0, wrong: 0, startTime: 0, wpm: 0 },
                 combo: 0, maxCombo: 0,
                 done: false, active: false, wordCount: 20,
-                _lastWpmTick: 0,
+                mode: 'word', scope: 'all',
+                book: S.activeBook,
+                _target: '',
 
                 info() { return this.active ? this.stats.correct + '/' + this.stats.total : ''; },
 
-                build() {
-                    const words = activeWords();
-                    this.words = shuffle(words).slice(0, this.wordCount);
+                pool() {
+                    const b = S.books[this.book] || activeWords();
+                    const words = (Array.isArray(b) ? b : b.w || []).filter(e => e[2]);
+                    if (this.scope === 'all') return words;
+                    if (this.scope === 'learning') return words.filter(e => mastery(e[0]) === 'learning');
+                    if (this.scope === 'mastered') return words.filter(e => mastery(e[0]) === 'mastered');
+                    if (this.scope === 'star') return words.filter(e => { const p = progOf(e[0]); return p && p.star; });
+                    if (this.scope === 'due') return dueList(words);
+                    if (this.scope === 'new') return newList(words);
+                    if (this.scope === 'fav') return S.books.fav ? S.books.fav.w.filter(e => e[2]) : [];
+                    if (this.scope.startsWith('book:')) {
+                        const b = S.books[this.scope.slice(5)];
+                        return b ? b.w.filter(e => e[2]) : [];
+                    }
+                    return words;
+                },
+                build(mode) {
+                    this.mode = mode || 'word';
+                    let pool = this.pool();
+                    if (this.mode === 'sentence') {
+                        const sentPool = pool.filter(w => w[3] && w[3].trim().length > 10);
+                        pool = sentPool.length > 5 ? sentPool : pool;
+                    }
+                    if (pool.length < 1) { this.words = []; return; }
+                    let src = shuffle(pool);
+                    while (src.length < this.wordCount && src.length > 0) src = src.concat(shuffle(pool));
+                    this.words = src.slice(0, this.wordCount);
                     this.idx = 0; this.pos = 0;
                     this.typed = [];
                     this.stats = { total: 0, correct: 0, wrong: 0, startTime: Date.now(), wpm: 0 };
                     this.combo = 0; this.maxCombo = 0;
                     this.done = false; this.active = true;
+                    this._target = this.mode === 'sentence'
+                        ? (this.words[0] ? this.words[0][3] || '' : '')
+                        : (this.words[0] ? this.words[0][0].toLowerCase() : '');
+                },
+
+                _buildTarget() {
+                    const w = this.words[this.idx];
+                    if (!w) { this._target = ''; return; }
+                    this._target = this.mode === 'sentence'
+                        ? (w[3] || '')
+                        : w[0].toLowerCase();
                 },
 
                 render() {
                     if (!this.active) {
+                        const bookW = S.books[this.book];
+                        const aw = (bookW && Array.isArray(bookW.w) ? bookW.w : activeWords()).filter(e => e[2]);
+                        const sc = this.scope;
+                        const wc = this.wordCount;
+                        function sg(label, val, cntN, disabled, alwaysActive) {
+                            const isActive = alwaysActive ? val === 'book:' + Typing.book : sc === val;
+                            return '<button class="sg-item' + (isActive ? ' active' : '') + (disabled ? ' disabled' : '') + '" data-action="tyScope" data-s="' + val + '">' +
+                                '<span>' + label + '</span><span class="sg-cnt">' + cntN + '</span></button>';
+                        }
+                        const starCount = aw.filter(e => { const p = progOf(e[0]); return p && p.star; }).length;
+                        const dueCount = dueList(aw).length;
+                        const newCount = newList(aw).length;
+                        const learningCount = aw.filter(e => mastery(e[0]) === 'learning').length;
+                        const masteredCount = aw.filter(e => mastery(e[0]) === 'mastered').length;
+                            const counts = [5, 10, 20, 30, 50];
+                        const customActive = counts.indexOf(wc) === -1;
+                        const customVal = customActive ? wc : '';
+                        const allBooks = Object.values(S.books);
+                        const bookItems = allBooks.map(b => {
+                            const bc = b.w.filter(e => e[2]).length;
+                            return sg(esc(b.name), 'book:' + b.id, bc, bc < 1, true);
+                        }).join('');
                         $('#v-typing').innerHTML =
-                            '<div class="ty-wrap">' +
-                                '<div class="setup-box" style="max-width:380px">' +
-                                    '<div class="setup-title">打字练习</div>' +
-                                    '<p style="color:var(--text-dim);text-align:center;margin:8px 0 16px;font-size:calc(13px*var(--fscale));line-height:1.5">逐个字母拼写单词，提升拼写熟练度与打字速度</p>' +
-                                    '<button class="ed-btn primary" data-action="tyStart" style="width:100%">开始练习</button>' +
+                            '<div class="setup-box">' +
+                                '<div class="setup-title">打字练习</div>' +
+                                '<div class="ed-field"><span class="ed-label">模式</span><div class="seg">' +
+                                    '<button class="' + (this.mode === 'word' ? 'active' : '') + '" data-action="tyMode" data-m="word">单词</button>' +
+                                    '<button class="' + (this.mode === 'sentence' ? 'active' : '') + '" data-action="tyMode" data-m="sentence">例句</button>' +
+                                '</div></div>' +
+                                '<div class="ed-field"><span class="ed-label">题量</span><div class="setup-grid three">' +
+                                    counts.map(n => '<button class="sg-item' + (wc === n ? ' active' : '') + '" data-action="tyCount" data-n="' + n + '"><span>' + n + ' 词</span></button>').join('') +
                                 '</div>' +
+                                '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
+                                    '<span style="font-size:calc(11px*var(--fscale));color:var(--text-faint);white-space:nowrap">自定义</span>' +
+                                    '<input type="number" id="ty-custom-count" min="1" max="999" placeholder="输入题数" value="' + customVal + '" ' +
+                                    'style="flex:1;padding:6px 10px;font-size:calc(12px*var(--fscale));text-align:center;border:1px solid var(--border-dim);background:transparent;color:var(--text);border-radius:var(--radius)" />' +
+                                '</div></div>' +
+                                '<div class="ed-field"><span class="ed-label">范围</span><div class="setup-grid">' +
+                                    sg('全部', 'all', aw.length, false) +
+                                    sg('学习中', 'learning', learningCount, learningCount < 1) +
+                                    sg('已掌握', 'mastered', masteredCount, masteredCount < 1) +
+                                    sg('★ 难点', 'star', starCount, starCount < 1) +
+                                    sg('待复习', 'due', dueCount, dueCount < 1) +
+                                    sg('未学', 'new', newCount, newCount < 1) +
+                                    
+                                '</div>' +
+                                (bookItems ? '<div class="setup-divider"></div><div class="setup-grid">' + bookItems + '</div>' : '') +
+                                '</div>' +
+                                '<button class="ed-btn primary" data-action="tyStart">开始练习 ' + ICO('chevR') + '</button>' +
                             '</div>';
+                        const ci = $('#ty-custom-count');
+                        if (ci) ci.addEventListener('change', () => { const v = parseInt(ci.value); if (v > 0) Typing.wordCount = v; });
                         return;
                     }
                     if (this.done) { this.renderDone(); return; }
@@ -3343,33 +3486,76 @@
                     const phon = w[1] || '';
                     const meaning = w[2] || '';
                     const example = w[3] || '';
+                    const translation = w[4] || '';
+                    const target = this._target;
+                    const isSentence = this.mode === 'sentence';
 
                     let boxesHtml = '';
-                    for (let i = 0; i < word.length; i++) {
-                        let cls = 'ty-box';
+                    let inWord = false;
+                    for (let i = 0; i < target.length; i++) {
+                        const ch = target[i];
+                        const isSpace = ch === ' ';
+                        if (isSpace && inWord) {
+                            boxesHtml += '</span>';
+                            inWord = false;
+                        }
+                        if (!isSpace && !inWord) {
+                            boxesHtml += '<span class="ty-word-grp">';
+                            inWord = true;
+                        }
+                        let cls = isSpace ? 'ty-box ty-space' : 'ty-box';
                         if (i < this.pos) {
                             cls += this.typed[i].ok ? ' ok' : ' bad';
                         } else if (i === this.pos) {
                             cls += ' cur';
                         }
-                        const ch = i < this.pos ? this.typed[i].ch : (i === this.pos ? '_' : '');
-                        boxesHtml += '<div class="' + cls + '" id="ty-b' + i + '">' + ch + '</div>';
+                        const display = isSpace ? '' : (i < this.pos ? (this.typed[i].ok ? target[i] : this.typed[i].ch) : (i === this.pos ? '_' : ''));
+                        boxesHtml += '<div class="' + cls + '" id="ty-b' + i + '">' + display + '</div>';
                     }
+                    if (inWord) boxesHtml += '</span>';
 
                     const acc = this.stats.total > 0 ? Math.round(this.stats.correct / this.stats.total * 100) : 100;
                     const elapsed = (Date.now() - this.stats.startTime) / 60000;
                     this.stats.wpm = elapsed > 0 ? Math.round(this.stats.correct / 5 / elapsed) : 0;
                     const comboCls = this.maxCombo >= 5 ? ' hot' : '';
 
-                    let exHtml = '';
-                    if (example) {
+                    let hintHtml = '';
+                    if (isSentence) {
                         const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const highlighted = example.replace(new RegExp('\\b' + escaped + '\\w*', 'gi'), '<em>$&</em>');
-                        exHtml = '<div class="ty-example">' + highlighted + '</div>';
+                        const exampleHtml = example
+                            ? example.replace(new RegExp('\\b' + escaped + '\\w*', 'gi'), '<em>$&</em>')
+                            : '';
+                        hintHtml = '<div class="ty-sent-hint">' +
+                            '<div class="ty-sent-meaning">' + meaning + '</div>' +
+                            (translation ? '<div class="ty-sent-ex">' + esc(translation) + '</div>' : '') +
+                            (exampleHtml ? '<div class="ty-sent-ex">' + exampleHtml + '</div>' : '') +
+                            '</div>';
+                    } else {
+                        if (meaning) hintHtml += '<div class="ty-meaning">' + meaning + '</div>';
+                        if (example) {
+                            const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const highlighted = example.replace(new RegExp('\\b' + escaped + '\\w*', 'gi'), '<em>$&</em>');
+                            hintHtml += '<div class="ty-example">' + highlighted + '</div>';
+                        }
+                    }
+
+                    const modeLabel = isSentence ? '例句' : '单词';
+                    const modeToggle =
+                        '<div class="ty-mode-row" style="margin-bottom:8px">' +
+                            '<button class="ed-btn' + (!isSentence ? ' primary' : '') + '" data-action="tyStartW" style="flex:0 0 auto;padding:5px 14px;font-size:calc(10px*var(--fscale))">单词</button>' +
+                            '<button class="ed-btn' + (isSentence ? ' primary' : '') + '" data-action="tyStartS" style="flex:0 0 auto;padding:5px 14px;font-size:calc(10px*var(--fscale))">例句</button>' +
+                        '</div>';
+
+                    let infoLine = '';
+                    if (isSentence) {
+                        infoLine = '<div class="ty-word-display" style="margin-bottom:4px">拼写例句</div>';
+                    } else {
+                        infoLine = '<div class="ty-word-display">' + phon + '</div>';
                     }
 
                     $('#v-typing').innerHTML =
                         '<div class="ty-wrap">' +
+                            modeToggle +
                             '<div class="ty-stats">' +
                                 '<div class="ty-stat"><span class="ty-sv wpm" id="ty-wpm">' + this.stats.wpm + '</span><span>WPM</span></div>' +
                                 '<div class="ty-stat"><span class="ty-sv acc" id="ty-acc">' + acc + '%</span><span>准确率</span></div>' +
@@ -3377,10 +3563,9 @@
                                 '<div class="ty-stat"><span class="ty-sv" id="ty-prog">' + (this.idx + 1) + '/' + this.words.length + '</span><span>进度</span></div>' +
                             '</div>' +
                             '<div class="ty-correct-wrap">' +
-                                '<div class="ty-word-display">' + phon + '</div>' +
-                                '<div class="ty-word" id="ty-word">' + boxesHtml + '</div>' +
-                                '<div class="ty-meaning">' + meaning + '</div>' +
-                                exHtml +
+                                infoLine +
+                                '<div class="ty-word' + (isSentence ? ' ty-sent-boxes' : '') + '" id="ty-word">' + boxesHtml + '</div>' +
+                                hintHtml +
                             '</div>' +
                         '</div>';
                 },
@@ -3391,10 +3576,12 @@
                     const acc = this.stats.total > 0 ? Math.round(this.stats.correct / this.stats.total * 100) : 100;
                     const grade = acc >= 95 && wpm >= 40 ? 'S' : acc >= 85 && wpm >= 30 ? 'A' : acc >= 70 ? 'B' : 'C';
                     const gradeColor = grade === 'S' ? 'var(--accent-green)' : grade === 'A' ? 'var(--accent)' : grade === 'B' ? 'var(--accent-orange)' : 'var(--accent-red)';
+                    const modeLabel = this.mode === 'sentence' ? '例句' : '单词';
                     $('#v-typing').innerHTML =
                         '<div class="ty-wrap">' +
                             '<div class="ty-done">' +
                                 '<div class="ty-done-title" style="color:' + gradeColor + '">' + grade + ' 级</div>' +
+                                '<div style="font-size:calc(11px*var(--fscale));color:var(--text-dim);margin-top:-8px">' + modeLabel + '模式</div>' +
                                 '<div class="ty-done-grid">' +
                                     '<div class="ty-done-stat"><span class="tds-label">WPM</span><span class="tds-val" style="color:var(--accent-green)">' + wpm + '</span></div>' +
                                     '<div class="ty-done-stat"><span class="tds-label">准确率</span><span class="tds-val" style="color:var(--accent)">' + acc + '%</span></div>' +
@@ -3403,26 +3590,31 @@
                                     '<div class="ty-done-stat"><span class="tds-label">正确</span><span class="tds-val" style="color:var(--accent-green)">' + this.stats.correct + '</span></div>' +
                                     '<div class="ty-done-stat"><span class="tds-label">用时</span><span class="tds-val">' + dur + 's</span></div>' +
                                 '</div>' +
-                                '<button class="ed-btn primary" data-action="tyStart" style="margin-top:8px;width:100%">再来一轮</button>' +
-                                '<button class="ed-btn" data-action="tyHome" style="width:100%">返回总览</button>' +
+                                '<div class="ty-mode-row" style="width:100%;margin-top:4px">' +
+                                    '<button class="ed-btn primary" data-action="' + (this.mode === 'sentence' ? 'tyStartS' : 'tyStartW') + '">再来一轮</button>' +
+                                    '<button class="ed-btn" data-action="tyHome">返回总览</button>' +
+                                '</div>' +
                             '</div>' +
                         '</div>';
                 },
 
-                start() {
-                    this.build();
+                start(mode) {
+                    if (mode) this.mode = mode;
+                    this.build(this.mode);
+                    if (!this.words.length) { notify('当前范围没有可用单词'); return; }
                     this.render();
-                    this._lastWpmTick = Date.now();
                 },
 
                 hit(ch) {
                     if (this.done || !this.active) return;
-                    const w = this.words[this.idx];
-                    const word = w[0].toLowerCase();
-                    if (this.pos >= word.length) return;
+                    const target = this._target;
+                    if (this.pos >= target.length) return;
 
-                    const expected = word[this.pos];
-                    const ok = ch === expected;
+                    const expected = target[this.pos];
+                    const isLetter = /^[a-zA-Z]$/.test(expected);
+                    const ok = isLetter
+                        ? ch.toLowerCase() === expected.toLowerCase()
+                        : ch === expected;
 
                     this.typed[this.pos] = { ch, ok };
                     this.stats.total++;
@@ -3433,9 +3625,9 @@
                         if (this.combo > this.maxCombo) this.maxCombo = this.combo;
                         this.pos++;
                         this._flashBox(this.pos - 1, true);
-                        this._spawnParticles(this.pos - 1, ok);
+                        this._spawnParticles(this.pos - 1, true);
                         buzz([8]);
-                        if (this.pos >= word.length) {
+                        if (this.pos >= target.length) {
                             this._completeWord();
                         } else {
                             this.render();
@@ -3447,12 +3639,34 @@
                         this.pos++;
                         this._flashBox(this.pos - 1, false);
                         buzz([18]);
-                        if (this.pos >= word.length) {
+                        if (this.pos >= target.length) {
                             this._completeWord();
                         } else {
                             this.render();
                             this._updateStats();
                         }
+                    }
+                },
+
+                space() {
+                    if (this.done || !this.active) return;
+                    const target = this._target;
+                    if (this.pos >= target.length) return;
+                    if (target[this.pos] === ' ') {
+                        this.typed[this.pos] = { ch: ' ', ok: true };
+                        this.stats.total++;
+                        this.stats.correct++;
+                        this.pos++;
+                        this._flashBox(this.pos - 1, true);
+                        buzz([6]);
+                        if (this.pos >= target.length) {
+                            this._completeWord();
+                        } else {
+                            this.render();
+                            this._updateStats();
+                        }
+                    } else if (this.mode === 'word') {
+                        this.skip();
                     }
                 },
 
@@ -3471,7 +3685,6 @@
                 },
 
                 _completeWord() {
-                    this.stats.total++;
                     const el = $('#ty-word');
                     if (el) {
                         el.classList.add('ty-word-break');
@@ -3486,6 +3699,8 @@
                     this.typed = [];
                     if (this.idx >= this.words.length) {
                         this.done = true;
+                    } else {
+                        this._buildTarget();
                     }
                     this.render();
                     this._updateStats();
@@ -3496,9 +3711,7 @@
                     if (!el) return;
                     el.classList.remove('cur');
                     el.classList.add(ok ? 'ok' : 'bad');
-                    if (ok) {
-                        el.classList.add('correct-burst');
-                    }
+                    if (ok) el.classList.add('correct-burst');
                 },
 
                 _spawnParticles(i, ok) {
@@ -3510,18 +3723,18 @@
                     const colors = ok
                         ? ['var(--accent-green)', '#4ade80', '#86efac', '#bbf7d0']
                         : ['var(--accent-red)', '#fca5a5', '#fecaca'];
-                    const count = ok ? 10 : 4;
+                    const count = ok ? 8 : 3;
                     for (let p = 0; p < count; p++) {
                         const dot = document.createElement('div');
                         dot.className = 'ty-particle';
                         const angle = (Math.PI * 2 / count) * p + (Math.random() - 0.5) * 0.5;
-                        const dist = 30 + Math.random() * 50;
+                        const dist = 20 + Math.random() * 35;
                         dot.style.left = cx + 'px';
                         dot.style.top = cy + 'px';
                         dot.style.background = colors[p % colors.length];
                         dot.style.setProperty('--px', Math.cos(angle) * dist + 'px');
                         dot.style.setProperty('--py', Math.sin(angle) * dist + 'px');
-                        dot.style.width = (4 + Math.random() * 4) + 'px';
+                        dot.style.width = (3 + Math.random() * 4) + 'px';
                         dot.style.height = dot.style.width;
                         document.body.appendChild(dot);
                         setTimeout(() => dot.remove(), 650);
@@ -3556,8 +3769,8 @@
                     const el = document.createElement('div');
                     el.className = 'ty-combo-float';
                     el.textContent = this.combo + 'x 连击!';
-                    el.style.left = '50%';
-                    el.style.top = '40%';
+                    el.style.left = '45%';
+                    el.style.top = '60%';
                     el.style.transform = 'translateX(-50%)';
                     document.body.appendChild(el);
                     setTimeout(() => el.remove(), 850);
@@ -3587,10 +3800,16 @@
 
                 hint() {
                     if (this.done || !this.active) return;
-                    const w = this.words[this.idx];
-                    const word = w[0].toLowerCase();
-                    if (this.pos >= word.length) return;
-                    this.typed[this.pos] = { ch: word[this.pos], ok: true };
+                    const target = this._target;
+                    if (this.pos >= target.length) return;
+                    const ch = target[this.pos];
+                    if (ch === ' ') {
+                        this.pos++;
+                        this._updateStats();
+                        this.render();
+                        return;
+                    }
+                    this.typed[this.pos] = { ch, ok: true };
                     this.stats.total++;
                     this.stats.correct++;
                     this.combo++;
@@ -3598,7 +3817,7 @@
                     this.pos++;
                     this._flashBox(this.pos - 1, true);
                     buzz([10]);
-                    if (this.pos >= word.length) {
+                    if (this.pos >= target.length) {
                         this._completeWord();
                     } else {
                         this.render();
@@ -3684,10 +3903,13 @@
                         '<i class="' + (j < this.i ? 'done' : j === this.i ? 'cur' : '') + '"></i>').join('');
                     const note = S.set.showNote ? ensureNotes(e[0]) : null;
                     let noteHtml = '';
-                    if (note && (note.ex || note.zh || note.story)) {
-                        if (note.ex) noteHtml += '<div class="fb-note"><b>补充例句</b>' + esc(note.ex) + '</div>';
-                        if (note.zh) noteHtml += '<div class="fb-note"><b>联想记忆</b>' + esc(note.zh) + '</div>';
-                        if (note.story) noteHtml += '<div class="fb-note"><b>我的故事</b>' + esc(note.story) + '</div>';
+                    if (note) {
+                        if (!e[4] && note.exZh) noteHtml += '<div class="fb-ex-zh">' + esc(note.exZh) + '</div>';
+                        if (note.ex || note.zh || note.story) {
+                            if (note.ex) noteHtml += '<div class="fb-note"><b>补充例句</b>' + esc(note.ex) + '</div>';
+                            if (note.zh) noteHtml += '<div class="fb-note"><b>联想记忆</b>' + esc(note.zh) + '</div>';
+                            if (note.story) noteHtml += '<div class="fb-note"><b>我的故事</b>' + esc(note.story) + '</div>';
+                        }
                     }
                     $('#v-flash').innerHTML =
                         '<div class="fc-wrap">' +
@@ -3705,6 +3927,7 @@
                                 '<div class="fc-face back">' +
                                     '<div class="fb-pos">' + parsePos(e[2]).map(g => '<div class="fb-pos-row"><span class="fb-pos-tag" data-pos="' + esc(g.pos.replace(/[^a-z]/gi, '')) + '">' + esc(g.pos) + '</span><span class="fb-meaning">' + esc(g.meaning) + '</span></div>').join('') + '</div>' +
                                     (e[3] ? '<div class="fb-ex" data-action="fcSpeakEx">“' + esc(e[3]) + '”　' + ICO('spk') + '</div>' : '') +
+                                    (e[4] ? '<div class="fb-ex-zh">' + esc(e[4]) + '</div>' : '') +
                                     noteHtml +
                                 '</div>' +
                             '</div></div></div>' +
@@ -3817,32 +4040,47 @@
                 mode: 'choice',
                 count: 10,
                 scope: 'all',
+                book: S.activeBook,
                 qs: [], qi: 0, right: 0, wrongList: [],
                 sp: null, t0: 0,
 
                 info() { return this.qs.length && this.qi < this.qs.length ? 'Q' + (this.qi + 1) + '/' + this.qs.length : ''; },
 
                 pool() {
-                    const words = activeWords().filter(e => e[2]);
+                    const b = S.books[this.book] || activeWords();
+                    const words = (Array.isArray(b) ? b : b.w || []).filter(e => e[2]);
+                    if (this.scope === 'all') return words;
+                    if (this.scope === 'learning') return words.filter(e => mastery(e[0]) === 'learning');
+                    if (this.scope === 'mastered') return words.filter(e => mastery(e[0]) === 'mastered');
                     if (this.scope === 'star') return words.filter(e => { const p = progOf(e[0]); return p && p.star; });
                     if (this.scope === 'due') return dueList(words);
                     if (this.scope === 'new') return newList(words);
+                    if (this.scope === 'fav') return S.books.fav ? S.books.fav.w.filter(e => e[2]) : [];
+                    if (this.scope.startsWith('book:')) {
+                        const b = S.books[this.scope.slice(5)];
+                        return b ? b.w.filter(e => e[2]) : [];
+                    }
                     return words;
                 },
 
                 makeQuestions() {
                     const pool = this.pool();
                     const all = activeWords();
-                    let src = shuffle(pool).slice(0, this.count);
-                    if (src.length < 4 && all.length >= 4) src = shuffle(all).slice(0, this.count);
-                    if (src.length < 1) return [];
-                    this.qs = src.map(e => {
-                        const en = Math.random() < 0.55;
-                        const opts = en
-                            ? shuffle([e[2]].concat(shuffle(all.filter(x => nkey(x[0]) !== nkey(e[0]))).slice(0, 3).map(d => d[2])))
-                            : shuffle([e[0]].concat(shuffle(all.filter(x => nkey(x[0]) !== nkey(e[0]))).slice(0, 3).map(d => d[0])));
+                    if (pool.length < 1) return [];
+                    let src = shuffle(pool);
+                    while (src.length < this.count && src.length > 0) src = src.concat(shuffle(pool));
+                    src = src.slice(0, this.count);
+                    if (src.length < 4 && all.length >= 4) { src = shuffle(all).slice(0, this.count); }
+                    this.qs = src.map((e, idx) => {
+                        const en = pool.indexOf(e) === -1 ? (idx % 2 === 0) : (Math.random() < 0.55);
+                        const distractors = shuffle(all.filter(x => nkey(x[0]) !== nkey(e[0]))).slice(0, 3);
+                        const pairs = en
+                            ? shuffle([[e[2], e[0]]].concat(distractors.map(d => [d[2], d[0]])))
+                            : shuffle([[e[0], e[2]]].concat(distractors.map(d => [d[0], d[2]])));
+                        const opts = pairs.map(p => p[0]);
+                        const optsSrc = pairs.map(p => p[1]);
                         const ans = opts.indexOf(en ? e[2] : e[0]);
-                        return { e, opts, ans, en };
+                        return { e, opts, optsSrc, ans, en };
                     });
                     this.qi = 0; this.right = 0; this.wrongList = [];
                     return this.qs;
@@ -3855,6 +4093,28 @@
                 },
 
                 renderSetup() {
+                    const bookW = S.books[this.book];
+                    const aw = (bookW && Array.isArray(bookW.w) ? bookW.w : activeWords()).filter(e => e[2]);
+                    const sc = this.scope;
+                    const cnt = this.count;
+                    function sg(label, val, cntN, disabled, alwaysActive) {
+                        const isActive = alwaysActive ? val === 'book:' + Quiz.book : sc === val;
+                        return '<button class="sg-item' + (isActive ? ' active' : '') + (disabled ? ' disabled' : '') + '" data-action="qScope" data-s="' + val + '">' +
+                            '<span>' + label + '</span><span class="sg-cnt">' + cntN + '</span></button>';
+                    }
+                    const starCount = aw.filter(e => { const p = progOf(e[0]); return p && p.star; }).length;
+                    const dueCount = dueList(aw).length;
+                    const newCount = newList(aw).length;
+                    const learningCount = aw.filter(e => mastery(e[0]) === 'learning').length;
+                    const masteredCount = aw.filter(e => mastery(e[0]) === 'mastered').length;
+                    const counts = [5, 10, 20, 30, 50, 100];
+                    const customActive = counts.indexOf(cnt) === -1;
+                    const customVal = customActive ? cnt : '';
+                    const allBooks = Object.values(S.books);
+                    const bookItems = allBooks.map(b => {
+                        const bc = b.w.filter(e => e[2]).length;
+                        return sg(esc(b.name), 'book:' + b.id, bc, bc < 1, true);
+                    }).join('');
                     $('#v-quiz').innerHTML =
                         '<div class="setup-box">' +
                             '<div class="setup-title">测验设置</div>' +
@@ -3862,17 +4122,28 @@
                                 '<button data-action="qMode" data-m="choice" class="' + (this.mode === 'choice' ? 'active' : '') + '">四选一</button>' +
                                 '<button data-action="qMode" data-m="spell" class="' + (this.mode === 'spell' ? 'active' : '') + '">拼写挑战</button>' +
                             '</div></div>' +
-                            '<div class="ed-field"><span class="ed-label">题量</span><div class="seg">' +
-                                [10, 20, 30].map(n => '<button data-action="qCount" data-n="' + n + '" class="' + (this.count === n ? 'active' : '') + '">' + n + ' 题</button>').join('') +
+                            '<div class="ed-field"><span class="ed-label">题量</span><div class="setup-grid three">' +
+                                counts.map(n => '<button class="sg-item' + (cnt === n ? ' active' : '') + '" data-action="qCount" data-n="' + n + '"><span>' + n + ' 题</span></button>').join('') +
+                            '</div>' +
+                            '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
+                                '<span style="font-size:calc(11px*var(--fscale));color:var(--text-faint);white-space:nowrap">自定义</span>' +
+                                '<input type="number" id="q-custom-count" min="1" max="999" placeholder="输入题数" value="' + customVal + '" ' +
+                                'style="flex:1;padding:6px 10px;font-size:calc(12px*var(--fscale));text-align:center;border:1px solid var(--border-dim);background:transparent;color:var(--text);border-radius:var(--radius)" />' +
                             '</div></div>' +
-                            '<div class="ed-field"><span class="ed-label">范围</span><div class="seg">' +
-                                '<button data-action="qScope" data-s="all" class="' + (this.scope === 'all' ? 'active' : '') + '">全部</button>' +
-                                '<button data-action="qScope" data-s="due" class="' + (this.scope === 'due' ? 'active' : '') + '">待复习</button>' +
-                                '<button data-action="qScope" data-s="new" class="' + (this.scope === 'new' ? 'active' : '') + '">未学</button>' +
-                                '<button data-action="qScope" data-s="star" class="' + (this.scope === 'star' ? 'active' : '') + '">★ 难点</button>' +
-                            '</div></div>' +
-                            '<button class="ed-btn primary" data-action="quizStart" style="margin-top:8px">开始测验 ' + ICO('chevR') + '</button>' +
+                            '<div class="ed-field"><span class="ed-label">范围</span><div class="setup-grid">' +
+                                sg('全部', 'all', aw.length, false) +
+                                sg('学习中', 'learning', learningCount, learningCount < 1) +
+                                sg('已掌握', 'mastered', masteredCount, masteredCount < 1) +
+                                sg('★ 难点', 'star', starCount, starCount < 1) +
+                                sg('待复习', 'due', dueCount, dueCount < 1) +
+                                sg('未学', 'new', newCount, newCount < 1) +
+                            '</div>' +
+                            (bookItems ? '<div class="setup-divider"></div><div class="setup-grid">' + bookItems + '</div>' : '') +
+                            '</div>' +
+                            '<button class="ed-btn primary" data-action="quizStart">开始测验 ' + ICO('chevR') + '</button>' +
                         '</div>';
+                    const ci = $('#q-custom-count');
+                    if (ci) ci.addEventListener('change', () => { const v = parseInt(ci.value); if (v > 0) { Quiz.count = v; } });
                 },
 
                 renderQuestion() {
@@ -3889,7 +4160,7 @@
                             '</div>' +
                             '<div id="opts">' +
                                 q.opts.map((o, i) =>
-                                    '<div class="opt row-in" style="animation-delay:' + i * 45 + 'ms" data-action="optPick" data-i="' + i + '"><span class="ol">' + 'ABCD'[i] + '</span><span>' + esc(o) + '</span></div>').join('') +
+                                    '<div class="opt row-in" style="animation-delay:' + i * 45 + 'ms" data-action="optPick" data-i="' + i + '" data-src="' + esc(q.optsSrc[i]) + '"><span class="ol">' + 'ABCD'[i] + '</span><span>' + esc(o) + '</span></div>').join('') +
                             '</div>' +
                         '</div>';
                     if (q.en && S.set.autoSpeak) TT.speak(e[0]);
@@ -3903,8 +4174,14 @@
                     opts[q.ans].classList.add('correct');
                     if (!ok) {
                         opts[i].classList.add('wrong');
-                        opts[i].insertAdjacentHTML('beforeend', '<span class="opt-ans">' + ICO('arrowR') + ' ' + esc(q.opts[q.ans]) + '</span>');
+                        const wrongSrc = opts[i].dataset.src || '';
+                        opts[i].insertAdjacentHTML('beforeend', wrongSrc ? '<span class="opt-src">' + wrongSrc + '</span>' : '');
                         opts.forEach((o, j) => { if (j !== q.ans && j !== i) o.classList.add('dim-off'); });
+                        const wrap = $('#opts').parentElement;
+                        const btn = document.createElement('div');
+                        btn.style.cssText = 'text-align:center;margin-top:14px';
+                        btn.innerHTML = '<button class="mini-btn solid" data-action="quizNext">' + ICO('chevR') + ' 下一个</button>';
+                        wrap.appendChild(btn);
                         buzz([16, 40, 16]);
                     } else {
                         opts.forEach((o, j) => { if (j !== q.ans) o.classList.add('dim-off'); });
@@ -3912,7 +4189,7 @@
                         buzz([8, 30, 10]);
                     }
                     this.record(ok, q);
-                    setTimeout(() => this.next(), ok ? 700 : 1400);
+                    if (ok) setTimeout(() => this.next(), 700);
                 },
 
                 record(ok, q) {
@@ -4176,9 +4453,12 @@
 
                 start() {
                     this.t0 = Date.now();
+                    const pool = this.pool();
+                    if (!pool.length) { notify('当前范围没有可用单词'); return; }
                     if (this.mode === 'spell') {
-                        const src = shuffle(this.pool().length >= 4 ? this.pool() : activeWords()).slice(0, this.count);
-                        if (!src.length) { notify('当前范围没有可用单词'); return; }
+                        let src = shuffle(pool);
+                        while (src.length < this.count && src.length > 0) src = src.concat(shuffle(pool));
+                        src = src.slice(0, this.count);
                         this.qs = src.map(e => ({ e }));
                         this.qi = 0; this.right = 0; this.wrongList = [];
                         this.nextSpell(true);
@@ -4344,7 +4624,7 @@
                 toggleShowNote() {
                     S.set.showNote = !S.set.showNote;
                     applyAll(); save();
-                    $$('.fb-note').forEach(n => { n.style.display = S.set.showNote ? '' : 'none'; });
+                    $$('.fb-note, .fb-ex-zh').forEach(n => { n.style.display = S.set.showNote ? '' : 'none'; });
                     notify(S.set.showNote ? '背卡将显示我的备注（即时生效）' : '背卡不再显示备注（即时生效）');
                 },
                 toggleStatusbar() { S.set.statusbar = !S.set.statusbar; applyAll(); save(); },
@@ -4456,6 +4736,7 @@
                 noteSave() {
                     if (!DR) return;
                     const n = ensureNotes(DR.e[0]);
+                    n.exZh = ($('#dn-exzh').value || '').trim();
                     n.ex = ($('#dn-ex').value || '').trim();
                     n.zh = ($('#dn-zh').value || '').trim();
                     n.story = ($('#dn-story').value || '').trim();
@@ -4565,7 +4846,8 @@
 
                 qMode(t) { Quiz.mode = t.dataset.m; refreshSetupSeg(t); },
                 qCount(t) { Quiz.count = +t.dataset.n; refreshSetupSeg(t); },
-                qScope(t) { Quiz.scope = t.dataset.s; refreshSetupSeg(t); },
+                qCountCustom(t) { const v = parseInt(t.value); if (v > 0) Quiz.count = v; },
+                qScope(t) { Quiz.scope = t.dataset.s; if (t.dataset.s.startsWith('book:')) Quiz.book = t.dataset.s.slice(5); Quiz.render(); },
                 quizStart() { Quiz.start(); },
                 quizSpeak() { TT.speak(Quiz.mode === 'spell' && Quiz.sp ? Quiz.sp.e[0] : (Quiz.qs[Quiz.qi] ? Quiz.qs[Quiz.qi].e[0] : '')); },
                 optPick(t) { Quiz.pick(typeof t === 'number' ? t : +t.dataset.i); },
@@ -4577,7 +4859,13 @@
                 spSkip() { Quiz.skipSpell(); },
                 spNext() { Quiz.qi++; Quiz.nextSpell(); },
                 tyStart() { Typing.start(); },
+                tyStartW() { Typing.start('word'); },
+                tyStartS() { Typing.start('sentence'); },
+                tyScope(t) { Typing.scope = t.dataset.s; if (t.dataset.s.startsWith('book:')) Typing.book = t.dataset.s.slice(5); Typing.render(); },
+                tyCount(t) { Typing.wordCount = +t.dataset.n; refreshSetupSeg(t); },
+                tyMode(t) { Typing.mode = t.dataset.m; refreshSetupSeg(t); },
                 tyHome() { Typing.active = false; switchView('home'); },
+                quizNext() { Quiz.next(); },
                 quizReset() { Quiz.reset(); Quiz.render(); updateHead(); },
                 quizWrongAll() {
                     if (!Quiz.wrongList.length) return;
@@ -4711,7 +4999,8 @@
             }
 
             function refreshSetupSeg(t) {
-                const seg = t.closest('.seg');
+                const seg = t.closest('.seg') || t.closest('.setup-grid');
+                if (!seg) return;
                 seg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
                 t.classList.add('active');
             }
@@ -4800,8 +5089,8 @@
                 if (curView === 'typing' && Typing.active && !Typing.done) {
                     if (e.key === 'Backspace') { e.preventDefault(); Typing.backspace(); return; }
                     if (e.key === 'Tab') { e.preventDefault(); Typing.hint(); return; }
-                    if (e.key === ' ') { e.preventDefault(); Typing.skip(); return; }
-                    if (/^[a-zA-Z]$/.test(e.key)) { Typing.hit(e.key.toLowerCase()); return; }
+                    if (e.key === ' ') { e.preventDefault(); Typing.space(); return; }
+                    if (e.key.length === 1) { Typing.hit(e.key); return; }
                 }
                 if (e.key === '?') { ACT.showHelp(); }
             });
