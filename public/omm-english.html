@@ -131,7 +131,7 @@
         .dropdown {
             position: fixed; top: 52px; background: var(--bg); border: 1px solid var(--border);
             padding: 4px; min-width: 200px; z-index: 1001;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); max-height: 82vh; overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); overflow-y: auto;
             border-radius: var(--radius);
             opacity: 0; visibility: hidden; pointer-events: none;
             transform: translateY(-4px);
@@ -1344,6 +1344,8 @@
         <div class="dd-item" data-action="toggleAutoSpeak"><span>卡片自动发音</span><span class="hint" id="sv-autospeak">ON</span></div>
         <div class="dd-item" data-action="togglePhon"><span>显示音标</span><span class="hint" id="sv-phon">ON</span></div>
         <div class="dd-item" data-action="toggleEx"><span>显示例句</span><span class="hint" id="sv-showex">ON</span></div>
+        <div class="dd-item" data-action="toggleTySound"><span>拼写打字音效</span><span class="hint" id="sv-tysound">ON</span></div>
+        <div class="dd-item-row"><span>音效音量</span><div class="settings-control"><span class="settings-value" id="sv-tysoundvol">60%</span><span class="settings-btn" data-action="tySoundVolDown">−</span><span class="settings-btn" data-action="tySoundVolUp">+</span></div></div>
         <div class="dd-divider"></div>
         <div class="dd-label">语音</div>
         <div class="fmt-hint" id="sv-tts-mode" style="margin:2px 10px 4px;padding:5px 9px;"></div>
@@ -1913,7 +1915,7 @@
             function defaults() {
                 return {
                     v: 1,
-                    set: { theme: 'light', bg: 'bg-dots', fscale: 1, radius: 0, pinned: false, statusbar: true, dailyNew: 20, autoSpeak: true, showPhon: true, showEx: true, showNote: true, seenGuide: false, ttsVoice: '', ttsRate: 0.95, examDate: '2026-12-12' },
+                    set: { theme: 'light', bg: 'bg-dots', fscale: 1, radius: 0, pinned: false, statusbar: true, dailyNew: 20, autoSpeak: true, showPhon: true, showEx: true, showNote: true, seenGuide: false, ttsVoice: '', ttsRate: 0.95, examDate: '2026-12-12', tySound: true, tySoundVol: 60 },
                     notes: {},
                     books: {},
                     activeBook: 'cet6',
@@ -2044,6 +2046,55 @@
             }
 
             function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { } }
+
+            // Typing sound engine (Web Audio API)
+            const TySound = {
+                _ctx: null,
+                _ok: null,
+                _bad: null,
+                _space: null,
+                ctx() {
+                    if (!this._ctx) {
+                        try { this._ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+                    }
+                    return this._ctx;
+                },
+                _tone(freq, dur, vol, type) {
+                    const c = this.ctx();
+                    if (!c) return;
+                    if (c.state === 'suspended') c.resume();
+                    const o = c.createOscillator();
+                    const g = c.createGain();
+                    o.type = type || 'square';
+                    o.frequency.value = freq;
+                    g.gain.setValueAtTime(vol || 0.06, c.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+                    o.connect(g);
+                    g.connect(c.destination);
+                    o.start(c.currentTime);
+                    o.stop(c.currentTime + dur);
+                },
+                _noise(dur, vol) {
+                    const c = this.ctx();
+                    if (!c) return;
+                    if (c.state === 'suspended') c.resume();
+                    const len = c.sampleRate * dur;
+                    const buf = c.createBuffer(1, len, c.sampleRate);
+                    const data = buf.getChannelData(0);
+                    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1);
+                    const src = c.createBufferSource();
+                    src.buffer = buf;
+                    const g = c.createGain();
+                    g.gain.setValueAtTime(vol || 0.04, c.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+                    src.connect(g);
+                    g.connect(c.destination);
+                    src.start(c.currentTime);
+                },
+                ok() { const v = (S.set.tySoundVol || 60) / 100; this._tone(1200, 0.05, 0.12 * v, 'square'); this._tone(1600, 0.035, 0.08 * v, 'sine'); },
+                bad() { const v = (S.set.tySoundVol || 60) / 100; this._tone(220, 0.12, 0.18 * v, 'sawtooth'); this._noise(0.06, 0.08 * v); },
+                space() { const v = (S.set.tySoundVol || 60) / 100; this._tone(800, 0.04, 0.10 * v, 'sine'); this._tone(600, 0.03, 0.06 * v, 'sine'); }
+            };
             function waveBoxes() {
                 const wrap = $('#spell-boxes');
                 if (!wrap) return;
@@ -2152,6 +2203,10 @@
                 $('#sv-statusbar').textContent = st.statusbar ? 'ON' : 'OFF';
                 const sn = $('#sv-shownote');
                 if (sn) sn.textContent = st.showNote ? 'ON' : 'OFF';
+                const ts = $('#sv-tysound');
+                if (ts) ts.textContent = st.tySound ? 'ON' : 'OFF';
+                const tv = $('#sv-tysoundvol');
+                if (tv) tv.textContent = st.tySoundVol + '%';
                 updateExamLabel();
             }
 
@@ -3627,6 +3682,7 @@
                         this._flashBox(this.pos - 1, true);
                         this._spawnParticles(this.pos - 1, true);
                         buzz([8]);
+                        if (S.set.tySound) TySound.ok();
                         if (this.pos >= target.length) {
                             this._completeWord();
                         } else {
@@ -3639,6 +3695,7 @@
                         this.pos++;
                         this._flashBox(this.pos - 1, false);
                         buzz([18]);
+                        if (S.set.tySound) TySound.bad();
                         if (this.pos >= target.length) {
                             this._completeWord();
                         } else {
@@ -3659,6 +3716,7 @@
                         this.pos++;
                         this._flashBox(this.pos - 1, true);
                         buzz([6]);
+                        if (S.set.tySound) TySound.space();
                         if (this.pos >= target.length) {
                             this._completeWord();
                         } else {
@@ -4258,6 +4316,7 @@
                         this.sp.val = v;
                         hid.value = v;
                         buzz(6);
+                        if (S.set.tySound) TySound.ok();
                         const keepFocus = document.activeElement === hid;
                         const scroll = $('#v-quiz') ? $('#v-quiz').scrollTop : 0;
                         this.renderSpell();
@@ -4627,6 +4686,9 @@
                     $$('.fb-note, .fb-ex-zh').forEach(n => { n.style.display = S.set.showNote ? '' : 'none'; });
                     notify(S.set.showNote ? '背卡将显示我的备注（即时生效）' : '背卡不再显示备注（即时生效）');
                 },
+                toggleTySound() { S.set.tySound = !S.set.tySound; applyAll(); save(); notify(S.set.tySound ? '打字音效已开启' : '打字音效已关闭'); },
+                tySoundVolDown() { S.set.tySoundVol = clamp(S.set.tySoundVol - 10, 10, 100); applyAll(); save(); },
+                tySoundVolUp() { S.set.tySoundVol = clamp(S.set.tySoundVol + 10, 10, 100); applyAll(); save(); },
                 toggleStatusbar() { S.set.statusbar = !S.set.statusbar; applyAll(); save(); },
                 setBg(t) { S.set.bg = t.dataset.bg; applyAll(); save(); },
                 resetStyles() {
