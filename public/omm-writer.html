@@ -248,6 +248,7 @@
             border-color: var(--border);
             background: var(--hover);
         }
+        .pin-btn svg { width: 14px; height: 14px; }
 
         /* Dropdowns */
         .dropdown {
@@ -1409,7 +1410,7 @@
             <span class="menu-label" data-i18n="menu.tools">工具</span>
             <div class="menu-btn" data-action="resetView" data-i18n="menu.resetView"></div>
             <div class="menu-btn" data-action="purge" data-i18n="menu.purge"></div>
-            <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" data-i18n-title="pin.title" title="固定菜单栏">▼</div>
+            <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" data-i18n-title="pin.title" title="固定菜单栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
         </div>
     </div>
 
@@ -1443,7 +1444,7 @@
         <div class="dd-divider"></div>
         <div class="dd-label" data-i18n="dd.settings.appearance">Appearance</div>
         <div class="dd-item" data-action="settingsToggleTheme"><span data-i18n="dd.settings.theme">Theme</span><span class="hint" id="sv-theme"></span></div>
-        <div class="dd-item-row"><span data-i18n="dd.settings.bg">Background</span><div class="settings-bg-options" id="sv-bg-options"><span class="settings-bg-dot active" data-bg="bg-void" title="Void" style="background:var(--bg);border:1px solid var(--border)"></span><span class="settings-bg-dot" data-bg="bg-grid" title="Grid" style="background-image:linear-gradient(var(--border-dim) 1px,transparent 1px),linear-gradient(90deg,var(--border-dim) 1px,transparent 1px);background-size:6px 6px"></span><span class="settings-bg-dot" data-bg="bg-dots" title="Dots" style="background-image:radial-gradient(circle,var(--text-dim) 1px,transparent 1px);background-size:5px 5px"></span><span class="settings-bg-dot" data-bg="bg-cross" title="Cross" style="background-image:linear-gradient(var(--border-dim) 1px,transparent 1px),linear-gradient(90deg,var(--border-dim) 1px,transparent 1px);background-size:6px 6px;background-position:3px 3px"></span><span class="settings-bg-dot" data-bg="bg-diagonal" title="Diagonal" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 5px,var(--border-dim) 5px,var(--border-dim) 6px)"></span></div></div>
+        <div class="dd-item-row"><span data-i18n="dd.settings.bg">Background</span><div class="settings-bg-options" id="sv-bg-options"><span class="settings-bg-dot active" data-bg="bg-void" data-i18n-title="dd.bg.void" title="无" style="background:var(--bg);border:1px solid var(--border)"></span><span class="settings-bg-dot" data-bg="bg-grid" data-i18n-title="dd.bg.grid" title="网格" style="background-image:linear-gradient(var(--border-dim) 1px,transparent 1px),linear-gradient(90deg,var(--border-dim) 1px,transparent 1px);background-size:6px 6px"></span><span class="settings-bg-dot" data-bg="bg-dots" data-i18n-title="dd.bg.dots" title="点阵" style="background-image:radial-gradient(circle,var(--text-dim) 1px,transparent 1px);background-size:5px 5px"></span><span class="settings-bg-dot" data-bg="bg-cross" data-i18n-title="dd.bg.cross" title="十字" style="background-image:linear-gradient(var(--border-dim) 1px,transparent 1px),linear-gradient(90deg,var(--border-dim) 1px,transparent 1px);background-size:6px 6px;background-position:3px 3px"></span><span class="settings-bg-dot" data-bg="bg-diagonal" data-i18n-title="dd.bg.diagonal" title="斜纹" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 5px,var(--border-dim) 5px,var(--border-dim) 6px)"></span></div></div>
         <div class="dd-item" data-action="settingsToggleNodeBg"><span data-i18n="dd.settings.nodeBg">Node BG</span><span class="hint" id="sv-node-bg"></span></div>
         <div class="dd-item-row"><span data-i18n="dd.settings.nodeRadius">Node Radius</span><div class="settings-control"><span class="settings-value" id="sv-node-radius">0</span><span class="settings-btn" data-action="settingsNodeRadiusDown">−</span><span class="settings-btn" data-action="settingsNodeRadiusUp">+</span></div></div>
         <div class="dd-divider"></div>
@@ -1734,6 +1735,10 @@
                     'notify.allCleared': 'All cleared',
                     'notify.stylesReset': 'Styles reset',
                     'stats.text': '{0} node{1} · {2} conn{3}',
+                    'on': 'ON',
+                    'off': 'OFF',
+                    'theme.light': 'Light',
+                    'theme.dark': 'Dark',
                 },
                 zh: {
                     'splash.tagline': '线框写作环境',
@@ -1851,6 +1856,10 @@
                     'placeholder.mathEdit': '双击编辑 LaTeX 公式',
                     'notify.nodeBgOn': '节点背景：开',
                     'notify.nodeBgOff': '节点背景：关',
+                    'on': '开',
+                    'off': '关',
+                    'theme.light': '浅色',
+                    'theme.dark': '深色',
                     'notify.viewReset': '视图已重置',
                     'notify.nodeRemoved': '节点已删除',
                     'notify.dragToConnect': '拖动到另一个节点的端口以连接',
@@ -2219,6 +2228,7 @@
                 showExportOverlay() { DOM.exportOverlay.classList.add('active'); },
                 hideExportOverlay() { DOM.exportOverlay.classList.remove('active'); },
                 togglePin() {
+                    closeAllDropdowns();
                     AppState.menuPinned = !AppState.menuPinned;
                     DOM.topMenu.classList.toggle('pinned', AppState.menuPinned);
                     DOM.pinBtn.classList.toggle('pinned', AppState.menuPinned);
@@ -2231,13 +2241,13 @@
                     document.getElementById('sv-node-radius').textContent = AppState.nodeBorderRadius;
                     document.getElementById('sv-port-size').textContent = AppState.portSize;
                     document.getElementById('sv-conn-width').textContent = AppState.connWidth;
-                    document.getElementById('sv-menu-pinned').textContent = AppState.menuPinned ? 'ON' : 'OFF';
-                    document.getElementById('sv-status-bar').textContent = AppState.statusBarVisible ? 'ON' : 'OFF';
-                    document.getElementById('sv-node-bg').textContent = AppState.nodeBgVisible ? 'ON' : 'OFF';
-                    document.getElementById('sv-theme').textContent = AppState.theme === 'dark' ? 'Dark' : 'Light';
-                    document.getElementById('sv-focus').textContent = AppState.focusMode ? 'ON' : 'OFF';
-                    document.getElementById('sv-read').textContent = AppState.readingMode ? 'ON' : 'OFF';
-                    document.getElementById('sv-full').textContent = AppState.fullDisplay ? 'ON' : 'OFF';
+                    document.getElementById('sv-menu-pinned').textContent = AppState.menuPinned ? t('on') : t('off');
+                    document.getElementById('sv-status-bar').textContent = AppState.statusBarVisible ? t('on') : t('off');
+                    document.getElementById('sv-node-bg').textContent = AppState.nodeBgVisible ? t('on') : t('off');
+                    document.getElementById('sv-theme').textContent = AppState.theme === 'dark' ? t('theme.dark') : t('theme.light');
+                    document.getElementById('sv-focus').textContent = AppState.focusMode ? t('on') : t('off');
+                    document.getElementById('sv-read').textContent = AppState.readingMode ? t('on') : t('off');
+                    document.getElementById('sv-full').textContent = AppState.fullDisplay ? t('on') : t('off');
                     document.getElementById('sv-lang').textContent = AppState.lang === 'zh' ? '中文' : 'EN';
                     document.querySelectorAll('#sv-port-color .ft-color-dot').forEach(d => {
                         d.classList.toggle('active', d.dataset.color === AppState.portColor);
