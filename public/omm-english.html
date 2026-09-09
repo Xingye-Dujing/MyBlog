@@ -1155,6 +1155,16 @@
         .dr-ph svg, .wp-actions svg, .fb-ex svg { width: 12px; height: 12px; vertical-align: -2px; }
         .pk-head .pk-title { flex: 1; text-align: center; }
 
+        /* ===== Custom count input active ===== */
+        .custom-count {
+            flex: 1; padding: 6px 10px; font-size: calc(12px * var(--fscale)); text-align: center;
+            border: 1px solid var(--border-dim); background: transparent; color: var(--text);
+            border-radius: var(--radius); transition: border-color 0.15s;
+        }
+        .custom-count:focus, .custom-count.has-val {
+            border-color: var(--text);
+        }
+
         /* ===== Spelling letter boxes ===== */
         .qz-wrap { position: relative; }
         #sp-hid { position: absolute; opacity: 0; width: 2px; height: 2px; left: 50%; top: 40%; border: none; background: transparent; }
@@ -2359,14 +2369,14 @@
             function progOf(word) { return S.prog[nkey(word)]; }
             function ensureProg(word) {
                 const k = nkey(word);
-                if (!S.prog[k]) S.prog[k] = { b: 0, due: Date.now(), seen: 0, ok: 0, bad: 0, star: false };
+                if (!S.prog[k]) S.prog[k] = { b: 0, due: Date.now(), seen: 0, ok: 0, bad: 0, fuzzy: 0, star: false };
                 return S.prog[k];
             }
             function gradeWord(word, g) {
                 const p = ensureProg(word);
                 p.seen++;
                 if (g === 0) { p.b = 0; p.bad++; p.due = Date.now() + 600000; }
-                else if (g === 1) { p.due = Date.now() + (p.b === 0 ? 0.25 : IV[p.b] * 0.7) * DAY; }
+                else if (g === 1) { p.fuzzy = (p.fuzzy || 0) + 1; p.due = Date.now() + (p.b === 0 ? 0.25 : IV[p.b] * 0.7) * DAY; }
                 else { p.b = Math.min(5, p.b + 1); p.ok++; p.due = Date.now() + IV[p.b] * DAY; }
                 save();
             }
@@ -2726,7 +2736,7 @@
                         '<textarea class="ed-area" id="dn-story" rows="3" placeholder="我和这个词的故事、记忆钩子…">' + esc(note.story) + '</textarea>' +
                         '<button class="mini-btn solid" data-action="noteSave" style="align-self:flex-start">保存备注</button>' +
                     '</div>' +
-                    '<div class="dr-meta">状态：' + mLabel + '　·　记忆盒：' + boxTxt + '<br>看过 ' + (p ? p.seen : 0) + ' 次（对 ' + (p ? p.ok : 0) + ' / 错 ' + (p ? p.bad : 0) + '）　·　下次复习：' + dueTxt +
+                    '<div class="dr-meta">状态：' + mLabel + '　·　记忆盒：' + boxTxt + '<br>认识 ' + (p ? p.ok : 0) + ' 次　·　不认识 ' + (p ? p.bad : 0) + ' 次　·　模糊 ' + (p ? (p.fuzzy || 0) : 0) + ' 次　·　下次复习：' + dueTxt +
                         (fav ? '<br>已收入生词本' : '') + '</div>' +
                     '<div class="dr-actions">' +
                         '<button class="mini-btn" data-action="wdReset">重置进度</button>' +
@@ -3515,8 +3525,7 @@
                                 '</div>' +
                                 '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
                                     '<span style="font-size:calc(11px*var(--fscale));color:var(--text-faint);white-space:nowrap">自定义</span>' +
-                                    '<input type="number" id="ty-custom-count" min="1" max="999" placeholder="输入题数" value="' + customVal + '" ' +
-                                    'style="flex:1;padding:6px 10px;font-size:calc(12px*var(--fscale));text-align:center;border:1px solid var(--border-dim);background:transparent;color:var(--text);border-radius:var(--radius)" />' +
+                                    '<input type="number" id="ty-custom-count" class="custom-count' + (customActive ? ' has-val' : '') + '" min="1" max="999" placeholder="输入题数" value="' + customVal + '" />' +
                                 '</div></div>' +
                                 '<div class="ed-field"><span class="ed-label">范围</span><div class="setup-grid">' +
                                     sg('全部', 'all', aw.length, false) +
@@ -3532,7 +3541,17 @@
                                 '<button class="ed-btn primary" data-action="tyStart">开始练习 ' + ICO('chevR') + '</button>' +
                             '</div>';
                         const ci = $('#ty-custom-count');
-                        if (ci) ci.addEventListener('change', () => { const v = parseInt(ci.value); if (v > 0) Typing.wordCount = v; });
+                        if (ci) {
+                            const clearPreset = () => {
+                                const grid = ci.closest('.ed-field').querySelector('.setup-grid');
+                                if (grid) grid.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                            };
+                            ci.addEventListener('input', () => {
+                                const v = parseInt(ci.value);
+                                if (v > 0) { Typing.wordCount = v; ci.classList.add('has-val'); clearPreset(); }
+                                else ci.classList.remove('has-val');
+                            });
+                        }
                         return;
                     }
                     if (this.done) { this.renderDone(); return; }
@@ -4125,10 +4144,31 @@
                     const pool = this.pool();
                     const all = activeWords();
                     if (pool.length < 1) return [];
-                    let src = shuffle(pool);
-                    while (src.length < this.count && src.length > 0) src = src.concat(shuffle(pool));
+                    const wordWeight = (w) => {
+                        const p = progOf(w[0]);
+                        if (!p) return 1;
+                        return 1 + (p.bad || 0) + (p.fuzzy || 0);
+                    };
+                    const weightedPick = (arr, n) => {
+                        const result = [];
+                        const tmp = arr.slice();
+                        while (tmp.length > 0 && result.length < n) {
+                            const totalW = tmp.reduce((s, w) => s + wordWeight(w), 0);
+                            let r = Math.random() * totalW;
+                            for (let i = 0; i < tmp.length; i++) {
+                                r -= wordWeight(tmp[i]);
+                                if (r <= 0) { result.push(tmp.splice(i, 1)[0]); break; }
+                            }
+                            if (result.length < n && tmp.length > 0 && result.length === 0) result.push(tmp.shift());
+                        }
+                        return result;
+                    };
+                    let src = weightedPick(pool, this.count);
+                    if (src.length < this.count && pool.length > 0) {
+                        src = src.concat(weightedPick(pool, this.count - src.length));
+                    }
                     src = src.slice(0, this.count);
-                    if (src.length < 4 && all.length >= 4) { src = shuffle(all).slice(0, this.count); }
+                    if (src.length < 4 && all.length >= 4) { src = weightedPick(all, this.count); }
                     this.qs = src.map((e, idx) => {
                         const en = pool.indexOf(e) === -1 ? (idx % 2 === 0) : (Math.random() < 0.55);
                         const distractors = shuffle(all.filter(x => nkey(x[0]) !== nkey(e[0]))).slice(0, 3);
@@ -4185,8 +4225,7 @@
                             '</div>' +
                             '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
                                 '<span style="font-size:calc(11px*var(--fscale));color:var(--text-faint);white-space:nowrap">自定义</span>' +
-                                '<input type="number" id="q-custom-count" min="1" max="999" placeholder="输入题数" value="' + customVal + '" ' +
-                                'style="flex:1;padding:6px 10px;font-size:calc(12px*var(--fscale));text-align:center;border:1px solid var(--border-dim);background:transparent;color:var(--text);border-radius:var(--radius)" />' +
+'<input type="number" id="q-custom-count" class="custom-count' + (customActive ? ' has-val' : '') + '" min="1" max="999" placeholder="输入题数" value="' + customVal + '" />' +
                             '</div></div>' +
                             '<div class="ed-field"><span class="ed-label">范围</span><div class="setup-grid">' +
                                 sg('全部', 'all', aw.length, false) +
@@ -4201,7 +4240,17 @@
                             '<button class="ed-btn primary" data-action="quizStart">开始测验 ' + ICO('chevR') + '</button>' +
                         '</div>';
                     const ci = $('#q-custom-count');
-                    if (ci) ci.addEventListener('change', () => { const v = parseInt(ci.value); if (v > 0) { Quiz.count = v; } });
+                    if (ci) {
+                        const clearPreset = () => {
+                            const grid = ci.closest('.ed-field').querySelector('.setup-grid');
+                            if (grid) grid.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                        };
+                        ci.addEventListener('input', () => {
+                            const v = parseInt(ci.value);
+                            if (v > 0) { Quiz.count = v; ci.classList.add('has-val'); clearPreset(); }
+                            else ci.classList.remove('has-val');
+                        });
+                    }
                 },
 
                 renderQuestion() {
@@ -4484,7 +4533,6 @@
                     this.sp.checked = true;
                     this.sp.val = '';
                     this.record(false, this.sp.q);
-                    this.wrongList.push(this.sp.e);
                     const btns = $('#sp-btns');
                     if (btns) btns.classList.add('hidden');
                     const fb = $('#sp-fb');
@@ -4537,6 +4585,10 @@
                     const total = this.qs.length;
                     const pct = total ? Math.round(this.right / total * 100) : 0;
                     const dur = Math.max(1, Math.round((Date.now() - (this.t0 || Date.now())) / 1000));
+                    if (this.wrongList.length) {
+                        this.wrongList.forEach(e => { const p = ensureProg(e[0]); p.due = Date.now(); });
+                        save();
+                    }
                     const C = 326.7;
                     const wrongRows = this.wrongList.map(e =>
                         '<div class="wl-row"><span class="wl-w">' + esc(e[0]) + '</span><span class="wl-m">' + esc(e[2]) + '</span>' +
@@ -5065,6 +5117,8 @@
                 if (!seg) return;
                 seg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
                 t.classList.add('active');
+                const field = t.closest('.ed-field');
+                if (field) { const ci = field.querySelector('.custom-count'); if (ci) ci.classList.remove('has-val'); }
             }
 
             // ============================================================
