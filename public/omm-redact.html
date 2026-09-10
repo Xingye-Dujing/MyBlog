@@ -15,6 +15,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js">
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap');
 
@@ -384,7 +386,10 @@
         /* ===== LAYOUT ===== */
         #app-layout {
             position: absolute;
-            inset: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 26px;
             z-index: 1;
             display: flex;
             flex-direction: row;
@@ -846,6 +851,9 @@
             margin: 0 auto;
             --view-scale: 1;
             flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         /* ===== DOCUMENT PAGE ===== */
@@ -885,22 +893,6 @@
         body.theme-dark .doc-page.pdf {
             background: #0a0a0a;
             border-color: #222;
-        }
-        .doc-page.pdf .page-num {
-            position: absolute;
-            top: 6px;
-            right: 6px;
-            padding: 1px 10px;
-            background: rgba(0, 0, 0, 0.5);
-            color: #fff;
-            border-radius: 10px;
-            font-size: 9px;
-            letter-spacing: 0.5px;
-            z-index: 7;
-            user-select: none;
-        }
-        body.theme-dark .doc-page.pdf .page-num {
-            background: rgba(255, 255, 255, 0.10);
         }
 
         .pdf-placeholder {
@@ -969,6 +961,13 @@
             pointer-events: none !important;
         }
 
+        /* TXT/DOCX page frame: exactly the same visual frame as native PDF pages. */
+        .doc-page:not(.pdf), .txt-page-zoom-shell .doc-page.txt-zoom-page, .docx-export-page {
+            border: 1px solid var(--border) !important;
+            border-radius: var(--radius) !important;
+            box-shadow: var(--page-shadow) !important;
+        }
+
         /* ===== REDACTION STATES ===== */
         .redact-rect-applied {
             fill: #000000;
@@ -982,6 +981,9 @@
             position: relative;
             flex: 0 0 auto;
             display: block;
+            width: 794px;
+            min-width: 794px;
+            max-width: 794px;
             margin: 0 auto 20px;
             box-sizing: border-box;
         }
@@ -1003,7 +1005,7 @@
         /* ===== TEXT PAGES ===== */
         .doc-page-text {
             font-family: 'SimSun', '宋体', 'Songti SC', serif;
-            font-size: 14px;
+            font-size: 16px;
             line-height: 1.8;
             color: #222;
             white-space: pre-wrap;
@@ -1015,11 +1017,58 @@
         }
 
         .page-num {
-            text-align: right;
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            padding: 4px 10px;
+            min-width: 0;
+            background: rgba(255, 255, 255, 0.94);
+            color: #3f4650;
+            border: 1px solid rgba(115, 124, 136, 0.24);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(30, 36, 44, 0.10);
             font-size: 10px;
-            color: var(--text-faint);
-            margin-bottom: 4px;
+            font-weight: 600;
+            line-height: 1.25;
+            letter-spacing: 0.35px;
+            text-align: center;
+            white-space: nowrap;
+            z-index: 7;
             user-select: none;
+            pointer-events: none;
+        }
+        body.theme-dark .page-num {
+            background: rgba(37, 42, 49, 0.92);
+            color: #e8edf4;
+            border-color: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+        }
+        .doc-page .page-num,
+        .docx-export-page .page-num {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.94);
+            color: #3f4650;
+            border: 1px solid rgba(115, 124, 136, 0.24);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(30, 36, 44, 0.10);
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1.25;
+            letter-spacing: 0.35px;
+            text-align: center;
+            white-space: nowrap;
+            z-index: 7;
+            pointer-events: none;
+        }
+        body.theme-dark .doc-page .page-num,
+        body.theme-dark .docx-export-page .page-num {
+            background: rgba(37, 42, 49, 0.92);
+            color: #e8edf4;
+            border-color: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
         }
 
         /* ===== DROP ZONE ===== */
@@ -1058,9 +1107,10 @@
         /* ===== STATUS BAR ===== */
         #status-bar {
             position: fixed;
-            bottom: 0;
             left: 0;
             right: 0;
+            bottom: 0;
+            width: 100%;
             height: 26px;
             display: flex;
             align-items: center;
@@ -1072,7 +1122,9 @@
             color: var(--text-dim);
             font-family: var(--font-mono);
             letter-spacing: 0.5px;
-            z-index: 100;
+            z-index: 5000;
+            box-sizing: border-box;
+            flex: none;
             transition: opacity 0.3s, transform 0.3s;
             border-radius: var(--radius);
         }
@@ -1179,34 +1231,59 @@
             position: fixed;
             inset: 0;
             z-index: 9998;
-            background: rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(4px);
             display: none;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
-            gap: 14px;
-            color: #fff;
-            font-family: var(--font-mono);
-            font-size: 13px;
-            letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.28);
+        }
+        #export-overlay.active { display: flex; }
+        .export-progress-card {
+            min-width: 220px;
+            padding: 18px 22px;
+            background: var(--bg);
+            border: 1px solid var(--border);
             border-radius: var(--radius);
+            text-align: center;
+            box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+            color: var(--text);
         }
-        #export-overlay.active {
-            display: flex;
+        .export-progress-title {
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            color: var(--text);
         }
-        #export-overlay .spinner {
-            width: 30px;
-            height: 30px;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-top-color: #fff;
+        .export-progress-subtitle,
+        .export-progress-hint {
+            display: none;
+        }
+        .export-progress-icon {
+            width: 18px;
+            height: 18px;
+            margin: 0 auto 10px;
+            border: 2px solid var(--border-dim);
+            border-top-color: var(--text);
             border-radius: 50%;
-            animation: spin 0.7s linear infinite;
+            animation: export-spin 0.8s linear infinite;
         }
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
+        .export-progress-track {
+            width: 100%;
+            height: 3px;
+            margin-top: 12px;
+            background: var(--border-dim);
+            overflow: hidden;
+            border-radius: 2px;
+        }
+        .export-progress-bar {
+            width: 35%;
+            height: 100%;
+            background: var(--text);
+            animation: export-progress 1.2s ease-in-out infinite;
+        }
+        @keyframes export-spin { to { transform: rotate(360deg); } }
+        @keyframes export-progress {
+            0% { transform: translateX(-140%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(320%); }
         }
 
         /* ===== PROGRESS ===== */
@@ -1442,6 +1519,18 @@
             outline: 2px solid rgba(255, 80, 0, 0.8);
         }
 
+        .export-stage .doc-page,
+        .export-stage .docx-container {
+            border: 0 !important;
+            box-shadow: none !important;
+            outline: none !important;
+        }
+        /* DOCX uses the same single-line page frame as TXT/PDF. */
+        .docx-export-page {
+            border: 1px solid var(--border) !important;
+            box-shadow: var(--page-shadow) !important;
+        }
+
         /* ===== UTILITY ===== */
         .bg-void {
             background: var(--bg);
@@ -1466,11 +1555,6 @@
 
         #file-input {
             display: none;
-        }
-        #cursor-info {
-            font-size: 9px;
-            color: var(--text-dim);
-            white-space: nowrap;
         }
 
         /* sidebar toggle */
@@ -1594,8 +1678,8 @@
         </div>
         <div class="menu-group">
             <span class="menu-label">导出</span>
-            <div class="menu-btn" data-action="exportText">导出文本</div>
             <div class="menu-btn" data-action="exportPDF">导出 PDF</div>
+            <div class="menu-btn" data-action="exportImage">导出图片</div>
         </div>
         <div class="menu-group">
             <span class="menu-label">设置</span>
@@ -1637,7 +1721,7 @@
                 <div style="margin-top:6px;">
                     <div class="toggle-row" style="align-items:flex-start;"><div><span>锁定已脱敏区</span><div style="font-size:9px;color:var(--text-faint);margin-top:1px;line-height:1.3;">开启后，已应用的遮罩不可擦除。</div></div><div class="toggle-switch on" id="toggle-lock" data-action="toggleLock"></div></div>
                     <div class="toggle-row" style="align-items:flex-start;"><div><span>显示页码</span><div style="font-size:9px;color:var(--text-faint);margin-top:1px;line-height:1.3;">在每页右上角显示编号。</div></div><div class="toggle-switch on" id="toggle-pageshow" data-action="togglePageNum"></div></div>
-                    <div class="toggle-row" style="align-items:flex-start;"><div><span>自动分页</span><div style="font-size:9px;color:var(--text-faint);margin-top:1px;line-height:1.3;">TXT 文档按固定行数拆分为多页。</div></div><div class="toggle-switch on" id="toggle-autopage" data-action="toggleAutoPage"></div></div>
+                    <div class="toggle-row" style="align-items:flex-start;"><div><span>自动分页</span><div style="font-size:9px;color:var(--text-faint);margin-top:1px;line-height:1.3;">TXT、DOCX 按当前阅读区尺寸自动拆分为多页。</div></div><div class="toggle-switch on" id="toggle-autopage" data-action="toggleAutoPage"></div></div>
                 </div>
             </div>
 
@@ -1713,9 +1797,8 @@
                 <div class="tool-sep"></div>
                 <div class="tool-btn" data-action="openSearch" title="搜索 (Ctrl+F)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="7"/><line x1="15.5" y1="15.5" x2="21" y2="21"/></svg></div>
                 <div class="tool-sep"></div>
-                <div class="tool-btn" data-action="exportText">导出文本</div>
                 <div class="tool-btn" data-action="exportPDF">导出 PDF</div>
-                <span id="cursor-info">就绪</span>
+                <div class="tool-btn" data-action="exportImage">导出图片</div>
             </div>
 
             <div id="doc-viewport">
@@ -1783,7 +1866,7 @@
     </div>
 
     <!-- STATUS BAR -->
-    <div id="status-bar">
+    <div id="status-bar" aria-live="polite">
         <span id="stat-left">就绪</span>
         <span id="stat-right">ZENREDACT</span>
     </div>
@@ -1814,11 +1897,14 @@
 
     <!-- EXPORT OVERLAY -->
     <div id="export-overlay">
-        <div class="spinner"></div>
-        <span>正在生成脱敏文件…</span>
+        <div class="export-progress-card">
+            <div class="export-progress-icon" aria-hidden="true"></div>
+            <div class="export-progress-title">正在生成脱敏文件</div>
+            <div class="export-progress-track"><div class="export-progress-bar"></div></div>
+        </div>
     </div>
 
-    <input type="file" id="file-input" accept=".txt,.pdf,.docx,.doc,.md,.csv,.log,.xml,.json,.html,.js,.ts,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.sh,.bat,.ps1,.sql,.yaml,.yml,.toml,.ini,.cfg,.conf,.jsonl,.nfo,.rst,.adoc,.tex,.css,.scss,.less,.svg,.rtf" />
+    <input type="file" id="file-input" accept=".txt,.docx,.pdf" />
 
     <script>
         (function() {
@@ -1830,10 +1916,12 @@
             var CONFIG = {
                 CHUNK_SIZE: 1024 * 1024,
                 MAX_LINES_PREVIEW: 100000,
-                FONT_SIZE: 14,
+                FONT_SIZE: 16,
                 LINE_HEIGHT: 1.8,
                 PAGE_PADDING_X: 40,
                 PAGE_PADDING_Y: 32,
+                A4_PAGE_WIDTH: 794,
+                A4_PAGE_HEIGHT: 1123,
                 UNDO_LIMIT: 80,
                 NOTIFY_DURATION: 2000,
                 PDF_RENDER_SCALE: 2.2,
@@ -1856,6 +1944,7 @@
                 lockRedacts: true,
                 showPageNum: true,
                 autoPage: true,
+                textPageBuildId: 0,
                 file: null,
                 fileName: '',
                 fileSize: 0,
@@ -1924,7 +2013,6 @@
                 confirmOverlay: $('#custom-confirm'),
                 confirmMsg: $('#confirm-msg'),
                 exportOverlay: $('#export-overlay'),
-                cursorInfo: $('#cursor-info'),
                 logPanel: $('#log-panel'),
                 fname: $('#fname'),
                 fmeta: $('#fmeta'),
@@ -2103,8 +2191,8 @@
                     '      case "buildPages": {',
                     '        var text = d.text, autoPage = d.autoPage, charWidth = d.charWidth || 10;',
                     '        var fontSize = d.fontSize || 14, lineHeight = d.lineHeight || 1.8;',
-                    '        var padX = d.pagePadX || 40, padY = d.pagePadY || 32, maxH = d.maxPageH || 800;',
-                    '        var viewportW = d.viewportW || 746;',
+                    '        var padX = d.pagePadX || 40, padY = d.pagePadY || 32, maxH = d.maxPageH || 1123;',
+                    '        var viewportW = d.viewportW || 794;',
                     '        var containerW = Math.max(200, viewportW - padX * 2);',
                     '        var charsPerLine = Math.max(1, Math.floor(containerW / fontSize));',
                     '        var lines = text.split(/\r\n|\r|\n/);',
@@ -2251,7 +2339,8 @@
                     localStorage.setItem('zr-settings', JSON.stringify({ theme: S.theme, bg: S.bg, tool: S.tool,
                         pinned: S.pinned, radius: S.radius, sidebarCollapsed: S.sidebarCollapsed, sidebarW: sidebarW,
                         rightSidebarCollapsed: S.rightSidebarCollapsed, rightSidebarW: rightSidebarW,
-                        redactStyle: S.redactStyle }));
+                        redactStyle: S.redactStyle,
+                        sensitiveWords: Array.isArray(S.sensitiveWords) ? S.sensitiveWords : [] }));
                 } catch (_) {}
             }
 
@@ -2273,6 +2362,10 @@
                         S.redactStyle.color = d.redactStyle.color || '#000000';
                         S.redactStyle.radius = d.redactStyle.radius || 0;
                         S.redactStyle.opacity = Number.isFinite(Number(d.redactStyle.opacity)) ? Math.max(10, Math.min(100, Number(d.redactStyle.opacity))) : 100;
+                    }
+                    if (Array.isArray(d.sensitiveWords)) {
+                        S.sensitiveWords = d.sensitiveWords.map(function(w) { return String(w || '').trim(); }).filter(Boolean);
+                        if (DOM.sensitiveWordInput) DOM.sensitiveWordInput.value = S.sensitiveWords.join('\n');
                     }
                     if (d.sidebarW) {
                         document.documentElement.style.setProperty('--sidebar-w', d.sidebarW + 'px');
@@ -2312,8 +2405,16 @@
             function toggleAutoPage() {
                 S.autoPage = !S.autoPage;
                 var el = $('#toggle-autopage');
-                el.classList.toggle('on', S.autoPage);
-                if (S.text) rebuildPages();
+                if (el) el.classList.toggle('on', S.autoPage);
+                // Invalidate an older TXT pagination build immediately so its async callback
+                // cannot overwrite the newly selected pagination mode.
+                if (S.fileType === 'txt' || (!S.pdfMode && !S.docxHtml)) S.textPageBuildId++;
+                saveSettings();
+                if (S.docxHtml && S.fileType === 'docx') {
+                    renderDocxPaginated();
+                } else if (S.text) {
+                    rebuildPages();
+                }
             }
 
             function toggleSidebar() {
@@ -2860,6 +2961,13 @@
 
             async function loadFile(file) {
                 if (!file) return;
+                var ext = (file.name.split('.').pop() || '').toLowerCase();
+                var allowed = { txt: true, docx: true, pdf: true };
+                if (!allowed[ext]) {
+                    notify('仅支持 TXT、DOCX、PDF 文件');
+                    log('拒绝加载不支持的文件格式：' + (ext ? '.' + ext : '无扩展名'), true);
+                    return;
+                }
                 try {
                     DOM.fileInput.value = '';
                     log('加载文件：' + file.name + '（' + formatSize(file.size) + '）');
@@ -2904,7 +3012,6 @@
                     S.moveChanged = false;
                     updateRedactCount();
 
-                    var ext = file.name.split('.').pop().toLowerCase();
                     S.fileType = ext;
                     S.pdfMode = false;
                     S.docxHtml = null;
@@ -3394,71 +3501,82 @@
             function rebuildPages() {
                 showProgress();
                 setProgress(0);
+                var buildId = ++S.textPageBuildId;
 
-                if (S.worker) {
-                    S.worker.onmessage = function(e) {
-                        var d = e.data;
-                        if (d.type === 'pagesResult') {
-                            S.pages = d.pages;
-                            S.totalPages = d.totalPages;
-                            S.charCount = d.totalChars;
-                            setProgress(100);
-                            setLoadingInfo('分页完成：' + S.totalPages + ' 页');
-                            setTimeout(function() { hideProgress(); }, 200);
-                            renderDocument();
-                            requestAnimationFrame(function() {
-                                setTool(S.tool, false);
-                                $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
-                            });
-                            updateStats();
-                            updatePageJumpInfo();
-                        }
-                        if (d.type === 'progress') {
-                            setProgress(d.pct);
-                            setLoadingInfo('分页处理中… ' + d.pct + '%');
-                        }
-                        if (d.type === 'error') { hideProgress();
-                            handleError('分页处理失败', new Error(d.message)); }
-                    };
-                    S.worker.postMessage({
-                        type: 'buildPages',
-                        text: S.text,
-                        autoPage: S.autoPage,
-                        viewportW: DOM.docViewport.clientWidth - 48,
-                        charWidth: 10,
-                        fontSize: CONFIG.FONT_SIZE,
-                        lineHeight: CONFIG.LINE_HEIGHT,
-                        pagePadX: CONFIG.PAGE_PADDING_X,
-                        pagePadY: CONFIG.PAGE_PADDING_Y,
-                        maxPageH: 800,
-                    });
-                } else {
-                    var vp = DOM.docViewport,
-                        pw = Math.min(vp.clientWidth - 48, 794);
-                    var containerW = pw - CONFIG.PAGE_PADDING_X * 2;
-                    var charsPerLine = Math.max(1, Math.floor(containerW / CONFIG.FONT_SIZE));
-                    S.pages = [];
-                    var cur = { lines: [], pageNum: 0 },
-                        y = CONFIG.PAGE_PADDING_Y;
-                    for (var i = 0; i < S.lines.length; i++) {
-                        var ln = S.lines[i],
-                            wl = Math.max(1, Math.ceil(ln.text.length / charsPerLine));
-                        var bh = wl * CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT;
-                        if (S.autoPage && y + bh > 800 && cur.lines.length > 0) {
-                            cur.pageNum = S.pages.length;
-                            S.pages.push(cur);
-                            cur = { lines: [], pageNum: S.pages.length };
-                            y = CONFIG.PAGE_PADDING_Y;
-                        }
-                        cur.lines.push({ text: ln.text, y: y, height: bh, wrappedCount: wl, sourceIndex: ln.index });
-                        y += bh;
-                    }
-                    if (cur.lines.length > 0) { cur.pageNum = S.pages.length;
-                        S.pages.push(cur); }
-                    S.totalPages = S.pages.length;
-                    setProgress(100);
-                    setTimeout(function() { hideProgress(); }, 200);
+                // TXT pagination uses the exact same deterministic A4 calculation as the
+                // built-in sample. This avoids the previous Worker mismatch where an
+                // opened TXT could wrap differently from the sample.
+                var pw = CONFIG.A4_PAGE_WIDTH;
+                var ph = CONFIG.A4_PAGE_HEIGHT;
+                var contentW = Math.max(200, pw - CONFIG.PAGE_PADDING_X * 2 - 2);
+                // Conservative character capacity keeps browser wrapping from exceeding
+                // the deterministic pagination estimate. This is especially important for
+                // mixed Chinese/Latin TXT files and long unbroken lines.
+                var charsPerLine = Math.max(1, Math.floor(contentW / (CONFIG.FONT_SIZE * 1.05)));
+                var lineHeightPx = CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT;
+                var usableH = Math.max(lineHeightPx, ph - CONFIG.PAGE_PADDING_Y * 2 - 2);
+                var linesPerPage = Math.max(1, Math.floor(usableH / lineHeightPx));
+                var pages = [];
+                var cur = { lines: [], pageNum: 0 };
+                var y = CONFIG.PAGE_PADDING_Y;
+
+                function pushPage() {
+                    if (!cur.lines.length) return;
+                    cur.pageNum = pages.length;
+                    pages.push(cur);
+                    cur = { lines: [], pageNum: pages.length };
+                    y = CONFIG.PAGE_PADDING_Y;
                 }
+
+                for (var i = 0; i < S.lines.length; i++) {
+                    if (buildId !== S.textPageBuildId) return;
+                    var ln = S.lines[i];
+                    var raw = String(ln.text || '');
+                    // Preserve blank physical lines as one visual line.
+                    var chunks = [];
+                    if (!raw.length) {
+                        chunks.push('');
+                    } else {
+                        for (var pos = 0; pos < raw.length; pos += charsPerLine) {
+                            chunks.push(raw.slice(pos, pos + charsPerLine));
+                        }
+                    }
+
+                    for (var c = 0; c < chunks.length; c++) {
+                        if (S.autoPage && cur.lines.length >= linesPerPage) pushPage();
+                        cur.lines.push({
+                            text: chunks[c],
+                            y: y,
+                            height: lineHeightPx,
+                            wrappedCount: 1,
+                            sourceIndex: ln.index,
+                            sourceOffset: c
+                        });
+                        y += lineHeightPx;
+                    }
+
+                    if (i % 200 === 0) setProgress(Math.round((i / Math.max(1, S.lines.length)) * 90));
+                }
+
+                if (cur.lines.length > 0 || pages.length === 0) {
+                    cur.pageNum = pages.length;
+                    pages.push(cur);
+                }
+
+                if (buildId !== S.textPageBuildId) return;
+                S.pages = pages;
+                S.totalPages = pages.length;
+                setProgress(100);
+                setLoadingInfo('分页完成：' + S.totalPages + ' 页');
+                setTimeout(function() { hideProgress(); }, 120);
+                renderDocument();
+                requestAnimationFrame(function() {
+                    if (buildId !== S.textPageBuildId) return;
+                    setTool(S.tool, false);
+                    $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); });
+                });
+                updateStats();
+                updatePageJumpInfo();
             }
 
             /* ============================================================
@@ -3606,6 +3724,8 @@
 
                     page.style.transform = 'scale(' + scale + ')';
                     shell.style.width = Math.max(1, baseW * scale) + 'px';
+                    shell.style.minWidth = Math.max(1, baseW * scale) + 'px';
+                    shell.style.maxWidth = Math.max(1, baseW * scale) + 'px';
                     shell.style.height = Math.max(1, baseH * scale) + 'px';
                     shell.style.marginBottom = Math.max(20, Math.round(20 * scale)) + 'px';
 
@@ -3796,12 +3916,10 @@
                         ? S.moveRedact
                         : findRedactAt(pageIdx, x, y, metrics.W, metrics.H);
                     canvas.style.cursor = S.isMovingRedact ? 'grabbing' : (moveHit ? 'grab' : 'default');
-                    DOM.cursorInfo.textContent = '页' + (pageIdx + 1) + ' (' + Math.round(x) + ', ' + Math.round(y) + ')';
                     if (S.isMovingRedact) updateMoveRedact(canvas, x, y, metrics);
                     return;
                 }
 
-                DOM.cursorInfo.textContent = '页' + (pageIdx + 1) + ' (' + Math.round(x) + ', ' + Math.round(y) + ')';
                 if (!S.isDrawing || !S.drawStart) return;
 
                 drawExistingRedacts(canvas);
@@ -3825,7 +3943,6 @@
 
                 var w = Math.abs(x - S.drawStart.x),
                     h = Math.abs(y - S.drawStart.y);
-                DOM.cursorInfo.textContent = '区域: ' + Math.round(w) + '×' + Math.round(h) + ' px';
             }
 
             function onCanvasMouseUp(e) {
@@ -4120,12 +4237,29 @@
                 for (var ri = 0; ri < sel.rangeCount; ri++) {
                     var range = sel.getRangeAt(ri);
                     var node = range.startContainer;
-                    var textEl = (node && node.nodeType === 3) ? node.parentElement.closest('.doc-page-text') : null;
-                    if (!textEl) continue;
-                    var pageEl = textEl.closest('.doc-page');
-                    if (!pageEl) continue;
-                    var pageIdx = parseInt(pageEl.dataset.pageIdx, 10);
-                    var canvas = pageEl.querySelector('.redact-canvas');
+                    var parent = node && node.nodeType === 3 ? node.parentElement : node;
+                    if (!parent || !parent.closest) continue;
+
+                    // TXT uses .doc-page-text, while DOCX is rendered directly
+                    // inside .docx-container. Support both structures here.
+                    var textEl = parent.closest('.doc-page-text');
+                    var docxContainer = parent.closest('.docx-container');
+                    var pageIdx = -1;
+                    var canvas = null;
+
+                    if (textEl) {
+                        var pageEl = textEl.closest('.doc-page');
+                        if (!pageEl) continue;
+                        pageIdx = parseInt(pageEl.dataset.pageIdx, 10);
+                        canvas = pageEl.querySelector('.redact-canvas');
+                    } else if (docxContainer) {
+                        var docxPage = docxContainer.closest('.doc-page[data-page-idx]');
+                        if (!docxPage) continue;
+                        pageIdx = parseInt(docxPage.dataset.pageIdx, 10);
+                        canvas = docxPage.querySelector('.redact-canvas');
+                    }
+
+                    if (pageIdx < 0 || !canvas) continue;
                     appendSelectionRedacts(range, pageIdx, canvas, pending);
                 }
                 if (pending.length > 0) {
@@ -4146,39 +4280,7 @@
                 DOM.docPages.innerHTML = '';
 
                 if (S.docxHtml && S.fileType === 'docx') {
-                    var container = document.createElement('div');
-                    container.className = 'docx-container';
-                    container.style.cssText =
-                        'max-width:794px;margin:0 auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:32px 40px;box-shadow:var(--page-shadow);';
-                    container.innerHTML = S.docxHtml;
-                    var style = document.createElement('style');
-                    style.textContent =
-                        '.docx-container p{margin:0 0 0.5em 0;line-height:1.7;}.docx-container h1,.docx-container h2,.docx-container h3,.docx-container h4{margin:0.8em 0 0.3em;font-weight:500;}.docx-container table{border-collapse:collapse;width:100%;margin:0.6em 0;}.docx-container td,.docx-container th{border:1px solid var(--border);padding:4px 8px;}.docx-container img{max-width:100%;height:auto;}';
-                    container.appendChild(style);
-                    var wrapDiv = document.createElement('div');
-                    wrapDiv.style.position = 'relative';
-                    wrapDiv.appendChild(container);
-                    var canvasOverlay = document.createElement('canvas');
-                    canvasOverlay.className = 'redact-canvas';
-                    canvasOverlay.style.cssText =
-                        'position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;z-index:5;pointer-events:auto;';
-                    canvasOverlay.dataset.pageIdx = '0';
-                    canvasOverlay.addEventListener('mousedown', onCanvasMouseDown);
-                    canvasOverlay.addEventListener('mousemove', onCanvasMouseMove);
-                    canvasOverlay.addEventListener('mouseup', onCanvasMouseUp);
-                    canvasOverlay.addEventListener('mouseleave', onCanvasMouseUp);
-                    canvasOverlay.addEventListener('dblclick', onCanvasDblClick);
-                    canvasOverlay.addEventListener('mouseover', onCanvasMouseOver);
-                    canvasOverlay.addEventListener('mouseout', onCanvasMouseLeave);
-                    wrapDiv.appendChild(canvasOverlay);
-                    DOM.docPages.appendChild(wrapDiv);
-                    S.pages = [{ pageNum: 0, lines: S.lines, displayW: 794, displayH: 1120 }];
-                    S.totalPages = 1;
-                    requestAnimationFrame(function() {
-                        var c = wrapDiv.querySelector('.redact-canvas');
-                        if (c) drawExistingRedacts(c);
-                    });
-                    updateStats();
+                    renderDocxPaginated();
                     return;
                 }
 
@@ -4248,6 +4350,11 @@
                     } else {
                         var txtShell = document.createElement('div');
                         txtShell.className = 'txt-page-zoom-shell';
+                        var txtPageWidth = CONFIG.A4_PAGE_WIDTH;
+                        var txtPageHeight = CONFIG.A4_PAGE_HEIGHT;
+                        txtShell.style.width = txtPageWidth + 'px';
+                        txtShell.style.minWidth = txtPageWidth + 'px';
+                        txtShell.style.maxWidth = txtPageWidth + 'px';
                         var textContainer = document.createElement('div');
                         textContainer.className = 'doc-page-text';
                         textContainer.style.fontFamily = 'SimSun, 宋体, Songti SC, serif';
@@ -4260,6 +4367,18 @@
                         textContainer.textContent = fullText;
 
                         pageEl.appendChild(textContainer);
+                        pageEl.style.width = txtPageWidth + 'px';
+                        pageEl.style.minWidth = txtPageWidth + 'px';
+                        pageEl.style.maxWidth = txtPageWidth + 'px';
+                        pageEl.style.boxSizing = 'border-box';
+                        if (S.autoPage) {
+                            pageEl.style.height = txtPageHeight + 'px';
+                            pageEl.style.overflow = 'hidden';
+                        } else {
+                            pageEl.style.height = 'auto';
+                            pageEl.style.minHeight = txtPageHeight + 'px';
+                            pageEl.style.overflow = 'visible';
+                        }
 
                         var canvas = document.createElement('canvas');
                         canvas.className = 'redact-canvas';
@@ -4463,6 +4582,318 @@
                 }
             }
 
+            function getDocxPageMetrics() {
+                // DOCX uses a real A4 logical page, just like TXT. The viewport /
+                // sidebars affect visibility only; they must never resize the paper.
+                var pageW = CONFIG.A4_PAGE_WIDTH;
+                var pageH = CONFIG.A4_PAGE_HEIGHT;
+                return {
+                    pageW: pageW,
+                    pageH: pageH,
+                    padX: 40,
+                    padY: 32
+                };
+            }
+
+            var docxPaginationTimer = null;
+            function scheduleDocxPagination(delay) {
+                if (!S.docxHtml || S.fileType !== 'docx') return;
+                clearTimeout(docxPaginationTimer);
+                docxPaginationTimer = setTimeout(function() {
+                    docxPaginationTimer = null;
+                    renderDocxPaginated();
+                }, delay == null ? 80 : delay);
+            }
+
+            function renderDocxPaginated() {
+                if (!S.docxHtml || S.fileType !== 'docx') return;
+
+                // Rebuild from scratch. Direct pagination calls (toggle/resize) must not append
+                // new DOCX pages behind the previous render. Preserve the user's scroll position.
+                var keepScrollTop = DOM.docViewport ? DOM.docViewport.scrollTop : 0;
+                DOM.docPages.innerHTML = '';
+
+                var metrics = getDocxPageMetrics();
+                var PAGE_W = metrics.pageW, PAGE_H = metrics.pageH;
+                var PAD_X = metrics.padX, PAD_Y = metrics.padY;
+                var contentH = Math.max(120, PAGE_H - PAD_Y * 2);
+                var singlePageMode = !S.autoPage;
+
+                var oldDocxStyle = document.getElementById('docx-pagination-runtime-style');
+                if (oldDocxStyle) oldDocxStyle.remove();
+                var style = document.createElement('style');
+                style.id = 'docx-pagination-runtime-style';
+                style.textContent =
+                    '.docx-export-page{position:relative;width:' + PAGE_W + 'px;height:auto;min-height:' + PAGE_H + 'px;box-sizing:border-box;margin:0 auto 20px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--page-shadow);overflow:hidden;flex:0 0 auto;align-self:center;}' +
+                    
+                    '.docx-export-page.auto-page{height:' + PAGE_H + 'px;overflow:hidden;}' +
+                    '.docx-export-page.single-page{height:auto;min-height:' + PAGE_H + 'px;overflow:hidden;}' +
+                    '.docx-export-page .docx-container{box-sizing:border-box;width:100%;max-width:none;margin:0;background:var(--bg);padding:' + PAD_Y + 'px ' + PAD_X + 'px;border:0;box-shadow:none;border-radius:0;overflow:hidden;}' +
+                    '.docx-export-page.single-page .docx-container{height:auto;min-height:' + PAGE_H + 'px;overflow:visible;}' +
+                    '.docx-export-page.auto-page .docx-container{height:' + PAGE_H + 'px;overflow:hidden;}' +
+                    '.docx-container{font-size:16px;} .docx-container p,.docx-container li,.docx-container td,.docx-container th{font-size:16px;} ' +
+                    '.docx-container p{margin:0 0 0.5em 0;line-height:1.7;}' +
+                    '.docx-container h1,.docx-container h2,.docx-container h3,.docx-container h4{margin:0.8em 0 0.3em;font-weight:500;}' +
+                    '.docx-container table{border-collapse:collapse;width:100%;margin:0.6em 0;}' +
+                    '.docx-container td,.docx-container th{border:1px solid var(--border);padding:4px 8px;}' +
+                    '.docx-container img{max-width:100%;max-height:' + contentH + 'px;height:auto;display:block;object-fit:contain;}' +
+                    '.docx-container ul,.docx-container ol{margin-top:0.4em;margin-bottom:0.6em;padding-left:1.6em;}' +
+                    '.docx-export-page .redact-canvas{position:absolute;inset:0;width:100%;height:100%;}';
+                document.head.appendChild(style);
+
+                var measure = document.createElement('div');
+                measure.className = 'docx-container';
+                measure.style.cssText =
+                    'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;height:auto!important;min-height:0!important;width:' + PAGE_W + 'px!important;box-sizing:border-box;padding:' + PAD_Y + 'px ' + PAD_X + 'px;overflow:visible!important;';
+                measure.innerHTML = S.docxHtml;
+                document.body.appendChild(measure);
+
+                var nodes = Array.prototype.slice.call(measure.children);
+                var pages = [], current = [];
+
+                function measureList(list) {
+                    measure.innerHTML = '';
+                    list.forEach(function(node) { measure.appendChild(node.cloneNode(true)); });
+                    // scrollHeight includes the container's vertical padding. The page
+                    // comparison below is based on the actual content area, so remove
+                    // the top and bottom padding here to prevent false fits / overflow.
+                    return Math.max(0, measure.scrollHeight - PAD_Y * 2);
+                }
+
+                function splitLargeBlock(node) {
+                    var parts = [];
+                    var tag = (node.tagName || '').toLowerCase();
+
+                    // Tables split by rows and repeat the first row as a lightweight header.
+                    if (tag === 'table') {
+                        var rows = Array.prototype.slice.call(node.querySelectorAll('tr'));
+                        if (rows.length > 1) {
+                            var head = rows[0].cloneNode(true);
+                            var chunk = [];
+                            rows.forEach(function(row, ri) {
+                                var testRows = chunk.concat([row]);
+                                var tbl = node.cloneNode(false);
+                                var tbody = document.createElement('tbody');
+                                if (ri > 0 && head) tbody.appendChild(head.cloneNode(true));
+                                testRows.forEach(function(r) { tbody.appendChild(r.cloneNode(true)); });
+                                tbl.appendChild(tbody);
+                                if (chunk.length && measureList([tbl]) > contentH) {
+                                    var out = node.cloneNode(false);
+                                    var outBody = document.createElement('tbody');
+                                    if (chunk[0] !== rows[0] && head) outBody.appendChild(head.cloneNode(true));
+                                    chunk.forEach(function(r) { outBody.appendChild(r.cloneNode(true)); });
+                                    out.appendChild(outBody);
+                                    parts.push(out);
+                                    chunk = [row];
+                                } else {
+                                    chunk = testRows;
+                                }
+                            });
+                            if (chunk.length) {
+                                var out2 = node.cloneNode(false);
+                                var body2 = document.createElement('tbody');
+                                if (chunk[0] !== rows[0] && head) body2.appendChild(head.cloneNode(true));
+                                chunk.forEach(function(r) { body2.appendChild(r.cloneNode(true)); });
+                                out2.appendChild(body2);
+                                parts.push(out2);
+                            }
+                            if (parts.length > 1) return parts;
+                        }
+                    }
+
+                    // Paragraphs/headings: split long text down to a safe page-sized fragment.
+                    if (tag === 'p' || /^h[1-6]$/.test(tag) || tag === 'blockquote') {
+                        var text = node.textContent || '';
+                        if (text.length) {
+                            var units = /\s/.test(text) ? text.split(/(\s+)/).filter(Boolean) : Array.from(text);
+                            var buf = '';
+                            for (var i = 0; i < units.length; i++) {
+                                var next = buf + units[i];
+                                var tmp = node.cloneNode(false);
+                                tmp.textContent = next;
+                                if (buf && measureList([tmp]) > contentH - 4) {
+                                    var piece = node.cloneNode(false);
+                                    piece.textContent = buf;
+                                    parts.push(piece);
+                                    buf = units[i];
+                                } else {
+                                    buf = next;
+                                }
+                            }
+                            if (buf) {
+                                var last = node.cloneNode(false);
+                                last.textContent = buf;
+                                parts.push(last);
+                            }
+                            if (parts.length > 1) return parts;
+                            parts = [];
+                        }
+                    }
+
+                    // Generic containers (div/section/list/etc.): split their direct children
+                    // so a large wrapper can never overflow the page as one indivisible block.
+                    var children = Array.prototype.slice.call(node.children || []);
+                    if (children.length > 1) {
+                        var chunkChildren = [];
+                        children.forEach(function(child) {
+                            var test = chunkChildren.concat([child]);
+                            var wrapper = node.cloneNode(false);
+                            test.forEach(function(c) { wrapper.appendChild(c.cloneNode(true)); });
+                            if (chunkChildren.length && measureList([wrapper]) > contentH) {
+                                var out = node.cloneNode(false);
+                                chunkChildren.forEach(function(c) { out.appendChild(c.cloneNode(true)); });
+                                parts.push(out);
+                                chunkChildren = [child];
+                            } else {
+                                chunkChildren = test;
+                            }
+                        });
+                        if (chunkChildren.length) {
+                            var outLast = node.cloneNode(false);
+                            chunkChildren.forEach(function(c) { outLast.appendChild(c.cloneNode(true)); });
+                            parts.push(outLast);
+                        }
+                        if (parts.length > 1) return parts;
+                    }
+
+                    return [node.cloneNode(true)];
+                }
+
+                // When automatic pagination is disabled, preserve one document page.
+                // Otherwise split block-level DOCX HTML against the actual reading viewport.
+                if (!S.autoPage) {
+                    pages = [nodes];
+                } else {
+                    nodes.forEach(function(node) {
+                        var candidate = current.concat([node]);
+                        if (current.length && measureList(candidate) > contentH) {
+                            var split = splitLargeBlock(node);
+                            if (split.length > 1) {
+                                pages.push(current);
+                                current = [];
+                                split.forEach(function(part) {
+                                    if (current.length && measureList(current.concat([part])) > contentH) {
+                                        pages.push(current);
+                                        current = [part];
+                                    } else {
+                                        current.push(part);
+                                    }
+                                });
+                            } else {
+                                pages.push(current);
+                                current = [node];
+                            }
+                        } else {
+                            current = candidate;
+                        }
+                    });
+                    if (current.length || pages.length === 0) pages.push(current);
+                }
+
+                // Guarantee that a single oversized block never creates visible overflow.
+                if (S.autoPage) {
+                    var normalized = [];
+                    pages.forEach(function(group) {
+                        var bucket = [];
+                        group.forEach(function(node) {
+                            var test = bucket.concat([node]);
+                            if (bucket.length && measureList(test) > contentH) {
+                                normalized.push(bucket);
+                                bucket = [node];
+                            } else {
+                                bucket = test;
+                            }
+                        });
+                        if (bucket.length) normalized.push(bucket);
+                    });
+                    pages = normalized.length ? normalized : [[]];
+                }
+                measure.remove();
+
+                S.pages = [];
+                pages.forEach(function(pageNodes, pageIdx) {
+                    var pageEl = document.createElement('div');
+                    pageEl.className = 'doc-page docx-export-page ' + (singlePageMode ? 'single-page' : 'auto-page');
+                    pageEl.dataset.pageIdx = pageIdx;
+                    pageEl.style.width = PAGE_W + 'px';
+                    pageEl.style.minWidth = PAGE_W + 'px';
+                    pageEl.style.maxWidth = PAGE_W + 'px';
+                    pageEl.style.boxSizing = 'border-box';
+                    pageEl.style.padding = '0';
+                    pageEl.style.border = '1px solid var(--border)';
+                    pageEl.style.borderStyle = 'solid';
+                    pageEl.style.borderRadius = 'var(--radius)';
+                    pageEl.style.boxShadow = 'var(--page-shadow)';
+                    pageEl.style.overflow = 'hidden';
+                    if (!singlePageMode) {
+                        pageEl.style.height = PAGE_H + 'px';
+                        pageEl.style.overflow = 'hidden';
+                    } else {
+                        pageEl.style.height = 'auto';
+                        pageEl.style.minHeight = PAGE_H + 'px';
+                        pageEl.style.overflow = 'hidden';
+                    }
+                    if (S.showPageNum) {
+                        var badge = document.createElement('div');
+                        badge.className = 'page-num';
+                        badge.textContent = '第 ' + (pageIdx + 1) + ' 页';
+                        pageEl.appendChild(badge);
+                    }
+
+                    var container = document.createElement('div');
+                    container.className = 'docx-container';
+                    container.style.width = '100%';
+                    container.style.boxSizing = 'border-box';
+                    container.style.margin = '0';
+                    container.style.padding = PAD_Y + 'px ' + PAD_X + 'px';
+                    container.style.userSelect = 'text';
+                    if (!singlePageMode) {
+                        container.style.height = PAGE_H + 'px';
+                        container.style.overflow = 'hidden';
+                    } else {
+                        container.style.height = 'auto';
+                        container.style.minHeight = PAGE_H + 'px';
+                        container.style.overflow = 'visible';
+                    }
+                    container.style.webkitUserSelect = 'text';
+                    container.style.cursor = S.textSelect ? 'text' : 'default';
+                    pageNodes.forEach(function(node) { container.appendChild(node.cloneNode(true)); });
+                    pageEl.appendChild(container);
+
+                    var canvasOverlay = document.createElement('canvas');
+                    canvasOverlay.className = 'redact-canvas';
+                    canvasOverlay.style.cssText =
+                        'position:absolute;top:0;left:0;width:100%;height:100%;cursor:' + getToolCursor() +
+                        ';z-index:5;pointer-events:' + (S.textSelect ? 'none' : 'auto') + ';';
+                    canvasOverlay.dataset.pageIdx = pageIdx;
+                    canvasOverlay.addEventListener('mousedown', onCanvasMouseDown);
+                    canvasOverlay.addEventListener('mousemove', onCanvasMouseMove);
+                    canvasOverlay.addEventListener('mouseup', onCanvasMouseUp);
+                    canvasOverlay.addEventListener('mouseleave', onCanvasMouseUp);
+                    canvasOverlay.addEventListener('dblclick', onCanvasDblClick);
+                    canvasOverlay.addEventListener('mouseover', onCanvasMouseOver);
+                    canvasOverlay.addEventListener('mouseout', onCanvasMouseLeave);
+                    pageEl.appendChild(canvasOverlay);
+                    DOM.docPages.appendChild(pageEl);
+
+                    S.pages.push({pageNum: pageIdx, lines: [], displayW: PAGE_W, displayH: PAGE_H});
+                });
+
+                S.totalPages = pages.length || 1;
+                requestAnimationFrame(function() {
+                    setTool(S.tool, false);
+                    $$('.redact-canvas').forEach(function(c) {
+                        c.classList.toggle('select-mode', S.textSelect);
+                        drawExistingRedacts(c);
+                    });
+                    if (DOM.docViewport) {
+                        DOM.docViewport.scrollTop = Math.min(keepScrollTop, Math.max(0, DOM.docViewport.scrollHeight - DOM.docViewport.clientHeight));
+                    }
+                });
+                updateStats();
+                updatePageJumpInfo();
+            }
+
             /* ============================================================
                TOOL MANAGEMENT
                ============================================================ */
@@ -4475,7 +4906,7 @@
                     c.style.pointerEvents = S.textSelect ? 'none' : 'auto';
                     c.classList.toggle('select-mode', S.textSelect);
                 });
-                $$('.doc-page-text').forEach(function(el) {
+                $$('.doc-page-text, .docx-container').forEach(function(el) {
                     el.style.cursor = S.textSelect ? 'text' : 'default';
                     el.style.userSelect = 'text';
                     el.style.webkitUserSelect = 'text';
@@ -4490,61 +4921,6 @@
             /* ============================================================
                EXPORT
                ============================================================ */
-            async function exportText() {
-                if (S.redacts.length === 0) { notify('没有需要导出的脱敏内容'); return; }
-                try {
-                    DOM.exportOverlay.classList.add('active');
-                    DOM.statusLeft.textContent = '生成脱敏文本…';
-                    var text = await buildRedactedText();
-                    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-                    var url = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = url;
-                    var base = S.fileName.replace(/\.[^.]+$/, '') || 'document';
-                    a.download = base + '_脱敏.txt';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    DOM.exportOverlay.classList.remove('active');
-                    notify('脱敏文本已导出');
-                    log('导出脱敏文本成功');
-                    DOM.statusLeft.textContent = '导出完成';
-                } catch (err) {
-                    DOM.exportOverlay.classList.remove('active');
-                    handleError('导出失败', err);
-                }
-            }
-
-            async function buildRedactedText() {
-                if (S.pdfMode && S.pdfPages && S.pdfPages.length) {
-                    await Promise.all(S.pdfPages.map(function(_, idx) { return ensurePdfPageText(idx); }));
-                    S.text = S.pdfPages.map(function(p) { return p.textString || (p.textItems || []).map(function(t) { return t.str; }).join(' '); }).join('\n');
-                    S.lines = S.text.split(/\r\n|\r|\n/).map(function(line, idx) { return { text: line, index: idx, length: line.length }; });
-                    S.charCount = S.text.length;
-                    updateStats();
-                }
-                var result = S.text;
-                var wordBased = S.redacts.filter(function(r) { return r.wordMatch && r.wordMatch.word && r.applied; });
-                var seen = {};
-                wordBased.forEach(function(r) {
-                    var w = r.wordMatch.word;
-                    if (seen[w]) return;
-                    seen[w] = true;
-                    try { result = result.replace(new RegExp(escapeRegex(w), 'gi'), '[已隐去]'); } catch (_) {}
-                });
-                var areaRedacts = S.redacts.filter(function(r) { return !r.wordMatch && r.applied; });
-                if (areaRedacts.length > 0) {
-                    result += '\n\n--- 以下区域已脱敏 ---\n';
-                    areaRedacts.forEach(function(r) {
-                        var rr = getRedactPixelRect(r, 1000, 1400);
-                        result += '[遮罩区域: x:' + Math.round(rr.x1) + ' y:' + Math.round(rr.y1) + '-' + Math.round(rr
-                            .x2) + '-' + Math.round(rr.y2) + ']\n';
-                    });
-                }
-                return result;
-            }
-
             async function exportPDF() {
                 var appliedCount = S.redacts.filter(function(r) { return r.applied; }).length;
                 if (appliedCount === 0) {
@@ -4556,44 +4932,361 @@
                     await buildImagePDF(bn);
                     return;
                 }
-                try {
-                    DOM.exportOverlay.classList.add('active');
-                    DOM.statusLeft.textContent = '生成PDF…';
-                    var { jsPDF } = window.jspdf;
-                    var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                    var pw = doc.internal.pageSize.getWidth() - 20,
-                        fs = 10,
-                        lh = fs * 1.8,
-                        pad = 10;
-                    var text = S.text;
-                    var wb = S.redacts.filter(function(r) { return r.wordMatch && r.wordMatch.word && r.applied; });
-                    var seen = {};
-                    wb.forEach(function(r) {
-                        var w = r.wordMatch.word;
-                        if (seen[w]) return;
-                        seen[w] = true;
-                        try { text = text.replace(new RegExp(escapeRegex(w), 'gi'), '[已隐去]'); } catch (_) {}
-                    });
-                    var lines = text.split(/\r\n|\r|\n/);
-                    var y = pad;
-                    for (var i = 0; i < lines.length; i++) {
-                        if (y + lh > doc.internal.pageSize.getHeight() - pad) { doc.addPage();
-                            y = pad; }
-                        doc.setFontSize(fs);
-                        doc.setTextColor(0, 0, 0);
-                        doc.text(lines[i], pad, y + fs);
-                        y += lh;
+                await exportNonPdfDocumentToPDF();
+            }
+
+            function getExportTextPages() {
+                var text = S.text || '';
+                var lines = text.split(/\r\n|\r|\n/).map(function(line, i) {
+                    return { text: line, index: i, length: line.length };
+                });
+                var pw = CONFIG.A4_PAGE_WIDTH;
+                var containerW = Math.max(200, pw - CONFIG.PAGE_PADDING_X * 2);
+                var charsPerLine = Math.max(1, Math.floor(containerW / CONFIG.FONT_SIZE));
+                var pages = [];
+                var cur = { lines: [], pageNum: 0 };
+                var y = CONFIG.PAGE_PADDING_Y;
+                for (var i = 0; i < lines.length; i++) {
+                    var ln = lines[i];
+                    var wl = Math.max(1, Math.ceil(ln.text.length / charsPerLine));
+                    var bh = wl * CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT;
+                    if (S.autoPage && y + bh > CONFIG.A4_PAGE_HEIGHT && cur.lines.length > 0) {
+                        cur.pageNum = pages.length;
+                        pages.push(cur);
+                        cur = { lines: [], pageNum: pages.length };
+                        y = CONFIG.PAGE_PADDING_Y;
                     }
+                    cur.lines.push({ text: ln.text, y: y, height: bh, wrappedCount: wl, sourceIndex: ln.index });
+                    y += bh;
+                }
+                if (cur.lines.length > 0 || pages.length === 0) {
+                    cur.pageNum = pages.length;
+                    pages.push(cur);
+                }
+                return pages;
+            }
+
+            function hexToCssColor(hex) {
+                var h = String(hex || '#000000');
+                return /^#[0-9a-fA-F]{6}$/.test(h) ? h : '#000000';
+            }
+
+            function drawAppliedRedactsOnly(canvas) {
+                if (!canvas) return;
+                var pageIdx = parseInt(canvas.dataset.pageIdx, 10);
+                var page = S.pages[pageIdx];
+                var rect = canvas.getBoundingClientRect();
+                var W = canvas.clientWidth || rect.width;
+                var H = canvas.clientHeight || rect.height;
+                if (!W || !H) return;
+                var ctx = prepareRedactCanvas(canvas, W, H);
+                if (!ctx) return;
+                S.redacts.filter(function(r) {
+                    return r.pageIdx === pageIdx && r.applied;
+                }).forEach(function(r) {
+                    var rr = getRedactPixelRect(r, W, H);
+                    if (rr.w < 1 || rr.h < 1) return;
+                    drawRedactRect(ctx, rr, r.style || S.redactStyle || {}, true);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h);
+                });
+            }
+
+            async function waitForStageAssets(stage) {
+                if (document.fonts && document.fonts.ready) {
+                    try { await document.fonts.ready; } catch (_) {}
+                }
+                var images = Array.prototype.slice.call(stage.querySelectorAll('img'));
+                if (!images.length) return;
+                await Promise.all(images.map(function(img) {
+                    if (img.complete) {
+                        return img.decode ? img.decode().catch(function() {}) : Promise.resolve();
+                    }
+                    return new Promise(function(resolve) {
+                        img.addEventListener('load', resolve, { once: true });
+                        img.addEventListener('error', resolve, { once: true });
+                    });
+                }));
+            }
+
+            async function renderElementToCanvas(element, width, height) {
+                if (!window.html2canvas) throw new Error('图片渲染库未加载');
+                await waitForStageAssets(element);
+                return await window.html2canvas(element, {
+                    backgroundColor: '#ffffff',
+                    scale: 3,
+                    useCORS: true,
+                    allowTaint: false,
+                    logging: false,
+                    width: Math.ceil(width),
+                    height: Math.ceil(height),
+                    windowWidth: Math.max(document.documentElement.clientWidth, Math.ceil(width)),
+                    windowHeight: Math.max(document.documentElement.clientHeight, Math.ceil(height)),
+                    scrollX: 0,
+                    scrollY: 0
+                });
+            }
+
+            function stripExportPageFrame(el) {
+                if (!el) return;
+                el.classList.add('export-page-no-frame');
+                el.style.setProperty('border', '0', 'important');
+                el.style.setProperty('box-shadow', 'none', 'important');
+                el.style.setProperty('outline', 'none', 'important');
+                el.style.setProperty('background-clip', 'padding-box', 'important');
+                el.style.setProperty('background-origin', 'padding-box', 'important');
+            }
+
+            function normalizeExportCloneDecorations(clone) {
+                clone.querySelectorAll('.page-num').forEach(function(el) {
+                    el.style.visibility = 'hidden';
+                });
+                clone.querySelectorAll('.search-highlight').forEach(function(el) {
+                    el.remove();
+                });
+                clone.querySelectorAll('.doc-page, .docx-container').forEach(function(el) {
+                    stripExportPageFrame(el);
+                });
+                // Export-only wrappers must never contribute a visible frame.
+                clone.querySelectorAll('.txt-page-zoom-shell, .doc-page-img-wrap').forEach(function(el) {
+                    el.style.setProperty('border', '0', 'important');
+                    el.style.setProperty('box-shadow', 'none', 'important');
+                    el.style.setProperty('outline', 'none', 'important');
+                });
+            }
+
+            function copyAppliedMaskCanvas(sourceCanvas, cloneCanvas, pageIdx) {
+                if (!cloneCanvas || !sourceCanvas) return;
+                cloneCanvas.dataset.pageIdx = String(pageIdx);
+                cloneCanvas.style.pointerEvents = 'none';
+                cloneCanvas.style.cursor = 'default';
+                drawAppliedRedactsOnly(cloneCanvas);
+            }
+
+            async function createTxtExportPageCanvas(pageIdx) {
+                var source = getPageEl(pageIdx);
+                if (!source) return null;
+                var logicalW = source.offsetWidth || source.clientWidth || 794;
+                var logicalH = source.offsetHeight || source.clientHeight || 1120;
+                var stage = document.createElement('div');
+                stage.className = 'export-stage';
+                stage.style.cssText = 'position:fixed;left:-100000px;top:0;width:' + logicalW + 'px;height:' + logicalH + 'px;background:#fff;overflow:hidden;';
+                var clone = source.cloneNode(true);
+                clone.style.transform = 'none';
+                clone.style.margin = '0';
+                clone.style.width = logicalW + 'px';
+                clone.style.height = logicalH + 'px';
+                clone.style.maxWidth = 'none';
+                normalizeExportCloneDecorations(clone);
+                var cloneCanvas = clone.querySelector('.redact-canvas');
+                var sourceCanvas = source.querySelector('.redact-canvas');
+                if (cloneCanvas) cloneCanvas.style.zIndex = '5';
+                stage.appendChild(clone);
+                document.body.appendChild(stage);
+                copyAppliedMaskCanvas(sourceCanvas, cloneCanvas, pageIdx);
+                var canvas = await renderElementToCanvas(stage, logicalW, logicalH);
+                stage.remove();
+                return canvas;
+            }
+
+            async function createDocxExportPageCanvas(pageIdx) {
+                var sourcePage = getPageEl(pageIdx);
+                if (!sourcePage) return null;
+                var logicalW = sourcePage.offsetWidth || 794;
+                var logicalH = sourcePage.offsetHeight || 800;
+                var stage = document.createElement('div');
+                stage.className = 'export-stage';
+                stage.style.cssText = 'position:fixed;left:-100000px;top:0;width:' + logicalW + 'px;height:' + logicalH + 'px;background:#fff;overflow:hidden;';
+                var clone = sourcePage.cloneNode(true);
+                clone.style.margin = '0';
+                clone.style.width = logicalW + 'px';
+                clone.style.height = logicalH + 'px';
+                clone.style.maxWidth = 'none';
+                normalizeExportCloneDecorations(clone);
+                var cloneCanvas = clone.querySelector('.redact-canvas');
+                var sourceCanvas = sourcePage.querySelector('.redact-canvas');
+                if (cloneCanvas) {
+                    cloneCanvas.style.zIndex = '5';
+                    cloneCanvas.dataset.pageIdx = String(pageIdx);
+                }
+                stage.appendChild(clone);
+                document.body.appendChild(stage);
+                copyAppliedMaskCanvas(sourceCanvas, cloneCanvas, pageIdx);
+                var canvas = await renderElementToCanvas(stage, logicalW, logicalH);
+                stage.remove();
+                return canvas;
+            }
+
+            function addCanvasToA4(pdfDoc, canvas, addPage) {
+                if (addPage) pdfDoc.addPage();
+                var maxW = 206, maxH = 293, ratio = canvas.height / Math.max(1, canvas.width);
+                var w = maxW, h = w * ratio;
+                if (h > maxH) { h = maxH; w = h / ratio; }
+                var x = (210 - w) / 2, y = (297 - h) / 2;
+                pdfDoc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, w, h, undefined, 'FAST');
+            }
+
+            function sliceCanvas(canvas, sy, h) {
+                var slice = document.createElement('canvas');
+                slice.width = canvas.width;
+                slice.height = h;
+                var ctx = slice.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, slice.width, h);
+                ctx.drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+                return slice;
+            }
+
+            async function exportNonPdfDocumentToPDF() {
+                DOM.exportOverlay.classList.add('active');
+                DOM.statusLeft.textContent = '生成分页 PDF…';
+                try {
+                    var jsPdfCtor = window.jspdf && window.jspdf.jsPDF;
+                    if (!jsPdfCtor) throw new Error('PDF 生成库未加载');
+                    var doc = new jsPdfCtor({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+                    var first = true;
+                    var logicalSlice = 800;
+                    if (S.fileType === 'docx') {
+                        var docxPageCount = S.totalPages || 0;
+                        for (var di = 0; di < docxPageCount; di++) {
+                            var dcanvas = await createDocxExportPageCanvas(di);
+                            if (!dcanvas) continue;
+                            addCanvasToA4(doc, dcanvas, !first);
+                            first = false;
+                            setProgress(Math.round(((di + 1) / docxPageCount) * 100));
+                        }
+                    } else if (S.fileType === 'txt') {
+                        var pages = S.pages && S.pages.length ? S.pages : getExportTextPages();
+                        for (var i = 0; i < pages.length; i++) {
+                            var canvas = await createTxtExportPageCanvas(i);
+                            if (!canvas) continue;
+                            addCanvasToA4(doc, canvas, !first);
+                            first = false;
+                            setProgress(Math.round(((i + 1) / pages.length) * 100));
+                        }
+                    } else {
+                        throw new Error('当前文件类型不支持此 PDF 导出方式');
+                    }
+                    if (first) throw new Error('没有可导出的页面');
                     var base = S.fileName.replace(/\.[^.]+$/, '') || 'document';
                     doc.save(base + '_脱敏.pdf');
                     DOM.exportOverlay.classList.remove('active');
-                    notify('PDF已导出');
-                    log('导出PDF成功');
+                    notify('分页 PDF 已导出');
+                    log('分页 PDF 导出成功：与阅读区渲染一致，预览遮罩未导出');
                     DOM.statusLeft.textContent = 'PDF导出完成';
                 } catch (err) {
                     DOM.exportOverlay.classList.remove('active');
                     handleError('PDF导出失败', err);
                 }
+            }
+
+            async function ensurePdfPageRendered(pageIdx) {
+                if (!S.pdfMode || !S.pdfJsDoc || !S.pdfPages[pageIdx]) return;
+                if (S.pdfPages[pageIdx].img) return;
+                await renderPdfPage(pageIdx);
+            }
+
+            async function createPdfImageCanvas(pageIdx) {
+                await ensurePdfPageRendered(pageIdx);
+                var sourcePage = getPageEl(pageIdx);
+                if (!sourcePage) return null;
+                var wrap = sourcePage.querySelector('.doc-page-img-wrap');
+                if (!wrap) return null;
+                var logicalW = wrap.clientWidth || 794;
+                var logicalH = wrap.clientHeight || Math.round((S.pdfPages[pageIdx].vh / S.pdfPages[pageIdx].vw) * 794);
+                var stage = document.createElement('div');
+                stage.className = 'export-stage';
+                stage.style.cssText = 'position:fixed;left:-100000px;top:0;width:' + logicalW + 'px;height:' + logicalH + 'px;background:#fff;overflow:hidden;';
+                var clone = wrap.cloneNode(true);
+                clone.style.width = logicalW + 'px';
+                clone.style.height = logicalH + 'px';
+                var sourceCanvas = wrap.querySelector('.redact-canvas');
+                var cloneCanvas = clone.querySelector('.redact-canvas');
+                if (cloneCanvas) {
+                    cloneCanvas.dataset.pageIdx = String(pageIdx);
+                    cloneCanvas.style.pointerEvents = 'none';
+                }
+                clone.querySelectorAll('.search-highlight').forEach(function(el) { el.remove(); });
+                stage.appendChild(clone);
+                document.body.appendChild(stage);
+                copyAppliedMaskCanvas(sourceCanvas, cloneCanvas, pageIdx);
+                var canvas = await renderElementToCanvas(stage, logicalW, logicalH);
+                stage.remove();
+                return canvas;
+            }
+
+            async function renderAllPagesForImageExport() {
+                var count = Math.max(0, S.totalPages || S.pages.length || 0);
+                var canvases = [];
+                if (S.fileType === 'docx') {
+                    var docxPageCount = S.totalPages || 0;
+                    for (var di = 0; di < docxPageCount; di++) {
+                        var dcanvas = await createDocxExportPageCanvas(di);
+                        if (dcanvas) canvases.push(dcanvas);
+                    }
+                } else if (S.fileType === 'txt') {
+                    for (var i = 0; i < count; i++) {
+                        var c = await createTxtExportPageCanvas(i);
+                        if (c) canvases.push(c);
+                    }
+                } else if (S.pdfMode) {
+                    for (var pi = 0; pi < count; pi++) {
+                        var pc = await createPdfImageCanvas(pi);
+                        if (pc) canvases.push(pc);
+                    }
+                } else {
+                    for (var j = 0; j < count; j++) {
+                        var pageEl = getPageEl(j);
+                        if (!pageEl) continue;
+                        var cc = await renderElementToCanvas(pageEl, pageEl.offsetWidth || 794, pageEl.offsetHeight || 1120);
+                        canvases.push(cc);
+                    }
+                }
+                return canvases;
+            }
+
+            async function exportImage() {
+                DOM.exportOverlay.classList.add('active');
+                DOM.statusLeft.textContent = '生成全部页面图片压缩包…';
+                try {
+                    var base = S.fileName.replace(/\.[^.]+$/, '') || 'document';
+                    var canvases = await renderAllPagesForImageExport();
+                    if (!canvases.length) throw new Error('没有可导出的页面');
+                    if (!window.JSZip) throw new Error('压缩包生成库未加载');
+                    var zip = new JSZip();
+                    for (var i = 0; i < canvases.length; i++) {
+                        var blob = await canvasToBlob(canvases[i]);
+                        zip.file(base + '_第' + String(i + 1).padStart(3, '0') + '页.png', blob);
+                        setProgress(Math.round(((i + 1) / canvases.length) * 100));
+                    }
+                    var zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+                    downloadBlob(zipBlob, base + '_图片.zip');
+                    DOM.exportOverlay.classList.remove('active');
+                    notify('已导出全部 ' + canvases.length + ' 页图片压缩包');
+                    log('图片批量导出成功：' + canvases.length + ' 页，ZIP');
+                    DOM.statusLeft.textContent = '图片导出完成';
+                } catch (err) {
+                    DOM.exportOverlay.classList.remove('active');
+                    handleError('图片导出失败', err);
+                }
+            }
+
+            function canvasToBlob(canvas) {
+                return new Promise(function(resolve, reject) {
+                    canvas.toBlob(function(blob) { if (blob) resolve(blob); else reject(new Error('图片生成失败')); }, 'image/png');
+                });
+            }
+
+            function downloadBlob(blob, filename) {
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
             }
 
             async function exportRedactedPDF() {
@@ -4962,32 +5655,34 @@
                 });
                 S.charCount = t.length;
 
-                // 与普通 TXT 分页规则一致，但这里同步生成页面，确保点击“示例”立即有内容。
-                var vp = DOM.docViewport;
-                var viewportW = vp && vp.clientWidth ? vp.clientWidth - 48 : 746;
-                var pw = Math.min(Math.max(viewportW, 360), 794);
-                var containerW = Math.max(200, pw - CONFIG.PAGE_PADDING_X * 2);
-                var charsPerLine = Math.max(1, Math.floor(containerW / CONFIG.FONT_SIZE));
+                // 与普通 TXT 使用同一套 A4 分页算法，确保示例和真实打开的 TXT 完全一致。
+                var pw = CONFIG.A4_PAGE_WIDTH;
+                var ph = CONFIG.A4_PAGE_HEIGHT;
+                var contentW = Math.max(200, pw - CONFIG.PAGE_PADDING_X * 2 - 2);
+                var charsPerLine = Math.max(1, Math.floor(contentW / (CONFIG.FONT_SIZE * 1.05)));
+                var lineHeightPx = CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT;
+                var usableH = Math.max(lineHeightPx, ph - CONFIG.PAGE_PADDING_Y * 2 - 2);
+                var linesPerPage = Math.max(1, Math.floor(usableH / lineHeightPx));
                 S.pages = [];
                 var cur = { lines: [], pageNum: 0 }, y = CONFIG.PAGE_PADDING_Y;
-                for (var i = 0; i < S.lines.length; i++) {
-                    var ln = S.lines[i];
-                    var wl = Math.max(1, Math.ceil(ln.text.length / charsPerLine));
-                    var bh = wl * CONFIG.FONT_SIZE * CONFIG.LINE_HEIGHT;
-                    if (S.autoPage && y + bh > 800 && cur.lines.length > 0) {
-                        cur.pageNum = S.pages.length;
-                        S.pages.push(cur);
-                        cur = { lines: [], pageNum: S.pages.length };
-                        y = CONFIG.PAGE_PADDING_Y;
-                    }
-                    cur.lines.push({ text: ln.text, y: y, height: bh, wrappedCount: wl, sourceIndex: ln.index });
-                    y += bh;
-                }
-                if (cur.lines.length > 0 || S.pages.length === 0) {
+                function samplePushPage() {
+                    if (!cur.lines.length) return;
                     cur.pageNum = S.pages.length;
                     S.pages.push(cur);
+                    cur = { lines: [], pageNum: S.pages.length };
+                    y = CONFIG.PAGE_PADDING_Y;
                 }
-                S.totalPages = S.pages.length;
+                for (var i = 0; i < S.lines.length; i++) {
+                    var ln = S.lines[i], raw = String(ln.text || ''), chunks = [];
+                    if (!raw.length) chunks.push('');
+                    else for (var pos = 0; pos < raw.length; pos += charsPerLine) chunks.push(raw.slice(pos, pos + charsPerLine));
+                    for (var c = 0; c < chunks.length; c++) {
+                        if (S.autoPage && cur.lines.length >= linesPerPage) samplePushPage();
+                        cur.lines.push({ text: chunks[c], y: y, height: lineHeightPx, wrappedCount: 1, sourceIndex: ln.index, sourceOffset: c });
+                        y += lineHeightPx;
+                    }
+                }
+                if (cur.lines.length || !S.pages.length) samplePushPage();
 
                 DOM.fname.textContent = S.fileName;
                 DOM.fileTypeInfo.textContent = '格式: TXT · ' + formatSize(S.fileSize);
@@ -5019,8 +5714,8 @@
                         else if (a === 'loadSample') loadSample();
                         else if (a === 'applyAllRedacts') applyAllRedacts();
                         else if (a === 'clearAll') clearAllRedacts();
-                        else if (a === 'exportText') exportText();
                         else if (a === 'exportPDF') exportPDF();
+                        else if (a === 'exportImage') exportImage();
                         else if (a === 'showSettings') toggleSettingsDropdown();
                         else if (a === 'togglePin') togglePin();
                     });
@@ -5040,7 +5735,7 @@
                         else if (a === 'toggleSidebar') toggleSidebar();
                         else if (a === 'resetRedactStyle') resetRedactStyle();
                         else if (a === 'autoMaskSensitiveWords') autoMaskSensitiveWords();
-                        else if (a === 'clearSensitiveWords') { if (DOM.sensitiveWordInput) DOM.sensitiveWordInput.value = ''; S.sensitiveWords = []; notify('敏感词列表已清空'); log('已清空敏感词列表'); }
+                        else if (a === 'clearSensitiveWords') { if (DOM.sensitiveWordInput) DOM.sensitiveWordInput.value = ''; S.sensitiveWords = []; saveSettings(); notify('敏感词列表已清空'); log('已清空敏感词列表'); }
                     });
                 });
 
@@ -5095,6 +5790,7 @@
                 if (DOM.sensitiveWordInput) {
                     DOM.sensitiveWordInput.addEventListener('input', function() {
                         S.sensitiveWords = parseSensitiveWords().map(function(w) { return w.raw; });
+                        saveSettings();
                     });
                 }
 
@@ -5103,8 +5799,8 @@
                     el.addEventListener('click', function() {
                         var a = el.dataset.action;
                         if (a === 'clearAll') clearAllRedacts();
-                        else if (a === 'exportText') exportText();
                         else if (a === 'exportPDF') exportPDF();
+                        else if (a === 'exportImage') exportImage();
                         else if (a === 'undoRedact') undoRedact();
                         else if (a === 'redoRedact') redoRedact();
                         else if (a === 'zoomIn') setPdfViewScale((S.viewScale || 1) + 0.2);
@@ -5119,9 +5815,19 @@
                     if (!S.textSelect) return;
                     var target = e.target;
                     var pageEl = target && target.closest ? target.closest('.doc-page') : null;
-                    if (!pageEl) return;
-                    var pageIdx = parseInt(pageEl.dataset.pageIdx, 10);
-                    var canvas = pageEl.querySelector('.redact-canvas');
+                    var pageIdx = -1;
+                    var canvas = null;
+                    if (pageEl) {
+                        pageIdx = parseInt(pageEl.dataset.pageIdx, 10);
+                        canvas = pageEl.querySelector('.redact-canvas');
+                    } else {
+                        var docxContainer = target && target.closest ? target.closest('.docx-container') : null;
+                        if (docxContainer && docxContainer.parentElement) {
+                            pageIdx = 0;
+                            canvas = docxContainer.parentElement.querySelector('.redact-canvas');
+                        }
+                    }
+                    if (pageIdx < 0) return;
                     if (!canvas) return;
                     var metrics = getCanvasMetrics(canvas);
                     if (!metrics) return;
@@ -5148,13 +5854,18 @@
                 // Toggles
                 $$('.toggle-switch').forEach(function(el) {
                     el.addEventListener('click', function() {
-                        el.classList.toggle('on');
                         var a = el.dataset.action;
+                        if (a === 'toggleAutoPage') {
+                            // toggleAutoPage() is the single source of truth.
+                            // Do not pre-toggle the DOM here, otherwise the state flips twice.
+                            toggleAutoPage();
+                            return;
+                        }
+                        el.classList.toggle('on');
                         if (a === 'toggleLock') { S.lockRedacts = el.classList.contains('on');
                             $$('.redact-canvas').forEach(function(c) { drawExistingRedacts(c); }); } else if (
                             a === 'togglePageNum') { S.showPageNum = el.classList.contains('on');
-                            renderDocument(); } else if (a === 'toggleAutoPage') { S.autoPage = el.classList
-                                .contains('on'); if (S.text) rebuildPages(); }
+                            renderDocument(); }
                     });
                 });
 
@@ -5259,11 +5970,27 @@
                     if (S.pages.length > 0) {
                         clearTimeout(resizeTimer);
                         resizeTimer = setTimeout(function() {
-                            if (!S.pdfMode && !S.docxHtml) rebuildPages();
-                            renderDocument();
-                        }, 200);
+                            if (S.docxHtml && S.fileType === 'docx') {
+                                renderDocxPaginated();
+                            } else if (!S.pdfMode) {
+                                rebuildPages();
+                            } else {
+                                renderDocument();
+                            }
+                        }, 180);
                     }
                 });
+
+                // DOCX pagination follows the actual reading viewport. Sidebar width,
+                // collapsing/expanding, and browser resizing therefore trigger reflow.
+                if (window.ResizeObserver && DOM.docViewport) {
+                    var docViewportObserver = new ResizeObserver(function() {
+                        if (S.docxHtml && S.fileType === 'docx' && S.autoPage) {
+                            scheduleDocxPagination(100);
+                        }
+                    });
+                    docViewportObserver.observe(DOM.docViewport);
+                }
 
                 // PDF/TXT redaction canvases are positioned in page-local coordinates,
                 // so scrolling does not require a full redraw. Avoid doing any per-scroll
