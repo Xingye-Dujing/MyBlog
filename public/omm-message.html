@@ -21,6 +21,8 @@
         --accent-green: #339933;
         --accent-red: #cc3333;
         --accent-blue: #3366cc;
+        --highlight-yellow: #e0b000;
+        --highlight-yellow-bg: rgba(255, 210, 60, 0.22);
         --panel-bg: transparent;
         --font-mono: 'Literata', 'SimSun', '宋体', 'NSimSun', serif;
         --fscale: 1;
@@ -44,6 +46,8 @@
         --hover: rgba(255, 255, 255, 0.06);
         --active-bg: #fff;
         --active-text: #000;
+        --highlight-yellow: #ffd43b;
+        --highlight-yellow-bg: rgba(255, 212, 59, 0.18);
 
         /* Toast 深色主题 */
         --toast-bg: rgba(255, 255, 255, 0.08);
@@ -530,6 +534,52 @@
         color: var(--text-dim);
         text-transform: uppercase;
       }
+      .message-tools {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+      }
+      .message-search {
+        width: min(240px, 34vw);
+        height: 30px;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text);
+        outline: none;
+        padding: 5px 9px;
+        border-radius: var(--radius);
+        font-size: calc(10px * var(--fscale));
+        user-select: text;
+      }
+      .message-search:focus { border-color: var(--border); }
+      .message-search::placeholder { color: var(--text-faint); }
+      .message-filter {
+        height: 30px;
+        min-width: 30px;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-faint);
+        padding: 0 8px;
+        border-radius: var(--radius);
+        font-size: calc(12px * var(--fscale));
+        line-height: 1;
+        transition: 0.15s;
+      }
+      .message-filter:hover,
+      .message-filter.active {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .message-filter.active { box-shadow: inset 0 -2px 0 var(--text); }
+      .message-result-count {
+        min-width: 28px;
+        text-align: right;
+        font-size: calc(8px * var(--fscale));
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+      }
       .panel-x {
         font-size: calc(9px * var(--fscale));
         color: var(--text-faint);
@@ -1014,13 +1064,43 @@
         color: var(--accent-red);
         border-color: var(--accent-red);
       }
+      .msg-action.favorite {
+        min-width: 22px;
+        padding-inline: 4px;
+        color: var(--text-faint);
+      }
+      .msg-action.favorite.active {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .msg-action.favorite:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+        background: var(--hover);
+      }
       .msg-row.target-highlight .msg-bubble {
-        animation: msg-highlight 1.2s ease;
+        animation: msg-highlight 1.55s cubic-bezier(.16,1,.3,1);
       }
       @keyframes msg-highlight {
-        0%, 100% { box-shadow: 0 0 0 0 transparent; }
-        25%, 70% { box-shadow: 0 0 0 2px var(--border); }
+        0% { box-shadow: 0 0 0 0 transparent;}
+        18% {
+          box-shadow: 0 0 0 2px var(--highlight-yellow), 0 0 0 7px var(--highlight-yellow-bg);
+        }
+        68% {
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--highlight-yellow) 78%, transparent), 0 0 0 7px color-mix(in srgb, var(--highlight-yellow) 12%, transparent);
+        }
+        100% { box-shadow: 0 0 0 0 transparent;}
       }
+      .msg-search-mark {
+        background: var(--highlight-yellow-bg);
+        color: var(--text);
+        border-bottom: 1px solid var(--highlight-yellow);
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+      .msg-row.mine .msg-meta { justify-content: flex-end; }
+      .msg-row.other .msg-meta { justify-content: flex-start; }
       .msg-edited {
         color: var(--text-faint);
         font-size: calc(8px * var(--fscale));
@@ -1296,6 +1376,13 @@
           padding: 12px 10px;
           gap: 10px;
         }
+        .message-tools { gap: 4px; }
+        .message-search {
+          width: min(48vw, 190px);
+          height: 28px;
+          font-size: max(10px, calc(10px * var(--fscale)));
+        }
+        .message-filter { height: 28px; min-width: 28px; }
         .msg-row {
           max-width: 88%;
         }
@@ -1537,7 +1624,11 @@
         <section class="panel chat">
           <div class="panel-head">
             <span class="panel-title" data-i18n="chat.title">消息流</span
-            ><span class="panel-x" id="room-label">PRIVATE</span>
+            ><div class="message-tools">
+              <input class="message-search" id="message-search" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="chat.searchPlaceholder" placeholder="搜索消息…" />
+              <button class="message-filter" id="favorite-filter" type="button" data-action="toggleFavoriteFilter" aria-label="收藏消息" title="收藏消息">☆</button>
+              <span class="message-result-count" id="message-result-count"></span>
+            </div>
           </div>
           <div class="messages" id="messages">
             <div class="empty" id="empty" data-i18n="chat.empty">登录并解锁后开始发送消息</div>
@@ -1812,6 +1903,13 @@
             'side.cloud': '云同步',
             'side.settings': '设置',
             'chat.title': '消息流',
+            'chat.searchPlaceholder': '搜索消息…',
+            'chat.noSearchResult': '没有找到匹配消息',
+            'chat.noFavorite': '还没有收藏消息',
+            'chat.favorite': '收藏',
+            'chat.unfavorite': '取消收藏',
+            'chat.showAll': '显示全部',
+            'chat.onlyFavorite': '只看收藏',
             'chat.empty': '登录并解锁后开始发送消息',
             'chat.placeholder': '输入消息…',
             'chat.send': '发送',
@@ -1874,6 +1972,17 @@
              'toast.quoteCopied': '已引用消息',
              'toast.confirmDelete': '确定删除这条消息吗？',
              'toast.quoteDeleted': '引用的消息已删除',
+             'toast.favoriteAdded': '已收藏消息',
+             'toast.favoriteRemoved': '已取消收藏',
+             'toast.metaUnavailable': '消息收藏同步表不可用，请先执行新的建表 SQL',
+             'toast.favoriteOffline': '当前未连接云端，无法收藏消息',
+             'toast.favoriteMessageMissing': '消息尚未同步到云端，暂时无法收藏',
+             'toast.favoriteFailed': '收藏操作失败，已恢复原状态',
+             'toast.quoteOffline': '当前未连接云端，无法引用消息',
+             'toast.editOffline': '当前未连接云端，无法编辑消息',
+             'toast.deleteOffline': '当前未连接云端，无法删除消息',
+             'toast.editFailed': '编辑失败，消息内容未修改',
+             'toast.deleteFailed': '删除失败，消息仍然保留',
              'chat.deletedMessage': '消息已删除',
              'chat.deleteConfirmText': '删除后将从当前账号的消息记录中移除。',
              'chat.cancel': '取消',
@@ -1926,6 +2035,13 @@
             'side.cloud': 'CLOUD SYNC',
             'side.settings': 'SETTINGS',
             'chat.title': 'MESSAGE STREAM',
+            'chat.searchPlaceholder': 'SEARCH MESSAGES…',
+            'chat.noSearchResult': 'NO MATCHING MESSAGES',
+            'chat.noFavorite': 'NO SAVED MESSAGES',
+            'chat.favorite': 'SAVE',
+            'chat.unfavorite': 'UNSAVE',
+            'chat.showAll': 'SHOW ALL',
+            'chat.onlyFavorite': 'SAVED ONLY',
             'chat.empty': 'Sign in and unlock to start messaging',
             'chat.placeholder': 'Type a message…',
             'chat.send': 'SEND',
@@ -1988,6 +2104,17 @@
              'toast.quoteCopied': 'Message quoted',
              'toast.confirmDelete': 'Delete this message?',
              'toast.quoteDeleted': 'The quoted message has been deleted',
+             'toast.favoriteAdded': 'Message saved',
+             'toast.favoriteRemoved': 'Message unsaved',
+             'toast.metaUnavailable': 'Message metadata table is unavailable. Run the new SQL first',
+             'toast.favoriteOffline': 'Cloud is not connected. The message cannot be saved',
+             'toast.favoriteMessageMissing': 'This message is not synced to the cloud yet',
+             'toast.favoriteFailed': 'Save failed. The previous state has been restored',
+             'toast.quoteOffline': 'Cloud is not connected. The message cannot be quoted',
+             'toast.editOffline': 'Cloud is not connected. The message cannot be edited',
+             'toast.deleteOffline': 'Cloud is not connected. The message cannot be deleted',
+             'toast.editFailed': 'Edit failed. The message was not changed',
+             'toast.deleteFailed': 'Delete failed. The message is still preserved',
              'chat.deletedMessage': 'MESSAGE DELETED',
              'chat.deleteConfirmText': 'This message will be removed from the message history for this account.',
              'chat.cancel': 'CANCEL',
@@ -2027,10 +2154,12 @@
           device: 'zmsg-device-v1',
         }
         const TABLE = 'zmessage_messages'
+        const META_TABLE = 'zmessage_message_meta'
         const CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
         let sb = null,
           session = null,
           channel = null,
+          realtimeReady = false,
           password = '',
           busy = false,
           lang = 'zh',
@@ -2038,7 +2167,11 @@
           deviceId = '',
           deviceName = '',
           ui = { theme: 'light', bg: 'bg-void', fscale: 1, radius: 6, pinned: true },
-          editingId = null
+          editingId = null,
+          favoriteIds = new Set(),
+          favoriteFilter = false,
+          searchQuery = '',
+          metaAvailable = false
         const $ = (id) => document.getElementById(id)
         const $$ = (s) => Array.from(document.querySelectorAll(s))
         function t(k) {
@@ -2132,10 +2265,10 @@
         function connState() {
           if (!session) return cfg().url && cfg().key ? t('status.configured') : t('status.offline')
           if (!password) return t('status.locked')
-          return channel ? t('status.live') : t('status.loading')
+          return realtimeReady ? t('status.live') : channel ? t('status.loading') : t('status.locked')
         }
         function sideState() {
-          if (channel && password) return t('status.live')
+          if (realtimeReady && password) return t('status.live')
           if (session) return t('status.locked')
           return cfg().url && cfg().key ? t('status.configured') : t('status.offline')
         }
@@ -2148,14 +2281,30 @@
           $('status-text').textContent = text
           $('status-dot').className = 'status-dot ' + (err ? 'err' : ok ? 'live' : '')
         }
+        function requireCloudAction(kind) {
+          if (!session || !password || !sb || !realtimeReady) {
+            const key = kind === 'quote'
+              ? 'toast.quoteOffline'
+              : kind === 'edit'
+                ? 'toast.editOffline'
+                : 'toast.deleteOffline'
+            toast(t(key))
+            return false
+          }
+          return true
+        }
+
         function persistCache() {
           try {
             localStorage.setItem(LS.cache, JSON.stringify(messages.slice(-250)))
+            localStorage.setItem(LS.cache + '-favorites', JSON.stringify(Array.from(favoriteIds)))
           } catch {}
         }
         function loadCache() {
           try {
             const a = JSON.parse(localStorage.getItem(LS.cache) || '[]')
+            const f = JSON.parse(localStorage.getItem(LS.cache + '-favorites') || '[]')
+            favoriteIds = new Set(Array.isArray(f) ? f : [])
             if (Array.isArray(a)) {
               messages = a.map(normalizeMessage)
               renderMessages()
@@ -2273,10 +2422,11 @@
           const r = await sb.auth.getSession()
           if (r.error) throw r.error
           session = r.data.session || null
+          realtimeReady = false
           setConn()
         }
         function sqlText() {
-          return `create table if not exists public.${TABLE} (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null references auth.users(id) on delete cascade,\n  device_id text not null,\n  device_name text not null default '',\n  payload text not null,\n  client_created_at bigint not null,\n  created_at timestamptz not null default now()\n);\n\nalter table public.${TABLE} enable row level security;\ngrant select, insert, update, delete on public.${TABLE} to authenticated;\nrevoke all on public.${TABLE} from anon;\n\ndrop policy if exists "zmsg_select_own" on public.${TABLE};\ndrop policy if exists "zmsg_insert_own" on public.${TABLE};\ndrop policy if exists "zmsg_update_own" on public.${TABLE};\ndrop policy if exists "zmsg_delete_own" on public.${TABLE};\n\ncreate policy "zmsg_select_own" on public.${TABLE}\nfor select to authenticated using (auth.uid() = user_id);\n\ncreate policy "zmsg_insert_own" on public.${TABLE}\nfor insert to authenticated with check (auth.uid() = user_id);\n\ncreate policy "zmsg_update_own" on public.${TABLE}\nfor update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);\n\ncreate policy "zmsg_delete_own" on public.${TABLE}\nfor delete to authenticated using (auth.uid() = user_id);\n\nalter table public.${TABLE} replica identity full;\ndo $$\nbegin\n  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='${TABLE}') then\n    alter publication supabase_realtime add table public.${TABLE};\n  end if;\nend $$;\n\nnotify pgrst, 'reload schema';`
+          return `create table if not exists public.${TABLE} (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null references auth.users(id) on delete cascade,\n  device_id text not null,\n  device_name text not null default '',\n  payload text not null,\n  client_created_at bigint not null,\n  created_at timestamptz not null default now()\n);\n\nalter table public.${TABLE} enable row level security;\ngrant select, insert, update, delete on public.${TABLE} to authenticated;\nrevoke all on public.${TABLE} from anon;\n\ndrop policy if exists "zmsg_select_own" on public.${TABLE};\ndrop policy if exists "zmsg_insert_own" on public.${TABLE};\ndrop policy if exists "zmsg_update_own" on public.${TABLE};\ndrop policy if exists "zmsg_delete_own" on public.${TABLE};\n\ncreate policy "zmsg_select_own" on public.${TABLE}\nfor select to authenticated using (auth.uid() = user_id);\n\ncreate policy "zmsg_insert_own" on public.${TABLE}\nfor insert to authenticated with check (auth.uid() = user_id);\n\ncreate policy "zmsg_update_own" on public.${TABLE}\nfor update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);\n\ncreate policy "zmsg_delete_own" on public.${TABLE}\nfor delete to authenticated using (auth.uid() = user_id);\n\nalter table public.${TABLE} replica identity full;\ndo $$\nbegin\n  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='${TABLE}') then\n    alter publication supabase_realtime add table public.${TABLE};\n  end if;\nend $$;\n\ncreate table if not exists public.${META_TABLE} (\n  user_id uuid not null references auth.users(id) on delete cascade,\n  message_id uuid not null references public.${TABLE}(id) on delete cascade,\n  device_id text not null default '',\n  device_name text not null default '',\n  favorite boolean not null default false,\n  edited_at bigint not null default 0,\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now(),\n  primary key (user_id, message_id)\n);\n\nalter table public.${META_TABLE} add column if not exists favorite boolean not null default false;\ncreate index if not exists zmsg_meta_user_idx on public.${META_TABLE}(user_id);\n\nalter table public.${META_TABLE} enable row level security;\ngrant select, insert, update, delete on public.${META_TABLE} to authenticated;\nrevoke all on public.${META_TABLE} from anon;\n\ndrop policy if exists "zmsg_meta_select_own" on public.${META_TABLE};\ndrop policy if exists "zmsg_meta_insert_own" on public.${META_TABLE};\ndrop policy if exists "zmsg_meta_update_own" on public.${META_TABLE};\ndrop policy if exists "zmsg_meta_delete_own" on public.${META_TABLE};\n\ncreate policy "zmsg_meta_select_own" on public.${META_TABLE}\nfor select to authenticated using (auth.uid() = user_id);\n\ncreate policy "zmsg_meta_insert_own" on public.${META_TABLE}\nfor insert to authenticated with check (auth.uid() = user_id);\n\ncreate policy "zmsg_meta_update_own" on public.${META_TABLE}\nfor update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);\n\ncreate policy "zmsg_meta_delete_own" on public.${META_TABLE}\nfor delete to authenticated using (auth.uid() = user_id);\n\nalter table public.${META_TABLE} replica identity full;\ndo $$\nbegin\n  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='${META_TABLE}') then\n    alter publication supabase_realtime add table public.${META_TABLE};\n  end if;\nend $$;\n\nnotify pgrst, 'reload schema';`
         }
         function dateKey(ts) {
           const d = new Date(ts)
@@ -2306,6 +2456,21 @@
             editedAt: Number(m.editedAt) || 0,
           }
         }
+        function isFavorite(id) {
+          return !!id && favoriteIds.has(id)
+        }
+        function filteredMessages() {
+          const q = searchQuery.trim().toLocaleLowerCase()
+          return messages.filter((m) => {
+            if (favoriteFilter && !isFavorite(m.id)) return false
+            if (!q) return true
+            return [m.text, m.deviceName, m.quoteText, m.quoteDeviceName]
+              .filter(Boolean)
+              .join('\n')
+              .toLocaleLowerCase()
+              .includes(q)
+          })
+        }
         function clearEditMode() {
           editingId = null
           $('edit-state').classList.add('hidden')
@@ -2325,6 +2490,143 @@
           input.focus()
           input.selectionStart = input.selectionEnd = input.value.length
         }
+        async function fetchMessageMeta() {
+          favoriteIds = new Set()
+          metaAvailable = false
+          if (!sb || !session || !password) {
+            renderMessages()
+            return
+          }
+          const r = await sb
+            .from(META_TABLE)
+            .select('message_id,favorite')
+            .eq('user_id', session.user.id)
+          if (r.error) {
+            if (/schema cache|Could not find the table|does not exist|column .* does not exist/i.test(r.error.message || '')) {
+              renderMessages()
+              return
+            }
+            throw r.error
+          }
+          metaAvailable = true
+          for (const row of r.data || []) if (row.favorite) favoriteIds.add(row.message_id)
+          persistCache()
+          renderMessages()
+        }
+        async function setFavorite(id, value) {
+          if (!id || busy) return
+          if (!session || !password || !sb || !realtimeReady) {
+            toast(t('toast.favoriteOffline'))
+            return
+          }
+          const previous = isFavorite(id)
+          if (value === previous) return
+
+          // 收藏必须对应真实存在的云端消息，避免本地缓存/孤立消息触发外键错误。
+          try {
+            const messageCheck = await sb
+              .from(TABLE)
+              .select('id')
+              .eq('user_id', session.user.id)
+              .eq('id', id)
+              .maybeSingle()
+            if (messageCheck.error) throw messageCheck.error
+            if (!messageCheck.data) {
+              toast(t('toast.favoriteMessageMissing'))
+              return
+            }
+          } catch (e) {
+            if (/schema cache|Could not find the table|does not exist|column .* does not exist/i.test(e.message || '')) {
+              metaAvailable = false
+              toast(t('toast.metaUnavailable'))
+            } else {
+              toast(t('toast.favoriteFailed'))
+            }
+            return
+          }
+
+          favoriteIds[value ? 'add' : 'delete'](id)
+          persistCache()
+          renderMessages()
+
+          try {
+            let r = await sb
+              .from(META_TABLE)
+              .update({ favorite: value, updated_at: new Date().toISOString() })
+              .eq('user_id', session.user.id)
+              .eq('message_id', id)
+              .select('message_id,favorite')
+
+            if (r.error) throw r.error
+
+            if (!r.data?.length) {
+              r = await sb.from(META_TABLE).insert({
+                user_id: session.user.id,
+                message_id: id,
+                device_id: deviceId,
+                device_name: deviceName || '',
+                favorite: value,
+                edited_at: 0,
+                updated_at: new Date().toISOString(),
+              }).select('message_id,favorite')
+              if (r.error) throw r.error
+            }
+
+            metaAvailable = true
+            toast(t(value ? 'toast.favoriteAdded' : 'toast.favoriteRemoved'))
+          } catch (e) {
+            // 数据库操作失败必须恢复 UI 与本地缓存，避免出现假收藏。
+            favoriteIds[previous ? 'add' : 'delete'](id)
+            persistCache()
+            renderMessages()
+
+            if (/schema cache|Could not find the table|does not exist|column .* does not exist/i.test(e.message || '')) {
+              metaAvailable = false
+              toast(t('toast.metaUnavailable'))
+            } else if (/violates foreign key|message_id|zmessage_messages/i.test(e.message || '')) {
+              toast(t('toast.favoriteMessageMissing'))
+            } else {
+              setConn(false, true)
+              toast(t('toast.favoriteFailed'))
+            }
+          }
+        }
+        function toggleFavorite(id) {
+          const target = messages.find((m) => m.id === id)
+          if (!target) {
+            toast(t('toast.favoriteMessageMissing'))
+            return
+          }
+          setFavorite(id, !isFavorite(id))
+        }
+        function toggleFavoriteFilter() {
+          favoriteFilter = !favoriteFilter
+          renderMessages()
+        }
+        function highlightText(container, text, query) {
+          container.textContent = ''
+          const source = String(text || '')
+          if (!query) {
+            container.textContent = source
+            return
+          }
+          const needle = query.toLocaleLowerCase()
+          const lower = source.toLocaleLowerCase()
+          let from = 0
+          while (from < source.length) {
+            const index = lower.indexOf(needle, from)
+            if (index < 0) {
+              container.appendChild(document.createTextNode(source.slice(from)))
+              break
+            }
+            if (index > from) container.appendChild(document.createTextNode(source.slice(from, index)))
+            const mark = document.createElement('mark')
+            mark.className = 'msg-search-mark'
+            mark.textContent = source.slice(index, index + needle.length)
+            container.appendChild(mark)
+            from = index + needle.length
+          }
+        }
         function locateMessage(id) {
           if (!id) return false
           const row = document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')
@@ -2339,6 +2641,7 @@
           return true
         }
         function quoteMessage(m) {
+          if (!m || !requireCloudAction('quote')) return
           const input = $('message-input')
           const quote = (m.text || '').split('\n').map((line) => '> ' + line).join('\n')
           input.value = quote + (quote ? '\n\n' : '')
@@ -2357,29 +2660,41 @@
             q.dataset.quoteDeleted = m.quoteDeleted ? '1' : '0'
             const qn = document.createElement('div')
             qn.className = 'msg-quote-name'
-            qn.textContent = m.quoteDeviceName || 'MESSAGE'
+            highlightText(qn, m.quoteDeviceName || 'MESSAGE', searchQuery)
             const qt = document.createElement('div')
             qt.className = 'msg-quote-text'
-            qt.textContent = m.quoteDeleted ? t('chat.deletedMessage') : (m.quoteText || '')
+            highlightText(qt, m.quoteDeleted ? t('chat.deletedMessage') : (m.quoteText || ''), searchQuery)
             q.append(qn, qt)
             bubble.appendChild(q)
           }
           const body = document.createElement('div')
-          body.textContent = m.text
+          highlightText(body, m.text, searchQuery)
           bubble.appendChild(body)
         }
         function renderMessages() {
           const box = $('messages')
           box.innerHTML = ''
           messages = messages.map(normalizeMessage).sort((a, b) => a.ts - b.ts)
+          const visible = filteredMessages()
+          const hasFilter = !!searchQuery.trim() || favoriteFilter
+          $('favorite-filter').classList.toggle('active', favoriteFilter)
+          $('favorite-filter').textContent = favoriteFilter ? '★' : '☆'
+          $('favorite-filter').title = favoriteFilter ? t('chat.showAll') : t('chat.onlyFavorite')
+          $('favorite-filter').setAttribute('aria-label', $('favorite-filter').title)
+          $('message-result-count').textContent = hasFilter ? String(visible.length) : ''
           if (!messages.length) {
             const e = document.createElement('div')
             e.className = 'empty'
             e.textContent = password ? t('sync.noMessages') : t('sync.sendFirst')
             box.appendChild(e)
+          } else if (!visible.length) {
+            const e = document.createElement('div')
+            e.className = 'empty'
+            e.textContent = favoriteFilter ? t('chat.noFavorite') : t('chat.noSearchResult')
+            box.appendChild(e)
           } else {
             let last = ''
-            for (const m of messages) {
+            for (const m of visible) {
               const dk = dateKey(m.ts)
               if (dk !== last) {
                 const sep = document.createElement('div')
@@ -2391,26 +2706,28 @@
               const row = document.createElement('div')
               row.className = 'msg-row ' + (m.deviceId === deviceId ? 'mine' : 'other')
               row.dataset.messageId = m.id
+
               const meta = document.createElement('div')
               meta.className = 'msg-meta'
-              const metaText = document.createElement('span')
-              metaText.textContent = (m.deviceName || 'DEVICE') + ' · ' + time(m.ts)
-              if (m.editedAt) {
-                const edited = document.createElement('span')
-                edited.className = 'msg-edited'
-                edited.textContent = '(' + t('chat.edited') + ')'
-                meta.append(metaText, edited)
-              } else {
-                meta.appendChild(metaText)
-              }
               const actions = document.createElement('div')
               actions.className = 'msg-actions'
+
+              const favoriteBtn = document.createElement('button')
+              favoriteBtn.className = 'msg-action favorite' + (isFavorite(m.id) ? ' active' : '')
+              favoriteBtn.dataset.action = 'toggleFavorite'
+              favoriteBtn.dataset.messageId = m.id
+              favoriteBtn.textContent = isFavorite(m.id) ? '★' : '☆'
+              favoriteBtn.title = isFavorite(m.id) ? t('chat.unfavorite') : t('chat.favorite')
+              favoriteBtn.setAttribute('aria-label', favoriteBtn.title)
+              actions.appendChild(favoriteBtn)
+
               const quoteBtn = document.createElement('button')
               quoteBtn.className = 'msg-action'
               quoteBtn.dataset.action = 'quoteMessage'
               quoteBtn.dataset.messageId = m.id
               quoteBtn.textContent = t('chat.quote')
               actions.appendChild(quoteBtn)
+
               if (m.deviceId === deviceId) {
                 const editBtn = document.createElement('button')
                 editBtn.className = 'msg-action'
@@ -2424,7 +2741,28 @@
                 delBtn.textContent = t('chat.delete')
                 actions.append(editBtn, delBtn)
               }
-              meta.appendChild(actions)
+
+              const metaText = document.createElement('span')
+              metaText.className = 'msg-meta-text'
+              highlightText(metaText, (m.deviceName || 'DEVICE') + ' · ' + time(m.ts), searchQuery)
+
+              if (m.deviceId === deviceId) {
+                // 自己发送的消息：操作区放在 msg-meta 文本左边。
+                meta.appendChild(actions)
+                meta.appendChild(metaText)
+              } else {
+                // 他方发送的消息：操作区继续放在 msg-meta 文本右边。
+                meta.appendChild(metaText)
+                meta.appendChild(actions)
+              }
+
+              if (m.editedAt) {
+                const edited = document.createElement('span')
+                edited.className = 'msg-edited'
+                edited.textContent = '(' + t('chat.edited') + ')'
+                meta.appendChild(edited)
+              }
+
               const bubble = document.createElement('div')
               bubble.className = 'msg-bubble'
               renderMessageText(bubble, m)
@@ -2434,7 +2772,7 @@
           }
           $('msg-count').textContent = messages.length
           $('status-count').textContent = String(messages.length)
-          if (!busy && !editingId) box.scrollTop = box.scrollHeight
+          if (!busy && !editingId && !hasFilter) box.scrollTop = box.scrollHeight
           $('send-btn').disabled = !password || busy
           $('send-btn').textContent = editingId ? t('chat.edit') : t('chat.send')
         }
@@ -2485,8 +2823,10 @@
           messages = out.map((x) => Object.assign({}, x, { quoteDeleted: !!x.quoteId && !ids.has(x.quoteId) }))
           persistCache()
           renderMessages()
+          await fetchMessageMeta()
         }
         function subscribe() {
+          realtimeReady = false
           if (channel) {
             try { sb.removeChannel(channel) } catch {}
             channel = null
@@ -2518,6 +2858,7 @@
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: TABLE, filter: 'user_id=eq.' + session.user.id }, (p) => {
               const deletedId = p.old.id
               const affected = messages.some((x) => x.quoteId === deletedId && !x.quoteDeleted)
+              favoriteIds.delete(deletedId)
               if (affected) {
                 messages = messages.map((x) => x.quoteId === deletedId ? Object.assign({}, x, { quoteDeleted: true }) : x)
                 persistCache()
@@ -2526,14 +2867,51 @@
               }
               removeMessage(deletedId)
             })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: META_TABLE, filter: 'user_id=eq.' + session.user.id }, (p) => {
+              const row = p.new || {}
+              if (row.favorite) favoriteIds.add(row.message_id)
+              else favoriteIds.delete(row.message_id)
+              metaAvailable = true
+              persistCache()
+              renderMessages()
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: META_TABLE, filter: 'user_id=eq.' + session.user.id }, (p) => {
+              const row = p.new || {}
+              if (row.favorite) favoriteIds.add(row.message_id)
+              else favoriteIds.delete(row.message_id)
+              metaAvailable = true
+              persistCache()
+              renderMessages()
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: META_TABLE, filter: 'user_id=eq.' + session.user.id }, (p) => {
+              const id = p.old?.message_id
+              if (id) favoriteIds.delete(id)
+              persistCache()
+              renderMessages()
+            })
             .subscribe((s) => {
-              if (s === 'SUBSCRIBED') { setConn(true); renderMessages() }
-              else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') setConn(false, true)
+              if (s === 'SUBSCRIBED') {
+                realtimeReady = true
+                setConn(true)
+                renderMessages()
+              } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') {
+                realtimeReady = false
+                setConn(false, true)
+                renderMessages()
+              }
             })
         }
         async function deleteCloudMessage(id) {
-          const r = await sb.from(TABLE).delete().eq('id', id).eq('user_id', session.user.id)
+          if (!requireCloudAction('delete')) throw new Error(t('toast.deleteOffline'))
+          const r = await sb
+            .from(TABLE)
+            .delete()
+            .eq('id', id)
+            .eq('user_id', session.user.id)
+            .select('id')
           if (r.error) throw r.error
+          if (!r.data?.length) throw new Error(t('toast.deleteFailed'))
+          return r.data[0]
         }
         function confirmDeleteMessage() {
           return new Promise((resolve) => {
@@ -2568,7 +2946,9 @@
         }
         async function deleteMessage(id) {
           const m = messages.find((x) => x.id === id)
-          if (!m || !session || !password || busy) return
+          if (!m) return
+          if (!requireCloudAction('delete')) return
+          if (busy) return
           if (m.deviceId !== deviceId) return
           if (!(await confirmDeleteMessage())) return
           busy = true
@@ -2580,6 +2960,7 @@
             if (editingId === id) clearEditMode()
             toast(t('toast.deletedMessage'))
           } catch (e) {
+            realtimeReady = false
             setConn(false, true)
             toast(e.message || t('status.error'))
           } finally {
@@ -2588,6 +2969,7 @@
           }
         }
         async function updateCloudMessage(id, messageData) {
+          if (!requireCloudAction('edit')) throw new Error(t('toast.editOffline'))
           const payload = await enc(messageData)
           const r = await sb
             .from(TABLE)
@@ -2595,35 +2977,22 @@
             .eq('id', id)
             .eq('user_id', session.user.id)
             .select('id,device_id,device_name,client_created_at')
-          if (!r.error && r.data && r.data.length) return r.data[0]
-          // 兼容旧版 Supabase RLS：没有 UPDATE policy 时，update + select
-          // 往往不会报错，而是返回 0 行，因此这里也必须进入兼容回退。
-          if (!r.error || /UPDATE|policy|permission|not allowed/i.test(r.error?.message || '')) {
-            const old = messages.find((x) => x.id === id)
-            const re = await sb.from(TABLE).delete().eq('id', id).eq('user_id', session.user.id)
-            if (re.error) throw re.error
-            const ins = await sb.from(TABLE).insert({
-              id,
-              user_id: session.user.id,
-              device_id: old?.deviceId || deviceId,
-              device_name: old?.deviceName || deviceName || 'DEVICE',
-              payload,
-              client_created_at: old?.ts || Date.now(),
-            }).select('id,device_id,device_name,client_created_at')
-            if (ins.error || !ins.data?.length) throw (ins.error || new Error(t('status.error')))
-            return ins.data[0]
-          }
-          throw r.error
+          if (r.error) throw r.error
+          if (!r.data?.length) throw new Error(t('toast.editFailed'))
+          return r.data[0]
         }
         async function editMessage(id) {
           const m = messages.find((x) => x.id === id)
-          if (!m || m.deviceId !== deviceId || !password) return
+          if (!m) return
+          if (!requireCloudAction('edit')) return
+          if (m.deviceId !== deviceId) return
           setEditMode(m)
         }
         async function saveEdit() {
           if (!editingId) return send()
           const input = $('message-input'), text = input.value.trim(), id = editingId
-          if (!text || !session || !password || busy) return
+          if (!text || busy) return
+          if (!requireCloudAction('edit')) return
           busy = true
           try {
             const old = messages.find((x) => x.id === id)
@@ -2645,6 +3014,7 @@
             autoResizeMessageInput()
             toast(t('toast.updated'))
           } catch (e) {
+            realtimeReady = false
             setConn(false, true)
             toast(e.message || t('status.error'))
           } finally {
@@ -2785,6 +3155,7 @@
           } catch {}
           sb = null
           session = null
+          realtimeReady = false
           password = ''
           busy = false
           closeSubpage()
@@ -2792,6 +3163,11 @@
           $('auth-panel').classList.add('hidden')
           $('sql-panel').classList.add('hidden')
           messages = []
+          favoriteIds.clear()
+          metaAvailable = false
+          favoriteFilter = false
+          searchQuery = ''
+          if ($('message-search')) $('message-search').value = ''
           renderMessages()
           setConn()
           toast(t('toast.loggedOut'))
@@ -2799,6 +3175,7 @@
         }
         function lock() {
           password = ''
+          realtimeReady = false
           if (channel) {
             try {
               sb.removeChannel(channel)
@@ -2875,6 +3252,7 @@
           saveCfg({ url, key, email })
           sb = null
           session = null
+          realtimeReady = false
           password = ''
           setConn()
           toast(t('toast.saved'))
@@ -2889,6 +3267,8 @@
         }
         function clearLocal() {
           localStorage.removeItem(LS.cache)
+          localStorage.removeItem(LS.cache + '-favorites')
+          favoriteIds.clear()
           messages = []
           renderMessages()
           toast(t('toast.deleted'))
@@ -2953,6 +3333,8 @@
             if (act === 'editMessage') editMessage(a.dataset.messageId)
             if (act === 'deleteMessage') deleteMessage(a.dataset.messageId)
             if (act === 'locateQuote') locateMessage(a.dataset.quoteId)
+            if (act === 'toggleFavorite') toggleFavorite(a.dataset.messageId)
+            if (act === 'toggleFavoriteFilter') toggleFavoriteFilter()
             if (act === 'clearLocal') clearLocal()
             if (act === 'togglePin') {
               ui.pinned = !ui.pinned
@@ -2996,6 +3378,18 @@
             }
           }
           $('send-btn').onclick = send
+          $('message-search').addEventListener('input', (e) => {
+            searchQuery = e.target.value || ''
+            renderMessages()
+          })
+          $('message-search').addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.currentTarget.value = ''
+              searchQuery = ''
+              renderMessages()
+            }
+          })
           $('cancel-edit').onclick = () => { clearEditMode(); $('message-input').value = ''; autoResizeMessageInput(); renderMessages(); $('message-input').focus() }
           $('message-input').addEventListener('input', autoResizeMessageInput)
           $('message-input').addEventListener('keydown', (e) => {
