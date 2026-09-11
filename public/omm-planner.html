@@ -7203,29 +7203,65 @@ notify pgrst, 'reload schema';</textarea
                   }
                 }),
             }
+
+            const repeatModes = ['daily', 'weekly', 'monthly', 'yearly', 'dates']
+            const isRepeat = repeatModes.indexOf(S.edRepeat) >= 0
+            const isDatesRepeat = S.edRepeat === 'dates'
+            const isCalendarRepeat = ['daily', 'weekly', 'monthly', 'yearly'].indexOf(S.edRepeat) >= 0
+            const newDS = S.edDateVal
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(newDS || '')) return
+
+            // 编辑重复实例时，"不重复"必须真正解除整条重复规则，
+            // 并把当前正在编辑的实例转换为普通单次日程。
             if (S.editing && S.editing.virt) {
               const r = Rules.byId(S.editing.id)
               if (!r) {
                 Editor.close()
                 return
               }
+
+              const current = Rules.instance(r, newDS)
+
+              if (S.edRepeat === 'none') {
+                const obj = Object.assign({}, common, {
+                  id: uid(),
+                  created: r.created || Date.now(),
+                  done: current.done === 'failed' ? 'failed' : !!current.done,
+                  order: Store.nextOrder(newDS),
+                })
+
+                const list = Store.recurs
+                const i = list.findIndex(function (x) {
+                  return x.id === r.id
+                })
+                if (i >= 0) list.splice(i, 1)
+
+                Store.add(newDS, obj)
+                Store.persist()
+                S.lastType = type
+                Editor.close()
+                Render.all()
+                notify(t('notify.saved'))
+                return
+              }
+
               Object.assign(r, common)
               r.renderPast = S.edRenderPast !== false
-              if (['daily', 'weekly', 'monthly', 'yearly', 'dates'].indexOf(S.edRepeat) >= 0) {
-                r.rrule.mode = S.edRepeat
-              }
-              if (['daily', 'weekly', 'monthly', 'yearly'].indexOf(S.edRepeat) >= 0) {
-                r.rrule.end = /^\d{4}-\d{2}-\d{2}$/.test(S.edEndVal || '') ? S.edEndVal : ''
-              } else {
-                r.rrule.end = ''
-              }
-              if (r.rrule.mode === 'dates') {
+              r.rrule.mode = S.edRepeat
+              r.rrule.end =
+                isCalendarRepeat && /^\d{4}-\d{2}-\d{2}$/.test(S.edEndVal || '')
+                  ? S.edEndVal
+                  : ''
+              if (isDatesRepeat) {
                 if (!S.edDates.length) {
                   notify(t('notify.noDates'))
                   return
                 }
                 r.rrule.dates = S.edDates.slice()
+              } else {
+                r.rrule.dates = []
               }
+
               Store.persist()
               S.lastType = type
               Editor.close()
@@ -7233,35 +7269,46 @@ notify pgrst, 'reload schema';</textarea
               notify(t('notify.saved'))
               return
             }
-            if (!S.editing && S.edRepeat && S.edRepeat !== 'none') {
-              if (S.edRepeat === 'dates' && !S.edDates.length) {
+
+            // 新建或编辑普通日程时，选择任意重复模式都应该创建/转换为重复规则。
+            if (isRepeat) {
+              if (isDatesRepeat && !S.edDates.length) {
                 notify(t('notify.noDates'))
                 return
               }
-              const rrStart = /^\d{4}-\d{2}-\d{2}$/.test(S.edDateVal || '')
-                ? S.edDateVal
-                : todayDS()
+
+              const old = S.editing ? Store.find(S.editing.date, S.editing.id) : null
+              const rrStart = newDS
               const rr = {
                 mode: S.edRepeat,
                 start: rrStart,
                 end:
-                  S.edRepeat !== 'dates' && /^\d{4}-\d{2}-\d{2}$/.test(S.edEndVal || '')
+                  isCalendarRepeat && /^\d{4}-\d{2}-\d{2}$/.test(S.edEndVal || '')
                     ? S.edEndVal
                     : '',
-                dates: S.edRepeat === 'dates' ? S.edDates.slice() : [],
+                dates: isDatesRepeat ? S.edDates.slice() : [],
               }
-              Store.recurs.push(
-                Object.assign(
-                  {
-                    id: uid(),
-                    created: Date.now(),
-                    doneMap: {},
-                    renderPast: S.edRenderPast !== false,
-                    rrule: rr,
-                  },
-                  common,
-                ),
+
+              const rule = Object.assign(
+                {
+                  id: uid(),
+                  created: old && old.created ? old.created : Date.now(),
+                  doneMap: {},
+                  renderPast: S.edRenderPast !== false,
+                  rrule: rr,
+                },
+                common,
               )
+
+              // 从普通日程转换为重复规则时，保留原日程在起始日的完成状态。
+              if (old && type === 'todo' && (old.done === true || old.done === 'failed')) {
+                rule.doneMap[rrStart] = old.done === 'failed' ? 'failed' : true
+              }
+
+              if (old) {
+                Store.removeAt(S.editing.date, S.editing.id)
+              }
+              Store.recurs.push(rule)
               Store.persist()
               S.lastType = type
               Editor.close()
@@ -7269,8 +7316,7 @@ notify pgrst, 'reload schema';</textarea
               notify(t('notify.saved'))
               return
             }
-            const newDS = S.edDateVal
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(newDS || '')) return
+
             const old = S.editing ? Store.find(S.editing.date, S.editing.id) : null
             const obj = Object.assign({}, common, {
               id: old ? old.id : uid(),

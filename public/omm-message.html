@@ -672,8 +672,9 @@
       .composer textarea {
         flex: 1;
         min-height: 76px;
-        max-height: 180px;
-        resize: vertical;
+        max-height: none;
+        resize: none;
+        overflow-y: hidden;
         background: transparent;
         border: 1px solid var(--border-dim);
         outline: none;
@@ -1098,7 +1099,9 @@
         }
         .composer textarea {
           min-height: 58px;
-          max-height: 150px;
+          max-height: none;
+          overflow-y: hidden;
+          resize: none;
         }
         .send {
           min-width: 74px;
@@ -1591,6 +1594,7 @@
             'chat.placeholder': '输入消息…',
             'chat.send': '发送',
             'chat.hotkey': 'Enter 发送 · Shift+Enter 换行',
+            'chat.hotkeyMobile': 'Enter 换行 · 点击发送',
             'mobile.chat': '消息',
             'mobile.sync': '云同步',
             'mobile.settings': '设置',
@@ -1690,6 +1694,7 @@
             'chat.placeholder': 'Type a message…',
             'chat.send': 'SEND',
             'chat.hotkey': 'Enter SEND · Shift+Enter NEW LINE',
+            'chat.hotkeyMobile': 'Enter NEW LINE · TAP SEND',
             'mobile.chat': 'MESSAGES',
             'mobile.sync': 'SYNC',
             'mobile.settings': 'SETTINGS',
@@ -1866,6 +1871,9 @@
           $('conn-text').textContent = connState()
           $('side-status').textContent = sideState()
           $('status-text').textContent = connState()
+          $('compose-info').textContent = window.matchMedia('(max-width: 720px)').matches
+            ? t('chat.hotkeyMobile')
+            : t('chat.hotkey')
           $('theme-btn').textContent =
             ui.theme === 'dark' ? t('settings.dark') : t('settings.light')
           $('menu-pin-btn').textContent = ui.pinned ? t('settings.on') : t('settings.off')
@@ -2197,6 +2205,7 @@
               text,
             })
             input.value = ''
+            autoResizeMessageInput()
             toast(t('toast.sent'))
           } catch (e) {
             setConn(false, true)
@@ -2356,8 +2365,26 @@
           e.style.height = 'auto'
           e.style.height = Math.max(140, e.scrollHeight) + 'px'
         }
+        function autoResizeMessageInput() {
+          const input = $('message-input')
+          if (!input) return
+          input.style.height = 'auto'
+          input.style.height = Math.max(
+            parseFloat(getComputedStyle(input).minHeight) || 0,
+            input.scrollHeight,
+          ) + 'px'
+        }
+        function clearTextSelection() {
+          const selection = window.getSelection?.()
+          if (selection && !selection.isCollapsed) selection.removeAllRanges()
+        }
         function bind() {
           $('splash-enter').onclick = enterApp
+          // 只有在开始下一次鼠标操作时，才清除已经存在的旧选区。
+          // 不使用 click，否则本次新产生的文本选区会在 click 阶段被立即清除。
+          document.addEventListener('mousedown', () => {
+            clearTextSelection()
+          })
           document.addEventListener('click', (e) => {
             if (
               !e.target.closest('.subpage') &&
@@ -2428,12 +2455,21 @@
             }
           }
           $('send-btn').onclick = send
+          $('message-input').addEventListener('input', autoResizeMessageInput)
           $('message-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key !== 'Enter' || e.isComposing) return
+            const isMobile = window.matchMedia('(max-width: 720px)').matches
+
+            // 手机端 Enter 始终换行，发送必须手动点击“发送”按钮。
+            if (isMobile) return
+
+            // 桌面端保持原有行为，Enter 发送，Shift+Enter 换行。
+            if (!e.shiftKey) {
               e.preventDefault()
               send()
             }
           })
+          autoResizeMessageInput()
           $('theme-btn').onclick = () => {
             ui.theme = ui.theme === 'dark' ? 'light' : 'dark'
             saveUi()
@@ -2489,6 +2525,8 @@
           })
           window.addEventListener('resize', () => {
             applyUi()
+            applyI18n()
+            autoResizeMessageInput()
           })
         }
         async function boot() {
