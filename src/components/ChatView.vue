@@ -388,7 +388,7 @@ onUnmounted(() => {
   background: transparent;
   outline: none;
   font-size: 0.9rem;
-  font-family: serif;
+  font-family: Literata, serif;
   padding: 4px 0;
   min-width: 0;
 }

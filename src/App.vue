@@ -38,7 +38,7 @@ import ReadingNotice from '@/components/ReadingNotice.vue'
 }
 
 body {
-  font-family: serif;
+  font-family: Literata, serif;
   overflow-x: hidden;
   background-color: white;
   min-height: 100vh;

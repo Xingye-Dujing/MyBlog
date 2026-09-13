@@ -310,7 +310,7 @@ function isExpanded(tag) {
   border: 1.5px solid #e8e8e8;
   border-radius: 18px;
   font-size: 0.9rem;
-  font-family: serif;
+  font-family: Literata, serif;
   background: #fafafa;
   outline: none;
   transition: all 0.2s;

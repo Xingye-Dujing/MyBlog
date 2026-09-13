@@ -109,7 +109,7 @@ function dismiss() {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: serif;
+  font-family: Literata, serif;
 }
 
 .notice-btn:hover {

@@ -134,7 +134,7 @@ function handleToggle(sectionId) {
   top: 0;
   overflow-y: auto;
   flex-shrink: 0;
-  font-family: serif;
+  font-family: Literata, serif;
 }
 
 .outline-header {
