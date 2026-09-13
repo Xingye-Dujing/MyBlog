@@ -3542,6 +3542,11 @@ notify pgrst, 'reload schema';</textarea
 
             DOM.canvasInner.appendChild(node)
 
+            // MathJax must run only after the node has entered the live DOM.
+            if (type === 'markdown' || type === 'math') {
+              NodeManager._scheduleMathTypeset(content)
+            }
+
             // Initialize TODO checkbox state from content strikethrough
             if (type === 'todo') {
               const cb = node.querySelector('.todo-checkbox')
@@ -3829,6 +3834,45 @@ notify pgrst, 'reload schema';</textarea
               })
             }
           },
+          _scheduleMathTypeset(container) {
+            if (!container) return
+
+            const run = () => {
+              if (!container.isConnected) {
+                requestAnimationFrame(run)
+                return
+              }
+
+              const rect = container.getBoundingClientRect()
+              if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+                requestAnimationFrame(run)
+                return
+              }
+
+              const typeset = () => {
+                if (!window.MathJax || typeof MathJax.typesetPromise !== 'function') {
+                  requestAnimationFrame(run)
+                  return
+                }
+
+                try {
+                  if (typeof MathJax.typesetClear === 'function') {
+                    MathJax.typesetClear([container])
+                  }
+                } catch (_) {}
+
+                MathJax.typesetPromise([container]).catch(() => {})
+              }
+
+              if (MathJax.startup && MathJax.startup.promise) {
+                MathJax.startup.promise.then(typeset).catch(() => {})
+              } else {
+                typeset()
+              }
+            }
+
+            requestAnimationFrame(() => requestAnimationFrame(run))
+          },
           _renderMarkdown(container) {
             const source = container.dataset.source || ''
             if (!source.trim()) {
@@ -3917,9 +3961,7 @@ notify pgrst, 'reload schema';</textarea
             }
             if (inList) flushList()
             container.innerHTML = result.join('')
-            if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
-              MathJax.typesetPromise([container]).catch(() => {})
-            }
+            NodeManager._scheduleMathTypeset(container)
           },
           _inlineMarkdown(text) {
             let s = escapeHtml(text)
@@ -3936,9 +3978,7 @@ notify pgrst, 'reload schema';</textarea
               return
             }
             container.innerHTML = `<div style="padding:8px 0;">$$${escapeHtml(source)}$$</div>`
-            if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
-              MathJax.typesetPromise([container]).catch(() => {})
-            }
+            NodeManager._scheduleMathTypeset(container)
           },
           refreshPlaceholders() {
             document.querySelectorAll('.node').forEach((node) => {
@@ -4148,6 +4188,10 @@ notify pgrst, 'reload schema';</textarea
               const input = document.createElement('input')
               input.type = 'text'
               input.className = 'node-title-edit'
+              input.autocomplete = 'off'
+              input.setAttribute('autocorrect', 'off')
+              input.setAttribute('autocapitalize', 'off')
+              input.spellcheck = false
               input.value = original
               textSpan.replaceWith(input)
               input.focus()
