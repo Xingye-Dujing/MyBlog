@@ -187,10 +187,12 @@
       }
       #menu-trigger:hover ~ #top-menu,
       #top-menu:hover,
-      #top-menu.pinned {
+      #top-menu.pinned,
+      body.submenu-open #top-menu {
         top: 0;
       }
-      body.menu-pinned #app-layout {
+      body.menu-pinned #app-layout,
+      body.submenu-open #app-layout {
         padding-top: 48px;
       }
 
@@ -1709,7 +1711,7 @@
       }
     </style>
   </head>
-  <body class="bg-void menu-pinned">
+  <body class="bg-void">
     <!-- SPLASH -->
     <div id="splash">
       <div class="splash-logo">ZENREDACT</div>
@@ -2136,7 +2138,7 @@
           bg: 'bg-void',
           tool: 'rect',
           textSelect: false,
-          pinned: true,
+          pinned: false,
           radius: 0,
           lockRedacts: true,
           showPageNum: true,
@@ -6896,6 +6898,7 @@
               $$('.dropdown.open').forEach(function (d) {
                 d.classList.remove('open')
               })
+              document.body.classList.remove('submenu-open')
             }
           })
 
@@ -6930,7 +6933,8 @@
           // so scrolling does not require a full redraw. Avoid doing any per-scroll
           // canvas work on large documents.
 
-          // Close dropdowns
+          // Close dropdowns. The temporary submenu state must be cleared together
+          // with the dropdown, otherwise app-layout keeps the 48px top offset.
           document.addEventListener('click', function (e) {
             if (
               !e.target.closest('.dropdown') &&
@@ -6939,6 +6943,7 @@
               $$('.dropdown.open').forEach(function (d) {
                 d.classList.remove('open')
               })
+              document.body.classList.remove('submenu-open')
             }
           })
 
@@ -6952,11 +6957,13 @@
               $$('.dropdown.open').forEach(function (d) {
                 d.classList.remove('open')
               })
+              document.body.classList.remove('submenu-open')
             } else if (a === 'setBg') {
               setBg(item.dataset.bg)
               $$('.dropdown.open').forEach(function (d) {
                 d.classList.remove('open')
               })
+              document.body.classList.remove('submenu-open')
             } else if (a === 'radiusPlus') {
               var radii = [0, 4, 8, 12, 16, 20, 24]
               var cur = radii.indexOf(S.radius || 0)
@@ -7066,15 +7073,9 @@
         }
 
         function toggleSettingsDropdown() {
-          if (!S.pinned) {
-            S.pinned = true
-            DOM.topMenu.classList.add('pinned')
-            $('#pin-btn').classList.add('pinned')
-            document.body.classList.add('menu-pinned')
-            saveSettings()
-          }
           var dd = $('#dd-settings')
           var open = dd.classList.toggle('open')
+          document.body.classList.toggle('submenu-open', open)
           $('#sv-theme').textContent = S.theme === 'dark' ? '深色' : '浅色'
           if (open) {
             var btn = document.querySelector('#top-menu [data-action="showSettings"]')

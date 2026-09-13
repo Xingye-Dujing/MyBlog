@@ -137,7 +137,8 @@
       }
       #menu-trigger:hover ~ #top-menu,
       #top-menu:hover,
-      #top-menu.pinned {
+      #top-menu.pinned,
+      body.submenu-open #top-menu {
         top: 0;
       }
       .menu-group {
@@ -455,8 +456,11 @@
         z-index: 1;
         transition: padding-top 0.38s cubic-bezier(0.16, 1, 0.3, 1);
       }
-      body:not(.menu-pinned) #main {
+      body:not(.menu-pinned):not(.submenu-open) #main {
         padding-top: 14px;
+      }
+      body.submenu-open:not(.menu-pinned) #main {
+        padding-top: 60px;
       }
       #cal-head {
         display: flex;
@@ -8336,6 +8340,7 @@ notify pgrst, 'reload schema';</textarea
             document.querySelectorAll('.dropdown.open').forEach(function (d) {
               softHide(d)
             })
+            document.body.classList.remove('submenu-open')
             document.querySelectorAll('.menu-btn.active').forEach(function (b) {
               if (['btn-month', 'btn-week', 'btn-list'].indexOf(b.id) < 0)
                 b.classList.remove('active')
@@ -8353,13 +8358,7 @@ notify pgrst, 'reload schema';</textarea
             dd.style.top = rect.bottom + 6 + 'px'
             dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 10)) + 'px'
             if (btn.classList.contains('menu-btn')) btn.classList.add('active')
-            if (!S.menuPinned) {
-              S.menuPinned = true
-              DOM.topMenu.classList.add('pinned')
-              DOM.pinBtn.classList.add('pinned')
-              document.body.classList.add('menu-pinned')
-              Settings.save()
-            }
+            document.body.classList.add('submenu-open')
           },
           updateSettingsUI() {
             document.getElementById('sv-theme').textContent = t('theme.' + S.theme)
@@ -8514,13 +8513,6 @@ notify pgrst, 'reload schema';</textarea
             Store.removePlanner(el.dataset.pid)
           },
           showSettings(el) {
-            if (!S.menuPinned) {
-              S.menuPinned = true
-              DOM.topMenu.classList.add('pinned')
-              DOM.pinBtn.classList.add('pinned')
-              document.body.classList.add('menu-pinned')
-              Settings.save()
-            }
             UIMgr.showDropdown('dd-settings', el)
           },
           togglePin() {
