@@ -35,8 +35,10 @@
     <script src="https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdmirror.com/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdmirror.com/npm/pptxviewjs@1.1.9/dist/PptxViewJS.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script src="https://cdn.jsdmirror.com/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
@@ -2196,7 +2198,7 @@
               <div style="font-size: 15px; letter-spacing: 1px; margin-bottom: 6px">
                 打开文档开始脱敏
               </div>
-              <div style="font-size: 11px">支持 TXT / PDF / DOCX / 图片 · 大文件流式读取</div>
+              <div style="font-size: 11px">支持 TXT / PDF / DOCX / PPTX / 图片 · 大文件流式读取</div>
             </div>
           </div>
         </div>
@@ -2267,7 +2269,7 @@
     <!-- DROP ZONE -->
     <div id="drop-zone">
       <div class="drop-text">释放文件以打开</div>
-      <div class="drop-hint">支持 TXT / PDF / DOCX / 图片 · 可拖入多张图片</div>
+      <div class="drop-hint">支持 TXT / PDF / DOCX / PPTX / 图片 · 可拖入多张图片</div>
     </div>
 
     <!-- SEARCH BAR -->
@@ -2320,7 +2322,7 @@
       </div>
     </div>
 
-    <input type="file" id="file-input" accept=".txt,.docx,.pdf" />
+    <input type="file" id="file-input" accept=".txt,.docx,.pdf,.pptx" />
     <input type="file" id="image-file-input" accept="image/*" multiple />
     <input type="file" id="image-folder-input" accept="image/*" webkitdirectory directory multiple />
 
@@ -4806,9 +4808,9 @@
         async function loadFile(file) {
           if (!file) return
           var ext = (file.name.split('.').pop() || '').toLowerCase()
-          var allowed = { txt: true, docx: true, pdf: true }
+          var allowed = { txt: true, docx: true, pdf: true, pptx: true }
           if (!allowed[ext]) {
-            notify('仅支持 TXT、DOCX、PDF 文件')
+            notify('仅支持 TXT、DOCX、PDF、PPTX 文件')
             log('拒绝加载不支持的文件格式：' + (ext ? '.' + ext : '无扩展名'), true)
             return
           }
@@ -4876,6 +4878,8 @@
 
             if (ext === 'pdf') {
               await loadPDF(file)
+            } else if (ext === 'pptx') {
+              await loadPPTX(file)
             } else if (ext === 'docx' || ext === 'doc') {
               await loadDOCX(file)
             } else {
@@ -4987,6 +4991,9 @@
         }
 
         function loadFileReadAsArrayBuffer(file) {
+          if (file && typeof file.arrayBuffer === 'function') {
+            return file.arrayBuffer()
+          }
           return new Promise(function (resolve, reject) {
             var r = new FileReader()
             r.onload = function (e) {
@@ -4997,6 +5004,88 @@
             }
             r.readAsArrayBuffer(file)
           })
+        }
+
+        /* ============================================================
+               PPTX LOADING — render every slide to an image, then reuse
+               the existing image/PDF pipeline.
+               ============================================================ */
+        async function loadPPTX(file) {
+          if (!window.PptxViewJS || !window.PptxViewJS.PPTXViewer) {
+            throw new Error('PPTX 渲染库未加载，请检查网络连接')
+          }
+
+          showProgress()
+          setProgress(0)
+          setLoadingInfo('解析 PPTX…')
+          DOM.statusLeft.textContent = '解析 PPTX: ' + file.name
+
+          var host = document.createElement('div')
+          host.style.cssText = 'position:fixed;left:-100000px;top:-100000px;width:1600px;height:900px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;'
+          var canvas = document.createElement('canvas')
+          canvas.width = 1600
+          canvas.height = 900
+          canvas.style.cssText = 'display:block;width:1600px;height:900px;'
+          host.appendChild(canvas)
+          document.body.appendChild(host)
+
+          try {
+            var Viewer = window.PptxViewJS.PPTXViewer
+            var viewer = new Viewer({ canvas: canvas })
+            await viewer.loadFile(file)
+            var count = Number(viewer.getSlideCount()) || 0
+            if (!count) throw new Error('PPTX 中没有可渲染的幻灯片')
+
+            var slideFiles = []
+            for (var i = 0; i < count; i++) {
+              setProgress(Math.round((i / count) * 90))
+              setLoadingInfo('渲染第 ' + (i + 1) + ' / ' + count + ' 张幻灯片…')
+              await viewer.goToSlide(i)
+              await viewer.render()
+
+              var blob = await new Promise(function (resolve, reject) {
+                canvas.toBlob(function (b) {
+                  if (b) resolve(b)
+                  else reject(new Error('第 ' + (i + 1) + ' 张幻灯片无法生成 PNG'))
+                }, 'image/png')
+              })
+
+              var slideFile = new File(
+                [blob],
+                (file.name.replace(/\.[^.]+$/, '') || 'PPTX') + '_第' + String(i + 1).padStart(3, '0') + '.png',
+                { type: 'image/png' },
+              )
+              slideFile.__zenImageWidth = canvas.width
+              slideFile.__zenImageHeight = canvas.height
+              slideFile.__zenImageRatio = canvas.width / Math.max(1, canvas.height)
+              slideFiles.push(slideFile)
+
+              await new Promise(function (resolve) { requestAnimationFrame(resolve) })
+            }
+
+            if (!slideFiles.length) throw new Error('PPTX 没有成功渲染任何幻灯片')
+
+            setProgress(94)
+            setLoadingInfo('将幻灯片图片载入现有图片处理流程…')
+            await buildPdfFromImages(slideFiles)
+
+            // buildPdfFromImages() opens a temporary PDF so the existing image/PDF
+            // page, mask, navigation and export pipeline is reused unchanged.
+            // The outer loadFile() restores the original PPTX filename/type after
+            // this function returns.
+            S.pptxSlideCount = count
+            S.pptxRenderedFiles = slideFiles
+            S.imageSourceFiles = slideFiles.slice()
+            S.imageSourceCount = slideFiles.length
+            S.imageSourceNames = slideFiles.map(function (f) { return f.name })
+            setProgress(100)
+            setLoadingInfo('PPTX 加载完成')
+            log('PPTX 已逐页渲染为 PNG，并进入现有图片/PDF处理流程：' + count + ' 张幻灯片')
+          } finally {
+            try {
+              if (host.parentNode) host.parentNode.removeChild(host)
+            } catch (_) {}
+          }
         }
 
         /* ============================================================
@@ -9298,7 +9387,7 @@
             initEvents()
             initColorPicker()
             createWorker()
-            log('系统就绪 · 支持 TXT / PDF / DOCX')
+            log('系统就绪 · 支持 TXT / PDF / DOCX / PPT')
             log('遮罩默认为「预览」状态，双击应用。')
             DOM.statusLeft.textContent = '就绪'
             DOM.statusRight.textContent = 'ZENREDACT'
