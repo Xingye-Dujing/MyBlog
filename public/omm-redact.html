@@ -38,7 +38,6 @@
     <script src="https://cdn.jsdmirror.com/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/pptxviewjs@1.1.9/dist/PptxViewJS.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
@@ -2634,7 +2633,7 @@
               : '第 ' + safeCurrent + ' / ' + safeTotal + ' 页'
           }
           if (DOM.exportProgressBar) DOM.exportProgressBar.style.width = pct + '%'
-          if (DOM.exportProgressHint) DOM.exportProgressHint.textContent = pct + '% · ' + safeCurrent + ' / ' + safeTotal
+          if (DOM.exportProgressHint) DOM.exportProgressHint.textContent = safeCurrent + ' / ' + safeTotal + ' 页'
         }
 
         function resetExportProgress(title, stage) {
@@ -4874,12 +4873,19 @@
             S.imageSourceFiles = []
             S.pdfMode = false
             S.docxHtml = null
+            S.pptxMode = false
+            S.pptxSlideCount = 0
+            S.pptxRenderedFiles = []
             resetImageNavState()
 
             if (ext === 'pdf') {
               await loadPDF(file)
             } else if (ext === 'pptx') {
               await loadPPTX(file)
+              // loadPPTX temporarily opens a generated PDF internally. Restore the
+              // original source type while keeping pdfMode=true for the shared renderer.
+              S.fileType = 'pptx'
+              S.pptxMode = true
             } else if (ext === 'docx' || ext === 'doc') {
               await loadDOCX(file)
             } else {
@@ -4990,20 +4996,14 @@
           })
         }
 
-        function loadFileReadAsArrayBuffer(file) {
-          if (file && typeof file.arrayBuffer === 'function') {
-            return file.arrayBuffer()
+        async function loadFileReadAsArrayBuffer(file) {
+          if (!file) throw new Error('无效的文件对象')
+          if (typeof file.arrayBuffer === 'function') return await file.arrayBuffer()
+          if (file instanceof ArrayBuffer) return file
+          if (ArrayBuffer.isView(file)) {
+            return file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength)
           }
-          return new Promise(function (resolve, reject) {
-            var r = new FileReader()
-            r.onload = function (e) {
-              resolve(e.target.result)
-            }
-            r.onerror = function () {
-              reject(new Error('读取失败'))
-            }
-            r.readAsArrayBuffer(file)
-          })
+          throw new Error('当前对象不支持 ArrayBuffer 读取')
         }
 
         /* ============================================================
@@ -5073,6 +5073,7 @@
             // page, mask, navigation and export pipeline is reused unchanged.
             // The outer loadFile() restores the original PPTX filename/type after
             // this function returns.
+            S.pptxMode = true
             S.pptxSlideCount = count
             S.pptxRenderedFiles = slideFiles
             S.imageSourceFiles = slideFiles.slice()
@@ -7686,13 +7687,18 @@
           })
         }
 
-        function blobToDataUri(blob) {
-          return new Promise(function (resolve, reject) {
-            var reader = new FileReader()
-            reader.onload = function () { resolve(reader.result) }
-            reader.onerror = function () { reject(new Error('读取导出图片失败')) }
-            reader.readAsDataURL(blob)
-          })
+        async function blobToDataUri(blob) {
+          if (!blob) throw new Error('无效的图片数据')
+          if (typeof blob === 'string' && /^data:/i.test(blob)) return blob
+          if (typeof blob.arrayBuffer !== 'function') throw new Error('当前图片对象不支持二进制读取')
+          var ab = await blob.arrayBuffer()
+          var bytes = new Uint8Array(ab)
+          var binary = ''
+          var chunkSize = 0x8000
+          for (var i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, bytes.length)))
+          }
+          return 'data:' + String(blob.type || 'application/octet-stream') + ';base64,' + btoa(binary)
         }
 
         async function createSourceImageExportBlob(file, pageIdx) {
@@ -7768,7 +7774,15 @@
         async function renderAllPagesForImageExport() {
           var count = Math.max(0, S.totalPages || S.pages.length || 0)
           var canvases = []
-          if (S.fileType === 'docx') {
+          if (S.pptxMode && S.pdfMode) {
+            for (var pxi = 0; pxi < count; pxi++) {
+              var pxc = await createPdfImageCanvas(pxi)
+              if (pxc) canvases.push(pxc)
+              setProgress(Math.round(((pxi + 1) / Math.max(1, count)) * 85))
+              setExportProgress(pxi + 1, count, '正在渲染第 ' + (pxi + 1) + ' 页', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
+            }
+          } else if (S.fileType === 'docx') {
             var docxPageCount = S.totalPages || 0
             for (var di = 0; di < docxPageCount; di++) {
               var dcanvas = await createDocxExportPageCanvas(di)
@@ -7811,227 +7825,339 @@
           return canvases
         }
 
-        async function exportImage() {
-          DOM.exportOverlay.classList.add('active')
-          DOM.statusLeft.textContent = '生成全部页面图片压缩包…'
-          try {
-            var base = S.fileName.replace(/\.[^.]+$/, '') || 'document'
-            resetExportProgress('正在生成脱敏图片', '准备处理图片…')
-            if (!window.JSZip) throw new Error('压缩包生成库未加载')
-            var zip = new JSZip()
-            var imageFiles = Array.isArray(S.imageSourceFiles) ? S.imageSourceFiles.slice() : []
-            var count = Math.max(0, S.totalPages || S.pages.length || 0)
+        function createObjectUrlForBlob(blob) {
+          if (!blob) return ''
+          try { return URL.createObjectURL(blob) } catch (_) { return '' }
+        }
 
-            // Image-folder imports keep their original File objects. Export them
-            // directly so an untouched JPEG/PNG is never decoded and re-encoded.
-            // Only pages with applied masks are raster-composited.
-            if (imageFiles.length === count && imageFiles.length > 0) {
-              await exportImageCollectionDirectly(imageFiles, base, zip)
-            } else {
-              var canvases = await renderAllPagesForImageExport()
-              if (!canvases.length) throw new Error('没有可导出的页面')
-              setExportProgress(0, canvases.length, '页面渲染完成，准备打包…', '正在生成脱敏图片')
-              for (var i = 0; i < canvases.length; i++) {
-                var blob = await canvasToBlob(canvases[i])
-                zip.file(base + '_第' + String(i + 1).padStart(3, '0') + '页.png', blob)
-                setProgress(Math.round(((i + 1) / canvases.length) * 85))
-                setExportProgress(i + 1, canvases.length, '写入第 ' + (i + 1) + ' 页图片', '正在生成脱敏图片')
-                canvases[i].width = 1
-                canvases[i].height = 1
-                await new Promise(function (r) { requestAnimationFrame(r) })
-              }
-            }
+        async function createPptxRasterExportBlob(file, pageIdx, mime, quality) {
+          var img = await loadImageElement(file)
+          var w = Math.max(1, Number(file.__zenImageWidth) || img.naturalWidth || 1600)
+          var h = Math.max(1, Number(file.__zenImageHeight) || img.naturalHeight || 900)
+          var canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          var ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false })
+          if (!ctx) throw new Error('无法创建 PPTX 页面导出画布')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, w, h)
+          ctx.drawImage(img, 0, 0, w, h)
 
-            setExportProgress(100, 100, '正在完成 ZIP…', '正在生成脱敏图片')
-            // Source images are already compressed formats. ZIP deflate normally
-            // adds CPU cost with little benefit here, so STORE keeps the archive
-            // size close to the original image total and finishes much faster.
-            var zipBlob = await zip.generateAsync({
-              type: 'blob',
-              compression: 'STORE',
-            }, function (metadata) {
-              var pct = Math.round(metadata.percent || 0)
-              setExportProgress(pct, 100, '正在打包 ZIP · ' + pct + '%', '正在生成脱敏图片')
-              setProgress(pct)
+          var applied = S.redacts.filter(function (r) {
+            return r.pageIdx === pageIdx && r.applied
+          })
+          applied.forEach(function (r) {
+            var rr = getRedactPixelRect(r, w, h)
+            if (rr.w < 1 || rr.h < 1) return
+            drawRedactRect(ctx, rr, r.style || S.redactStyle || {}, true)
+            ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+            ctx.lineWidth = Math.max(0.5, Math.min(2, Math.min(w, h) / 2000))
+            ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h)
+          })
+
+          var blob = await new Promise(function (resolve, reject) {
+            canvas.toBlob(function (b) {
+              if (b) resolve(b)
+              else reject(new Error('PPTX 页面图片编码失败'))
+            }, mime || 'image/jpeg', quality == null ? 0.82 : quality)
+          })
+
+          if (img && img.__zenObjectUrl) {
+            try { URL.revokeObjectURL(img.__zenObjectUrl) } catch (_) {}
+            img.__zenObjectUrl = ''
+          }
+          canvas.width = 1
+          canvas.height = 1
+          return blob
+        }
+
+        /* ============================================================
+               ZIP EXPORT — native STORE writer
+               JSZip remains available to the PPTX renderer, but export no longer
+               passes Blob/File objects through JSZip. This avoids browser/runtime
+               implementations where JSZip's FileReader path calls a missing
+               readAsArrayBuffer method.
+               ============================================================ */
+        var ZIP_CRC_TABLE = (function () {
+          var table = new Uint32Array(256)
+          for (var n = 0; n < 256; n++) {
+            var c = n
+            for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)
+            table[n] = c >>> 0
+          }
+          return table
+        })()
+
+        function zipCrc32(bytes) {
+          var crc = 0xFFFFFFFF
+          for (var i = 0; i < bytes.length; i++) {
+            crc = ZIP_CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8)
+          }
+          return (crc ^ 0xFFFFFFFF) >>> 0
+        }
+
+        function zipWriteU16(view, offset, value) {
+          view.setUint16(offset, value & 0xFFFF, true)
+        }
+
+        function zipWriteU32(view, offset, value) {
+          view.setUint32(offset, value >>> 0, true)
+        }
+
+        function zipUtf8(value) {
+          return new TextEncoder().encode(String(value == null ? '' : value))
+        }
+
+        async function zipEntryBytes(data) {
+          if (data == null) return new Uint8Array(0)
+          if (data instanceof Uint8Array) return data
+          if (data instanceof ArrayBuffer) return new Uint8Array(data)
+          if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+          if (typeof Blob !== 'undefined' && data instanceof Blob) return new Uint8Array(await data.arrayBuffer())
+          if (typeof data === 'string') return zipUtf8(data)
+          if (typeof data.arrayBuffer === 'function') return new Uint8Array(await data.arrayBuffer())
+          throw new Error('ZIP 数据类型不受支持')
+        }
+
+        async function createStoreZipBlob(entries, onProgress) {
+          var files = []
+          var localParts = []
+          var centralParts = []
+          var localOffset = 0
+          var total = entries.length
+
+          for (var i = 0; i < total; i++) {
+            var entry = entries[i]
+            var nameBytes = zipUtf8(entry.name)
+            var dataBytes = await zipEntryBytes(entry.data)
+            var crc = zipCrc32(dataBytes)
+            var local = new Uint8Array(30 + nameBytes.length)
+            var lv = new DataView(local.buffer)
+            zipWriteU32(lv, 0, 0x04034B50)
+            zipWriteU16(lv, 4, 20)
+            zipWriteU16(lv, 6, 0x0800)
+            zipWriteU16(lv, 8, 0)
+            zipWriteU16(lv, 10, 0)
+            zipWriteU16(lv, 12, 0)
+            zipWriteU32(lv, 14, crc)
+            zipWriteU32(lv, 18, dataBytes.length)
+            zipWriteU32(lv, 22, dataBytes.length)
+            zipWriteU16(lv, 26, nameBytes.length)
+            zipWriteU16(lv, 28, 0)
+            local.set(nameBytes, 30)
+            localParts.push(local, dataBytes)
+
+            var central = new Uint8Array(46 + nameBytes.length)
+            var cv = new DataView(central.buffer)
+            zipWriteU32(cv, 0, 0x02014B50)
+            zipWriteU16(cv, 4, 20)
+            zipWriteU16(cv, 6, 20)
+            zipWriteU16(cv, 8, 0x0800)
+            zipWriteU16(cv, 10, 0)
+            zipWriteU16(cv, 12, 0)
+            zipWriteU16(cv, 14, 0)
+            zipWriteU32(cv, 16, crc)
+            zipWriteU32(cv, 20, dataBytes.length)
+            zipWriteU32(cv, 24, dataBytes.length)
+            zipWriteU16(cv, 28, nameBytes.length)
+            zipWriteU16(cv, 30, 0)
+            zipWriteU16(cv, 32, 0)
+            zipWriteU16(cv, 34, 0)
+            zipWriteU16(cv, 36, 0)
+            zipWriteU32(cv, 38, 0)
+            zipWriteU32(cv, 42, localOffset)
+            central.set(nameBytes, 46)
+            centralParts.push(central)
+
+            localOffset += local.length + dataBytes.length
+            files.push({ name: entry.name, size: dataBytes.length })
+            if (onProgress) onProgress(i + 1, total)
+            await new Promise(function (r) { requestAnimationFrame(r) })
+          }
+
+          var centralSize = centralParts.reduce(function (sum, part) { return sum + part.length }, 0)
+          var centralOffset = localOffset
+          var eocd = new Uint8Array(22)
+          var ev = new DataView(eocd.buffer)
+          zipWriteU32(ev, 0, 0x06054B50)
+          zipWriteU16(ev, 4, 0)
+          zipWriteU16(ev, 6, 0)
+          zipWriteU16(ev, 8, total)
+          zipWriteU16(ev, 10, total)
+          zipWriteU32(ev, 12, centralSize)
+          zipWriteU32(ev, 16, centralOffset)
+          zipWriteU16(ev, 20, 0)
+
+          return new Blob(localParts.concat(centralParts, [eocd]), { type: 'application/zip' })
+        }
+
+        async function exportPptxImageCollectionDirectly(base, entries) {
+          var files = Array.isArray(S.pptxRenderedFiles) ? S.pptxRenderedFiles : []
+          var count = files.length
+          if (!count) throw new Error('没有可导出的 PPTX 幻灯片图片')
+          for (var i = 0; i < count; i++) {
+            setProgress(Math.round((i / count) * 85))
+            setExportProgress(i + 1, count, '正在导出第 ' + (i + 1) + ' / ' + count + ' 张幻灯片', '正在生成脱敏图片')
+            var blob = await createPptxRasterExportBlob(files[i], i, 'image/jpeg', 0.9)
+            entries.push({
+              name: base + '_第' + String(i + 1).padStart(3, '0') + '.jpg',
+              data: blob,
             })
-            downloadBlob(zipBlob, base + '_图片.zip')
-            DOM.exportOverlay.classList.remove('active')
-            notify('已导出图片压缩包')
-            log(
-              '图片批量导出成功：无遮罩图片保留原始文件字节；100% 脱敏图片先在原始分辨率合成后再写入 ZIP，确保遮罩区域不可从导出图片中移除',
-            )
-            DOM.statusLeft.textContent = '图片导出完成'
-          } catch (err) {
-            DOM.exportOverlay.classList.remove('active')
-            handleError('图片导出失败', err)
+            await new Promise(function (r) { requestAnimationFrame(r) })
           }
         }
 
-        async function exportPPTX() {
-          if (!window.PptxGenJS) {
-            notify('PPTX 生成库未加载，请检查网络连接')
-            return
-          }
+        function xmlEscape(value) {
+          return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;')
+        }
 
+        function buildRasterPptxXmlPackage(slideCount, slideWEmu, slideHEmu, title) {
+          var contentTypes = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+            '<Default Extension="xml" ContentType="application/xml"/>',
+            '<Default Extension="jpeg" ContentType="image/jpeg"/>',
+            '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>',
+            '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>',
+            '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>',
+            '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>',
+          ]
+          for (var i = 1; i <= slideCount; i++) {
+            contentTypes.push('<Override PartName="/ppt/slides/slide' + i + '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>')
+          }
+          contentTypes.push('</Types>')
+
+          var rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>' +
+            '</Relationships>'
+
+          var pres = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1" autoCompressPictures="1" serverZoom="1">' +
+            '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
+            '<p:sldIdLst>'
+          for (var si = 1; si <= slideCount; si++) {
+            pres += '<p:sldId id="' + (255 + si) + '" r:id="rId' + (si + 1) + '"/>'
+          }
+          pres += '</p:sldIdLst>' +
+            '<p:sldSz cx="' + slideWEmu + '" cy="' + slideHEmu + '" type="screen16x9"/>' +
+            '<p:notesSz cx="6858000" cy="9144000"/>' +
+            '<p:defaultTextStyle><a:defPPr/><a:lvl1pPr marL="0" algn="l"><a:defRPr/></a:lvl1pPr></p:defaultTextStyle>' +
+            '</p:presentation>'
+
+          var presRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>'
+          for (var pi = 1; pi <= slideCount; pi++) {
+            presRels += '<Relationship Id="rId' + (pi + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide' + pi + '.xml"/>'
+          }
+          presRels += '</Relationships>'
+
+          var theme = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme"><a:themeElements>' +
+            '<a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>' +
+            '<a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>' +
+            '<a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>' +
+            '<a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>' +
+            '<a:fontScheme name="Office"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>' +
+            '<a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle/><a:effectStyle/><a:effectStyle/></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="lt1"/></a:solidFill><a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="lt1"/></a:gs><a:gs pos="100000"><a:schemeClr val="lt2"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill></a:bgFillStyleLst></a:fmtScheme>' +
+            '</a:themeElements></a:theme>'
+
+          var layout = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>'
+          var layoutRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>'
+          var master = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="Master"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles><p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" folHlink="folHlink" hlink="hlink" tx1="dk1" tx2="dk2"/><p:hf/></p:sldMaster>'
+          var masterRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>'
+
+          return {
+            '[Content_Types].xml': contentTypes.join(''),
+            '_rels/.rels': rootRels,
+            'ppt/presentation.xml': pres,
+            'ppt/_rels/presentation.xml.rels': presRels,
+            'ppt/theme/theme1.xml': theme,
+            'ppt/slideLayouts/slideLayout1.xml': layout,
+            'ppt/slideLayouts/_rels/slideLayout1.xml.rels': layoutRels,
+            'ppt/slideMasters/slideMaster1.xml': master,
+            'ppt/slideMasters/_rels/slideMaster1.xml.rels': masterRels,
+          }
+        }
+
+        function addRasterSlideToPptx(entries, index, imageBlob, slideWEmu, slideHEmu, slideTitle) {
+          var slideNo = index + 1
+          var mediaName = 'ppt/media/image' + slideNo + '.jpg'
+          var slideName = 'ppt/slides/slide' + slideNo + '.xml'
+          var relName = 'ppt/slides/_rels/slide' + slideNo + '.xml.rels'
+          entries.push({ name: mediaName, data: imageBlob })
+          var spId = 2
+          var slideXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+            '<p:cSld name="' + xmlEscape(slideTitle || ('Slide ' + slideNo)) + '"><p:spTree>' +
+            '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+            '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' +
+            '<p:pic><p:nvPicPr><p:cNvPr id="' + spId + '" name="Slide ' + slideNo + '"/><p:cNvPicPr><a:picLocks noChangeAspect="1" noChangeArrowheads="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>' +
+            '<p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>' +
+            '<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + slideWEmu + '" cy="' + slideHEmu + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>' +
+            '</p:pic></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>'
+          var relXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image' + slideNo + '.jpg"/></Relationships>'
+          entries.push({ name: slideName, data: slideXml })
+          entries.push({ name: relName, data: relXml })
+        }
+
+        async function exportPPTX() {
           var count = Math.max(0, S.totalPages || S.pages.length || 0)
           if (!count) {
             notify('没有可导出的页面')
             return
           }
-
           DOM.exportOverlay.classList.add('active')
           DOM.statusLeft.textContent = '生成 PPTX…'
           resetExportProgress('正在生成脱敏 PPTX', '准备处理页面…')
           try {
-            var PptxCtor = window.PptxGenJS
-            var pptx = new PptxCtor()
-            pptx.author = 'ZENREDACT'
-            pptx.subject = S.fileName || 'document'
-            pptx.title = S.fileName || 'document'
-            pptx.company = 'ZENREDACT'
-            pptx.lang = 'zh-CN'
-            pptx.defineLayout({ name: 'ZEN_WIDE', width: 13.333333, height: 7.5 })
-            pptx.defineLayout({ name: 'ZEN_STANDARD', width: 10, height: 7.5 })
+            var entries = []
+            var slideWEmu = 12192000
+            var slideHEmu = 6858000
+            var parts = buildRasterPptxXmlPackage(count, slideWEmu, slideHEmu, S.fileName || 'document')
+            Object.keys(parts).forEach(function (name) { entries.push({ name: name, data: parts[name] }) })
 
-            var slideRatio = 16 / 9
-            var imageFiles = Array.isArray(S.imageSourceFiles) ? S.imageSourceFiles.slice() : []
-
-            // Image collections use original files when possible. A page containing
-            // any applied 100% redaction is handled separately and flattened before
-            // it enters the PPTX, so the source pixels cannot survive as another layer.
-            if (imageFiles.length === count) {
-              var imageRatios = []
-              for (var ri = 0; ri < imageFiles.length; ri++) {
-                var rf = imageFiles[ri]
-                var cachedW = rf.__zenImageWidth || 0
-                var cachedH = rf.__zenImageHeight || 0
-                if (cachedW && cachedH) imageRatios.push(cachedW / cachedH)
-                else imageRatios.push(await getImageFileRatio(rf))
-              }
-              if (imageRatios.length && imageRatios.every(function (r) { return Math.abs(r - 4 / 3) / (4 / 3) <= 0.0005 })) {
-                slideRatio = 4 / 3
-              } else if (imageRatios.length && imageRatios.every(function (r) { return Math.abs(r - 16 / 9) / (16 / 9) <= 0.0005 })) {
-                slideRatio = 16 / 9
-              }
-            }
-
-            pptx.layout = slideRatio === 4 / 3 ? 'ZEN_STANDARD' : 'ZEN_WIDE'
-            var slideW = slideRatio === 4 / 3 ? 10 : 13.333333
-            var slideH = 7.5
-
-            async function addImageSlideFromFile(file, index) {
-              var slide = pptx.addSlide()
-              slide.background = { color: 'FFFFFF' }
-              var data = await fileToDataUri(file)
-              var ratio = await getImageFileRatio(file)
-              var w = slideW
-              var h = slideW / ratio
-              var x = 0
-              var y = (slideH - h) / 2
-              if (h > slideH) {
-                h = slideH
-                w = slideH * ratio
-                x = (slideW - w) / 2
-                y = 0
-              }
-
-              var pageRedacts = getAppliedPageRedactions(index)
-
-              // A 100% opacity redaction is security-sensitive. Never keep the
-              // original image plus a removable PowerPoint shape on the same slide.
-              // Flatten the image first, so the original pixels are not stored in
-              // the PPTX package as a separate recoverable layer.
-              if (hasOpaqueAppliedRedactionsOnPage(index)) {
-                var flattenedBlob = await createSourceImageExportBlob(file, index)
-                data = await blobToDataUri(flattenedBlob)
-                slide.addImage({ data: data, x: x, y: y, w: w, h: h })
-              } else {
-                // Semi-transparent masks remain editable/highlight-like in PPTX.
-                slide.addImage({ data: data, x: x, y: y, w: w, h: h })
-
-                pageRedacts.forEach(function (r) {
-                  var nx1 = Math.max(0, Math.min(1, Number(r.nx1) || 0))
-                  var ny1 = Math.max(0, Math.min(1, Number(r.ny1) || 0))
-                  var nx2 = Math.max(0, Math.min(1, Number(r.nx2) || 0))
-                  var ny2 = Math.max(0, Math.min(1, Number(r.ny2) || 0))
-                  var sx = Math.min(nx1, nx2)
-                  var sy = Math.min(ny1, ny2)
-                  var sw = Math.abs(nx2 - nx1)
-                  var sh = Math.abs(ny2 - ny1)
-                  if (sw <= 0 || sh <= 0) return
-
-                  var style = r.style || S.redactStyle || {}
-                  var color = hexToCssColor(style.color || '#000000').replace('#', '').toUpperCase()
-                  var opacity = Math.max(0.1, Math.min(1, (Number(style.opacity) || 100) / 100))
-                  var transparency = Math.round((1 - opacity) * 100)
-                  var shapeType = (pptx.ShapeType && style.radius > 0 && pptx.ShapeType.roundRect)
-                    ? pptx.ShapeType.roundRect
-                    : (pptx.ShapeType ? pptx.ShapeType.rect : 'rect')
-                  slide.addShape(shapeType, {
-                    x: x + sx * w,
-                    y: y + sy * h,
-                    w: sw * w,
-                    h: sh * h,
-                    fill: { color: color, transparency: transparency },
-                    line: { color: color, transparency: 100 },
-                  })
-                })
-              }
-
-              setProgress(Math.round(((index + 1) / count) * 100))
-            }
-
-            async function addRenderedSlide(index) {
-              var canvas = null
-              if (S.fileType === 'docx') canvas = await createDocxExportPageCanvas(index)
-              else if (S.fileType === 'txt') canvas = await createTxtExportPageCanvas(index)
-              else if (S.pdfMode) canvas = await createPdfImageCanvas(index)
-              else {
-                var pageEl = getPageEl(index)
-                if (pageEl) canvas = await renderElementToCanvas(pageEl, pageEl.offsetWidth || 794, pageEl.offsetHeight || 1120)
-              }
-              if (!canvas) return
-              var slide = pptx.addSlide()
-              slide.background = { color: 'FFFFFF' }
-              var ratio = canvas.width / Math.max(1, canvas.height)
-              var w = slideW
-              var h = w / ratio
-              var x = 0
-              var y = (slideH - h) / 2
-              if (h > slideH) {
-                h = slideH
-                w = h * ratio
-                x = (slideW - w) / 2
-                y = 0
-              }
-              slide.addImage({ data: canvas.toDataURL('image/png'), x: x, y: y, w: w, h: h })
-              setProgress(Math.round(((index + 1) / count) * 100))
-               setExportProgress(index + 1, count, '正在写入第 ' + (index + 1) + ' 张幻灯片', '正在生成脱敏 PPTX')
-            }
-
-            if (imageFiles.length === count) {
-              for (var ii = 0; ii < imageFiles.length; ii++) {
-                await addImageSlideFromFile(imageFiles[ii], ii)
+            if (S.pptxMode) {
+              var pptxFiles = Array.isArray(S.pptxRenderedFiles) ? S.pptxRenderedFiles : []
+              if (pptxFiles.length !== count) throw new Error('PPTX 页面缓存不完整，无法导出')
+              for (var i = 0; i < count; i++) {
+                setProgress(Math.round((i / count) * 92))
+                setExportProgress(i + 1, count, '正在生成第 ' + (i + 1) + ' / ' + count + ' 张幻灯片', '正在生成 PPTX')
+                var slideBlob = await createPptxRasterExportBlob(pptxFiles[i], i, 'image/jpeg', 0.82)
+                addRasterSlideToPptx(entries, i, slideBlob, slideWEmu, slideHEmu, 'Slide ' + (i + 1))
                 await new Promise(function (r) { requestAnimationFrame(r) })
               }
             } else {
-              for (var pi = 0; pi < count; pi++) {
-                await addRenderedSlide(pi)
+              var canvases = await renderAllPagesForImageExport()
+              if (canvases.length !== count) throw new Error('页面渲染不完整，无法导出 PPTX')
+              for (var ci = 0; ci < canvases.length; ci++) {
+                setProgress(Math.round((ci / count) * 92))
+                setExportProgress(ci + 1, count, '正在生成第 ' + (ci + 1) + ' / ' + count + ' 张幻灯片', '正在生成 PPTX')
+                var cblob = await new Promise(function (resolve, reject) {
+                  canvases[ci].toBlob(function (b) { b ? resolve(b) : reject(new Error('页面图片编码失败')) }, 'image/jpeg', 0.82)
+                })
+                addRasterSlideToPptx(entries, ci, cblob, slideWEmu, slideHEmu, 'Slide ' + (ci + 1))
+                canvases[ci].width = 1
+                canvases[ci].height = 1
                 await new Promise(function (r) { requestAnimationFrame(r) })
               }
             }
 
-            var base = (S.fileName.replace(/\.[^.]+$/, '') || 'document') + '_PPTX'
-            await pptx.writeFile({ fileName: base + '.pptx' })
+            if (DOM.exportProgressTitle) DOM.exportProgressTitle.textContent = '正在完成 PPTX'
+            if (DOM.exportProgressSubtitle) DOM.exportProgressSubtitle.textContent = '正在封装文件…'
+            if (DOM.exportProgressHint) DOM.exportProgressHint.textContent = count + ' / ' + count + ' 页'
+            if (DOM.exportProgressBar) DOM.exportProgressBar.style.width = '100%'
+            var out = await createStoreZipBlob(entries, function () {})
+            downloadBlob(out, (S.fileName.replace(/\.[^.]+$/, '') || 'document') + '_PPTX.pptx')
             DOM.exportOverlay.classList.remove('active')
             notify('PPTX 已导出：' + count + ' 张幻灯片')
-            log(
-              'PPTX 导出成功：' +
-                count +
-                ' 张幻灯片' +
-                (slideRatio === 16 / 9 ? ' · 16:9' : ' · 4:3') +
-                ' · 100% 脱敏页面已栅格化合成，不保留可移除的原图层',
-            )
+            log('PPTX 导出成功：使用 JPEG 栅格化页面封装，且不再经过 JSZip 的 FileReader 路径')
             DOM.statusLeft.textContent = 'PPTX导出完成'
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
@@ -8039,13 +8165,86 @@
           }
         }
 
-        function fileToDataUri(file) {
-          return new Promise(function (resolve, reject) {
-            var reader = new FileReader()
-            reader.onload = function () { resolve(reader.result) }
-            reader.onerror = function () { reject(new Error('读取图片失败：' + file.name)) }
-            reader.readAsDataURL(file)
-          })
+        async function exportImage() {
+          DOM.exportOverlay.classList.add('active')
+          DOM.statusLeft.textContent = '生成全部页面图片压缩包…'
+          try {
+            var base = S.fileName.replace(/\.[^.]+$/, '') || 'document'
+            resetExportProgress('正在生成脱敏图片', '准备处理图片…')
+            var entries = []
+
+            // PPTX imports are already rasterized into document pages. Export from
+            // those rendered page images directly. No JSZip FileReader path is used.
+            if (S.pptxMode) {
+              await exportPptxImageCollectionDirectly(base, entries)
+            } else {
+              var imageFiles = Array.isArray(S.imageSourceFiles) ? S.imageSourceFiles.slice() : []
+              var count = Math.max(0, S.totalPages || S.pages.length || 0)
+              if (imageFiles.length === count && imageFiles.length > 0) {
+                for (var i = 0; i < imageFiles.length; i++) {
+                  setExportProgress(i + 1, count, '正在处理第 ' + (i + 1) + ' / ' + count + ' 张图片', '正在生成脱敏图片')
+                  var sourceBlob = await createSourceImageExportBlob(imageFiles[i], i)
+                  var sourceMime = getImageExportMimeType(imageFiles[i])
+                  var sourceExt = sourceMime === 'image/jpeg' ? 'jpg' : sourceMime === 'image/webp' ? 'webp' : 'png'
+                  var sourceStem = (imageFiles[i].name || ('第' + String(i + 1).padStart(3, '0'))).replace(/\.[^.]+$/, '')
+                  entries.push({
+                    name: sourceStem + (hasAppliedRedactionsOnPage(i) ? '_脱敏' : '') + '.' + sourceExt,
+                    data: sourceBlob,
+                  })
+                  setProgress(Math.round(((i + 1) / Math.max(1, count)) * 85))
+                  await new Promise(function (r) { requestAnimationFrame(r) })
+                }
+              } else {
+                var canvases = await renderAllPagesForImageExport()
+                if (!canvases.length) throw new Error('没有可导出的页面')
+                for (var ci = 0; ci < canvases.length; ci++) {
+                  var outBlob = await canvasToBlob(canvases[ci])
+                  entries.push({ name: base + '_第' + String(ci + 1).padStart(3, '0') + '页.png', data: outBlob })
+                  canvases[ci].width = 1
+                  canvases[ci].height = 1
+                  setProgress(Math.round(((ci + 1) / canvases.length) * 85))
+                  setExportProgress(ci + 1, canvases.length, '写入第 ' + (ci + 1) + ' 页图片', '正在生成脱敏图片')
+                  await new Promise(function (r) { requestAnimationFrame(r) })
+                }
+              }
+            }
+
+            setExportProgress(100, 100, '正在完成 ZIP…', '正在生成脱敏图片')
+            var zipBlob = await createStoreZipBlob(entries, function (done, total) {
+              var pct = Math.round((done / Math.max(1, total)) * 100)
+              setExportProgress(pct, 100, '正在打包 ZIP · ' + pct + '%', '正在生成脱敏图片')
+              setProgress(pct)
+            })
+            downloadBlob(zipBlob, base + '_图片.zip')
+            DOM.exportOverlay.classList.remove('active')
+            notify('已导出图片压缩包')
+            log('图片批量导出成功：使用原图或当前渲染结果生成 ZIP，不经过 JSZip 的 FileReader 路径')
+            DOM.statusLeft.textContent = '图片导出完成'
+          } catch (err) {
+            DOM.exportOverlay.classList.remove('active')
+            handleError('图片导出失败', err)
+          }
+        }
+
+        async function fileToDataUri(file) {
+          if (!file) throw new Error('无效的图片文件')
+          if (typeof file === 'string' && /^data:/i.test(file)) return file
+          if (typeof file === 'string' && /^blob:/i.test(file)) {
+            var blobResponse = await fetch(file)
+            return blobToDataUri(await blobResponse.blob())
+          }
+          if (file && typeof file.arrayBuffer === 'function') {
+            var ab = await file.arrayBuffer()
+            var bytes = new Uint8Array(ab)
+            var binary = ''
+            var chunkSize = 0x8000
+            for (var i = 0; i < bytes.length; i += chunkSize) {
+              binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, bytes.length)))
+            }
+            var mime = String(file.type || 'application/octet-stream')
+            return 'data:' + mime + ';base64,' + btoa(binary)
+          }
+          throw new Error('当前图片对象不支持二进制读取：' + String(file.name || 'unknown'))
         }
 
         function getImageFileRatio(file) {
