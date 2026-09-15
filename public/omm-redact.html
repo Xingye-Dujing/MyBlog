@@ -7774,10 +7774,40 @@
         async function renderAllPagesForImageExport() {
           var count = Math.max(0, S.totalPages || S.pages.length || 0)
           var canvases = []
+          if (!count) return canvases
+
+          // TXT / DOM pages can be rebuilt asynchronously by the normal renderer.
+          // Before exporting, make sure every logical page has a corresponding DOM
+          // node. The old implementation silently skipped missing nodes, which later
+          // surfaced as the misleading "页面渲染不完整" error.
+          async function ensurePageDomReady() {
+            if (!DOM.docPages) return
+            var expected = count
+            var actual = DOM.docPages.querySelectorAll('.doc-page[data-page-idx]').length
+            if (actual >= expected) return
+
+            renderDocument()
+            await new Promise(function (r) { requestAnimationFrame(r) })
+            await new Promise(function (r) { requestAnimationFrame(r) })
+
+            actual = DOM.docPages.querySelectorAll('.doc-page[data-page-idx]').length
+            if (actual < expected) {
+              // One last synchronous rebuild handles the rare case where a layout
+              // update raced the first export attempt.
+              renderDocument()
+              await new Promise(function (r) { requestAnimationFrame(r) })
+            }
+          }
+
+          if (!S.pptxMode && !S.pdfMode && (S.fileType === 'txt' || !S.docxHtml)) {
+            await ensurePageDomReady()
+          }
+
           if (S.pptxMode && S.pdfMode) {
             for (var pxi = 0; pxi < count; pxi++) {
               var pxc = await createPdfImageCanvas(pxi)
-              if (pxc) canvases.push(pxc)
+              if (!pxc) throw new Error('第 ' + (pxi + 1) + ' 页渲染失败')
+              canvases.push(pxc)
               setProgress(Math.round(((pxi + 1) / Math.max(1, count)) * 85))
               setExportProgress(pxi + 1, count, '正在渲染第 ' + (pxi + 1) + ' 页', '正在生成脱敏图片')
               await new Promise(function (r) { requestAnimationFrame(r) })
@@ -7786,7 +7816,8 @@
             var docxPageCount = S.totalPages || 0
             for (var di = 0; di < docxPageCount; di++) {
               var dcanvas = await createDocxExportPageCanvas(di)
-              if (dcanvas) canvases.push(dcanvas)
+              if (!dcanvas) throw new Error('第 ' + (di + 1) + ' 页渲染失败')
+              canvases.push(dcanvas)
               setProgress(Math.round(((di + 1) / Math.max(1, docxPageCount)) * 85))
               setExportProgress(di + 1, docxPageCount, '正在渲染第 ' + (di + 1) + ' 页', '正在生成脱敏图片')
               await new Promise(function (r) { requestAnimationFrame(r) })
@@ -7794,7 +7825,8 @@
           } else if (S.fileType === 'txt') {
             for (var i = 0; i < count; i++) {
               var c = await createTxtExportPageCanvas(i)
-              if (c) canvases.push(c)
+              if (!c) throw new Error('第 ' + (i + 1) + ' 页渲染失败')
+              canvases.push(c)
               setProgress(Math.round(((i + 1) / Math.max(1, count)) * 85))
               setExportProgress(i + 1, count, '正在渲染第 ' + (i + 1) + ' 页', '正在生成脱敏图片')
               await new Promise(function (r) { requestAnimationFrame(r) })
@@ -7802,20 +7834,23 @@
           } else if (S.pdfMode) {
             for (var pi = 0; pi < count; pi++) {
               var pc = await createPdfImageCanvas(pi)
-              if (pc) canvases.push(pc)
+              if (!pc) throw new Error('第 ' + (pi + 1) + ' 页渲染失败')
+              canvases.push(pc)
               setProgress(Math.round(((pi + 1) / Math.max(1, count)) * 85))
               setExportProgress(pi + 1, count, '正在渲染第 ' + (pi + 1) + ' 页', '正在生成脱敏图片')
               await new Promise(function (r) { requestAnimationFrame(r) })
             }
           } else {
+            await ensurePageDomReady()
             for (var j = 0; j < count; j++) {
               var pageEl = getPageEl(j)
-              if (!pageEl) continue
+              if (!pageEl) throw new Error('第 ' + (j + 1) + ' 页页面节点不存在')
               var cc = await renderElementToCanvas(
                 pageEl,
                 pageEl.offsetWidth || 794,
                 pageEl.offsetHeight || 1120,
               )
+              if (!cc) throw new Error('第 ' + (j + 1) + ' 页渲染失败')
               canvases.push(cc)
               setProgress(Math.round(((j + 1) / Math.max(1, count)) * 85))
               setExportProgress(j + 1, count, '正在渲染第 ' + (j + 1) + ' 页', '正在生成脱敏图片')
@@ -8135,7 +8170,7 @@
               }
             } else {
               var canvases = await renderAllPagesForImageExport()
-              if (canvases.length !== count) throw new Error('页面渲染不完整，无法导出 PPTX')
+              if (canvases.length !== count) throw new Error('页面渲染数量异常：已渲染 ' + canvases.length + ' / ' + count + ' 页，无法导出 PPTX')
               for (var ci = 0; ci < canvases.length; ci++) {
                 setProgress(Math.round((ci / count) * 92))
                 setExportProgress(ci + 1, count, '正在生成第 ' + (ci + 1) + ' / ' + count + ' 张幻灯片', '正在生成 PPTX')
@@ -8157,7 +8192,7 @@
             downloadBlob(out, (S.fileName.replace(/\.[^.]+$/, '') || 'document') + '_PPTX.pptx')
             DOM.exportOverlay.classList.remove('active')
             notify('PPTX 已导出：' + count + ' 张幻灯片')
-            log('PPTX 导出成功：使用 JPEG 栅格化页面封装，且不再经过 JSZip 的 FileReader 路径')
+            log('PPTX 导出成功：使用 JPEG 栅格化页面封装')
             DOM.statusLeft.textContent = 'PPTX导出完成'
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
@@ -8218,7 +8253,7 @@
             downloadBlob(zipBlob, base + '_图片.zip')
             DOM.exportOverlay.classList.remove('active')
             notify('已导出图片压缩包')
-            log('图片批量导出成功：使用原图或当前渲染结果生成 ZIP，不经过 JSZip 的 FileReader 路径')
+            log('图片批量导出成功：使用原图或当前渲染结果生成 ZIP')
             DOM.statusLeft.textContent = '图片导出完成'
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
@@ -8927,6 +8962,7 @@
             }
           }
           if (cur.lines.length || !S.pages.length) samplePushPage()
+          S.totalPages = S.pages.length
 
           DOM.fname.textContent = S.fileName
           DOM.fileTypeInfo.textContent = '格式: TXT · ' + formatSize(S.fileSize)
@@ -9586,7 +9622,7 @@
             initEvents()
             initColorPicker()
             createWorker()
-            log('系统就绪 · 支持 TXT / PDF / DOCX / PPT')
+            log('系统就绪 · 支持 TXT / PDF / DOCX / PPTX')
             log('遮罩默认为「预览」状态，双击应用。')
             DOM.statusLeft.textContent = '就绪'
             DOM.statusRight.textContent = 'ZENREDACT'
