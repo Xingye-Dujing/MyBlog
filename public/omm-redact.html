@@ -2343,6 +2343,12 @@
           UNDO_LIMIT: 80,
           NOTIFY_DURATION: 2000,
           PDF_RENDER_SCALE: 2.2,
+          // Keep high-DPI screens from multiplying every PDF canvas indefinitely.
+          // The viewer still renders at the original quality baseline on 1x displays.
+          PDF_MAX_DEVICE_PIXEL_RATIO: 1.25,
+          PDF_MAX_RENDER_SCALE: 2.6,
+          PDF_ZOOM_RENDER_DELAY: 300,
+          PDF_ZOOM_RENDER_BUFFER: 2,
           IMAGE_NAV_ENABLED_DEFAULT: true,
           PDF_IMAGE_LARGE_FILTER_DEFAULT: true,
           PDF_IMAGE_LARGE_RATIO_DEFAULT: 0.9,
@@ -3037,9 +3043,6 @@
           S.lockRedacts = !S.lockRedacts
           var el = $('#toggle-lock')
           el.classList.toggle('on', S.lockRedacts)
-          $$('.redact-canvas').forEach(function (c) {
-            drawExistingRedacts(c)
-          })
         }
 
         function togglePageNum() {
@@ -5085,7 +5088,7 @@
 
             // Phase 2: render only the first couple of pages. Everything else is lazy.
             var renderCount = Math.min(numPages, CONFIG.PDF_INITIAL_RENDER)
-            var renderScale = Math.min(3, CONFIG.PDF_RENDER_SCALE * (window.devicePixelRatio || 1))
+            var renderScale = getEffectivePdfRenderScale()
             setProgress(20)
             setLoadingInfo('渲染前 ' + renderCount + ' 页…')
             await renderPdfPages(
@@ -5171,6 +5174,14 @@
           return S.pdfTextLoads[pageIdx]
         }
 
+        function getEffectivePdfRenderScale(multiplier) {
+          var dpr = Math.max(1, Math.min(CONFIG.PDF_MAX_DEVICE_PIXEL_RATIO || 1.25, window.devicePixelRatio || 1))
+          var base = Number(CONFIG.PDF_RENDER_SCALE) || 2.2
+          var factor = Number.isFinite(multiplier) ? multiplier : 1
+          var maxScale = Number(CONFIG.PDF_MAX_RENDER_SCALE) || 2.6
+          return Math.min(maxScale, base * dpr * factor)
+        }
+
         async function renderPdfPages(scale, pageIndices, onProgress, token) {
           if (!S.pdfJsDoc) return
           var indices =
@@ -5200,11 +5211,8 @@
           if (pageIdx < 0 || pageIdx >= S.pdfPages.length) return
           if (currentToken !== pdfLoadToken) return
           try {
-            var scale =
-              forcedScale ||
-              S._renderScale ||
-              CONFIG.PDF_RENDER_SCALE * (window.devicePixelRatio || 1)
-            scale = Math.min(3, scale)
+            var scale = forcedScale || S._renderScale || getEffectivePdfRenderScale()
+            scale = Math.min(CONFIG.PDF_MAX_RENDER_SCALE || 2.6, scale)
             var page = await S.pdfJsDoc.getPage(pageIdx + 1)
             if (currentToken !== pdfLoadToken) return
             var viewport = page.getViewport({ scale: scale })
@@ -5628,6 +5636,35 @@
         /* ============================================================
                UNDO / REDO
                ============================================================ */
+        function getChangedRedactionPages(before, after) {
+          var result = Object.create(null)
+          var beforeMap = Object.create(null)
+          var afterMap = Object.create(null)
+          ;(before || []).forEach(function (r) {
+            if (!r || r.id == null) return
+            beforeMap[String(r.id)] = r
+          })
+          ;(after || []).forEach(function (r) {
+            if (!r || r.id == null) return
+            afterMap[String(r.id)] = r
+          })
+
+          var ids = Object.create(null)
+          Object.keys(beforeMap).forEach(function (id) { ids[id] = true })
+          Object.keys(afterMap).forEach(function (id) { ids[id] = true })
+
+          Object.keys(ids).forEach(function (id) {
+            var a = beforeMap[id]
+            var b = afterMap[id]
+            var aSig = a ? JSON.stringify([a.pageIdx, a.nx1, a.ny1, a.nx2, a.ny2, a.type, a.applied, a.style]) : ''
+            var bSig = b ? JSON.stringify([b.pageIdx, b.nx1, b.ny1, b.nx2, b.ny2, b.type, b.applied, b.style]) : ''
+            if (aSig === bSig) return
+            if (a && Number.isFinite(Number(a.pageIdx))) result[Number(a.pageIdx)] = true
+            if (b && Number.isFinite(Number(b.pageIdx))) result[Number(b.pageIdx)] = true
+          })
+          return Object.keys(result).map(Number)
+        }
+
         function addUndoSnapshot() {
           S.undoStack.push(JSON.stringify(S.redacts))
           if (S.undoStack.length > CONFIG.UNDO_LIMIT) S.undoStack.shift()
@@ -5639,12 +5676,11 @@
             notify('没有可撤销的操作')
             return
           }
-          S.redoStack.push(JSON.stringify(S.redacts))
+          var before = S.redacts
+          S.redoStack.push(JSON.stringify(before))
           S.redacts = JSON.parse(S.undoStack.pop())
           updateRedactCount()
-          $$('.redact-canvas').forEach(function (c) {
-            drawExistingRedacts(c)
-          })
+          redrawRedactionPages(getChangedRedactionPages(before, S.redacts))
           notify('已撤销')
         }
 
@@ -5653,12 +5689,11 @@
             notify('没有可重做的操作')
             return
           }
-          S.undoStack.push(JSON.stringify(S.redacts))
+          var before = S.redacts
+          S.undoStack.push(JSON.stringify(before))
           S.redacts = JSON.parse(S.redoStack.pop())
           updateRedactCount()
-          $$('.redact-canvas').forEach(function (c) {
-            drawExistingRedacts(c)
-          })
+          redrawRedactionPages(getChangedRedactionPages(before, S.redacts))
           notify('已重做')
         }
 
@@ -5820,6 +5855,30 @@
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
           ctx.clearRect(0, 0, W, H)
           return ctx
+        }
+
+        function redrawRedactionPages(pageIndexes) {
+          var wanted = Object.create(null)
+          if (pageIndexes == null) return
+          pageIndexes.forEach(function (idx) {
+            idx = Number(idx)
+            if (Number.isFinite(idx) && idx >= 0) wanted[idx] = true
+          })
+          $$('.redact-canvas').forEach(function (canvas) {
+            var idx = parseInt(canvas.dataset.pageIdx, 10)
+            if (wanted[idx]) drawExistingRedacts(canvas)
+          })
+        }
+
+        function redrawRenderedRedactions() {
+          $$('.redact-canvas').forEach(function (canvas) {
+            var pageEl = canvas.closest('.doc-page')
+            if (!pageEl) return
+            var idx = parseInt(pageEl.dataset.pageIdx, 10)
+            if (!Number.isFinite(idx)) return
+            if (S.pdfMode && !S.renderedPages[idx]) return
+            drawExistingRedacts(canvas)
+          })
         }
 
         function drawExistingRedacts(canvas) {
@@ -6650,6 +6709,26 @@
           if (DOM.zoomLabel) DOM.zoomLabel.textContent = Math.round((S.viewScale || 1) * 100) + '%'
         }
 
+        function collectVisiblePdfPageIndices(buffer) {
+          var vp = DOM.docViewport
+          var pagesRoot = DOM.docPages
+          if (!vp || !pagesRoot || !S.pdfMode || !S.totalPages) return []
+          var top = vp.scrollTop - vp.clientHeight * (buffer || 2)
+          var bottom = vp.scrollTop + vp.clientHeight * ((buffer || 2) + 1)
+          var result = []
+          var children = pagesRoot.children
+          for (var i = 0; i < children.length; i++) {
+            var el = children[i]
+            if (!el || !el.classList || !el.classList.contains('doc-page')) continue
+            var idx = parseInt(el.dataset.pageIdx, 10)
+            if (!Number.isFinite(idx)) continue
+            var pageTop = el.offsetTop
+            var pageBottom = pageTop + el.offsetHeight
+            if (pageBottom >= top && pageTop <= bottom) result.push(idx)
+          }
+          return result
+        }
+
         function setPdfViewScale(scale) {
           S.viewScale = Math.max(0.4, Math.min(4, scale))
           applyPdfMode()
@@ -6685,37 +6764,43 @@
           setTimeout(function () {
             vp.scrollTop = savedScrollTop
           }, 50)
-          // Still re-render rendered PDF pages at new resolution (async, deferred)
+          // Re-render only the current viewport and a small buffer. Distant pages are
+          // marked stale and will be refreshed lazily when the user reaches them.
           if (S.pdfJsDoc) {
             zoomRenderTimer = setTimeout(function () {
-              var rs = CONFIG.PDF_RENDER_SCALE * S.viewScale * (window.devicePixelRatio || 1)
+              var rs = getEffectivePdfRenderScale(S.viewScale || 1)
               S._renderScale = rs
-              var renderedIndices = Object.keys(S.renderedPages)
-                .map(Number)
-                .filter(function (i) {
-                  return S.renderedPages[i]
-                })
-              if (renderedIndices.length === 0) return
-              renderedIndices.forEach(function (i) {
-                S.renderedPages[i] = false
+              var visible = collectVisiblePdfPageIndices(CONFIG.PDF_ZOOM_RENDER_BUFFER || 2)
+              if (!visible.length) {
+                setupLazyRendering(rs)
+                return
+              }
+
+              // Invalidate only currently rendered pages inside the active window.
+              // Pages outside the window are left stale and will be replaced on demand.
+              var rerenderSet = Object.create(null)
+              visible.forEach(function (idx) {
+                rerenderSet[idx] = true
+                if (S.renderedPages[idx]) S.renderedPages[idx] = false
               })
-              S.lazyRenderQueue = []
+              S.lazyRenderQueue = S.lazyRenderQueue.filter(function (task) {
+                return task && rerenderSet[task.idx] ? false : true
+              })
               S.lazyRendering = false
-              var renderSet = {}
-              async function rerender() {
-                for (var pi = 0; pi < renderedIndices.length; pi++) {
-                  var idx = renderedIndices[pi]
-                  if (renderSet[idx]) continue
-                  renderSet[idx] = true
-                  await renderSinglePdfPage(idx, S._renderScale, pdfLoadToken)
-                  await new Promise(function (r) {
-                    requestAnimationFrame(r)
-                  })
+
+              async function rerenderVisible() {
+                for (var pi = 0; pi < visible.length; pi++) {
+                  var idx = visible[pi]
+                  await renderSinglePdfPage(idx, rs, pdfLoadToken)
+                  await new Promise(function (r) { requestAnimationFrame(r) })
                 }
                 setupLazyRendering(rs)
               }
-              rerender()
-            }, 300)
+              rerenderVisible().catch(function (err) {
+                console.warn('缩放后重绘可视 PDF 页面失败', err)
+                setupLazyRendering(rs)
+              })
+            }, CONFIG.PDF_ZOOM_RENDER_DELAY || 300)
           }
         }
 
@@ -7403,7 +7488,7 @@
             doc.save(base + '_脱敏.pdf')
             DOM.exportOverlay.classList.remove('active')
             notify('分页 PDF 已导出')
-            log('分页 PDF 导出成功：与阅读区渲染一致，预览遮罩未导出')
+            log('分页 PDF 导出成功')
             DOM.statusLeft.textContent = 'PDF导出完成'
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
@@ -7414,7 +7499,7 @@
         async function ensurePdfPageRendered(pageIdx) {
           if (!S.pdfMode || !S.pdfJsDoc || !S.pdfPages[pageIdx]) return
           if (S.pdfPages[pageIdx].img) return
-          await renderSinglePdfPage(pageIdx, S._renderScale || (CONFIG.PDF_RENDER_SCALE * (window.devicePixelRatio || 1)), pdfLoadToken)
+          await renderSinglePdfPage(pageIdx, S._renderScale || getEffectivePdfRenderScale(), pdfLoadToken)
         }
 
         async function createPdfImageCanvas(pageIdx) {
@@ -7480,6 +7565,117 @@
           return canvas
         }
 
+        function getImageExportMimeType(file) {
+          var type = String(file && file.type || '').toLowerCase()
+          if (type === 'image/jpeg' || type === 'image/jpg') return 'image/jpeg'
+          if (type === 'image/png') return 'image/png'
+          if (type === 'image/webp') return 'image/webp'
+          if (type === 'image/gif') return 'image/png'
+          if (type === 'image/bmp') return 'image/png'
+          if (type === 'image/avif') return 'image/png'
+          var ext = ((file && file.name) || '').split('.').pop().toLowerCase()
+          if (/^jpe?g$/.test(ext)) return 'image/jpeg'
+          if (ext === 'png') return 'image/png'
+          if (ext === 'webp') return 'image/webp'
+          return 'image/png'
+        }
+
+        function getAppliedPageRedactions(pageIdx) {
+          return S.redacts.filter(function (r) {
+            return r.pageIdx === pageIdx && r.applied
+          })
+        }
+
+        function hasAppliedRedactionsOnPage(pageIdx) {
+          return getAppliedPageRedactions(pageIdx).length > 0
+        }
+
+        function hasOpaqueAppliedRedactionsOnPage(pageIdx) {
+          return getAppliedPageRedactions(pageIdx).some(function (r) {
+            var opacity = Number(r.style && r.style.opacity)
+            return (Number.isFinite(opacity) ? opacity : 100) >= 100
+          })
+        }
+
+        function blobToDataUri(blob) {
+          return new Promise(function (resolve, reject) {
+            var reader = new FileReader()
+            reader.onload = function () { resolve(reader.result) }
+            reader.onerror = function () { reject(new Error('读取导出图片失败')) }
+            reader.readAsDataURL(blob)
+          })
+        }
+
+        async function createSourceImageExportBlob(file, pageIdx) {
+          // No applied mask: keep the original file bytes exactly. This is the
+          // most important size optimization for image-collection exports.
+          if (!hasAppliedRedactionsOnPage(pageIdx)) return file
+
+          var img = await loadImageElement(file)
+          var w = Math.max(1, img.naturalWidth || file.__zenImageWidth || 1)
+          var h = Math.max(1, img.naturalHeight || file.__zenImageHeight || 1)
+          var canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          var ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false })
+          if (!ctx) throw new Error('无法创建图片导出画布：' + file.name)
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, w, h)
+          ctx.drawImage(img, 0, 0, w, h)
+
+          // A mask is intentionally just a visual overlay. It does not need
+          // additional resolution, so it is painted once on the native image
+          // dimensions instead of on the high-DPI PDF render.
+          ctx.save()
+          S.redacts
+            .filter(function (r) {
+              return r.pageIdx === pageIdx && r.applied
+            })
+            .forEach(function (r) {
+              var rr = getRedactPixelRect(r, w, h)
+              if (rr.w < 1 || rr.h < 1) return
+              drawRedactRect(ctx, rr, r.style || S.redactStyle || {}, true)
+              ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+              ctx.lineWidth = Math.max(0.5, Math.min(2, Math.min(w, h) / 2000))
+              ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h)
+            })
+          ctx.restore()
+
+          var mime = getImageExportMimeType(file)
+          var quality = mime === 'image/jpeg' ? 0.9 : mime === 'image/webp' ? 0.9 : undefined
+          var blob = await new Promise(function (resolve, reject) {
+            canvas.toBlob(function (b) {
+              if (b) resolve(b)
+              else reject(new Error('图片编码失败：' + file.name))
+            }, mime, quality)
+          })
+
+          // Release the temporary object URL created by loadImageElement().
+          if (img && img.__zenObjectUrl) {
+            try { URL.revokeObjectURL(img.__zenObjectUrl) } catch (_) {}
+            img.__zenObjectUrl = ''
+          }
+          canvas.width = 1
+          canvas.height = 1
+          return blob
+        }
+
+        async function exportImageCollectionDirectly(imageFiles, base, zip) {
+          var total = imageFiles.length
+          for (var i = 0; i < total; i++) {
+            var file = imageFiles[i]
+            setExportProgress(i + 1, total, '处理第 ' + (i + 1) + ' / ' + total + ' 张图片', '正在生成脱敏图片')
+            var blob = await createSourceImageExportBlob(file, i)
+            var ext = getImageExportMimeType(file) === 'image/jpeg' ? 'jpg'
+              : getImageExportMimeType(file) === 'image/png' ? 'png'
+              : getImageExportMimeType(file) === 'image/webp' ? 'webp' : 'png'
+            var stem = (file.name || ('第' + String(i + 1).padStart(3, '0'))).replace(/\.[^.]+$/, '')
+            zip.file(stem + (hasAppliedRedactionsOnPage(i) ? '_脱敏' : '') + '.' + ext, blob)
+            setProgress(Math.round(((i + 1) / Math.max(1, total)) * 85))
+            await new Promise(function (r) { requestAnimationFrame(r) })
+          }
+        }
+
         async function renderAllPagesForImageExport() {
           var count = Math.max(0, S.totalPages || S.pages.length || 0)
           var canvases = []
@@ -7531,28 +7727,50 @@
           DOM.statusLeft.textContent = '生成全部页面图片压缩包…'
           try {
             var base = S.fileName.replace(/\.[^.]+$/, '') || 'document'
-            resetExportProgress('正在生成脱敏图片', '准备渲染页面…')
-            var canvases = await renderAllPagesForImageExport()
-            setExportProgress(0, canvases.length || 1, '页面渲染完成，准备打包…', '正在生成脱敏图片')
-            if (!canvases.length) throw new Error('没有可导出的页面')
+            resetExportProgress('正在生成脱敏图片', '准备处理图片…')
             if (!window.JSZip) throw new Error('压缩包生成库未加载')
             var zip = new JSZip()
-            for (var i = 0; i < canvases.length; i++) {
-              var blob = await canvasToBlob(canvases[i])
-              zip.file(base + '_第' + String(i + 1).padStart(3, '0') + '页.png', blob)
-              setProgress(Math.round(((i + 1) / canvases.length) * 100))
-              setExportProgress(i + 1, canvases.length, '写入第 ' + (i + 1) + ' 页图片', '正在生成脱敏图片')
-              await new Promise(function (r) { requestAnimationFrame(r) })
+            var imageFiles = Array.isArray(S.imageSourceFiles) ? S.imageSourceFiles.slice() : []
+            var count = Math.max(0, S.totalPages || S.pages.length || 0)
+
+            // Image-folder imports keep their original File objects. Export them
+            // directly so an untouched JPEG/PNG is never decoded and re-encoded.
+            // Only pages with applied masks are raster-composited.
+            if (imageFiles.length === count && imageFiles.length > 0) {
+              await exportImageCollectionDirectly(imageFiles, base, zip)
+            } else {
+              var canvases = await renderAllPagesForImageExport()
+              if (!canvases.length) throw new Error('没有可导出的页面')
+              setExportProgress(0, canvases.length, '页面渲染完成，准备打包…', '正在生成脱敏图片')
+              for (var i = 0; i < canvases.length; i++) {
+                var blob = await canvasToBlob(canvases[i])
+                zip.file(base + '_第' + String(i + 1).padStart(3, '0') + '页.png', blob)
+                setProgress(Math.round(((i + 1) / canvases.length) * 85))
+                setExportProgress(i + 1, canvases.length, '写入第 ' + (i + 1) + ' 页图片', '正在生成脱敏图片')
+                canvases[i].width = 1
+                canvases[i].height = 1
+                await new Promise(function (r) { requestAnimationFrame(r) })
+              }
             }
+
+            setExportProgress(100, 100, '正在完成 ZIP…', '正在生成脱敏图片')
+            // Source images are already compressed formats. ZIP deflate normally
+            // adds CPU cost with little benefit here, so STORE keeps the archive
+            // size close to the original image total and finishes much faster.
             var zipBlob = await zip.generateAsync({
               type: 'blob',
-              compression: 'DEFLATE',
-              compressionOptions: { level: 6 },
+              compression: 'STORE',
+            }, function (metadata) {
+              var pct = Math.round(metadata.percent || 0)
+              setExportProgress(pct, 100, '正在打包 ZIP · ' + pct + '%', '正在生成脱敏图片')
+              setProgress(pct)
             })
             downloadBlob(zipBlob, base + '_图片.zip')
             DOM.exportOverlay.classList.remove('active')
-            notify('已导出全部 ' + canvases.length + ' 页图片压缩包')
-            log('图片批量导出成功：' + canvases.length + ' 页，ZIP')
+            notify('已导出图片压缩包')
+            log(
+              '图片批量导出成功：无遮罩图片保留原始文件字节；100% 脱敏图片先在原始分辨率合成后再写入 ZIP，确保遮罩区域不可从导出图片中移除',
+            )
             DOM.statusLeft.textContent = '图片导出完成'
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
@@ -7589,9 +7807,9 @@
             var slideRatio = 16 / 9
             var imageFiles = Array.isArray(S.imageSourceFiles) ? S.imageSourceFiles.slice() : []
 
-            // Image collections are exported directly from their original files.
-            // This is independent from the temporary PDF pipeline and therefore does
-            // not rasterize or recompress JPEG/PNG sources.
+            // Image collections use original files when possible. A page containing
+            // any applied 100% redaction is handled separately and flattened before
+            // it enters the PPTX, so the source pixels cannot survive as another layer.
             if (imageFiles.length === count) {
               var imageRatios = []
               for (var ri = 0; ri < imageFiles.length; ri++) {
@@ -7628,41 +7846,48 @@
                 y = 0
               }
 
-              // Keep JPEG/PNG as the original PPTX image, then place the applied
-              // redaction masks above it as PowerPoint shapes. This preserves source
-              // image quality while making applied masks visible in the PPTX.
-              slide.addImage({ data: data, x: x, y: y, w: w, h: h })
+              var pageRedacts = getAppliedPageRedactions(index)
 
-              var pageRedacts = S.redacts.filter(function (r) {
-                return r.pageIdx === index && r.applied
-              })
-              pageRedacts.forEach(function (r) {
-                var nx1 = Math.max(0, Math.min(1, Number(r.nx1) || 0))
-                var ny1 = Math.max(0, Math.min(1, Number(r.ny1) || 0))
-                var nx2 = Math.max(0, Math.min(1, Number(r.nx2) || 0))
-                var ny2 = Math.max(0, Math.min(1, Number(r.ny2) || 0))
-                var sx = Math.min(nx1, nx2)
-                var sy = Math.min(ny1, ny2)
-                var sw = Math.abs(nx2 - nx1)
-                var sh = Math.abs(ny2 - ny1)
-                if (sw <= 0 || sh <= 0) return
+              // A 100% opacity redaction is security-sensitive. Never keep the
+              // original image plus a removable PowerPoint shape on the same slide.
+              // Flatten the image first, so the original pixels are not stored in
+              // the PPTX package as a separate recoverable layer.
+              if (hasOpaqueAppliedRedactionsOnPage(index)) {
+                var flattenedBlob = await createSourceImageExportBlob(file, index)
+                data = await blobToDataUri(flattenedBlob)
+                slide.addImage({ data: data, x: x, y: y, w: w, h: h })
+              } else {
+                // Semi-transparent masks remain editable/highlight-like in PPTX.
+                slide.addImage({ data: data, x: x, y: y, w: w, h: h })
 
-                var style = r.style || S.redactStyle || {}
-                var color = hexToCssColor(style.color || '#000000').replace('#', '').toUpperCase()
-                var opacity = Math.max(0.1, Math.min(1, (Number(style.opacity) || 100) / 100))
-                var transparency = Math.round((1 - opacity) * 100)
-                var shapeType = (pptx.ShapeType && style.radius > 0 && pptx.ShapeType.roundRect)
-                  ? pptx.ShapeType.roundRect
-                  : (pptx.ShapeType ? pptx.ShapeType.rect : 'rect')
-                slide.addShape(shapeType, {
-                  x: x + sx * w,
-                  y: y + sy * h,
-                  w: sw * w,
-                  h: sh * h,
-                  fill: { color: color, transparency: transparency },
-                  line: { color: color, transparency: 100 },
+                pageRedacts.forEach(function (r) {
+                  var nx1 = Math.max(0, Math.min(1, Number(r.nx1) || 0))
+                  var ny1 = Math.max(0, Math.min(1, Number(r.ny1) || 0))
+                  var nx2 = Math.max(0, Math.min(1, Number(r.nx2) || 0))
+                  var ny2 = Math.max(0, Math.min(1, Number(r.ny2) || 0))
+                  var sx = Math.min(nx1, nx2)
+                  var sy = Math.min(ny1, ny2)
+                  var sw = Math.abs(nx2 - nx1)
+                  var sh = Math.abs(ny2 - ny1)
+                  if (sw <= 0 || sh <= 0) return
+
+                  var style = r.style || S.redactStyle || {}
+                  var color = hexToCssColor(style.color || '#000000').replace('#', '').toUpperCase()
+                  var opacity = Math.max(0.1, Math.min(1, (Number(style.opacity) || 100) / 100))
+                  var transparency = Math.round((1 - opacity) * 100)
+                  var shapeType = (pptx.ShapeType && style.radius > 0 && pptx.ShapeType.roundRect)
+                    ? pptx.ShapeType.roundRect
+                    : (pptx.ShapeType ? pptx.ShapeType.rect : 'rect')
+                  slide.addShape(shapeType, {
+                    x: x + sx * w,
+                    y: y + sy * h,
+                    w: sw * w,
+                    h: sh * h,
+                    fill: { color: color, transparency: transparency },
+                    line: { color: color, transparency: 100 },
+                  })
                 })
-              })
+              }
 
               setProgress(Math.round(((index + 1) / count) * 100))
             }
@@ -7711,7 +7936,13 @@
             await pptx.writeFile({ fileName: base + '.pptx' })
             DOM.exportOverlay.classList.remove('active')
             notify('PPTX 已导出：' + count + ' 张幻灯片')
-            log('PPTX 导出成功：' + count + ' 张幻灯片' + (slideRatio === 16 / 9 ? ' · 16:9' : ' · 4:3'))
+            log(
+              'PPTX 导出成功：' +
+                count +
+                ' 张幻灯片' +
+                (slideRatio === 16 / 9 ? ' · 16:9' : ' · 4:3') +
+                ' · 100% 脱敏页面已栅格化合成，不保留可移除的原图层',
+            )
             DOM.statusLeft.textContent = 'PPTX导出完成'
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
@@ -8068,11 +8299,11 @@
               }
             }
 
-            // "incremental" keeps the original PDF objects and appends only the
-            // changes made in this batch. This is native PDF processing, not
-            // rasterization, and avoids the extra compaction pass that caused the
-            // previous high-memory peak.
-            var saved = pdfDoc.saveToBuffer(batchChanged ? 'incremental,compress' : 'incremental')
+            // Applying a PDF redaction makes the document ineligible for
+            // incremental saving. Use a normal compressed rewrite for every
+            // changed batch; the final pass below additionally garbage-collects
+            // unreachable objects so old redacted content is not retained.
+            var saved = pdfDoc.saveToBuffer(batchChanged ? 'compress=yes' : 'incremental')
             var bytes = saved.asUint8Array ? saved.asUint8Array() : new Uint8Array(saved)
             return {
               bytes: new Uint8Array(bytes),
@@ -8156,11 +8387,12 @@
               totalRedacts = one.redactCount
               totalHighlights = one.highlightCount
               setProgress(100)
-              log('原生 PDF 小文件模式：单次处理完成，未进行栅格化')
+              log('原生 PDF 小文件模式：单次处理完成，最终文件完整重写并清理历史对象')
             } else {
-              // Large PDF: process in small native page batches and save each batch
-              // incrementally. The output stays PDF-native throughout. No page is
-              // rendered to JPEG/PNG and no image-PDF fallback exists.
+              // Large PDF: process in small native page batches. Because applying
+              // redactions disables incremental saving, each changed batch is
+              // saved as a normal compressed PDF rewrite. No page is rendered to
+              // JPEG/PNG and no image-PDF fallback exists.
               var batchSize = getNativePdfBatchSize(sourceBytes, pageCount)
               notify('大文件原生脱敏处理中，共 ' + pageCount + ' 页，每批 ' + batchSize + ' 页…')
               log(
@@ -8197,9 +8429,21 @@
               }
             }
 
-            // The final bytes are still the native MuPDF PDF output. Do not run
-            // garbage=compact here for large files because that would reintroduce a
-            // second full-document memory peak.
+            // IMPORTANT: 100% redaction must not leave the original incremental
+            // revision chain inside the exported PDF. Rewrite the finished document
+            // non-incrementally and collect unreachable objects before download.
+            var finalDoc = mupdf.Document.openDocument(new Uint8Array(sourceBytes), 'application/pdf')
+            var finalPdf = finalDoc.asPDF()
+            // MuPDF 1.28.x accepts PDF write options such as
+            // `garbage=4,compress=yes`. `deflate` is not a valid PDF write
+            // option here and causes "Unused pdf arguments found".
+            var finalSaved = finalPdf.saveToBuffer('garbage=4,compress=yes')
+            var cleanedBytes = finalSaved.asUint8Array ? finalSaved.asUint8Array() : new Uint8Array(finalSaved)
+            sourceBytes = new Uint8Array(cleanedBytes)
+            try {
+              finalDoc.destroy()
+            } catch (_) {}
+
             var blob = new Blob([sourceBytes], { type: 'application/pdf' })
             var url = URL.createObjectURL(blob)
             var a = document.createElement('a')
@@ -8215,7 +8459,7 @@
             DOM.exportOverlay.classList.remove('active')
             var msg = 'PDF已导出：' + totalRedacts + ' 个脱敏遮罩'
             if (totalHighlights) msg += '，' + totalHighlights + ' 个高亮遮罩'
-            if (largeMode) msg += '；大文件采用原生分页增量处理'
+            if (largeMode) msg += '；大文件采用原生分页重写处理'
             else msg += '；原生单次处理'
             notify(msg)
             log(msg + '；未进行图片栅格化，不降低 PDF 画质')
@@ -8682,6 +8926,23 @@
               if (f) loadFile(f)
             }
           })
+
+          // Folder picker confirmation
+          if ($('#folder-picker-cancel')) {
+            $('#folder-picker-cancel').addEventListener('click', function () {
+              closeImageFolderPicker(false)
+            })
+          }
+          if ($('#folder-picker-ok')) {
+            $('#folder-picker-ok').addEventListener('click', function () {
+              closeImageFolderPicker(true)
+            })
+          }
+          if (DOM.folderPickerConfirm) {
+            DOM.folderPickerConfirm.addEventListener('click', function (e) {
+              if (e.target === DOM.folderPickerConfirm) closeImageFolderPicker(false)
+            })
+          }
 
           // Confirm
           $('#confirm-cancel').addEventListener('click', function () {
