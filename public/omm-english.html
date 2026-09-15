@@ -2205,6 +2205,35 @@
         }
       }
 
+      /* ===== Word sketch / iPad drawing ===== */
+      .sketch-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:2px; }
+      .sketch-preview { width:100%; height:170px; display:block; border:1px solid var(--border-dim); background:var(--bg); touch-action:none; }
+      .sketch-editor { position:fixed; inset:0; z-index:8600; background:var(--bg); display:flex; flex-direction:column; opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease,visibility .18s; }
+      .sketch-editor.open { opacity:1; visibility:visible; pointer-events:auto; }
+      .sketch-head { min-height:52px; padding:7px 10px calc(7px + env(safe-area-inset-top)); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:7px; flex-wrap:wrap; background:var(--bg); flex-shrink:0; }
+      .sketch-title { font-size:calc(11px * var(--fscale)); color:var(--text); letter-spacing:1.5px; margin-right:auto; white-space:nowrap; }
+      .sketch-tool { height:34px; min-width:34px; padding:0 9px; border:1px solid var(--border-dim); background:transparent; color:var(--text-dim); font-family:var(--font-mono); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:5px; border-radius:var(--radius); -webkit-tap-highlight-color:transparent; }
+      .sketch-tool:hover,.sketch-tool.on { color:var(--text); border-color:var(--border); background:var(--hover); }
+      .sketch-tool.danger:hover { color:var(--accent-red); border-color:var(--accent-red); }
+      .sketch-width { width:112px; height:34px; accent-color:var(--text); cursor:pointer; }
+      .sketch-color { width:34px; height:34px; padding:2px; border:1px solid var(--border-dim); background:transparent; cursor:pointer; border-radius:var(--radius); }
+      .sketch-color::-webkit-color-swatch-wrapper { padding:1px; }
+      .sketch-color::-webkit-color-swatch,.sketch-color::-moz-color-swatch { border:0; }
+      .sketch-board { position:relative; flex:1; min-height:0; padding:10px; display:flex; background:var(--bg); touch-action:none; overscroll-behavior:none; }
+      .sketch-canvas { width:100%; height:100%; display:block; background:var(--bg); border:1px solid var(--border-dim); touch-action:none; cursor:crosshair; -webkit-user-select:none; user-select:none; }
+      .sketch-readonly .sketch-canvas { cursor:default; }
+      .sketch-foot { min-height:48px; padding:6px 10px calc(6px + env(safe-area-inset-bottom)); border-top:1px solid var(--border-dim); display:flex; align-items:center; gap:8px; background:var(--bg); flex-shrink:0; }
+      .sketch-hint { font-size:calc(9px * var(--fscale)); color:var(--text-faint); margin-right:auto; letter-spacing:.5px; }
+      @media (max-width:720px) {
+        .sketch-head { padding-left:calc(8px + env(safe-area-inset-left)); padding-right:calc(8px + env(safe-area-inset-right)); }
+        .sketch-board { padding:6px; }
+        .sketch-foot { padding-left:calc(8px + env(safe-area-inset-left)); padding-right:calc(8px + env(safe-area-inset-right)); }
+        .sketch-tool { min-width:38px; height:38px; padding:0 8px; }
+        .sketch-width { width:130px; height:38px; }
+        .sketch-color { width:38px; height:38px; }
+        .sketch-title { font-size:calc(10px * var(--fscale)); }
+      }
+
       /* ===== Modal / confirm / notify ===== */
       #modal {
         position: fixed;
@@ -4713,6 +4742,26 @@ notify pgrst, 'reload schema';</textarea
       </div>
     </div>
 
+    <!-- Word drawing editor / viewer -->
+    <div id="sketch-editor" class="sketch-editor" aria-hidden="true">
+      <div class="sketch-head">
+        <div class="sketch-title" id="sketch-title">我的绘画</div>
+        <button class="sketch-tool" id="sketch-undo" type="button" title="撤销">↶</button>
+        <button class="sketch-tool" id="sketch-redo" type="button" title="重做">↷</button>
+        <input class="sketch-color" id="sketch-color" type="color" value="#000000" title="颜色" />
+        <input class="sketch-width" id="sketch-width" type="range" min="1" max="24" step="1" value="4" title="粗细" />
+        <button class="sketch-tool" id="sketch-eraser" type="button" title="橡皮擦">橡皮</button>
+        <button class="sketch-tool danger" id="sketch-clear" type="button" title="清空画布">清空</button>
+        <button class="sketch-tool" id="sketch-close" type="button">关闭</button>
+      </div>
+      <div class="sketch-board"><canvas id="sketch-canvas" class="sketch-canvas"></canvas></div>
+      <div class="sketch-foot">
+        <span class="sketch-hint" id="sketch-hint">Apple Pencil / 手指直接绘制</span>
+        <button class="mini-btn" id="sketch-view-edit" type="button" style="display:none">编辑</button>
+        <button class="mini-btn solid" id="sketch-save" type="button">保存绘画</button>
+      </div>
+    </div>
+
     <!-- Confirm -->
     <div id="custom-confirm">
       <div class="confirm-box">
@@ -7105,6 +7154,7 @@ notify pgrst, 'reload schema';</textarea
               tySoundVol: 60,
             },
             notes: {},
+            drawings: {},
             books: {},
             activeBook: 'cet6',
             view: 'home',
@@ -7142,6 +7192,7 @@ notify pgrst, 'reload schema';</textarea
           } else if (!Array.isArray(s.books.fav.w)) {
             s.books.fav.w = []
           }
+          if (!s.drawings || typeof s.drawings !== 'object') s.drawings = {}
           if (!s.activeBook || !s.books[s.activeBook]) s.activeBook = 'cet6'
           if (!['home', 'words', 'flash', 'quiz', 'listen', 'typing'].includes(s.view))
             s.view = 'home'
@@ -7504,7 +7555,40 @@ notify pgrst, 'reload schema';</textarea
             if (hint) hint.textContent = '有道在线发音 · 备用百度线路 · 语速与嗓音随系统'
           },
           refresh() {
-            if ('speechSynthesis' in window) {
+            const sketchCanvas = $('#sketch-canvas')
+          if (sketchCanvas) {
+            sketchCanvas.addEventListener('pointerdown', sketchBegin)
+            sketchCanvas.addEventListener('pointermove', sketchMove)
+            sketchCanvas.addEventListener('pointerup', sketchEnd)
+            sketchCanvas.addEventListener('pointercancel', sketchEnd)
+          }
+          $('#sketch-close').addEventListener('click', closeSketch)
+          $('#sketch-save').addEventListener('click', saveSketch)
+          $('#sketch-undo').addEventListener('click', sketchUndo)
+          $('#sketch-redo').addEventListener('click', sketchRedo)
+          $('#sketch-clear').addEventListener('click', sketchClear)
+          $('#sketch-view-edit').addEventListener('click', () => {
+            if (DRAW.word) openSketch(DRAW.word, 'edit')
+          })
+          $('#sketch-color').addEventListener('input', (e) => {
+            DRAW.color = e.target.value || drawingThemeColor()
+            DRAW.eraser = false
+            updateSketchToolState()
+          })
+          $('#sketch-width').addEventListener('input', (e) => {
+            DRAW.width = clamp(+e.target.value || 4, 1, 24)
+            updateSketchToolState()
+          })
+          $('#sketch-eraser').addEventListener('click', () => {
+            DRAW.eraser = !DRAW.eraser
+            updateSketchToolState()
+          })
+          window.addEventListener('resize', () => {
+            if ($('#sketch-editor').classList.contains('open')) fitDrawingCanvas()
+            hydrateSketchPreviews(document)
+          })
+
+          if ('speechSynthesis' in window) {
               this.voices = speechSynthesis
                 .getVoices()
                 .filter((v) => v.lang && v.lang.toLowerCase().indexOf('en') === 0)
@@ -7646,6 +7730,41 @@ notify pgrst, 'reload schema';</textarea
           if (!S.notes[k]) S.notes[k] = { ex: '', zh: '', story: '', exZh: '' }
           return S.notes[k]
         }
+        // ============================================================
+        // WORD DRAWINGS · Vector strokes, no image/blob storage
+        // ============================================================
+        const DRAW_W = 1200
+        const DRAW_H = 800
+        let DRAW = { word:'', mode:'edit', strokes:[], redo:[], stroke:null, color:'#000000', width:4, eraser:false, dpr:1 }
+        function drawingKey(word){ return nkey(word) }
+        function getDrawing(word){ if(!S.drawings) S.drawings={}; const d=S.drawings[drawingKey(word)]; return d&&Array.isArray(d.strokes)?d:null }
+        function cloneStrokes(strokes){ return JSON.parse(JSON.stringify(strokes||[])) }
+        function drawingThemeColor(){ return document.body.classList.contains('theme-dark')?'#ffffff':'#000000' }
+        function normalizeDrawingData(d){
+          if(!d||!Array.isArray(d.strokes)) return {w:DRAW_W,h:DRAW_H,strokes:[]}
+          return {w:DRAW_W,h:DRAW_H,strokes:d.strokes.map(st=>({color:typeof st.color==='string'?st.color:'#000000',width:Math.max(1,Number(st.width)||4),erase:!!st.erase,points:Array.isArray(st.points)?st.points.map(p=>({x:Math.max(0,Math.min(DRAW_W,Number(p.x)||0)),y:Math.max(0,Math.min(DRAW_H,Number(p.y)||0)),p:Math.max(.15,Math.min(1,Number(p.p)||.7))})).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)):[]})).filter(st=>st.points.length>0)}
+        }
+        function fitDrawingCanvas(){ const c=$('#sketch-canvas'); if(!c)return; const r=c.getBoundingClientRect(); if(!r.width||!r.height)return; DRAW.dpr=Math.max(1,Math.min(3,devicePixelRatio||1)); c.width=Math.round(r.width*DRAW.dpr); c.height=Math.round(r.height*DRAW.dpr); const ctx=c.getContext('2d'); ctx.setTransform(DRAW.dpr,0,0,DRAW.dpr,0,0); drawAll() }
+        function drawAll(){ const c=$('#sketch-canvas'); if(!c)return; const r=c.getBoundingClientRect(),ctx=c.getContext('2d'); if(!r.width||!r.height)return; ctx.setTransform(DRAW.dpr,0,0,DRAW.dpr,0,0); ctx.clearRect(0,0,r.width,r.height); ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--bg').trim()||'#fff'; ctx.fillRect(0,0,r.width,r.height); DRAW.strokes.forEach(st=>drawStroke(ctx,st,r.width,r.height)) }
+        function drawStroke(ctx,st,cw,ch){
+          if(!st.points||!st.points.length)return; const sx=cw/DRAW_W,sy=ch/DRAW_H; ctx.save(); ctx.globalCompositeOperation=st.erase?'destination-out':'source-over'; ctx.strokeStyle=st.color||'#000'; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=Math.max(1,Number(st.width)||4)*((sx+sy)/2);
+          if(st.points.length===1){ const p=st.points[0]; ctx.beginPath(); ctx.arc(p.x*sx,p.y*sy,Math.max(.7,ctx.lineWidth*.5),0,Math.PI*2); ctx.fillStyle=st.erase?'rgba(0,0,0,1)':st.color||'#000'; ctx.fill() }
+          else { const p0=st.points[0]; ctx.beginPath(); ctx.moveTo(p0.x*sx,p0.y*sy); for(let i=1;i<st.points.length;i++){const p=st.points[i];ctx.lineTo(p.x*sx,p.y*sy)} ctx.stroke() } ctx.restore()
+        }
+        function pointerToDrawingPoint(e){ const c=$('#sketch-canvas'),r=c.getBoundingClientRect(); return {x:Math.max(0,Math.min(DRAW_W,((e.clientX-r.left)/r.width)*DRAW_W)),y:Math.max(0,Math.min(DRAW_H,((e.clientY-r.top)/r.height)*DRAW_H)),p:Math.max(.15,Math.min(1,Number(e.pressure)>0?Number(e.pressure):.7))} }
+        function sketchBegin(e){ if(DRAW.mode!=='edit')return; const c=$('#sketch-canvas'); if(!c)return; e.preventDefault(); try{c.setPointerCapture(e.pointerId)}catch(_){} DRAW.stroke={color:DRAW.color,width:Math.max(1,+DRAW.width||4),erase:!!DRAW.eraser,points:[pointerToDrawingPoint(e)]}; DRAW.redo=[]; drawAll(); const ctx=c.getContext('2d'),r=c.getBoundingClientRect(); drawStroke(ctx,DRAW.stroke,r.width,r.height) }
+        function sketchMove(e){ if(DRAW.mode!=='edit'||!DRAW.stroke)return; e.preventDefault(); DRAW.stroke.points.push(pointerToDrawingPoint(e)); drawAll(); const c=$('#sketch-canvas'),ctx=c.getContext('2d'),r=c.getBoundingClientRect(); drawStroke(ctx,DRAW.stroke,r.width,r.height) }
+        function sketchEnd(e){ if(!DRAW.stroke)return; try{const c=$('#sketch-canvas');if(c&&e.pointerId!=null)c.releasePointerCapture(e.pointerId)}catch(_){} if(DRAW.stroke.points.length)DRAW.strokes.push(DRAW.stroke); DRAW.stroke=null; drawAll() }
+        function openSketch(word,mode){ word=String(word||'').trim(); if(!word)return; const wrap=$('#sketch-editor'); if(!wrap)return; const saved=getDrawing(word); DRAW.word=word; DRAW.mode=mode==='view'?'view':'edit'; DRAW.strokes=saved?cloneStrokes(normalizeDrawingData(saved).strokes):[]; DRAW.redo=[]; DRAW.stroke=null; DRAW.color=saved&&/^#[0-9a-f]{6}$/i.test(saved.lastColor||'')?saved.lastColor:drawingThemeColor(); DRAW.width=saved&&saved.lastWidth?clamp(saved.lastWidth,1,24):4; DRAW.eraser=false; wrap.classList.toggle('sketch-readonly',DRAW.mode==='view'); wrap.classList.add('open'); wrap.setAttribute('aria-hidden','false'); $('#sketch-title').textContent=(DRAW.mode==='view'?'查看绘画 · ':'编辑绘画 · ')+word; $('#sketch-color').value=DRAW.color; $('#sketch-width').value=String(DRAW.width); $('#sketch-save').style.display=DRAW.mode==='edit'?'':'none'; $('#sketch-view-edit').style.display=DRAW.mode==='view'?'':'none'; $('#sketch-eraser').style.display=DRAW.mode==='edit'?'':'none'; $('#sketch-clear').style.display=DRAW.mode==='edit'?'':'none'; $('#sketch-undo').style.display=DRAW.mode==='edit'?'':'none'; $('#sketch-redo').style.display=DRAW.mode==='edit'?'':'none'; $('#sketch-color').disabled=DRAW.mode!=='edit'; $('#sketch-width').disabled=DRAW.mode!=='edit'; $('#sketch-close').textContent=DRAW.mode==='edit'?'取消':'关闭'; $('#sketch-hint').textContent=DRAW.mode==='edit'?'Apple Pencil / 手指直接绘制 · 松手即成一笔':'只读显示 · 点“编辑”继续绘制'; setTimeout(()=>{fitDrawingCanvas();updateSketchToolState()},0) }
+        function closeSketch(){ const w=$('#sketch-editor'); if(!w)return; w.classList.remove('open'); w.setAttribute('aria-hidden','true'); DRAW.word=''; DRAW.stroke=null }
+        function saveSketch(){ if(DRAW.mode!=='edit'||!DRAW.word)return; if(!S.drawings)S.drawings={}; const key=drawingKey(DRAW.word); if(!DRAW.strokes.length){delete S.drawings[key];save();closeSketch();notify('绘画已删除');if(DR&&DR.e&&nkey(DR.e[0])===key)openDrawer(DR.e,DR.b);else refreshView();return} S.drawings[key]={v:1,w:DRAW_W,h:DRAW_H,lastWidth:Math.max(1,+DRAW.width||4),lastColor:DRAW.color,updatedAt:Date.now(),strokes:cloneStrokes(DRAW.strokes)}; save(); buzz(8); notify('绘画已保存'); closeSketch(); if(DR&&DR.e&&nkey(DR.e[0])===key)openDrawer(DR.e,DR.b); else refreshView() }
+        function updateSketchToolState(){ const er=$('#sketch-eraser'); if(er)er.classList.toggle('on',DRAW.eraser); const c=$('#sketch-color'); if(c&&/^#[0-9a-f]{6}$/i.test(DRAW.color))c.value=DRAW.color; const w=$('#sketch-width'); if(w)w.value=String(DRAW.width) }
+        function sketchUndo(){ if(DRAW.mode!=='edit'||!DRAW.strokes.length)return; DRAW.redo.push(DRAW.strokes.pop()); drawAll() }
+        function sketchRedo(){ if(DRAW.mode!=='edit'||!DRAW.redo.length)return; DRAW.strokes.push(DRAW.redo.pop()); drawAll() }
+        function sketchClear(){ if(DRAW.mode!=='edit'||!DRAW.strokes.length)return; confirmBox('清空这张绘画？',()=>{DRAW.strokes=[];DRAW.redo=[];drawAll()}) }
+        function renderSketchPreview(canvas,word){ const d=getDrawing(word); if(!d||!d.strokes.length)return; const r=canvas.getBoundingClientRect(); if(!r.width||!r.height)return; const dpr=Math.max(1,Math.min(2,devicePixelRatio||1)); canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--bg').trim()||'#fff';ctx.fillRect(0,0,r.width,r.height);normalizeDrawingData(d).strokes.forEach(st=>drawStroke(ctx,st,r.width,r.height)) }
+        function hydrateSketchPreviews(root){;(root||document).querySelectorAll('.sketch-preview[data-word]').forEach(c=>renderSketchPreview(c,c.dataset.word)) }
+
         function inFav(word) {
           return S.books.fav.w.some((x) => nkey(x[0]) === nkey(word))
         }
@@ -8365,6 +8484,12 @@ notify pgrst, 'reload schema';</textarea
             '</textarea>' +
             '<button class="mini-btn solid" data-action="noteSave" style="align-self:flex-start">保存备注</button>' +
             '</div>' +
+            '<div class="ed-field" style="margin-top:2px"><span class="ed-label">我的绘画</span>' +
+            (getDrawing(entry[0]) && getDrawing(entry[0]).strokes.length
+              ? '<canvas class="sketch-preview" data-word="' + esc(entry[0]) + '" aria-label="' + esc(entry[0]) + ' 的绘画预览"></canvas>' +
+                '<div class="sketch-actions"><button class="mini-btn" data-action="drawView">查看</button><button class="mini-btn solid" data-action="drawEdit">编辑</button></div>'
+              : '<div class="fmt-hint" style="padding:9px 12px">还没有绘画。遇到像 skyscraper 这种容易形成画面感的词，可以直接用 iPad 画下来。</div><div class="sketch-actions"><button class="mini-btn solid" data-action="drawEdit">开始绘画</button></div>') +
+            '</div>' +
             '<div class="dr-meta">状态：' +
             mLabel +
             '　·　记忆盒：' +
@@ -8387,6 +8512,7 @@ notify pgrst, 'reload schema';</textarea
             '</div>'
           $('#drawer').classList.add('open')
           $('#drawer-mask').classList.add('open')
+          hydrateSketchPreviews($('#dr-body'))
         }
         function drawerClose() {
           $('#drawer').classList.remove('open')
@@ -10197,6 +10323,10 @@ notify pgrst, 'reload schema';</textarea
                   noteHtml += '<div class="fb-note"><b>我的故事</b>' + esc(note.story) + '</div>'
               }
             }
+            const sketch = getDrawing(e[0])
+            if (sketch && sketch.strokes.length) {
+              noteHtml += '<div class="fb-note" style="width:100%"><b>我的绘画</b><canvas class="sketch-preview" data-word="' + esc(e[0]) + '" style="height:150px;margin-top:8px"></canvas></div>'
+            }
             $('#v-flash').innerHTML =
               '<div class="fc-wrap">' +
               '<div class="fc-meta"><span>' +
@@ -10260,6 +10390,7 @@ notify pgrst, 'reload schema';</textarea
               '<button class="gb good" data-action="fcGrade" data-g="2">认识<small>3 · 加深记忆</small></button>' +
               '</div>' +
               '</div>'
+            hydrateSketchPreviews($('#v-flash'))
             this.flipped = false
             if (S.set.autoSpeak) setTimeout(() => this.speakCurrent(), 250)
           },
@@ -11570,6 +11701,14 @@ notify pgrst, 'reload schema';</textarea
             }
             buzz(8)
           },
+          drawEdit() {
+            if (!DR) return
+            openSketch(DR.e[0], 'edit')
+          },
+          drawView() {
+            if (!DR) return
+            openSketch(DR.e[0], 'view')
+          },
           noteSave() {
             if (!DR) return
             const n = ensureNotes(DR.e[0])
@@ -12120,6 +12259,10 @@ notify pgrst, 'reload schema';</textarea
           const tag = (e.target.tagName || '').toUpperCase()
           const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
           if (e.key === 'Escape') {
+            if ($('#sketch-editor').classList.contains('open')) {
+              closeSketch()
+              return
+            }
             if ($('#custom-confirm').classList.contains('active')) {
               $('#custom-confirm').classList.remove('active')
               return
@@ -12455,6 +12598,7 @@ notify pgrst, 'reload schema';</textarea
           out.v = Number(out.v || 1)
           out.set = isPlainObject(out.set) ? out.set : {}
           out.notes = isPlainObject(out.notes) ? out.notes : {}
+          out.drawings = isPlainObject(out.drawings) ? out.drawings : {}
           out.books = isPlainObject(out.books) ? out.books : {}
           out.prog = isPlainObject(out.prog) ? out.prog : {}
           out.days = isPlainObject(out.days) ? out.days : {}
@@ -12480,6 +12624,7 @@ notify pgrst, 'reload schema';</textarea
             isPlainObject(d.days) &&
             Array.isArray(d.listen) &&
             isPlainObject(d.notes) &&
+            isPlainObject(d.drawings) &&
             isPlainObject(d.set) &&
             !!d.books.cet6 &&
             !!d.books.fav

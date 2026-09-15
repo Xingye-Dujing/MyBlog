@@ -1514,6 +1514,95 @@
         color: var(--text-faint);
       }
 
+      /* ===== IMAGE JUMP ===== */
+      #image-jump-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 10px;
+        color: var(--text-dim);
+        margin-left: 2px;
+      }
+
+      #image-jump-status-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+
+      #image-jump-input {
+        width: 34px;
+        height: 20px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: var(--bg);
+        color: var(--text);
+        font-size: 10px;
+        font-family: var(--font-mono);
+        text-align: center;
+        padding: 0 2px;
+        outline: none;
+      }
+
+      #image-jump-input:focus {
+        border-color: var(--text);
+      }
+
+      #image-jump-total {
+        color: var(--text-faint);
+        font-family: var(--font-mono);
+        white-space: nowrap;
+      }
+
+      #image-jump-wrap .image-jump-btn {
+        min-width: 24px;
+        height: 20px;
+        padding: 0 5px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+      }
+
+      #image-jump-wrap .image-jump-btn:disabled {
+        opacity: 0.25;
+        cursor: default;
+        border-color: transparent;
+        background: transparent;
+        color: var(--text-faint);
+      }
+
+      #image-jump-wrap .image-jump-btn:disabled:hover {
+        border-color: transparent;
+        background: transparent;
+      }
+
+      .image-nav-current {
+        outline: 2px solid var(--text);
+        outline-offset: -2px;
+      }
+
+      .doc-page-img.image-nav-current {
+        outline-offset: -3px;
+      }
+
+      .docx-container img.image-nav-current {
+        outline-offset: 2px;
+      }
+
+
+      .pdf-image-nav-highlight {
+        position: absolute;
+        z-index: 8;
+        pointer-events: none;
+        box-sizing: border-box;
+        border: 2px solid var(--text);
+        box-shadow: 0 0 0 2px rgba(255,255,255,0.82), 0 0 0 4px rgba(26,26,26,0.18);
+        transition: opacity 0.12s;
+      }
+      body.theme-dark .pdf-image-nav-highlight {
+        box-shadow: 0 0 0 2px rgba(10,10,10,0.9), 0 0 0 4px rgba(232,232,232,0.18);
+      }
       /* ===== SEARCH BAR ===== */
       #search-bar {
         position: fixed;
@@ -1569,6 +1658,19 @@
       .search-highlight.current {
         background: rgba(255, 120, 0, 0.55);
         outline: 2px solid rgba(255, 80, 0, 0.8);
+      }
+
+      .image-nav-current {
+        outline: 2px solid var(--text) !important;
+        outline-offset: 3px;
+        transition: outline-color 0.15s;
+      }
+
+      .image-nav-btn[disabled],
+      .image-jump-btn[disabled] {
+        opacity: 0.28;
+        cursor: default;
+        pointer-events: none;
       }
 
       .export-stage .doc-page,
@@ -1956,6 +2058,16 @@
             <span id="page-jump-total">/ 0</span>
           </div>
           <div class="tool-sep"></div>
+          <div id="image-jump-wrap" title="快速跳转到图片（Alt+↑ / Alt+↓）">
+            <button class="tool-btn image-jump-btn" data-action="imagePrev" aria-label="上一张图片">‹</button>
+            <div id="image-jump-status-wrap">
+              <input type="text" id="image-jump-input" placeholder="图" title="跳转到图片编号（Enter）" inputmode="numeric" />
+              <span id="image-jump-total">/ 0</span>
+            </div>
+            <button class="tool-btn image-jump-btn" data-action="imageNext" aria-label="下一张图片">›</button>
+            <button class="tool-btn image-jump-btn" data-action="imageCancel" aria-label="取消图片高亮" title="取消图片高亮">×</button>
+          </div>
+          <div class="tool-sep"></div>
           <div class="tool-btn" data-action="openSearch" title="搜索 (Ctrl+F)">
             <svg
               width="13"
@@ -2241,6 +2353,11 @@
           statLoadProgress: $('#stat-load-progress'),
           pageJumpInput: $('#page-jump-input'),
           pageJumpTotal: $('#page-jump-total'),
+          imageJumpInput: $('#image-jump-input'),
+          imageJumpTotal: $('#image-jump-total'),
+          imagePrevBtn: $('#image-jump-wrap [data-action="imagePrev"]'),
+          imageNextBtn: $('#image-jump-wrap [data-action="imageNext"]'),
+          imageCancelBtn: $('#image-jump-wrap [data-action="imageCancel"]'),
           searchBar: $('#search-bar'),
           searchInput: $('#search-input'),
           searchInfo: $('#search-info'),
@@ -2785,6 +2902,551 @@
         }
 
         /* ============================================================
+               IMAGE JUMP
+               ============================================================ */
+        function clearImageNavCurrent() {
+          $$('.image-nav-current').forEach(function (el) {
+            el.classList.remove('image-nav-current')
+          })
+        }
+
+        function resetImageNavState() {
+          imageNavState.targets = []
+          imageNavState.currentIdx = -1
+          imageNavState.refreshQueued = false
+          imageNavState.pdfScanPromise = null
+          imageNavState.navigationLockIdx = -1
+          imageNavState.navigationLockUntil = 0
+          imageNavState.navigationTimer = null
+          imageNavState.highlightTimer = null
+          if (DOM.imageJumpInput) DOM.imageJumpInput.value = ''
+          if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ 0'
+          if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = true
+          if (DOM.imageNextBtn) DOM.imageNextBtn.disabled = true
+          if (DOM.imageCancelBtn) DOM.imageCancelBtn.disabled = true
+          clearImageNavCurrent()
+        }
+
+        function matrixMultiply(m1, m2) {
+          return [
+            m1[0] * m2[0] + m1[2] * m2[1],
+            m1[1] * m2[0] + m1[3] * m2[1],
+            m1[0] * m2[2] + m1[2] * m2[3],
+            m1[1] * m2[2] + m1[3] * m2[3],
+            m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+            m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+          ]
+        }
+
+        function transformUnitRect(matrix) {
+          var pts = [
+            [0, 0],
+            [1, 0],
+            [0, 1],
+            [1, 1],
+          ].map(function (p) {
+            return [
+              matrix[0] * p[0] + matrix[2] * p[1] + matrix[4],
+              matrix[1] * p[0] + matrix[3] * p[1] + matrix[5],
+            ]
+          })
+          var xs = pts.map(function (p) {
+            return p[0]
+          })
+          var ys = pts.map(function (p) {
+            return p[1]
+          })
+          return {
+            x: Math.min.apply(null, xs),
+            y: Math.min.apply(null, ys),
+            w: Math.max.apply(null, xs) - Math.min.apply(null, xs),
+            h: Math.max.apply(null, ys) - Math.min.apply(null, ys),
+          }
+        }
+
+        function isPdfImagePaintOp(fn) {
+          if (!window.pdfjsLib || !pdfjsLib.OPS) return false
+          return (
+            fn === pdfjsLib.OPS.paintJpegXObject ||
+            fn === pdfjsLib.OPS.paintImageXObject ||
+            fn === pdfjsLib.OPS.paintInlineImageXObject ||
+            fn === pdfjsLib.OPS.paintImageXObjectRepeat ||
+            fn === pdfjsLib.OPS.paintInlineImageXObjectGroup ||
+            fn === pdfjsLib.OPS.paintImageMaskXObject ||
+            fn === pdfjsLib.OPS.paintImageMaskXObjectRepeat ||
+            fn === pdfjsLib.OPS.paintImageMaskXObjectGroup
+          )
+        }
+
+        function getPdfImageSourceSize(fn, args) {
+          var width = 0,
+            height = 0
+          if (!args) return { width: 0, height: 0 }
+          if (
+            fn === pdfjsLib.OPS.paintJpegXObject ||
+            fn === pdfjsLib.OPS.paintImageXObject
+          ) {
+            width = Number(args[1]) || 0
+            height = Number(args[2]) || 0
+          } else if (fn === pdfjsLib.OPS.paintInlineImageXObject) {
+            width = Number(args[0] && args[0].width) || 0
+            height = Number(args[0] && args[0].height) || 0
+          } else if (fn === pdfjsLib.OPS.paintImageMaskXObject) {
+            width = Number(args[0] && args[0].width) || 0
+            height = Number(args[0] && args[0].height) || 0
+          }
+          return { width: width, height: height }
+        }
+
+        function shouldKeepPdfImageTarget(rect, sourceSize, viewport) {
+          var displayArea = Math.abs(rect.w * rect.h)
+          var sourceArea = Math.abs((sourceSize.width || 0) * (sourceSize.height || 0))
+          var pageArea = Math.max(1, viewport.width * viewport.height)
+          // Ignore tiny image masks/icons and one-pixel pattern assets. Real placed
+          // photos/illustrations in a document should have a meaningful source size or area.
+          if (sourceSize.width > 0 && sourceSize.height > 0) {
+            if (sourceSize.width < 8 || sourceSize.height < 8) return false
+          }
+          if (displayArea < 36) return false
+          if (sourceArea > 0 && sourceArea < 64) return false
+          if (displayArea / pageArea < 0.00002) return false
+          return true
+        }
+
+        async function scanPdfImageTargets(token) {
+          if (!S.pdfMode || !S.pdfJsDoc || !S.pdfPages.length || !window.pdfjsLib) return []
+          if (imageNavState.pdfScanPromise) return imageNavState.pdfScanPromise
+          var currentToken = token || pdfLoadToken
+          imageNavState.pdfScanPromise = (async function () {
+            var targets = []
+            try {
+              for (var pageIdx = 0; pageIdx < S.pdfPages.length; pageIdx++) {
+                if (currentToken !== pdfLoadToken) return []
+                var page = await S.pdfJsDoc.getPage(pageIdx + 1)
+                var viewport = page.getViewport({ scale: 1 })
+                var opList = await page.getOperatorList()
+                var ctm = [1, 0, 0, 1, 0, 0]
+                var stack = []
+
+                function pushImage(rect, sourceSize) {
+                  if (!rect || !shouldKeepPdfImageTarget(rect, sourceSize, viewport)) return
+                  var safe = {
+                    x: Math.max(0, Math.min(viewport.width, rect.x)),
+                    y: Math.max(0, Math.min(viewport.height, rect.y)),
+                    w: Math.max(0, Math.min(viewport.width, rect.x + rect.w) - Math.max(0, rect.x)),
+                    h: Math.max(0, Math.min(viewport.height, rect.y + rect.h) - Math.max(0, rect.y)),
+                  }
+                  if (safe.w < 6 || safe.h < 6) return
+                  targets.push({
+                    type: 'pdf-image',
+                    pageIdx: pageIdx,
+                    rect: safe,
+                    viewportW: viewport.width,
+                    viewportH: viewport.height,
+                    sourceWidth: sourceSize.width || 0,
+                    sourceHeight: sourceSize.height || 0,
+                  })
+                }
+
+                for (var oi = 0; oi < opList.fnArray.length; oi++) {
+                  var fn = opList.fnArray[oi]
+                  var args = opList.argsArray[oi]
+                  if (fn === pdfjsLib.OPS.save) {
+                    stack.push(ctm.slice())
+                    continue
+                  }
+                  if (fn === pdfjsLib.OPS.restore) {
+                    ctm = stack.length ? stack.pop() : [1, 0, 0, 1, 0, 0]
+                    continue
+                  }
+                  if (fn === pdfjsLib.OPS.transform && args && args.length >= 6) {
+                    ctm = matrixMultiply(ctm, args)
+                    continue
+                  }
+                  if (fn === pdfjsLib.OPS.paintFormXObjectBegin) {
+                    stack.push(ctm.slice())
+                    if (args && args[0] && args[0].length >= 6) ctm = matrixMultiply(ctm, args[0])
+                    continue
+                  }
+                  if (fn === pdfjsLib.OPS.paintFormXObjectEnd) {
+                    ctm = stack.length ? stack.pop() : [1, 0, 0, 1, 0, 0]
+                    continue
+                  }
+                  if (!isPdfImagePaintOp(fn)) continue
+
+                  if (
+                    fn === pdfjsLib.OPS.paintImageXObjectRepeat &&
+                    args &&
+                    Array.isArray(args[3])
+                  ) {
+                    var repeatW = Number(args[1]) || 0
+                    var repeatH = Number(args[2]) || 0
+                    var positions = args[3]
+                    for (var ri = 0; ri + 1 < positions.length; ri += 2) {
+                      var repeatMatrix = matrixMultiply(ctm, [
+                        Number(args[1]) || 0,
+                        0,
+                        0,
+                        Number(args[2]) || 0,
+                        Number(positions[ri]) || 0,
+                        Number(positions[ri + 1]) || 0,
+                      ])
+                      var repeatViewportMatrix = pdfjsLib.Util.transform(
+                        viewport.transform,
+                        repeatMatrix,
+                      )
+                      pushImage(transformUnitRect(repeatViewportMatrix), {
+                        width: repeatW,
+                        height: repeatH,
+                      })
+                    }
+                    continue
+                  }
+
+                  if (
+                    fn === pdfjsLib.OPS.paintInlineImageXObjectGroup ||
+                    fn === pdfjsLib.OPS.paintImageMaskXObjectGroup
+                  ) {
+                    var groupData = args && args[0]
+                    var groupMap = args && args[1]
+                    var groupW = Number(groupData && groupData.width) || 0
+                    var groupH = Number(groupData && groupData.height) || 0
+                    if (Array.isArray(groupMap)) {
+                      groupMap.forEach(function (entry) {
+                        var entryMatrix = entry && entry.transform
+                        if (!entryMatrix || entryMatrix.length < 6) return
+                        var combined = matrixMultiply(ctm, entryMatrix)
+                        var viewportMatrix = pdfjsLib.Util.transform(viewport.transform, combined)
+                        pushImage(transformUnitRect(viewportMatrix), {
+                          width: groupW || Number(entry.w) || 0,
+                          height: groupH || Number(entry.h) || 0,
+                        })
+                      })
+                    }
+                    continue
+                  }
+
+                  var sourceSize = getPdfImageSourceSize(fn, args)
+                  var imageMatrix = pdfjsLib.Util.transform(viewport.transform, ctm)
+                  pushImage(transformUnitRect(imageMatrix), sourceSize)
+                }
+
+                await new Promise(function (resolve) {
+                  requestAnimationFrame(resolve)
+                })
+              }
+            } catch (err) {
+              console.warn('PDF图片检测失败', err)
+            }
+            // Reading order is page order first, then vertical position, then horizontal position.
+            targets.sort(function (a, b) {
+              return a.pageIdx - b.pageIdx || a.rect.y - b.rect.y || a.rect.x - b.rect.x
+            })
+            imageNavState.targets = targets
+            imageNavState.currentIdx = -1
+            updateImageNavInfo()
+            return targets
+          })().finally(function () {
+            imageNavState.pdfScanPromise = null
+          })
+          return imageNavState.pdfScanPromise
+        }
+
+        function getPdfImageViewportPosition(target) {
+          if (!target || target.type !== 'pdf-image') return null
+          var pageEl = getPageEl(target.pageIdx)
+          if (!pageEl) return null
+          var wrap = pageEl.querySelector('.doc-page-img-wrap')
+          if (!wrap) return null
+          var scaleX = wrap.clientWidth / Math.max(1, target.viewportW || 1)
+          var scaleY = wrap.clientHeight / Math.max(1, target.viewportH || 1)
+          var centerX = (target.rect.x + target.rect.w / 2) * scaleX
+          var centerY = (target.rect.y + target.rect.h / 2) * scaleY
+          return { pageEl: pageEl, wrap: wrap, x: centerX, y: centerY }
+        }
+
+        function collectImageNavTargets() {
+          var targets = []
+          if (!DOM.docPages) return targets
+
+          if (S.pdfMode) {
+            return imageNavState.targets || []
+          }
+
+          // DOCX: only actual <img> nodes in the document content are image targets.
+          if (S.docxHtml && S.fileType === 'docx') {
+            DOM.docPages.querySelectorAll('.docx-container img').forEach(function (img) {
+              var pageEl = img.closest('.doc-page[data-page-idx]')
+              if (!pageEl) return
+              var pageIdx = parseInt(pageEl.dataset.pageIdx, 10)
+              if (isNaN(pageIdx)) return
+              targets.push({
+                type: 'image',
+                pageIdx: pageIdx,
+                el: img,
+                pageEl: pageEl,
+              })
+            })
+          }
+          return targets
+        }
+
+        function updateImageNavInfo() {
+          var discovered = collectImageNavTargets()
+          // Preserve the PDF scan result. For DOCX, rebuild the live DOM image list.
+          if (!S.pdfMode) imageNavState.targets = discovered
+          var total = imageNavState.targets.length
+          if (total === 0) {
+            imageNavState.currentIdx = -1
+            if (DOM.imageJumpInput) DOM.imageJumpInput.value = ''
+          if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ 0'
+            if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = true
+            if (DOM.imageNextBtn) DOM.imageNextBtn.disabled = true
+            clearImageNavCurrent()
+            return
+          }
+
+          // A newly opened document has no active image yet. Do not infer the first
+          // image from the current viewport. The first navigation click should decide
+          // which image becomes active.
+          if (imageNavState.currentIdx < 0) {
+            if (DOM.imageJumpInput) DOM.imageJumpInput.value = ''
+            if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ ' + total
+            if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = true
+            if (DOM.imageNextBtn) DOM.imageNextBtn.disabled = false
+            return
+          }
+
+          // During a programmatic smooth jump, scroll events are emitted continuously.
+          // Do not let an intermediate scroll position overwrite the image the user just
+          // selected. The lock is released by the fallback timer.
+          if (
+            imageNavState.navigationLockIdx >= 0 &&
+            imageNavState.navigationLockIdx < total &&
+            Date.now() < imageNavState.navigationLockUntil
+          ) {
+            imageNavState.currentIdx = imageNavState.navigationLockIdx
+            var lockedShown = imageNavState.currentIdx + 1
+            if (DOM.imageJumpInput) DOM.imageJumpInput.value = String(lockedShown)
+            if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ ' + total
+            if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = imageNavState.currentIdx <= 0
+            if (DOM.imageNextBtn) DOM.imageNextBtn.disabled = imageNavState.currentIdx >= total - 1
+            return
+          }
+
+          imageNavState.navigationLockIdx = -1
+          imageNavState.navigationLockUntil = 0
+
+          var vpRect = DOM.docViewport.getBoundingClientRect()
+          var mid = vpRect.top + vpRect.height / 2
+          var current = -1
+          var bestDistance = Infinity
+
+          imageNavState.targets.forEach(function (target, idx) {
+            var center = Infinity
+            if (target.type === 'pdf-image') {
+              var pos = getPdfImageViewportPosition(target)
+              if (pos) {
+                var pageRect = pos.pageEl.getBoundingClientRect()
+                center = pageRect.top + pos.y
+              }
+            } else if (target.el) {
+              var r = target.el.getBoundingClientRect()
+              center = (r.top + r.bottom) / 2
+            }
+            if (!isFinite(center)) return
+            var distance = Math.abs(center - mid)
+            if (distance < bestDistance) {
+              bestDistance = distance
+              current = idx
+            }
+          })
+
+          if (current !== -1) imageNavState.currentIdx = current
+
+          var shown = imageNavState.currentIdx >= 0 ? imageNavState.currentIdx + 1 : 0
+          if (DOM.imageJumpInput) DOM.imageJumpInput.value = shown > 0 ? String(shown) : ''
+          if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ ' + total
+          if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = imageNavState.currentIdx <= 0
+          if (DOM.imageNextBtn) DOM.imageNextBtn.disabled =
+            imageNavState.currentIdx >= total - 1
+        }
+
+        function scheduleImageNavRefresh() {
+          if (imageNavState.refreshQueued) return
+          imageNavState.refreshQueued = true
+          requestAnimationFrame(function () {
+            imageNavState.refreshQueued = false
+            updateImageNavInfo()
+          })
+        }
+
+        function clearImageNavCurrent() {
+          $$('.image-nav-current').forEach(function (el) {
+            el.classList.remove('image-nav-current')
+          })
+          $$('.pdf-image-nav-highlight').forEach(function (el) {
+            el.remove()
+          })
+        }
+
+        function showPdfImageHighlight(target) {
+          if (!target || target.type !== 'pdf-image') return
+          var pos = getPdfImageViewportPosition(target)
+          if (!pos || !pos.wrap) return
+          var old = pos.wrap.querySelector('.pdf-image-nav-highlight')
+          if (old) old.remove()
+          var el = document.createElement('div')
+          el.className = 'pdf-image-nav-highlight image-nav-current'
+          el.style.left = Math.max(0, pos.x - ((target.rect.w * (pos.wrap.clientWidth / Math.max(1, target.viewportW))) / 2)) + 'px'
+          el.style.top = Math.max(0, pos.y - ((target.rect.h * (pos.wrap.clientHeight / Math.max(1, target.viewportH))) / 2)) + 'px'
+          el.style.width = Math.max(1, target.rect.w * (pos.wrap.clientWidth / Math.max(1, target.viewportW))) + 'px'
+          el.style.height = Math.max(1, target.rect.h * (pos.wrap.clientHeight / Math.max(1, target.viewportH))) + 'px'
+          pos.wrap.appendChild(el)
+          return el
+        }
+
+        function cancelImageHighlight() {
+          if (imageNavState.highlightTimer) {
+            clearTimeout(imageNavState.highlightTimer)
+            imageNavState.highlightTimer = null
+          }
+          clearImageNavCurrent()
+          if (DOM.imageCancelBtn) DOM.imageCancelBtn.disabled = true
+        }
+
+        function setImageHighlightActive() {
+          if (DOM.imageCancelBtn) DOM.imageCancelBtn.disabled = false
+        }
+
+        function releaseImageNavigationLock() {
+          // scrollend can fire at the end of the programmatic jump itself.
+          // Do NOT immediately resync from viewport geometry here: for a row of
+          // side-by-side images the nearest image to the viewport center can be
+          // a different target from the one the user explicitly selected.
+          // Keep the explicit selection as the source of truth until the user
+          // performs a subsequent manual scroll.
+          imageNavState.navigationLockIdx = -1
+          imageNavState.navigationLockUntil = 0
+          if (imageNavState.navigationTimer) {
+            clearTimeout(imageNavState.navigationTimer)
+            imageNavState.navigationTimer = null
+          }
+        }
+
+        function jumpToImage(targetIdx, direction) {
+          var targets = collectImageNavTargets()
+          if (!S.pdfMode) imageNavState.targets = targets
+          targets = imageNavState.targets || []
+          var total = targets.length
+          if (!total) {
+            notify('当前文档没有检测到可跳转的真实图片')
+            updateImageNavInfo()
+            return
+          }
+
+          var current = imageNavState.currentIdx
+          if (current < 0 || current >= total) {
+            updateImageNavInfo()
+            current = imageNavState.currentIdx
+          }
+          if (current < 0) current = direction > 0 ? -1 : total
+
+          var nextIdx
+          if (typeof targetIdx === 'number') {
+            nextIdx = Math.max(0, Math.min(total - 1, targetIdx))
+          } else if (direction > 0) {
+            nextIdx = Math.min(total - 1, current + 1)
+          } else {
+            nextIdx = Math.max(0, current - 1)
+          }
+
+          var target = targets[nextIdx]
+          if (!target) return
+
+          clearImageNavCurrent()
+          imageNavState.currentIdx = nextIdx
+          imageNavState.navigationLockIdx = nextIdx
+          // Keep the selected index authoritative while the smooth scroll is running.
+          imageNavState.navigationLockUntil = Date.now() + 1800
+
+          if (imageNavState.navigationTimer) clearTimeout(imageNavState.navigationTimer)
+          imageNavState.navigationTimer = setTimeout(function () {
+            imageNavState.navigationTimer = null
+            imageNavState.navigationLockUntil = 0
+            imageNavState.navigationLockIdx = -1
+            // Keep the user's chosen image as the active index. Do not trigger an
+            // immediate viewport-based resync here. The next real user scroll can
+            // update the active image normally.
+            if (DOM.imageJumpInput) DOM.imageJumpInput.value = String(imageNavState.currentIdx + 1)
+            if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ ' + imageNavState.targets.length
+            if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = imageNavState.currentIdx <= 0
+            if (DOM.imageNextBtn) DOM.imageNextBtn.disabled = imageNavState.currentIdx >= imageNavState.targets.length - 1
+          }, 1900)
+
+          if (target.type === 'pdf-image') {
+            var pos = getPdfImageViewportPosition(target)
+            var pageEl = getPageEl(target.pageIdx)
+            if (pageEl && pos) {
+              var pageRect = pageEl.getBoundingClientRect()
+              var viewportRect = vpRectForImageNav()
+
+              // A PDF may contain multiple real images on the same row. In that case
+              // their Y positions are identical, so changing scrollTop alone does
+              // nothing for an image that sits to the left/right of the current view.
+              // Always center both axes around the selected image.
+              var desiredTop =
+                DOM.docViewport.scrollTop +
+                (pageRect.top - viewportRect.top) +
+                pos.y -
+                DOM.docViewport.clientHeight / 2
+              var desiredLeft =
+                DOM.docViewport.scrollLeft +
+                (pageRect.left - viewportRect.left) +
+                pos.x -
+                DOM.docViewport.clientWidth / 2
+
+              var maxTop = Math.max(0, DOM.docViewport.scrollHeight - DOM.docViewport.clientHeight)
+              var maxLeft = Math.max(0, DOM.docViewport.scrollWidth - DOM.docViewport.clientWidth)
+
+              DOM.docViewport.scrollTo({
+                top: Math.max(0, Math.min(maxTop, desiredTop)),
+                left: Math.max(0, Math.min(maxLeft, desiredLeft)),
+                behavior: 'smooth',
+              })
+              showPdfImageHighlight(target)
+              setImageHighlightActive()
+            } else if (pageEl) {
+              pageEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+            }
+            if (DOM.pageJumpInput) DOM.pageJumpInput.value = String(target.pageIdx + 1)
+          } else if (target.el) {
+            target.el.classList.add('image-nav-current')
+            target.el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+            setImageHighlightActive()
+            if (target.pageIdx != null && DOM.pageJumpInput) DOM.pageJumpInput.value = String(target.pageIdx + 1)
+          }
+
+          if (DOM.imageJumpInput) DOM.imageJumpInput.value = String(nextIdx + 1)
+          if (DOM.imageJumpTotal) DOM.imageJumpTotal.textContent = '/ ' + total
+          if (DOM.imagePrevBtn) DOM.imagePrevBtn.disabled = nextIdx <= 0
+          if (DOM.imageNextBtn) DOM.imageNextBtn.disabled = nextIdx >= total - 1
+          scheduleSearchRefresh()
+        }
+
+        function vpRectForImageNav() {
+          return DOM.docViewport.getBoundingClientRect()
+        }
+
+        function imageNext() {
+          jumpToImage(null, 1)
+        }
+
+        function imagePrev() {
+          jumpToImage(null, -1)
+        }
+
+        /* ============================================================
                SEARCH
                ============================================================ */
         var searchState = {
@@ -2795,6 +3457,17 @@
           warnedQuery: '',
           refreshTimer: null,
           matchSeq: 0,
+        }
+
+        var imageNavState = {
+          targets: [],
+          currentIdx: -1,
+          refreshQueued: false,
+          pdfScanPromise: null,
+          navigationLockIdx: -1,
+          navigationLockUntil: 0,
+          navigationTimer: null,
+          highlightTimer: null,
         }
 
         // Search ignores whitespace and zero-width/control/invisible characters so a query may
@@ -3500,6 +4173,7 @@
             S.fileType = ext
             S.pdfMode = false
             S.docxHtml = null
+            resetImageNavState()
 
             if (ext === 'pdf') {
               await loadPDF(file)
@@ -3706,7 +4380,12 @@
             S.totalPages = numPages
             S.fileType = 'pdf'
             S.pdfTextLoads = {}
+            resetImageNavState()
             updateLoadedPageInfo()
+
+            // Detect embedded PDF raster/vector image placements from the page operator lists.
+            // The PDF page preview itself is a generated full-page image and is never a target.
+            var pdfImageScanPromise = scanPdfImageTargets(token)
 
             // Phase 2: render only the first couple of pages. Everything else is lazy.
             var renderCount = Math.min(numPages, CONFIG.PDF_INITIAL_RENDER)
@@ -3730,10 +4409,12 @@
             setProgress(80)
             setLoadingInfo('建立页面…')
             renderDocument()
+            await pdfImageScanPromise
+            updateImageNavInfo()
             setupLazyRendering(renderScale)
             setProgress(100)
             setLoadingInfo('加载完成，其他页面将在滚动时加载')
-            log('PDF 解析完成：' + numPages + ' 页（首屏 ' + renderCount + ' 页，其余按需加载）')
+            log('PDF 解析完成：' + numPages + ' 页（首屏 ' + renderCount + ' 页，其余按需加载，检测到 ' + imageNavState.targets.length + ' 张真实图片）')
             hideProgress()
             DOM.fmeta.textContent = formatSize(file.size) + ' · ' + numPages + ' 页 · 文字按需解析'
           } catch (err) {
@@ -5109,6 +5790,7 @@
           })
           updateStats()
           updatePageJumpInfo()
+          updateImageNavInfo()
         }
 
         function layoutPdfPage(pageIdx, wrap) {
@@ -6583,6 +7265,7 @@
           })
           updateStats()
           updatePageJumpInfo()
+          updateImageNavInfo()
           notify('已加载 TXT 示例文档')
           log('已加载 TXT 示例文档：' + S.fileName)
           DOM.statusLeft.textContent = '已加载: ' + S.fileName
@@ -6707,6 +7390,9 @@
               else if (a === 'zoomIn') setPdfViewScale((S.viewScale || 1) + 0.2)
               else if (a === 'zoomOut') setPdfViewScale((S.viewScale || 1) - 0.2)
               else if (a === 'zoomReset') setPdfViewScale(1)
+              else if (a === 'imageNext') imageNext()
+              else if (a === 'imagePrev') imagePrev()
+              else if (a === 'imageCancel') cancelImageHighlight()
               else if (a === 'openSearch') toggleSearch()
             })
           })
@@ -6882,6 +7568,12 @@
                 return
               }
             }
+            if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault()
+              if (e.key === 'ArrowDown') imageNext()
+              else imagePrev()
+              return
+            }
             if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
               return
             }
@@ -6974,6 +7666,17 @@
             }
           })
 
+          // Keep image navigation position synchronized with the reading viewport.
+          // During a programmatic image jump, scroll events are intentionally ignored
+          // by updateImageNavInfo via navigationLockIdx. We also do not use wheel/touch
+          // as a lock breaker, because those events can occur while the browser is still
+          // settling a smooth two-axis scroll and can make image 4 appear to skip to 5.
+          DOM.docViewport.addEventListener('scroll', scheduleImageNavRefresh, { passive: true })
+          if ('onscrollend' in DOM.docViewport) {
+            DOM.docViewport.addEventListener('scrollend', releaseImageNavigationLock, { passive: true })
+          }
+          window.addEventListener('resize', scheduleImageNavRefresh)
+
           // Page jump input
           DOM.pageJumpInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
@@ -6982,6 +7685,35 @@
             }
             e.stopPropagation()
           })
+
+          // Image jump input
+          if (DOM.imageJumpInput) {
+            DOM.imageJumpInput.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                var raw = DOM.imageJumpInput.value.trim()
+                if (!/^\d+$/.test(raw)) {
+                  notify('请输入有效的图片编号')
+                  return
+                }
+                var idx = parseInt(raw, 10) - 1
+                if (!imageNavState.targets.length) {
+                  imageNavState.targets = collectImageNavTargets()
+                }
+                if (!imageNavState.targets.length) {
+                  notify('当前文档没有检测到可跳转的真实图片')
+                  return
+                }
+                if (idx < 0 || idx >= imageNavState.targets.length) {
+                  notify('图片编号超出范围')
+                  DOM.imageJumpInput.value = imageNavState.currentIdx >= 0 ? String(imageNavState.currentIdx + 1) : ''
+                  return
+                }
+                jumpToImage(idx)
+              }
+              e.stopPropagation()
+            })
+          }
 
           // Search bar events
           DOM.searchInput.addEventListener('input', function () {
