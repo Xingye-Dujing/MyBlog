@@ -1792,7 +1792,9 @@
         );
       }
 
-      #file-input {
+      #file-input,
+      #image-file-input,
+      #image-folder-input {
         display: none;
       }
 
@@ -1906,7 +1908,9 @@
     <div id="top-menu">
       <div class="menu-group">
         <span class="menu-label">文件</span>
-        <div class="menu-btn" data-action="loadFile">打开</div>
+        <div class="menu-btn" data-action="loadFile">打开文档</div>
+        <div class="menu-btn" data-action="loadImages">打开图片</div>
+        <div class="menu-btn" data-action="loadImageFolder">图片文件夹</div>
         <div class="menu-btn" data-action="loadSample">示例</div>
       </div>
       <div class="menu-group">
@@ -2190,7 +2194,7 @@
               <div style="font-size: 15px; letter-spacing: 1px; margin-bottom: 6px">
                 打开文档开始脱敏
               </div>
-              <div style="font-size: 11px">支持 TXT / PDF / DOCX · 大文件流式读取</div>
+              <div style="font-size: 11px">支持 TXT / PDF / DOCX / 图片 · 大文件流式读取</div>
             </div>
           </div>
         </div>
@@ -2261,7 +2265,7 @@
     <!-- DROP ZONE -->
     <div id="drop-zone">
       <div class="drop-text">释放文件以打开</div>
-      <div class="drop-hint">支持 TXT / PDF / DOCX · 大文件流式读取</div>
+      <div class="drop-hint">支持 TXT / PDF / DOCX / 图片 · 可拖入多张图片</div>
     </div>
 
     <!-- SEARCH BAR -->
@@ -2313,6 +2317,8 @@
     </div>
 
     <input type="file" id="file-input" accept=".txt,.docx,.pdf" />
+    <input type="file" id="image-file-input" accept="image/*" multiple />
+    <input type="file" id="image-folder-input" accept="image/*" webkitdirectory directory multiple />
 
     <script>
       ;(function () {
@@ -2359,6 +2365,7 @@
           fileName: '',
           fileSize: 0,
           fileType: '',
+          imageSourceCount: 0,
           text: '',
           lines: [],
           pages: [],
@@ -2421,6 +2428,8 @@
           docPages: $('#doc-pages'),
           dropZone: $('#drop-zone'),
           fileInput: $('#file-input'),
+          imageFileInput: $('#image-file-input'),
+          imageFolderInput: $('#image-folder-input'),
           statusLeft: $('#stat-left'),
           statusRight: $('#stat-right'),
           notification: $('#notification'),
@@ -4449,6 +4458,263 @@
         }
 
         /* ============================================================
+               IMAGE IMPORT — build an in-memory PDF, then use the normal PDF path.
+               This keeps image pages compatible with the existing viewer, lazy
+               loading, redaction canvas, image navigation and PDF export pipeline.
+               ============================================================ */
+        function isImageFile(file) {
+          if (!file) return false
+          var type = String(file.type || '').toLowerCase()
+          if (type.indexOf('image/') === 0) return true
+          var ext = (file.name.split('.').pop() || '').toLowerCase()
+          return {
+            png: true,
+            jpg: true,
+            jpeg: true,
+            webp: true,
+            gif: true,
+            bmp: true,
+            avif: true,
+            tif: true,
+            tiff: true,
+          }[ext] === true
+        }
+
+        function naturalCompare(a, b) {
+          return String(a).localeCompare(String(b), 'zh-CN', {
+            numeric: true,
+            sensitivity: 'base',
+          })
+        }
+
+        function getImagePath(file) {
+          return String(file.webkitRelativePath || file.name || '')
+        }
+
+        function loadImageElement(file) {
+          return new Promise(function (resolve, reject) {
+            if (!file) {
+              reject(new Error('图片文件无效'))
+              return
+            }
+            var url = URL.createObjectURL(file)
+            var img = new Image()
+            var done = false
+            function cleanup() {
+              try {
+                URL.revokeObjectURL(url)
+              } catch (_) {}
+            }
+            img.onload = function () {
+              if (done) return
+              done = true
+              if (!img.naturalWidth || !img.naturalHeight) {
+                cleanup()
+                reject(new Error('无法读取图片尺寸：' + file.name))
+                return
+              }
+              // Keep the object URL alive until jsPDF has consumed the image.
+              // Revoking it here makes jsPDF receive `blob:null/...` and causes
+              // getImageFileTypeByImageData() to fail for otherwise valid files.
+              img.__zenObjectUrl = url
+              resolve(img)
+            }
+            img.onerror = function () {
+              if (done) return
+              done = true
+              cleanup()
+              reject(new Error('图片无法解码：' + file.name))
+            }
+            img.decoding = 'async'
+            img.src = url
+          })
+        }
+
+        function getImagePdfFormat(file) {
+          var type = String(file && file.type || '').toLowerCase()
+          if (type === 'image/jpeg' || type === 'image/jpg') return 'JPEG'
+          if (type === 'image/png') return 'PNG'
+          if (type === 'image/webp') return 'WEBP'
+          if (type === 'image/gif') return 'GIF'
+          if (type === 'image/bmp') return 'BMP'
+          if (type === 'image/avif') return 'AVIF'
+          var ext = ((file && file.name) || '').split('.').pop().toLowerCase()
+          if (ext === 'jpg' || ext === 'jpeg') return 'JPEG'
+          if (ext === 'png') return 'PNG'
+          if (ext === 'webp') return 'WEBP'
+          if (ext === 'gif') return 'GIF'
+          if (ext === 'bmp') return 'BMP'
+          if (ext === 'avif') return 'AVIF'
+          return 'JPEG'
+        }
+
+        async function buildPdfFromImages(files) {
+          if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('PDF 生成库未加载，无法将图片整理为 PDF')
+          }
+          var sourceFiles = Array.prototype.slice.call(files || []).filter(isImageFile)
+          sourceFiles.sort(function (a, b) {
+            return naturalCompare(getImagePath(a), getImagePath(b))
+          })
+          if (!sourceFiles.length) throw new Error('没有找到可用的图片文件')
+
+          var JS = window.jspdf.jsPDF
+          // 原图优先：默认不限制像素尺寸，不通过 Canvas 缩放或 JPEG 重编码。
+          // 仅在 jsPDF 无法直接处理的图片格式时才使用浏览器解码后再转换。
+          var MAX_PT = Infinity
+          var firstPage = true
+          var doc = null
+          var successCount = 0
+          var failedNames = []
+
+          DOM.statusLeft.textContent = '整理图片为 PDF…'
+
+          try {
+            for (var i = 0; i < sourceFiles.length; i++) {
+              var file = sourceFiles[i]
+              setProgress(Math.round((i / sourceFiles.length) * 95))
+              setLoadingInfo('读取图片 ' + (i + 1) + ' / ' + sourceFiles.length + '：' + file.name)
+
+              try {
+                var img = await loadImageElement(file)
+                var rawW = Math.max(1, img.naturalWidth)
+                var rawH = Math.max(1, img.naturalHeight)
+                var scale = Math.min(1, MAX_PT / Math.max(rawW, rawH))
+                var pageW = Math.max(1, rawW * scale)
+                var pageH = Math.max(1, rawH * scale)
+                var format = getImagePdfFormat(file)
+                var sourceImage = img
+                var imageData = null
+
+                // 原图优先策略：JPEG / PNG 直接把原始文件字节交给 jsPDF，
+                // 不缩放、不经过 Canvas、不重新编码。
+                // 只有 jsPDF 当前版本不直接支持的格式才走解码转换。
+                var directFormats = ['JPEG', 'PNG']
+                var needsCanvas = directFormats.indexOf(format) === -1
+                if (needsCanvas) {
+                  var targetW = rawW
+                  var targetH = rawH
+                  var workCanvas = document.createElement('canvas')
+                  workCanvas.width = targetW
+                  workCanvas.height = targetH
+                  var workCtx = workCanvas.getContext('2d', { alpha: true, willReadFrequently: false })
+                  if (!workCtx) throw new Error('浏览器无法创建图片转换画布')
+                  workCtx.clearRect(0, 0, targetW, targetH)
+                  workCtx.drawImage(img, 0, 0, targetW, targetH)
+                  // 非 JPEG/PNG 格式只能在此兼容路径转换，仍保持原始像素尺寸。
+                  imageData = workCanvas.toDataURL('image/png')
+                  sourceImage = imageData
+                  format = 'PNG'
+                  workCanvas.width = 1
+                  workCanvas.height = 1
+                }
+
+                if (firstPage) {
+                  doc = new JS({
+                    orientation: pageW >= pageH ? 'landscape' : 'portrait',
+                    unit: 'pt',
+                    format: [pageW, pageH],
+                    compress: true,
+                  })
+                  firstPage = false
+                } else {
+                  doc.addPage([pageW, pageH], pageW >= pageH ? 'landscape' : 'portrait')
+                }
+
+                // Draw edge-to-edge. No margins are introduced.
+                doc.addImage(sourceImage, format, 0, 0, pageW, pageH, undefined, 'FAST')
+                successCount++
+
+                // The image element may be backed by a temporary object URL.
+                // Revoke it only after jsPDF has finished reading the image.
+                if (img && img.__zenObjectUrl) {
+                  try {
+                    URL.revokeObjectURL(img.__zenObjectUrl)
+                  } catch (_) {}
+                  img.__zenObjectUrl = ''
+                }
+              } catch (imgErr) {
+                failedNames.push(file.name)
+                // Always release the temporary object URL, including failures.
+                if (typeof img !== 'undefined' && img && img.__zenObjectUrl) {
+                  try {
+                    URL.revokeObjectURL(img.__zenObjectUrl)
+                  } catch (_) {}
+                  img.__zenObjectUrl = ''
+                }
+                console.warn('图片加入 PDF 失败：' + file.name, imgErr)
+              }
+
+              await new Promise(function (resolve) {
+                requestAnimationFrame(resolve)
+              })
+            }
+
+            if (!doc || successCount === 0) {
+              throw new Error('没有成功加入任何图片。可能是浏览器不支持其中的图片格式。')
+            }
+
+            setProgress(100)
+            setLoadingInfo('生成 PDF 文件…')
+            var pdfBlob = doc.output('blob')
+            var firstPath = getImagePath(sourceFiles[0])
+            var folderName = String(firstPath.split('/')[0] || '').trim()
+            var base = sourceFiles.length === 1
+              ? (sourceFiles[0].name.replace(/\.[^.]+$/, '') || '图片')
+              : (folderName || '图片合集')
+            var pdfName = base + '_图片集.pdf'
+            var imagePdfFile = new File([pdfBlob], pdfName, { type: 'application/pdf' })
+
+            S.imageSourceCount = successCount
+            S.imageSourceNames = sourceFiles.map(function (f) { return getImagePath(f) })
+            await loadFile(imagePdfFile)
+            S.imageSourceCount = successCount
+
+            if (failedNames.length) {
+              notify('已载入 ' + successCount + ' 张图片，另有 ' + failedNames.length + ' 张无法读取')
+              log('图片 PDF 完成：成功 ' + successCount + ' 张，失败 ' + failedNames.length + ' 张', failedNames.length > 0)
+            } else {
+              notify('已将 ' + successCount + ' 张图片整理为 PDF')
+              log('图片 PDF 完成：' + successCount + ' 张图片，按文件名/路径排序')
+            }
+            DOM.fileTypeInfo.textContent =
+              '格式: 图片 PDF · ' + successCount + ' 张图片 · ' + formatSize(pdfBlob.size)
+            DOM.fmeta.textContent =
+              formatSize(pdfBlob.size) + ' · ' + successCount + ' 张图片 · 自动生成 PDF'
+            DOM.statusLeft.textContent = '已加载: ' + pdfName
+          } finally {
+            hideProgress()
+            hideLoadingPopup()
+            if (DOM.imageFileInput) DOM.imageFileInput.value = ''
+            if (DOM.imageFolderInput) DOM.imageFolderInput.value = ''
+          }
+        }
+
+        async function loadImageFiles(fileList) {
+          var files = Array.prototype.slice.call(fileList || []).filter(isImageFile)
+          if (!files.length) {
+            notify('没有找到可打开的图片')
+            return
+          }
+          files.sort(function (a, b) {
+            return naturalCompare(getImagePath(a), getImagePath(b))
+          })
+
+          try {
+            showLoadingPopup(files.length === 1 ? files[0].name : ('图片合集 · ' + files.length + ' 张'))
+            showProgress()
+            setProgress(0)
+            setLoadingInfo('准备生成图片 PDF…')
+            await buildPdfFromImages(files)
+          } catch (err) {
+            handleError('图片加载失败', err)
+          } finally {
+            if (DOM.imageFileInput) DOM.imageFileInput.value = ''
+            if (DOM.imageFolderInput) DOM.imageFolderInput.value = ''
+          }
+        }
+
+        /* ============================================================
                FILE LOADING
                ============================================================ */
         function showDropZone(show) {
@@ -4519,6 +4785,8 @@
             updateRedactCount()
 
             S.fileType = ext
+            S.imageSourceCount = 0
+            S.imageSourceNames = []
             S.pdfMode = false
             S.docxHtml = null
             resetImageNavState()
@@ -7840,6 +8108,8 @@
             el.addEventListener('click', function () {
               var a = el.dataset.action
               if (a === 'loadFile') DOM.fileInput.click()
+              else if (a === 'loadImages' && DOM.imageFileInput) DOM.imageFileInput.click()
+              else if (a === 'loadImageFolder' && DOM.imageFolderInput) DOM.imageFolderInput.click()
               else if (a === 'loadSample') loadSample()
               else if (a === 'applyAllRedacts') applyAllRedacts()
               else if (a === 'clearAll') clearAllRedacts()
@@ -8032,11 +8302,22 @@
             })
           })
 
-          // File input
+          // File inputs
           DOM.fileInput.addEventListener('change', function (e) {
             var f = e.target.files[0]
             if (f) loadFile(f)
+            DOM.fileInput.value = ''
           })
+          if (DOM.imageFileInput) {
+            DOM.imageFileInput.addEventListener('change', function (e) {
+              loadImageFiles(e.target.files)
+            })
+          }
+          if (DOM.imageFolderInput) {
+            DOM.imageFolderInput.addEventListener('change', function (e) {
+              loadImageFiles(e.target.files)
+            })
+          }
 
           // Drag and drop
           var da = $('#doc-area')
@@ -8057,8 +8338,13 @@
             e.preventDefault()
             dragLeaveCounter = 0
             showDropZone(false)
-            var f = e.dataTransfer.files[0]
-            if (f) loadFile(f)
+            var dropped = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || [])
+            var imageFiles = dropped.filter(isImageFile)
+            if (imageFiles.length) loadImageFiles(imageFiles)
+            else {
+              var f = dropped[0]
+              if (f) loadFile(f)
+            }
           })
 
           document.addEventListener('dragover', function (e) {
@@ -8067,8 +8353,13 @@
           document.addEventListener('drop', function (e) {
             e.preventDefault()
             showDropZone(false)
-            var f = e.dataTransfer.files[0]
-            if (f) loadFile(f)
+            var dropped = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || [])
+            var imageFiles = dropped.filter(isImageFile)
+            if (imageFiles.length) loadImageFiles(imageFiles)
+            else {
+              var f = dropped[0]
+              if (f) loadFile(f)
+            }
           })
 
           // Confirm
