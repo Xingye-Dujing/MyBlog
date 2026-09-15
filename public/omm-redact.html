@@ -36,6 +36,7 @@
     <script src="https://cdn.jsdmirror.com/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdmirror.com/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
@@ -1320,9 +1321,20 @@
         letter-spacing: 0.5px;
         color: var(--text);
       }
-      .export-progress-subtitle,
+      .export-progress-subtitle {
+        display: block;
+        margin-top: 6px;
+        min-height: 16px;
+        font-size: 10px;
+        color: var(--text-dim);
+        line-height: 1.5;
+      }
       .export-progress-hint {
-        display: none;
+        display: block;
+        margin-top: 7px;
+        font-size: 9px;
+        color: var(--text-faint);
+        letter-spacing: 0.4px;
       }
       .export-progress-icon {
         width: 18px;
@@ -1342,28 +1354,16 @@
         border-radius: 2px;
       }
       .export-progress-bar {
-        width: 35%;
+        width: 0%;
         height: 100%;
         background: var(--text);
-        animation: export-progress 1.2s ease-in-out infinite;
+        transition: width 0.18s ease;
       }
       @keyframes export-spin {
         to {
           transform: rotate(360deg);
         }
       }
-      @keyframes export-progress {
-        0% {
-          transform: translateX(-140%);
-        }
-        50% {
-          transform: translateX(100%);
-        }
-        100% {
-          transform: translateX(320%);
-        }
-      }
-
       /* ===== PROGRESS ===== */
       .progress-bar {
         width: 100%;
@@ -1922,6 +1922,7 @@
         <span class="menu-label">导出</span>
         <div class="menu-btn" data-action="exportPDF">导出 PDF</div>
         <div class="menu-btn" data-action="exportImage">导出图片</div>
+        <div class="menu-btn" data-action="exportPPTX">导出 PPTX</div>
       </div>
       <div class="menu-group">
         <span class="menu-label">设置</span>
@@ -2186,6 +2187,7 @@
           <div class="tool-sep"></div>
           <div class="tool-btn" data-action="exportPDF">导出 PDF</div>
           <div class="tool-btn" data-action="exportImage">导出图片</div>
+          <div class="tool-btn" data-action="exportPPTX">导出 PPTX</div>
         </div>
 
         <div id="doc-viewport">
@@ -2311,8 +2313,10 @@
     <div id="export-overlay">
       <div class="export-progress-card">
         <div class="export-progress-icon" aria-hidden="true"></div>
-        <div class="export-progress-title">正在生成脱敏文件</div>
-        <div class="export-progress-track"><div class="export-progress-bar"></div></div>
+        <div class="export-progress-title" id="export-progress-title">正在生成脱敏文件</div>
+        <div class="export-progress-subtitle" id="export-progress-subtitle">准备中…</div>
+        <div class="export-progress-track"><div class="export-progress-bar" id="export-progress-bar"></div></div>
+        <div class="export-progress-hint" id="export-progress-hint">0%</div>
       </div>
     </div>
 
@@ -2366,6 +2370,7 @@
           fileSize: 0,
           fileType: '',
           imageSourceCount: 0,
+          imageSourceFiles: [],
           text: '',
           lines: [],
           pages: [],
@@ -2436,6 +2441,10 @@
           confirmOverlay: $('#custom-confirm'),
           confirmMsg: $('#confirm-msg'),
           exportOverlay: $('#export-overlay'),
+          exportProgressTitle: $('#export-progress-title'),
+          exportProgressSubtitle: $('#export-progress-subtitle'),
+          exportProgressBar: $('#export-progress-bar'),
+          exportProgressHint: $('#export-progress-hint'),
           logPanel: $('#log-panel'),
           fname: $('#fname'),
           fmeta: $('#fmeta'),
@@ -2597,7 +2606,34 @@
         }
 
         function setProgress(pct) {
-          DOM.progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%'
+          var safePct = Math.min(100, Math.max(0, Number(pct) || 0))
+          var width = safePct + '%'
+          if (DOM.progressFill) DOM.progressFill.style.width = width
+          // Keep the visible loading popup progress bar synchronized with the
+          // same progress value. The popup is what users see while opening a
+          // document, so its bar must advance together with the loading text.
+          if (DOM.loadingProgressFill) DOM.loadingProgressFill.style.width = width
+        }
+
+        function setExportProgress(current, total, stage, title) {
+          var safeTotal = Math.max(1, Number(total) || 1)
+          var safeCurrent = Math.max(0, Math.min(safeTotal, Number(current) || 0))
+          var pct = Math.round((safeCurrent / safeTotal) * 100)
+          if (DOM.exportProgressTitle) DOM.exportProgressTitle.textContent = title || '正在生成脱敏文件'
+          if (DOM.exportProgressSubtitle) {
+            DOM.exportProgressSubtitle.textContent = stage
+              ? stage + ' · 第 ' + safeCurrent + ' / ' + safeTotal + ' 页'
+              : '第 ' + safeCurrent + ' / ' + safeTotal + ' 页'
+          }
+          if (DOM.exportProgressBar) DOM.exportProgressBar.style.width = pct + '%'
+          if (DOM.exportProgressHint) DOM.exportProgressHint.textContent = pct + '% · ' + safeCurrent + ' / ' + safeTotal
+        }
+
+        function resetExportProgress(title, stage) {
+          if (DOM.exportProgressTitle) DOM.exportProgressTitle.textContent = title || '正在生成脱敏文件'
+          if (DOM.exportProgressSubtitle) DOM.exportProgressSubtitle.textContent = stage || '准备中…'
+          if (DOM.exportProgressBar) DOM.exportProgressBar.style.width = '0%'
+          if (DOM.exportProgressHint) DOM.exportProgressHint.textContent = '0%'
         }
 
         function showProgress() {
@@ -2610,7 +2646,7 @@
 
         function showLoadingPopup(filename) {
           DOM.loadingFilename.textContent = filename
-          DOM.loadingProgressFill.style.width = '0%'
+          if (DOM.loadingProgressFill) DOM.loadingProgressFill.style.width = '0%'
           DOM.loadingInfo.textContent = '准备中…'
           DOM.loadingPopup.classList.add('active')
         }
@@ -4549,114 +4585,152 @@
         }
 
         async function buildPdfFromImages(files) {
-          if (!window.jspdf || !window.jspdf.jsPDF) {
+          if (!window.PDFLib || !window.PDFLib.PDFDocument) {
             throw new Error('PDF 生成库未加载，无法将图片整理为 PDF')
           }
+
           var sourceFiles = Array.prototype.slice.call(files || []).filter(isImageFile)
           sourceFiles.sort(function (a, b) {
             return naturalCompare(getImagePath(a), getImagePath(b))
           })
           if (!sourceFiles.length) throw new Error('没有找到可用的图片文件')
 
-          var JS = window.jspdf.jsPDF
-          // 原图优先：默认不限制像素尺寸，不通过 Canvas 缩放或 JPEG 重编码。
-          // 仅在 jsPDF 无法直接处理的图片格式时才使用浏览器解码后再转换。
-          var MAX_PT = Infinity
-          var firstPage = true
-          var doc = null
+          // Keep the original image File objects for the independent PPTX exporter.
+          // PDF creation and PPTX creation are separate pipelines.
+          S.imageSourceFiles = sourceFiles.slice()
+
+          var PDFDocument = window.PDFLib.PDFDocument
+          var doc = await PDFDocument.create()
           var successCount = 0
           var failedNames = []
+          var embeddedImages = []
 
           DOM.statusLeft.textContent = '整理图片为 PDF…'
+
+          function readFileAsUint8Array(file) {
+            return loadFileReadAsArrayBuffer(file).then(function (ab) {
+              return new Uint8Array(ab)
+            })
+          }
+
+          function looksLikeJpeg(bytes) {
+            return bytes && bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+          }
+
+          function looksLikePng(bytes) {
+            return bytes && bytes.length >= 8 &&
+              bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+              bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+          }
+
+          function loadImageForFallback(file) {
+            return loadImageElement(file)
+          }
+
+          async function convertUnsupportedImageToPng(file) {
+            var img = await loadImageForFallback(file)
+            try {
+              var w = Math.max(1, img.naturalWidth)
+              var h = Math.max(1, img.naturalHeight)
+              var canvas = document.createElement('canvas')
+              canvas.width = w
+              canvas.height = h
+              var ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: false })
+              if (!ctx) throw new Error('浏览器无法创建图片转换画布')
+              ctx.clearRect(0, 0, w, h)
+              ctx.drawImage(img, 0, 0, w, h)
+              var blob = await new Promise(function (resolve, reject) {
+                canvas.toBlob(function (b) {
+                  if (b) resolve(b)
+                  else reject(new Error('图片 PNG 转换失败'))
+                }, 'image/png')
+              })
+              var ab = await loadFileReadAsArrayBuffer(blob)
+              return { bytes: new Uint8Array(ab), width: w, height: h }
+            } finally {
+              if (img && img.__zenObjectUrl) {
+                try { URL.revokeObjectURL(img.__zenObjectUrl) } catch (_) {}
+                img.__zenObjectUrl = ''
+              }
+            }
+          }
 
           try {
             for (var i = 0; i < sourceFiles.length; i++) {
               var file = sourceFiles[i]
               setProgress(Math.round((i / sourceFiles.length) * 95))
-              setLoadingInfo('读取图片 ' + (i + 1) + ' / ' + sourceFiles.length + '：' + file.name)
+              setLoadingInfo('整理图片 ' + (i + 1) + ' / ' + sourceFiles.length + '：' + file.name)
 
               try {
-                var img = await loadImageElement(file)
-                var rawW = Math.max(1, img.naturalWidth)
-                var rawH = Math.max(1, img.naturalHeight)
-                var scale = Math.min(1, MAX_PT / Math.max(rawW, rawH))
-                var pageW = Math.max(1, rawW * scale)
-                var pageH = Math.max(1, rawH * scale)
-                var format = getImagePdfFormat(file)
-                var sourceImage = img
-                var imageData = null
+                var bytes = await readFileAsUint8Array(file)
+                var image = null
+                var width = 0
+                var height = 0
 
-                // 原图优先策略：JPEG / PNG 直接把原始文件字节交给 jsPDF，
-                // 不缩放、不经过 Canvas、不重新编码。
-                // 只有 jsPDF 当前版本不直接支持的格式才走解码转换。
-                var directFormats = ['JPEG', 'PNG']
-                var needsCanvas = directFormats.indexOf(format) === -1
-                if (needsCanvas) {
-                  var targetW = rawW
-                  var targetH = rawH
-                  var workCanvas = document.createElement('canvas')
-                  workCanvas.width = targetW
-                  workCanvas.height = targetH
-                  var workCtx = workCanvas.getContext('2d', { alpha: true, willReadFrequently: false })
-                  if (!workCtx) throw new Error('浏览器无法创建图片转换画布')
-                  workCtx.clearRect(0, 0, targetW, targetH)
-                  workCtx.drawImage(img, 0, 0, targetW, targetH)
-                  // 非 JPEG/PNG 格式只能在此兼容路径转换，仍保持原始像素尺寸。
-                  imageData = workCanvas.toDataURL('image/png')
-                  sourceImage = imageData
-                  format = 'PNG'
-                  workCanvas.width = 1
-                  workCanvas.height = 1
-                }
-
-                if (firstPage) {
-                  doc = new JS({
-                    orientation: pageW >= pageH ? 'landscape' : 'portrait',
-                    unit: 'pt',
-                    format: [pageW, pageH],
-                    compress: true,
-                  })
-                  firstPage = false
+                if (looksLikeJpeg(bytes) || String(file.type || '').toLowerCase() === 'image/jpeg' || /\.(jpe?g)$/i.test(file.name)) {
+                  image = await doc.embedJpg(bytes)
+                  var jpgSize = image.size()
+                  width = jpgSize.width
+                  height = jpgSize.height
+                } else if (looksLikePng(bytes) || String(file.type || '').toLowerCase() === 'image/png' || /\.png$/i.test(file.name)) {
+                  image = await doc.embedPng(bytes)
+                  var pngSize = image.size()
+                  width = pngSize.width
+                  height = pngSize.height
                 } else {
-                  doc.addPage([pageW, pageH], pageW >= pageH ? 'landscape' : 'portrait')
+                  var converted = await convertUnsupportedImageToPng(file)
+                  image = await doc.embedPng(converted.bytes)
+                  width = converted.width
+                  height = converted.height
                 }
 
-                // Draw edge-to-edge. No margins are introduced.
-                doc.addImage(sourceImage, format, 0, 0, pageW, pageH, undefined, 'FAST')
+                if (!image || !width || !height) throw new Error('无法读取图片尺寸')
+
+                // Cache the embedded image reference and native geometry.
+                // The source image bytes are never changed by this step.
+                file.__zenEmbeddedImage = image
+                file.__zenImageWidth = width
+                file.__zenImageHeight = height
+                file.__zenImageRatio = width / Math.max(1, height)
+                embeddedImages.push(file)
+
                 successCount++
-
-                // The image element may be backed by a temporary object URL.
-                // Revoke it only after jsPDF has finished reading the image.
-                if (img && img.__zenObjectUrl) {
-                  try {
-                    URL.revokeObjectURL(img.__zenObjectUrl)
-                  } catch (_) {}
-                  img.__zenObjectUrl = ''
-                }
               } catch (imgErr) {
                 failedNames.push(file.name)
-                // Always release the temporary object URL, including failures.
-                if (typeof img !== 'undefined' && img && img.__zenObjectUrl) {
-                  try {
-                    URL.revokeObjectURL(img.__zenObjectUrl)
-                  } catch (_) {}
-                  img.__zenObjectUrl = ''
-                }
                 console.warn('图片加入 PDF 失败：' + file.name, imgErr)
               }
 
-              await new Promise(function (resolve) {
-                requestAnimationFrame(resolve)
-              })
+              await new Promise(function (resolve) { requestAnimationFrame(resolve) })
             }
 
-            if (!doc || successCount === 0) {
+            if (successCount === 0) {
               throw new Error('没有成功加入任何图片。可能是浏览器不支持其中的图片格式。')
+            }
+
+            // PDF image pages keep the native source-image dimensions.
+            // PPTX slide-ratio detection is handled only by exportPPTX().
+            // The first pass intentionally embedded image objects into `doc`.
+            // PDF pages were not created yet, so we can now create them without
+            // re-reading or re-encoding the original image bytes.
+            // Re-embedding must be avoided for large image collections. Keep the
+            // actual embedded image references on the successfully decoded files.
+            if (!embeddedImages.length) {
+              throw new Error('图片页面引用丢失，请重新载入图片。')
+            }
+
+            for (var pi2 = 0; pi2 < embeddedImages.length; pi2++) {
+              var f2 = embeddedImages[pi2]
+              var img2 = f2.__zenEmbeddedImage
+              var w2 = f2.__zenImageWidth
+              var h2 = f2.__zenImageHeight
+              var page = doc.addPage([w2, h2])
+              page.drawImage(img2, { x: 0, y: 0, width: w2, height: h2 })
             }
 
             setProgress(100)
             setLoadingInfo('生成 PDF 文件…')
-            var pdfBlob = doc.output('blob')
+            var pdfBytes = await doc.save({ useObjectStreams: true, addDefaultPage: false })
+            var pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' })
             var firstPath = getImagePath(sourceFiles[0])
             var folderName = String(firstPath.split('/')[0] || '').trim()
             var base = sourceFiles.length === 1
@@ -4668,19 +4742,24 @@
             S.imageSourceCount = successCount
             S.imageSourceNames = sourceFiles.map(function (f) { return getImagePath(f) })
             await loadFile(imagePdfFile)
+            // loadFile() resets per-document source metadata. Restore the original
+            // image File objects so PPTX can embed the sources directly without
+            // rasterizing the temporary PDF.
             S.imageSourceCount = successCount
+            S.imageSourceNames = sourceFiles.map(function (f) { return getImagePath(f) })
+            S.imageSourceFiles = embeddedImages.slice()
 
             if (failedNames.length) {
               notify('已载入 ' + successCount + ' 张图片，另有 ' + failedNames.length + ' 张无法读取')
-              log('图片 PDF 完成：成功 ' + successCount + ' 张，失败 ' + failedNames.length + ' 张', failedNames.length > 0)
+              log('图片 PDF 完成：成功 ' + successCount + ' 张，失败 ' + failedNames.length + ' 张', true)
             } else {
               notify('已将 ' + successCount + ' 张图片整理为 PDF')
-              log('图片 PDF 完成：' + successCount + ' 张图片，按文件名/路径排序')
+              log('图片 PDF 完成：直接嵌入原始 JPEG/PNG，未进行缩放或 JPEG 重编码')
             }
             DOM.fileTypeInfo.textContent =
               '格式: 图片 PDF · ' + successCount + ' 张图片 · ' + formatSize(pdfBlob.size)
             DOM.fmeta.textContent =
-              formatSize(pdfBlob.size) + ' · ' + successCount + ' 张图片 · 自动生成 PDF'
+              formatSize(pdfBlob.size) + ' · ' + successCount + ' 张图片 · 原图嵌入 PDF'
             DOM.statusLeft.textContent = '已加载: ' + pdfName
           } finally {
             hideProgress()
@@ -4787,6 +4866,7 @@
             S.fileType = ext
             S.imageSourceCount = 0
             S.imageSourceNames = []
+            S.imageSourceFiles = []
             S.pdfMode = false
             S.docxHtml = null
             resetImageNavState()
@@ -7293,7 +7373,8 @@
               compress: true,
             })
             var first = true
-            var logicalSlice = 800
+            var exportTotal = S.fileType === 'docx' ? (S.totalPages || 0) : (S.pages && S.pages.length ? S.pages.length : getExportTextPages().length)
+            resetExportProgress('正在生成脱敏 PDF', '准备分页…')
             if (S.fileType === 'docx') {
               var docxPageCount = S.totalPages || 0
               for (var di = 0; di < docxPageCount; di++) {
@@ -7302,6 +7383,7 @@
                 addCanvasToA4(doc, dcanvas, !first)
                 first = false
                 setProgress(Math.round(((di + 1) / docxPageCount) * 100))
+                setExportProgress(di + 1, docxPageCount, '正在生成第 ' + (di + 1) + ' 页 PDF', '正在生成脱敏 PDF')
               }
             } else if (S.fileType === 'txt') {
               var pages = S.pages && S.pages.length ? S.pages : getExportTextPages()
@@ -7311,6 +7393,7 @@
                 addCanvasToA4(doc, canvas, !first)
                 first = false
                 setProgress(Math.round(((i + 1) / pages.length) * 100))
+                setExportProgress(i + 1, pages.length, '正在生成第 ' + (i + 1) + ' 页 PDF', '正在生成脱敏 PDF')
               }
             } else {
               throw new Error('当前文件类型不支持此 PDF 导出方式')
@@ -7331,43 +7414,69 @@
         async function ensurePdfPageRendered(pageIdx) {
           if (!S.pdfMode || !S.pdfJsDoc || !S.pdfPages[pageIdx]) return
           if (S.pdfPages[pageIdx].img) return
-          await renderPdfPage(pageIdx)
+          await renderSinglePdfPage(pageIdx, S._renderScale || (CONFIG.PDF_RENDER_SCALE * (window.devicePixelRatio || 1)), pdfLoadToken)
         }
 
         async function createPdfImageCanvas(pageIdx) {
           await ensurePdfPageRendered(pageIdx)
           var sourcePage = getPageEl(pageIdx)
-          if (!sourcePage) return null
+          var pdfState = S.pdfPages[pageIdx]
+          if (!sourcePage || !pdfState || !pdfState.img) return null
+
           var wrap = sourcePage.querySelector('.doc-page-img-wrap')
-          if (!wrap) return null
-          var logicalW = wrap.clientWidth || 794
-          var logicalH =
-            wrap.clientHeight || Math.round((S.pdfPages[pageIdx].vh / S.pdfPages[pageIdx].vw) * 794)
-          var stage = document.createElement('div')
-          stage.className = 'export-stage'
-          stage.style.cssText =
-            'position:fixed;left:-100000px;top:0;width:' +
-            logicalW +
-            'px;height:' +
-            logicalH +
-            'px;background:#fff;overflow:hidden;'
-          var clone = wrap.cloneNode(true)
-          clone.style.width = logicalW + 'px'
-          clone.style.height = logicalH + 'px'
-          var sourceCanvas = wrap.querySelector('.redact-canvas')
-          var cloneCanvas = clone.querySelector('.redact-canvas')
-          if (cloneCanvas) {
-            cloneCanvas.dataset.pageIdx = String(pageIdx)
-            cloneCanvas.style.pointerEvents = 'none'
+          var sourceImg = wrap && wrap.querySelector('.doc-page-img')
+          if (!sourceImg) return null
+
+          // PDF pages are already rasterized by PDF.js. Re-running the whole page
+          // through html2canvas here is unnecessarily expensive, especially when a
+          // page contains many semi-transparent redaction masks. Export directly
+          // from the existing page bitmap and composite the applied masks once.
+          var logicalW = wrap.clientWidth || sourceImg.clientWidth || 794
+          var logicalH = wrap.clientHeight || sourceImg.clientHeight ||
+            Math.round((pdfState.vh / Math.max(1, pdfState.vw)) * logicalW)
+          var nativeW = pdfState.imgW || sourceImg.naturalWidth || Math.max(1, Math.round(logicalW * 2))
+          var nativeH = pdfState.imgH || sourceImg.naturalHeight || Math.max(1, Math.round(logicalH * 2))
+
+          var canvas = document.createElement('canvas')
+          canvas.width = Math.max(1, Math.round(nativeW))
+          canvas.height = Math.max(1, Math.round(nativeH))
+          var ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false })
+          if (!ctx) return null
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+          var img = new Image()
+          img.decoding = 'async'
+          img.src = pdfState.img
+          if (img.decode) {
+            try { await img.decode() } catch (_) {}
           }
-          clone.querySelectorAll('.search-highlight').forEach(function (el) {
-            el.remove()
-          })
-          stage.appendChild(clone)
-          document.body.appendChild(stage)
-          copyAppliedMaskCanvas(sourceCanvas, cloneCanvas, pageIdx)
-          var canvas = await renderElementToCanvas(stage, logicalW, logicalH)
-          stage.remove()
+          if (!img.complete || !img.naturalWidth) {
+            await new Promise(function (resolve, reject) {
+              img.onload = resolve
+              img.onerror = function () { reject(new Error('PDF页面图像加载失败')) }
+            })
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+          var sx = canvas.width / Math.max(1, logicalW)
+          var sy = canvas.height / Math.max(1, logicalH)
+          ctx.save()
+          ctx.scale(sx, sy)
+          S.redacts
+            .filter(function (r) {
+              return r.pageIdx === pageIdx && r.applied
+            })
+            .forEach(function (r) {
+              var rr = getRedactPixelRect(r, logicalW, logicalH)
+              if (rr.w < 1 || rr.h < 1) return
+              drawRedactRect(ctx, rr, r.style || S.redactStyle || {}, true)
+              ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+              ctx.lineWidth = 0.5
+              ctx.strokeRect(rr.x1, rr.y1, rr.w, rr.h)
+            })
+          ctx.restore()
+
           return canvas
         }
 
@@ -7379,16 +7488,25 @@
             for (var di = 0; di < docxPageCount; di++) {
               var dcanvas = await createDocxExportPageCanvas(di)
               if (dcanvas) canvases.push(dcanvas)
+              setProgress(Math.round(((di + 1) / Math.max(1, docxPageCount)) * 85))
+              setExportProgress(di + 1, docxPageCount, '正在渲染第 ' + (di + 1) + ' 页', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
             }
           } else if (S.fileType === 'txt') {
             for (var i = 0; i < count; i++) {
               var c = await createTxtExportPageCanvas(i)
               if (c) canvases.push(c)
+              setProgress(Math.round(((i + 1) / Math.max(1, count)) * 85))
+              setExportProgress(i + 1, count, '正在渲染第 ' + (i + 1) + ' 页', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
             }
           } else if (S.pdfMode) {
             for (var pi = 0; pi < count; pi++) {
               var pc = await createPdfImageCanvas(pi)
               if (pc) canvases.push(pc)
+              setProgress(Math.round(((pi + 1) / Math.max(1, count)) * 85))
+              setExportProgress(pi + 1, count, '正在渲染第 ' + (pi + 1) + ' 页', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
             }
           } else {
             for (var j = 0; j < count; j++) {
@@ -7400,6 +7518,9 @@
                 pageEl.offsetHeight || 1120,
               )
               canvases.push(cc)
+              setProgress(Math.round(((j + 1) / Math.max(1, count)) * 85))
+              setExportProgress(j + 1, count, '正在渲染第 ' + (j + 1) + ' 页', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
             }
           }
           return canvases
@@ -7410,7 +7531,9 @@
           DOM.statusLeft.textContent = '生成全部页面图片压缩包…'
           try {
             var base = S.fileName.replace(/\.[^.]+$/, '') || 'document'
+            resetExportProgress('正在生成脱敏图片', '准备渲染页面…')
             var canvases = await renderAllPagesForImageExport()
+            setExportProgress(0, canvases.length || 1, '页面渲染完成，准备打包…', '正在生成脱敏图片')
             if (!canvases.length) throw new Error('没有可导出的页面')
             if (!window.JSZip) throw new Error('压缩包生成库未加载')
             var zip = new JSZip()
@@ -7418,6 +7541,8 @@
               var blob = await canvasToBlob(canvases[i])
               zip.file(base + '_第' + String(i + 1).padStart(3, '0') + '页.png', blob)
               setProgress(Math.round(((i + 1) / canvases.length) * 100))
+              setExportProgress(i + 1, canvases.length, '写入第 ' + (i + 1) + ' 页图片', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
             }
             var zipBlob = await zip.generateAsync({
               type: 'blob',
@@ -7433,6 +7558,192 @@
             DOM.exportOverlay.classList.remove('active')
             handleError('图片导出失败', err)
           }
+        }
+
+        async function exportPPTX() {
+          if (!window.PptxGenJS) {
+            notify('PPTX 生成库未加载，请检查网络连接')
+            return
+          }
+
+          var count = Math.max(0, S.totalPages || S.pages.length || 0)
+          if (!count) {
+            notify('没有可导出的页面')
+            return
+          }
+
+          DOM.exportOverlay.classList.add('active')
+          DOM.statusLeft.textContent = '生成 PPTX…'
+          resetExportProgress('正在生成脱敏 PPTX', '准备处理页面…')
+          try {
+            var PptxCtor = window.PptxGenJS
+            var pptx = new PptxCtor()
+            pptx.author = 'ZENREDACT'
+            pptx.subject = S.fileName || 'document'
+            pptx.title = S.fileName || 'document'
+            pptx.company = 'ZENREDACT'
+            pptx.lang = 'zh-CN'
+            pptx.defineLayout({ name: 'ZEN_WIDE', width: 13.333333, height: 7.5 })
+            pptx.defineLayout({ name: 'ZEN_STANDARD', width: 10, height: 7.5 })
+
+            var slideRatio = 16 / 9
+            var imageFiles = Array.isArray(S.imageSourceFiles) ? S.imageSourceFiles.slice() : []
+
+            // Image collections are exported directly from their original files.
+            // This is independent from the temporary PDF pipeline and therefore does
+            // not rasterize or recompress JPEG/PNG sources.
+            if (imageFiles.length === count) {
+              var imageRatios = []
+              for (var ri = 0; ri < imageFiles.length; ri++) {
+                var rf = imageFiles[ri]
+                var cachedW = rf.__zenImageWidth || 0
+                var cachedH = rf.__zenImageHeight || 0
+                if (cachedW && cachedH) imageRatios.push(cachedW / cachedH)
+                else imageRatios.push(await getImageFileRatio(rf))
+              }
+              if (imageRatios.length && imageRatios.every(function (r) { return Math.abs(r - 4 / 3) / (4 / 3) <= 0.0005 })) {
+                slideRatio = 4 / 3
+              } else if (imageRatios.length && imageRatios.every(function (r) { return Math.abs(r - 16 / 9) / (16 / 9) <= 0.0005 })) {
+                slideRatio = 16 / 9
+              }
+            }
+
+            pptx.layout = slideRatio === 4 / 3 ? 'ZEN_STANDARD' : 'ZEN_WIDE'
+            var slideW = slideRatio === 4 / 3 ? 10 : 13.333333
+            var slideH = 7.5
+
+            async function addImageSlideFromFile(file, index) {
+              var slide = pptx.addSlide()
+              slide.background = { color: 'FFFFFF' }
+              var data = await fileToDataUri(file)
+              var ratio = await getImageFileRatio(file)
+              var w = slideW
+              var h = slideW / ratio
+              var x = 0
+              var y = (slideH - h) / 2
+              if (h > slideH) {
+                h = slideH
+                w = slideH * ratio
+                x = (slideW - w) / 2
+                y = 0
+              }
+
+              // Keep JPEG/PNG as the original PPTX image, then place the applied
+              // redaction masks above it as PowerPoint shapes. This preserves source
+              // image quality while making applied masks visible in the PPTX.
+              slide.addImage({ data: data, x: x, y: y, w: w, h: h })
+
+              var pageRedacts = S.redacts.filter(function (r) {
+                return r.pageIdx === index && r.applied
+              })
+              pageRedacts.forEach(function (r) {
+                var nx1 = Math.max(0, Math.min(1, Number(r.nx1) || 0))
+                var ny1 = Math.max(0, Math.min(1, Number(r.ny1) || 0))
+                var nx2 = Math.max(0, Math.min(1, Number(r.nx2) || 0))
+                var ny2 = Math.max(0, Math.min(1, Number(r.ny2) || 0))
+                var sx = Math.min(nx1, nx2)
+                var sy = Math.min(ny1, ny2)
+                var sw = Math.abs(nx2 - nx1)
+                var sh = Math.abs(ny2 - ny1)
+                if (sw <= 0 || sh <= 0) return
+
+                var style = r.style || S.redactStyle || {}
+                var color = hexToCssColor(style.color || '#000000').replace('#', '').toUpperCase()
+                var opacity = Math.max(0.1, Math.min(1, (Number(style.opacity) || 100) / 100))
+                var transparency = Math.round((1 - opacity) * 100)
+                var shapeType = (pptx.ShapeType && style.radius > 0 && pptx.ShapeType.roundRect)
+                  ? pptx.ShapeType.roundRect
+                  : (pptx.ShapeType ? pptx.ShapeType.rect : 'rect')
+                slide.addShape(shapeType, {
+                  x: x + sx * w,
+                  y: y + sy * h,
+                  w: sw * w,
+                  h: sh * h,
+                  fill: { color: color, transparency: transparency },
+                  line: { color: color, transparency: 100 },
+                })
+              })
+
+              setProgress(Math.round(((index + 1) / count) * 100))
+            }
+
+            async function addRenderedSlide(index) {
+              var canvas = null
+              if (S.fileType === 'docx') canvas = await createDocxExportPageCanvas(index)
+              else if (S.fileType === 'txt') canvas = await createTxtExportPageCanvas(index)
+              else if (S.pdfMode) canvas = await createPdfImageCanvas(index)
+              else {
+                var pageEl = getPageEl(index)
+                if (pageEl) canvas = await renderElementToCanvas(pageEl, pageEl.offsetWidth || 794, pageEl.offsetHeight || 1120)
+              }
+              if (!canvas) return
+              var slide = pptx.addSlide()
+              slide.background = { color: 'FFFFFF' }
+              var ratio = canvas.width / Math.max(1, canvas.height)
+              var w = slideW
+              var h = w / ratio
+              var x = 0
+              var y = (slideH - h) / 2
+              if (h > slideH) {
+                h = slideH
+                w = h * ratio
+                x = (slideW - w) / 2
+                y = 0
+              }
+              slide.addImage({ data: canvas.toDataURL('image/png'), x: x, y: y, w: w, h: h })
+              setProgress(Math.round(((index + 1) / count) * 100))
+               setExportProgress(index + 1, count, '正在写入第 ' + (index + 1) + ' 张幻灯片', '正在生成脱敏 PPTX')
+            }
+
+            if (imageFiles.length === count) {
+              for (var ii = 0; ii < imageFiles.length; ii++) {
+                await addImageSlideFromFile(imageFiles[ii], ii)
+                await new Promise(function (r) { requestAnimationFrame(r) })
+              }
+            } else {
+              for (var pi = 0; pi < count; pi++) {
+                await addRenderedSlide(pi)
+                await new Promise(function (r) { requestAnimationFrame(r) })
+              }
+            }
+
+            var base = (S.fileName.replace(/\.[^.]+$/, '') || 'document') + '_PPTX'
+            await pptx.writeFile({ fileName: base + '.pptx' })
+            DOM.exportOverlay.classList.remove('active')
+            notify('PPTX 已导出：' + count + ' 张幻灯片')
+            log('PPTX 导出成功：' + count + ' 张幻灯片' + (slideRatio === 16 / 9 ? ' · 16:9' : ' · 4:3'))
+            DOM.statusLeft.textContent = 'PPTX导出完成'
+          } catch (err) {
+            DOM.exportOverlay.classList.remove('active')
+            handleError('PPTX导出失败', err)
+          }
+        }
+
+        function fileToDataUri(file) {
+          return new Promise(function (resolve, reject) {
+            var reader = new FileReader()
+            reader.onload = function () { resolve(reader.result) }
+            reader.onerror = function () { reject(new Error('读取图片失败：' + file.name)) }
+            reader.readAsDataURL(file)
+          })
+        }
+
+        function getImageFileRatio(file) {
+          if (file.__zenImageWidth && file.__zenImageHeight) {
+            return file.__zenImageWidth / Math.max(1, file.__zenImageHeight)
+          }
+          return loadImageElement(file).then(function (img) {
+            var w = Math.max(1, img.naturalWidth)
+            var h = Math.max(1, img.naturalHeight)
+            if (img.__zenObjectUrl) {
+              try { URL.revokeObjectURL(img.__zenObjectUrl) } catch (_) {}
+              img.__zenObjectUrl = ''
+            }
+            file.__zenImageWidth = w
+            file.__zenImageHeight = h
+            file.__zenImageRatio = w / h
+            return file.__zenImageRatio
+          })
         }
 
         function canvasToBlob(canvas) {
@@ -7667,7 +7978,7 @@
           return sizeMB >= 16 || pageCount >= 80
         }
 
-        async function processNativePdfBatch(mupdf, inputBytes, startPage, endPage, byPage, pdfJsDoc) {
+        async function processNativePdfBatch(mupdf, inputBytes, startPage, endPage, byPage, pdfJsDoc, onPageProgress) {
           var doc = null
           try {
             doc = mupdf.Document.openDocument(new Uint8Array(inputBytes), 'application/pdf')
@@ -7753,6 +8064,7 @@
                     jsPage.cleanup()
                   } catch (_) {}
                 }
+                if (typeof onPageProgress === 'function') onPageProgress(pi + 1)
               }
             }
 
@@ -7800,6 +8112,7 @@
           try {
             DOM.exportOverlay.classList.add('active')
             DOM.statusLeft.textContent = '生成原生 PDF…'
+            resetExportProgress('正在生成脱敏 PDF', '准备处理页面…')
             notify('正在使用原生 PDF 脱敏引擎处理…')
             mupdf = await ensureMuPDF()
 
@@ -7835,6 +8148,9 @@
                 pageCount,
                 byPage,
                 S.pdfJsDoc,
+                function (donePage) {
+                  setExportProgress(donePage, pageCount, '正在处理 PDF 页面', '正在生成脱敏 PDF')
+                },
               )
               sourceBytes = one.bytes
               totalRedacts = one.redactCount
@@ -7866,6 +8182,9 @@
                   endPage,
                   byPage,
                   S.pdfJsDoc,
+                  function (donePage) {
+                    setExportProgress(donePage, pageCount, '正在处理 PDF 页面', '正在生成脱敏 PDF')
+                  },
                 )
                 sourceBytes = batch.bytes
                 totalRedacts += batch.redactCount
@@ -8115,6 +8434,7 @@
               else if (a === 'clearAll') clearAllRedacts()
               else if (a === 'exportPDF') exportPDF()
               else if (a === 'exportImage') exportImage()
+              else if (a === 'exportPPTX') exportPPTX()
               else if (a === 'showSettings') toggleSettingsDropdown()
               else if (a === 'togglePin') togglePin()
             })
@@ -8215,6 +8535,7 @@
               if (a === 'clearAll') clearAllRedacts()
               else if (a === 'exportPDF') exportPDF()
               else if (a === 'exportImage') exportImage()
+              else if (a === 'exportPPTX') exportPPTX()
               else if (a === 'undoRedact') undoRedact()
               else if (a === 'redoRedact') redoRedact()
               else if (a === 'zoomIn') setPdfViewScale((S.viewScale || 1) + 0.2)
