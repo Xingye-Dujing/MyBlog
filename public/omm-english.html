@@ -1112,11 +1112,41 @@
       }
       .dr-body {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
+        overflow-x: hidden;
         padding: 20px 20px 30px;
         display: flex;
         flex-direction: column;
         gap: 14px;
+        scrollbar-width: none;
+      }
+      .dr-body::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
+      }
+      /* When a word has a drawing, keep the whole detail layout compact enough
+         that adding the preview does not suddenly create a visible scrollbar. */
+      #dr-body:has(.sketch-preview) {
+        padding: 14px 18px 18px;
+        gap: 10px;
+      }
+      #dr-body:has(.sketch-preview) .dr-word {
+        font-size: calc(28px * var(--fscale));
+      }
+      #dr-body:has(.sketch-preview) .dr-pos {
+        gap: 3px;
+        margin-top: 2px;
+      }
+      #dr-body:has(.sketch-preview) .ed-field {
+        gap: 5px;
+      }
+      #dr-body:has(.sketch-preview) .ed-area {
+        min-height: 56px;
+      }
+      #dr-body:has(.sketch-preview) .sketch-actions {
+        margin-top: 0;
       }
       .dr-word {
         font-family: var(--font-en);
@@ -1387,15 +1417,30 @@
         perspective: 1400px;
         padding: 18px 0;
         min-height: 0;
+        overflow: visible;
       }
+      @media (max-width: 720px) {
+        .fc-zone {
+          padding: 14px 0;
+        }
+      }
+      @media (max-width: 560px) {
+        .fc-zone {
+          padding: 10px 0;
+        }
+      }
+
       .fc-card {
         position: relative;
-        width: min(620px, 92%);
-        height: min(400px, 100%);
+        width: 100%;
+        height: auto;
+        aspect-ratio: 3 / 2;
+        min-height: 0;
+        max-height: 100%;
+        box-sizing: border-box;
         transform-style: preserve-3d;
         transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
         cursor: pointer;
-        max-height: 420px;
       }
       .fc-card.flipped {
         transform: rotateY(180deg);
@@ -2214,13 +2259,16 @@
       }
       .sketch-preview {
         width: 100%;
-        height: 170px;
+        height: auto;
+        aspect-ratio: 3 / 2;
+        max-width: 100%;
         display: block;
         border: 1px solid var(--border-dim);
         border-radius: var(--radius);
         background: var(--bg);
         touch-action: none;
         overflow: hidden;
+        object-fit: contain;
       }
       .sketch-viewer {
         position: fixed;
@@ -2307,21 +2355,6 @@
         border-radius: var(--radius);
         box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08);
         flex: 0 0 auto;
-      }
-      .sketch-viewer-foot {
-        min-height: 44px;
-        padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
-        border-top: 1px solid var(--border-dim);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg);
-        flex-shrink: 0;
-      }
-      .sketch-viewer-hint {
-        font-size: calc(9px * var(--fscale));
-        color: var(--text-faint);
-        letter-spacing: 0.5px;
       }
       @media (max-width: 720px) {
         .sketch-viewer-board {
@@ -2646,6 +2679,8 @@
         margin: 10px 10px;
         padding: 8px;
         display: flex;
+        align-items: center;
+        justify-content: center;
         background: var(--bg);
         border: 1px solid var(--border-dim);
         border-radius: var(--radius);
@@ -2673,13 +2708,18 @@
       }
       .sketch-canvas {
         width: 100%;
-        height: 100%;
+        height: auto;
+        max-width: 100%;
+        max-height: 100%;
+        aspect-ratio: 3 / 2;
         display: block;
+        flex: 0 1 auto;
         background: var(--bg);
         border: 0;
         border-radius: var(--radius);
         touch-action: none;
         cursor: crosshair;
+        object-fit: contain;
         -webkit-user-select: none;
         user-select: none;
       }
@@ -3131,7 +3171,7 @@
         background: var(--hover);
       }
       .hidden {
-        display: none !important;
+        display: none;
       }
 
       /* ===== Bottom nav (mobile) ===== */
@@ -3570,7 +3610,7 @@
       @media (max-width: 720px) {
         #top-menu,
         #menu-trigger {
-          display: none !important;
+          display: none;
         }
         #main {
           padding: 42px 18px calc(60px + env(safe-area-inset-bottom));
@@ -3661,7 +3701,9 @@
           padding: 12px 0;
         }
         .fc-card {
-          height: min(320px, 56vh);
+          height: auto;
+          aspect-ratio: 3 / 2;
+          min-height: 0;
         }
         .fw {
           font-size: calc(26px * var(--fscale));
@@ -3719,14 +3761,14 @@
       /* ===== Mobile polish: no scrollbars / no horizontal overflow ===== */
       @media (pointer: coarse), (max-width: 720px) {
         ::-webkit-scrollbar {
-          width: 0 !important;
-          height: 0 !important;
-          display: none !important;
+          width: 0;
+          height: 0;
+          display: none;
         }
         *,
         *::before,
         *::after {
-          scrollbar-width: none !important;
+          scrollbar-width: none;
         }
         .view,
         .tr-wrap,
@@ -3744,7 +3786,7 @@
         .dots,
         .grade-row,
         .transport {
-          scrollbar-width: none !important;
+          scrollbar-width: none;
         }
         html,
         body {
@@ -3893,7 +3935,7 @@
       @media (min-width: 721px) {
         #more-sheet,
         #more-mask {
-          display: none !important;
+          display: none;
         }
       }
 
@@ -4373,13 +4415,13 @@
       }
       @media (max-width: 720px) {
         #status-bar {
-          display: none !important;
+          display: none;
         }
         #v-home.on {
           display: block;
         }
         #v-home.on > * {
-          margin-bottom: 10px !important;
+          margin-bottom: 10px;
         }
         #v-home > .home-grid,
         #v-home > .home-grid2 {
@@ -4406,6 +4448,359 @@
 
       #ze-sync-label {
         margin-left: 8px;
+      }
+
+      /* ===== Final drawing / detail layout ===== */
+      .sketch-preview,
+      .sketch-viewer-canvas,
+      .sketch-canvas {
+        aspect-ratio: 3 / 2;
+        box-sizing: border-box;
+      }
+
+      /* Canvas uses its intrinsic bitmap ratio by default. The JS renderer
+         writes the real 3:2 CSS width/height after layout, so CSS must not
+         overwrite that inline height with auto. */
+      #dr-body .sketch-preview {
+        display: block;
+        width: min(100%, 360px);
+        max-width: 360px;
+        margin: 0 auto;
+        object-fit: fill;
+      }
+      .sketch-viewer-canvas {
+        display: block;
+        width: min(1100px, 94vw);
+        max-width: 94vw;
+        object-fit: fill;
+      }
+      .sketch-canvas {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        object-fit: fill;
+      }
+
+      /* Detail page keeps normal overflow behaviour. A scrollbar appears only
+         when the complete content really exceeds the available height. */
+      #dr-body {
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
+      #dr-body::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+        display: block;
+      }
+      #dr-body::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+      }
+      #dr-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      /* When a drawing is present, tighten only the surrounding whitespace so
+         adding a drawing does not immediately force an unnecessary scrollbar. */
+      #dr-body:has(.sketch-preview) {
+        padding-top: 10px;
+        padding-bottom: 12px;
+        gap: 7px;
+      }
+      #dr-body:has(.sketch-preview) .dr-word {
+        line-height: 1.15;
+      }
+      #dr-body:has(.sketch-preview) .dr-ex {
+        line-height: 1.5;
+        padding-top: 2px;
+        padding-bottom: 2px;
+      }
+      #dr-body:has(.sketch-preview) .ed-field {
+        gap: 4px;
+      }
+      #dr-body:has(.sketch-preview) .sketch-actions {
+        gap: 6px;
+        margin-top: 0;
+      }
+
+      /* Keep both note boxes native-resizable. flex-shrink:0 is important here:
+         otherwise the detail column can compress a textarea down to its
+         content height and make the resize handle effectively unusable. */
+      #dr-body #dn-ex,
+      #dr-body #dn-story {
+        display: block;
+        width: 100%;
+        flex: 0 0 auto;
+        min-height: 70px;
+        max-height: 45vh;
+        resize: vertical;
+        overflow: auto;
+        box-sizing: border-box;
+      }
+
+      @media (max-width: 900px) {
+        .fc-sketch-ear {
+          width: 15px;
+          flex-basis: 15px;
+          height: 48px;
+        }
+      }
+      @media (max-width: 720px) {
+        #dr-body .sketch-preview {
+          width: min(100%, 320px);
+          max-width: 320px;
+        }
+        .fc-sketch-ear {
+          width: 13px;
+          flex-basis: 13px;
+          height: 42px;
+        }
+        #dr-body:has(.sketch-preview) {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+      }
+      @media (max-width: 560px) {
+        #dr-body .sketch-preview {
+          width: min(100%, 280px);
+          max-width: 280px;
+        }
+        .fc-sketch-ear {
+          width: 12px;
+          flex-basis: 12px;
+          height: 38px;
+        }
+      }
+
+      /* ===== Final word-detail drawing + note textarea tuning ===== */
+      #dr-body .sketch-preview {
+        display: block;
+        width: min(100%, 360px);
+        height: min(calc((100vw - 48px) * 2 / 3), 240px);
+        max-width: 360px;
+        max-height: 240px;
+        aspect-ratio: 3 / 2;
+        object-fit: fill;
+        margin: 0 auto;
+        box-sizing: border-box;
+      }
+      @media (max-width: 720px) {
+        #dr-body .sketch-preview {
+          width: min(100%, 320px);
+          height: min(calc((100vw - 36px) * 2 / 3), 213.333px);
+          max-width: 320px;
+          max-height: 213.333px;
+        }
+      }
+      @media (max-width: 560px) {
+        #dr-body .sketch-preview {
+          width: min(100%, 280px);
+          height: min(calc((100vw - 28px) * 2 / 3), 186.667px);
+          max-width: 280px;
+          max-height: 186.667px;
+        }
+      }
+
+      .fc-sketch-stage {
+        position: relative;
+        width: 100%;
+        height: min(400px, 62vh);
+        min-height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        perspective: 1400px;
+        overflow: visible;
+        --fc-sketch-panel-width: 600px;
+        --fc-sketch-panel-height: 400px;
+        --fc-sketch-side-width: 616px;
+        --fc-sketch-ear-width: 16px;
+        --fc-sketch-shift: 0px;
+      }
+
+      .fc-card-positioner {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: min(620px, 92%);
+        height: 100%;
+        margin-left: max(-310px, -46%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        transform: translateX(0);
+        transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.16s;
+        will-change: transform;
+      }
+
+      .fc-card {
+        height: 100%;
+        width: auto;
+        max-width: 100%;
+        max-height: 100%;
+        aspect-ratio: 3 / 2;
+        min-height: 0;
+        box-sizing: border-box;
+      }
+
+      .fc-sketch-side {
+        position: absolute;
+        top: 50%;
+        width: var(--fc-sketch-side-width);
+        height: var(--fc-sketch-panel-height);
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        z-index: 20;
+        pointer-events: none;
+        transform: translateY(-50%);
+        transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.16s;
+        will-change: transform;
+      }
+      .fc-sketch-side.left {
+        justify-content: flex-end;
+      }
+      .fc-sketch-side.right {
+        justify-content: flex-start;
+      }
+      .fc-sketch-side.hidden {
+        display: none;
+      }
+
+      .fc-sketch-ear {
+        position: relative;
+        z-index: 60;
+        flex: 0 0 var(--fc-sketch-ear-width);
+        width: var(--fc-sketch-ear-width);
+        min-width: var(--fc-sketch-ear-width);
+        height: 52px;
+        align-self: center;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        cursor: pointer;
+        pointer-events: auto;
+        background: var(--bg);
+        color: var(--text-dim);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        transition:
+          color 0.22s ease,
+          border-color 0.22s ease,
+          background 0.22s ease;
+      }
+      .fc-sketch-ear:hover,
+      .fc-sketch-ear.on {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .fc-sketch-ear svg {
+        width: 13px;
+        height: 13px;
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .fc-sketch-side.left .fc-sketch-ear {
+        border-radius: var(--radius) 0 0 var(--radius);
+      }
+      .fc-sketch-side.right .fc-sketch-ear {
+        border-radius: 0 var(--radius) var(--radius) 0;
+      }
+
+      .fc-sketch-panel {
+        position: relative;
+        flex: 0 0 var(--fc-sketch-panel-width);
+        width: var(--fc-sketch-panel-width);
+        min-width: var(--fc-sketch-panel-width);
+        height: var(--fc-sketch-panel-height);
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        display: block;
+        box-sizing: border-box;
+        background: var(--bg);
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+        transform: scaleX(0);
+        transform-origin: center center;
+        transition:
+          transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
+          opacity 0.18s ease;
+        will-change: transform, opacity;
+      }
+      .fc-sketch-side.left .fc-sketch-panel {
+        order: 1;
+        transform-origin: right center;
+      }
+      .fc-sketch-side.left .fc-sketch-ear {
+        order: 2;
+      }
+      .fc-sketch-side.right .fc-sketch-ear {
+        order: 1;
+      }
+      .fc-sketch-side.right .fc-sketch-panel {
+        order: 2;
+        transform-origin: left center;
+      }
+      .fc-sketch-panel.open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scaleX(1);
+      }
+
+      .fc-sketch-side-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        aspect-ratio: auto;
+        object-fit: fill;
+        box-sizing: border-box;
+        background: var(--bg);
+      }
+
+      @media (max-width: 900px) {
+        .fc-sketch-stage {
+          height: min(370px, 58vh);
+          min-height: 280px;
+        }
+        .fc-sketch-ear {
+          height: 48px;
+        }
+      }
+      @media (max-width: 720px) {
+        .fc-sketch-stage {
+          height: min(340px, 56vh);
+          min-height: 260px;
+        }
+        .fc-sketch-ear {
+          height: 44px;
+        }
+      }
+      @media (max-width: 560px) {
+        .fc-sketch-stage {
+          height: min(320px, 52vh);
+          min-height: 235px;
+        }
+        .fc-sketch-ear {
+          height: 40px;
+        }
       }
     </style>
 
@@ -4529,7 +4924,7 @@
         font-size: calc(10px * var(--fscale));
         line-height: 1.6;
         color: var(--text-dim);
-        border-radius: var(--radius) !important;
+        border-radius: var(--radius);
         overflow-wrap: anywhere;
         word-break: break-word;
       }
@@ -4574,7 +4969,7 @@
         border-color: var(--accent-red);
       }
       .ze-cloud-hidden {
-        display: none !important;
+        display: none;
       }
       .ze-sync-dot {
         width: 7px;
@@ -4634,7 +5029,7 @@
       #ze-sql-box,
       .ze-cloud-status,
       .ze-cloud-note {
-        border-radius: var(--radius) !important;
+        border-radius: var(--radius);
       }
       .ze-cloud-copy-status {
         min-height: 1.2em;
@@ -5283,9 +5678,6 @@ notify pgrst, 'reload schema';</textarea
           class="sketch-viewer-canvas"
           aria-label="绘画放大预览"
         ></canvas>
-      </div>
-      <div class="sketch-viewer-foot">
-        <span class="sketch-viewer-hint">只读放大预览 · 不会进入编辑</span>
       </div>
     </div>
 
@@ -8287,6 +8679,14 @@ notify pgrst, 'reload schema';</textarea
             window.addEventListener('resize', () => {
               if ($('#sketch-editor').classList.contains('open')) fitDrawingCanvas()
               hydrateSketchPreviews(document)
+              const stage = document.querySelector('.fc-sketch-stage')
+              if (stage) {
+                const word = stage.querySelector('.fc-sketch-side-canvas')?.dataset.word
+                if (word) {
+                  renderSketchSideCanvas($('#fc-sketch-canvas-left'), word)
+                  renderSketchSideCanvas($('#fc-sketch-canvas-right'), word)
+                }
+              }
             })
 
             if ('speechSynthesis' in window) {
@@ -8491,9 +8891,33 @@ notify pgrst, 'reload schema';</textarea
               .filter((st) => st.points.length > 0),
           }
         }
+        function fitCanvas3to2(canvas, maxWidth) {
+          if (!canvas) return null
+          const parent = canvas.parentElement
+          const parentWidth = parent ? parent.clientWidth : 0
+          const layoutWidth =
+            canvas.offsetWidth ||
+            parseFloat(getComputedStyle(canvas).width) ||
+            parentWidth ||
+            canvas.clientWidth
+          const available = Math.max(1, layoutWidth || parentWidth || 1)
+          const requested = Number(maxWidth) || available
+          const width = Math.max(1, Math.min(requested, available))
+          const height = (width * 2) / 3
+          canvas.style.width = width + 'px'
+          canvas.style.height = height + 'px'
+          return { width, height }
+        }
         function fitDrawingCanvas() {
           const c = $('#sketch-canvas')
           if (!c) return
+          const board = c.parentElement
+          const bw = board ? Math.max(1, board.clientWidth - 16) : c.clientWidth
+          const bh = board ? Math.max(1, board.clientHeight - 16) : c.clientHeight
+          const width = Math.max(1, Math.min(bw, (bh * 3) / 2))
+          const height = (width * 2) / 3
+          c.style.width = width + 'px'
+          c.style.height = height + 'px'
           const r = c.getBoundingClientRect()
           if (!r.width || !r.height) return
           DRAW.dpr = Math.max(1, Math.min(3, devicePixelRatio || 1))
@@ -8711,8 +9135,10 @@ notify pgrst, 'reload schema';</textarea
           const canvas = $('#sketch-viewer-canvas')
           if (!canvas) return
           const data = getDrawing(word)
-          const rect = canvas.getBoundingClientRect()
-          if (!data || !data.strokes.length || !rect.width || !rect.height) return
+          const fitted = fitCanvas3to2(canvas, Math.min(1100, Math.round(window.innerWidth * 0.94)))
+          if (!data || !data.strokes.length || !fitted) return
+          const rect = { width: fitted.width, height: fitted.height }
+          if (!rect.width || !rect.height) return
           const dpr = Math.max(1, Math.min(3, devicePixelRatio || 1))
           canvas.width = Math.round(rect.width * dpr)
           canvas.height = Math.round(rect.height * dpr)
@@ -9081,17 +9507,169 @@ notify pgrst, 'reload schema';</textarea
         function renderSketchPreview(canvas, word) {
           const d = getDrawing(word)
           if (!d || !d.strokes.length) return
-          const r = canvas.getBoundingClientRect()
-          if (!r.width || !r.height) return
+          const fitted = fitCanvas3to2(canvas, 240)
+          if (!fitted || !fitted.width || !fitted.height) return
           const dpr = Math.max(1, Math.min(2, devicePixelRatio || 1))
-          canvas.width = Math.round(r.width * dpr)
-          canvas.height = Math.round(r.height * dpr)
+          canvas.width = Math.round(fitted.width * dpr)
+          canvas.height = Math.round(fitted.height * dpr)
           const ctx = canvas.getContext('2d')
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
           ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#fff'
-          ctx.fillRect(0, 0, r.width, r.height)
-          normalizeDrawingData(d).strokes.forEach((st) => drawStroke(ctx, st, r.width, r.height))
+          ctx.fillRect(0, 0, fitted.width, fitted.height)
+          normalizeDrawingData(d).strokes.forEach((st) =>
+            drawStroke(ctx, st, fitted.width, fitted.height),
+          )
         }
+
+        function renderSketchSideCanvas(canvas, word) {
+          if (!canvas) return
+          const data = getDrawing(word)
+          if (!data || !Array.isArray(data.strokes) || !data.strokes.length) return
+
+          const panel = canvas.closest('.fc-sketch-panel')
+          if (!panel) return
+
+          // offsetWidth / offsetHeight 忽略 CSS transform。
+          // 面板处于 scaleX(0) 关闭状态时，用 getBoundingClientRect 会得到 0。
+          const width = Math.max(1, Math.round(panel.offsetWidth))
+          const height = Math.max(1, Math.round(panel.offsetHeight))
+          const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1))
+
+          canvas.width = Math.max(1, Math.round(width * dpr))
+          canvas.height = Math.max(1, Math.round(height * dpr))
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+          ctx.clearRect(0, 0, width, height)
+          ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#fff'
+          ctx.fillRect(0, 0, width, height)
+          normalizeDrawingData(data).strokes.forEach((st) => drawStroke(ctx, st, width, height))
+        }
+
+        function updateFlashSketchShift() {
+          const stage = document.querySelector('.fc-sketch-stage')
+          if (!stage) return
+
+          const positioner = stage.querySelector('.fc-card-positioner')
+          const card = stage.querySelector('.fc-card')
+          const leftSide = stage.querySelector('.fc-sketch-side.left')
+          const rightSide = stage.querySelector('.fc-sketch-side.right')
+          const leftPanel = stage.querySelector('#fc-sketch-panel-left')
+          const rightPanel = stage.querySelector('#fc-sketch-panel-right')
+          if (!card || !positioner) return
+
+          const stageWidth = Math.max(1, stage.clientWidth)
+          const cardWidth = Math.max(1, Math.round(card.offsetWidth))
+          const cardHeight = Math.max(1, Math.round(card.offsetHeight))
+          const earWidth = stageWidth <= 560 ? 13 : stageWidth <= 720 ? 14 : 16
+          // 面板与卡片完全同尺寸；高度直接取卡片高度，保证 3:2。
+          const panelWidth = cardWidth
+          const panelHeight = cardHeight
+          const sideWidth = panelWidth + earWidth
+          const shift = Math.round((panelWidth + earWidth) / 2)
+
+          stage.style.setProperty('--fc-ear-width', earWidth + 'px')
+          stage.style.setProperty('--fc-sketch-panel-width', panelWidth + 'px')
+          stage.style.setProperty('--fc-sketch-panel-height', panelHeight + 'px')
+          stage.style.setProperty('--fc-sketch-side-width', sideWidth + 'px')
+          stage.style.setProperty('--fc-sketch-shift', shift + 'px')
+
+          const baseCardLeft = Math.round((stageWidth - cardWidth) / 2)
+          const baseCardRight = baseCardLeft + cardWidth
+
+          if (leftSide) {
+            leftSide.style.setProperty(
+              'left',
+              Math.round(baseCardLeft - panelWidth - earWidth) + 'px',
+              'important',
+            )
+            leftSide.style.setProperty('width', sideWidth + 'px', 'important')
+            leftSide.style.setProperty('height', panelHeight + 'px', 'important')
+          }
+          if (rightSide) {
+            rightSide.style.setProperty('left', baseCardRight + 'px', 'important')
+            rightSide.style.setProperty('width', sideWidth + 'px', 'important')
+            rightSide.style.setProperty('height', panelHeight + 'px', 'important')
+          }
+
+          const isLeftOpen = !!leftPanel?.classList.contains('open')
+          const isRightOpen = !!rightPanel?.classList.contains('open')
+
+          const stageShift = isLeftOpen ? shift : isRightOpen ? -shift : 0
+
+          const cardTransform = `translateX(${stageShift}px)`
+          const leftTransform = `translateY(-50%) translateX(${stageShift}px)`
+          const rightTransform = `translateY(-50%) translateX(${stageShift}px)`
+
+          positioner.style.setProperty('transform', cardTransform, 'important')
+          if (leftSide) leftSide.style.setProperty('transform', leftTransform, 'important')
+          if (rightSide) rightSide.style.setProperty('transform', rightTransform, 'important')
+
+          stage.querySelectorAll('.fc-sketch-side-canvas').forEach((canvas) => {
+            const word = canvas.dataset.word || ''
+            if (word) renderSketchSideCanvas(canvas, word)
+          })
+        }
+
+        function closeFlashSketchSides(animate = true) {
+          const stage = document.querySelector('.fc-sketch-stage')
+          if (!stage) return
+          const left = $('#fc-sketch-panel-left')
+          const right = $('#fc-sketch-panel-right')
+          const leftEar = document.querySelector('.fc-sketch-ear[data-side="left"]')
+          const rightEar = document.querySelector('.fc-sketch-ear[data-side="right"]')
+          if (left) left.classList.remove('open')
+          if (right) right.classList.remove('open')
+          if (leftEar) {
+            leftEar.classList.remove('on')
+            leftEar.setAttribute('aria-expanded', 'false')
+            leftEar.style.visibility = 'visible'
+          }
+          if (rightEar) {
+            rightEar.classList.remove('on')
+            rightEar.setAttribute('aria-expanded', 'false')
+            rightEar.style.visibility = 'visible'
+          }
+          stage.classList.remove('sketch-left-open', 'sketch-right-open')
+          if (animate) requestAnimationFrame(updateFlashSketchShift)
+          else updateFlashSketchShift()
+        }
+
+        function toggleFlashSketchSide(side) {
+          const stage = document.querySelector('.fc-sketch-stage')
+          if (!stage) return
+          const other = side === 'left' ? 'right' : 'left'
+          const panel = $('#fc-sketch-panel-' + side)
+          const otherPanel = $('#fc-sketch-panel-' + other)
+          const ear = document.querySelector('.fc-sketch-ear[data-side="' + side + '"]')
+          const otherEar = document.querySelector('.fc-sketch-ear[data-side="' + other + '"]')
+          if (!panel) return
+
+          const isOpen = !panel.classList.contains('open')
+
+          if (otherPanel) otherPanel.classList.remove('open')
+          panel.classList.toggle('open', isOpen)
+          stage.classList.toggle('sketch-' + side + '-open', isOpen)
+          stage.classList.toggle('sketch-' + other + '-open', false)
+
+          if (ear) {
+            ear.classList.toggle('on', isOpen)
+            ear.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
+            ear.style.visibility = 'visible'
+          }
+          if (otherEar) {
+            otherEar.classList.remove('on')
+            otherEar.setAttribute('aria-expanded', 'false')
+            otherEar.style.visibility = isOpen ? 'hidden' : 'visible'
+          }
+
+          requestAnimationFrame(() => {
+            updateFlashSketchShift()
+            requestAnimationFrame(() => updateFlashSketchShift())
+          })
+        }
+
         function hydrateSketchPreviews(root) {
           ;(root || document)
             .querySelectorAll('.sketch-preview[data-word]')
@@ -11640,6 +12218,8 @@ notify pgrst, 'reload schema';</textarea
             const it = this.q[this.i]
             const e = it.e
             const p = progOf(e[0])
+            const sketch = getDrawing(e[0])
+            const hasSketch = !!(sketch && Array.isArray(sketch.strokes) && sketch.strokes.length)
             const segs = this.q
               .map(
                 (x, j) =>
@@ -11660,13 +12240,6 @@ notify pgrst, 'reload schema';</textarea
                   noteHtml += '<div class="fb-note"><b>我的故事</b>' + esc(note.story) + '</div>'
               }
             }
-            const sketch = getDrawing(e[0])
-            if (sketch && sketch.strokes.length) {
-              noteHtml +=
-                '<div class="fb-note" style="width:100%"><b>我的绘画</b><canvas class="sketch-preview" data-word="' +
-                esc(e[0]) +
-                '" style="height:150px;margin-top:8px"></canvas></div>'
-            }
             $('#v-flash').innerHTML =
               '<div class="fc-wrap">' +
               '<div class="fc-meta"><span>' +
@@ -11681,7 +12254,11 @@ notify pgrst, 'reload schema';</textarea
               '/' +
               this.q.length +
               '</span></div>' +
-              '<div class="fc-zone"><div class="row-in pressable" style="height:100%;width:100%;display:flex;align-items:center;justify-content:center;perspective:inherit"><div class="fc-card" id="fc-card" data-action="fcFlip">' +
+              '<div class="fc-zone"><div class="fc-sketch-stage"><div class="fc-sketch-side left ' +
+              (hasSketch ? '' : 'hidden') +
+              '" id="fc-sketch-side-left"><div class="fc-sketch-panel" id="fc-sketch-panel-left"><canvas class="fc-sketch-side-canvas" id="fc-sketch-canvas-left" data-word="' +
+              esc(e[0]) +
+              '"></canvas></div><button class="fc-sketch-ear" type="button" data-action="fcSketchToggle" data-side="left" aria-label="展开左侧绘画"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l7 7-7 7"></path></svg></button></div><div class="fc-card-positioner"><div class="fc-card" id="fc-card" data-action="fcFlip">' +
               '<div class="fc-face front">' +
               '<span class="fc-corner l' +
               (p && p.star ? ' on' : '') +
@@ -11696,7 +12273,7 @@ notify pgrst, 'reload schema';</textarea
               '</div>' +
               (S.set.showPhon && e[1] ? '<div class="fw-ph">' + esc(e[1]) + '</div>' : '') +
               (S.set.showEx && e[3] ? '<div class="fw-ex">' + esc(e[3]) + '</div>' : '') +
-              '<div class="fw-tip">点击卡片或按空格翻转</div>' +
+              '<div class="fw-tip">点击卡片或按空格翻转 · 按 D 展开涂鸦</div>' +
               '</div>' +
               '<div class="fc-face back">' +
               '<div class="fb-pos">' +
@@ -11723,7 +12300,11 @@ notify pgrst, 'reload schema';</textarea
               (e[4] ? '<div class="fb-ex-zh">' + esc(e[4]) + '</div>' : '') +
               noteHtml +
               '</div>' +
-              '</div></div></div>' +
+              '</div></div><div class="fc-sketch-side right ' +
+              (hasSketch ? '' : 'hidden') +
+              '" id="fc-sketch-side-right"><button class="fc-sketch-ear" type="button" data-action="fcSketchToggle" data-side="right" aria-label="展开右侧绘画"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5l-7 7 7 7"></path></svg></button><div class="fc-sketch-panel" id="fc-sketch-panel-right"><canvas class="fc-sketch-side-canvas" id="fc-sketch-canvas-right" data-word="' +
+              esc(e[0]) +
+              '"></canvas></div></div></div></div>' +
               '<div class="grade-row">' +
               '<button class="gb again" data-action="fcGrade" data-g="0">不认识<small>1 · 10分钟后</small></button>' +
               '<button class="gb hard" data-action="fcGrade" data-g="1">模糊<small>2 · 明天见</small></button>' +
@@ -11731,6 +12312,14 @@ notify pgrst, 'reload schema';</textarea
               '</div>' +
               '</div>'
             hydrateSketchPreviews($('#v-flash'))
+            if (hasSketch) {
+              updateFlashSketchShift()
+              renderSketchSideCanvas($('#fc-sketch-canvas-left'), e[0])
+              renderSketchSideCanvas($('#fc-sketch-canvas-right'), e[0])
+              requestAnimationFrame(() => {
+                updateFlashSketchShift()
+              })
+            }
             this.flipped = false
             if (S.set.autoSpeak) setTimeout(() => this.speakCurrent(), 250)
           },
@@ -11769,6 +12358,7 @@ notify pgrst, 'reload schema';</textarea
             updateStatus()
             const card = $('#fc-card')
             const wasFlipped = this.flipped
+            closeFlashSketchSides(true)
             this.flipped = false
             const doGrade = () => {
               card.classList.remove('flipped', 'slide-l', 'slide-r')
@@ -13049,6 +13639,9 @@ notify pgrst, 'reload schema';</textarea
             if (!DR) return
             openSketchViewer(DR.e[0])
           },
+          fcSketchToggle(btn) {
+            toggleFlashSketchSide(btn.dataset.side === 'right' ? 'right' : 'left')
+          },
           noteSave() {
             if (!DR) return
             const n = ensureNotes(DR.e[0])
@@ -13627,6 +14220,16 @@ notify pgrst, 'reload schema';</textarea
           }
           if (isInput || e.ctrlKey || e.metaKey || e.altKey) return
           if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+            if (e.key.toLowerCase() === 'd') {
+              e.preventDefault()
+              const stage = document.querySelector('.fc-sketch-stage')
+              if (stage) {
+                const openLeft = stage.classList.contains('sketch-left-open')
+                const openRight = stage.classList.contains('sketch-right-open')
+                toggleFlashSketchSide(openLeft ? 'left' : openRight ? 'right' : 'left')
+              }
+              return
+            }
             if (e.code === 'Space') {
               e.preventDefault()
               Flash.flip()
