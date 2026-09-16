@@ -9193,8 +9193,45 @@ notify pgrst, 'reload schema';</textarea
           _sketchBoardRO.observe(board)
         }
         function stopSketchBoardWatch() {
-          if (_sketchBoardRO) { _sketchBoardRO.disconnect(); _sketchBoardRO = null }
+          if (_sketchBoardRO) {
+            _sketchBoardRO.disconnect()
+            _sketchBoardRO = null
+          }
           clearTimeout(_sketchResizeTimer)
+        }
+
+        let _fcResizeTimer = 0
+        let _fcStageRO = null
+        function startFlashStageWatch() {
+          stopFlashStageWatch()
+          const stage = document.querySelector('.fc-sketch-stage')
+          if (!stage) return
+          _fcStageRO = new ResizeObserver(() => {
+            clearTimeout(_fcResizeTimer)
+            _fcResizeTimer = requestAnimationFrame(() => {
+              _fcResizeTimer = 0
+              updateFlashSketchShift()
+            })
+          })
+          _fcStageRO.observe(stage)
+        }
+        function stopFlashStageWatch() {
+          if (_fcStageRO) {
+            _fcStageRO.disconnect()
+            _fcStageRO = null
+          }
+          if (_fcResizeTimer) {
+            cancelAnimationFrame(_fcResizeTimer)
+            _fcResizeTimer = 0
+          }
+        }
+        function onFlashWindowResize() {
+          if (curView !== 'flash') return
+          if (_fcResizeTimer) cancelAnimationFrame(_fcResizeTimer)
+          _fcResizeTimer = requestAnimationFrame(() => {
+            _fcResizeTimer = 0
+            updateFlashSketchShift()
+          })
         }
 
         function openSketch(word, mode) {
@@ -9578,6 +9615,10 @@ notify pgrst, 'reload schema';</textarea
           let panelWidth, panelHeight, sideWidth, shift
 
           if (isMobile) {
+            card.style.width = ''
+            card.style.height = ''
+            cardWidth = Math.max(1, Math.round(card.offsetWidth))
+            cardHeight = Math.max(1, Math.round(card.offsetHeight))
             const maxW = Math.max(140, stageWidth - earWidth * 2)
             const maxH = Math.max(140, stageHeight)
             const fitW = Math.min(maxW, (maxH * 3) / 2)
@@ -9586,20 +9627,28 @@ notify pgrst, 'reload schema';</textarea
             sideWidth = panelWidth + earWidth
             shift = 0
           } else {
+            card.style.width = ''
+            card.style.height = ''
+            cardWidth = Math.max(1, Math.round(card.offsetWidth))
+            cardHeight = Math.max(1, Math.round(card.offsetHeight))
             const usableW = viewportW - 24
             const maxCardW = Math.floor((usableW - earWidth * 2 - gap * 4) / 3)
             const maxCardByHeight = Math.floor(stageHeight * 1.5)
-            const targetCardW = Math.min(cardWidth, maxCardW, maxCardByHeight)
+            const targetCardW = Math.min(maxCardW, maxCardByHeight)
             if (targetCardW < cardWidth) {
               cardWidth = Math.max(220, targetCardW)
               cardHeight = Math.round((cardWidth * 2) / 3)
-              card.style.width = cardWidth + 'px'
-              card.style.height = 'auto'
             }
+            card.style.width = cardWidth + 'px'
+            card.style.height = cardHeight + 'px'
             panelWidth = cardWidth
             panelHeight = cardHeight
             sideWidth = panelWidth + earWidth
             shift = Math.round((panelWidth + earWidth) / 2)
+
+            if (leftSide) leftSide.style.removeProperty('width')
+            if (rightSide) rightSide.style.removeProperty('width')
+            card.style.opacity = ''
           }
 
           stage.style.setProperty('--fc-ear-width', earWidth + 'px')
@@ -9620,10 +9669,12 @@ notify pgrst, 'reload schema';</textarea
             if (leftSide) {
               leftSide.style.setProperty('left', panelLeft - earWidth - 2 + 'px', 'important')
               leftSide.style.setProperty('width', sideWidth + 'px', 'important')
+              leftSide.style.removeProperty('transform')
             }
             if (rightSide) {
               rightSide.style.setProperty('left', panelLeft + 1 + 'px', 'important')
               rightSide.style.setProperty('width', sideWidth + 'px', 'important')
+              rightSide.style.removeProperty('transform')
             }
 
             positioner.style.setProperty('transform', 'translateX(0)', 'important')
@@ -9853,6 +9904,7 @@ notify pgrst, 'reload schema';</textarea
           })
           $$('#bottom-nav .bn-item').forEach((b) => b.classList.toggle('active', b.dataset.v === v))
           renderView(v)
+          if (v !== 'flash') stopFlashStageWatch()
           closeDrops()
           closePops()
         }
@@ -12374,6 +12426,7 @@ notify pgrst, 'reload schema';</textarea
               renderSketchSideCanvas($('#fc-sketch-canvas-left'), e[0])
               renderSketchSideCanvas($('#fc-sketch-canvas-right'), e[0])
             }
+            startFlashStageWatch()
             this.flipped = false
             if (S.set.autoSpeak) setTimeout(() => this.speakCurrent(), 250)
           },
@@ -14514,6 +14567,7 @@ notify pgrst, 'reload schema';</textarea
           })
 
           switchView(curView, false)
+          window.addEventListener('resize', onFlashWindowResize)
         }
 
         init()
