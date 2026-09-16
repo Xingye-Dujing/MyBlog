@@ -1477,7 +1477,7 @@
         justify-content: center;
         padding: 24px;
         box-shadow: 0 10px 34px rgba(0, 0, 0, 0.07);
-        overflow: hidden;
+        overflow: visible;
       }
       .fc-face.back {
         transform: rotateY(180deg);
@@ -2682,7 +2682,6 @@
         align-items: center;
         justify-content: center;
         background: var(--bg);
-        border: 1px solid var(--border-dim);
         border-radius: var(--radius);
         overflow: hidden;
         touch-action: none;
@@ -2715,7 +2714,7 @@
         display: block;
         flex: 0 1 auto;
         background: var(--bg);
-        border: 0;
+        border: 1px solid var(--border-dim);
         border-radius: var(--radius);
         touch-action: none;
         cursor: crosshair;
@@ -4626,7 +4625,7 @@
         left: 50%;
         width: min(620px, 92%);
         height: 100%;
-        margin-left: max(-310px, -46%);
+        margin-left: max(-322px, -46%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -8676,18 +8675,6 @@ notify pgrst, 'reload schema';</textarea
             $('#sketch-width-number').addEventListener('change', (e) => {
               setSketchWidth(e.target.value || DRAW.width)
             })
-            window.addEventListener('resize', () => {
-              if ($('#sketch-editor').classList.contains('open')) fitDrawingCanvas()
-              hydrateSketchPreviews(document)
-              const stage = document.querySelector('.fc-sketch-stage')
-              if (stage) {
-                const word = stage.querySelector('.fc-sketch-side-canvas')?.dataset.word
-                if (word) {
-                  renderSketchSideCanvas($('#fc-sketch-canvas-left'), word)
-                  renderSketchSideCanvas($('#fc-sketch-canvas-right'), word)
-                }
-              }
-            })
 
             if ('speechSynthesis' in window) {
               this.voices = speechSynthesis
@@ -9546,7 +9533,6 @@ notify pgrst, 'reload schema';</textarea
           ctx.fillRect(0, 0, width, height)
           normalizeDrawingData(data).strokes.forEach((st) => drawStroke(ctx, st, width, height))
         }
-
         function updateFlashSketchShift() {
           const stage = document.querySelector('.fc-sketch-stage')
           if (!stage) return
@@ -9559,52 +9545,106 @@ notify pgrst, 'reload schema';</textarea
           const rightPanel = stage.querySelector('#fc-sketch-panel-right')
           if (!card || !positioner) return
 
+          const viewportW = window.innerWidth
           const stageWidth = Math.max(1, stage.clientWidth)
-          const cardWidth = Math.max(1, Math.round(card.offsetWidth))
-          const cardHeight = Math.max(1, Math.round(card.offsetHeight))
-          const earWidth = stageWidth <= 560 ? 13 : stageWidth <= 720 ? 14 : 16
-          // 面板与卡片完全同尺寸；高度直接取卡片高度，保证 3:2。
-          const panelWidth = cardWidth
-          const panelHeight = cardHeight
-          const sideWidth = panelWidth + earWidth
-          const shift = Math.round((panelWidth + earWidth) / 2)
+          const stageHeight = Math.max(1, stage.clientHeight)
+          const earWidth = viewportW <= 560 ? 13 : viewportW <= 720 ? 14 : 16
+          const gap = 12
+          const isMobile = viewportW < 900
+
+          let cardWidth = Math.max(1, Math.round(card.offsetWidth))
+          let cardHeight = Math.max(1, Math.round(card.offsetHeight))
+
+          let panelWidth, panelHeight, sideWidth, shift
+
+          if (isMobile) {
+            const maxW = Math.max(140, stageWidth - earWidth * 2)
+            const maxH = Math.max(140, stageHeight)
+            const fitW = Math.min(maxW, (maxH * 3) / 2)
+            panelWidth = Math.round(fitW)
+            panelHeight = Math.round((fitW * 2) / 3)
+            sideWidth = panelWidth + earWidth
+            shift = 0
+          } else {
+            const usableW = viewportW - 24
+            const maxCardW = Math.floor((usableW - earWidth * 2 - gap * 4) / 3)
+            const maxCardByHeight = Math.floor(stageHeight * 1.5)
+            const targetCardW = Math.min(cardWidth, maxCardW, maxCardByHeight)
+            if (targetCardW < cardWidth) {
+              cardWidth = Math.max(220, targetCardW)
+              cardHeight = Math.round((cardWidth * 2) / 3)
+              card.style.width = cardWidth + 'px'
+              card.style.height = 'auto'
+            }
+            panelWidth = cardWidth
+            panelHeight = cardHeight
+            sideWidth = panelWidth + earWidth
+            shift = Math.round((panelWidth + earWidth) / 2)
+          }
 
           stage.style.setProperty('--fc-ear-width', earWidth + 'px')
           stage.style.setProperty('--fc-sketch-panel-width', panelWidth + 'px')
           stage.style.setProperty('--fc-sketch-panel-height', panelHeight + 'px')
           stage.style.setProperty('--fc-sketch-side-width', sideWidth + 'px')
           stage.style.setProperty('--fc-sketch-shift', shift + 'px')
-
-          const baseCardLeft = Math.round((stageWidth - cardWidth) / 2)
-          const baseCardRight = baseCardLeft + cardWidth
-
-          if (leftSide) {
-            leftSide.style.setProperty(
-              'left',
-              Math.round(baseCardLeft - panelWidth - earWidth) + 'px',
-              'important',
-            )
-            leftSide.style.setProperty('width', sideWidth + 'px', 'important')
-            leftSide.style.setProperty('height', panelHeight + 'px', 'important')
-          }
-          if (rightSide) {
-            rightSide.style.setProperty('left', baseCardRight + 'px', 'important')
-            rightSide.style.setProperty('width', sideWidth + 'px', 'important')
-            rightSide.style.setProperty('height', panelHeight + 'px', 'important')
-          }
+          stage.classList.toggle('fc-overlay-mode', isMobile)
 
           const isLeftOpen = !!leftPanel?.classList.contains('open')
           const isRightOpen = !!rightPanel?.classList.contains('open')
+          const leftEar = leftSide?.querySelector('.fc-sketch-ear')
+          const rightEar = rightSide?.querySelector('.fc-sketch-ear')
 
-          const stageShift = isLeftOpen ? shift : isRightOpen ? -shift : 0
+          if (isMobile) {
+            const panelLeft = Math.round((stageWidth - panelWidth) / 2)
 
-          const cardTransform = `translateX(${stageShift}px)`
-          const leftTransform = `translateY(-50%) translateX(${stageShift}px)`
-          const rightTransform = `translateY(-50%) translateX(${stageShift}px)`
+            if (leftSide) {
+              leftSide.style.setProperty('left', panelLeft - earWidth - 2 + 'px', 'important')
+              leftSide.style.setProperty('width', sideWidth + 'px', 'important')
+            }
+            if (rightSide) {
+              rightSide.style.setProperty('left', panelLeft + 1 + 'px', 'important')
+              rightSide.style.setProperty('width', sideWidth + 'px', 'important')
+            }
 
-          positioner.style.setProperty('transform', cardTransform, 'important')
-          if (leftSide) leftSide.style.setProperty('transform', leftTransform, 'important')
-          if (rightSide) rightSide.style.setProperty('transform', rightTransform, 'important')
+            positioner.style.setProperty('transform', 'translateX(0)', 'important')
+
+            if (leftEar) leftEar.style.visibility = 'visible'
+            if (rightEar) rightEar.style.visibility = 'visible'
+
+            card.style.opacity = isLeftOpen || isRightOpen ? '0.15' : ''
+          } else {
+            const baseCardLeft = Math.round((stageWidth - cardWidth) / 2)
+            const baseCardRight = baseCardLeft + cardWidth
+
+            if (leftSide) {
+              leftSide.style.setProperty(
+                'left',
+                baseCardLeft - panelWidth - earWidth - gap + 'px',
+                'important',
+              )
+            }
+            if (rightSide) {
+              rightSide.style.setProperty('left', baseCardRight - gap - 2 + 'px', 'important')
+            }
+
+            const stageShift = isLeftOpen ? shift : isRightOpen ? -shift : 0
+            positioner.style.setProperty('transform', `translateX(${stageShift}px)`, 'important')
+            if (leftSide)
+              leftSide.style.setProperty(
+                'transform',
+                `translateY(-50%) translateX(${stageShift}px)`,
+                'important',
+              )
+            if (rightSide)
+              rightSide.style.setProperty(
+                'transform',
+                `translateY(-50%) translateX(${stageShift}px)`,
+                'important',
+              )
+
+            if (leftEar) leftEar.style.visibility = isRightOpen ? 'hidden' : 'visible'
+            if (rightEar) rightEar.style.visibility = isLeftOpen ? 'hidden' : 'visible'
+          }
 
           stage.querySelectorAll('.fc-sketch-side-canvas').forEach((canvas) => {
             const word = canvas.dataset.word || ''
@@ -9619,18 +9659,18 @@ notify pgrst, 'reload schema';</textarea
           const right = $('#fc-sketch-panel-right')
           const leftEar = document.querySelector('.fc-sketch-ear[data-side="left"]')
           const rightEar = document.querySelector('.fc-sketch-ear[data-side="right"]')
+
           if (left) left.classList.remove('open')
           if (right) right.classList.remove('open')
           if (leftEar) {
             leftEar.classList.remove('on')
             leftEar.setAttribute('aria-expanded', 'false')
-            leftEar.style.visibility = 'visible'
           }
           if (rightEar) {
             rightEar.classList.remove('on')
             rightEar.setAttribute('aria-expanded', 'false')
-            rightEar.style.visibility = 'visible'
           }
+
           stage.classList.remove('sketch-left-open', 'sketch-right-open')
           if (animate) requestAnimationFrame(updateFlashSketchShift)
           else updateFlashSketchShift()
@@ -9656,12 +9696,10 @@ notify pgrst, 'reload schema';</textarea
           if (ear) {
             ear.classList.toggle('on', isOpen)
             ear.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
-            ear.style.visibility = 'visible'
           }
           if (otherEar) {
             otherEar.classList.remove('on')
             otherEar.setAttribute('aria-expanded', 'false')
-            otherEar.style.visibility = isOpen ? 'hidden' : 'visible'
           }
 
           requestAnimationFrame(() => {
@@ -9669,7 +9707,6 @@ notify pgrst, 'reload schema';</textarea
             requestAnimationFrame(() => updateFlashSketchShift())
           })
         }
-
         function hydrateSketchPreviews(root) {
           ;(root || document)
             .querySelectorAll('.sketch-preview[data-word]')
@@ -12316,9 +12353,6 @@ notify pgrst, 'reload schema';</textarea
               updateFlashSketchShift()
               renderSketchSideCanvas($('#fc-sketch-canvas-left'), e[0])
               renderSketchSideCanvas($('#fc-sketch-canvas-right'), e[0])
-              requestAnimationFrame(() => {
-                updateFlashSketchShift()
-              })
             }
             this.flipped = false
             if (S.set.autoSpeak) setTimeout(() => this.speakCurrent(), 250)
