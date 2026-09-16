@@ -2217,8 +2217,121 @@
         height: 170px;
         display: block;
         border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
         background: var(--bg);
         touch-action: none;
+        overflow: hidden;
+      }
+      .sketch-viewer {
+        position: fixed;
+        inset: 0;
+        z-index: 8700;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition:
+          opacity 0.18s ease,
+          visibility 0.18s;
+      }
+      .sketch-viewer.open {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+      }
+      .sketch-viewer-head {
+        min-height: 52px;
+        padding: 7px 10px calc(7px + env(safe-area-inset-top));
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        background: var(--bg);
+        flex-shrink: 0;
+      }
+      .sketch-viewer-title {
+        font-size: calc(14px * var(--fscale));
+        color: var(--text);
+        letter-spacing: 1.5px;
+        margin-right: auto;
+        white-space: nowrap;
+      }
+      .sketch-viewer-close {
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text-dim);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .sketch-viewer-close:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .sketch-viewer-close svg {
+        width: 17px;
+        height: 17px;
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .sketch-viewer-board {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        margin: 10px 0;
+        background: var(--bg);
+        overflow: auto;
+        border-radius: var(--radius);
+      }
+      .sketch-viewer-canvas {
+        display: block;
+        width: min(1100px, 94vw);
+        height: auto;
+        max-height: 78vh;
+        aspect-ratio: 3 / 2;
+        background: var(--bg);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08);
+        flex: 0 0 auto;
+      }
+      .sketch-viewer-foot {
+        min-height: 44px;
+        padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border-dim);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        flex-shrink: 0;
+      }
+      .sketch-viewer-hint {
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 0.5px;
+      }
+      @media (max-width: 720px) {
+        .sketch-viewer-board {
+          padding: 10px;
+          margin: 6px 0;
+        }
+        .sketch-viewer-canvas {
+          width: 96vw;
+          max-height: 78vh;
+        }
       }
       .sketch-editor {
         position: fixed;
@@ -2251,7 +2364,7 @@
         flex-shrink: 0;
       }
       .sketch-title {
-        font-size: calc(11px * var(--fscale));
+        font-size: calc(14px * var(--fscale));
         color: var(--text);
         letter-spacing: 1.5px;
         margin-right: auto;
@@ -2283,44 +2396,288 @@
         color: var(--accent-red);
         border-color: var(--accent-red);
       }
-      .sketch-width {
-        width: 112px;
-        height: 34px;
-        accent-color: var(--text);
-        cursor: pointer;
+      .sketch-tool.on:not(.danger) svg {
+        stroke-width: 2;
+      }
+      .sketch-tool#sketch-eraser.on {
+        background: var(--hover);
+        border-color: var(--border);
+      }
+      .sketch-tool svg {
+        width: 17px;
+        height: 17px;
+        display: block;
+        flex: 0 0 auto;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .sketch-tool .sketch-tool-label {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 0.5px;
+      }
+      .sketch-tool.on {
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .sketch-tool.on .sketch-tool-label {
+        color: var(--text);
+      }
+      .sketch-color-wrap {
+        position: relative;
+        flex: 0 0 auto;
       }
       .sketch-color {
         width: 34px;
         height: 34px;
-        padding: 2px;
+        padding: 3px;
         border: 1px solid var(--border-dim);
         background: transparent;
+        color: var(--text);
         cursor: pointer;
         border-radius: var(--radius);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
-      .sketch-color::-webkit-color-swatch-wrapper {
-        padding: 1px;
+      .sketch-color:hover,
+      .sketch-color.open {
+        border-color: var(--border);
+        background: var(--hover);
       }
-      .sketch-color::-webkit-color-swatch,
-      .sketch-color::-moz-color-swatch {
-        border: 0;
+      .sketch-color.disabled {
+        opacity: 0.42;
+        cursor: default;
+      }
+      .sketch-color-swatch {
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        display: block;
+      }
+      .sketch-color-panel {
+        position: absolute;
+        top: 40px;
+        right: 0;
+        z-index: 8900;
+        min-width: 186px;
+        padding: 8px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 5px 18px rgba(0, 0, 0, 0.14);
+        display: none;
+      }
+      .sketch-color-panel.open {
+        display: block;
+      }
+      .sketch-color-grid {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 3px;
+        margin-bottom: 8px;
+      }
+      .sketch-color-cell {
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition:
+          transform 0.1s,
+          border-color 0.1s;
+      }
+      .sketch-color-cell:hover {
+        transform: scale(1.14);
+        border-color: var(--border);
+      }
+      .sketch-color-cell.active {
+        border: 2px solid var(--text);
+      }
+      .sketch-color-hex-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .sketch-color-hex-row span {
+        font-size: 10px;
+        color: var(--text-dim);
+      }
+      .sketch-color-hex {
+        flex: 1;
+        width: 0;
+        height: 23px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 0 6px;
+        outline: none;
+      }
+      .sketch-color-hex:focus {
+        border-color: var(--text);
+      }
+      .sketch-width-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 34px;
+        padding: 3px 5px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+      }
+      .sketch-width {
+        width: 92px;
+        height: 24px;
+        margin: 0;
+        padding: 0;
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        accent-color: var(--text);
+        cursor: pointer;
+        align-self: center;
+      }
+      .sketch-width::-webkit-slider-runnable-track {
+        height: 5px;
+        background: color-mix(in srgb, var(--text) 18%, var(--bg));
+        border-radius: 999px;
+      }
+      .sketch-width::-moz-range-track {
+        height: 5px;
+        background: color-mix(in srgb, var(--text) 18%, var(--bg));
+        border-radius: 999px;
+      }
+      .sketch-width::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 15px;
+        height: 15px;
+        margin-top: -5px;
+        border: 1px solid var(--bg);
+        background: var(--text);
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent);
+      }
+      .sketch-width::-moz-range-thumb {
+        width: 15px;
+        height: 15px;
+        border: 1px solid var(--bg);
+        background: var(--text);
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent);
+      }
+      .sketch-width:focus-visible {
+        outline: none;
+      }
+      .sketch-width:focus-visible::-webkit-slider-thumb {
+        box-shadow:
+          0 0 0 2px var(--bg),
+          0 0 0 3px var(--text);
+      }
+      .sketch-width:focus-visible::-moz-range-thumb {
+        box-shadow:
+          0 0 0 2px var(--bg),
+          0 0 0 3px var(--text);
+      }
+      .sketch-width-stages {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .sketch-width-stage {
+        width: 19px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text-dim);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .sketch-width-stage:hover,
+      .sketch-width-stage.active {
+        border-color: var(--border-dim);
+        color: var(--text);
+        background: var(--hover);
+      }
+      .sketch-width-stage:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .sketch-width-dot {
+        display: block;
+        width: var(--dot-size);
+        height: var(--dot-size);
+        border-radius: 50%;
+        background: var(--text-dim);
+      }
+      .sketch-width-stage.active .sketch-width-dot {
+        background: var(--text);
+      }
+      .sketch-width-number {
+        width: 38px;
+        height: 24px;
+        padding: 0 3px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-align: center;
+        outline: none;
+      }
+      .sketch-width-number:focus {
+        border-color: var(--border);
       }
       .sketch-board {
         position: relative;
         flex: 1;
         min-height: 0;
-        padding: 10px;
+        margin: 10px 10px;
+        padding: 8px;
         display: flex;
         background: var(--bg);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        overflow: hidden;
         touch-action: none;
         overscroll-behavior: none;
+      }
+      .sketch-eraser-cursor {
+        position: absolute;
+        width: 0;
+        height: 0;
+        left: 0;
+        top: 0;
+        border: 1px dashed var(--text-dim);
+        background: transparent;
+        border-radius: var(--sketch-eraser-radius, 0px);
+        pointer-events: none;
+        z-index: 5;
+        display: none;
+        transform: translate(-50%, -50%);
+        box-sizing: border-box;
+      }
+      .sketch-eraser-cursor.show {
+        display: block;
       }
       .sketch-canvas {
         width: 100%;
         height: 100%;
         display: block;
         background: var(--bg);
-        border: 1px solid var(--border-dim);
+        border: 0;
+        border-radius: var(--radius);
         touch-action: none;
         cursor: crosshair;
         -webkit-user-select: none;
@@ -2351,6 +2708,7 @@
           padding-right: calc(8px + env(safe-area-inset-right));
         }
         .sketch-board {
+          margin: 6px;
           padding: 6px;
         }
         .sketch-foot {
@@ -2362,16 +2720,27 @@
           height: 38px;
           padding: 0 8px;
         }
-        .sketch-width {
-          width: 130px;
+        .sketch-width-wrap {
           height: 38px;
+          max-width: calc(100vw - 16px);
+          padding: 3px 5px;
+        }
+        .sketch-width {
+          width: 82px;
+          height: 26px;
         }
         .sketch-color {
           width: 38px;
           height: 38px;
         }
+        .sketch-color-panel {
+          top: 44px;
+        }
+        .sketch-width-stage {
+          width: 18px;
+        }
         .sketch-title {
-          font-size: calc(10px * var(--fscale));
+          font-size: calc(13px * var(--fscale));
         }
       }
 
@@ -4883,30 +5252,177 @@ notify pgrst, 'reload schema';</textarea
       </div>
     </div>
 
+    <!-- Word drawing enlarged viewer -->
+    <div
+      id="sketch-viewer"
+      class="sketch-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sketch-viewer-title"
+      aria-hidden="true"
+      inert
+    >
+      <div class="sketch-viewer-head">
+        <div class="sketch-viewer-title" id="sketch-viewer-title">查看绘画</div>
+        <button
+          class="sketch-viewer-close"
+          id="sketch-viewer-close"
+          type="button"
+          title="关闭"
+          aria-label="关闭"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 7 10 10"></path>
+            <path d="m17 7-10 10"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="sketch-viewer-board">
+        <canvas
+          id="sketch-viewer-canvas"
+          class="sketch-viewer-canvas"
+          aria-label="绘画放大预览"
+        ></canvas>
+      </div>
+      <div class="sketch-viewer-foot">
+        <span class="sketch-viewer-hint">只读放大预览 · 不会进入编辑</span>
+      </div>
+    </div>
+
     <!-- Word drawing editor / viewer -->
-    <div id="sketch-editor" class="sketch-editor" aria-hidden="true">
+    <div
+      id="sketch-editor"
+      class="sketch-editor"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sketch-title"
+      aria-hidden="true"
+      inert
+    >
       <div class="sketch-head">
         <div class="sketch-title" id="sketch-title">我的绘画</div>
-        <button class="sketch-tool" id="sketch-undo" type="button" title="撤销">↶</button>
-        <button class="sketch-tool" id="sketch-redo" type="button" title="重做">↷</button>
-        <input class="sketch-color" id="sketch-color" type="color" value="#000000" title="颜色" />
-        <input
-          class="sketch-width"
-          id="sketch-width"
-          type="range"
-          min="1"
-          max="24"
-          step="1"
-          value="4"
-          title="粗细"
-        />
-        <button class="sketch-tool" id="sketch-eraser" type="button" title="橡皮擦">橡皮</button>
-        <button class="sketch-tool danger" id="sketch-clear" type="button" title="清空画布">
-          清空
+        <button class="sketch-tool" id="sketch-undo" type="button" title="撤销" aria-label="撤销">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 8 5 12l4 4"></path>
+            <path d="M5.5 12H14a5 5 0 0 1 5 5"></path>
+          </svg>
         </button>
-        <button class="sketch-tool" id="sketch-close" type="button">关闭</button>
+        <button class="sketch-tool" id="sketch-redo" type="button" title="重做" aria-label="重做">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m15 8 4 4-4 4"></path>
+            <path d="M18.5 12H10a5 5 0 0 0-5 5"></path>
+          </svg>
+        </button>
+        <div class="sketch-color-wrap" id="sketch-color-wrap">
+          <button
+            class="sketch-color"
+            id="sketch-color"
+            type="button"
+            title="颜色"
+            aria-label="选择画笔颜色"
+            aria-expanded="false"
+          >
+            <span class="sketch-color-swatch" id="sketch-color-swatch"></span>
+          </button>
+          <div class="sketch-color-panel" id="sketch-color-panel">
+            <div class="sketch-color-grid" id="sketch-color-grid"></div>
+            <div class="sketch-color-hex-row">
+              <span>#</span>
+              <input
+                class="sketch-color-hex"
+                id="sketch-color-hex"
+                type="text"
+                maxlength="6"
+                placeholder="000000"
+                inputmode="text"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="sketch-width-wrap" id="sketch-width-wrap" title="笔画粗细">
+          <input
+            class="sketch-width"
+            id="sketch-width"
+            type="range"
+            min="1"
+            max="24"
+            step="1"
+            value="4"
+            aria-label="笔画粗细"
+          />
+          <div class="sketch-width-stages" id="sketch-width-stages" aria-label="常用粗细">
+            <button class="sketch-width-stage" type="button" data-width="1" title="1px">
+              <span class="sketch-width-dot" style="--dot-size: 2px"></span>
+            </button>
+            <button class="sketch-width-stage" type="button" data-width="3" title="3px">
+              <span class="sketch-width-dot" style="--dot-size: 4px"></span>
+            </button>
+            <button class="sketch-width-stage" type="button" data-width="5" title="5px">
+              <span class="sketch-width-dot" style="--dot-size: 6px"></span>
+            </button>
+            <button class="sketch-width-stage" type="button" data-width="8" title="8px">
+              <span class="sketch-width-dot" style="--dot-size: 9px"></span>
+            </button>
+            <button class="sketch-width-stage" type="button" data-width="12" title="12px">
+              <span class="sketch-width-dot" style="--dot-size: 12px"></span>
+            </button>
+          </div>
+          <input
+            class="sketch-width-number"
+            id="sketch-width-number"
+            type="number"
+            min="1"
+            max="24"
+            step="1"
+            value="4"
+            inputmode="numeric"
+            aria-label="精确笔画粗细"
+            title="精确输入 1 到 24px"
+          />
+        </div>
+        <button
+          class="sketch-tool"
+          id="sketch-eraser"
+          type="button"
+          title="橡皮擦"
+          aria-label="橡皮擦"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4.5 14.5 14.8 4.2a2.6 2.6 0 0 1 3.7 0l1.3 1.3a2.6 2.6 0 0 1 0 3.7L9.5 19.5H6.8a2 2 0 0 1-1.4-.6l-1.2-1.2a2.2 2.2 0 0 1 .3-3.2Z"
+            ></path>
+            <path d="m11 8 5 5"></path>
+            <path d="M9.5 19.5H19"></path>
+          </svg>
+          <span class="sketch-tool-label">橡皮</span>
+        </button>
+        <button
+          class="sketch-tool danger"
+          id="sketch-clear"
+          type="button"
+          title="清空画布"
+          aria-label="清空画布"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16"></path>
+            <path d="M10 4h4"></path>
+            <path d="m7 7 .8 13h8.4L17 7"></path>
+            <path d="M10 11v5"></path>
+            <path d="M14 11v5"></path>
+          </svg>
+        </button>
+        <button class="sketch-tool" id="sketch-close" type="button" title="关闭" aria-label="关闭">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 7 10 10"></path>
+            <path d="m17 7-10 10"></path>
+          </svg>
+        </button>
       </div>
-      <div class="sketch-board"><canvas id="sketch-canvas" class="sketch-canvas"></canvas></div>
+      <div class="sketch-board">
+        <canvas id="sketch-canvas" class="sketch-canvas"></canvas>
+        <div class="sketch-eraser-cursor" id="sketch-eraser-cursor" aria-hidden="true"></div>
+      </div>
       <div class="sketch-foot">
         <span class="sketch-hint" id="sketch-hint">Apple Pencil / 手指直接绘制</span>
         <button class="mini-btn" id="sketch-view-edit" type="button" style="display: none">
@@ -7689,6 +8205,9 @@ notify pgrst, 'reload schema';</textarea
           if (ts) ts.textContent = st.tySound ? '开' : '关'
           const tv = $('#sv-tysoundvol')
           if (tv) tv.textContent = st.tySoundVol + '%'
+          if (DRAW.eraserCursor && DRAW.eraser && DRAW.mode === 'edit') {
+            updateEraserCursor(DRAW.eraserCursor.clientX, DRAW.eraserCursor.clientY)
+          }
           updateExamLabel()
         }
 
@@ -7709,12 +8228,22 @@ notify pgrst, 'reload schema';</textarea
             if (hint) hint.textContent = '有道在线发音 · 备用百度线路 · 语速与嗓音随系统'
           },
           refresh() {
+            installSketchDelegatedHandlers()
             const sketchCanvas = $('#sketch-canvas')
             if (sketchCanvas) {
               sketchCanvas.addEventListener('pointerdown', sketchBegin)
               sketchCanvas.addEventListener('pointermove', sketchMove)
               sketchCanvas.addEventListener('pointerup', sketchEnd)
               sketchCanvas.addEventListener('pointercancel', sketchEnd)
+              sketchCanvas.addEventListener('pointermove', (e) => {
+                if (DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(e.clientX, e.clientY)
+              })
+              sketchCanvas.addEventListener('pointerleave', () => {
+                if (!DRAW.stroke) hideEraserCursor()
+              })
+              sketchCanvas.addEventListener('pointerenter', (e) => {
+                if (DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(e.clientX, e.clientY)
+              })
             }
             $('#sketch-close').addEventListener('click', closeSketch)
             $('#sketch-save').addEventListener('click', saveSketch)
@@ -7724,18 +8253,36 @@ notify pgrst, 'reload schema';</textarea
             $('#sketch-view-edit').addEventListener('click', () => {
               if (DRAW.word) openSketch(DRAW.word, 'edit')
             })
-            $('#sketch-color').addEventListener('input', (e) => {
-              DRAW.color = e.target.value || drawingThemeColor()
-              DRAW.eraser = false
-              updateSketchToolState()
+            initSketchColorPicker()
+            $('#sketch-color-hex').addEventListener('input', (e) => {
+              const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
+              e.target.value = v
+              if (v.length === 6) setSketchColor('#' + v)
+            })
+            $('#sketch-color-hex').addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter') return
+              const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
+              if (v.length === 6) {
+                setSketchColor('#' + v)
+                closeSketchColorPicker()
+              }
+            })
+            document.addEventListener('click', (e) => {
+              const wrap = $('#sketch-color-wrap')
+              if (wrap && !wrap.contains(e.target)) closeSketchColorPicker()
             })
             $('#sketch-width').addEventListener('input', (e) => {
-              DRAW.width = clamp(+e.target.value || 4, 1, 24)
-              updateSketchToolState()
+              setSketchWidth(e.target.value)
             })
-            $('#sketch-eraser').addEventListener('click', () => {
-              DRAW.eraser = !DRAW.eraser
-              updateSketchToolState()
+            $$('#sketch-width-stages .sketch-width-stage').forEach((btn) => {
+              btn.addEventListener('click', () => setSketchWidth(btn.dataset.width))
+            })
+            $('#sketch-width-number').addEventListener('input', (e) => {
+              if (e.target.value === '') return
+              setSketchWidth(e.target.value)
+            })
+            $('#sketch-width-number').addEventListener('change', (e) => {
+              setSketchWidth(e.target.value || DRAW.width)
             })
             window.addEventListener('resize', () => {
               if ($('#sketch-editor').classList.contains('open')) fitDrawingCanvas()
@@ -7898,7 +8445,10 @@ notify pgrst, 'reload schema';</textarea
           color: '#000000',
           width: 4,
           eraser: false,
+          eraserCursor: null,
           dpr: 1,
+          returnFocus: null,
+          viewerReturnFocus: null,
         }
         function drawingKey(word) {
           return nkey(word)
@@ -7924,6 +8474,10 @@ notify pgrst, 'reload schema';</textarea
                 color: typeof st.color === 'string' ? st.color : '#000000',
                 width: Math.max(1, Number(st.width) || 4),
                 erase: !!st.erase,
+                eraseRadius:
+                  st.eraseRadius != null && Number.isFinite(Number(st.eraseRadius))
+                    ? Math.max(0, Number(st.eraseRadius))
+                    : undefined,
                 points: Array.isArray(st.points)
                   ? st.points
                       .map((p) => ({
@@ -7961,31 +8515,138 @@ notify pgrst, 'reload schema';</textarea
           ctx.fillRect(0, 0, r.width, r.height)
           DRAW.strokes.forEach((st) => drawStroke(ctx, st, r.width, r.height))
         }
+        function getSketchEraserRadiusLogical(scale, width) {
+          const root = getComputedStyle(document.documentElement)
+          const radiusPx = parseFloat(root.getPropertyValue('--radius')) || 0
+          const eraseWidth = Math.max(1, Number(width) || Number(DRAW.width) || 1)
+          const safeScale = Math.max(0.0001, Number(scale) || 1)
+          return Math.min(eraseWidth * 0.5, radiusPx / safeScale)
+        }
+
+        function drawRoundedEraserStamp(ctx, x, y, size, radius) {
+          const half = size * 0.5
+          const r = Math.max(0, Math.min(radius, half))
+          ctx.beginPath()
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(x - half, y - half, size, size, r)
+          } else {
+            const x0 = x - half
+            const y0 = y - half
+            const x1 = x + half
+            const y1 = y + half
+            ctx.moveTo(x0 + r, y0)
+            ctx.lineTo(x1 - r, y0)
+            ctx.quadraticCurveTo(x1, y0, x1, y0 + r)
+            ctx.lineTo(x1, y1 - r)
+            ctx.quadraticCurveTo(x1, y1, x1 - r, y1)
+            ctx.lineTo(x0 + r, y1)
+            ctx.quadraticCurveTo(x0, y1, x0, y1 - r)
+            ctx.lineTo(x0, y0 + r)
+            ctx.quadraticCurveTo(x0, y0, x0 + r, y0)
+            ctx.closePath()
+          }
+          ctx.fill()
+        }
+
+        function drawRoundedEraserStroke(ctx, points, sx, sy, sizeLogical, radiusLogical) {
+          if (!points.length) return
+          const scale = (sx + sy) * 0.5
+          const size = sizeLogical * scale
+          const radiusLogicalValue =
+            radiusLogical != null
+              ? Number(radiusLogical) || 0
+              : getSketchEraserRadiusLogical(scale, sizeLogical)
+          const radius = Math.min(size * 0.5, Math.max(0, radiusLogicalValue) * scale)
+          const stamp = (p) => drawRoundedEraserStamp(ctx, p.x * sx, p.y * sy, size, radius)
+          stamp(points[0])
+          for (let i = 1; i < points.length; i++) {
+            const a = points[i - 1]
+            const b = points[i]
+            const ax = a.x * sx
+            const ay = a.y * sy
+            const bx = b.x * sx
+            const by = b.y * sy
+            const distance = Math.hypot(bx - ax, by - ay)
+            const step = Math.max(1, size * 0.35)
+            const count = Math.max(1, Math.ceil(distance / step))
+            for (let j = 1; j <= count; j++) {
+              const t = j / count
+              stamp({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+            }
+          }
+        }
+
+        function updateEraserCursor(clientX, clientY) {
+          DRAW.eraserCursor = { clientX, clientY }
+          const cursor = $('#sketch-eraser-cursor')
+          const canvas = $('#sketch-canvas')
+          const board = canvas ? canvas.parentElement : null
+          if (!cursor || !canvas || !board || DRAW.mode !== 'edit' || !DRAW.eraser) {
+            if (cursor) cursor.classList.remove('show')
+            return
+          }
+          const cr = canvas.getBoundingClientRect()
+          const br = board.getBoundingClientRect()
+          if (!cr.width || !cr.height) {
+            cursor.classList.remove('show')
+            return
+          }
+          const scale = (cr.width / DRAW_W + cr.height / DRAW_H) * 0.5
+          const size = Math.max(1, Number(DRAW.width) || 1) * scale
+          const radiusPx =
+            parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--radius')) || 0
+          const radius = Math.min(radiusPx, size * 0.5)
+          cursor.style.width = size + 'px'
+          cursor.style.height = size + 'px'
+          cursor.style.left = cr.left - br.left + (clientX - cr.left) + 'px'
+          cursor.style.top = cr.top - br.top + (clientY - cr.top) + 'px'
+          cursor.style.setProperty('--sketch-eraser-radius', radius + 'px')
+          cursor.classList.add('show')
+        }
+
+        function hideEraserCursor() {
+          const cursor = $('#sketch-eraser-cursor')
+          if (cursor) cursor.classList.remove('show')
+        }
+
         function drawStroke(ctx, st, cw, ch) {
           if (!st.points || !st.points.length) return
           const sx = cw / DRAW_W,
             sy = ch / DRAW_H
           ctx.save()
-          ctx.globalCompositeOperation = st.erase ? 'destination-out' : 'source-over'
-          ctx.strokeStyle = st.color || '#000'
-          ctx.lineCap = 'round'
-          ctx.lineJoin = 'round'
-          ctx.lineWidth = Math.max(1, Number(st.width) || 4) * ((sx + sy) / 2)
-          if (st.points.length === 1) {
-            const p = st.points[0]
-            ctx.beginPath()
-            ctx.arc(p.x * sx, p.y * sy, Math.max(0.7, ctx.lineWidth * 0.5), 0, Math.PI * 2)
-            ctx.fillStyle = st.erase ? 'rgba(0,0,0,1)' : st.color || '#000'
-            ctx.fill()
+          if (st.erase) {
+            ctx.globalCompositeOperation = 'destination-out'
+            ctx.fillStyle = 'rgba(0,0,0,1)'
+            drawRoundedEraserStroke(
+              ctx,
+              st.points,
+              sx,
+              sy,
+              Math.max(1, Number(st.width) || 4),
+              st.eraseRadius != null ? Number(st.eraseRadius) : undefined,
+            )
           } else {
-            const p0 = st.points[0]
-            ctx.beginPath()
-            ctx.moveTo(p0.x * sx, p0.y * sy)
-            for (let i = 1; i < st.points.length; i++) {
-              const p = st.points[i]
-              ctx.lineTo(p.x * sx, p.y * sy)
+            ctx.globalCompositeOperation = 'source-over'
+            ctx.strokeStyle = st.color || '#000'
+            ctx.lineCap = 'round'
+            ctx.lineJoin = 'round'
+            ctx.lineWidth = Math.max(1, Number(st.width) || 4) * ((sx + sy) / 2)
+            if (st.points.length === 1) {
+              const p = st.points[0]
+              ctx.beginPath()
+              ctx.arc(p.x * sx, p.y * sy, Math.max(0.7, ctx.lineWidth * 0.5), 0, Math.PI * 2)
+              ctx.fillStyle = st.color || '#000'
+              ctx.fill()
+            } else {
+              const p0 = st.points[0]
+              ctx.beginPath()
+              ctx.moveTo(p0.x * sx, p0.y * sy)
+              for (let i = 1; i < st.points.length; i++) {
+                const p = st.points[i]
+                ctx.lineTo(p.x * sx, p.y * sy)
+              }
+              ctx.stroke()
             }
-            ctx.stroke()
           }
           ctx.restore()
         }
@@ -8003,6 +8664,7 @@ notify pgrst, 'reload schema';</textarea
           const c = $('#sketch-canvas')
           if (!c) return
           e.preventDefault()
+          if (DRAW.eraser) updateEraserCursor(e.clientX, e.clientY)
           try {
             c.setPointerCapture(e.pointerId)
           } catch (_) {}
@@ -8016,11 +8678,16 @@ notify pgrst, 'reload schema';</textarea
           drawAll()
           const ctx = c.getContext('2d'),
             r = c.getBoundingClientRect()
+          if (DRAW.stroke.erase) {
+            const scale = (r.width / DRAW_W + r.height / DRAW_H) * 0.5
+            DRAW.stroke.eraseRadius = getSketchEraserRadiusLogical(scale, DRAW.stroke.width)
+          }
           drawStroke(ctx, DRAW.stroke, r.width, r.height)
         }
         function sketchMove(e) {
           if (DRAW.mode !== 'edit' || !DRAW.stroke) return
           e.preventDefault()
+          if (DRAW.eraser) updateEraserCursor(e.clientX, e.clientY)
           DRAW.stroke.points.push(pointerToDrawingPoint(e))
           drawAll()
           const c = $('#sketch-canvas'),
@@ -8037,7 +8704,68 @@ notify pgrst, 'reload schema';</textarea
           if (DRAW.stroke.points.length) DRAW.strokes.push(DRAW.stroke)
           DRAW.stroke = null
           drawAll()
+          if (DRAW.eraser && e.clientX != null && e.clientY != null)
+            updateEraserCursor(e.clientX, e.clientY)
         }
+        function renderSketchViewer(word) {
+          const canvas = $('#sketch-viewer-canvas')
+          if (!canvas) return
+          const data = getDrawing(word)
+          const rect = canvas.getBoundingClientRect()
+          if (!data || !data.strokes.length || !rect.width || !rect.height) return
+          const dpr = Math.max(1, Math.min(3, devicePixelRatio || 1))
+          canvas.width = Math.round(rect.width * dpr)
+          canvas.height = Math.round(rect.height * dpr)
+          const ctx = canvas.getContext('2d')
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+          ctx.clearRect(0, 0, rect.width, rect.height)
+          ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#fff'
+          ctx.fillRect(0, 0, rect.width, rect.height)
+          normalizeDrawingData(data).strokes.forEach((st) =>
+            drawStroke(ctx, st, rect.width, rect.height),
+          )
+        }
+        function openSketchViewer(word) {
+          word = String(word || '').trim()
+          if (!word || !getDrawing(word)) return
+          const viewer = $('#sketch-viewer')
+          if (!viewer) return
+          const active = document.activeElement
+          DRAW.viewerReturnFocus =
+            active && active !== document.body && typeof active.focus === 'function' ? active : null
+          $('#sketch-viewer-title').textContent = '查看绘画 · ' + word
+          viewer.inert = false
+          viewer.setAttribute('aria-hidden', 'false')
+          viewer.classList.add('open')
+          requestAnimationFrame(() => renderSketchViewer(word))
+          setTimeout(() => {
+            const close = $('#sketch-viewer-close')
+            if (close) close.focus({ preventScroll: true })
+          }, 0)
+        }
+        function closeSketchViewer() {
+          const viewer = $('#sketch-viewer')
+          if (!viewer) return
+          const active = document.activeElement
+          if (active && viewer.contains(active) && typeof active.blur === 'function') active.blur()
+          viewer.classList.remove('open')
+          viewer.setAttribute('aria-hidden', 'true')
+          viewer.inert = true
+          const back = DRAW.viewerReturnFocus
+          DRAW.viewerReturnFocus = null
+          if (back && back.isConnected && typeof back.focus === 'function') {
+            requestAnimationFrame(() => {
+              try {
+                back.focus({ preventScroll: true })
+              } catch (_) {
+                try {
+                  back.focus()
+                } catch (_) {}
+              }
+            })
+          }
+        }
+
         function openSketch(word, mode) {
           word = String(word || '').trim()
           if (!word) return
@@ -8055,22 +8783,48 @@ notify pgrst, 'reload schema';</textarea
               : drawingThemeColor()
           DRAW.width = saved && saved.lastWidth ? clamp(saved.lastWidth, 1, 24) : 4
           DRAW.eraser = false
+          DRAW.eraserCursor = null
+          const activeBeforeOpen = document.activeElement
+          DRAW.returnFocus =
+            activeBeforeOpen &&
+            activeBeforeOpen !== document.body &&
+            !wrap.contains(activeBeforeOpen) &&
+            typeof activeBeforeOpen.focus === 'function'
+              ? activeBeforeOpen
+              : null
           wrap.classList.toggle('sketch-readonly', DRAW.mode === 'view')
-          wrap.classList.add('open')
+          wrap.inert = false
           wrap.setAttribute('aria-hidden', 'false')
+          wrap.classList.add('open')
           $('#sketch-title').textContent =
             (DRAW.mode === 'view' ? '查看绘画 · ' : '编辑绘画 · ') + word
-          $('#sketch-color').value = DRAW.color
+          updateSketchColorUI()
           $('#sketch-width').value = String(DRAW.width)
+          $('#sketch-width-number').value = String(DRAW.width)
           $('#sketch-save').style.display = DRAW.mode === 'edit' ? '' : 'none'
           $('#sketch-view-edit').style.display = DRAW.mode === 'view' ? '' : 'none'
           $('#sketch-eraser').style.display = DRAW.mode === 'edit' ? '' : 'none'
           $('#sketch-clear').style.display = DRAW.mode === 'edit' ? '' : 'none'
           $('#sketch-undo').style.display = DRAW.mode === 'edit' ? '' : 'none'
           $('#sketch-redo').style.display = DRAW.mode === 'edit' ? '' : 'none'
-          $('#sketch-color').disabled = DRAW.mode !== 'edit'
+          const colorButton = $('#sketch-color')
+          if (colorButton) {
+            colorButton.removeAttribute('disabled')
+            colorButton.setAttribute('aria-disabled', DRAW.mode === 'edit' ? 'false' : 'true')
+            colorButton.tabIndex = DRAW.mode === 'edit' ? 0 : -1
+            colorButton.classList.toggle('disabled', DRAW.mode !== 'edit')
+          }
           $('#sketch-width').disabled = DRAW.mode !== 'edit'
-          $('#sketch-close').textContent = DRAW.mode === 'edit' ? '取消' : '关闭'
+          $('#sketch-width-number').disabled = DRAW.mode !== 'edit'
+          $$('#sketch-width-stages .sketch-width-stage').forEach((btn) => {
+            btn.disabled = DRAW.mode !== 'edit'
+          })
+          const closeButton = $('#sketch-close')
+          if (closeButton) {
+            const closeLabel = DRAW.mode === 'edit' ? '取消' : '关闭'
+            closeButton.title = closeLabel
+            closeButton.setAttribute('aria-label', closeLabel)
+          }
           $('#sketch-hint').textContent =
             DRAW.mode === 'edit'
               ? 'Apple Pencil / 手指直接绘制 · 松手即成一笔'
@@ -8083,10 +8837,34 @@ notify pgrst, 'reload schema';</textarea
         function closeSketch() {
           const w = $('#sketch-editor')
           if (!w) return
+
+          // Remove focus from any descendant before hiding the editor from AT.
+          const active = document.activeElement
+          if (active && w.contains(active) && typeof active.blur === 'function') {
+            active.blur()
+          }
+
           w.classList.remove('open')
           w.setAttribute('aria-hidden', 'true')
+          w.inert = true
           DRAW.word = ''
           DRAW.stroke = null
+          DRAW.eraserCursor = null
+          hideEraserCursor()
+
+          const returnFocus = DRAW.returnFocus
+          DRAW.returnFocus = null
+          if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+            requestAnimationFrame(() => {
+              try {
+                returnFocus.focus({ preventScroll: true })
+              } catch (_) {
+                try {
+                  returnFocus.focus()
+                } catch (_) {}
+              }
+            })
+          }
         }
         function saveSketch() {
           if (DRAW.mode !== 'edit' || !DRAW.word) return
@@ -8117,13 +8895,170 @@ notify pgrst, 'reload schema';</textarea
           if (DR && DR.e && nkey(DR.e[0]) === key) openDrawer(DR.e, DR.b)
           else refreshView()
         }
+        const SKETCH_PRESET_COLORS = [
+          '#000000',
+          '#434343',
+          '#666666',
+          '#999999',
+          '#b7b7b7',
+          '#cccccc',
+          '#efefef',
+          '#ffffff',
+          '#cc3333',
+          '#e06666',
+          '#f4b400',
+          '#f9ab00',
+          '#fbbc04',
+          '#0b8043',
+          '#33b679',
+          '#009688',
+          '#3f51b5',
+          '#673ab7',
+          '#8e24aa',
+          '#d81b60',
+          '#e67c73',
+          '#039be5',
+          '#1a73e8',
+          '#7986cb',
+          '#9c27b0',
+          '#e91e63',
+          '#f4511e',
+          '#689f38',
+          '#00acc1',
+          '#5c6bc0',
+          '#111111',
+          '#1d4ed8',
+        ]
+        function installSketchDelegatedHandlers() {
+          if (document.documentElement.dataset.sketchHandlersReady === '1') return
+          document.documentElement.dataset.sketchHandlersReady = '1'
+
+          document.addEventListener(
+            'click',
+            (e) => {
+              if (e.target.closest('#sketch-viewer-close')) {
+                e.preventDefault()
+                closeSketchViewer()
+              }
+            },
+            true,
+          )
+
+          document.addEventListener(
+            'click',
+            (e) => {
+              const colorButton = e.target.closest('#sketch-color')
+              if (colorButton) {
+                e.preventDefault()
+                e.stopPropagation()
+                if (DRAW.mode !== 'edit' || colorButton.getAttribute('aria-disabled') === 'true')
+                  return
+                const panel = $('#sketch-color-panel')
+                if (!panel) return
+                const open = panel.classList.toggle('open')
+                colorButton.classList.toggle('open', open)
+                colorButton.setAttribute('aria-expanded', open ? 'true' : 'false')
+                return
+              }
+
+              const eraserButton = e.target.closest('#sketch-eraser')
+              if (eraserButton) {
+                e.preventDefault()
+                e.stopPropagation()
+                if (DRAW.mode !== 'edit') return
+                DRAW.eraser = !DRAW.eraser
+                updateSketchToolState()
+                return
+              }
+
+              const colorWrap = $('#sketch-color-wrap')
+              if (colorWrap && !colorWrap.contains(e.target)) closeSketchColorPicker()
+            },
+            true,
+          )
+        }
+
+        function closeSketchColorPicker() {
+          const panel = $('#sketch-color-panel')
+          const btn = $('#sketch-color')
+          if (panel) panel.classList.remove('open')
+          if (btn) {
+            btn.classList.remove('open')
+            btn.setAttribute('aria-expanded', 'false')
+          }
+        }
+        function updateSketchColorUI() {
+          const color = /^#[0-9a-f]{6}$/i.test(DRAW.color) ? DRAW.color : drawingThemeColor()
+          DRAW.color = color
+          const swatch = $('#sketch-color-swatch')
+          if (swatch) swatch.style.background = color
+          const hex = $('#sketch-color-hex')
+          if (hex) hex.value = color.replace('#', '')
+          const cells = $('#sketch-color-grid')
+          if (cells) {
+            Array.from(cells.children).forEach((cell) => {
+              cell.classList.toggle('active', cell.dataset.color === color)
+            })
+          }
+        }
+        function setSketchColor(color) {
+          color = String(color || '').trim()
+          if (!/^#[0-9a-f]{6}$/i.test(color)) return
+          DRAW.color = color.toUpperCase()
+          DRAW.eraser = false
+          updateSketchColorUI()
+          updateSketchToolState()
+        }
+        function initSketchColorPicker() {
+          const grid = $('#sketch-color-grid')
+          if (!grid || grid.dataset.ready === '1') return
+          grid.innerHTML = ''
+          SKETCH_PRESET_COLORS.forEach((color) => {
+            const cell = document.createElement('button')
+            cell.type = 'button'
+            cell.className = 'sketch-color-cell'
+            cell.dataset.color = color
+            cell.style.background = color
+            cell.title = color
+            cell.setAttribute('aria-label', '颜色 ' + color)
+            cell.addEventListener('click', (e) => {
+              e.stopPropagation()
+              setSketchColor(color)
+              closeSketchColorPicker()
+            })
+            grid.appendChild(cell)
+          })
+          grid.dataset.ready = '1'
+          updateSketchColorUI()
+        }
+        function setSketchWidth(value) {
+          const width = clamp(Math.round(Number(value) || 1), 1, 24)
+          DRAW.width = width
+          updateSketchToolState()
+        }
         function updateSketchToolState() {
+          initSketchColorPicker()
           const er = $('#sketch-eraser')
-          if (er) er.classList.toggle('on', DRAW.eraser)
-          const c = $('#sketch-color')
-          if (c && /^#[0-9a-f]{6}$/i.test(DRAW.color)) c.value = DRAW.color
+          if (er) {
+            er.classList.toggle('on', DRAW.eraser)
+            er.setAttribute('aria-pressed', DRAW.eraser ? 'true' : 'false')
+            er.title = DRAW.eraser ? '橡皮擦 · 已开启' : '橡皮擦'
+          }
+          updateSketchColorUI()
           const w = $('#sketch-width')
           if (w) w.value = String(DRAW.width)
+          const wn = $('#sketch-width-number')
+          if (wn) wn.value = String(DRAW.width)
+          $$('#sketch-width-stages .sketch-width-stage').forEach((btn) => {
+            btn.classList.toggle('active', +btn.dataset.width === +DRAW.width)
+          })
+          const canvas = $('#sketch-canvas')
+          if (canvas)
+            canvas.style.cursor =
+              DRAW.mode === 'edit' ? (DRAW.eraser ? 'none' : 'crosshair') : 'default'
+          if (DRAW.eraserCursor && DRAW.eraser && DRAW.mode === 'edit')
+            updateEraserCursor(DRAW.eraserCursor.clientX, DRAW.eraserCursor.clientY)
+          else hideEraserCursor()
         }
         function sketchUndo() {
           if (DRAW.mode !== 'edit' || !DRAW.strokes.length) return
@@ -12112,7 +13047,7 @@ notify pgrst, 'reload schema';</textarea
           },
           drawView() {
             if (!DR) return
-            openSketch(DR.e[0], 'view')
+            openSketchViewer(DR.e[0])
           },
           noteSave() {
             if (!DR) return
@@ -12664,6 +13599,10 @@ notify pgrst, 'reload schema';</textarea
           const tag = (e.target.tagName || '').toUpperCase()
           const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
           if (e.key === 'Escape') {
+            if ($('#sketch-viewer').classList.contains('open')) {
+              closeSketchViewer()
+              return
+            }
             if ($('#sketch-editor').classList.contains('open')) {
               closeSketch()
               return
