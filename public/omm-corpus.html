@@ -2,7 +2,10 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5"
+    />
     <meta name="theme-color" content="#ffffff" />
     <title>英语语料库</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
@@ -65,6 +68,8 @@
         transition:
           background-color 0.25s,
           color 0.25s;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: none;
       }
       button,
       input,
@@ -147,6 +152,7 @@
         padding: 0 12px;
         overflow-x: auto;
         scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
       }
       #top-menu::-webkit-scrollbar {
         display: none;
@@ -229,6 +235,7 @@
         padding: 0 6px;
         position: relative;
         flex-shrink: 0;
+        touch-action: manipulation;
       }
       .menu-group + .menu-group:before {
         content: '';
@@ -239,6 +246,13 @@
         width: 1px;
         height: 20px;
         background: var(--border-dim);
+      }
+      button,
+      input,
+      select,
+      textarea {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
       }
       .menu-label {
         font-size: calc(9px * var(--fscale));
@@ -259,6 +273,9 @@
         letter-spacing: 0.4px;
         white-space: nowrap;
         transition: 0.15s;
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
       }
       .menu-btn:hover {
         color: var(--text);
@@ -631,10 +648,24 @@
         position: absolute;
         inset: 0;
         padding: 58px 28px 34px;
+        padding-top: env(safe-area-inset-top, 58px);
+        padding-left: max(28px, env(safe-area-inset-left, 28px));
+        padding-right: max(28px, env(safe-area-inset-right, 28px));
+        padding-bottom: max(34px, env(safe-area-inset-bottom, 34px));
         display: flex;
         flex-direction: column;
         z-index: 1;
         transition: padding-top 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+        -webkit-overflow-scrolling: touch;
+      }
+      #bottom-nav {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+        z-index: 2000;
       }
       body:not(.menu-pinned):not(.submenu-open) #main {
         padding-top: 14px;
@@ -652,6 +683,7 @@
         padding-bottom: 14px;
         gap: 12px;
         flex-shrink: 0;
+        flex-wrap: wrap;
       }
       .ch-left {
         display: flex;
@@ -695,6 +727,8 @@
         scrollbar-width: thin;
         scrollbar-color: var(--border-dim) transparent;
         padding-right: 2px;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
       }
       .view.on {
         display: block;
@@ -1131,13 +1165,14 @@
 
       .ai-grid {
         display: grid;
-        grid-template-columns: minmax(280px, 1fr) 10px minmax(280px, var(--ai-main-width, 58%));
+        grid-template-columns: minmax(240px, 1fr) 10px minmax(240px, var(--ai-main-width, 58%));
         grid-template-rows: minmax(0, 1fr);
         gap: 0;
         width: 100%;
         height: 100%;
         min-width: 0;
         min-height: 0;
+        overflow: hidden;
       }
       .ai-main,
       .ai-side {
@@ -1929,6 +1964,21 @@
         padding-top: 10px;
         flex-shrink: 0;
       }
+      input,
+      textarea,
+      select {
+        font-size: 16px;
+      }
+      @media (min-width: 621px) {
+        input,
+        textarea,
+        select {
+          font-size: inherit;
+        }
+      }
+      .menu-btn {
+        min-height: 36px;
+      }
       .ai-composer .ai-input {
         min-height: 86px;
         max-height: 240px;
@@ -2169,7 +2219,7 @@
         line-height: 1.6;
       }
       .ed-area.big {
-        font: 14px/1.8 var(--font-en);
+        font: 12px/1.8 var(--font-en);
       }
       .field-grid {
         display: grid;
@@ -2289,6 +2339,14 @@
 
       #bottom-nav {
         display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+        z-index: 2000;
+        background: var(--bg);
+        border-top: var(--border-width) var(--border-style) var(--border-dim);
       }
       .bn-item {
         flex: 1;
@@ -2303,6 +2361,8 @@
         background: transparent;
         border: 0;
         cursor: pointer;
+        touch-action: manipulation;
+        min-height: 44px;
       }
       .bn-item.active {
         color: var(--text);
@@ -2316,6 +2376,66 @@
         margin-right: 2px;
       }
 
+      /* ===== Mobile polish: no scrollbars / no horizontal overflow ===== */
+      @media (pointer: coarse), (max-width: 720px) {
+        ::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
+        }
+        *,
+        *::before,
+        *::after {
+          scrollbar-width: none;
+        }
+        .view,
+        .modal-body,
+        .dr-body,
+        .dropdown,
+        .ai-chat,
+        .ai-subsection {
+          scrollbar-width: none;
+        }
+        html,
+        body {
+          overflow-x: hidden;
+          max-width: 100vw;
+        }
+        .view,
+        .modal-body,
+        .dr-body,
+        .category-layout {
+          max-width: 100%;
+        }
+        .corpus-row .en,
+        .corpus-row .zh,
+        .recent-item .en,
+        .ai-hit .line,
+        .ai-bubble-content,
+        .prompt-box,
+        .info-line,
+        .copy-block,
+        .empty-hint {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        svg,
+        img {
+          max-width: 100%;
+        }
+      }
+
+      @media (max-width: 1024px) {
+        .stat-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .home-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .home-grid .panel:nth-child(3) {
+          grid-column: 1 / -1;
+        }
+      }
       @media (max-width: 900px) {
         #main {
           padding-left: 16px;
@@ -2323,33 +2443,52 @@
         }
         .stat-grid {
           grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+        .stat .num {
+          font-size: calc(20px * var(--fscale));
+        }
+        .stat .lab {
+          font-size: calc(8px * var(--fscale));
         }
         .home-grid,
-        .home-grid2,
-        .ai-grid {
+        .home-grid2 {
           grid-template-columns: 1fr;
+        }
+        .ai-grid {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          overflow: hidden;
         }
         .ai-resizer {
           display: none;
         }
         .ai-main,
         .ai-side {
-          grid-column: 1;
-          grid-row: auto;
+          width: 100%;
+          height: auto;
+          min-height: 0;
+          overflow: visible;
         }
         .ai-main {
-          height: auto;
+          flex: 1 1 0;
+          min-height: 0;
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
         .ai-side {
-          height: auto;
-          grid-template-rows: auto auto;
-          overflow: visible;
+          flex: 1 1 0;
+          min-height: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
         .ai-side .ai-subsection {
-          height: auto;
-          max-height: none;
-          overflow: visible;
+          flex: 1 1 0;
+          min-height: 0;
+          overflow: auto;
         }
         .home-grid.flex,
         .home-grid2.flex {
@@ -2385,36 +2524,109 @@
         .corpus-row .cat {
           display: none;
         }
+        #head {
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        #ch-title {
+          font-size: calc(20px * var(--fscale));
+        }
+      }
+      @media (max-width: 768px) {
+        .stat-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+        .stat .num {
+          font-size: calc(22px * var(--fscale));
+        }
+        .panel {
+          padding: 12px 14px;
+        }
+        .corpus-row {
+          grid-template-columns: 60px minmax(0, 1fr) 20px;
+          padding: 10px 8px;
+        }
+        .home-grid {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .home-grid .panel:nth-child(3) {
+          grid-column: auto;
+        }
+        .toolbar {
+          gap: 4px;
+        }
+        .tool-search {
+          min-width: 120px;
+          font-size: 10px;
+        }
+        #library-add {
+          height: 28px;
+          display: flex;
+        }
       }
       @media (max-width: 620px) {
-        #v-home.on {
-          overflow: hidden;
+        #top-menu,
+        #menu-trigger {
+          display: none !important;
         }
-        #top-menu {
-          display: flex !important;
-          top: -48px;
-          height: 46px;
-          justify-content: flex-start;
-          padding: 0 8px;
+        body:not(.menu-pinned):not(.submenu-open) #main {
+          padding-top: 20px;
         }
-        .menu-trigger {
-          height: 8px;
+        body.menu-pinned #main,
+        body.submenu-open:not(.menu-pinned) #main {
+          padding-top: 20px;
         }
-        body.menu-pinned #top-menu,
-        body.submenu-open #top-menu {
-          top: 0;
+        .cat-panel .cat-item {
+          padding: 6px 8px;
+          font-size: calc(11px * var(--fscale));
+        }
+        .cat-panel .panel-h {
+          margin-bottom: 6px;
+        }
+        .cat-panel .panel-t {
+          font-size: calc(9px * var(--fscale));
         }
         #bottom-nav {
           display: flex;
+          height: 56px;
+          align-items: center;
+          justify-content: space-around;
+          background: var(--bg);
+          border-top: var(--border-width) var(--border-style) var(--border-dim);
+        }
+        .bn-item {
+          min-height: 44px;
+          padding: 6px 0 4px;
+          font-size: calc(9px * var(--fscale));
+          gap: 3px;
+        }
+        .bn-icon {
+          width: 18px;
+          height: 18px;
         }
         #main {
-          padding-bottom: 58px;
+          padding-bottom: 66px;
+          padding-left: 16px;
+          padding-right: 16px;
         }
         #ch-right {
-          gap: 8px;
+          gap: 6px;
+          font-size: calc(9px * var(--fscale));
+        }
+        #ch-title {
+          font-size: calc(16px * var(--fscale));
         }
         .stat-grid {
           grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+        .stat .num {
+          font-size: calc(20px * var(--fscale));
+        }
+        .stat .lab {
+          font-size: calc(8px * var(--fscale));
         }
         .field-grid {
           grid-template-columns: 1fr;
@@ -2430,7 +2642,9 @@
           padding: 0 2px;
         }
         .menu-btn {
-          padding: 4px 8px;
+          padding: 6px 10px;
+          min-height: 36px;
+          font-size: calc(11px * var(--fscale));
         }
         .corpus-row {
           grid-template-columns: 1fr 24px;
@@ -2440,13 +2654,221 @@
         }
         .corpus-row .en {
           white-space: normal;
+          font-size: 14px;
         }
         .drawer {
           width: 100%;
         }
         .home-grid,
         .home-grid2 {
+          grid-template-columns: 1fr;
           gap: 8px;
+        }
+        .quick-add textarea {
+          min-height: 120px;
+        }
+        .ed-input,
+        .ed-area,
+        .ed-select {
+          font-size: 12px;
+        }
+        .ai-input {
+          font-size: 12px;
+          min-height: 100px;
+        }
+        .custom-select-trigger {
+          min-height: 44px;
+        }
+        .settings-btn {
+          width: 36px;
+          height: 36px;
+          min-height: 36px;
+        }
+
+        .ai-corpus-controls {
+          gap: 4px;
+        }
+        .ai-limit-field input,
+        .ai-word-limit-field input {
+          width: 60px;
+          height: 36px;
+          font-size: 16px;
+        }
+        .ai-strategy-switch button {
+          min-height: 36px;
+          padding: 5px 6px;
+          font-size: 9px;
+        }
+        .modal {
+          width: 94vw;
+          max-height: 92vh;
+          font-size: 14px;
+        }
+        .modal .modal-body {
+          font-size: 13px;
+        }
+        .modal h3,
+        .modal .modal-title {
+          font-size: 15px;
+        }
+        .modal.open {
+          transform: translate(-50%, -50%);
+        }
+        .ai-focus-fullscreen {
+          padding: 10px 12px;
+        }
+        .ai-panel-head-actions {
+          gap: 4px;
+        }
+        .ai-fullscreen-btn {
+          width: 32px;
+          height: 32px;
+          padding: 6px;
+        }
+        .ai-bubble {
+          max-width: min(92%, 780px);
+        }
+        .ai-bubble.user {
+          max-width: min(92%, 720px);
+        }
+        .ai-bubble-content h1 {
+          font-size: 20px;
+        }
+        .ai-bubble-content h2 {
+          font-size: 16px;
+        }
+        .ai-bubble-content h3 {
+          font-size: 14px;
+        }
+        .prompt-box {
+          font-size: 13px;
+        }
+        .drawer-actions {
+          flex-direction: column;
+        }
+        .ed-btn {
+          min-height: 44px;
+          width: 100%;
+        }
+        .ai-chat-empty,
+        .empty-hint {
+          padding: 3em 1em;
+        }
+        .home-grid .panel:nth-child(3) {
+          grid-column: auto;
+        }
+        .ai-grid {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .ai-main {
+          flex: 1 1 50%;
+          min-height: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .ai-side {
+          flex: 1 1 50%;
+          min-height: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .ai-chat {
+          overflow-y: auto;
+          flex: 1;
+        }
+        .ai-composer {
+          flex-shrink: 0;
+        }
+        .ai-side .ai-subsection {
+          flex: 1 1 0;
+          min-height: 0;
+          overflow: auto;
+        }
+      }
+      @media (max-width: 560px) {
+        .stat-grid {
+          gap: 6px;
+        }
+        .home-grid,
+        .home-grid2 {
+          gap: 6px;
+        }
+        .panel {
+          padding: 11px 12px;
+        }
+        .panel-h {
+          margin-bottom: 8px;
+        }
+        .quick-add textarea {
+          min-height: 100px;
+        }
+        .ai-input {
+          min-height: 86px;
+          font: 12px/1.8 var(--font-en);
+        }
+        .ai-bubble-content {
+          font: 12px/1.8 var(--font-en);
+        }
+        .drawer {
+          width: 100%;
+        }
+        .dr-body {
+          padding: 14px 16px 24px;
+        }
+        .ai-chat-empty,
+        .empty-hint {
+          padding: 2.5em 1em;
+        }
+        .recent-item .en {
+          font-size: 14px;
+        }
+        .ai-hit .line {
+          font-size: 14px;
+        }
+      }
+      @media (max-width: 400px) {
+        .stat-grid {
+          grid-template-columns: 1fr;
+          gap: 6px;
+        }
+        .stat-grid .stat:nth-child(3),
+        .stat-grid .stat:nth-child(4) {
+          display: none;
+        }
+        #bottom-nav {
+          height: 50px;
+          padding-bottom: max(4px, env(safe-area-inset-bottom, 4px));
+        }
+        .bn-item span:not(.bn-icon) {
+          display: none;
+        }
+        .bn-item {
+          min-height: 40px;
+        }
+        #main {
+          padding-bottom: max(58px, env(safe-area-inset-bottom, 58px));
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+        .view {
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+        }
+        #ch-title {
+          font-size: calc(14px * var(--fscale));
+        }
+        #ch-right {
+          display: none;
+        }
+        .stat .num {
+          font-size: calc(18px * var(--fscale));
+        }
+        .home-grid2 {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -6810,6 +7232,159 @@ ${extra}`
           updateHead()
           showSplash()
         }
+        // Mobile utilities
+        let isMobile = false
+        let isTouchDevice = false
+        function detectMobile() {
+          isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+          isMobile = window.innerWidth <= 768 || isTouchDevice
+          document.body.classList.toggle('is-mobile', isMobile)
+          document.body.classList.toggle('is-touch', isTouchDevice)
+        }
+        detectMobile()
+
+        function setViewportHeight() {
+          document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px')
+        }
+        setViewportHeight()
+        window.addEventListener('resize', setViewportHeight)
+
+        // Prevent overscroll outside scrollable areas on touch devices
+        document.body.addEventListener(
+          'touchmove',
+          (e) => {
+            const target = e.target
+            const isScrollable =
+              target.closest('.view') ||
+              target.closest('#bottom-nav') ||
+              target.closest('#drawer') ||
+              target.closest('.dropdown') ||
+              target.closest('.modal') ||
+              target.closest('#top-menu') ||
+              target.closest('.ai-subsection') ||
+              target.closest('.ai-chat')
+            if (!isScrollable) {
+              e.preventDefault()
+            }
+          },
+          { passive: false },
+        )
+
+        // Lock/unlock body scroll when drawers/modals open
+        const _origOpenEditor = openEditor
+        openEditor = function (id) {
+          if (isMobile) document.body.style.overflow = 'hidden'
+          _origOpenEditor(id)
+        }
+        const _origCloseEditor = closeEditor
+        closeEditor = function () {
+          _origCloseEditor()
+          if (isMobile) document.body.style.overflow = ''
+        }
+        const _origCloseModal = closeModal
+        closeModal = function () {
+          _origCloseModal()
+          if (isMobile) document.body.style.overflow = ''
+        }
+
+        // AI resizer: add touch support
+        const aiResizer = $('#ai-resizer')
+        if (aiResizer) {
+          let isDragging = false
+          let startX = 0
+          let startWidth = 0
+          const aiSide = $('#ai-side-panel')
+
+          function onDragStart(clientX) {
+            isDragging = true
+            startX = clientX
+            startWidth = aiSide ? aiSide.offsetWidth : 0
+            document.body.classList.add('dragging')
+          }
+          function onDragMove(clientX) {
+            if (!isDragging) return
+            const diff = clientX - startX
+            const newWidth = Math.max(240, Math.min(500, startWidth + diff))
+            if (aiSide) aiSide.style.width = newWidth + 'px'
+          }
+          function onDragEnd() {
+            isDragging = false
+            document.body.classList.remove('dragging')
+          }
+
+          aiResizer.addEventListener(
+            'touchstart',
+            (e) => {
+              onDragStart(e.touches[0].clientX)
+            },
+            { passive: true },
+          )
+          document.addEventListener(
+            'touchmove',
+            (e) => {
+              if (!isDragging) return
+              onDragMove(e.touches[0].clientX)
+            },
+            { passive: true },
+          )
+          document.addEventListener('touchend', onDragEnd)
+          aiResizer.addEventListener(
+            'mousedown',
+            (e) => {
+              onDragStart(e.clientX)
+            },
+            { passive: true },
+          )
+          document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return
+            onDragMove(e.clientX)
+          })
+          document.addEventListener('mouseup', onDragEnd)
+        }
+
+        // Fix: prevent focus issues on mobile when switching views
+        window.addEventListener('resize', () => {
+          detectMobile()
+          const drawer = $('#drawer')
+          if (drawer && !drawer.classList.contains('open')) {
+            document.body.style.overflow = ''
+          }
+        })
+
+        // Handle keyboard on mobile: close drawer when escape
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            const drawer = $('#drawer')
+            if (drawer && drawer.classList.contains('open')) {
+              closeEditor()
+            }
+            const modalMask = $('#modal-mask')
+            if (modalMask && modalMask.classList.contains('open')) {
+              closeModal()
+            }
+            const ddSettings = $('#dd-settings')
+            if (ddSettings && ddSettings.classList.contains('open')) {
+              closeDrops()
+            }
+          }
+        })
+
+        // Make .ai-grid responsive - force single column on mobile
+        function fixAiGrid() {
+          const aiGrid = document.querySelector('.ai-grid')
+          if (aiGrid) {
+            if (window.innerWidth <= 900) {
+              aiGrid.style.gridTemplateColumns = '1fr'
+              aiGrid.style.gridTemplateRows = 'auto auto'
+            } else {
+              aiGrid.style.gridTemplateColumns = ''
+              aiGrid.style.gridTemplateRows = ''
+            }
+          }
+        }
+        window.addEventListener('resize', fixAiGrid)
+        fixAiGrid()
+
         boot()
       })()
     </script>
