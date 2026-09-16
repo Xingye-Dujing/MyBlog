@@ -1076,6 +1076,7 @@
         display: flex;
         flex-direction: column;
         box-shadow: -14px 0 44px rgba(0, 0, 0, 0.14);
+        border-radius: var(--radius);
       }
       #drawer.open {
         transform: none;
@@ -9179,6 +9180,23 @@ notify pgrst, 'reload schema';</textarea
           }
         }
 
+        let _sketchResizeTimer = 0
+        let _sketchBoardRO = null
+        function startSketchBoardWatch() {
+          stopSketchBoardWatch()
+          const board = document.querySelector('#sketch-editor .sketch-board')
+          if (!board) return
+          _sketchBoardRO = new ResizeObserver(() => {
+            clearTimeout(_sketchResizeTimer)
+            _sketchResizeTimer = setTimeout(() => fitDrawingCanvas(), 0)
+          })
+          _sketchBoardRO.observe(board)
+        }
+        function stopSketchBoardWatch() {
+          if (_sketchBoardRO) { _sketchBoardRO.disconnect(); _sketchBoardRO = null }
+          clearTimeout(_sketchResizeTimer)
+        }
+
         function openSketch(word, mode) {
           word = String(word || '').trim()
           if (!word) return
@@ -9245,6 +9263,7 @@ notify pgrst, 'reload schema';</textarea
           setTimeout(() => {
             fitDrawingCanvas()
             updateSketchToolState()
+            startSketchBoardWatch()
           }, 0)
         }
         function closeSketch() {
@@ -9264,6 +9283,7 @@ notify pgrst, 'reload schema';</textarea
           DRAW.stroke = null
           DRAW.eraserCursor = null
           hideEraserCursor()
+          stopSketchBoardWatch()
 
           const returnFocus = DRAW.returnFocus
           DRAW.returnFocus = null
