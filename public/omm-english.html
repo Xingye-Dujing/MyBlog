@@ -2717,11 +2717,30 @@
         background: var(--bg);
         border: 1px solid var(--border-dim);
         border-radius: var(--radius);
+        -ms-touch-action: none;
         touch-action: none;
         cursor: crosshair;
         object-fit: contain;
         -webkit-user-select: none;
         user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-user-drag: none;
+      }
+      /* Toolbar children must never swallow the tap: some WebKit builds do not
+         bubble click to document when the hit target is an SVG child. */
+      .sketch-tool > *,
+      .sketch-color > *,
+      .mini-btn > *,
+      .fc-sketch-ear > * {
+        pointer-events: none;
+      }
+      .sketch-tool,
+      .sketch-color,
+      .mini-btn,
+      .fc-sketch-ear {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
       }
       .sketch-readonly .sketch-canvas {
         cursor: default;
@@ -8623,63 +8642,9 @@ notify pgrst, 'reload schema';</textarea
             if (hint) hint.textContent = '有道在线发音 · 备用百度线路 · 语速与嗓音随系统'
           },
           refresh() {
-            installSketchDelegatedHandlers()
-            const sketchCanvas = $('#sketch-canvas')
-            if (sketchCanvas) {
-              sketchCanvas.addEventListener('pointerdown', sketchBegin)
-              sketchCanvas.addEventListener('pointermove', sketchMove)
-              sketchCanvas.addEventListener('pointerup', sketchEnd)
-              sketchCanvas.addEventListener('pointercancel', sketchEnd)
-              sketchCanvas.addEventListener('pointermove', (e) => {
-                if (DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(e.clientX, e.clientY)
-              })
-              sketchCanvas.addEventListener('pointerleave', () => {
-                if (!DRAW.stroke) hideEraserCursor()
-              })
-              sketchCanvas.addEventListener('pointerenter', (e) => {
-                if (DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(e.clientX, e.clientY)
-              })
-            }
-            $('#sketch-close').addEventListener('click', closeSketch)
-            $('#sketch-save').addEventListener('click', saveSketch)
-            $('#sketch-undo').addEventListener('click', sketchUndo)
-            $('#sketch-redo').addEventListener('click', sketchRedo)
-            $('#sketch-clear').addEventListener('click', sketchClear)
-            $('#sketch-view-edit').addEventListener('click', () => {
-              if (DRAW.word) openSketch(DRAW.word, 'edit')
-            })
-            initSketchColorPicker()
-            $('#sketch-color-hex').addEventListener('input', (e) => {
-              const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
-              e.target.value = v
-              if (v.length === 6) setSketchColor('#' + v)
-            })
-            $('#sketch-color-hex').addEventListener('keydown', (e) => {
-              if (e.key !== 'Enter') return
-              const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
-              if (v.length === 6) {
-                setSketchColor('#' + v)
-                closeSketchColorPicker()
-              }
-            })
-            document.addEventListener('click', (e) => {
-              const wrap = $('#sketch-color-wrap')
-              if (wrap && !wrap.contains(e.target)) closeSketchColorPicker()
-            })
-            $('#sketch-width').addEventListener('input', (e) => {
-              setSketchWidth(e.target.value)
-            })
-            $$('#sketch-width-stages .sketch-width-stage').forEach((btn) => {
-              btn.addEventListener('click', () => setSketchWidth(btn.dataset.width))
-            })
-            $('#sketch-width-number').addEventListener('input', (e) => {
-              if (e.target.value === '') return
-              setSketchWidth(e.target.value)
-            })
-            $('#sketch-width-number').addEventListener('change', (e) => {
-              setSketchWidth(e.target.value || DRAW.width)
-            })
-
+            // NOTE: the sketch board UI must not depend on the speech engine.
+            // It is initialised separately (and unconditionally) in init().
+            initSketchBoard()
             if ('speechSynthesis' in window) {
               this.voices = speechSynthesis
                 .getVoices()
@@ -8903,8 +8868,14 @@ notify pgrst, 'reload schema';</textarea
           const c = $('#sketch-canvas')
           if (!c) return
           const board = c.parentElement
-          const bw = board ? Math.max(1, board.clientWidth - 16) : c.clientWidth
-          const bh = board ? Math.max(1, board.clientHeight - 16) : c.clientHeight
+          let bw = board ? board.clientWidth - 16 : c.clientWidth
+          let bh = board ? board.clientHeight - 16 : c.clientHeight
+          // Some kernels report 0 for flex children inside a fixed sheet. Fall
+          // back to viewport maths so the board never collapses to nothing.
+          if (!(bw > 40) || !(bh > 40)) {
+            bw = Math.max(1, (window.innerWidth || 360) - 48)
+            bh = Math.max(1, (window.innerHeight || 640) - 190)
+          }
           const width = Math.max(1, Math.min(bw, (bh * 3) / 2))
           const height = (width * 2) / 3
           c.style.width = width + 'px'
@@ -9074,10 +9045,113 @@ notify pgrst, 'reload schema';</textarea
             p: Math.max(0.15, Math.min(1, Number(e.pressure) > 0 ? Number(e.pressure) : 0.7)),
           }
         }
+
+        // ------------------------------------------------------------
+        // TOUCH FALLBACK
+        // WeChat's X5/XWEB kernel, XBrowser and other legacy WebViews ship
+        // partial (or no) Pointer Event support, so pointerdown/pointermove
+        // simply never fire there. These handlers mirror the pointer path using
+        // raw touch events, which every touch-capable engine implements.
+        // ------------------------------------------------------------
+        function sketchPointerIsLive() {
+          return Date.now() - (DRAW.lastPointerTs || 0) < 1500
+        }
+        function sketchTouchFind(e, id) {
+          const list = e && e.touches && e.touches.length ? e.touches : e && e.changedTouches
+          if (!list || !list.length) return null
+          if (id === null || id === undefined) return list[0]
+          for (let i = 0; i < list.length; i++) {
+            if (list[i].identifier === id) return list[i]
+          }
+          return null
+        }
+        function touchToDrawingPoint(touch) {
+          const c = $('#sketch-canvas'),
+            r = c.getBoundingClientRect()
+          return {
+            x: Math.max(0, Math.min(DRAW_W, ((touch.clientX - r.left) / r.width) * DRAW_W)),
+            y: Math.max(0, Math.min(DRAW_H, ((touch.clientY - r.top) / r.height) * DRAW_H)),
+            p: Math.max(0.15, Math.min(1, Number(touch.force) > 0 ? Number(touch.force) : 0.7)),
+          }
+        }
+        function startStrokeOnCanvas(c, point) {
+          DRAW.stroke = {
+            color: DRAW.color,
+            width: Math.max(1, +DRAW.width || 4),
+            erase: !!DRAW.eraser,
+            points: [point],
+          }
+          DRAW.redo = []
+          drawAll()
+          const ctx = c.getContext('2d'),
+            r = c.getBoundingClientRect()
+          if (DRAW.stroke.erase) {
+            const scale = (r.width / DRAW_W + r.height / DRAW_H) * 0.5
+            DRAW.stroke.eraseRadius = getSketchEraserRadiusLogical(scale, DRAW.stroke.width)
+          }
+          drawStroke(ctx, DRAW.stroke, r.width, r.height)
+        }
+        function paintCurrentStroke(c) {
+          if (!DRAW.stroke) return
+          const ctx = c.getContext('2d'),
+            r = c.getBoundingClientRect()
+          drawAll()
+          drawStroke(ctx, DRAW.stroke, r.width, r.height)
+        }
+        function finishCurrentStroke() {
+          if (!DRAW.stroke) return
+          if (DRAW.stroke.points.length) DRAW.strokes.push(DRAW.stroke)
+          DRAW.stroke = null
+          drawAll()
+        }
+        function sketchTouchBegin(e) {
+          if (DRAW.mode !== 'edit') return
+          if (sketchPointerIsLive()) return
+          const c = $('#sketch-canvas')
+          if (!c) return
+          if (e.cancelable) e.preventDefault()
+          if (e.touches && e.touches.length > 1) {
+            finishCurrentStroke()
+            DRAW.strokeTouchId = null
+            return
+          }
+          const t = sketchTouchFind(e)
+          if (!t) return
+          DRAW.strokeTouchId = t.identifier
+          DRAW.lastTouchTs = Date.now()
+          if (DRAW.eraser) updateEraserCursor(t.clientX, t.clientY)
+          startStrokeOnCanvas(c, touchToDrawingPoint(t))
+        }
+        function sketchTouchMove(e) {
+          if (DRAW.mode !== 'edit') return
+          if (sketchPointerIsLive()) return
+          const c = $('#sketch-canvas')
+          if (!c || !DRAW.stroke || DRAW.strokeTouchId === null || DRAW.strokeTouchId === undefined)
+            return
+          const t = sketchTouchFind(e, DRAW.strokeTouchId)
+          if (!t) return
+          if (e.cancelable) e.preventDefault()
+          if (DRAW.eraser) updateEraserCursor(t.clientX, t.clientY)
+          DRAW.stroke.points.push(touchToDrawingPoint(t))
+          paintCurrentStroke(c)
+        }
+        function sketchTouchEnd(e) {
+          const id = DRAW.strokeTouchId
+          DRAW.strokeTouchId = null
+          if (sketchPointerIsLive()) return
+          const t = sketchTouchFind(e, id)
+          finishCurrentStroke()
+          if (t && DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(t.clientX, t.clientY)
+          else hideEraserCursor()
+          if (e && e.cancelable) e.preventDefault()
+        }
+
         function sketchBegin(e) {
           if (DRAW.mode !== 'edit') return
           const c = $('#sketch-canvas')
           if (!c) return
+          DRAW.lastPointerTs = Date.now()
+          DRAW.strokeTouchId = null
           e.preventDefault()
           if (DRAW.eraser) updateEraserCursor(e.clientX, e.clientY)
           try {
@@ -9112,6 +9186,7 @@ notify pgrst, 'reload schema';</textarea
         }
         function sketchEnd(e) {
           if (!DRAW.stroke) return
+          DRAW.lastPointerTs = Date.now()
           try {
             const c = $('#sketch-canvas')
             if (c && e.pointerId != null) c.releasePointerCapture(e.pointerId)
@@ -9185,21 +9260,38 @@ notify pgrst, 'reload schema';</textarea
 
         let _sketchResizeTimer = 0
         let _sketchBoardRO = null
+        function onSketchWindowResize() {
+          if (!$('#sketch-editor') || !$('#sketch-editor').classList.contains('open')) return
+          clearTimeout(_sketchResizeTimer)
+          _sketchResizeTimer = setTimeout(() => fitDrawingCanvas(), 60)
+        }
         function startSketchBoardWatch() {
           stopSketchBoardWatch()
           const board = document.querySelector('#sketch-editor .sketch-board')
           if (!board) return
-          _sketchBoardRO = new ResizeObserver(() => {
-            clearTimeout(_sketchResizeTimer)
-            _sketchResizeTimer = setTimeout(() => fitDrawingCanvas(), 0)
-          })
-          _sketchBoardRO.observe(board)
+          if (typeof ResizeObserver === 'function') {
+            try {
+              _sketchBoardRO = new ResizeObserver(() => {
+                clearTimeout(_sketchResizeTimer)
+                _sketchResizeTimer = setTimeout(() => fitDrawingCanvas(), 0)
+              })
+              _sketchBoardRO.observe(board)
+            } catch (_) {
+              _sketchBoardRO = null
+            }
+          } else {
+            // Legacy kernels without ResizeObserver still need to refit.
+            window.addEventListener('resize', onSketchWindowResize)
+            window.addEventListener('orientationchange', onSketchWindowResize)
+          }
         }
         function stopSketchBoardWatch() {
           if (_sketchBoardRO) {
             _sketchBoardRO.disconnect()
             _sketchBoardRO = null
           }
+          window.removeEventListener('resize', onSketchWindowResize)
+          window.removeEventListener('orientationchange', onSketchWindowResize)
           clearTimeout(_sketchResizeTimer)
         }
 
@@ -9208,15 +9300,19 @@ notify pgrst, 'reload schema';</textarea
         function startFlashStageWatch() {
           stopFlashStageWatch()
           const stage = document.querySelector('.fc-sketch-stage')
-          if (!stage) return
-          _fcStageRO = new ResizeObserver(() => {
-            if (_fcResizeTimer) cancelAnimationFrame(_fcResizeTimer)
-            _fcResizeTimer = requestAnimationFrame(() => {
-              _fcResizeTimer = 0
-              renderFlashSideCanvases()
+          if (!stage || typeof ResizeObserver !== 'function') return
+          try {
+            _fcStageRO = new ResizeObserver(() => {
+              if (_fcResizeTimer) cancelAnimationFrame(_fcResizeTimer)
+              _fcResizeTimer = requestAnimationFrame(() => {
+                _fcResizeTimer = 0
+                renderFlashSideCanvases()
+              })
             })
-          })
-          _fcStageRO.observe(stage)
+            _fcStageRO.observe(stage)
+          } catch (_) {
+            _fcStageRO = null
+          }
         }
         function stopFlashStageWatch() {
           if (_fcStageRO) {
@@ -9304,6 +9400,10 @@ notify pgrst, 'reload schema';</textarea
             fitDrawingCanvas()
             updateSketchToolState()
             startSketchBoardWatch()
+            // A few engines settle the sheet layout one frame late.
+            if (typeof requestAnimationFrame === 'function') {
+              requestAnimationFrame(() => fitDrawingCanvas())
+            }
           }, 0)
         }
         function closeSketch() {
@@ -9402,6 +9502,32 @@ notify pgrst, 'reload schema';</textarea
           '#111111',
           '#1d4ed8',
         ]
+        // The delegated listeners below are the primary path. Every control also
+        // gets a direct binding in initSketchBoard() because some in-app engines
+        // (older WeChat X5/XWEB, XBrowser, legacy Android WebView) do not bubble
+        // click when the innermost target is an SVG child, which silently kills
+        // purely delegated handlers. `stopPropagation` in the capture listener
+        // guarantees only one of the two paths ever runs.
+        function toggleSketchColorPicker() {
+          const colorButton = $('#sketch-color')
+          if (!colorButton) return
+          if (DRAW.mode !== 'edit' || colorButton.getAttribute('aria-disabled') === 'true') return
+          const panel = $('#sketch-color-panel')
+          if (!panel) return
+          const open = panel.classList.toggle('open')
+          colorButton.classList.toggle('open', open)
+          colorButton.setAttribute('aria-expanded', open ? 'true' : 'false')
+        }
+        function toggleSketchEraser() {
+          if (DRAW.mode !== 'edit') return
+          DRAW.eraser = !DRAW.eraser
+          updateSketchToolState()
+        }
+        function delegatedEl(e) {
+          const t = e.target
+          if (!t || typeof t.closest !== 'function') return null
+          return t
+        }
         function installSketchDelegatedHandlers() {
           if (document.documentElement.dataset.sketchHandlersReady === '1') return
           document.documentElement.dataset.sketchHandlersReady = '1'
@@ -9409,8 +9535,10 @@ notify pgrst, 'reload schema';</textarea
           document.addEventListener(
             'click',
             (e) => {
-              if (e.target.closest('#sketch-viewer-close')) {
+              const el = delegatedEl(e)
+              if (el && el.closest('#sketch-viewer-close')) {
                 e.preventDefault()
+                e.__zeSketchHandled = '1'
                 closeSketchViewer()
               }
             },
@@ -9420,35 +9548,129 @@ notify pgrst, 'reload schema';</textarea
           document.addEventListener(
             'click',
             (e) => {
-              const colorButton = e.target.closest('#sketch-color')
-              if (colorButton) {
-                e.preventDefault()
-                e.stopPropagation()
-                if (DRAW.mode !== 'edit' || colorButton.getAttribute('aria-disabled') === 'true')
-                  return
-                const panel = $('#sketch-color-panel')
-                if (!panel) return
-                const open = panel.classList.toggle('open')
-                colorButton.classList.toggle('open', open)
-                colorButton.setAttribute('aria-expanded', open ? 'true' : 'false')
-                return
-              }
-
-              const eraserButton = e.target.closest('#sketch-eraser')
-              if (eraserButton) {
-                e.preventDefault()
-                e.stopPropagation()
-                if (DRAW.mode !== 'edit') return
-                DRAW.eraser = !DRAW.eraser
-                updateSketchToolState()
-                return
-              }
-
               const colorWrap = $('#sketch-color-wrap')
-              if (colorWrap && !colorWrap.contains(e.target)) closeSketchColorPicker()
+              const el = delegatedEl(e)
+
+              if (el) {
+                const colorButton = el.closest('#sketch-color')
+                if (colorButton) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  e.__zeSketchHandled = '1'
+                  toggleSketchColorPicker()
+                  return
+                }
+
+                const eraserButton = el.closest('#sketch-eraser')
+                if (eraserButton) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  e.__zeSketchHandled = '1'
+                  toggleSketchEraser()
+                  return
+                }
+              }
+
+              if (colorWrap && colorWrap.contains(e.target)) return
+              if (colorWrap) closeSketchColorPicker()
             },
             true,
           )
+        }
+
+        // ============================================================
+        // SKETCH BOARD INIT · unconditional, idempotent, null-safe
+        // ------------------------------------------------------------
+        // This block used to live inside TT.refresh(), which only runs when
+        // window.speechSynthesis exists. In-app browsers that lack the Web
+        // Speech API (or throw anywhere earlier in refresh()) therefore ended
+        // up with a canvas that had no listeners at all and a toolbar that was
+        // completely inert — the exact "nothing reacts" symptom.
+        // ============================================================
+        function bindOnce(el, type, fn, opts) {
+          if (!el || typeof el.addEventListener !== 'function') return
+          if (!el.__zeEvt) el.__zeEvt = {}
+          if (el.__zeEvt[type]) return
+          el.__zeEvt[type] = true
+          el.addEventListener(type, fn, opts)
+        }
+        function zeOnce(e, fn) {
+          if (e.__zeSketchHandled === '1') return
+          e.__zeSketchHandled = '1'
+          fn()
+        }
+        function bindSketchInput(canvas) {
+          if (!canvas || canvas.__zeSketchInput === '1') return
+          canvas.__zeSketchInput = '1'
+
+          // Pointer path (modern Chrome / Safari 13+)
+          canvas.addEventListener('pointerdown', sketchBegin)
+          canvas.addEventListener('pointermove', sketchMove)
+          canvas.addEventListener('pointerup', sketchEnd)
+          canvas.addEventListener('pointercancel', sketchEnd)
+          canvas.addEventListener('pointermove', (e) => {
+            DRAW.lastPointerTs = Date.now()
+            if (DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(e.clientX, e.clientY)
+          })
+          canvas.addEventListener('pointerleave', () => {
+            if (!DRAW.stroke) hideEraserCursor()
+          })
+          canvas.addEventListener('pointerenter', (e) => {
+            if (DRAW.eraser && DRAW.mode === 'edit') updateEraserCursor(e.clientX, e.clientY)
+          })
+
+          // Touch fallback path (every touch engine supports these). Guarded by
+          // lastPointerTs so a kernel that also fires pointer events never draws
+          // the same stroke twice.
+          canvas.addEventListener('touchstart', sketchTouchBegin, { passive: false })
+          canvas.addEventListener('touchmove', sketchTouchMove, { passive: false })
+          canvas.addEventListener('touchend', sketchTouchEnd, { passive: false })
+          canvas.addEventListener('touchcancel', sketchTouchEnd, { passive: false })
+          canvas.addEventListener('contextmenu', (e) => e.preventDefault())
+        }
+        function initSketchBoard() {
+          installSketchDelegatedHandlers()
+          bindSketchInput($('#sketch-canvas'))
+
+          bindOnce($('#sketch-close'), 'click', closeSketch)
+          bindOnce($('#sketch-save'), 'click', saveSketch)
+          bindOnce($('#sketch-undo'), 'click', sketchUndo)
+          bindOnce($('#sketch-redo'), 'click', sketchRedo)
+          bindOnce($('#sketch-clear'), 'click', sketchClear)
+          bindOnce($('#sketch-view-edit'), 'click', () => {
+            if (DRAW.word) openSketch(DRAW.word, 'edit')
+          })
+          bindOnce($('#sketch-viewer-close'), 'click', (e) => zeOnce(e, closeSketchViewer))
+
+          initSketchColorPicker()
+
+          bindOnce($('#sketch-color'), 'click', (e) => zeOnce(e, toggleSketchColorPicker))
+          bindOnce($('#sketch-eraser'), 'click', (e) => zeOnce(e, toggleSketchEraser))
+
+          bindOnce($('#sketch-color-hex'), 'input', (e) => {
+            const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
+            e.target.value = v
+            if (v.length === 6) setSketchColor('#' + v)
+          })
+          bindOnce($('#sketch-color-hex'), 'keydown', (e) => {
+            if (e.key !== 'Enter') return
+            const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
+            if (v.length === 6) {
+              setSketchColor('#' + v)
+              closeSketchColorPicker()
+            }
+          })
+          bindOnce($('#sketch-width'), 'input', (e) => setSketchWidth(e.target.value))
+          bindOnce($('#sketch-width-number'), 'input', (e) => {
+            if (e.target.value === '') return
+            setSketchWidth(e.target.value)
+          })
+          bindOnce($('#sketch-width-number'), 'change', (e) => {
+            setSketchWidth(e.target.value || DRAW.width)
+          })
+          ;($$('#sketch-width-stages .sketch-width-stage') || []).forEach((btn) => {
+            bindOnce(btn, 'click', () => setSketchWidth(btn.dataset.width))
+          })
         }
 
         function closeSketchColorPicker() {
@@ -14419,6 +14641,8 @@ notify pgrst, 'reload schema';</textarea
             rd.readAsText(f)
             ev.target.value = ''
           })
+
+          initSketchBoard()
 
           if ('speechSynthesis' in window) {
             TT.refresh()
