@@ -2260,6 +2260,94 @@
         border-top: var(--border-width) var(--border-style) var(--border-faint);
         padding-top: 9px;
       }
+      .info-line.flush {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .rs-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .rs-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        padding: 9px 11px;
+        border: var(--border-width) var(--border-style) var(--border-dim);
+        cursor: pointer;
+      }
+      .rs-item:hover {
+        background: var(--hover);
+      }
+      /* 复选框统一为单色描边样式：透明底 + 描边对勾，不使用系统强调色 */
+      .cbx {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        border: var(--border-width) var(--border-style) var(--border-dim);
+        background: transparent;
+        color: var(--text);
+        accent-color: transparent;
+      }
+      .cbx:hover {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .cbx:checked {
+        background: transparent;
+        border-color: var(--border-dim);
+      }
+      .cbx:checked:hover {
+        background: var(--hover);
+      }
+      .cbx:checked::after {
+        content: '';
+        width: 7px;
+        height: 4px;
+        border-left: 1.5px solid var(--text-dim);
+        border-bottom: 1.5px solid var(--text-dim);
+        transform: rotate(-45deg) translateY(-1px);
+      }
+      .cbx:focus-visible {
+        outline: 1px solid var(--border-dim);
+        outline-offset: 2px;
+      }
+      .rs-item input[type='checkbox'] {
+        margin-top: 3px;
+      }
+      .rs-main {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .rs-title {
+        font-size: 12px;
+        color: var(--text);
+      }
+      .rs-sub {
+        font-size: 10px;
+        color: var(--text-faint);
+        line-height: 1.7;
+      }
+      .rs-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--text-dim);
+        cursor: pointer;
+      }
+      .ed-btn.armed {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
       .copy-block {
         font: 11px/1.7 var(--font-mono);
         white-space: pre-wrap;
@@ -2309,13 +2397,6 @@
       .preset.active {
         border-color: var(--border);
         background: var(--hover);
-      }
-      .security-note {
-        border-left: 2px solid var(--accent-orange);
-        padding-left: 10px;
-        font-size: 10px;
-        color: var(--text-dim);
-        line-height: 1.7;
       }
 
       .toast {
@@ -2893,7 +2974,8 @@
       </div>
       <div class="menu-group">
         <span class="menu-label">DATA</span><button class="menu-btn" id="import-btn">导入</button
-        ><button class="menu-btn" id="export-btn">导出</button>
+        ><button class="menu-btn" id="export-btn">导出</button
+        ><button class="menu-btn" id="reset-btn">重置</button>
       </div>
       <div class="menu-group">
         <span class="menu-label">VIEW</span><button class="menu-btn" id="settings-btn">样式</button>
@@ -3092,6 +3174,9 @@
       <div class="dd-divider"></div>
       <div class="dd-item" id="open-ai-settings">
         <span>AI 连接设置</span><span class="dd-hint">API</span>
+      </div>
+      <div class="dd-item" id="setting-reset">
+        <span>清空 / 重置语料库</span><span class="dd-hint">RESET</span>
       </div>
     </div>
     <div id="bottom-nav">
@@ -3662,7 +3747,7 @@
             font-size: 11px;
             color: var(--text-dim);
           "
-          ><input type="checkbox" id="ed-fav" /> 设为重点语料</label
+          ><input type="checkbox" id="ed-fav" class="cbx" /> 设为重点语料</label
         >
         <div class="info-line" id="ed-meta"></div>
         <div class="drawer-actions">
@@ -5433,7 +5518,7 @@
         }
         function openAISettings() {
           const s = S.settings
-          const html = `<div class=\"ed-field\"><span class=\"ed-label\">AI Provider</span><div class=\"preset-row\"><button class=\"preset\" data-p=\"deepseek\">DEEPSEEK</button><button class=\"preset\" data-p=\"openai\">OPENAI</button><button class=\"preset\" data-p=\"openrouter\">OPENROUTER</button><button class=\"preset\" data-p=\"custom\">CUSTOM</button></div></div><div class=\"field-grid\"><div class=\"ed-field\"><span class=\"ed-label\">Base URL</span><input class=\"ed-input\" id=\"api-base\" value=\"${esc(s.apiBase || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">Model</span><input class=\"ed-input\" id=\"api-model\" value=\"${esc(s.apiModel || '')}\"><div class=\"ai-model-preset\" id=\"ai-model-preset\"></div></div></div><div class=\"ed-field\"><span class=\"ed-label\">API Key</span><input class=\"ed-input\" id=\"api-key\" type=\"password\" value=\"${esc(s.apiKey || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">System Prompt</span><textarea class=\"ed-area\" id=\"api-system\" style=\"min-height:120px\">${esc(s.system || DEFAULT.settings.system)}</textarea></div><div class=\"security-note\">纯前端调用会让 API Key 存在浏览器环境中。个人本地使用可以这样做，公开部署建议使用后端代理。</div><div class=\"drawer-actions\"><button class=\"ed-btn primary\" id=\"settings-save\">保存设置</button><button class=\"ed-btn\" id=\"api-test\">测试连接</button></div>`
+          const html = `<div class=\"ed-field\"><span class=\"ed-label\">AI Provider</span><div class=\"preset-row\"><button class=\"preset\" data-p=\"deepseek\">DEEPSEEK</button><button class=\"preset\" data-p=\"openai\">OPENAI</button><button class=\"preset\" data-p=\"openrouter\">OPENROUTER</button><button class=\"preset\" data-p=\"custom\">CUSTOM</button></div></div><div class=\"field-grid\"><div class=\"ed-field\"><span class=\"ed-label\">Base URL</span><input class=\"ed-input\" id=\"api-base\" value=\"${esc(s.apiBase || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">Model</span><input class=\"ed-input\" id=\"api-model\" value=\"${esc(s.apiModel || '')}\"><div class=\"ai-model-preset\" id=\"ai-model-preset\"></div></div></div><div class=\"ed-field\"><span class=\"ed-label\">API Key</span><input class=\"ed-input\" id=\"api-key\" type=\"password\" value=\"${esc(s.apiKey || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">System Prompt</span><textarea class=\"ed-area\" id=\"api-system\" style=\"min-height:120px\">${esc(s.system || DEFAULT.settings.system)}</textarea></div><div class=\"drawer-actions\"><button class=\"ed-btn primary\" id=\"settings-save\">保存设置</button><button class=\"ed-btn\" id=\"api-test\">测试连接</button></div>`
           let m = document.querySelector('#settings-dynamic')
           if (!m) {
             m = document.createElement('div')
@@ -6708,6 +6793,166 @@ ${extra}`
           a.click()
           setTimeout(() => URL.revokeObjectURL(a.href), 500)
         }
+        /* ---------- 清空 / 重置语料库 ---------- */
+        const RESET_MARKER = 'reset-dynamic'
+        let rsArmTimer = null
+        function rsDisarm(scope) {
+          clearTimeout(rsArmTimer)
+          if (!scope) return
+          scope.querySelectorAll('.ed-btn[data-armed="1"]').forEach((b) => {
+            b.dataset.armed = ''
+            if (b.dataset.origLabel) b.textContent = b.dataset.origLabel
+            b.classList.remove('armed')
+          })
+        }
+        function rsArm(scope, btn, confirmText, run) {
+          if (!btn) return
+          if (!btn.dataset.origLabel) btn.dataset.origLabel = btn.textContent
+          btn.onclick = () => {
+            const armed = btn.dataset.armed === '1'
+            rsDisarm(scope)
+            if (!armed) {
+              btn.dataset.armed = '1'
+              btn.textContent = confirmText
+              btn.classList.add('armed')
+              rsArmTimer = setTimeout(() => rsDisarm(scope), 5000)
+              return
+            }
+            run()
+          }
+        }
+        function rsDownloadBackup() {
+          const chk = $('#rs-backup')
+          if (!chk || !chk.checked) return
+          // 备份失败不应阻断清空/重置本身。
+          try {
+            downloadData()
+          } catch (e) {}
+        }
+        function openReset() {
+          closeDrops()
+          let m = document.getElementById(RESET_MARKER)
+          if (!m) {
+            m = document.createElement('div')
+            m.id = RESET_MARKER
+            m.className = 'modal'
+            m.innerHTML =
+              '<div class="modal-head"><span class="modal-title">CLEAR / RESET</span><button class="close-btn" id="reset-dynamic-close" aria-label="关闭"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l14 14M19 5L5 19" /></svg></button></div><div class="modal-body"></div>'
+            document.body.appendChild(m)
+            m.querySelector('#reset-dynamic-close').onclick = closeModal
+          }
+          const body = m.querySelector('.modal-body')
+          const opts = [
+            {
+              key: 'entries',
+              title: '语料条目',
+              sub: `删除全部语料（当前 ${S.entries.length} 条）`,
+              on: true,
+            },
+            {
+              key: 'categories',
+              title: '分类',
+              sub: `删除全部分类（当前 ${S.categories.length} 个），保留的语料会显示成“未分类”`,
+              on: false,
+            },
+            {
+              key: 'chat',
+              title: 'AI 对话记录',
+              sub: `清空 AI 视图里的连续对话（当前 ${(S.chat || []).length} 条）`,
+              on: false,
+            },
+          ]
+          body.innerHTML = `
+            <div class="info-line flush">当前：${S.entries.length} 条语料 · ${S.categories.length} 个分类 · ${(S.chat || []).length} 条对话 · 内置语料 ${DEFAULT.entries.length} 条。</div>
+            <div class="ed-field">
+              <span class="ed-label">清空范围</span>
+              <div class="rs-list">
+                ${opts
+                  .map(
+                    (o) =>
+                      `<label class="rs-item" data-rs="${o.key}"><input class="cbx" type="checkbox" ${o.on ? 'checked' : ''} /><span class="rs-main"><span class="rs-title">${esc(o.title)}</span><span class="rs-sub">${esc(o.sub)}</span></span></label>`,
+                  )
+                  .join('')}
+              </div>
+            </div>
+            <label class="rs-check"><input class="cbx" type="checkbox" id="rs-backup" checked /><span>执行前自动下载一份备份 JSON</span></label>
+            <div class="drawer-actions">
+              <button class="ed-btn danger" id="rs-clear" type="button">清空所选</button>
+              <button class="ed-btn primary" id="rs-builtin" type="button">重置为内置内容</button>
+              <button class="ed-btn danger" id="rs-factory" type="button">恢复出厂设置</button>
+            </div>
+            <div class="info-line">「重置为内置内容」把语料与分类还原成 ${DEFAULT.entries.length} 条内置考试语料，保留 AI 连接、外观设置和对话；「恢复出厂设置」会连同 API 配置、外观、统计一起还原。所有操作都需要二次点击确认，勾选备份后会在执行前先下载 JSON。</div>
+          `
+          $('#modal-mask').classList.add('open')
+          m.classList.add('open')
+          rsDisarm(body)
+          rsArm(body, body.querySelector('#rs-clear'), '再点一次 · 清空所选', () =>
+            resetSelected(m),
+          )
+          rsArm(body, body.querySelector('#rs-builtin'), '再点一次 · 重置为内置', () =>
+            resetToBuiltin(),
+          )
+          rsArm(body, body.querySelector('#rs-factory'), '再点一次 · 恢复出厂', () =>
+            resetToFactory(),
+          )
+        }
+        function rsChecked(scope, key) {
+          const box = scope.querySelector(`label[data-rs="${key}"] input`)
+          return !!(box && box.checked)
+        }
+        function resetSelected(m) {
+          const body = m.querySelector('.modal-body')
+          const pick = {
+            entries: rsChecked(body, 'entries'),
+            categories: rsChecked(body, 'categories'),
+            chat: rsChecked(body, 'chat'),
+          }
+          if (!pick.entries && !pick.categories && !pick.chat) {
+            toast('没有勾选任何范围')
+            return
+          }
+          rsDownloadBackup()
+          if (pick.entries) S.entries = []
+          if (pick.categories) S.categories = []
+          if (pick.chat) S.chat = []
+          afterReset('已清空所选内容')
+        }
+        function resetToBuiltin() {
+          rsDownloadBackup()
+          S.entries = clone(DEFAULT).entries
+          S.categories = clone(DEFAULT).categories
+          afterReset(`已重置为内置内容 · ${S.entries.length} 条语料`)
+        }
+        function resetToFactory() {
+          rsDownloadBackup()
+          S = clone(DEFAULT)
+          afterReset('已恢复出厂设置')
+        }
+        function afterReset(msg) {
+          selectedAiIds = []
+          manualAiIds.clear()
+          selectedTags.clear()
+          selectedCategory = 'all'
+          currentFilter = 'all'
+          editId = null
+          aiContextTouched = false
+          aiContextDraft = ''
+          if ($('#drawer') && $('#drawer').classList.contains('open')) closeEditor()
+          if ($('#search-input')) $('#search-input').value = ''
+          try {
+            localStorage.removeItem(LS)
+          } catch (e) {}
+          save()
+          applySettings()
+          populateCats()
+          renderHome()
+          renderLibrary()
+          renderChat()
+          renderAiContext()
+          updateHead()
+          toast(msg)
+          closeModal()
+        }
         async function testAI() {
           try {
             let r = ''
@@ -6793,6 +7038,11 @@ ${extra}`
           closeDrops()
           openAISettings()
         }
+        $('#setting-reset').onclick = () => {
+          closeDrops()
+          openReset()
+        }
+        if ($('#reset-btn')) $('#reset-btn').onclick = openReset
         $('#settings-close')?.addEventListener('click', closeModal)
         $('#modal-mask').onclick = closeModal
         document.addEventListener('click', (e) => {
