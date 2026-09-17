@@ -3613,7 +3613,7 @@
           display: none;
         }
         #main {
-          padding: 42px 18px calc(60px + env(safe-area-inset-bottom));
+          padding: 42px 2px calc(60px + env(safe-area-inset-bottom));
         }
         #v-home.on,
         .view {
@@ -4656,13 +4656,24 @@
         transition:
           color 0.22s ease,
           border-color 0.22s ease,
-          background 0.22s ease;
+          background 0.22s ease,
+          opacity 0.18s ease,
+          visibility 0.18s ease;
       }
       .fc-sketch-ear:hover,
       .fc-sketch-ear.on {
         color: var(--text);
         border-color: var(--border);
         background: var(--hover);
+      }
+      /* Only one side can be expanded at a time: while one panel is open
+         the opposite ear fades out and stays unclickable. Space is kept
+         so the row does not jump when it comes back. */
+      .fc-sketch-stage.sketch-left-open .fc-sketch-side.right .fc-sketch-ear,
+      .fc-sketch-stage.sketch-right-open .fc-sketch-side.left .fc-sketch-ear {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
       }
       .fc-sketch-ear svg {
         width: 13px;
@@ -9571,12 +9582,13 @@ notify pgrst, 'reload schema';</textarea
 
           if (left) left.classList.remove('open')
           if (right) right.classList.remove('open')
+          stage.classList.remove('sketch-left-open', 'sketch-right-open')
           stage.querySelectorAll('.fc-sketch-ear').forEach((ear) => {
             ear.classList.remove('on')
             ear.setAttribute('aria-expanded', 'false')
+            ear.removeAttribute('aria-hidden')
+            ear.removeAttribute('tabindex')
           })
-
-          stage.classList.remove('sketch-left-open', 'sketch-right-open')
         }
 
         function toggleFlashSketchSide(side) {
@@ -9599,10 +9611,19 @@ notify pgrst, 'reload schema';</textarea
           if (ear) {
             ear.classList.toggle('on', isOpen)
             ear.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
+            ear.removeAttribute('aria-hidden')
+            ear.removeAttribute('tabindex')
           }
           if (otherEar) {
             otherEar.classList.remove('on')
             otherEar.setAttribute('aria-expanded', 'false')
+            if (isOpen) {
+              otherEar.setAttribute('aria-hidden', 'true')
+              otherEar.setAttribute('tabindex', '-1')
+            } else {
+              otherEar.removeAttribute('aria-hidden')
+              otherEar.removeAttribute('tabindex')
+            }
           }
 
           if (isOpen) {
