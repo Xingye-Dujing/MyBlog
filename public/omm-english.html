@@ -3632,7 +3632,7 @@
           display: none;
         }
         #main {
-          padding: 42px 2px calc(60px + env(safe-area-inset-bottom));
+          padding: 42px 20px calc(60px + env(safe-area-inset-bottom));
         }
         #v-home.on,
         .view {
@@ -4785,7 +4785,7 @@
         .fc-sketch-stage {
           --ear-w: 15px;
           --ear-h: 48px;
-          --card-w: min(calc(100cqw - 2 * var(--ear-w)), 150cqh);
+          --card-w: min(calc(90cqw - 2 * var(--ear-w)), 150cqh);
           height: min(370px, 58vh);
           min-height: 280px;
         }
@@ -14912,12 +14912,14 @@ notify pgrst, 'reload schema';</textarea
           return document.getElementById(id)
         }
 
-        var c = cfg()
-        return {
-          remember: !!c.remember,
-          autoSync: !!c.autoSync,
-          warnAck: !!c.warnAck,
-          password: typeof c.password === 'string' ? c.password : '',
+        function prefs() {
+          var c = cfg()
+          return {
+            remember: !!c.remember,
+            autoSync: !!c.autoSync,
+            warnAck: !!c.warnAck,
+            password: typeof c.password === 'string' ? c.password : '',
+          }
         }
 
         function patchCfg(part) {
@@ -15129,6 +15131,15 @@ notify pgrst, 'reload schema';</textarea
           var e = E('ze-cloud-status')
           if (e) e.textContent = t
         }
+
+        function toggleCls(id, cls, on) {
+          var e = E(id)
+          if (e) e.classList.toggle(cls, !!on)
+        }
+        function setText(id, v) {
+          var e = E(id)
+          if (e) e.textContent = v
+        }
         function setLabel(t, on) {
           var e = E('ze-sync-label')
           if (e) e.textContent = t
@@ -15228,7 +15239,9 @@ notify pgrst, 'reload schema';</textarea
           )
         }
         function friendly(err) {
-          var m = (err && err.message) || String(err || '')
+          var m =
+            ((err && err.name ? err.name + ' ' : '') + ((err && err.message) || '')).trim() ||
+            String(err || '')
           if (isTableMissing(err))
             return '云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次'
           if (/Invalid login credentials/i.test(m))
@@ -15239,7 +15252,9 @@ notify pgrst, 'reload schema';</textarea
             return 'Supabase SDK 加载失败，请检查网络'
           if (/decrypt|OperationError|InvalidStateError|云端数据无效/i.test(m))
             return '云端数据解密失败，请确认密码正确'
-          return m
+          return /^\[object /.test(m)
+            ? '操作失败，请重试或查看浏览器控制台日志'
+            : m || '操作失败，请重试或查看浏览器控制台日志'
         }
         var libPromise = null
         function ensureLib() {
@@ -15433,6 +15448,11 @@ notify pgrst, 'reload schema';</textarea
         }
         async function syncFromCloud() {
           if (!session || !unlockPassword) throw new Error('请先解锁云数据')
+          if (syncing) {
+            setStatus('同步正在进行中，请稍候')
+            return
+          }
+          syncing = true
           busy(true)
           setStatus('同步中')
           try {
@@ -15445,6 +15465,7 @@ notify pgrst, 'reload schema';</textarea
               location.reload()
             }, 220)
           } finally {
+            syncing = false
             busy(false)
           }
         }
@@ -15454,9 +15475,16 @@ notify pgrst, 'reload schema';</textarea
             setStatus('同步正在进行中，请稍候')
             return
           }
-          await push()
-          setStatus('已将本地数据上传到云端')
-          toast('云同步已连接')
+          syncing = true
+          busy(true)
+          try {
+            await push()
+            setStatus('已将本地数据上传到云端')
+            toast('云同步已连接')
+          } finally {
+            syncing = false
+            busy(false)
+          }
         }
         async function auth(mode) {
           if (syncing || authing) {
@@ -15578,13 +15606,13 @@ notify pgrst, 'reload schema';</textarea
           var c = cfg(),
             ok = !!(c.url && c.key)
           syncPrefsUI()
-          E('ze-config-panel').classList.toggle('ze-cloud-hidden', ok)
-          E('ze-auth-panel').classList.toggle('ze-cloud-hidden', !ok)
-          E('ze-sql-panel').classList.add('ze-cloud-hidden')
-          E('ze-sync-actions').classList.toggle('ze-cloud-hidden', !session || !unlockPassword)
-          E('ze-login-pull').textContent = session ? '解锁并从云端同步' : '登录并从云端同步'
-          E('ze-login-push').textContent = session ? '解锁并上传本地' : '登录并上传本地'
-          E('ze-login-only').textContent = session ? '解锁' : '登录'
+          toggleCls('ze-config-panel', 'ze-cloud-hidden', ok)
+          toggleCls('ze-auth-panel', 'ze-cloud-hidden', !ok)
+          toggleCls('ze-sql-panel', 'ze-cloud-hidden', true)
+          toggleCls('ze-sync-actions', 'ze-cloud-hidden', !session || !unlockPassword)
+          setText('ze-login-pull', session ? '解锁并从云端同步' : '登录并从云端同步')
+          setText('ze-login-push', session ? '解锁并上传本地' : '登录并上传本地')
+          setText('ze-login-only', session ? '解锁' : '登录')
           if (E('ze-auth-email-config')) E('ze-auth-email-config').value = c.email || ''
           if (E('ze-sb-url')) E('ze-sb-url').value = c.url || ''
           if (E('ze-sb-key')) E('ze-sb-key').value = c.key || ''
@@ -15652,7 +15680,7 @@ notify pgrst, 'reload schema';</textarea
             setStatus('云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次')
           }
           E('ze-back-config').onclick = function () {
-            E('ze-sql-panel').classList.add('ze-cloud-hidden')
+            toggleCls('ze-sql-panel', 'ze-cloud-hidden', true)
             refresh()
           }
           E('ze-copy-sql').onclick = async function () {

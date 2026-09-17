@@ -8660,6 +8660,14 @@ ${extra}`
           var e = E('omm-cloud-status')
           if (e) e.textContent = t
         }
+        function toggleCls(id, cls, on) {
+          var e = E(id)
+          if (e) e.classList.toggle(cls, !!on)
+        }
+        function setText(id, v) {
+          var e = E(id)
+          if (e) e.textContent = v
+        }
         function setLabel(t, on) {
           var e = E('omm-sync-label')
           if (e) e.textContent = t
@@ -8741,7 +8749,9 @@ ${extra}`
           )
         }
         function friendly(err) {
-          var m = (err && err.message) || String(err || '')
+          var m =
+            ((err && err.name ? err.name + ' ' : '') + ((err && err.message) || '')).trim() ||
+            String(err || '')
           if (isTableMissing(err))
             return '云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次'
           if (/Invalid login credentials/i.test(m))
@@ -8752,7 +8762,9 @@ ${extra}`
             return 'Supabase SDK 加载失败，请检查网络'
           if (/decrypt|OperationError|InvalidStateError|云端数据无效/i.test(m))
             return '云端数据解密失败，请确认密码正确'
-          return m
+          return /^\[object /.test(m)
+            ? '操作失败，请重试或查看浏览器控制台日志'
+            : m || '操作失败，请重试或查看浏览器控制台日志'
         }
         var libPromise = null
         function ensureLib() {
@@ -8946,6 +8958,11 @@ ${extra}`
         }
         async function syncFromCloud() {
           if (!session || !unlockPassword) throw new Error('请先解锁云数据')
+          if (syncing) {
+            setStatus('同步正在进行中，请稍候')
+            return
+          }
+          syncing = true
           busy(true)
           setStatus('同步中')
           try {
@@ -8958,6 +8975,7 @@ ${extra}`
               location.reload()
             }, 220)
           } finally {
+            syncing = false
             busy(false)
           }
         }
@@ -8967,9 +8985,16 @@ ${extra}`
             setStatus('同步正在进行中，请稍候')
             return
           }
-          await push()
-          setStatus('已将本地数据上传到云端')
-          toast('云同步已连接')
+          syncing = true
+          busy(true)
+          try {
+            await push()
+            setStatus('已将本地数据上传到云端')
+            toast('云同步已连接')
+          } finally {
+            syncing = false
+            busy(false)
+          }
         }
         async function auth(mode) {
           if (syncing || authing) {
@@ -9093,13 +9118,13 @@ ${extra}`
           var c = cfg(),
             ok = !!(c.url && c.key)
           syncPrefsUI()
-          E('omm-config-panel').classList.toggle('omm-cloud-hidden', ok)
-          E('omm-auth-panel').classList.toggle('omm-cloud-hidden', !ok)
-          E('omm-sql-panel').classList.add('omm-cloud-hidden')
-          E('omm-sync-actions').classList.toggle('omm-cloud-hidden', !session || !unlockPassword)
-          E('omm-login-pull').textContent = session ? '解锁并从云端同步' : '登录并从云端同步'
-          E('omm-login-push').textContent = session ? '解锁并上传本地' : '登录并上传本地'
-          E('omm-login-only').textContent = session ? '解锁' : '登录'
+          toggleCls('omm-config-panel', 'omm-cloud-hidden', ok)
+          toggleCls('omm-auth-panel', 'omm-cloud-hidden', !ok)
+          toggleCls('omm-sql-panel', 'omm-cloud-hidden', true)
+          toggleCls('omm-sync-actions', 'omm-cloud-hidden', !session || !unlockPassword)
+          setText('omm-login-pull', session ? '解锁并从云端同步' : '登录并从云端同步')
+          setText('omm-login-push', session ? '解锁并上传本地' : '登录并上传本地')
+          setText('omm-login-only', session ? '解锁' : '登录')
           if (E('omm-auth-email-config')) E('omm-auth-email-config').value = c.email || ''
           if (E('omm-sb-url')) E('omm-sb-url').value = c.url || ''
           if (E('omm-sb-key')) E('omm-sb-key').value = c.key || ''
@@ -9159,7 +9184,7 @@ ${extra}`
           E('omm-open-sql').onclick = openSql
           E('omm-open-sql-auth').onclick = openSql
           E('omm-back-config').onclick = function () {
-            E('omm-sql-panel').classList.add('omm-cloud-hidden')
+            toggleCls('omm-sql-panel', 'omm-cloud-hidden', true)
             refresh()
           }
           E('omm-copy-sql').onclick = async function () {
@@ -9272,9 +9297,9 @@ ${extra}`
           })
         }
         function openSql() {
-          E('omm-config-panel').classList.add('omm-cloud-hidden')
-          E('omm-auth-panel').classList.add('omm-cloud-hidden')
-          E('omm-sql-panel').classList.remove('omm-cloud-hidden')
+          toggleCls('omm-config-panel', 'omm-cloud-hidden', true)
+          toggleCls('omm-auth-panel', 'omm-cloud-hidden', true)
+          toggleCls('omm-sql-panel', 'omm-cloud-hidden', false)
           autosizeSql()
           setStatus('云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次')
         }

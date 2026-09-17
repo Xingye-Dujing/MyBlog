@@ -2266,6 +2266,7 @@
             'toast.noCloud': '暂无云端消息',
             'toast.deleted': '本地消息缓存已清理',
             'toast.copied': 'SQL 已复制',
+            'toast.storageFull': '本机存储写入失败，可能是空间不足或浏览器禁用了本地存储',
             'sync.invalidConfig': 'Project URL 或 Publishable Key 无效',
             'status.offline': '离线',
             'status.configured': '已配置，待登录',
@@ -2401,6 +2402,8 @@
             'toast.deleteOffline': 'Cloud is not connected. The message cannot be deleted',
             'toast.editFailed': 'Edit failed. The message was not changed',
             'toast.deleteFailed': 'Delete failed. The message is still preserved',
+            'toast.storageFull':
+              'Writing to local storage failed. It may be full or blocked by the browser',
             'chat.deletedMessage': 'MESSAGE DELETED',
             'chat.deleteConfirmText':
               'This message will be removed from the message history for this account.',
@@ -2487,6 +2490,21 @@
           e.classList.add('toast-on')
           clearTimeout(toast._t)
           toast._t = setTimeout(() => e.classList.remove('toast-on'), 1800)
+        }
+
+        function friendly(e) {
+          const m = (e && e.message) || ''
+
+          const all = (m + ' ' + ((e && e.name) || '')).trim() || String(e || '')
+          if (e && (e.code === 'PGRST205' || /schema cache|Could not find the table/i.test(all)))
+            return t('sync.tableMissing')
+          if (/Invalid login credentials|Email not confirmed/i.test(all))
+            return t('sync.loginFailed')
+          if (/decrypt|OperationError|InvalidStateError|operation-specific reason/i.test(all))
+            return t('sync.unlockFailed')
+          if (/Failed to fetch|NetworkError|Load failed/i.test(all)) return t('sync.sdkFailed')
+          const text = m || (/^\[object /.test(all) ? '' : all)
+          return text || t('status.error')
         }
         function cfg() {
           try {
@@ -2676,7 +2694,7 @@
           applyUi()
         }
         function saveUi() {
-          localStorage.setItem(LS.ui, JSON.stringify(ui))
+          if (!lsSet(LS.ui, JSON.stringify(ui))) toast(t('toast.storageFull'))
         }
         function applyUi() {
           document.body.classList.toggle('theme-dark', ui.theme === 'dark')
@@ -3539,7 +3557,7 @@
           } catch (e) {
             realtimeReady = false
             setConn(false, true)
-            toast(e.message || t('status.error'))
+            toast(friendly(e))
           } finally {
             busy = false
             renderMessages()
@@ -3598,7 +3616,7 @@
           } catch (e) {
             realtimeReady = false
             setConn(false, true)
-            toast(e.message || t('status.error'))
+            toast(friendly(e))
           } finally {
             busy = false
             renderMessages()
@@ -3665,7 +3683,7 @@
           } catch (e) {
             password = ''
             setConn(false, true)
-            toast(e.message || t('sync.loginFailed'))
+            toast(friendly(e))
           } finally {
             busy = false
             renderMessages()
@@ -3727,7 +3745,7 @@
             toast(t('toast.sent'))
           } catch (e) {
             setConn(false, true)
-            toast(e.message || t('status.error'))
+            toast(friendly(e))
           } finally {
             busy = false
             renderMessages()
@@ -3758,7 +3776,7 @@
             toast(t('toast.saved'))
           } catch (e) {
             setConn(false, true)
-            toast(e.message || t('status.error'))
+            toast(friendly(e))
           } finally {
             busy = false
             renderMessages()

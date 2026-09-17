@@ -4808,6 +4808,9 @@ notify pgrst, 'reload schema';</textarea
             'sync.invalidLogin':
               '邮箱或密码不正确，请确认该邮箱已在 Authentication → Users 中创建为 Auth 用户',
             'sync.emailNotConfirmed': '该邮箱尚未确认，请先在 Supabase Auth 中完成邮箱确认',
+            'sync.networkFailed': '网络请求失败，请检查网络或 Supabase 项目是否可访问',
+            'sync.localWriteFailed': '本机存储写入失败，请清理浏览器存储空间或退出无痕模式后重试',
+            'sync.unknownError': '操作失败，请重试或查看浏览器控制台日志',
             'sync.operationFailed': '操作失败：{0}',
             'sync.tableMissing':
               '云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次',
@@ -5115,6 +5118,11 @@ notify pgrst, 'reload schema';</textarea
               'Invalid email or password. Make sure this email exists as an Auth user under Authentication → Users.',
             'sync.emailNotConfirmed':
               'This email has not been confirmed yet. Complete email confirmation in Supabase Auth first.',
+            'sync.networkFailed':
+              'The network request failed. Check your connection and whether the Supabase project is reachable',
+            'sync.localWriteFailed':
+              'Failed to write to local storage. Free up browser storage or exit private mode and try again',
+            'sync.unknownError': 'Operation failed. Retry or check the browser console log',
             'sync.operationFailed': 'Operation failed: {0}',
             'sync.tableMissing':
               'The sync table does not exist yet. Open “VIEW SQL” and run it once in the Supabase SQL Editor',
@@ -10250,6 +10258,20 @@ notify pgrst, 'reload schema';</textarea
           var e = E('zp-cloud-status')
           if (e) e.textContent = v
         }
+
+        function setStatusText(v) {
+          var e = E('zp-cloud-status')
+          if (e) e.textContent = v
+        }
+
+        function toggleCls(id, cls, on) {
+          var e = E(id)
+          if (e) e.classList.toggle(cls, !!on)
+        }
+        function setText(id, v) {
+          var e = E(id)
+          if (e) e.textContent = v
+        }
         function labelKey(k, on) {
           state.statusKey = k
           var e = E('zp-sync-label')
@@ -10357,11 +10379,16 @@ notify pgrst, 'reload schema';</textarea
           )
         }
         function friendly(err) {
-          var m = (err && err.message) || String(err || '')
+          var m =
+            ((err && err.name ? err.name + ' ' : '') + ((err && err.message) || '')).trim() ||
+            String(err || '')
           if (isTableMissing(err)) return tr('sync.tableMissing')
           if (/Invalid login credentials/i.test(m)) return tr('sync.invalidLogin')
           if (/Email not confirmed/i.test(m)) return tr('sync.emailNotConfirmed')
-          return m
+          if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return tr('sync.networkFailed')
+          if (/decrypt|OperationError|InvalidStateError/i.test(m)) return tr('sync.decryptFailed')
+          if (/JSON|Unexpected token|is not valid JSON/i.test(m)) return tr('sync.decryptFailed')
+          return /^\[object /.test(m) ? tr('sync.unknownError') : m || tr('sync.unknownError')
         }
         var libPromise = null
         function ensureLib() {
@@ -10483,7 +10510,11 @@ notify pgrst, 'reload schema';</textarea
               localStorage.setItem('zp-settings-v1', JSON.stringify(settings))
             mark(now())
           } catch (e) {
-            throw e
+            throw new Error(
+              e && e.message === tr('sync.localWriteFailed')
+                ? e.message
+                : tr('sync.localWriteFailed'),
+            )
           }
         }
         async function push() {
@@ -10510,10 +10541,7 @@ notify pgrst, 'reload schema';</textarea
             state.lastCloudTs = Number(r.data.client_updated_at || ts)
             mark(ts)
             labelKey('sync.synced', true)
-            E('zp-cloud-status').textContent = tr(
-              'sync.syncComplete',
-              new Date(ts).toLocaleString(),
-            )
+            setStatusText(tr('sync.syncComplete', new Date(ts).toLocaleString()))
           } finally {
             busy(false)
           }
@@ -10527,13 +10555,13 @@ notify pgrst, 'reload schema';</textarea
           var c = cfg(),
             ok = !!(c.url && c.key)
           syncPrefsUI()
-          E('zp-config-panel').classList.toggle('zp-cloud-hidden', ok)
-          E('zp-auth-panel').classList.toggle('zp-cloud-hidden', !ok)
-          E('zp-sql-panel').classList.add('zp-cloud-hidden')
-          E('zp-sync-actions').classList.toggle('zp-cloud-hidden', !session || !unlockPassword)
-          E('zp-login-pull').textContent = tr(session ? 'sync.unlockAndPull' : 'sync.loginAndPull')
-          E('zp-login-push').textContent = tr(session ? 'sync.unlockAndPush' : 'sync.loginAndPush')
-          E('zp-login-only').textContent = tr(session ? 'sync.unlock' : 'sync.loginOnly')
+          toggleCls('zp-config-panel', 'zp-cloud-hidden', ok)
+          toggleCls('zp-auth-panel', 'zp-cloud-hidden', !ok)
+          toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
+          toggleCls('zp-sync-actions', 'zp-cloud-hidden', !session || !unlockPassword)
+          setText('zp-login-pull', tr(session ? 'sync.unlockAndPull' : 'sync.loginAndPull'))
+          setText('zp-login-push', tr(session ? 'sync.unlockAndPush' : 'sync.loginAndPush'))
+          setText('zp-login-only', tr(session ? 'sync.unlock' : 'sync.loginOnly'))
           if (!ok) {
             statusKey('sync.notConfigured')
             return
@@ -10601,7 +10629,7 @@ notify pgrst, 'reload schema';</textarea
             unlockPassword = ''
             E('zp-password').value = ''
             var msg = friendly(e)
-            E('zp-cloud-status').textContent = msg
+            setStatusText(msg)
             labelKey('sync.errorLabel', false)
           } finally {
             authing = false
@@ -10611,6 +10639,11 @@ notify pgrst, 'reload schema';</textarea
         }
         async function syncFromCloud() {
           if (!session || !unlockPassword) throw new Error(tr('sync.unlockRequired'))
+          if (syncing) {
+            statusKey('sync.syncing')
+            return
+          }
+          syncing = true
           busy(true)
           try {
             statusKey('sync.syncing')
@@ -10623,6 +10656,7 @@ notify pgrst, 'reload schema';</textarea
               location.reload()
             }, 250)
           } finally {
+            syncing = false
             busy(false)
           }
         }
@@ -10632,12 +10666,14 @@ notify pgrst, 'reload schema';</textarea
             statusKey('sync.syncing')
             return
           }
+          syncing = true
           busy(true)
           try {
             await push()
             statusKey('sync.toCloudDone')
             toast(tr('sync.connectedToast'))
           } finally {
+            syncing = false
             busy(false)
           }
         }
@@ -10649,7 +10685,7 @@ notify pgrst, 'reload schema';</textarea
           try {
             await syncFromCloud()
           } catch (e) {
-            E('zp-cloud-status').textContent = friendly(e)
+            setStatusText(friendly(e))
             labelKey('sync.errorLabel', false)
           }
         }
@@ -10705,15 +10741,19 @@ notify pgrst, 'reload schema';</textarea
           m.querySelectorAll('[data-i18n-placeholder]').forEach(function (x) {
             x.placeholder = tr(x.dataset.i18nPlaceholder)
           })
-          ;['zp-login-only', 'zp-login-pull', 'zp-login-push'].forEach(function (id) {
-            var b = E(id)
-            if (b && b.dataset.i18n) b.textContent = tr(b.dataset.i18n)
+          ;[
+            ['zp-login-only', 'sync.unlock', 'sync.loginOnly'],
+            ['zp-login-pull', 'sync.unlockAndPull', 'sync.loginAndPull'],
+            ['zp-login-push', 'sync.unlockAndPush', 'sync.loginAndPush'],
+          ].forEach(function (p) {
+            var b = E(p[0])
+            if (b) b.textContent = tr(session ? p[1] : p[2])
           })
           if (E('zp-password')) E('zp-password').placeholder = tr('sync.passwordPlaceholder')
           var st = E('zp-sync-label')
           if (st) st.textContent = tr(state.statusKey || 'sync.unconfiguredLabel')
           if (!state.busy && E('zp-cloud-status'))
-            E('zp-cloud-status').textContent = tr(state.statusKey || 'sync.notConfigured')
+            setStatusText(tr(state.statusKey || 'sync.notConfigured'))
 
           syncPrefsUI()
           var wm = E('zp-warn-modal')
@@ -10774,7 +10814,7 @@ notify pgrst, 'reload schema';</textarea
               refresh()
               statusKey('sync.savedConnected')
             } catch (e) {
-              E('zp-cloud-status').textContent = friendly(e)
+              setStatusText(friendly(e))
               labelKey('sync.errorLabel', false)
             }
           }
@@ -10783,14 +10823,14 @@ notify pgrst, 'reload schema';</textarea
             if (!w) toast(tr('sync.openDashboardFailed'))
           }
           E('zp-open-sql').onclick = function () {
-            E('zp-config-panel').classList.add('zp-cloud-hidden')
-            E('zp-auth-panel').classList.add('zp-cloud-hidden')
-            E('zp-sql-panel').classList.remove('zp-cloud-hidden')
+            toggleCls('zp-config-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-auth-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zp-cloud-hidden', false)
             autosizeSql()
             statusKey('sync.tableMissing')
           }
           E('zp-back-config').onclick = function () {
-            E('zp-sql-panel').classList.add('zp-cloud-hidden')
+            toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
             refresh()
           }
           E('zp-copy-sql').onclick = async function () {
@@ -10833,7 +10873,7 @@ notify pgrst, 'reload schema';</textarea
           E('zp-sync-now').onclick = syncNow
           E('zp-upload-now').onclick = function () {
             uploadLocal().catch(function (e) {
-              E('zp-cloud-status').textContent = friendly(e)
+              setStatusText(friendly(e))
               labelKey('sync.errorLabel', false)
             })
           }
@@ -10866,9 +10906,9 @@ notify pgrst, 'reload schema';</textarea
             if (mm && mm.classList.contains('open')) closeModal()
           })
           E('zp-open-sql-auth').onclick = function () {
-            E('zp-config-panel').classList.add('zp-cloud-hidden')
-            E('zp-auth-panel').classList.add('zp-cloud-hidden')
-            E('zp-sql-panel').classList.remove('zp-cloud-hidden')
+            toggleCls('zp-config-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-auth-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zp-cloud-hidden', false)
             autosizeSql()
             statusKey('sync.tableMissing')
           }
