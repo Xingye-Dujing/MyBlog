@@ -855,6 +855,149 @@
         border-color: var(--border);
         background: var(--hover);
       }
+      .cloud-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-dim);
+        cursor: pointer;
+        user-select: none;
+      }
+      .cloud-check input[type='checkbox'] {
+        appearance: none;
+        -webkit-appearance: none;
+        flex: 0 0 15px;
+        width: 15px;
+        height: 15px;
+        min-width: 15px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--border-dim);
+        border-radius: 3px;
+        background: transparent;
+        display: grid;
+        place-content: center;
+        cursor: pointer;
+      }
+      .cloud-check input[type='checkbox']:hover {
+        border-color: var(--border);
+      }
+      .cloud-check input[type='checkbox']::before {
+        content: '';
+        width: 7px;
+        height: 4px;
+        border-left: 1.5px solid var(--text);
+        border-bottom: 1.5px solid var(--text);
+        transform: rotate(-45deg) translate(0.5px, -1px);
+        opacity: 0;
+      }
+      .cloud-check input[type='checkbox']:checked::before {
+        opacity: 1;
+      }
+      .cloud-switch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 9px 10px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: var(--panel-bg);
+      }
+      .cloud-switch-text {
+        min-width: 0;
+      }
+      .cloud-switch-title {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text);
+      }
+      .cloud-switch-desc {
+        font-size: calc(9px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-dim);
+        margin-top: 3px;
+      }
+      .cloud-switch {
+        position: relative;
+        flex: 0 0 38px;
+        width: 38px;
+        height: 20px;
+        padding: 0;
+        border: 1px solid var(--border-dim);
+        border-radius: 999px;
+        background: transparent;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .cloud-switch:hover {
+        border-color: var(--border);
+      }
+      .cloud-switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--text-dim);
+        transition:
+          transform 0.18s,
+          background 0.18s;
+      }
+      .cloud-switch[aria-checked='true'] {
+        border-color: var(--text);
+      }
+      .cloud-switch[aria-checked='true']::after {
+        transform: translateX(16px);
+        background: var(--text);
+      }
+      .cloud-modal {
+        position: fixed;
+        inset: 0;
+
+        z-index: 8000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(0, 0, 0, 0.32);
+      }
+      .cloud-modal.open {
+        display: flex;
+      }
+      .cloud-modal-card {
+        width: 100%;
+        max-width: 380px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg);
+      }
+      .cloud-modal-title {
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text);
+      }
+      .cloud-modal-body {
+        margin-top: 10px;
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.75;
+        color: var(--text-dim);
+      }
+      .cloud-modal-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+      }
       .cloud-btn.primary {
         background: transparent;
         color: var(--text);
@@ -1809,7 +1952,9 @@
                 autocomplete="off"
                 placeholder="your@email.com"
               />
-              <div class="cloud-help" data-i18n="sync.emailHelp">只保存邮箱地址，不保存密码</div>
+              <div class="cloud-help" data-i18n="sync.emailHelp">
+                只保存邮箱地址用于登录；密码仅在勾选“记住密码”后保存到本机
+              </div>
             </div>
             <div class="cloud-note">
               <strong data-i18n="sync.accountTitle">账号与密码</strong><br /><span
@@ -1832,7 +1977,8 @@
             <div class="cloud-note">
               <strong data-i18n="sync.loginTitle">登录与解锁</strong><br /><span
                 data-i18n="sync.loginGuide"
-                >登录成功后还需要使用同一个密码解锁消息内容。密码不会保存到本地或云端。</span
+                >登录成功后还需要使用同一个密码解锁消息内容。勾选记住密码后，密码只保存在本设备的
+                LocalStorage 中，下次打开页面自动登录。</span
               >
             </div>
             <div class="cloud-field">
@@ -1843,10 +1989,15 @@
                 type="password"
                 autocomplete="current-password"
                 data-i18n-placeholder="sync.passwordPlaceholder"
-                placeholder="仅本次使用"
+                placeholder="登录密码"
               />
-              <div class="cloud-help" data-i18n="sync.passwordHelp">
-                密码只在当前页面内存中短暂使用，用于 Supabase Auth 验证和客户端 AES-GCM 解密
+              <label class="cloud-check" for="remember-password">
+                <input type="checkbox" id="remember-password" /><span data-i18n="sync.remember"
+                  >记住密码</span
+                >
+              </label>
+              <div class="cloud-help" data-i18n="sync.rememberHelp">
+                勾选后密码保存在本设备的 LocalStorage 中，不会上传到云端业务数据
               </div>
             </div>
             <div class="cloud-field">
@@ -1859,10 +2010,25 @@
                 placeholder="例如 手机 / 电脑"
               />
             </div>
+            <div class="cloud-switch-row">
+              <div class="cloud-switch-text">
+                <div class="cloud-switch-title" data-i18n="sync.autoSync">自动云同步</div>
+                <div class="cloud-switch-desc" id="auto-sync-desc" data-i18n="sync.autoSyncDesc">
+                  开启后打开页面自动连接并接收消息；关闭时需要手动点击立即同步
+                </div>
+              </div>
+              <button
+                class="cloud-switch"
+                id="auto-sync"
+                type="button"
+                role="switch"
+                aria-checked="false"
+                aria-label="自动云同步"
+              ></button>
+            </div>
             <div class="cloud-actions cloud-actions-3">
               <button class="cloud-btn primary" id="login" data-i18n="sync.login">登录并解锁</button
-              ><button class="cloud-btn" id="reload" data-i18n="sync.reload">
-                重新载入云端历史</button
+              ><button class="cloud-btn" id="reload" data-i18n="sync.syncNow">立即同步</button
               ><button class="cloud-btn" id="logout" data-i18n="sync.logout">退出登录</button>
             </div>
             <div class="cloud-actions">
@@ -1887,6 +2053,28 @@
         </div>
       </div>
     </section>
+    <div class="cloud-modal" id="cloud-warn-modal" aria-hidden="true">
+      <div
+        class="cloud-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cloud-warn-title"
+      >
+        <div class="cloud-modal-title" id="cloud-warn-title" data-i18n="sync.warnTitle">
+          开启云同步前请注意
+        </div>
+        <div class="cloud-modal-body" data-i18n="sync.warnBody">
+          云端没有任何历史记录的备份。开启后任何改动都会立刻在全部设备上生效，且无法撤销。请确认后再开启。
+        </div>
+        <div class="cloud-modal-actions">
+          <button class="cloud-btn primary" id="cloud-warn-ok" data-i18n="sync.warnOk">
+            我已知晓，开启</button
+          ><button class="cloud-btn" id="cloud-warn-cancel" data-i18n="sync.warnCancel">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
     <section class="subpage hidden" id="settings-page" aria-label="设置页面">
       <div class="subpage-head">
         <div class="subpage-title" data-i18n="settings.title">界面设置</div>
@@ -2007,7 +2195,7 @@
             'sync.keyHelp':
               '只填 Supabase Publishable key，不要把 service_role 或 secret key 放进页面',
             'sync.authEmail': 'Auth 邮箱',
-            'sync.emailHelp': '只保存邮箱地址，不保存密码',
+            'sync.emailHelp': '只保存邮箱地址用于登录；密码仅在勾选“记住密码”后保存到本机',
             'sync.accountTitle': '账号与密码',
             'sync.accountGuide':
               '请先在 Supabase Dashboard 的 Authentication → Users 中创建 Auth 用户',
@@ -2016,11 +2204,11 @@
             'sync.viewSql': '查看建表 SQL',
             'sync.loginTitle': '登录与解锁',
             'sync.loginGuide':
-              '登录成功后还需要使用同一个密码解锁消息内容。密码不会保存到本地或云端。',
+              '登录成功后还需要使用同一个密码解锁消息内容。勾选记住密码后，密码只保存在本设备的 LocalStorage 中，下次打开页面自动登录。',
             'sync.password': '密码',
-            'sync.passwordPlaceholder': '仅本次使用',
+            'sync.passwordPlaceholder': '登录密码',
             'sync.passwordHelp':
-              '密码只在当前页面内存中短暂使用，用于 Supabase Auth 验证和客户端 AES-GCM 解密',
+              '密码用于 Supabase Auth 验证和客户端 AES-GCM 解密。勾选记住密码后保存在本设备 LocalStorage',
             'sync.device': '设备名称',
             'sync.devicePlaceholder': '例如 手机 / 电脑',
             'sync.login': '登录并解锁',
@@ -2096,6 +2284,20 @@
             'sync.sdkFailed': 'Supabase SDK 加载失败',
             'sync.tableMissing': '消息同步表不存在，请先执行建表 SQL',
             'sync.invalidMessage': '收到的消息格式无效',
+            'sync.remember': '记住密码',
+            'sync.rememberHelp': '勾选后密码保存在本设备的 LocalStorage 中，不会上传到云端业务数据',
+            'sync.autoSync': '自动云同步',
+            'sync.autoSyncDesc': '开启后打开页面自动连接并接收消息；关闭时需要手动点击立即同步',
+            'sync.syncNow': '立即同步',
+            'sync.warnTitle': '开启云同步前请注意',
+            'sync.warnBody':
+              '云端没有任何历史记录的备份。开启后任何改动都会立刻在全部设备上生效，且无法撤销。请确认后再开启。',
+            'sync.warnOk': '我已知晓，开启',
+            'sync.warnCancel': '取消',
+            'sync.autoOn': '自动云同步已开启',
+            'sync.autoOff': '已切换为手动同步',
+            'sync.manualHint': '当前为手动同步，需要时点击「立即同步」',
+            'sync.lockedCleared': '已锁定数据，并清除了本机保存的密码',
           },
           en: {
             'splash.tagline': 'MULTI DEVICE MESSAGE SYNC',
@@ -2139,7 +2341,8 @@
             'sync.keyHelp':
               'Use only the Supabase Publishable key. Never place a service_role or secret key in this page',
             'sync.authEmail': 'Auth Email',
-            'sync.emailHelp': 'Only the email address is saved. Passwords are never saved',
+            'sync.emailHelp':
+              'Only the email is stored for sign-in. The password is saved on this device only when "Remember password" is checked',
             'sync.accountTitle': 'ACCOUNT AND PASSWORD',
             'sync.accountGuide':
               'Create an Auth user under Authentication → Users in the Supabase Dashboard first',
@@ -2148,11 +2351,11 @@
             'sync.viewSql': 'VIEW SQL',
             'sync.loginTitle': 'SIGN IN AND UNLOCK',
             'sync.loginGuide':
-              'After sign-in, use the same password to unlock message content. The password is never stored locally or in the cloud.',
+              'After sign-in, use the same password to unlock message content. With Remember password checked, it is stored in this device LocalStorage and the page signs in automatically next time.',
             'sync.password': 'PASSWORD',
-            'sync.passwordPlaceholder': 'USED ONLY THIS SESSION',
+            'sync.passwordPlaceholder': 'ACCOUNT PASSWORD',
             'sync.passwordHelp':
-              'The password is held briefly in memory for Supabase Auth and client-side AES-GCM decryption',
+              'Used for Supabase Auth and client-side AES-GCM decryption. With Remember password checked it is saved in this device LocalStorage',
             'sync.device': 'DEVICE NAME',
             'sync.devicePlaceholder': 'for example PHONE / DESKTOP',
             'sync.login': 'SIGN IN AND UNLOCK',
@@ -2229,6 +2432,22 @@
             'sync.sdkFailed': 'Failed to load the Supabase SDK',
             'sync.tableMissing': 'The message sync table does not exist. Run the SQL first',
             'sync.invalidMessage': 'Received message format is invalid',
+            'sync.remember': 'Remember password',
+            'sync.rememberHelp':
+              'When checked, the password is stored in this device LocalStorage only. It is never uploaded to cloud business data',
+            'sync.autoSync': 'AUTO SYNC',
+            'sync.autoSyncDesc':
+              'When on, the page connects and receives messages automatically. When off, tap Sync Now manually',
+            'sync.syncNow': 'SYNC NOW',
+            'sync.warnTitle': 'BEFORE YOU TURN ON CLOUD SYNC',
+            'sync.warnBody':
+              'There is no backup of any history in the cloud. Once enabled, every change takes effect on all devices immediately and cannot be undone. Confirm before continuing.',
+            'sync.warnOk': 'I UNDERSTAND, TURN ON',
+            'sync.warnCancel': 'CANCEL',
+            'sync.autoOn': 'Auto sync enabled',
+            'sync.autoOff': 'Switched to manual sync',
+            'sync.manualHint': 'Manual mode. Tap Sync Now when needed',
+            'sync.lockedCleared': 'Data locked and the saved password removed from this browser',
           },
         }
         const LS = {
@@ -2276,8 +2495,179 @@
             return {}
           }
         }
+
+        function lsGet(k, fb) {
+          try {
+            const v = localStorage.getItem(k)
+            return v === null || v === undefined ? fb : v
+          } catch {
+            return fb
+          }
+        }
+        function lsSet(k, v) {
+          try {
+            localStorage.setItem(k, v)
+            return true
+          } catch {
+            return false
+          }
+        }
+        function lsDel(k) {
+          try {
+            localStorage.removeItem(k)
+          } catch {}
+        }
         function saveCfg(v) {
-          localStorage.setItem(LS.cfg, JSON.stringify(v))
+          lsSet(LS.cfg, JSON.stringify(v))
+        }
+        function prefs() {
+          const c = cfg()
+          return {
+            remember: !!c.remember,
+            autoSync: !!c.autoSync,
+            warnAck: !!c.warnAck,
+            password: typeof c.password === 'string' ? c.password : '',
+          }
+        }
+        function savePrefs(next) {
+          const p = prefs(),
+            c = Object.assign(cfg(), next)
+          delete c.remember
+          delete c.autoSync
+          delete c.warnAck
+          delete c.password
+          if (next.remember !== undefined) p.remember = !!next.remember
+          if (next.autoSync !== undefined) p.autoSync = !!next.autoSync
+          if (next.warnAck !== undefined) p.warnAck = !!next.warnAck
+          if (next.password !== undefined) p.password = next.password
+          c.remember = p.remember
+          c.autoSync = p.autoSync
+          c.warnAck = p.warnAck
+          if (p.remember && p.password) c.password = p.password
+          else delete c.password
+          saveCfg(c)
+          return p
+        }
+        function openWarn(onOk) {
+          const m = $('cloud-warn-modal'),
+            ok = $('cloud-warn-ok'),
+            cc = $('cloud-warn-cancel')
+          if (!m || !ok || !cc) {
+            if (onOk) onOk()
+            return
+          }
+          const done = () => {
+            m.classList.remove('open')
+            m.setAttribute('aria-hidden', 'true')
+            ok.onclick = null
+            cc.onclick = null
+            m.onclick = null
+          }
+          m.onclick = (e) => {
+            if (e.target === m) done()
+          }
+          cc.onclick = done
+          ok.onclick = () => {
+            done()
+            if (onOk) onOk()
+          }
+          m.classList.add('open')
+          m.setAttribute('aria-hidden', 'false')
+          setTimeout(() => {
+            try {
+              ok.focus()
+            } catch {}
+          }, 0)
+        }
+        function setAutoSync(next, silent) {
+          const p = prefs()
+          if (p.autoSync === !!next) {
+            syncPrefsUi()
+            return
+          }
+          const commit = () => {
+            savePrefs({ autoSync: !!next })
+            syncPrefsUi()
+            if (!silent) toast(!!next ? t('sync.autoOn') : t('sync.autoOff'))
+            if (!!next) startAuto()
+            else stopAuto()
+          }
+          if (!!next && !p.warnAck) {
+            openWarn(() => {
+              savePrefs({ warnAck: true })
+              commit()
+            })
+            return
+          }
+          commit()
+        }
+        function syncPrefsUi() {
+          const p = prefs()
+          const sw = $('auto-sync')
+          if (sw) sw.setAttribute('aria-checked', p.autoSync ? 'true' : 'false')
+          const d = $('auto-sync-desc')
+          if (d) d.textContent = p.autoSync ? t('sync.autoSyncDesc') : t('sync.manualHint')
+          const rb = $('remember-password')
+          if (rb) rb.checked = p.remember
+          const pw = $('password')
+          if (pw && !pw.value && p.remember && p.password) pw.value = p.password
+        }
+        function stopAuto() {
+          realtimeReady = false
+          if (channel) {
+            try {
+              sb.removeChannel(channel)
+            } catch {}
+            channel = null
+          }
+          setConn()
+        }
+        async function startAuto() {
+          const c = cfg()
+          if (!c.url || !c.key) return
+          // 若正有同步在进行，短等其结束再接管，避免订阅被永久跳过
+          for (let i = 0; i < 40 && busy; i++) await new Promise((r) => setTimeout(r, 100))
+          try {
+            await connect()
+            const p = prefs()
+            if (!password && p.remember && p.password) await autoSignin()
+            if (session && password) {
+              await fetchHistory()
+              subscribe()
+            }
+          } catch (e) {
+            console.warn(e)
+            setConn(false, true)
+          }
+        }
+        function bindSyncPrefs() {
+          const sw = $('auto-sync')
+          if (sw) sw.onclick = () => setAutoSync(!prefs().autoSync)
+          const rb = $('remember-password')
+          if (rb)
+            rb.onchange = (e) => {
+              const on = !!e.target.checked
+              const v = ($('password').value || '').trim()
+              if (on && !v) {
+                e.target.checked = false
+                toast(t('sync.passwordRequired'))
+                return
+              }
+              savePrefs({ remember: on, password: v || prefs().password })
+              syncPrefsUi()
+            }
+          document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return
+            const m = $('cloud-warn-modal')
+            if (m && m.classList.contains('open')) {
+              const cc = $('cloud-warn-cancel')
+              if (cc) cc.click()
+              else {
+                m.classList.remove('open')
+                m.setAttribute('aria-hidden', 'true')
+              }
+            }
+          })
         }
         function loadUi() {
           try {
@@ -2402,10 +2792,10 @@
         }
         function device() {
           if (!deviceId) {
-            deviceId = localStorage.getItem(LS.device + '-id') || crypto.randomUUID()
-            localStorage.setItem(LS.device + '-id', deviceId)
+            deviceId = lsGet(LS.device + '-id', '') || crypto.randomUUID()
+            lsSet(LS.device + '-id', deviceId)
           }
-          deviceName = localStorage.getItem(LS.device + '-name') || ''
+          deviceName = lsGet(LS.device + '-name', '') || ''
           $('device-name').value = deviceName
           $('side-device').textContent = deviceName || '—'
           $('device-text').textContent = deviceName ? deviceName.toUpperCase() : ''
@@ -3215,11 +3605,32 @@
             input.focus()
           }
         }
+        async function autoSignin() {
+          const c = cfg(),
+            p = prefs()
+          const email = (c.email || '').trim(),
+            pw = p.password
+          if (!pw) return false
+          await connect()
+          if (!session) {
+            if (!email) return false
+            const r = await sb.auth.signInWithPassword({ email, password: pw })
+            if (r.error) throw r.error
+            session = r.data.session || null
+          }
+          if (!session) throw new Error(t('sync.loginFailed'))
+          password = pw
+          deviceName = lsGet(LS.device + '-name', '') || deviceName
+          syncPrefsUi()
+          setConn()
+          return true
+        }
         async function signin() {
           if (busy) return
           const c = cfg(),
             pw = $('password').value || '',
-            email = (c.email || '').trim()
+            email = (c.email || '').trim(),
+            remember = !!($('remember-password') && $('remember-password').checked)
           if (!email) {
             toast(t('sync.emailRequired'))
             return
@@ -3238,10 +3649,17 @@
             }
             password = pw
             deviceName = ($('device-name').value || '').trim()
-            if (deviceName) localStorage.setItem(LS.device + '-name', deviceName)
+            if (deviceName) lsSet(LS.device + '-name', deviceName)
+            savePrefs({ remember: remember, password: pw })
+            if (!remember) $('password').value = ''
+            syncPrefsUi()
             setConn()
-            await fetchHistory()
-            subscribe()
+            if (prefs().autoSync) {
+              await fetchHistory()
+              subscribe()
+            } else {
+              toast(t('sync.manualHint'))
+            }
             toast(t('toast.loggedIn'))
             closeSubpage()
           } catch (e) {
@@ -3317,15 +3735,29 @@
           }
         }
         async function reloadCloud() {
-          if (!session || !password) {
-            toast(t('sync.sendFirst'))
-            return
-          }
+          if (busy) return
           busy = true
           try {
+            const c = cfg()
+            if (!c.url || !c.key) throw new Error(t('sync.connectFirst'))
+            if (!session || !password) {
+              const p = prefs()
+              if (p.remember && p.password) await autoSignin()
+            }
+            if (!session || !password) {
+              toast(t('sync.sendFirst'))
+              return
+            }
+            await connect()
+            if (!session || !password) {
+              toast(t('sync.sendFirst'))
+              return
+            }
             await fetchHistory()
+            if (prefs().autoSync) subscribe()
             toast(t('toast.saved'))
           } catch (e) {
+            setConn(false, true)
             toast(e.message || t('status.error'))
           } finally {
             busy = false
@@ -3354,6 +3786,8 @@
           realtimeReady = false
           password = ''
           busy = false
+          $('password').value = ''
+          syncPrefsUi()
           closeSubpage()
           $('config-panel').classList.remove('hidden')
           $('auth-panel').classList.add('hidden')
@@ -3372,15 +3806,20 @@
         function lock() {
           password = ''
           realtimeReady = false
+
+          const cleared = prefs().remember
+          if (cleared) savePrefs({ remember: false, password: '' })
           if (channel) {
             try {
               sb.removeChannel(channel)
             } catch {}
             channel = null
           }
+          $('password').value = ''
+          syncPrefsUi()
           setConn()
           renderMessages()
-          toast(t('toast.locked'))
+          toast(cleared ? t('sync.lockedCleared') : t('toast.locked'))
           openSync()
         }
         function enterApp() {
@@ -3411,6 +3850,7 @@
           $('auth-panel').classList.toggle('hidden', !(c.url && c.key))
           $('sql-panel').classList.add('hidden')
           $('cloud-status').textContent = connState()
+          syncPrefsUi()
           $('sync-page').classList.remove('hidden')
           $('settings-page').classList.add('hidden')
           document.body.classList.add('subpage-open')
@@ -3445,7 +3885,14 @@
             toast(t('sync.invalidConfig'))
             return
           }
-          saveCfg({ url, key, email })
+          const prevCfg = cfg()
+
+          const changed = prevCfg.url !== url || prevCfg.key !== key || prevCfg.email !== email
+          savePrefs(
+            changed
+              ? { url: url, key: key, email: email, remember: false, password: '' }
+              : { url: url, key: key, email: email },
+          )
           sb = null
           session = null
           realtimeReady = false
@@ -3462,8 +3909,8 @@
           x.style.height = Math.max(220, x.scrollHeight + 2) + 'px'
         }
         function clearLocal() {
-          localStorage.removeItem(LS.cache)
-          localStorage.removeItem(LS.cache + '-favorites')
+          lsDel(LS.cache)
+          lsDel(LS.cache + '-favorites')
           favoriteIds.clear()
           messages = []
           renderMessages()
@@ -3647,7 +4094,7 @@
           )
           $('lang-btn').onclick = () => {
             lang = lang === 'zh' ? 'en' : 'zh'
-            localStorage.setItem(LS.ui + '-lang', lang)
+            lsSet(LS.ui + '-lang', lang)
             applyI18n()
             applyUi()
             renderMessages()
@@ -3681,7 +4128,9 @@
             device()
             loadCache()
             bind()
+            bindSyncPrefs()
             applyI18n()
+            syncPrefsUi()
             const c = cfg()
             if (c.url && c.key) {
               await connect()
@@ -3689,8 +4138,27 @@
                 $('config-panel').classList.add('hidden')
                 $('auth-panel').classList.remove('hidden')
               }
+              const p = prefs()
+
+              if (!password && p.remember && p.password) {
+                try {
+                  await autoSignin()
+                } catch (e) {
+                  console.warn(e)
+                }
+              }
+              if (p.autoSync && session && password) {
+                try {
+                  await fetchHistory()
+                  subscribe()
+                } catch (e) {
+                  console.warn(e)
+                  setConn(false, true)
+                }
+              }
             }
             setConn()
+            syncPrefsUi()
           } catch (e) {
             console.warn(e)
             setConn(false, true)
