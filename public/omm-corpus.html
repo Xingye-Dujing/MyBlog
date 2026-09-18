@@ -6357,15 +6357,23 @@ notify pgrst, 'reload schema';</textarea
           const presets =
             p === 'openrouter'
               ? [
-                  ['OPENROUTER / FREE', 'openrouter/free'],
+                  ['OPENROUTER / FREE (Router)', 'openrouter/free'],
                   ['NEMOTRON 3.5 LIGHTNING', 'nvidia/nemotron-3.5-lightning:free'],
+                  ['NEMOTRON 3 ULTRA', 'nvidia/nemotron-3-ultra-550b-a55b:free'],
                   ['GEMMA 4 31B', 'google/gemma-4-31b-it:free'],
+                  ['GEMMA 4 26B', 'google/gemma-4-26b-a4b-it:free'],
                   ['LING 3.0 FLASH', 'inclusionai/ling-3.0-flash:free'],
+                  ['LING 3.0 FLASH VL', 'inclusionai/ling-3.0-flash-vl:free'],
+                  ['POOLSIDE LAGUNA S 2.1', 'poolside/laguna-s-2.1:free'],
+                  ['POOLSIDE LAGUNA XS 2.1', 'poolside/laguna-xs-2.1:free'],
+                  ['COHERE NORTH MINI CODE', 'cohere/north-mini-code:free'],
+                  ['NEX N2.5 PRO', 'nex-agi/nex-n2.5-pro:free'],
+                  ['NEX N2.5 MINI', 'nex-agi/nex-n2.5-mini:free'],
                 ]
               : p === 'deepseek'
                 ? [
-                    ['DEEPSEEK FLASH', 'deepseek-flash'],
-                    ['DEEPSEEK CHAT', 'deepseek-chat'],
+                    ['DEEPSEEK FLASH (V4.1)', 'deepseek-flash'],
+                    ['DEEPSEEK V4 PRO', 'deepseek-v4-pro'],
                   ]
                 : p === 'openai'
                   ? [['GPT-5.2', 'gpt-5.2']]
@@ -7029,27 +7037,30 @@ ${extra}`
           )
         }
 
-        async function callAIStream(messages, mode, onChunk) {
-          if (!S.settings.apiKey) {
+        async function callAIStream(messages, mode, onChunk, override = {}) {
+          const apiKey = override.apiKey || S.settings.apiKey
+          if (!apiKey) {
             toast('请先在设置中配置 API Key')
             openAISettings()
             throw new Error('未配置 API Key')
           }
-          const base = S.settings.apiBase.replace(/\/$/, '')
+          const apiBase = override.apiBase || S.settings.apiBase
+          const apiModel = override.apiModel || S.settings.apiModel
+          const base = apiBase.replace(/\/$/, '')
           const url = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions'
           const baseBody = {
-            model: S.settings.apiModel,
+            model: apiModel,
             messages: cloneRequestMessages(messages),
             stream: true,
           }
-          const isOpenRouter = S.settings.provider === 'openrouter'
+          const isOpenRouter = apiBase.includes('openrouter.ai')
           const thinkingEnabled = isThinkingEnabled()
           const sendReasoning = thinkingEnabled && isOpenRouter
           const sendReasoningOff = !thinkingEnabled && isOpenRouter
           window.__corpusAbort = new AbortController()
           const headers = {
             'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + S.settings.apiKey,
+            Authorization: 'Bearer ' + apiKey,
           }
           const doFetch = async (reasoningMode) => {
             const body = { ...baseBody }
@@ -7197,7 +7208,9 @@ ${extra}`
               } else if (ev.summary) {
                 $('#ai-status').textContent = 'AI 正在思考…'
               }
-              $('#ai-chat').scrollTop = $('#ai-chat').scrollHeight
+              const chatEl = $('#ai-chat')
+              const atBottom = chatEl.scrollTop + chatEl.clientHeight >= chatEl.scrollHeight - 50
+              if (atBottom) chatEl.scrollTop = chatEl.scrollHeight
             })
             if (sessionId !== aiSessionId) return
             summary = isThinkingEnabled() ? limitThinkingSummary(summary) : ''
@@ -7746,12 +7759,24 @@ ${extra}`
         async function testAI() {
           try {
             let r = ''
+            // 先读取当前输入框的值（如果填了），否则用已保存的
+            const apiBase = clean($('#api-base').value).replace(/\/$/, '') || S.settings.apiBase
+            const apiModel = clean($('#api-model').value) || S.settings.apiModel
+            const apiKey = clean($('#api-key').value) || S.settings.apiKey
+            const systemPrompt =
+              clean($('#api-system').value) || S.settings.system || DEFAULT.settings.system
+
             await callAIStream(
-              buildAIRequestMessages('请只回复：语料库连接测试成功。', 'answer', []),
+              [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: '请只回复：语料库连接测试成功。' },
+                { role: 'user', content: 'CONTEXT\n\n无可用 CONTEXT' },
+              ],
               'answer',
               (ev) => {
                 if (ev.content) r = ev.content
               },
+              { apiBase, apiModel, apiKey }, // 传入临时配置
             )
             toast(r || '连接成功')
           } catch (e) {
