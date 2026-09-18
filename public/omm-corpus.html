@@ -3881,9 +3881,20 @@
           <path d="M12 5v14M5 12h14" /></svg
         >新建
       </button>
+      <button class="bn-item" id="bottom-settings">
+        <svg
+          class="bn-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+        >
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        样式
+      </button>
     </div>
-
-    <main id="main">
       <header id="head">
         <div class="ch-left">
           <span id="ch-title">CORPUS</span><span id="ch-sub">PERSONAL LANGUAGE LIBRARY</span>
@@ -6449,6 +6460,7 @@ notify pgrst, 'reload schema';</textarea
           if (wasOpen) return
           dd.classList.add('open')
           document.body.classList.add('submenu-open')
+          $$('#bottom-settings').forEach((b) => b.classList.remove('active'))
           $$(
             '#top-menu .menu-btn[data-action="showSettings"],#top-menu .menu-btn#settings-btn',
           ).forEach((b) => b.classList.remove('active'))
@@ -6458,10 +6470,19 @@ notify pgrst, 'reload schema';</textarea
           const w = dd.offsetWidth || 250
           if (x + w > innerWidth - 10) x = innerWidth - w - 10
           dd.style.left = Math.max(8, x) + 'px'
+          if (r) {
+            const h = dd.offsetHeight || 300
+            if (r.top > innerHeight / 2) {
+              dd.style.top = Math.max(8, r.top - h - 4) + 'px'
+            } else {
+              dd.style.top = r.bottom + 4 + 'px'
+            }
+          }
         }
         function closeDrops() {
           $$('.dropdown.open').forEach((d) => d.classList.remove('open'))
           $('#settings-btn')?.classList.remove('active')
+          $('#bottom-settings')?.classList.remove('active')
           document.body.classList.remove('submenu-open')
         }
         function openSettings(anchor) {
@@ -8180,6 +8201,12 @@ ${extra}`
           e.stopPropagation()
           openSettings(e.currentTarget)
         }
+        if ($('#bottom-settings')) {
+          $('#bottom-settings').onclick = (e) => {
+            e.stopPropagation()
+            openSettings(e.currentTarget)
+          }
+        }
         $('#open-ai-settings').onclick = () => {
           closeDrops()
           openAISettings()
@@ -8192,7 +8219,7 @@ ${extra}`
         $('#settings-close')?.addEventListener('click', closeModal)
         $('#modal-mask').onclick = closeModal
         document.addEventListener('click', (e) => {
-          if (!e.target.closest('#dd-settings') && !e.target.closest('#settings-btn')) closeDrops()
+          if (!e.target.closest('#dd-settings') && !e.target.closest('#settings-btn') && !e.target.closest('#bottom-settings')) closeDrops()
         })
         $('#font-minus').onclick = () => {
           S.settings.fontScale = Math.max(0.85, +(S.settings.fontScale - 0.05).toFixed(2))
