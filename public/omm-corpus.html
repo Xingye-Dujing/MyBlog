@@ -6495,7 +6495,7 @@ notify pgrst, 'reload schema';</textarea
         }
         function openAISettings() {
           const s = S.settings
-          const html = `<div class=\"ed-field\"><span class=\"ed-label\">AI Provider</span><div class=\"preset-row\"><button class=\"preset\" data-p=\"deepseek\">DEEPSEEK</button><button class=\"preset\" data-p=\"openai\">OPENAI</button><button class=\"preset\" data-p=\"openrouter\">OPENROUTER</button><button class=\"preset\" data-p=\"custom\">CUSTOM</button></div></div><div class=\"field-grid\"><div class=\"ed-field\"><span class=\"ed-label\">Base URL</span><input class=\"ed-input\" id=\"api-base\" value=\"${esc(s.apiBase || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">Model</span><input class=\"ed-input\" id=\"api-model\" value=\"${esc(s.apiModel || '')}\"><div class=\"ai-model-preset\" id=\"ai-model-preset\"></div></div></div><div class=\"ed-field\"><span class=\"ed-label\">API Key</span><input class=\"ed-input\" id=\"api-key\" type=\"password\" value=\"${esc(s.apiKey || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">System Prompt</span><textarea class=\"ed-area\" id=\"api-system\" style=\"min-height:120px\">${esc(s.system || DEFAULT.settings.system)}</textarea></div><div class=\"drawer-actions\"><button class=\"ed-btn primary\" id=\"settings-save\">保存设置</button><button class=\"ed-btn\" id=\"api-test\">测试连接</button></div>`
+          const html = `<div class=\"ed-field\"><span class=\"ed-label\">AI Provider</span><div class=\"preset-row\"><button class=\"preset\" data-p=\"deepseek\">DEEPSEEK</button><button class=\"preset\" data-p=\"openai\">OPENAI</button><button class=\"preset\" data-p=\"openrouter\">OPENROUTER</button><button class=\"preset\" data-p=\"zhipu\">ZHIPU</button><button class=\"preset\" data-p=\"custom\">CUSTOM</button></div></div><div class=\"field-grid\"><div class=\"ed-field\"><span class=\"ed-label\">Base URL</span><input class=\"ed-input\" id=\"api-base\" value=\"${esc(s.apiBase || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">Model</span><input class=\"ed-input\" id=\"api-model\" value=\"${esc(s.apiModel || '')}\"><div class=\"ai-model-preset\" id=\"ai-model-preset\"></div></div></div><div class=\"ed-field\"><span class=\"ed-label\">API Key</span><input class=\"ed-input\" id=\"api-key\" type=\"password\" value=\"${esc(s.apiKey || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">System Prompt</span><textarea class=\"ed-area\" id=\"api-system\" style=\"min-height:120px\">${esc(s.system || DEFAULT.settings.system)}</textarea></div><div class=\"drawer-actions\"><button class=\"ed-btn primary\" id=\"settings-save\">保存设置</button><button class=\"ed-btn\" id=\"api-test\">测试连接</button></div>`
           let m = document.querySelector('#settings-dynamic')
           if (!m) {
             m = document.createElement('div')
@@ -6531,6 +6531,9 @@ notify pgrst, 'reload schema';</textarea
           } else if (p === 'openrouter') {
             S.settings.apiBase = 'https://openrouter.ai/api/v1'
             S.settings.apiModel = 'openrouter/free'
+          } else if (p === 'zhipu') {
+            S.settings.apiBase = 'https://open.bigmodel.cn/api/paas/v4'
+            S.settings.apiModel = 'glm-4.7-flash'
           }
           applySettings()
           $('#api-base').value = S.settings.apiBase
@@ -6562,9 +6565,15 @@ notify pgrst, 'reload schema';</textarea
                     ['DEEPSEEK FLASH (V4.1)', 'deepseek-flash'],
                     ['DEEPSEEK V4 PRO', 'deepseek-v4-pro'],
                   ]
-                : p === 'openai'
-                  ? [['GPT-5.2', 'gpt-5.2']]
-                  : []
+                : p === 'zhipu'
+                  ? [
+                      ['GLM-4.7-FLASH (Free)', 'glm-4.7-flash'],
+                      ['GLM-4.5-FLASH (Free)', 'glm-4.5-flash'],
+                      ['GLM-4-FLASH-250414 (Free)', 'glm-4-flash-250414'],
+                    ]
+                  : p === 'openai'
+                    ? [['GPT-5.2', 'gpt-5.2']]
+                    : []
           box.innerHTML = presets
             .map((x) => `<button type="button" data-model="${esc(x[1])}">${esc(x[0])}</button>`)
             .join('')
