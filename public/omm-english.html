@@ -5412,6 +5412,14 @@
       <div class="dd-item" data-action="exportBookTxt">
         <span>当前词书（制表符文本）</span><span class="hint">.txt</span>
       </div>
+      <div class="dd-divider"></div>
+      <div class="dd-label">涂鸦</div>
+      <div class="dd-item" data-action="exportDoodles">
+        <span>导出全部涂鸦</span><span class="hint">.json</span>
+      </div>
+      <div class="dd-item" data-action="importDoodles">
+        <span>导入涂鸦</span><span class="hint">.json</span>
+      </div>
     </div>
 
     <!-- Settings dropdown -->
@@ -6089,6 +6097,7 @@ notify pgrst, 'reload schema';</textarea
     <input type="file" id="fi-vocab" accept=".json,.txt,.csv" style="display: none" />
     <input type="file" id="fi-ls-audio" accept="audio/*" style="display: none" />
     <input type="file" id="fi-ls-subs" accept=".srt,.lrc,.txt" style="display: none" />
+    <input type="file" id="fi-doodles" accept=".json" style="display: none" />
 
     <script>
       ;(function () {
@@ -9676,6 +9685,79 @@ notify pgrst, 'reload schema';</textarea
           closeSketch()
           if (DR && DR.e && nkey(DR.e[0]) === key) openDrawer(DR.e, DR.b)
           else refreshView()
+        }
+        function exportDoodles() {
+          const drawings = S.drawings || {}
+          const keys = Object.keys(drawings)
+          if (!keys.length) {
+            notify('没有可导出的涂鸦')
+            return
+          }
+          const data = { v: 1, exportedAt: new Date().toISOString(), drawings }
+          download(
+            'zenglish_doodles_' + dayKey() + '.json',
+            JSON.stringify(data, null, 2),
+            'application/json',
+          )
+          notify(keys.length + ' 张涂鸦已导出')
+        }
+        function collectAllWords() {
+          const set = new Set()
+          WORDS.forEach((e) => set.add(nkey(e[0])))
+          Object.values(S.books).forEach((b) => {
+            if (b && Array.isArray(b.w)) b.w.forEach((e) => set.add(nkey(e[0])))
+          })
+          return set
+        }
+        function importDoodlesFile(file) {
+          const rd = new FileReader()
+          rd.onload = () => {
+            try {
+              const obj = JSON.parse(rd.result)
+              let incoming = null
+              if (obj && obj.drawings && typeof obj.drawings === 'object') {
+                incoming = obj.drawings
+              } else if (typeof obj === 'object' && !Array.isArray(obj)) {
+                incoming = obj
+              }
+              if (!incoming) throw 0
+              const allKeys = Object.keys(incoming)
+              if (!allKeys.length) {
+                notify('文件中没有涂鸦数据')
+                return
+              }
+              const validWords = collectAllWords()
+              const valid = []
+              const skipped = []
+              allKeys.forEach((k) => {
+                if (validWords.has(k)) valid.push(k)
+                else skipped.push(k)
+              })
+              if (!valid.length) {
+                notify('所有涂鸦对应的单词都不在当前词书中')
+                return
+              }
+              let msg = '将导入 ' + valid.length + ' 张涂鸦'
+              if (skipped.length) msg += '，跳过 ' + skipped.length + ' 张（单词不在词书中）'
+              msg += '。已有同名词涂鸦将被覆盖，继续？'
+              confirmBox(msg, () => {
+                if (!S.drawings) S.drawings = {}
+                valid.forEach((k) => {
+                  S.drawings[k] = incoming[k]
+                })
+                save()
+                notify(
+                  valid.length +
+                    ' 张涂鸦已导入' +
+                    (skipped.length ? '，跳过 ' + skipped.length + ' 张' : ''),
+                )
+                refreshView()
+              })
+            } catch (e) {
+              notify('涂鸦文件格式不正确')
+            }
+          }
+          rd.readAsText(file)
         }
         const SKETCH_PRESET_COLORS = [
           '#000000',
@@ -13916,6 +13998,14 @@ notify pgrst, 'reload schema';</textarea
           exportBookTxt() {
             exportBook(null, true)
           },
+          exportDoodles: () => exportDoodles(),
+          importDoodles() {
+            const fi = $('#fi-doodles')
+            if (fi) {
+              fi.value = ''
+              fi.click()
+            }
+          },
 
           showImport() {
             showImportModal()
@@ -14563,7 +14653,7 @@ notify pgrst, 'reload schema';</textarea
           showExamPicker: 1,
           showVoicePicker: 1,
         }
-        const CLOSE_AFTER = { exportFull: 1, exportBookJson: 1, exportBookTxt: 1 }
+        const CLOSE_AFTER = { exportFull: 1, exportBookJson: 1, exportBookTxt: 1, exportDoodles: 1 }
 
         document.addEventListener('click', (e) => {
           const tw = e.target.closest('.tw')
@@ -14811,6 +14901,11 @@ notify pgrst, 'reload schema';</textarea
               notify('文件已读取：' + f.name)
             }
             rd.readAsText(f)
+            ev.target.value = ''
+          })
+          $('#fi-doodles').addEventListener('change', (ev) => {
+            const f = ev.target.files[0]
+            if (f) importDoodlesFile(f)
             ev.target.value = ''
           })
           $('#fi-ls-audio').addEventListener('change', (ev) => {
