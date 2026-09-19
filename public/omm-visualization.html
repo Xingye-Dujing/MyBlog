@@ -2003,6 +2003,7 @@
     </div>
     <div class="toast" id="toast"></div>
     <input type="file" id="file-input" accept=".csv,.txt,.xlsx,.xls,.tsv" />
+    <input type="file" id="property-import-input" accept=".json,application/json" />
 
     <div class="modal preview-modal" id="preview-modal" aria-label="图表放大查看">
       <div class="preview-card">
@@ -2780,66 +2781,147 @@
           BASE_ENGINE_PROPERTY_DEFAULTS[key] = structuredClone(state[key])
         })
         const CHART_PROP_DEFAULTS = structuredClone(chartProps)
+        const ENGINE_IDS = ['echarts', 'chartjs', 'apexcharts', 'zen']
+        const CHART_TYPE_IDS = Object.keys(chartNames)
         const enginePropertyStores = {}
 
-        function createEnginePropertyStore(id) {
+        // 右侧属性采用“引擎 → 图表类型 → 属性”的三级隔离结构。
+        // 同一个引擎下的折线 / 柱状 / 饼图等均有自己的 state；chartProps 继续按图表类型独立保存。
+        // 因此每一个“引擎 + 图表类型”组合都拥有完整、独立、可持久化的右侧属性。
+        function createTypePropertyState(id) {
           const props = structuredClone(BASE_ENGINE_PROPERTY_DEFAULTS)
-          props.contentScale = ENGINE_DEFAULT_SCALE[id] ?? 90
+          props.contentScale = ENGINE_DEFAULT_SCALE[id] ?? 100
+          return props
+        }
+
+        function createDataSelectionState() {
           return {
-            state: props,
-            chartProps: structuredClone(CHART_PROP_DEFAULTS),
+            xCol: 0,
+            yCols: [1, 2, 3],
+            targetCol: null,
+            y1Col: 1,
+            y2Col: 2,
           }
         }
 
-        Object.keys({ echarts: 1, chartjs: 1, apexcharts: 1, zen: 1 }).forEach((id) => {
+        function createDataSelectionStore() {
+          const selections = {}
+          CHART_TYPE_IDS.forEach((type) => {
+            selections[type] = createDataSelectionState()
+          })
+          return selections
+        }
+
+        function createEnginePropertyStore(id) {
+          const typeStates = {}
+          CHART_TYPE_IDS.forEach((type) => {
+            typeStates[type] = createTypePropertyState(id)
+          })
+          return {
+            typeStates,
+            chartProps: structuredClone(CHART_PROP_DEFAULTS),
+            dataSelections: createDataSelectionStore(),
+          }
+        }
+
+        ENGINE_IDS.forEach((id) => {
           enginePropertyStores[id] = createEnginePropertyStore(id)
         })
 
+        function getEngineTypePropertyStore(id, type) {
+          const store =
+            enginePropertyStores[id] || (enginePropertyStores[id] = createEnginePropertyStore(id))
+          if (!store.typeStates) store.typeStates = {}
+          if (!store.typeStates[type]) store.typeStates[type] = createTypePropertyState(id)
+          if (!store.chartProps) store.chartProps = structuredClone(CHART_PROP_DEFAULTS)
+          if (!store.dataSelections || typeof store.dataSelections !== 'object')
+            store.dataSelections = createDataSelectionStore()
+          if (!store.dataSelections[type]) store.dataSelections[type] = createDataSelectionState()
+          return {
+            store,
+            typeState: store.typeStates[type],
+            dataSelection: store.dataSelections[type],
+          }
+        }
+
+        function getCurrentDataSelection() {
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          return current.dataSelection
+        }
+
+        function syncCurrentDataSelectionStore() {
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          current.store.dataSelections[state.type] = {
+            xCol: structuredClone(state.xCol),
+            yCols: structuredClone(state.yCols),
+            targetCol: structuredClone(state.targetCol),
+            y1Col: structuredClone(state.y1Col),
+            y2Col: structuredClone(state.y2Col),
+          }
+        }
+
+        function loadDataSelectionStore(id, type = state.type) {
+          const current = getEngineTypePropertyStore(id, type)
+          const selection = current.dataSelection || createDataSelectionState()
+          state.xCol = structuredClone(selection.xCol)
+          state.yCols = structuredClone(selection.yCols)
+          state.targetCol = structuredClone(selection.targetCol)
+          state.y1Col = structuredClone(selection.y1Col)
+          state.y2Col = structuredClone(selection.y2Col)
+        }
+
         function syncCurrentEnginePropertyStore() {
-          const store = enginePropertyStores[state.engine]
-          if (!store) return
+          const current = getEngineTypePropertyStore(state.engine, state.type)
           ENGINE_PROPERTY_KEYS.forEach((key) => {
-            store.state[key] = structuredClone(state[key])
+            current.typeState[key] = structuredClone(state[key])
           })
-          store.chartProps = structuredClone(chartProps)
+          if (!current.store.chartProps || typeof current.store.chartProps !== 'object')
+            current.store.chartProps = structuredClone(CHART_PROP_DEFAULTS)
+          if (!current.store.chartProps[state.type])
+            current.store.chartProps[state.type] = structuredClone(
+              CHART_PROP_DEFAULTS[state.type] || {},
+            )
+          current.store.chartProps[state.type] = structuredClone(
+            chartProps[state.type] || CHART_PROP_DEFAULTS[state.type] || {},
+          )
+          syncCurrentDataSelectionStore()
         }
 
         function setEngineStateProp(key, value) {
           if (!ENGINE_PROPERTY_KEYS.includes(key)) return
           state[key] = structuredClone(value)
-          const store = enginePropertyStores[state.engine]
-          if (store) store.state[key] = structuredClone(value)
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          current.typeState[key] = structuredClone(value)
           schedulePersist()
         }
 
-        function loadEnginePropertyStore(id) {
-          const store =
-            enginePropertyStores[id] || (enginePropertyStores[id] = createEnginePropertyStore(id))
+        function loadEnginePropertyStore(id, type = state.type) {
+          const current = getEngineTypePropertyStore(id, type)
           ENGINE_PROPERTY_KEYS.forEach((key) => {
-            if (Object.prototype.hasOwnProperty.call(store.state, key)) {
-              state[key] = structuredClone(store.state[key])
+            if (Object.prototype.hasOwnProperty.call(current.typeState, key)) {
+              state[key] = structuredClone(current.typeState[key])
             } else if (Object.prototype.hasOwnProperty.call(BASE_ENGINE_PROPERTY_DEFAULTS, key)) {
               state[key] = structuredClone(BASE_ENGINE_PROPERTY_DEFAULTS[key])
             }
           })
-          chartProps = structuredClone(store.chartProps || CHART_PROP_DEFAULTS)
+          chartProps = structuredClone(current.store.chartProps || CHART_PROP_DEFAULTS)
+          if (!chartProps[type]) chartProps[type] = structuredClone(CHART_PROP_DEFAULTS[type] || {})
         }
 
         function resetCurrentEngineProperties() {
-          const store =
-            enginePropertyStores[state.engine] ||
-            (enginePropertyStores[state.engine] = createEnginePropertyStore(state.engine))
-          store.state = structuredClone(BASE_ENGINE_PROPERTY_DEFAULTS)
-          store.state.contentScale = ENGINE_DEFAULT_SCALE[state.engine] ?? 90
-          store.chartProps = structuredClone(CHART_PROP_DEFAULTS)
-          loadEnginePropertyStore(state.engine)
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          current.store.typeStates[state.type] = createTypePropertyState(state.engine)
+          current.store.chartProps[state.type] = structuredClone(
+            CHART_PROP_DEFAULTS[state.type] || {},
+          )
+          loadEnginePropertyStore(state.engine, state.type)
           renderInspector()
           applyChartMountLayout()
           resizeChart()
           renderChart(false)
           syncCurrentEnginePropertyStore()
           savePersistedState()
-          setStatus(`${engineInfo[state.engine].short} 属性已重置`)
+          setStatus(`${engineInfo[state.engine].short} ·「${chartNames[state.type]}」属性已重置`)
         }
 
         const legendSelectionByType = {}
@@ -2849,33 +2931,25 @@
         function setChartProp(key, value) {
           if (!chartProps[state.type]) chartProps[state.type] = {}
           chartProps[state.type][key] = structuredClone(value)
-          const store = enginePropertyStores[state.engine]
-          if (store) {
-            if (!store.chartProps[state.type]) store.chartProps[state.type] = {}
-            store.chartProps[state.type][key] = structuredClone(value)
-          }
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          if (!current.store.chartProps[state.type]) current.store.chartProps[state.type] = {}
+          current.store.chartProps[state.type][key] = structuredClone(value)
           schedulePersist()
         }
 
-        // 工作区与各引擎属性使用分离的 Local Storage 键：
-        // 1. 工作区只保存“当前引擎 / 当前图表 / 分类”等全局状态。
-        // 2. 每个引擎拥有自己的存储键，任何引擎都不会覆盖另一个引擎。
-        // 3. 保留旧版 preferences.v1 读取作为一次性迁移入口。
-        const STORAGE_VERSION = 2
+        // 工作区与右侧属性使用分离的 Local Storage 键：
+        // 1. 工作区只保存当前引擎 / 当前图表 / 数据映射等工作区状态。
+        // 2. 每个引擎拥有自己的 v3 存储键。
+        // 3. 每个引擎存储内部再按 chart type 分开保存右侧属性。
+        // 4. 保留 v2 / v1 读取作为一次性迁移入口，不会删除旧数据。
+        const STORAGE_VERSION = 4
+        const PROPERTY_EXPORT_VERSION = 1
         const WORKSPACE_PERSIST_KEY = 'zenviz.workspace.v2'
-        const ENGINE_PERSIST_PREFIX = 'zenviz.engine.v2.'
+        const ENGINE_PERSIST_PREFIX = 'zenviz.engine.v4.'
+        const LEGACY_ENGINE_PERSIST_PREFIXES = ['zenviz.engine.v3.', 'zenviz.engine.v2.']
         const LEGACY_PERSIST_KEY = 'zenviz.preferences.v1'
-        const ENGINE_IDS = ['echarts', 'chartjs', 'apexcharts', 'zen']
-        const GLOBAL_PERSIST_KEYS = [
-          'engine',
-          'type',
-          'category',
-          'xCol',
-          'yCols',
-          'targetCol',
-          'y1Col',
-          'y2Col',
-        ]
+        const GLOBAL_PERSIST_KEYS = ['engine', 'type', 'category']
+        const LEGACY_DATA_SELECTION_KEYS = ['xCol', 'yCols', 'targetCol', 'y1Col', 'y2Col']
 
         function sanitizeChartProps(source) {
           const result = structuredClone(CHART_PROP_DEFAULTS)
@@ -2888,12 +2962,69 @@
               if (!Object.prototype.hasOwnProperty.call(incoming, k)) return
               const v = incoming[k],
                 d = defaults[k]
+              // 允许“默认值为空字符串、用户实际输入数字”的数值属性正常持久化。
+              // 典型字段包括折线图 yMin / yMax、热图 min / max。此前这里严格按默认值
+              // 的类型校验，会把用户保存的数字误判为非法，导致刷新后恢复成空值。
               const ok =
                 typeof d === 'number'
                   ? typeof v === 'number' && Number.isFinite(v)
-                  : typeof d === typeof v
+                  : d === '' && (v === '' || (typeof v === 'number' && Number.isFinite(v)))
+                    ? true
+                    : typeof d === typeof v
               if (ok) result[type][k] = structuredClone(v)
             })
+          })
+          return result
+        }
+
+        function sanitizeTypeStates(source, legacyState = null, id = 'echarts') {
+          const result = {}
+          CHART_TYPE_IDS.forEach((type) => {
+            result[type] = createTypePropertyState(id)
+            const incoming = source?.[type]
+            if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+              ENGINE_PROPERTY_KEYS.forEach((k) => {
+                if (!Object.prototype.hasOwnProperty.call(incoming, k)) return
+                if (validPersistValue(k, incoming[k]))
+                  result[type][k] = structuredClone(incoming[k])
+              })
+            } else if (
+              legacyState &&
+              typeof legacyState === 'object' &&
+              !Array.isArray(legacyState)
+            ) {
+              // v2 只有“每个引擎一套属性”。升级到 v3 时把旧值复制到该引擎的各图表，
+              // 这样不会丢掉用户已有设置；之后每个图表再独立变化、独立保存。
+              ENGINE_PROPERTY_KEYS.forEach((k) => {
+                if (!Object.prototype.hasOwnProperty.call(legacyState, k)) return
+                if (validPersistValue(k, legacyState[k]))
+                  result[type][k] = structuredClone(legacyState[k])
+              })
+              result[type].contentScale = Number.isFinite(Number(legacyState.contentScale))
+                ? Number(legacyState.contentScale)
+                : (ENGINE_DEFAULT_SCALE[id] ?? 100)
+            }
+          })
+          return result
+        }
+
+        function sanitizeDataSelection(source) {
+          const result = createDataSelectionState()
+          if (!source || typeof source !== 'object' || Array.isArray(source)) return result
+          if (validPersistValue('xCol', source.xCol)) result.xCol = structuredClone(source.xCol)
+          if (validPersistValue('yCols', source.yCols)) result.yCols = structuredClone(source.yCols)
+          if (validPersistValue('targetCol', source.targetCol))
+            result.targetCol = structuredClone(source.targetCol)
+          if (validPersistValue('y1Col', source.y1Col)) result.y1Col = structuredClone(source.y1Col)
+          if (validPersistValue('y2Col', source.y2Col)) result.y2Col = structuredClone(source.y2Col)
+          return result
+        }
+
+        function sanitizeDataSelections(source) {
+          const result = createDataSelectionStore()
+          if (!source || typeof source !== 'object' || Array.isArray(source)) return result
+          CHART_TYPE_IDS.forEach((type) => {
+            result[type] = sanitizeDataSelection(source[type])
           })
           return result
         }
@@ -2906,8 +3037,9 @@
               ENGINE_PERSIST_PREFIX + id,
               JSON.stringify({
                 version: STORAGE_VERSION,
-                state: structuredClone(store.state),
+                typeStates: structuredClone(store.typeStates),
                 chartProps: structuredClone(store.chartProps),
+                dataSelections: structuredClone(store.dataSelections),
               }),
             )
           } catch (e) {
@@ -2940,16 +3072,22 @@
           schedulePersist()
         }
 
+        let persistenceRestoreFailed = false
         function restorePersistedState() {
+          persistenceRestoreFailed = false
           let migratedFromLegacy = false
+          let legacyDataSelection = null
           try {
-            // 先读取新版“当前工作区”状态。
             let workspaceLoaded = false
             const workspaceRaw = localStorage.getItem(WORKSPACE_PERSIST_KEY)
             if (workspaceRaw) {
               try {
                 const workspace = JSON.parse(workspaceRaw)
-                if (workspace && workspace.version === STORAGE_VERSION && workspace.state) {
+                if (
+                  workspace &&
+                  (workspace.version === 2 || workspace.version === STORAGE_VERSION) &&
+                  workspace.state
+                ) {
                   GLOBAL_PERSIST_KEYS.forEach((k) => {
                     if (
                       Object.prototype.hasOwnProperty.call(workspace.state, k) &&
@@ -2958,37 +3096,66 @@
                       state[k] = structuredClone(workspace.state[k])
                     }
                   })
+                  legacyDataSelection = {}
+                  LEGACY_DATA_SELECTION_KEYS.forEach((k) => {
+                    if (
+                      Object.prototype.hasOwnProperty.call(workspace.state, k) &&
+                      validPersistValue(k, workspace.state[k])
+                    ) {
+                      legacyDataSelection[k] = structuredClone(workspace.state[k])
+                    }
+                  })
                   workspaceLoaded = true
                 }
               } catch (e) {
-                console.warn('[ZENVIZ] 新版工作区存储读取失败，将尝试旧版迁移：', e)
+                console.warn('[ZENVIZ] 工作区存储读取失败，将尝试旧版迁移：', e)
               }
             }
 
-            // 再逐个读取四个引擎的独立属性。
             let engineStoreLoaded = false
             ENGINE_IDS.forEach((id) => {
-              const raw = localStorage.getItem(ENGINE_PERSIST_PREFIX + id)
+              const currentKey = ENGINE_PERSIST_PREFIX + id
+              let raw = localStorage.getItem(currentKey)
+              let rawVersion = STORAGE_VERSION
+              if (!raw) {
+                for (const legacyPrefix of LEGACY_ENGINE_PERSIST_PREFIXES) {
+                  const candidate = localStorage.getItem(legacyPrefix + id)
+                  if (candidate) {
+                    raw = candidate
+                    rawVersion = legacyPrefix.endsWith('.v3.') ? 3 : 2
+                    break
+                  }
+                }
+              }
               if (!raw) return
               try {
                 const saved = JSON.parse(raw)
-                if (!saved || saved.version !== STORAGE_VERSION) return
+                if (!saved || typeof saved !== 'object') return
                 const store = enginePropertyStores[id]
-                if (saved.state && typeof saved.state === 'object' && !Array.isArray(saved.state)) {
-                  ENGINE_PROPERTY_KEYS.forEach((k) => {
-                    if (!Object.prototype.hasOwnProperty.call(saved.state, k)) return
-                    if (validPersistValue(k, saved.state[k]))
-                      store.state[k] = structuredClone(saved.state[k])
-                  })
+                if (
+                  (saved.version === STORAGE_VERSION || saved.version === 3) &&
+                  saved.typeStates
+                ) {
+                  store.typeStates = sanitizeTypeStates(saved.typeStates, null, id)
+                  store.chartProps = sanitizeChartProps(saved.chartProps)
+                  store.dataSelections = sanitizeDataSelections(saved.dataSelections)
+                  if (saved.version === 3) migratedFromLegacy = true
+                  engineStoreLoaded = true
+                  return
                 }
-                store.chartProps = sanitizeChartProps(saved.chartProps)
-                engineStoreLoaded = true
+                // 兼容 v2：state 是引擎级共享属性，升级后复制到该引擎所有图表作为初始独立值。
+                if (saved.version === 2 && saved.state) {
+                  store.typeStates = sanitizeTypeStates(null, saved.state, id)
+                  store.chartProps = sanitizeChartProps(saved.chartProps)
+                  store.dataSelections = createDataSelectionStore()
+                  migratedFromLegacy = true
+                  engineStoreLoaded = true
+                }
               } catch (e) {
                 console.warn(`[ZENVIZ] ${id} 属性存储读取失败，将使用默认属性：`, e)
               }
             })
 
-            // 兼容之前的 preferences.v1：只在新版键不存在时迁移一次。
             if (!workspaceLoaded || !engineStoreLoaded) {
               const raw = localStorage.getItem(LEGACY_PERSIST_KEY)
               if (raw) {
@@ -3003,39 +3170,35 @@
                       )
                         state[k] = structuredClone(common[k])
                     })
+                    legacyDataSelection = {}
+                    LEGACY_DATA_SELECTION_KEYS.forEach((k) => {
+                      if (
+                        Object.prototype.hasOwnProperty.call(common, k) &&
+                        validPersistValue(k, common[k])
+                      ) {
+                        legacyDataSelection[k] = structuredClone(common[k])
+                      }
+                    })
 
                     if (saved.enginePrefs && typeof saved.enginePrefs === 'object') {
                       ENGINE_IDS.forEach((id) => {
                         const incoming = saved.enginePrefs[id]
                         if (!incoming || typeof incoming !== 'object') return
                         const store = enginePropertyStores[id]
-                        if (
-                          incoming.state &&
-                          typeof incoming.state === 'object' &&
-                          !Array.isArray(incoming.state)
-                        ) {
-                          ENGINE_PROPERTY_KEYS.forEach((k) => {
-                            if (!Object.prototype.hasOwnProperty.call(incoming.state, k)) return
-                            if (validPersistValue(k, incoming.state[k]))
-                              store.state[k] = structuredClone(incoming.state[k])
-                          })
-                        }
-                        if (incoming.chartProps)
-                          store.chartProps = sanitizeChartProps(incoming.chartProps)
+                        store.typeStates = sanitizeTypeStates(null, incoming.state, id)
+                        store.chartProps = sanitizeChartProps(incoming.chartProps)
+                        store.dataSelections = sanitizeDataSelections(incoming.dataSelections)
+                        migratedFromLegacy = true
+                        engineStoreLoaded = true
                       })
                     } else {
-                      // 更老版本只有共享 state/chartProps：仅迁移到当时使用的引擎。
                       const target = enginePropertyStores[state.engine]
-                      ENGINE_PROPERTY_KEYS.forEach((k) => {
-                        if (
-                          Object.prototype.hasOwnProperty.call(common, k) &&
-                          validPersistValue(k, common[k])
-                        )
-                          target.state[k] = structuredClone(common[k])
-                      })
+                      target.typeStates = sanitizeTypeStates(null, common, state.engine)
+                      target.dataSelections = sanitizeDataSelections(saved.dataSelections)
                       if (saved.chartProps) target.chartProps = sanitizeChartProps(saved.chartProps)
+                      migratedFromLegacy = true
+                      engineStoreLoaded = true
                     }
-                    migratedFromLegacy = true
                   }
                 } catch (e) {
                   console.warn('[ZENVIZ] 旧版存储迁移失败：', e)
@@ -3043,23 +3206,37 @@
               }
             }
 
-            // 首次进入时没有任何持久化数据，保持各引擎默认值。
-            // 有新版或旧版数据时，最终统一装载当前引擎自己的属性。
             if (!engineReady(state.engine)) {
-              const ready = ENGINE_IDS.find(engineReady) || 'zen'
-              state.engine = ready
+              state.engine = ENGINE_IDS.find(engineReady) || 'zen'
             }
-            loadEnginePropertyStore(state.engine)
+            const supported = engineSupportedTypes(state.engine)
+            if (!supported.includes(state.type)) {
+              state.type =
+                categories[state.category]?.find((t) => supported.includes(t)) ||
+                supported[0] ||
+                'line'
+              state.zenKind = state.type
+            }
+            loadEnginePropertyStore(state.engine, state.type)
+            loadDataSelectionStore(state.engine, state.type)
+            if (legacyDataSelection && Object.keys(legacyDataSelection).length) {
+              const currentSelection = getCurrentDataSelection()
+              Object.assign(currentSelection, sanitizeDataSelection(legacyDataSelection))
+              loadDataSelectionStore(state.engine, state.type)
+              migratedFromLegacy = true
+            }
             if (migratedFromLegacy || !workspaceLoaded || !engineStoreLoaded) {
-              // 立即建立新版存储，后续所有写入只使用新版键。
               syncCurrentEnginePropertyStore()
               ENGINE_IDS.forEach((id) => saveEngineStore(id))
               saveWorkspaceState()
             }
           } catch (e) {
-            reportError('图表设置读取失败', e, true)
+            // 读取异常时绝不能继续把默认值写回 Local Storage，否则会把原有用户设置覆盖掉。
+            persistenceRestoreFailed = true
+            reportError('图表设置读取失败，已保留现有存储数据', e, true)
             if (!engineReady(state.engine)) state.engine = 'zen'
-            loadEnginePropertyStore(state.engine)
+            loadEnginePropertyStore(state.engine, state.type)
+            loadDataSelectionStore(state.engine, state.type)
           }
         }
         function validPersistValue(key, value) {
@@ -3093,6 +3270,12 @@
               'yTitle',
               'artMode',
               'pdfOrientation',
+              'fontFamily',
+              'xAxisFontFamily',
+              'yAxisFontFamily',
+              'tooltipFontFamily',
+              'legendFontFamily',
+              'titleFontFamily',
             ].includes(key)
           )
             return typeof value === 'string'
@@ -3776,26 +3959,27 @@
             setStatus(`${engineInfo[id]?.short || id} 不可用 · 请检查网络或脚本加载`, 'err')
             return
           }
-          // 先保存离开前的引擎状态，再完整载入目标引擎自己的状态。
-          // 除当前引擎 / 当前图表 / 数据映射等工作区状态外，不再跨引擎复制任何属性。
+          // 离开当前“引擎 + 图表类型”前先保存这一张图的全部右侧属性。
           syncCurrentEnginePropertyStore()
           const oldType = state.type
           state.engine = id
-          loadEnginePropertyStore(id)
           const supported = engineSupportedTypes(id)
-          if (!supported.includes(state.type)) {
-            const preferred =
-              categories[state.category]?.find((t) => supported.includes(t)) || supported[0]
-            state.type = preferred
-            state.zenKind = preferred
+          const nextType = supported.includes(state.type)
+            ? state.type
+            : categories[state.category]?.find((t) => supported.includes(t)) || supported[0]
+          state.type = nextType || 'line'
+          state.zenKind = state.type
+          // 关键：先确定目标引擎下的目标图表，再读取对应的独立属性，绝不读取该引擎其它图表的属性。
+          loadEnginePropertyStore(id, state.type)
+          loadDataSelectionStore(id, state.type)
+          if (state.type !== oldType) {
             setStatus(
-              `${engineInfo[id].short} 已切换 · 「${chartNames[oldType]}」不可用，已改为「${chartNames[preferred]}」`,
+              `${engineInfo[id].short} 已切换 · 「${chartNames[oldType]}」不可用，已改为「${chartNames[state.type]}」`,
               'warn',
             )
           } else {
-            setStatus(`绘图引擎 · ${engineInfo[id].short}`)
+            setStatus(`绘图引擎 · ${engineInfo[id].short} · 「${chartNames[state.type]}」`)
           }
-          // 画布说明已移除，不再写入不存在的元素
 
           renderEngines()
           renderCategories(getActiveCategory())
@@ -3803,7 +3987,6 @@
           renderInspector()
           if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
           renderChart()
-          // 引擎切换本身也必须立即持久化，否则刷新后仍会回到上一次引擎。
           schedulePersist()
         }
         function selectType(t) {
@@ -3814,9 +3997,13 @@
             )
             return
           }
+          // 保存离开前图表的右侧属性，再读取同一引擎下新图表自己的属性。
+          syncCurrentEnginePropertyStore()
           state.type = t
           state.zenKind = t
           state.category = getActiveCategoryForType(t)
+          loadEnginePropertyStore(state.engine, state.type)
+          loadDataSelectionStore(state.engine, state.type)
           const rule = getChartDataRule(t)
           normalizeDataSelection({ fillDefaults: true })
           syncDataColumnSelects()
@@ -3829,7 +4016,6 @@
           }
           syncDataColumnSelects()
           $('#stage-title').textContent = chartNames[t]
-          // 画布说明已移除，不再写入不存在的元素
 
           updateMeta()
           renderInspector()
@@ -3838,7 +4024,6 @@
           renderCategories(state.category)
           renderTypeList(categories[state.category] || [])
           renderChart()
-          // 图表类型/分类也是刷新后应恢复的工作区状态，选择后立即保存。
           schedulePersist()
         }
         function getActiveCategoryForType(t) {
@@ -3915,6 +4100,9 @@
               ['svg', '导出 SVG'],
               ['pdf', '导出 PDF'],
               ['sep'],
+              ['export-properties', '导出右侧属性设置'],
+              ['import-properties', '导入右侧属性设置'],
+              ['sep'],
               ['print', '打印 / PDF'],
             ],
           }
@@ -3949,8 +4137,98 @@
             }[id] || ''
           )
         }
+        function downloadJsonFile(filename, payload) {
+          const blob = new Blob([JSON.stringify(payload, null, 2)], {
+            type: 'application/json;charset=utf-8',
+          })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 0)
+        }
+
+        function exportPropertySettings() {
+          try {
+            syncCurrentEnginePropertyStore()
+            const engines = {}
+            ENGINE_IDS.forEach((id) => {
+              const store = enginePropertyStores[id] || createEnginePropertyStore(id)
+              engines[id] = {
+                typeStates: structuredClone(store.typeStates || {}),
+                chartProps: structuredClone(store.chartProps || {}),
+              }
+            })
+            downloadJsonFile(
+              `zenviz-right-properties-${new Date().toISOString().slice(0, 10)}.json`,
+              {
+                kind: 'zenviz-right-properties',
+                version: PROPERTY_EXPORT_VERSION,
+                exportedAt: new Date().toISOString(),
+                engines,
+              },
+            )
+            setStatus('右侧属性设置已导出')
+          } catch (e) {
+            reportError('右侧属性设置导出失败', e, true)
+          }
+        }
+
+        async function importPropertySettings(file) {
+          if (!file) return
+          try {
+            const text = await file.text()
+            const payload = JSON.parse(text)
+            if (
+              payload?.kind !== 'zenviz-right-properties' ||
+              payload?.version !== PROPERTY_EXPORT_VERSION
+            ) {
+              throw Error('不是有效的 ZENVIZ 右侧属性设置文件')
+            }
+            const incomingEngines = payload.engines
+            if (!incomingEngines || typeof incomingEngines !== 'object') {
+              throw Error('属性设置文件缺少引擎数据')
+            }
+            const nextStores = {}
+            ENGINE_IDS.forEach((id) => {
+              const incoming = incomingEngines[id]
+              const store = createEnginePropertyStore(id)
+              if (incoming && typeof incoming === 'object') {
+                store.typeStates = sanitizeTypeStates(incoming.typeStates, null, id)
+                store.chartProps = sanitizeChartProps(incoming.chartProps)
+              }
+              nextStores[id] = store
+            })
+            ENGINE_IDS.forEach((id) => {
+              enginePropertyStores[id] = nextStores[id]
+              saveEngineStore(id)
+            })
+            loadEnginePropertyStore(state.engine, state.type)
+            loadDataSelectionStore(state.engine, state.type)
+            normalizeLayoutPrefs()
+            renderInspector()
+            applyChartMountLayout()
+            resizeChart()
+            renderChart(false)
+            saveWorkspaceState()
+            setStatus(`右侧属性设置已导入 · ${file.name}`)
+          } catch (e) {
+            reportError('右侧属性设置导入失败', e, true)
+          }
+        }
+
         function handleDropdown(id) {
           if (id === 'import') return $('#file-input').click()
+          if (id === 'import-properties') {
+            const input = $('#property-import-input')
+            if (!input) return
+            input.value = ''
+            return input.click()
+          }
+          if (id === 'export-properties') return exportPropertySettings()
           if (id === 'edit') return openDataModal()
           if (id === 'print') {
             try {
@@ -5029,15 +5307,18 @@
             opt.legend.show = false
             opt.yAxis.splitLine.show = p.showGrid
             if (p.showTrend && s.series.length) {
-              const first = s.series[0]
-              opt.series.push({
-                name: '趋势',
-                type: 'line',
-                data: first.data
-                  .map((y, j) => ({ value: [s.labels[j], y] }))
-                  .filter((pt) => numeric(pt.value[1]) !== null),
-                symbol: 'none',
-                lineStyle: { type: 'dashed', color: '#777', width: 1 },
+              s.series.forEach((ss, i) => {
+                const lineColor = palette()[i % palette().length]
+                opt.series.push({
+                  name: `${ss.name} · 趋势`,
+                  type: 'line',
+                  data: ss.data
+                    .map((y, j) => ({ value: [s.labels[j], y] }))
+                    .filter((pt) => numeric(pt.value[1]) !== null),
+                  symbol: 'none',
+                  silent: true,
+                  lineStyle: { type: 'dashed', color: lineColor, width: 1, opacity: 0.72 },
+                })
               })
             }
           }
@@ -5282,14 +5563,45 @@
           })
           window.addEventListener('resize', resizeHandler, { once: true })
         }
-        function heatmapColors(scheme) {
-          const m = {
-            冷静蓝: ['#edf3f8', '#9bb9cf', '#476f8f', '#193f5b'],
-            科研红: ['#f7ece8', '#d99a88', '#af5c48', '#7d3024'],
-            森林绿: ['#edf4ef', '#9aba9f', '#567d62', '#284d36'],
-            灰阶: ['#f7f7f7', '#bdbdbd', '#777', '#222'],
+        function mixHex(a, b, t) {
+          const parse = (hex) => {
+            const raw = String(hex || '').replace('#', '')
+            if (!/^[0-9a-f]{6}$/i.test(raw)) return null
+            return [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16))
           }
-          return m[scheme] || m.冷静蓝
+          const ca = parse(a),
+            cb = parse(b)
+          if (!ca || !cb) return b || a || '#777777'
+          const ratio = Math.max(0, Math.min(1, Number(t) || 0))
+          const rgb = ca.map((v, i) => Math.round(v + (cb[i] - v) * ratio))
+          return '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('')
+        }
+        function heatmapColors(scheme) {
+          // 热图 / 等值矩阵都必须响应右侧“配色”。
+          // 当前配色负责真正的色彩来源；“色阶”只决定从当前调色板中取哪一支主色。
+          const colors = palette()
+          if (!colors.length) return ['#f6f6f6', '#bdbdbd', '#777777', '#202020']
+          const indexByScheme = { 冷静蓝: 0, 科研红: 4, 森林绿: 2, 灰阶: 1 }
+          const dominant = colors[(indexByScheme[scheme] ?? 0) % colors.length]
+          const stops = 6
+          if (scheme === '灰阶') {
+            const raw = String(dominant || '').replace('#', '')
+            const gray = /^[0-9a-f]{6}$/i.test(raw)
+              ? (() => {
+                  const rgb = [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16))
+                  const g = Math.round(rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114)
+                  return '#' + [g, g, g].map((v) => v.toString(16).padStart(2, '0')).join('')
+                })()
+              : '#777777'
+            return Array.from({ length: stops }, (_, i) => {
+              const t = 0.08 + (0.92 * i) / (stops - 1)
+              return mixHex('#ffffff', gray, t)
+            })
+          }
+          return Array.from({ length: stops }, (_, i) => {
+            const t = 0.08 + (0.92 * i) / (stops - 1)
+            return mixHex('#ffffff', dominant, t)
+          })
         }
         function networkOption() {
           const p = chartProps.network,
@@ -5511,11 +5823,7 @@
               min: minV,
               max: maxV === minV ? minV + 1 : maxV,
               calculable: false,
-              inRange: {
-                color: ['#f6f6f6', '#b8b8b8', '#666666', '#202020'].map((c) =>
-                  contrastGray(c, p.contrast),
-                ),
-              },
+              inRange: { color: heatmapColors().map((c) => contrastGray(c, p.contrast)) },
               bottom: 14,
               left: 'center',
               orient: 'horizontal',
@@ -5902,18 +6210,22 @@
               d.showLine = false
             })
             if (p.showTrend && s.series.length) {
-              const first = s.series[0]
-              datasets.push({
-                label: '趋势',
-                data: first.data,
-                borderColor: '#777',
-                backgroundColor: 'transparent',
-                borderWidth: 1,
-                borderDash: [5, 4],
-                pointRadius: 0,
-                showLine: true,
-                fill: false,
-                tension: 0,
+              s.series.forEach((ss, i) => {
+                const lineColor = c[i % c.length]
+                datasets.push({
+                  label: `${ss.name} · 趋势`,
+                  data: ss.data,
+                  borderColor: lineColor,
+                  backgroundColor: 'transparent',
+                  borderWidth: 1,
+                  borderDash: [5, 4],
+                  pointRadius: 0,
+                  pointHoverRadius: 0,
+                  showLine: true,
+                  fill: false,
+                  tension: 0,
+                  spanGaps: true,
+                })
               })
             }
           }
@@ -6095,10 +6407,15 @@
             }
           if (t === 'bar') opt.dataLabels = { enabled: !!p.showValues, formatter: (v) => String(v) }
           if (t === 'scatter' && p.showTrend && s.series.length) {
-            opt.series = [...safeSeries, { name: '趋势', data: safeSeries[0]?.data || [] }]
+            const trendSeries = safeSeries.map((ss) => ({
+              name: `${ss.name} · 趋势`,
+              data: ss.data,
+            }))
+            opt.series = safeSeries.flatMap((ss, i) => [ss, trendSeries[i]])
+            opt.colors = safeSeries.flatMap((ss, i) => [c[i % c.length], c[i % c.length]])
             opt.stroke = {
-              width: safeSeries.map(() => 0).concat(1),
-              dashArray: safeSeries.map(() => 0).concat(5),
+              width: safeSeries.flatMap(() => [0, 1]),
+              dashArray: safeSeries.flatMap(() => [0, 5]),
               curve: 'straight',
             }
             opt.markers = { size: p.pointSize ?? 7 }
@@ -7771,12 +8088,20 @@
             reportError('PDF 导出失败', e, true)
           }
         }
+        $('#property-import-input').onchange = async (e) => {
+          const f = e.target.files?.[0]
+          if (!f) return
+          await importPropertySettings(f)
+          e.target.value = ''
+        }
+
         $('#save-png-btn').onclick = exportPNG
         $('#save-svg-btn').onclick = exportSVG
         $('#save-pdf-btn').onclick = exportPDF
         $('#reset-inspector-btn').onclick = resetCurrentEngineProperties
         $('#reset-btn').onclick = () => {
-          Object.keys(enginePropertyStores).forEach((id) => {
+          // 全局“重置”才会重置所有引擎、所有图表的独立属性；右侧“重置”只重置当前图表。
+          ENGINE_IDS.forEach((id) => {
             enginePropertyStores[id] = createEnginePropertyStore(id)
           })
           state.data = structuredClone(sample)
@@ -7790,14 +8115,7 @@
           state.category = '论文'
           state.radius = 0
           state.bg = 'body-grid'
-          state.showLegend = true
-          state.showGrid = true
-          state.smooth = false
-          state.showPoints = true
-          state.pointSize = 5
-          state.lineWidth = 2
-          state.opacity = 0.9
-          loadEnginePropertyStore('echarts')
+          loadEnginePropertyStore(state.engine, state.type)
           applyRadius()
           applyBg('body-grid')
           renderCategories('论文')
@@ -7846,20 +8164,22 @@
             state.engine = readyEngine
           }
 
-          // 再次从当前引擎自己的存储装载一次，确保切换/刷新后的最终绘制状态完全来自该引擎存储。
-          loadEnginePropertyStore(state.engine)
-          normalizeLayoutPrefs()
-          normalizeDataSelection({ fillDefaults: true })
-
+          // 先确认刷新后要恢复的“引擎 + 图表类型”，再读取这一张图自己的右侧属性。
           const preferred = typeSupported(state.type, state.engine)
             ? state.type
             : engineSupportedTypes(state.engine)[0] || 'line'
           state.type = preferred
           state.category = getActiveCategoryForType(preferred)
+          state.zenKind = preferred
+          loadEnginePropertyStore(state.engine, state.type)
+          loadDataSelectionStore(state.engine, state.type)
+          normalizeLayoutPrefs()
+          normalizeDataSelection({ fillDefaults: true })
 
-          // 将规范化后的当前引擎状态立即回写，确保存储与首次绘制使用同一份状态。
+          // 将规范化后的当前图表状态立即回写，确保存储与首次绘制使用同一份状态。
+          // 只有成功完成读取时才回写；若读取期间发生异常，禁止默认状态覆盖原有 Local Storage。
           syncCurrentEnginePropertyStore()
-          savePersistedState()
+          if (!persistenceRestoreFailed) savePersistedState()
 
           renderCategories(state.category)
           renderTypeList(categories[state.category] || [])
