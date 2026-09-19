@@ -2241,6 +2241,8 @@
             'toast.updated': '消息已更新',
             'toast.deletedMessage': '消息已删除',
             'toast.quoteCopied': '已引用消息',
+            'toast.messageCopied': '消息已复制',
+            'toast.copyFailed': '复制失败，请手动选择消息内容',
             'toast.confirmDelete': '确定删除这条消息吗？',
             'toast.quoteDeleted': '引用的消息已删除',
             'toast.favoriteAdded': '已收藏消息',
@@ -2260,6 +2262,7 @@
             'chat.cancelEdit': '取消编辑',
             'chat.editing': '编辑消息',
             'chat.quote': '引用',
+            'chat.copy': '复制',
             'chat.edit': '编辑',
             'chat.delete': '删除',
             'chat.edited': '已编辑',
@@ -2389,6 +2392,8 @@
             'toast.updated': 'Message updated',
             'toast.deletedMessage': 'Message deleted',
             'toast.quoteCopied': 'Message quoted',
+            'toast.messageCopied': 'Message copied',
+            'toast.copyFailed': 'Copy failed. Please select the message text manually',
             'toast.confirmDelete': 'Delete this message?',
             'toast.quoteDeleted': 'The quoted message has been deleted',
             'toast.favoriteAdded': 'Message saved',
@@ -2411,6 +2416,7 @@
             'chat.cancelEdit': 'CANCEL EDIT',
             'chat.editing': 'EDITING MESSAGE',
             'chat.quote': 'QUOTE',
+            'chat.copy': 'COPY',
             'chat.edit': 'EDIT',
             'chat.delete': 'DELETE',
             'chat.edited': 'EDITED',
@@ -3153,6 +3159,43 @@
           row.classList.add('target-highlight')
           return true
         }
+        async function copyTextToClipboard(text) {
+          const value = String(text ?? '')
+          if (!value) return false
+
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(value)
+              return true
+            }
+          } catch (err) {
+            // 继续尝试兼容旧浏览器/非安全上下文的 fallback。
+          }
+
+          try {
+            const textarea = document.createElement('textarea')
+            textarea.value = value
+            textarea.setAttribute('readonly', '')
+            textarea.style.position = 'fixed'
+            textarea.style.top = '0'
+            textarea.style.left = '-9999px'
+            textarea.style.opacity = '0'
+            textarea.style.pointerEvents = 'none'
+            document.body.appendChild(textarea)
+            textarea.focus()
+            textarea.select()
+            const ok = document.execCommand('copy')
+            textarea.remove()
+            return ok
+          } catch (err) {
+            return false
+          }
+        }
+        async function copyMessage(m) {
+          if (!m) return
+          const ok = await copyTextToClipboard(m.text || '')
+          toast(t(ok ? 'toast.messageCopied' : 'toast.copyFailed'))
+        }
         function quoteMessage(m) {
           if (!m || !requireCloudAction('quote')) return
           const input = $('message-input')
@@ -3245,7 +3288,18 @@
               quoteBtn.dataset.action = 'quoteMessage'
               quoteBtn.dataset.messageId = m.id
               quoteBtn.textContent = t('chat.quote')
+              quoteBtn.title = t('chat.quote')
+              quoteBtn.setAttribute('aria-label', quoteBtn.title)
               actions.appendChild(quoteBtn)
+
+              const copyBtn = document.createElement('button')
+              copyBtn.className = 'msg-action'
+              copyBtn.dataset.action = 'copyMessage'
+              copyBtn.dataset.messageId = m.id
+              copyBtn.textContent = t('chat.copy')
+              copyBtn.title = t('chat.copy')
+              copyBtn.setAttribute('aria-label', copyBtn.title)
+              actions.appendChild(copyBtn)
 
               if (m.deviceId === deviceId) {
                 const editBtn = document.createElement('button')
@@ -3988,6 +4042,10 @@
             if (act === 'quoteMessage') {
               const m = messages.find((x) => x.id === a.dataset.messageId)
               if (m) quoteMessage(m)
+            }
+            if (act === 'copyMessage') {
+              const m = messages.find((x) => x.id === a.dataset.messageId)
+              if (m) copyMessage(m)
             }
             if (act === 'editMessage') editMessage(a.dataset.messageId)
             if (act === 'deleteMessage') deleteMessage(a.dataset.messageId)
