@@ -812,9 +812,27 @@
         border: 1px solid var(--line2);
         padding: 3px 5px;
         box-sizing: border-box;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        scrollbar-width: thin;
       }
       .layout-legend.horizontal {
         flex-direction: row;
+        width: max-content;
+      }
+      .layout-legend.pie .layout-legend-mark::before {
+        left: 2px;
+        right: 2px;
+        top: 1px;
+        width: 12px;
+        height: 6px;
+        border-radius: 1px;
+        background: currentColor;
+      }
+      .layout-legend.pie .layout-legend-mark::after {
+        display: none;
       }
       .layout-legend.vertical {
         flex-direction: column;
@@ -824,6 +842,8 @@
         display: flex;
         align-items: center;
         gap: 5px;
+        flex: 0 0 auto;
+        white-space: nowrap;
         border: 1px solid transparent;
         padding: 2px 4px;
         color: rgba(21, 21, 21, 0.65);
@@ -1146,6 +1166,22 @@
         position: relative;
         min-width: 0;
       }
+      .data-role-field.is-hidden {
+        display: none;
+      }
+      .data-role-fields {
+        display: contents;
+      }
+      .data-role-note {
+        grid-column: 1 / -1;
+        padding: 7px 0 1px;
+        font-size: 10px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+      .data-role-note.is-hidden {
+        display: none;
+      }
       .zen-select[aria-expanded='true'] .zen-select-button {
         border-color: var(--ink);
       }
@@ -1209,6 +1245,22 @@
       .zen-select-option:hover {
         background: var(--hover);
         color: var(--ink);
+      }
+      .zen-select-option[aria-disabled='true'] {
+        opacity: 0.42;
+        cursor: not-allowed;
+      }
+      .zen-select-option[aria-disabled='true']:hover {
+        background: transparent;
+        color: var(--dim);
+      }
+      .zen-select-option:disabled {
+        opacity: 0.38;
+        cursor: not-allowed;
+      }
+      .zen-select-option:disabled:hover {
+        background: transparent;
+        color: var(--dim);
       }
       .zen-select-option.active {
         color: var(--ink);
@@ -1954,34 +2006,8 @@
                 placeholder="粘贴带表头的数据，逗号、制表符、分号或空格均可识别"
               ></textarea>
             </div>
-            <div class="field">
-              <label>第一列</label>
-              <div
-                class="zen-select"
-                id="zen-select-x-col"
-                data-select-key="x-col"
-                data-multiple="false"
-                data-value=""
-                aria-expanded="false"
-              >
-                <button type="button" class="zen-select-button">请选择</button>
-                <div class="zen-select-menu"><div class="zen-select-empty">暂无列</div></div>
-              </div>
-            </div>
-            <div class="field">
-              <label>数值列</label>
-              <div
-                class="zen-select multi"
-                id="zen-select-y-cols"
-                data-select-key="y-cols"
-                data-multiple="true"
-                data-value=""
-                aria-expanded="false"
-              >
-                <button type="button" class="zen-select-button">请选择</button>
-                <div class="zen-select-menu"><div class="zen-select-empty">暂无列</div></div>
-              </div>
-            </div>
+            <div id="data-role-fields" class="data-role-fields"></div>
+            <div id="data-role-note" class="data-role-note" aria-live="polite"></div>
           </div>
           <div class="modal-gap"></div>
           <div id="table-wrap"></div>
@@ -2042,6 +2068,11 @@
           exportScale: 2,
           pdfOrientation: 'landscape',
           data: null,
+          xCol: 0,
+          yCols: [1, 2, 3],
+          targetCol: null,
+          y1Col: 1,
+          y2Col: 2,
           chart: null,
           zenKind: 'slope',
           status: '',
@@ -2173,8 +2204,359 @@
           radial: '径向',
           poster: '海报统计',
           field: '粒子场',
-          contour: '等值',
+          contour: '等值矩阵',
         }
+        const chartDataRules = {
+          line: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'series',
+            ui: {
+              note: '横轴使用分类；图例来自所选系列列的列头。',
+              roles: [
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '系列列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          bar: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'series',
+            ui: {
+              note: '横轴使用分类；每个系列列对应一组柱子，图例显示系列列列头。',
+              roles: [
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '系列列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          area: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'series',
+            ui: {
+              note: '横轴使用分类；面积带来自所选系列列。',
+              roles: [
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '面积系列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          scatter: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'series',
+            ui: {
+              note: '横轴使用分类，与柱状图相同；点的颜色与图例按系列列对应。',
+              roles: [
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '点系列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          pie: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'category',
+            positiveY: true,
+            aggregateX: true,
+            completeY: true,
+            ui: {
+              note: '每一行是一个扇区。图例来自扇区名称，颜色与扇区逐项对应。',
+              roles: [
+                { key: 'x-col', label: '扇区名称列', kind: 'category' },
+                { key: 'y-cols', label: '扇区数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          radar: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'series',
+            completeY: true,
+            ui: {
+              note: '分类列提供雷达维度；每个系列列形成一条雷达数据系列。',
+              roles: [
+                { key: 'x-col', label: '维度名称列', kind: 'category' },
+                { key: 'y-cols', label: '指标系列列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          heatmap: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'none',
+            ui: {
+              note: '横轴使用分类，纵轴由数值系列列的列头构成。',
+              roles: [
+                { key: 'x-col', label: '横向类别列', kind: 'category' },
+                { key: 'y-cols', label: '热图数据列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          slope: {
+            x: 'category',
+            minY: 2,
+            maxY: 2,
+            legend: 'none',
+            pairY: true,
+            completeY: true,
+            ui: {
+              note: '每一行是一个对象；两列数值分别表示起点与终点。',
+              roles: [
+                { key: 'x-col', label: '对象名称列', kind: 'category' },
+                { key: 'y1-col', label: '起点数值列', kind: 'numeric' },
+                { key: 'y2-col', label: '终点数值列', kind: 'numeric' },
+              ],
+            },
+          },
+          lollipop: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            ui: {
+              note: '每一行是一个类别及其对应数值。',
+              roles: [
+                { key: 'x-col', label: '类别名称列', kind: 'category' },
+                { key: 'y-cols', label: '数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          timeline: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            ui: {
+              note: '第一列用于时间或事件名称，第二列提供事件数值。',
+              roles: [
+                { key: 'x-col', label: '时间／事件列', kind: 'category' },
+                { key: 'y-cols', label: '事件数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          dotplot: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            ui: {
+              note: '每个分类对应一个点，横向位置由所选数值决定。',
+              roles: [
+                { key: 'x-col', label: '类别名称列', kind: 'category' },
+                { key: 'y-cols', label: '点值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          wordfreq: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            nonNegativeY: true,
+            ui: {
+              note: '第一列是词语，第二列是词频；重复词会按词频汇总。',
+              roles: [
+                { key: 'x-col', label: '词语列', kind: 'category' },
+                { key: 'y-cols', label: '词频列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          smallmultiples: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'none',
+            ui: {
+              note: '第一列提供每个小图的横向类别，系列列分别生成独立小图。',
+              roles: [
+                { key: 'x-col', label: '横向类别列', kind: 'category' },
+                { key: 'y-cols', label: '小图变量列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          network: {
+            x: 'category',
+            target: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            positiveY: true,
+            completeY: true,
+            ui: {
+              note: '每一行是一条关系：来源 → 去向，权重决定连接强度。',
+              roles: [
+                { key: 'x-col', label: '来源列', kind: 'category' },
+                { key: 'target-col', label: '去向列', kind: 'category' },
+                { key: 'y-cols', label: '权重列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          sankey: {
+            x: 'category',
+            target: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            positiveY: true,
+            completeY: true,
+            ui: {
+              note: '每一行是一条流向：来源 → 去向，数值列决定流量。',
+              roles: [
+                { key: 'x-col', label: '来源列', kind: 'category' },
+                { key: 'target-col', label: '去向列', kind: 'category' },
+                { key: 'y-cols', label: '流量列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          correlation: {
+            x: 'none',
+            minY: 2,
+            maxY: 8,
+            legend: 'none',
+            completeY: true,
+            ui: {
+              note: '没有单独的分类列；每个数值变量都是矩阵中的一个变量。',
+              roles: [{ key: 'y-cols', label: '变量列', kind: 'numeric', multiple: true }],
+            },
+          },
+          parallel: {
+            x: 'none',
+            minY: 2,
+            maxY: 8,
+            legend: 'none',
+            completeY: true,
+            ui: {
+              note: '没有单独的 X 轴；每个数值变量构成平行坐标的一条维度轴。',
+              roles: [{ key: 'y-cols', label: '维度变量列', kind: 'numeric', multiple: true }],
+            },
+          },
+          boxplot: {
+            x: 'none',
+            minY: 1,
+            maxY: 8,
+            legend: 'none',
+            ui: {
+              note: '没有分类列；每个数值列代表一个独立分布组。',
+              roles: [{ key: 'y-cols', label: '分布变量列', kind: 'numeric', multiple: true }],
+            },
+          },
+          histogram: {
+            x: 'none',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            ui: {
+              note: '只需要一列样本值，图表会自动计算频数分布。',
+              roles: [{ key: 'y-cols', label: '样本值列', kind: 'numeric', multiple: false }],
+            },
+          },
+          errorbar: {
+            x: 'category',
+            minY: 2,
+            maxY: 2,
+            legend: 'none',
+            pairY: true,
+            completeY: true,
+            nonNegativeError: true,
+            ui: {
+              note: '每一行是一个类别；中心值与误差值分别来自两列。',
+              roles: [
+                { key: 'x-col', label: '类别名称列', kind: 'category' },
+                { key: 'y1-col', label: '中心值列', kind: 'numeric' },
+                { key: 'y2-col', label: '误差值列', kind: 'numeric' },
+              ],
+            },
+          },
+          bump: {
+            x: 'category',
+            minY: 2,
+            maxY: 6,
+            legend: 'series',
+            completeY: true,
+            ui: {
+              note: '第一列是时间／阶段；每个系列列表示一个排名对象，图例来自系列列列头。',
+              roles: [
+                { key: 'x-col', label: '时间／阶段列', kind: 'category' },
+                { key: 'y-cols', label: '排名系列列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          contour: {
+            x: 'category',
+            minY: 2,
+            maxY: 8,
+            legend: 'none',
+            ui: {
+              note: '第一列提供横向位置标签，数值列构成等值矩阵的纵向变量。',
+              roles: [
+                { key: 'x-col', label: '横向坐标标签列', kind: 'category' },
+                { key: 'y-cols', label: '等值数据列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          ribbon: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'none',
+            ui: {
+              note: '第一列提供时间／顺序，数据列分别形成带状轨迹。',
+              roles: [
+                { key: 'x-col', label: '时间／顺序列', kind: 'category' },
+                { key: 'y-cols', label: '带状数据列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
+          radial: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            nonNegativeY: true,
+            ui: {
+              note: '每一行对应一条径向射线，分类控制标签，数值控制半径。',
+              roles: [
+                { key: 'x-col', label: '分类名称列', kind: 'category' },
+                { key: 'y-cols', label: '径向数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          poster: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            nonNegativeY: true,
+            ui: {
+              note: '每一行是海报中的一个项目，数值决定柱高与总量。',
+              roles: [
+                { key: 'x-col', label: '项目／类别列', kind: 'category' },
+                { key: 'y-cols', label: '统计数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          field: {
+            x: 'none',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            ui: {
+              note: '粒子场没有分类 X 轴，只使用一列数值作为粒子分布的驱动数据。',
+              roles: [{ key: 'y-cols', label: '粒子驱动数值列', kind: 'numeric', multiple: false }],
+            },
+          },
+        }
+
         const typeMeta = {
           line: { engine: 'echarts', cat: '论文', desc: '论文与实验趋势' },
           bar: { engine: 'echarts', cat: '论文', desc: '类别比较' },
@@ -2201,7 +2583,7 @@
           radial: { engine: 'zen', cat: '艺术', desc: '极坐标构图' },
           poster: { engine: 'zen', cat: '艺术', desc: '信息海报' },
           field: { engine: 'zen', cat: '艺术', desc: '粒子／字段' },
-          contour: { engine: 'echarts', cat: '论文', desc: '等值线／表面' },
+          contour: { engine: 'echarts', cat: '论文', desc: '数据矩阵等值表达' },
         }
         const sample = {
           headers: ['类别', '甲', '乙', '丙'],
@@ -2225,6 +2607,8 @@
         let chartProps = {
           line: {
             lineWidth: 2,
+            lineType: 'solid',
+            lineMode: 'single',
             pointSize: 5,
             smooth: false,
             showPoints: true,
@@ -2258,6 +2642,7 @@
             showLegend: true,
             showGrid: true,
             showTrend: false,
+            rotateLabels: 0,
           },
           pie: {
             innerRadius: 32,
@@ -2435,7 +2820,16 @@
         const ENGINE_PERSIST_PREFIX = 'zenviz.engine.v2.'
         const LEGACY_PERSIST_KEY = 'zenviz.preferences.v1'
         const ENGINE_IDS = ['echarts', 'chartjs', 'apexcharts', 'zen']
-        const GLOBAL_PERSIST_KEYS = ['engine', 'type', 'category']
+        const GLOBAL_PERSIST_KEYS = [
+          'engine',
+          'type',
+          'category',
+          'xCol',
+          'yCols',
+          'targetCol',
+          'y1Col',
+          'y2Col',
+        ]
 
         function sanitizeChartProps(source) {
           const result = structuredClone(CHART_PROP_DEFAULTS)
@@ -2635,6 +3029,11 @@
             return (
               typeof value === 'string' && Object.prototype.hasOwnProperty.call(categories, value)
             )
+          if (key === 'xCol') return Number.isInteger(value) && value >= 0
+          if (key === 'targetCol' || key === 'y1Col' || key === 'y2Col')
+            return value === null || (Number.isInteger(value) && value >= 0)
+          if (key === 'yCols')
+            return Array.isArray(value) && value.every((v) => Number.isInteger(v) && v >= 0)
           if (key === 'palette') return ['mono', 'culture', 'science', 'editorial'].includes(value)
           if (
             [
@@ -2756,13 +3155,13 @@
         }
         normalizeLayoutPrefs()
 
-        function setStatus(msg, kind = 'ok') {
+        function setStatus(msg, kind = 'ok', notify = true) {
           $('#status-text').textContent = msg
           const dot = $('#status-dot')
           dot.style.background =
             kind === 'err' ? 'var(--err)' : kind === 'warn' ? 'var(--warn)' : 'var(--ok)'
           state.status = msg
-          toast(msg)
+          if (notify) toast(msg)
         }
         let toastTimer = 0
         function toast(msg) {
@@ -2798,14 +3197,371 @@
           const n = Number(String(v).replace(/,/g, ''))
           return Number.isFinite(n) ? n : null
         }
+        function getChartDataRule(type = state.type) {
+          const base = chartDataRules[type] || { x: 'category', minY: 1, maxY: 8, legend: 'series' }
+          if (type === 'ribbon') {
+            const bands = Math.max(
+              1,
+              Math.min(8, Math.round(Number(chartProps.ribbon?.bands) || 5)),
+            )
+            return { ...base, maxY: bands }
+          }
+          return base
+        }
+        function columnStats(index) {
+          const d = state.data || { headers: [], rows: [] }
+          const values = d.rows.map((r) => String(r?.[index] ?? '').trim())
+          const nonEmpty = values.filter(Boolean)
+          const numericValues = nonEmpty.map(numeric)
+          const invalidCount = numericValues.filter((v) => v === null).length
+          return {
+            index,
+            name: String(d.headers[index] ?? `列${index + 1}`),
+            nonEmptyCount: nonEmpty.length,
+            numericCount: numericValues.filter((v) => v !== null).length,
+            invalidCount,
+            isNumeric: nonEmpty.length > 0 && invalidCount === 0,
+            isCompleteNumeric:
+              d.rows.length > 0 && nonEmpty.length === d.rows.length && invalidCount === 0,
+            hasAnyValue: nonEmpty.length > 0,
+          }
+        }
+        function isUsableNumericColumn(index) {
+          return columnStats(index).isNumeric
+        }
+        function isUsableCategoryColumn(index) {
+          return columnStats(index).hasAnyValue
+        }
+        function firstUsableNumericColumns(exclude = -1, max = 8) {
+          return (state.data?.headers || [])
+            .map((_, i) => i)
+            .filter((i) => i !== exclude && isUsableNumericColumn(i))
+            .slice(0, max)
+        }
+        function firstUsableCategoryColumn(exclude = -1) {
+          const indexes = (state.data?.headers || [])
+            .map((_, i) => i)
+            .filter((i) => i !== exclude && isUsableCategoryColumn(i))
+          return indexes.find((i) => !isUsableNumericColumn(i)) ?? null
+        }
+        function normalizeDataSelection({ fillDefaults = false } = {}) {
+          const d = state.data || { headers: [], rows: [] }
+          const count = d.headers.length
+          if (!count) {
+            state.xCol = 0
+            state.targetCol = null
+            state.yCols = []
+            state.y1Col = null
+            state.y2Col = null
+            return
+          }
+          const rule = getChartDataRule(state.type)
+          let x = Number.isInteger(state.xCol) ? state.xCol : Number(state.xCol)
+          if (!Number.isInteger(x) || x < 0 || x >= count) x = 0
+          state.xCol = x
+          if (rule.target) {
+            let target = Number.isInteger(state.targetCol)
+              ? state.targetCol
+              : Number(state.targetCol)
+            if (!Number.isInteger(target) || target < 0 || target >= count || target === x)
+              target = firstUsableCategoryColumn(x)
+            state.targetCol = target
+          } else state.targetCol = null
+          if (rule.pairY) {
+            let y1 = Number.isInteger(state.y1Col) ? state.y1Col : Number(state.y1Col)
+            let y2 = Number.isInteger(state.y2Col) ? state.y2Col : Number(state.y2Col)
+            const excluded = new Set()
+            if (rule.x !== 'none') excluded.add(x)
+            if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol)
+            const defaults = firstUsableNumericColumns(-1, 8).filter((i) => !excluded.has(i))
+            if (!Number.isInteger(y1) || y1 < 0 || y1 >= count || excluded.has(y1))
+              y1 = defaults[0] ?? null
+            const fallback = defaults.find((i) => i !== y1)
+            if (!Number.isInteger(y2) || y2 < 0 || y2 >= count || excluded.has(y2) || y2 === y1)
+              y2 = fallback ?? null
+            state.y1Col = y1
+            state.y2Col = y2
+            state.yCols = [y1, y2].filter((v) => Number.isInteger(v))
+            return
+          }
+          let ys = Array.isArray(state.yCols) ? state.yCols.map(Number) : []
+          ys = ys.filter((v) => Number.isInteger(v) && v >= 0 && v < count)
+          ys = ys.filter((v, i, a) => a.indexOf(v) === i)
+          const excluded = new Set()
+          if (rule.x !== 'none') excluded.add(x)
+          if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol)
+          ys = ys.filter((v) => !excluded.has(v))
+          if (fillDefaults && ys.length === 0)
+            ys = firstUsableNumericColumns(rule.x === 'none' ? -1 : x, rule.maxY).filter(
+              (i) => !excluded.has(i),
+            )
+          state.yCols = ys.slice(0, rule.maxY)
+        }
+        function chartRoleLabel(type, key) {
+          const role = getChartDataRule(type).ui?.roles?.find((r) => r.key === key)
+          return (
+            role?.label ||
+            (key === 'x-col'
+              ? '分类列'
+              : key === 'target-col'
+                ? '去向列'
+                : key === 'y1-col'
+                  ? '第一数值列'
+                  : key === 'y2-col'
+                    ? '第二数值列'
+                    : '数据列')
+          )
+        }
+        function validateDataMapping(type = state.type, { toastOnError = false } = {}) {
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const rule = getChartDataRule(type)
+          const errors = []
+          if (!d.headers.length) errors.push('数据表没有列')
+          if (!d.rows.length) errors.push('数据表没有数据行')
+          const x = Number(state.xCol)
+          if (rule.x !== 'none') {
+            const xs = columnStats(x)
+            if (!Number.isInteger(x) || x < 0 || x >= d.headers.length)
+              errors.push(`${chartRoleLabel(type, 'x-col')}选择无效`)
+            else if (rule.x === 'numeric' && !xs.isNumeric)
+              errors.push(`「${xs.name}」必须为数值列`)
+            else if (rule.x === 'category' && !xs.hasAnyValue)
+              errors.push(`「${xs.name}」没有可用的${chartRoleLabel(type, 'x-col')}`)
+          }
+          if (rule.target) {
+            const t = Number(state.targetCol),
+              ts = columnStats(t)
+            if (!Number.isInteger(t) || t < 0 || t >= d.headers.length || t === x)
+              errors.push('去向列选择无效，必须与来源列不同')
+            else if (!ts.hasAnyValue) errors.push(`「${ts.name}」没有可用的去向数据`)
+            if (!errors.length && getFlowRows().length === 0)
+              errors.push('没有有效的来源 → 去向 → 权重记录，请检查三列数据')
+          }
+          const ys = state.yCols
+          if (ys.length < rule.minY || ys.length > rule.maxY)
+            errors.push(
+              `「${chartNames[type] || type}」需要 ${rule.minY === rule.maxY ? `恰好 ${rule.minY}` : `${rule.minY}–${rule.maxY}`} 个数值列，当前为 ${ys.length} 个`,
+            )
+          ys.forEach((idx) => {
+            const stats = columnStats(idx)
+            if (!stats.isNumeric) errors.push(`「${stats.name}」不是纯数值列，不能作为数值列使用`)
+            if (rule.completeY && !stats.isCompleteNumeric)
+              errors.push(
+                `「${stats.name}」存在空白或非数值内容，当前「${chartNames[type] || type}」要求完整数值列`,
+              )
+            if (rule.positiveY && stats.isNumeric) {
+              const vals = d.rows.map((r) => numeric(r?.[idx]))
+              if (vals.some((v) => v !== null && v < 0))
+                errors.push(`「${stats.name}」不能包含负数`)
+              if (!vals.some((v) => v !== null && v > 0))
+                errors.push(`「${stats.name}」必须至少包含一个大于 0 的值`)
+            }
+            if (
+              rule.nonNegativeY &&
+              stats.isNumeric &&
+              d.rows.some((r) => {
+                const v = numeric(r?.[idx])
+                return v !== null && v < 0
+              })
+            )
+              errors.push(`「${stats.name}」不能包含负数`)
+          })
+          if (rule.nonNegativeError && ys.length === 2) {
+            const errCol = ys[1]
+            if (
+              d.rows.some((r) => {
+                const v = numeric(r?.[errCol])
+                return v !== null && v < 0
+              })
+            )
+              errors.push(`「${columnStats(errCol).name}」作为误差列时不能包含负数`)
+          }
+          if (type === 'pie' && ys.length === 1) {
+            const slices = getPieSlices()
+            if (!slices.length) errors.push('饼图没有可绘制的分类数据')
+            else if (slices.every((item) => item.value <= 0))
+              errors.push('饼图的数值总和必须大于 0')
+          }
+          if (
+            type === 'correlation' &&
+            ys.filter((idx) => columnStats(idx).numericCount >= 2).length < 2
+          )
+            errors.push('相关矩阵至少需要 2 个具有有效数值的变量')
+          if (
+            type === 'histogram' &&
+            Number.isInteger(ys[0]) &&
+            columnStats(ys[0]).numericCount < 2
+          )
+            errors.push('直方图至少需要 2 个有效数值')
+          const message = errors[0] || ''
+          if (message && toastOnError) toast(message)
+          return { valid: errors.length === 0, message, errors, rule }
+        }
+        function getPieSlices() {
+          const s = rowsToSeries(),
+            totals = new Map()
+          s.labels.forEach((label, i) => {
+            const name = String(label ?? '').trim(),
+              value = numeric(s.series[0]?.data[i])
+            if (!name || value === null) return
+            totals.set(name, (totals.get(name) || 0) + value)
+          })
+          return Array.from(totals, ([name, value]) => ({ name, value }))
+        }
+        function getPairSeries() {
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const y1 = Number.isInteger(state.y1Col) ? state.y1Col : state.yCols[0]
+          const y2 = Number.isInteger(state.y2Col) ? state.y2Col : state.yCols[1]
+          return {
+            first: {
+              index: y1,
+              name: String(d.headers[y1] ?? ''),
+              data: d.rows.map((r) => numeric(r?.[y1])),
+            },
+            second: {
+              index: y2,
+              name: String(d.headers[y2] ?? ''),
+              data: d.rows.map((r) => numeric(r?.[y2])),
+            },
+          }
+        }
+        function getFlowRows() {
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const sourceCol = Number.isInteger(state.xCol) ? state.xCol : 0
+          const targetCol = Number.isInteger(state.targetCol) ? state.targetCol : null
+          const weightCol = Array.isArray(state.yCols) ? state.yCols[0] : null
+          const map = new Map()
+          if (targetCol === null || weightCol === null) return []
+          d.rows.forEach((r) => {
+            const source = String(r?.[sourceCol] ?? '').trim(),
+              target = String(r?.[targetCol] ?? '').trim(),
+              value = numeric(r?.[weightCol])
+            if (!source || !target || value === null || value <= 0) return
+            const key = source + '\u0000' + target
+            const prev = map.get(key)
+            map.set(key, { source, target, value: (prev?.value || 0) + value })
+          })
+          return Array.from(map.values())
+        }
+        function renderDataValidationState(message) {
+          const mount = $('#chart-mount')
+          if (!mount) return
+          $('#zen-svg').style.display = 'none'
+          mount.style.display = 'block'
+          mount.innerHTML = `<div class="render-error"><strong>当前数据不能绘制「${escapeHtml(chartNames[state.type] || state.type)}」</strong><span>${escapeHtml(message || '请选择符合条件的 X 列和数值列。')}</span><span>打开“编辑数据”调整列选择，选择器会自动限制可用列。</span></div>`
+        }
         function rowsToSeries() {
-          const d = state.data
-          const labels = d.rows.map((r) => r[0])
-          const arr = []
-          d.headers
-            .slice(1)
-            .forEach((h, ci) => arr.push({ name: h, data: d.rows.map((r) => numeric(r[ci + 1])) }))
-          return { labels, series: arr }
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const xCol = Number.isInteger(state.xCol) ? state.xCol : 0
+          const yCols = Array.isArray(state.yCols) ? state.yCols : []
+          const labels = d.rows.map((r) => String(r?.[xCol] ?? ''))
+          const xValues = d.rows.map((r) => numeric(r?.[xCol]))
+          const arr = yCols.map((ci) => ({
+            name: String(d.headers[ci] ?? `列${ci + 1}`),
+            data: d.rows.map((r) => numeric(r?.[ci])),
+          }))
+          return { labels, xValues, xCol, xName: String(d.headers[xCol] ?? ''), series: arr }
+        }
+        function handleDataSelectionChange(key, value) {
+          const rule = getChartDataRule(state.type)
+          if (key === 'x-col') {
+            if (rule.x === 'none') return false
+            const next = Number(value)
+            if (!Number.isInteger(next) || next < 0 || next >= (state.data?.headers.length || 0))
+              return false
+            const stats = columnStats(next)
+            if (rule.x === 'numeric' && !stats.isNumeric) {
+              toast(`「${stats.name}」不是纯数值列，当前图表的第一列必须为数值 X 轴`)
+              syncDataColumnSelects()
+              return false
+            }
+            if (rule.x === 'category' && !stats.hasAnyValue) {
+              toast(`「${stats.name}」没有可用的分类数据`)
+              syncDataColumnSelects()
+              return false
+            }
+            state.xCol = next
+            if (state.targetCol === next) state.targetCol = firstUsableCategoryColumn(next)
+            if (rule.pairY) {
+              state.y1Col = state.y1Col === next ? null : state.y1Col
+              state.y2Col = state.y2Col === next ? null : state.y2Col
+            } else state.yCols = state.yCols.filter((v) => v !== next && v !== state.targetCol)
+          } else if (key === 'target-col') {
+            const next = Number(value)
+            if (
+              !Number.isInteger(next) ||
+              next < 0 ||
+              next >= (state.data?.headers.length || 0) ||
+              next === state.xCol
+            )
+              return false
+            const stats = columnStats(next)
+            if (!stats.hasAnyValue) {
+              toast(`「${stats.name}」没有可用的去向数据`)
+              syncDataColumnSelects()
+              return false
+            }
+            state.targetCol = next
+            state.yCols = state.yCols.filter((v) => v !== next)
+          } else if (key === 'y1-col' || key === 'y2-col') {
+            const next = Number(value),
+              targetKey = key === 'y1-col' ? 'y1Col' : 'y2Col',
+              other = key === 'y1-col' ? state.y2Col : state.y1Col
+            if (!Number.isInteger(next) || next < 0 || next >= (state.data?.headers.length || 0))
+              return false
+            if ((rule.x !== 'none' && next === state.xCol) || next === state.targetCol) {
+              toast('该列当前承担其它数据角色，不能作为此数值角色')
+              syncDataColumnSelects()
+              return false
+            }
+            if (next === other) {
+              toast('两个数值角色必须选择不同列')
+              syncDataColumnSelects()
+              return false
+            }
+            const stats = columnStats(next)
+            if (!stats.isNumeric) {
+              toast(`「${stats.name}」不是纯数值列`)
+              syncDataColumnSelects()
+              return false
+            }
+            state[targetKey] = next
+            state.yCols = [state.y1Col, state.y2Col].filter((v) => Number.isInteger(v))
+          } else if (key === 'y-cols') {
+            const requested = (Array.isArray(value) ? value : [value]).map(Number),
+              unique = requested.filter((v, i, a) => Number.isInteger(v) && a.indexOf(v) === i),
+              valid = []
+            for (const idx of unique) {
+              if ((rule.x !== 'none' && idx === state.xCol) || idx === state.targetCol) {
+                toast(`「${columnStats(idx).name}」当前承担其它数据角色，不能同时作为数值列`)
+                continue
+              }
+              const stats = columnStats(idx)
+              if (!stats.isNumeric) {
+                toast(`「${stats.name}」不是纯数值列，不能作为数值列`)
+                continue
+              }
+              if (valid.length >= rule.maxY) {
+                toast(`「${chartNames[state.type] || state.type}」最多选择 ${rule.maxY} 个数值列`)
+                break
+              }
+              valid.push(idx)
+            }
+            state.yCols = valid
+          } else return false
+          normalizeDataSelection()
+          schedulePersist()
+          syncDataColumnSelects()
+          const validation = validateDataMapping(state.type)
+          updateMeta()
+          renderChart(false)
+          if (!validation.valid) setStatus(validation.message, 'warn')
+          else setStatus('数据列选择已更新')
+          return true
         }
         function palette() {
           const base = {
@@ -2964,6 +3720,7 @@
           renderCategories(getActiveCategory())
           renderTypeList(categories[getActiveCategory()] || [])
           renderInspector()
+          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
           renderChart()
           // 引擎切换本身也必须立即持久化，否则刷新后仍会回到上一次引擎。
           schedulePersist()
@@ -2979,11 +3736,23 @@
           state.type = t
           state.zenKind = t
           state.category = getActiveCategoryForType(t)
+          const rule = getChartDataRule(t)
+          normalizeDataSelection({ fillDefaults: true })
+          syncDataColumnSelects()
+          const previousYCount = Array.isArray(state.yCols) ? state.yCols.length : 0
+          normalizeDataSelection()
+          if (previousYCount > state.yCols.length) {
+            toast(
+              `「${chartNames[t]}」最多使用 ${rule.maxY} 个数值列，已自动保留前 ${rule.maxY} 个`,
+            )
+          }
+          syncDataColumnSelects()
           $('#stage-title').textContent = chartNames[t]
           // 画布说明已移除，不再写入不存在的元素
 
           updateMeta()
           renderInspector()
+          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
           renderEngines()
           renderCategories(state.category)
           renderTypeList(categories[state.category] || [])
@@ -3237,10 +4006,21 @@
   ${fieldNumber('设计宽度', 'width', state.width)}${fieldNumber('设计高度', 'height', state.height)}
  </section>`
           const specs = {
-            line: `<section class="ins-group"><div class="ins-head"><b>折线属性</b><span>03</span></div>${fieldRange('线宽', 'lineWidth', 1, 8, 0.5, p.lineWidth)}${fieldRange('点大小', 'pointSize', 1, 12, 1, p.pointSize)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldToggle('显示数据点', 'showPoints', p.showPoints)}${fieldToggle('平滑曲线', 'smooth', p.smooth)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}${fieldNumber('纵轴最小值', 'yMin', p.yMin)}${fieldNumber('纵轴最大值', 'yMax', p.yMax)}</section>`,
+            line: `<section class="ins-group"><div class="ins-head"><b>折线属性</b><span>03</span></div>${fieldRange('线宽', 'lineWidth', 1, 8, 0.5, p.lineWidth)}${fieldSelect(
+              '线型',
+              'lineType',
+              p.lineType,
+              [
+                ['solid', '实线'],
+                ['dashed', '虚线'],
+              ],
+            )}${fieldSelect('线条', 'lineMode', p.lineMode, [
+              ['single', '单线'],
+              ['double', '双线'],
+            ])}${fieldRange('点大小', 'pointSize', 1, 12, 1, p.pointSize)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldToggle('显示数据点', 'showPoints', p.showPoints)}${fieldToggle('平滑曲线', 'smooth', p.smooth)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}${fieldNumber('纵轴最小值', 'yMin', p.yMin)}${fieldNumber('纵轴最大值', 'yMax', p.yMax)}</section>`,
             bar: `<section class="ins-group"><div class="ins-head"><b>柱状属性</b><span>03</span></div>${fieldRange('柱宽', 'barWidth', 16, 80, 1, p.barWidth)}${fieldRange('柱间距', 'gap', 0, 50, 1, p.gap)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldToggle('显示数值', 'showValues', p.showValues)}${fieldToggle('堆叠显示', 'stacked', p.stacked)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
             area: `<section class="ins-group"><div class="ins-head"><b>面积属性</b><span>03</span></div>${fieldRange('线宽', 'lineWidth', 1, 8, 0.5, p.lineWidth)}${fieldRange('点大小', 'pointSize', 1, 12, 1, p.pointSize)}${fieldRange('填充透明度', 'fillOpacity', 0.04, 0.7, 0.02, p.fillOpacity)}${fieldToggle('平滑曲线', 'smooth', p.smooth)}${fieldToggle('显示数据点', 'showPoints', p.showPoints)}${fieldToggle('堆叠面积', 'stacked', p.stacked)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
-            scatter: `<section class="ins-group"><div class="ins-head"><b>散点属性</b><span>03</span></div>${fieldRange('点大小', 'pointSize', 2, 18, 1, p.pointSize)}${fieldRange('透明度', 'opacity', 0.15, 1, 0.05, p.opacity)}${fieldToggle('趋势提示线', 'showTrend', p.showTrend)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            scatter: `<section class="ins-group"><div class="ins-head"><b>散点属性</b><span>03</span></div>${fieldRange('点大小', 'pointSize', 2, 18, 1, p.pointSize)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldRange('透明度', 'opacity', 0.15, 1, 0.05, p.opacity)}${fieldToggle('趋势提示线', 'showTrend', p.showTrend)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
             pie: `<section class="ins-group"><div class="ins-head"><b>饼图属性</b><span>03</span></div>${fieldRange('内半径', 'innerRadius', 0, 70, 1, p.innerRadius)}${fieldRange('外半径', 'outerRadius', 40, 85, 1, p.outerRadius)}${fieldSelect(
               '图形方式',
               'rose',
@@ -3423,60 +4203,68 @@
           })
         }
         function bindCustomSelects(host = document) {
-          host.querySelectorAll('.zen-select').forEach(function (sel) {
+          const selects =
+            host && typeof host.matches === 'function' && host.matches('.zen-select')
+              ? [host]
+              : Array.from(host.querySelectorAll('.zen-select'))
+          selects.forEach(function (sel) {
             if (sel.dataset.bound) return
             sel.dataset.bound = '1'
-            const btn = sel.querySelector('.zen-select-button')
-            const opts = function () {
-              return Array.from(sel.querySelectorAll('.zen-select-option'))
-            }
-            const multi = sel.dataset.multiple === 'true'
-            if (!btn) return
-            btn.addEventListener('click', function (e) {
-              e.stopPropagation()
-              const open = sel.getAttribute('aria-expanded') === 'true'
-              closeCustomSelects(sel)
-              sel.setAttribute('aria-expanded', open ? 'false' : 'true')
-            })
-            opts().forEach(function (opt) {
-              opt.addEventListener('click', function (e) {
+            sel.addEventListener('click', function (e) {
+              const btn = e.target.closest('.zen-select-button')
+              if (btn && sel.contains(btn)) {
                 e.stopPropagation()
-                const v = opt.dataset.value
-                if (multi) {
-                  opt.classList.toggle('active')
-                  const vals = opts()
-                    .filter(function (x) {
-                      return x.classList.contains('active')
-                    })
-                    .map(function (x) {
-                      return x.dataset.value
-                    })
-                  sel.dataset.value = vals.join(',')
-                  btn.textContent =
-                    opts()
-                      .filter(function (x) {
-                        return x.classList.contains('active')
-                      })
-                      .map(function (x) {
-                        return x.textContent.trim()
-                      })
+                const open = sel.getAttribute('aria-expanded') === 'true'
+                closeCustomSelects(sel)
+                sel.setAttribute('aria-expanded', open ? 'false' : 'true')
+                return
+              }
+              const opt = e.target.closest('.zen-select-option')
+              if (!opt || !sel.contains(opt)) return
+              e.stopPropagation()
+              if (
+                opt.dataset.selectDisabled === 'true' ||
+                opt.getAttribute('aria-disabled') === 'true'
+              ) {
+                toast(opt.dataset.reason || opt.title || '当前图表不能使用此列')
+                return
+              }
+              const multi = sel.dataset.multiple === 'true'
+              const options = () => Array.from(sel.querySelectorAll('.zen-select-option'))
+              if (multi) {
+                const next = options()
+                  .filter((x) =>
+                    x === opt ? !x.classList.contains('active') : x.classList.contains('active'),
+                  )
+                  .map((x) => x.dataset.value)
+                options().forEach((x) =>
+                  x.classList.toggle('active', next.includes(x.dataset.value)),
+                )
+                sel.dataset.value = next.join(',')
+                const button = sel.querySelector('.zen-select-button')
+                if (button)
+                  button.textContent =
+                    options()
+                      .filter((x) => x.classList.contains('active'))
+                      .map((x) => x.textContent.trim())
                       .join('、') || '请选择'
-                  sel.dispatchEvent(
-                    new CustomEvent('zenchange', { bubbles: true, detail: { value: vals } }),
-                  )
-                } else {
-                  opts().forEach(function (x) {
-                    x.classList.remove('active')
-                  })
-                  opt.classList.add('active')
-                  sel.dataset.value = v
-                  btn.textContent = opt.textContent.trim()
-                  sel.setAttribute('aria-expanded', 'false')
-                  sel.dispatchEvent(
-                    new CustomEvent('zenchange', { bubbles: true, detail: { value: v } }),
-                  )
-                }
-              })
+                sel.dispatchEvent(
+                  new CustomEvent('zenchange', { bubbles: true, detail: { value: next } }),
+                )
+              } else {
+                options().forEach((x) => x.classList.remove('active'))
+                opt.classList.add('active')
+                sel.dataset.value = opt.dataset.value
+                const button = sel.querySelector('.zen-select-button')
+                if (button) button.textContent = opt.textContent.trim()
+                sel.setAttribute('aria-expanded', 'false')
+                sel.dispatchEvent(
+                  new CustomEvent('zenchange', {
+                    bubbles: true,
+                    detail: { value: opt.dataset.value },
+                  }),
+                )
+              }
             })
           })
         }
@@ -3578,18 +4366,21 @@
               }),
           )
           bindCustomSelects(document)
-          $$(`.zen-select[data-select-key]`).forEach((el) => {
-            el.addEventListener('zenchange', (e) => {
-              const k = el.dataset.selectKey,
-                val = el.dataset.value
-              if (k === 'orientation') {
-                setEngineStateProp('pdfOrientation', val)
-                return
-              }
-              setChartProp(k, val)
-              flushRender()
+          $$('.zen-select[data-select-key]')
+            .filter((el) => !el.closest('#data-modal'))
+            .forEach((el) => {
+              el.addEventListener('zenchange', () => {
+                const k = el.dataset.selectKey
+                const val = el.dataset.value
+                if (k === 'orientation') {
+                  setEngineStateProp('pdfOrientation', val)
+                  flushRender()
+                  return
+                }
+                setChartProp(k, val)
+                flushRender()
+              })
             })
-          })
           $$('.direction-btn').forEach(
             (b) =>
               (b.onclick = () => {
@@ -3731,6 +4522,16 @@
         function renderChart(animate = true) {
           try {
             updateMeta()
+            const dataValidation = validateDataMapping(state.type)
+            if (!dataValidation.valid) {
+              if (!fitChartFrame()) throw new Error('图表可用空间计算失败')
+              applyChartMountLayout()
+              clearMount()
+              renderDataValidationState(dataValidation.message)
+              setStatus(dataValidation.message, 'warn', false)
+              renderOverlay()
+              return
+            }
             const stageTitle = $('#stage-title')
             if (stageTitle) stageTitle.textContent = state.title
             $('#meta-engine').textContent =
@@ -3783,11 +4584,15 @@
           return { show: false, text: '', subtext: '' }
         }
         function legendVisible() {
-          return !!chartProp('showLegend', state.showLegend)
+          const rule = getChartDataRule(state.type)
+          return rule.legend !== 'none' && !!chartProp('showLegend', state.showLegend)
         }
         function currentLegendNames() {
+          const rule = getChartDataRule(state.type)
+          if (rule.legend === 'none') return []
+          if (rule.legend === 'category') return getPieSlices().map((slice) => slice.name)
           return rowsToSeries()
-            .series.map((s) => s.name)
+            .series.map((item) => item.name)
             .filter(Boolean)
         }
         function applyChartMountLayout() {
@@ -3844,7 +4649,7 @@
             if (names.length) {
               const saved = legendSelectionByType[state.type] || {}
               const legend = document.createElement('div')
-              legend.className = `layout-legend ${state.legendOrientation === 'vertical' ? 'vertical' : 'horizontal'}`
+              legend.className = `layout-legend ${state.legendOrientation === 'vertical' ? 'vertical' : 'horizontal'}${state.type === 'pie' ? ' pie' : ''}`
               legend.dataset.pos = state.legendPosition || 'top'
               names.forEach((name, index) => {
                 const on = Object.prototype.hasOwnProperty.call(saved, name) ? !!saved[name] : true
@@ -3882,20 +4687,48 @@
           saved[name] = !current
           legendSelectionByType[state.type] = saved
           try {
-            if (
-              state.engine === 'echarts' &&
-              state.chart &&
-              typeof state.chart.dispatchAction === 'function'
-            )
+            const rule = getChartDataRule(state.type)
+            if (rule.legend === 'none') return
+            if (rule.legend === 'category') {
+              const slices = getPieSlices()
+              const sliceIndex = slices.findIndex((slice) => slice.name === name)
+              if (sliceIndex < 0) return
+              if (
+                !saved[name] &&
+                slices.filter((slice) => saved[slice.name] !== false).length === 0
+              ) {
+                toast('饼图至少需要保留一个扇区')
+                saved[name] = true
+                legendSelectionByType[state.type] = saved
+                refreshOverlayLegendState()
+                return
+              }
+              if (state.engine === 'echarts' && state.chart?.dispatchAction)
+                state.chart.dispatchAction({
+                  type: saved[name] ? 'legendSelect' : 'legendUnSelect',
+                  name,
+                })
+              else if (state.engine === 'chartjs' && state.chart?.toggleDataVisibility) {
+                state.chart.toggleDataVisibility(sliceIndex)
+                state.chart.update('none')
+              } else if (state.engine === 'apexcharts' && state.chart?.updateSeries) {
+                state.chart.updateSeries(
+                  slices.map((slice) => (saved[slice.name] === false ? 0 : slice.value)),
+                  true,
+                )
+              }
+            } else if (state.engine === 'echarts' && state.chart?.dispatchAction) {
               state.chart.dispatchAction({
                 type: saved[name] ? 'legendSelect' : 'legendUnSelect',
                 name,
               })
-            else if (state.engine === 'chartjs' && state.chart) {
-              if (typeof state.chart.setDatasetVisibility === 'function')
+            } else if (state.engine === 'chartjs' && state.chart) {
+              if (state.chart.setDatasetVisibility)
                 state.chart.setDatasetVisibility(index, saved[name])
               state.chart.update('none')
-            } else if (state.engine === 'apexcharts' && state.chart) state.chart.toggleSeries(name)
+            } else if (state.engine === 'apexcharts' && state.chart?.toggleSeries) {
+              state.chart.toggleSeries(name)
+            }
           } catch (e) {
             reportError('图例状态更新失败', e, true)
           }
@@ -3981,7 +4814,15 @@
                 type: 'line',
                 symbol: cp.showPoints ? 'circle' : 'none',
                 symbolSize: cp.pointSize,
-                lineStyle: { width: cp.lineWidth, opacity: state.opacity },
+                symbolOffset: cp.lineMode === 'double' && cp.showPoints ? [0, 2] : [0, 0],
+                lineStyle: {
+                  width: cp.lineWidth,
+                  opacity: state.opacity,
+                  type: cp.lineType === 'dashed' ? 'dashed' : 'solid',
+                  shadowBlur: cp.lineMode === 'double' ? 0 : 0,
+                  shadowColor: cp.lineMode === 'double' ? palette()[i] : 'transparent',
+                  shadowOffsetY: cp.lineMode === 'double' ? 4 : 0,
+                },
                 itemStyle: { opacity: state.opacity },
                 areaStyle: isArea ? { opacity: cp.fillOpacity } : undefined,
                 smooth: cp.smooth,
@@ -3999,7 +4840,8 @@
           const ch = echarts.init(el, null, { renderer: 'svg' })
           state.chart = ch
           let opt = baseECharts()
-          const names = rowsToSeries().series.map((s) => s.name)
+          const names =
+            state.type === 'pie' ? currentLegendNames() : rowsToSeries().series.map((s) => s.name)
           const savedLegend = legendSelectionByType[state.type] || {}
           const selected = Object.fromEntries(
             names.map((name) => [
@@ -4026,33 +4868,46 @@
           }
           if (state.type === 'scatter') {
             const p = chartProps.scatter
+            const s = rowsToSeries()
             opt = {
               ...opt,
-              xAxis: { ...opt.xAxis, type: 'value' },
-              series: rowsToSeries().series.flatMap((ss, i) =>
-                ss.data.map((y, j) => ({
-                  name: ss.name,
-                  type: 'scatter',
-                  symbolSize: p.pointSize,
-                  itemStyle: { color: palette()[i], opacity: p.opacity },
-                  data: [[j + 1, y]],
-                })),
-              ),
+              xAxis: {
+                ...opt.xAxis,
+                type: 'category',
+                data: s.labels,
+                axisLabel: {
+                  ...(opt.xAxis?.axisLabel || {}),
+                  rotate: p.rotateLabels ?? state.rotateLabels ?? 0,
+                },
+              },
+              series: s.series.map((ss, i) => ({
+                name: ss.name,
+                type: 'scatter',
+                symbolSize: p.pointSize,
+                itemStyle: { color: palette()[i], opacity: p.opacity },
+                data: ss.data
+                  .map((v, j) => ({ value: [s.labels[j], v] }))
+                  .filter((pt) => numeric(pt.value[1]) !== null),
+              })),
             }
             opt.legend.show = false
             opt.yAxis.splitLine.show = p.showGrid
-            if (p.showTrend)
+            if (p.showTrend && s.series.length) {
+              const first = s.series[0]
               opt.series.push({
                 name: '趋势',
                 type: 'line',
-                data: rowsToSeries().series[0].data.map((y, j) => [j + 1, y]),
+                data: first.data
+                  .map((y, j) => ({ value: [s.labels[j], y] }))
+                  .filter((pt) => numeric(pt.value[1]) !== null),
                 symbol: 'none',
                 lineStyle: { type: 'dashed', color: '#777', width: 1 },
               })
+            }
           }
           if (state.type === 'pie') {
-            const p = chartProps.pie
-            const s = rowsToSeries()
+            const p = chartProps.pie,
+              slices = getPieSlices()
             opt = {
               animation: true,
               tooltip: {
@@ -4060,6 +4915,7 @@
                 backgroundColor: '#fff',
                 borderColor: '#151515',
                 textStyle: { fontFamily: 'Literata, Georgia, SimSun, serif', fontSize: 10 },
+                formatter: (params) => `${params.name}<br/>${params.value} · ${params.percent}%`,
               },
               title: echartsTitle(),
               legend: { show: false },
@@ -4075,15 +4931,14 @@
                   avoidLabelOverlap: true,
                   label: { show: p.showLabels, fontSize: 10, color: '#151515' },
                   itemStyle: { borderColor: '#fff', borderWidth: 1 },
-                  data: s.series[0].data.map((v, i) => ({
-                    name: s.labels[i],
-                    value: v,
+                  data: slices.map((slice, i) => ({
+                    name: slice.name,
+                    value: slice.value,
                     itemStyle: { color: palette()[i % palette().length] },
                   })),
                 },
               ],
             }
-            opt.legend.show = false
           }
           if (state.type === 'radar') {
             const p = chartProps.radar
@@ -4231,6 +5086,16 @@
           if (opt.title) opt.title = { ...opt.title, show: false }
           if (opt.legend) opt.legend = { ...opt.legend, show: false }
           ch.setOption(opt, true)
+          if (state.type === 'pie') {
+            const pieSaved = legendSelectionByType.pie || {}
+            Object.entries(pieSaved).forEach(([name, visible]) => {
+              if (visible === false) {
+                try {
+                  ch.dispatchAction({ type: 'legendUnSelect', name })
+                } catch (_) {}
+              }
+            })
+          }
           ch.on('legendselectchanged', (params) => {
             try {
               legendSelectionByType[state.type] = { ...params.selected }
@@ -4252,22 +5117,17 @@
           return m[scheme] || m.冷静蓝
         }
         function networkOption() {
-          const p = chartProps.network
-          const s = rowsToSeries()
-          const nodes = s.labels.map((x, i) => ({
-            name: x,
-            symbolSize: p.nodeSize,
-            itemStyle: { color: palette()[i % palette().length] },
-            label: { show: p.showLabels, fontSize: 9 },
-          }))
-          const links = []
-          for (let i = 0; i < nodes.length - 1; i++) {
-            links.push({
-              source: nodes[i].name,
-              target: nodes[(i + 1) % nodes.length].name,
-              value: 1 + (i % 3),
-            })
-          }
+          const p = chartProps.network,
+            rows = getFlowRows(),
+            nodeMap = new Map()
+          rows.forEach(({ source, target, value }) => {
+            if (!nodeMap.has(source)) nodeMap.set(source, { name: source, value: 0 })
+            if (!nodeMap.has(target)) nodeMap.set(target, { name: target, value: 0 })
+            nodeMap.get(source).value += value
+            nodeMap.get(target).value += value
+          })
+          const nodes = Array.from(nodeMap.values()),
+            maxValue = Math.max(...nodes.map((n) => n.value), 1)
           return {
             animation: true,
             title: echartsTitle(),
@@ -4282,8 +5142,14 @@
                 layout: 'force',
                 roam: true,
                 draggable: true,
-                data: nodes,
-                links,
+                data: nodes.map((n, i) => ({
+                  name: n.name,
+                  value: n.value,
+                  symbolSize: p.nodeSize + (n.value / maxValue) * p.nodeSize,
+                  itemStyle: { color: palette()[i % palette().length] },
+                  label: { show: p.showLabels, fontSize: 9 },
+                })),
+                links: rows.map((r) => ({ source: r.source, target: r.target, value: r.value })),
                 force: { repulsion: p.repulsion, edgeLength: p.edgeLength },
                 lineStyle: { color: 'rgba(21,21,21,.2)', width: p.lineWidth },
                 label: { show: p.showLabels, color: 'rgba(21,21,21,.72)', fontSize: 9 },
@@ -4293,17 +5159,12 @@
           }
         }
         function sankeyOption() {
-          const p = chartProps.sankey
-          const s = rowsToSeries()
-          const nodes = s.labels.map((x) => ({ name: x }))
-          const links = []
-          s.labels.forEach((x, i) => {
-            if (i < nodes.length - 1)
-              links.push({
-                source: x,
-                target: s.labels[i + 1],
-                value: Math.max(1, numeric(s.series[0].data[i]) || 1),
-              })
+          const p = chartProps.sankey,
+            rows = getFlowRows(),
+            names = new Set()
+          rows.forEach(({ source, target }) => {
+            names.add(source)
+            names.add(target)
           })
           return {
             animation: true,
@@ -4316,8 +5177,8 @@
             series: [
               {
                 type: 'sankey',
-                data: nodes,
-                links,
+                data: Array.from(names).map((name) => ({ name })),
+                links: rows.map((r) => ({ source: r.source, target: r.target, value: r.value })),
                 nodeWidth: p.nodeWidth,
                 nodeGap: p.nodeGap,
                 emphasis: { focus: 'adjacency' },
@@ -4403,39 +5264,58 @@
             ],
           }
         }
+        function contrastGray(hex, factor) {
+          const raw = String(hex || '#808080').replace('#', '')
+          if (!/^[0-9a-f]{6}$/i.test(raw)) return hex
+          const f = Math.max(0.5, Math.min(2, Number(factor) || 1))
+          const rgb = [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16))
+          const next = rgb.map((v) => Math.max(0, Math.min(255, Math.round(128 + (v - 128) * f))))
+          return '#' + next.map((v) => v.toString(16).padStart(2, '0')).join('')
+        }
         function contourOption() {
           const p = chartProps.contour,
-            n = p.resolution,
-            vals = []
-          for (let y = 0; y < n; y++)
-            for (let x = 0; x < n; x++) {
-              const v = Math.sin(x / 2) + Math.cos(y / 2) + Math.sin((x + y) / 3)
-              vals.push([x, y, v])
-            }
-          const base = ['#eef4f8', '#b8cfe0', '#6d9ab8', '#315d7a']
-          const colors = p.contrast === 1 ? base : base.map((c, i) => (i < 2 ? '#f6f6f6' : c))
+            s = rowsToSeries(),
+            series = s.series,
+            vals = [],
+            xs = s.labels
+          series.forEach((a, yi) => {
+            a.data.forEach((v, xi) => {
+              const n = numeric(v)
+              if (n !== null) vals.push([xi, yi, n])
+            })
+          })
+          const nums = vals.map((v) => v[2])
+          const minV = nums.length ? Math.min(...nums) : 0
+          const maxV = nums.length ? Math.max(...nums) : 1
           return {
             animation: true,
             title: echartsTitle(),
-            grid: { left: 55, right: 25, top: 64, bottom: 50 },
+            grid: { left: 80, right: 25, top: 64, bottom: 64 },
             xAxis: {
               type: 'category',
-              data: Array.from({ length: n }, (_, i) => i + 1),
+              data: xs,
               axisTick: { show: false },
-              axisLabel: { fontSize: 8 },
+              axisLabel: {
+                fontSize: 8,
+                interval: Math.max(0, Math.ceil(xs.length / p.resolution) - 1),
+              },
             },
             yAxis: {
               type: 'category',
-              data: Array.from({ length: n }, (_, i) => i + 1),
+              data: series.map((a) => a.name),
               axisTick: { show: false },
               axisLabel: { fontSize: 8 },
             },
             visualMap: {
-              min: -2,
-              max: 2,
+              min: minV,
+              max: maxV === minV ? minV + 1 : maxV,
               calculable: false,
-              inRange: { color: colors },
-              bottom: 12,
+              inRange: {
+                color: ['#f6f6f6', '#b8b8b8', '#666666', '#202020'].map((c) =>
+                  contrastGray(c, p.contrast),
+                ),
+              },
+              bottom: 14,
               left: 'center',
               orient: 'horizontal',
             },
@@ -4448,6 +5328,112 @@
               },
             ],
           }
+        }
+        function rgbaColor(color, alpha = 1) {
+          const value = String(color || '').trim()
+          const a = Math.max(0, Math.min(1, Number(alpha)))
+          if (/^#[0-9a-f]{3}$/i.test(value)) {
+            const hex = value.slice(1)
+            return `rgba(${parseInt(hex[0] + hex[0], 16)},${parseInt(hex[1] + hex[1], 16)},${parseInt(hex[2] + hex[2], 16)},${a})`
+          }
+          if (/^#[0-9a-f]{6}$/i.test(value)) {
+            const hex = value.slice(1)
+            return `rgba(${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)},${a})`
+          }
+          return value
+        }
+        const zenvizChartJsValueLabels = {
+          id: 'zenvizValueLabels',
+          afterDatasetsDraw(chart) {
+            const cfg = chart.options?.plugins?.zenvizValueLabels
+            if (!cfg?.enabled) return
+            const ctx = chart.ctx
+            ctx.save()
+            ctx.font = '9px Literata, Georgia, SimSun, serif'
+            ctx.fillStyle = 'rgba(21,21,21,.72)'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'bottom'
+            if (chart.config.type === 'bar') {
+              chart.data.datasets.forEach((dataset, datasetIndex) => {
+                const meta = chart.getDatasetMeta(datasetIndex)
+                meta.data.forEach((bar, index) => {
+                  const raw = dataset.data?.[index]
+                  const value = Number(raw)
+                  if (!Number.isFinite(value)) return
+                  const { x, y } = bar.getProps(['x', 'y'], true)
+                  ctx.fillText(String(value), x, y - 5)
+                })
+              })
+            } else if (chart.config.type === 'doughnut') {
+              const meta = chart.getDatasetMeta(0)
+              const labels = chart.data.labels || []
+              meta.data.forEach((arc, index) => {
+                const pos = arc.tooltipPosition(true)
+                const label = String(labels[index] ?? '')
+                if (label) ctx.fillText(label, pos.x, pos.y - 2)
+              })
+            }
+            ctx.restore()
+          },
+        }
+        const zenvizChartJsPieShape = {
+          id: 'zenvizPieShape',
+          beforeDatasetsDraw(chart) {
+            const mode = chart.options?.plugins?.zenvizPieShape?.rose
+            if (!mode || mode === 'none' || chart.config.type !== 'doughnut') return
+            const meta = chart.getDatasetMeta(0)
+            const values = (chart.data.datasets?.[0]?.data || []).map(Number)
+            const maxValue = Math.max(...values.filter((v) => Number.isFinite(v)), 1)
+            const baseOuter = Math.max(...meta.data.map((arc) => Number(arc.outerRadius) || 0), 0)
+            if (!baseOuter) return
+            meta.data.forEach((arc, index) => {
+              const value = Number(values[index])
+              if (!Number.isFinite(value) || value < 0) return
+              const ratio = Math.max(0.12, Math.min(1, value / maxValue))
+              const factor = mode === 'area' ? Math.sqrt(ratio) : ratio
+              const inner = Number(arc.innerRadius) || 0
+              arc.outerRadius = inner + (baseOuter - inner) * factor
+            })
+          },
+        }
+        const zenvizChartJsDoubleLine = {
+          id: 'zenvizChartJsDoubleLine',
+          afterDatasetsDraw(chart) {
+            if (state.type !== 'line') return
+            const p = chartProps.line || {}
+            if (p.lineMode !== 'double') return
+            const ctx = chart.ctx
+            chart.data.datasets.forEach((dataset, i) => {
+              if (dataset._zenLineMode !== 'double') return
+              const meta = chart.getDatasetMeta(i)
+              if (!meta || meta.hidden || !meta.dataset || typeof meta.dataset.draw !== 'function')
+                return
+              // 保持两条线的原有间距，数据点单独下移到两条线的正中间。
+              ctx.save()
+              ctx.translate(0, 4)
+              meta.dataset.draw(ctx)
+              ctx.restore()
+              if (dataset._zenShowPoints && Number(dataset._zenPointRadius) > 0) {
+                ctx.save()
+                ctx.translate(0, 2)
+                meta.data.forEach((point) => {
+                  if (!point || point.skip || !point.options || typeof point.draw !== 'function')
+                    return
+                  const oldRadius = point.options.radius
+                  const oldHoverRadius = point.options.hoverRadius
+                  const oldHitRadius = point.options.hitRadius
+                  point.options.radius = dataset._zenPointRadius
+                  point.options.hoverRadius = dataset._zenPointRadius
+                  point.options.hitRadius = 0
+                  point.draw(ctx)
+                  point.options.radius = oldRadius
+                  point.options.hoverRadius = oldHoverRadius
+                  point.options.hitRadius = oldHitRadius
+                })
+                ctx.restore()
+              }
+            })
+          },
         }
         function renderChartJS() {
           if (!window.Chart) {
@@ -4463,15 +5449,39 @@
             c = palette(),
             t = state.type,
             p = chartProps[t] || {}
-          let type = t === 'area' || t === 'line' ? 'line' : t === 'pie' ? 'doughnut' : t
+          let type =
+            t === 'area' || t === 'line' || t === 'scatter' ? 'line' : t === 'pie' ? 'doughnut' : t
           const datasets = s.series.map((a, i) => ({
             label: a.name,
             data: a.data,
             borderColor: c[i % c.length],
-            backgroundColor: type === 'bar' ? c[i % c.length] : c[i % c.length] + '44',
+            backgroundColor:
+              type === 'bar'
+                ? c[i % c.length]
+                : rgbaColor(c[i % c.length], t === 'scatter' ? (p.opacity ?? 0.72) : 0.27),
             borderWidth: p.lineWidth ?? state.lineWidth,
-            pointRadius: p.pointSize ?? state.pointSize,
+            borderDash: t === 'line' && p.lineType === 'dashed' ? [7, 5] : [],
+            _zenLineMode: t === 'line' ? p.lineMode || 'single' : 'single',
+            _zenShowPoints: t === 'line' && p.showPoints !== false,
+            _zenPointRadius: t === 'line' ? (p.pointSize ?? state.pointSize) : null,
+            pointRadius:
+              t === 'line'
+                ? p.lineMode === 'double'
+                  ? 0
+                  : p.showPoints === false
+                    ? 0
+                    : (p.pointSize ?? state.pointSize)
+                : t === 'area'
+                  ? p.showPoints === false
+                    ? 0
+                    : (p.pointSize ?? state.pointSize)
+                  : (p.pointSize ?? state.pointSize),
             pointHoverRadius: (p.pointSize ?? state.pointSize) + 2,
+            pointBackgroundColor: rgbaColor(
+              c[i % c.length],
+              t === 'scatter' ? (p.opacity ?? 0.72) : 1,
+            ),
+            pointBorderColor: rgbaColor(c[i % c.length], t === 'scatter' ? (p.opacity ?? 0.72) : 1),
             fill: t === 'area',
             tension: p.smooth ? 0.32 : 0,
             showLine: type !== 'scatter',
@@ -4487,14 +5497,29 @@
                 titleFont: { family: 'Literata, Georgia, SimSun, serif' },
                 bodyFont: { family: 'Literata, Georgia, SimSun, serif' },
               },
+              zenvizValueLabels: { enabled: false },
+              zenvizPieShape: { rose: 'none' },
             },
             elements: { line: { tension: p.smooth ? 0.3 : 0 } },
           }
           if (type === 'doughnut') {
+            const slices = getPieSlices()
+            datasets[0] = {
+              label: '饼图',
+              data: slices.map((slice) => slice.value),
+              backgroundColor: slices.map((_, i) => c[i % c.length]),
+              borderColor: slices.map(() => '#ffffff'),
+              borderWidth: 1,
+              hoverBackgroundColor: slices.map((_, i) => c[i % c.length]),
+            }
+            datasets.length = 1
             common.cutout = (p.innerRadius ?? 32) + '%'
-            common.plugins.legend.display = p.showLegend ?? true
-            common.plugins.datalabels = { display: false }
+            common.radius = (p.outerRadius ?? 62) + '%'
+            common.plugins.legend.display = false
+            common.plugins.zenvizValueLabels.enabled = !!p.showLabels
+            common.plugins.zenvizPieShape.rose = p.rose || 'none'
           } else if (type === 'radar') {
+            common.layout = { padding: Math.max(0, Math.round((80 - (p.radius ?? 58)) * 1.15)) }
             common.scales = {
               r: {
                 beginAtZero: true,
@@ -4513,6 +5538,7 @@
               d.pointRadius = p.pointSize ?? 4
             })
           } else if (type === 'bar') {
+            common.plugins.zenvizValueLabels.enabled = !!p.showValues
             common.scales = {
               x: {
                 title: {
@@ -4533,6 +5559,7 @@
                 },
                 categoryPercentage: 1,
                 barPercentage: Math.max(0.1, 1 - (p.gap ?? 24) / 100),
+                stacked: !!p.stacked,
               },
               y: {
                 title: {
@@ -4547,11 +5574,13 @@
                 },
                 grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
                 ticks: { color: 'rgba(21,21,21,.55)' },
+                stacked: !!p.stacked,
               },
             }
           } else {
             common.scales = {
               x: {
+                stacked: t === 'area' ? !!p.stacked : false,
                 title: {
                   display: !!state.xTitle,
                   text: state.xTitle,
@@ -4582,18 +5611,60 @@
                 },
                 grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
                 ticks: { color: 'rgba(21,21,21,.55)' },
+                stacked: t === 'area' ? !!p.stacked : false,
+                min: t === 'line' && p.yMin !== '' ? Number(p.yMin) : undefined,
+                max: t === 'line' && p.yMax !== '' ? Number(p.yMax) : undefined,
               },
             }
           }
           if (t === 'scatter') {
-            datasets.forEach((d) => {
-              d.backgroundColor = d.borderColor
+            common.scales.x.type = 'category'
+            common.scales.x.labels = s.labels
+            common.scales.x.offset = true
+            common.scales.x.title = {
+              display: !!state.xTitle,
+              text: state.xTitle,
+              color: 'rgba(21,21,21,.5)',
+              font: {
+                family: 'Literata, Georgia, SimSun, serif',
+                size: state.axisSize,
+                weight: '400',
+              },
+            }
+            common.scales.x.ticks = {
+              color: 'rgba(21,21,21,.55)',
+              maxRotation: state.rotateLabels ?? 0,
+              minRotation: state.rotateLabels ?? 0,
+            }
+            datasets.forEach((d, i) => {
+              d.backgroundColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72)
+              d.pointBackgroundColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72)
+              d.pointBorderColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72)
               d.pointRadius = p.pointSize ?? 7
               d.borderWidth = 0
+              d.showLine = false
             })
+            if (p.showTrend && s.series.length) {
+              const first = s.series[0]
+              datasets.push({
+                label: '趋势',
+                data: first.data,
+                borderColor: '#777',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderDash: [5, 4],
+                pointRadius: 0,
+                showLine: true,
+                fill: false,
+                tension: 0,
+              })
+            }
           }
           if (t === 'area') {
-            datasets.forEach((d, i) => (d.backgroundColor = c[i % c.length] + '44'))
+            datasets.forEach((d, i) => {
+              d.backgroundColor = rgbaColor(c[i % c.length], p.fillOpacity ?? 0.18)
+              d.borderColor = c[i % c.length]
+            })
           }
           const saved = legendSelectionByType[state.type] || {}
           datasets.forEach((d, i) => {
@@ -4603,7 +5674,19 @@
             type,
             data: { labels: s.labels, datasets },
             options: common,
+            plugins: [zenvizChartJsValueLabels, zenvizChartJsPieShape, zenvizChartJsDoubleLine],
           })
+          if (type === 'doughnut') {
+            const pieSaved = legendSelectionByType.pie || {}
+            getPieSlices().forEach((slice, i) => {
+              if (
+                pieSaved[slice.name] === false &&
+                typeof state.chart.toggleDataVisibility === 'function'
+              )
+                state.chart.toggleDataVisibility(i)
+            })
+            state.chart.update('none')
+          }
         }
         function renderApex() {
           if (!window.ApexCharts) {
@@ -4615,14 +5698,16 @@
             t = state.type,
             p = chartProps[t] || {}
           const apexType =
-            {
-              line: 'line',
-              area: 'area',
-              bar: 'bar',
-              scatter: 'scatter',
-              pie: 'donut',
-              radar: 'radar',
-            }[t] || 'line'
+            t === 'pie' && p.rose && p.rose !== 'none'
+              ? 'polarArea'
+              : {
+                  line: 'line',
+                  area: 'area',
+                  bar: 'bar',
+                  scatter: 'line',
+                  pie: 'donut',
+                  radar: 'radar',
+                }[t] || 'line'
           const mount = $('#chart-mount')
           const chartW = Math.max(1, mount.clientWidth || 0),
             chartH = Math.max(1, mount.clientHeight || 0)
@@ -4639,6 +5724,7 @@
               type: apexType,
               width: chartW,
               height: chartH,
+              stacked: t === 'bar' || t === 'area' ? !!p.stacked : false,
               toolbar: { show: false },
               fontFamily: 'Literata, Georgia, SimSun, serif',
               animations: { enabled: true, speed: 220 },
@@ -4647,10 +5733,26 @@
             colors: c,
             stroke: {
               curve: p.smooth ? 'smooth' : 'straight',
-              width: p.lineWidth ?? state.lineWidth,
+              width: t === 'scatter' ? 0 : (p.lineWidth ?? state.lineWidth),
+              dashArray: t === 'line' && p.lineType === 'dashed' ? 6 : 0,
             },
-            markers: { size: p.pointSize ?? (state.showPoints ? state.pointSize : 0) },
-            fill: { opacity: t === 'area' ? (p.fillOpacity ?? 0.16) : state.opacity },
+            markers: {
+              size:
+                t === 'line' || t === 'area'
+                  ? p.showPoints === false
+                    ? 0
+                    : (p.pointSize ?? state.pointSize)
+                  : (p.pointSize ?? state.pointSize),
+              offsetY: t === 'line' && p.lineMode === 'double' && p.showPoints !== false ? 2 : 0,
+            },
+            fill: {
+              opacity:
+                t === 'area'
+                  ? (p.fillOpacity ?? 0.16)
+                  : t === 'scatter'
+                    ? (p.opacity ?? 0.72)
+                    : state.opacity,
+            },
             grid: {
               show: p.showGrid ?? state.showGrid,
               borderColor: 'rgba(21,21,21,.08)',
@@ -4676,7 +5778,8 @@
                   colors: Array(s.labels.length).fill('rgba(21,21,21,.55)'),
                   fontSize: '9px',
                 },
-                rotate: t === 'bar' ? (p.rotateLabels ?? 0) : 0,
+                rotate:
+                  t === 'bar' || t === 'scatter' ? (p.rotateLabels ?? state.rotateLabels ?? 0) : 0,
               },
               axisBorder: { color: 'rgba(21,21,21,.25)' },
               axisTicks: { show: false },
@@ -4698,8 +5801,30 @@
                   fontSize: '9px',
                 },
               },
+              min: t === 'line' && p.yMin !== '' ? Number(p.yMin) : undefined,
+              max: t === 'line' && p.yMax !== '' ? Number(p.yMax) : undefined,
             },
             tooltip: { theme: 'light' },
+          }
+          if (t === 'line' && p.lineMode === 'double') {
+            opt.chart = { ...opt.chart, animations: { enabled: false } }
+          }
+          function applyApexDoubleLine() {
+            if (t !== 'line' || p.lineMode !== 'double') return
+            const svg = mount.querySelector('.apexcharts-svg')
+            if (!svg) return
+            svg.querySelectorAll('[data-zen-double-line="true"]').forEach((node) => node.remove())
+            const paths = Array.from(
+              svg.querySelectorAll('.apexcharts-series path.apexcharts-line'),
+            )
+            paths.forEach((path) => {
+              const clone = path.cloneNode(true)
+              clone.setAttribute('data-zen-double-line', 'true')
+              clone.setAttribute('transform', 'translate(0 4)')
+              clone.setAttribute('pointer-events', 'none')
+              clone.setAttribute('opacity', path.getAttribute('opacity') || '1')
+              path.parentNode?.appendChild(clone)
+            })
           }
           if (t === 'bar')
             opt.plotOptions = {
@@ -4708,9 +5833,15 @@
                 dataLabels: { position: 'top' },
               },
             }
-          if (t === 'pie') {
-            opt.labels = s.labels
-            opt.plotOptions = { pie: { donut: { size: (p.innerRadius ?? 32) + '%' } } }
+          if (t === 'bar') opt.dataLabels = { enabled: !!p.showValues, formatter: (v) => String(v) }
+          if (t === 'scatter' && p.showTrend && s.series.length) {
+            opt.series = [...safeSeries, { name: '趋势', data: safeSeries[0]?.data || [] }]
+            opt.stroke = {
+              width: safeSeries.map(() => 0).concat(1),
+              dashArray: safeSeries.map(() => 0).concat(5),
+              curve: 'straight',
+            }
+            opt.markers = { size: p.pointSize ?? 7 }
           }
           if (t === 'radar') {
             opt.plotOptions = {
@@ -4741,6 +5872,36 @@
             opt.yaxis = { show: false }
             opt.dataLabels = { enabled: false }
           }
+          if (t === 'pie') {
+            const pieSaved = legendSelectionByType.pie || {},
+              slices = getPieSlices()
+            opt.series = slices.map((slice) => (pieSaved[slice.name] === false ? 0 : slice.value))
+            opt.labels = slices.map((slice) => slice.name)
+            opt.colors = slices.map((_, i) => c[i % c.length])
+            if (p.rose && p.rose !== 'none') {
+              opt.plotOptions = {
+                polarArea: { rings: { strokeWidth: 1 }, spokes: { strokeWidth: 0 } },
+              }
+              opt.chart = { ...opt.chart, type: 'polarArea' }
+              opt.stroke = { width: 1, colors: ['#ffffff'] }
+            } else {
+              opt.plotOptions = {
+                pie: {
+                  donut: { size: (p.innerRadius ?? 32) + '%' },
+                  customScale: Math.max(0.45, Math.min(1.4, (p.outerRadius ?? 62) / 62)),
+                  expandOnClick: true,
+                },
+              }
+              opt.stroke = { width: 1, colors: ['#ffffff'] }
+            }
+            opt.fill = { opacity: 1 }
+            opt.dataLabels = {
+              enabled: !!p.showLabels,
+              formatter: (_val, opts) => String(opts.w.globals.labels?.[opts.seriesIndex] ?? ''),
+            }
+            opt.tooltip = { theme: 'light', y: { formatter: (v) => String(v) } }
+            opt.legend = { show: false }
+          }
           const ap = new ApexCharts(mount, opt)
           mount._apex = ap
           state.chart = ap
@@ -4748,14 +5909,17 @@
             const r = ap.render()
             if (r && typeof r.then === 'function')
               r.then(() => {
+                applyApexDoubleLine()
                 const saved = legendSelectionByType[state.type] || {}
-                Object.keys(saved).forEach((name) => {
-                  if (saved[name] === false) {
-                    try {
-                      ap.toggleSeries(name)
-                    } catch (_) {}
-                  }
-                })
+                if (state.type !== 'pie')
+                  Object.keys(saved).forEach((name) => {
+                    if (saved[name] === false) {
+                      try {
+                        ap.toggleSeries(name)
+                      } catch (_) {}
+                    }
+                  })
+                applyApexDoubleLine()
               }).catch((e) => {
                 reportError('ApexCharts 图表渲染失败', e, true)
               })
@@ -4834,15 +5998,18 @@
         function drawSlope(svg, W, H) {
           const p = chartProps.slope,
             s = rowsToSeries(),
-            a = s.series[0].data.map(numeric),
-            b = s.series[1]?.data.map(numeric) || a.map((v) => v * 1.1),
-            min = Math.min(...a, ...b),
-            max = Math.max(...a, ...b),
+            a = s.series[0]?.data.map(numeric) || [],
+            b = s.series[1]?.data.map(numeric) || []
+          const finite = a.concat(b).filter((v) => v !== null)
+          if (s.series.length !== 2 || !finite.length) return
+          const min = Math.min(...finite),
+            max = Math.max(...finite),
             left = 180,
             right = 760,
             top = 115,
             bottom = 510
           for (let i = 0; i < s.labels.length; i++) {
+            if (a[i] === null || b[i] === null) continue
             const y1 = bottom - ((a[i] - min) / (max - min || 1)) * (bottom - top),
               y2 = bottom - ((b[i] - min) / (max - min || 1)) * (bottom - top),
               col = palette()[i % palette().length]
@@ -4903,14 +6070,14 @@
             svgEl(
               'text',
               { x: left, y: 550, 'font-size': 9, fill: 'rgba(21,21,21,.4)' },
-              '第一时点',
+              s.series[0].name,
             ),
           )
           svg.appendChild(
             svgEl(
               'text',
               { x: right, y: 550, 'font-size': 9, fill: 'rgba(21,21,21,.4)' },
-              '第二时点',
+              s.series[1].name,
             ),
           )
         }
@@ -4985,17 +6152,24 @@
         function drawDotplot(svg, W, H) {
           const p = chartProps.dotplot,
             s = rowsToSeries(),
-            a = s.series[0].data.map(numeric),
-            max = Math.max(...a),
+            a = s.series[0]?.data.map(numeric) || []
+          const finite = a.filter((v) => v !== null)
+          if (!finite.length) return
+          const min = Math.min(...finite),
+            max = Math.max(...finite),
             x0 = 120,
             x1 = 860,
-            rowGap = Math.min(p.rowGap, 430 / Math.max(1, a.length - 1))
-          if (p.baseline)
+            rowGap = Math.min(p.rowGap, 430 / Math.max(1, s.labels.length - 1))
+          if (p.baseline && min <= 0 && max >= 0) {
+            const bx = x0 + ((0 - min) / (max - min || 1)) * (x1 - x0)
             svg.appendChild(
-              svgEl('line', { x1: x0, y1: 510, x2: x1, y2: 510, stroke: 'rgba(21,21,21,.25)' }),
+              svgEl('line', { x1: bx, y1: 95, x2: bx, y2: 520, stroke: 'rgba(21,21,21,.25)' }),
             )
-          a.forEach((v, i) => {
-            const x = x0 + (v / max) * (x1 - x0),
+          }
+          s.labels.forEach((label, i) => {
+            const v = numeric(a[i])
+            if (v === null) return
+            const x = x0 + ((v - min) / (max - min || 1)) * (x1 - x0),
               y = 120 + i * rowGap
             svg.appendChild(
               svgEl('circle', {
@@ -5016,36 +6190,38 @@
                   'font-size': 9,
                   fill: 'rgba(21,21,21,.55)',
                 },
-                s.labels[i],
+                label,
               ),
             )
           })
         }
+        function getWordFreqEntries() {
+          const s = rowsToSeries(),
+            totals = new Map()
+          s.labels.forEach((label, i) => {
+            const word = String(label ?? '').trim(),
+              value = numeric(s.series[0]?.data[i])
+            if (!word || value === null || value < 0) return
+            totals.set(word, (totals.get(word) || 0) + value)
+          })
+          return Array.from(totals, ([word, value]) => ({ word, value })).sort(
+            (a, b) => b.value - a.value,
+          )
+        }
         function drawWordfreq(svg, W, H) {
           const p = chartProps.wordfreq,
-            words = [
-              '记忆',
-              '文化',
-              '语言',
-              '历史',
-              '设计',
-              '数据',
-              '方法',
-              '空间',
-              '意义',
-              '档案',
-              '身体',
-              '时间',
-              '地方',
-              '知识',
-            ],
-            vals = words.map((_, i) => 20 + ((i * 17) % 80)),
+            entries = getWordFreqEntries(),
+            words = entries.map((e) => e.word),
+            vals = entries.map((e) => e.value),
             c = palette(),
-            cols = p.columns
+            cols = p.columns,
+            maxVal = Math.max(...vals, 1),
+            minVal = Math.min(...vals.filter((v) => v > 0), maxVal)
           vals.forEach((v, i) => {
-            const fs = p.minFont + (v / 100) * (p.maxFont - p.minFont),
-              x = 70 + (i % cols) * (860 / cols) + (i % 2) * 8,
-              y = 120 + Math.floor(i / cols) * 105
+            const norm = (v - minVal) / (maxVal - minVal || 1)
+            const fs = p.minFont + Math.max(0, norm) * (p.maxFont - p.minFont)
+            const x = 70 + (i % cols) * (860 / cols) + (i % 2) * 8
+            const y = 120 + Math.floor(i / cols) * 105
             svg.appendChild(
               svgEl(
                 'text',
@@ -5055,7 +6231,7 @@
                   'font-family': 'Literata,Georgia,SimSun,serif',
                   'font-size': fs,
                   fill: c[i % c.length],
-                  opacity: 0.48 + 0.52 * (1 - i / vals.length),
+                  opacity: 0.48 + 0.52 * (1 - i / Math.max(1, vals.length)),
                   transform: `rotate(${i % 3 === 0 ? p.rotation : 0} ${x} ${y})`,
                 },
                 words[i],
@@ -5114,41 +6290,72 @@
           })
         }
         function drawZenNetwork(svg, W, H) {
-          const s = rowsToSeries(),
-            pts = s.labels.map((l, i) => ({
-              x: 130 + (i % 4) * 230,
-              y: 150 + Math.floor(i / 4) * 150,
-              label: l,
-            }))
-          for (let i = 0; i < pts.length - 1; i++)
+          const p = chartProps.network,
+            rows = getFlowRows(),
+            nodeMap = new Map()
+          rows.forEach(({ source, target, value }) => {
+            if (!nodeMap.has(source)) nodeMap.set(source, { name: source, value: 0 })
+            if (!nodeMap.has(target)) nodeMap.set(target, { name: target, value: 0 })
+            nodeMap.get(source).value += value
+            nodeMap.get(target).value += value
+          })
+          const nodes = Array.from(nodeMap.values())
+          if (!nodes.length) return
+          const maxValue = Math.max(...nodes.map((n) => n.value), 1)
+          const gap = Math.max(90, Math.min(280, Number(p.edgeLength) + Number(p.repulsion) * 0.32))
+          const cols = Math.max(2, Math.min(5, Math.floor(820 / gap) || 2))
+          const stepX = cols > 1 ? Math.min(gap, 820 / (cols - 1)) : 0
+          const stepY = Math.max(100, Math.min(220, gap * 0.82))
+          const pts = nodes.map((n, i) => ({
+            ...n,
+            x: 90 + (i % cols) * stepX,
+            y: 100 + Math.floor(i / cols) * stepY,
+            radius: Math.max(4, p.nodeSize * (0.7 + (n.value / maxValue) * 0.7)),
+          }))
+          const byName = new Map(pts.map((n) => [n.name, n]))
+          rows.forEach((r) => {
+            const a = byName.get(r.source),
+              b = byName.get(r.target)
+            if (!a || !b) return
             svg.appendChild(
               svgEl('line', {
-                x1: pts[i].x,
-                y1: pts[i].y,
-                x2: pts[i + 1].x,
-                y2: pts[i + 1].y,
+                x1: a.x,
+                y1: a.y,
+                x2: b.x,
+                y2: b.y,
                 stroke: 'rgba(21,21,21,.18)',
-                'stroke-width': 1,
+                'stroke-width': Math.max(
+                  0.5,
+                  Math.min(5, Number(p.lineWidth) * (0.7 + Math.sqrt(r.value) * 0.08)),
+                ),
               }),
             )
-          pts.forEach((p, i) => {
+          })
+          pts.forEach((n, i) => {
             svg.appendChild(
               svgEl('circle', {
-                cx: p.x,
-                cy: p.y,
-                r: 16 + (i % 3) * 4,
+                cx: n.x,
+                cy: n.y,
+                r: n.radius,
                 fill: '#fff',
                 stroke: palette()[i % palette().length],
                 'stroke-width': 1.4,
               }),
             )
-            svg.appendChild(
-              svgEl(
-                'text',
-                { x: p.x, y: p.y + 3, 'text-anchor': 'middle', 'font-size': 8, fill: '#151515' },
-                p.label,
-              ),
-            )
+            if (p.showLabels)
+              svg.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    x: n.x,
+                    y: n.y + 3,
+                    'text-anchor': 'middle',
+                    'font-size': 8,
+                    fill: '#151515',
+                  },
+                  n.name,
+                ),
+              )
           })
         }
         function drawCorrelation(svg, W, H) {
@@ -5159,6 +6366,29 @@
             cell = p.cellSize,
             x0 = 150,
             y0 = 110
+          const correlation = (a, b) => {
+            const pairs = []
+            for (let k = 0; k < Math.max(a.length, b.length); k++) {
+              const x = numeric(a[k]),
+                y = numeric(b[k])
+              if (x !== null && y !== null) pairs.push([x, y])
+            }
+            if (pairs.length < 2) return 0
+            const mx = pairs.reduce((sum, pair) => sum + pair[0], 0) / pairs.length,
+              my = pairs.reduce((sum, pair) => sum + pair[1], 0) / pairs.length
+            let num = 0,
+              dx = 0,
+              dy = 0
+            pairs.forEach(([x, y]) => {
+              const vx = x - mx,
+                vy = y - my
+              num += vx * vy
+              dx += vx * vx
+              dy += vy * vy
+            })
+            const den = Math.sqrt(dx * dy)
+            return den > 0 ? Math.max(-1, Math.min(1, num / den)) : 0
+          }
           for (let i = 0; i < n; i++) {
             svg.appendChild(
               svgEl(
@@ -5189,8 +6419,9 @@
             for (let j = 0; j < n; j++) {
               if (p.mode === '下三角' && j > i) continue
               if (p.mode === '上三角' && j < i) continue
-              const v = i === j ? 1 : 0.2 + ((i + j + 1) % 5) * 0.13,
-                shade = Math.max(20, Math.min(248, Math.round(245 - v * 125 * p.intensity)))
+              const v = i === j ? 1 : correlation(s.series[i].data, s.series[j].data),
+                strength = Math.abs(v),
+                shade = Math.max(20, Math.min(248, Math.round(245 - strength * 125 * p.intensity)))
               svg.appendChild(
                 svgEl('rect', {
                   x: x0 + j * cell,
@@ -5208,7 +6439,7 @@
                     y: y0 + i * cell + (cell - 3) / 2 + 3,
                     'text-anchor': 'middle',
                     'font-size': 8,
-                    fill: v > 0.56 ? '#fff' : '#151515',
+                    fill: strength > 0.56 ? '#fff' : '#151515',
                   },
                   v.toFixed(p.precision),
                 ),
@@ -5266,16 +6497,23 @@
         function drawErrorbar(svg, W, H) {
           const p = chartProps.errorbar,
             s = rowsToSeries(),
-            a = s.series[0].data.map(numeric),
+            center = s.series[0],
+            error = s.series[1]
+          if (!center || !error) return
+          const finite = center.data.map(numeric).filter((v) => v !== null)
+          if (!finite.length) return
+          const min = Math.min(...finite),
+            max = Math.max(...finite),
             x0 = 100,
             x1 = 900,
-            y0 = 480,
-            max = Math.max(...a),
-            min = Math.min(...a)
-          a.forEach((v, i) => {
-            const x = x0 + (i * (x1 - x0)) / (a.length - 1 || 1),
+            y0 = 480
+          center.data.forEach((raw, i) => {
+            const v = numeric(raw),
+              e = numeric(error.data[i])
+            if (v === null || e === null) return
+            const x = x0 + (i * (x1 - x0)) / (center.data.length - 1 || 1),
               y = y0 - ((v - min) / (max - min || 1)) * 310,
-              err = p.errorSize * (0.6 + (i % 4) * 0.2),
+              err = (Math.abs(e) / (max - min || 1)) * 310 * (p.errorSize / 15),
               col = palette()[i % palette().length]
             svg.appendChild(
               svgEl('line', {
@@ -5317,6 +6555,19 @@
                 'stroke-width': p.lineWidth,
               }),
             )
+            svg.appendChild(
+              svgEl(
+                'text',
+                {
+                  x,
+                  y: y0 + 18,
+                  'text-anchor': 'middle',
+                  'font-size': 8,
+                  fill: 'rgba(21,21,21,.5)',
+                },
+                s.labels[i],
+              ),
+            )
           })
         }
         function drawBump(svg, W, H) {
@@ -5325,14 +6576,22 @@
             x0 = 80,
             x1 = 900,
             yTop = 120
-          s.series.slice(0, p.maxLines).forEach((ser, i) => {
+          const maxSeries = s.series.slice(0, p.maxLines)
+          maxSeries.forEach((ser, i) => {
             const vals = ser.data.map(numeric)
             let d = ''
             vals.forEach((v, j) => {
-              const rank = ((i + j) % 5) + 1,
+              if (v === null) return
+              const ranked = s.series
+                .map((candidate, idx) => ({ idx, value: numeric(candidate.data[j]) }))
+                .filter((candidate) => candidate.value !== null)
+                .sort((a, b) => b.value - a.value || a.idx - b.idx)
+              const pos = ranked.findIndex((candidate) => candidate.idx === s.series.indexOf(ser))
+              if (pos < 0) return
+              const rank = pos + 1,
                 x = x0 + (j * (x1 - x0)) / (vals.length - 1 || 1),
                 y = yTop + (rank - 1) * p.rowGap
-              d += (j ? 'L' : 'M') + x + ' ' + y + ' '
+              d += (d ? 'L' : 'M') + x + ' ' + y + ' '
             })
             const col = palette()[i % palette().length]
             svg.appendChild(
@@ -5362,14 +6621,22 @@
         }
         function drawRibbon(svg, W, H) {
           const p = chartProps.ribbon,
+            s = rowsToSeries(),
+            bands = s.series.slice(0, p.bands),
             x0 = 90,
             x1 = 910
-          for (let i = 0; i < p.bands; i++) {
-            const y = 130 + i * 65,
-              amp = p.amplitude + i * 3,
-              d = []
-            for (let x = x0; x <= x1; x += 18) {
-              const yy = y + Math.sin(x / 72 + i) * amp
+          bands.forEach((ser, i) => {
+            const vals = ser.data.map((v) => numeric(v))
+            const finite = vals.filter((v) => v !== null)
+            const mn = Math.min(...finite, 0)
+            const mx = Math.max(...finite, 1)
+            const base = 150 + i * 75
+            const d = []
+            for (let j = 0; j < vals.length; j++) {
+              const x = x0 + (j * (x1 - x0)) / Math.max(1, vals.length - 1)
+              const n = vals[j] ?? mn
+              const norm = (n - mn) / (mx - mn || 1)
+              const yy = base + (0.5 - norm) * p.amplitude + Math.sin(j * 0.6 + i) * 6
               d.push((d.length ? 'L' : 'M') + x + ' ' + yy)
             }
             const col = palette()[i % palette().length]
@@ -5378,7 +6645,7 @@
                 d: d.join(' '),
                 fill: 'none',
                 stroke: col,
-                'stroke-width': p.width - (i % 3) * 2,
+                'stroke-width': p.width,
                 opacity: p.opacity,
               }),
             )
@@ -5391,20 +6658,26 @@
                 opacity: 0.72,
               }),
             )
-          }
+          })
         }
         function drawRadial(svg, W, H) {
           const p = chartProps.radial,
+            s = rowsToSeries(),
+            vals = s.series[0].data.map((v) => numeric(v)),
+            finite = vals.filter((v) => v !== null),
+            vMin = Math.min(...finite, 0),
+            vMax = Math.max(...finite, 1),
             cx = 500,
             cy = 330,
             R = p.radius,
-            n = 18
+            n = Math.max(1, vals.length)
           for (let i = 0; i < n; i++) {
-            const a = (i / n) * Math.PI * 2,
-              r = 40 + (i % 6) * 24,
-              x2 = cx + Math.cos(a) * r,
-              y2 = cy + Math.sin(a) * r,
-              col = palette()[i % 6]
+            const a = (i / n) * Math.PI * 2
+            const value = vals[i] ?? vMin
+            const r = 40 + ((value - vMin) / (vMax - vMin || 1)) * Math.max(20, R - 55)
+            const x2 = cx + Math.cos(a) * r
+            const y2 = cy + Math.sin(a) * r
+            const col = palette()[i % palette().length]
             svg.appendChild(
               svgEl('line', {
                 x1: cx,
@@ -5426,6 +6699,20 @@
                 'stroke-width': 1.2,
               }),
             )
+            if (s.labels[i])
+              svg.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    x: x2,
+                    y: y2 - 8,
+                    'text-anchor': 'middle',
+                    'font-size': 7,
+                    fill: 'rgba(21,21,21,.58)',
+                  },
+                  s.labels[i],
+                ),
+              )
           }
           svg.appendChild(
             svgEl('circle', { cx, cy, r: R, fill: 'none', stroke: 'rgba(21,21,21,.12)' }),
@@ -5434,8 +6721,10 @@
         function drawPoster(svg, W, H) {
           const p = chartProps.poster,
             s = rowsToSeries(),
-            a = s.series[0].data.map(numeric),
-            total = a.reduce((x, y) => x + (y || 0), 0)
+            a = s.series[0]?.data.map(numeric) || [],
+            finite = a.filter((v) => v !== null && v >= 0),
+            total = a.reduce((x, y) => x + (y || 0), 0),
+            maxValue = Math.max(...finite, 1)
           svg.appendChild(
             svgEl(
               'text',
@@ -5451,13 +6740,15 @@
             ),
           )
           a.slice(0, p.barCount).forEach((v, i) => {
-            const x = 70 + i * (p.barWidth + 32)
+            const value = Math.max(0, numeric(v) ?? 0),
+              barH = Math.max(4, (value / maxValue) * p.barHeight),
+              x = 70 + i * (p.barWidth + 32)
             svg.appendChild(
               svgEl('rect', {
                 x,
-                y: 300,
+                y: 300 + p.barHeight - barH,
                 width: p.barWidth,
-                height: p.barHeight,
+                height: barH,
                 fill: palette()[i % palette().length],
               }),
             )
@@ -5466,7 +6757,7 @@
                 'text',
                 {
                   x: x + p.barWidth / 2,
-                  y: 300 + p.barHeight + 22,
+                  y: 324 + p.barHeight,
                   'text-anchor': 'middle',
                   'font-size': 9,
                   fill: 'rgba(21,21,21,.55)',
@@ -5478,31 +6769,47 @@
         }
         function drawField(svg, W, H) {
           const p = chartProps.field,
-            c = palette()
-          for (let i = 0; i < p.count; i++) {
-            const x = 40 + ((i * 73) % 920),
-              y = 95 + ((i * 151) % 460),
-              r = p.size * ((i % 4) + 0.6),
-              o = p.opacity + (i % 9) / 40
+            s = rowsToSeries(),
+            values = s.series[0].data.map((v) => numeric(v)),
+            finite = values.filter((v) => v !== null),
+            vMin = Math.min(...finite, 0),
+            vMax = Math.max(...finite, 1),
+            c = palette(),
+            count = Math.max(30, Math.min(360, p.count)),
+            seed = values.length ? values : [0]
+          for (let i = 0; i < count; i++) {
+            const base = numeric(seed[i % seed.length]) ?? 0
+            const norm = (base - vMin) / (vMax - vMin || 1)
+            const x = 40 + ((i * 73 + Math.round(norm * 37)) % 920)
+            const y = 95 + ((i * 151 + Math.round(norm * 53)) % 460)
+            const r = p.size * ((i % 4) + 0.6) * (0.8 + norm * 0.5)
+            const o = Math.min(1, p.opacity + (i % 9) / 40)
             svg.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: c[i % c.length], opacity: o }))
           }
         }
         function drawLollipop(svg, W, H) {
           const p = chartProps.lollipop,
             s = rowsToSeries()
-          let a = s.series[0].data.map(numeric).map((v, i) => ({ v, i, label: s.labels[i] }))
+          let a = s.series[0].data
+            .map(numeric)
+            .map((v, i) => ({ v, i, label: s.labels[i] }))
+            .filter((d) => d.v !== null)
           if (p.sort === '升序') a.sort((x, y) => x.v - y.v)
           if (p.sort === '降序') a.sort((x, y) => y.v - x.v)
-          const max = Math.max(...a.map((d) => d.v)),
+          if (!a.length) return
+          const min = Math.min(...a.map((d) => d.v)),
+            max = Math.max(...a.map((d) => d.v)),
             x0 = 100,
             x1 = 860,
-            rowH = 30
+            rowH = 30,
+            zeroX = min > 0 ? x0 : max < 0 ? x1 : x0 + ((0 - min) / (max - min || 1)) * (x1 - x0)
           a.forEach((d, i) => {
             const y = 112 + i * rowH,
-              xx = x0 + (d.v / max) * (x1 - x0)
+              xx = x0 + ((d.v - min) / (max - min || 1)) * (x1 - x0),
+              col = palette()[i % palette().length]
             svg.appendChild(
               svgEl('line', {
-                x1: x0,
+                x1: zeroX,
                 y1: y,
                 x2: xx,
                 y2: y,
@@ -5512,13 +6819,7 @@
               }),
             )
             svg.appendChild(
-              svgEl('circle', {
-                cx: xx,
-                cy: y,
-                r: p.pointSize,
-                fill: palette()[i % palette().length],
-                opacity: p.opacity,
-              }),
+              svgEl('circle', { cx: xx, cy: y, r: p.pointSize, fill: col, opacity: p.opacity }),
             )
             svg.appendChild(
               svgEl(
@@ -5711,7 +7012,11 @@
         }
 
         function openDataModal() {
+          normalizeDataSelection()
+          const title = $('#data-modal .modal-head h3')
+          if (title) title.textContent = `数据表 · ${chartNames[state.type] || '图表'}`
           renderDataTable()
+          syncDataColumnSelects()
           bindCustomSelects($('#data-modal'))
           $('#data-modal').classList.add('open')
         }
@@ -5723,29 +7028,150 @@
         $('#data-modal').addEventListener('click', (e) => {
           if (e.target.id === 'data-modal') closeDataModal()
         })
-        function syncDataColumnSelects() {
-          const defs = [
-            ['x-col', false],
-            ['y-cols', true],
+        $('#data-modal').addEventListener('zenchange', (e) => {
+          const el = e.target.closest?.('.zen-select[data-select-key]')
+          if (!el || !$('#data-modal').contains(el)) return
+          const key = el.dataset.selectKey
+          if (!['x-col', 'y-cols', 'target-col', 'y1-col', 'y2-col'].includes(key)) return
+          handleDataSelectionChange(key, e.detail?.value ?? (key === 'y-cols' ? [] : ''))
+        })
+        function dataRoleFieldMarkup(role) {
+          const multiple = role.multiple === true
+          const safeId = String(role.key).replace(/[^a-z0-9-]/gi, '-')
+          return `<div class="field data-role-field" id="data-field-${safeId}">
+  <label>${escapeHtml(role.label)}</label>
+  <div class="zen-select${multiple ? ' multi' : ''}" id="zen-select-${safeId}" data-select-key="${escapeHtml(role.key)}" data-multiple="${multiple ? 'true' : 'false'}" data-value="" aria-expanded="false">
+    <button type="button" class="zen-select-button">请选择</button>
+    <div class="zen-select-menu"><div class="zen-select-empty">暂无列</div></div>
+  </div>
+</div>`
+        }
+        function renderDataRoleFields() {
+          const host = $('#data-role-fields')
+          if (!host) return
+          const rule = getChartDataRule(state.type)
+          const roles = rule.ui?.roles || [
+            { key: 'x-col', label: '分类列', kind: 'category' },
+            { key: 'y-cols', label: '系列列', kind: 'numeric', multiple: true },
           ]
-          defs.forEach(([key, multi]) => {
-            const el = $(`[data-select-key="${key}"]`)
-            if (!el) return
-            const menu = el.querySelector('.zen-select-menu')
-            menu.innerHTML = state.data.headers.length
-              ? state.data.headers
-                  .map(
-                    (h, i) =>
-                      `<button type="button" class="zen-select-option${!multi && i === 0 ? ' active' : ''}" data-value="${i}">${escapeHtml(h)}</button>`,
-                  )
-                  .join('')
-              : '<div class="zen-select-empty">暂无列</div>'
-            el.dataset.value = multi ? '' : '0'
+          host.innerHTML = roles.map(dataRoleFieldMarkup).join('')
+          const note = $('#data-role-note')
+          if (note) {
+            const legendNote =
+              rule.legend === 'category'
+                ? '图例对应分类值。'
+                : rule.legend === 'series'
+                  ? '图例对应所选系列列的列头。'
+                  : '此图表不使用图例。'
+            note.textContent = [rule.ui?.note, legendNote].filter(Boolean).join(' ')
+            note.classList.remove('is-hidden')
+          }
+        }
+        function renderRoleSelect(key, role, activeValue, blockFn) {
+          const el = $(`[data-select-key="${key}"]`)
+          if (!el) return
+          const menu = el.querySelector('.zen-select-menu')
+          if (!menu) return
+          const multiple = role.multiple === true
+          const d = state.data || { headers: [], rows: [] }
+          if (!d.headers.length) {
+            menu.innerHTML = '<div class="zen-select-empty">暂无列</div>'
+            el.dataset.value = ''
             const btn = el.querySelector('.zen-select-button')
-            if (btn) btn.textContent = multi ? '请选择' : state.data.headers[0] || '请选择'
-            el.dataset.bound = ''
-            bindCustomSelects(el)
+            if (btn) btn.textContent = '请选择'
+            return
+          }
+          const active = multiple
+            ? new Set(
+                (Array.isArray(activeValue) ? activeValue : [])
+                  .map(Number)
+                  .filter(Number.isInteger),
+              )
+            : new Set(
+                Number.isInteger(Array.isArray(activeValue) ? activeValue[0] : activeValue)
+                  ? [Number(Array.isArray(activeValue) ? activeValue[0] : activeValue)]
+                  : [],
+              )
+          menu.innerHTML = d.headers
+            .map((h, i) => {
+              const stats = columnStats(i)
+              const isActive = active.has(i)
+              let allowed = true,
+                reason = ''
+              if (blockFn) {
+                const result = blockFn(i, stats, isActive)
+                if (result) {
+                  allowed = result.allowed !== false
+                  reason = result.reason || ''
+                }
+              }
+              if (multiple && !isActive && role.max !== undefined && active.size >= role.max) {
+                allowed = false
+                reason = `当前图表最多选择 ${role.max} 个列`
+              }
+              const blocked = !allowed && !isActive
+              return `<button type="button" class="zen-select-option${isActive ? ' active' : ''}" data-value="${i}"${blocked ? ` aria-disabled="true" data-select-disabled="true" data-reason="${escapeHtml(reason)}" title="${escapeHtml(reason)}"` : ''}>${escapeHtml(h)}${blocked && multiple ? ` <span class="muted">· ${escapeHtml(reason)}</span>` : ''}</button>`
+            })
+            .join('')
+          el.dataset.value = multiple
+            ? Array.from(active).join(',')
+            : active.size
+              ? String(Array.from(active)[0])
+              : ''
+          const btn = el.querySelector('.zen-select-button')
+          if (btn) {
+            const text = multiple
+              ? Array.from(active)
+                  .map((i) => d.headers[i])
+                  .filter(Boolean)
+                  .join('、')
+              : d.headers[Array.from(active)[0]] || ''
+            btn.textContent = text || '请选择'
+          }
+        }
+        function syncDataColumnSelects() {
+          const rule = getChartDataRule(state.type)
+          normalizeDataSelection()
+          renderDataRoleFields()
+          const roles = rule.ui?.roles || []
+          roles.forEach((role) => {
+            if (role.key === 'x-col') {
+              renderRoleSelect('x-col', role, state.xCol, (i, stats) => {
+                if (rule.x === 'numeric' && !stats.isNumeric)
+                  return { allowed: false, reason: '当前图表要求数值 X 轴' }
+                if (rule.x === 'category' && !stats.hasAnyValue)
+                  return { allowed: false, reason: '该列没有可用的分类数据' }
+                return null
+              })
+            } else if (role.key === 'y-cols') {
+              role.max = rule.maxY
+              renderRoleSelect('y-cols', role, state.yCols, (i, stats) => {
+                if (!stats.isNumeric) return { allowed: false, reason: '该列不是纯数值列' }
+                if (rule.x !== 'none' && i === state.xCol)
+                  return { allowed: false, reason: '该列当前承担其它数据角色' }
+                if (rule.target && i === state.targetCol)
+                  return { allowed: false, reason: '该列当前承担去向角色' }
+                return null
+              })
+            } else if (role.key === 'target-col') {
+              renderRoleSelect('target-col', role, state.targetCol, (i, stats) => {
+                if (i === state.xCol) return { allowed: false, reason: '去向列必须与来源列不同' }
+                if (!stats.hasAnyValue) return { allowed: false, reason: '该列没有可用的去向数据' }
+                return null
+              })
+            } else if (role.key === 'y1-col' || role.key === 'y2-col') {
+              const active = role.key === 'y1-col' ? state.y1Col : state.y2Col
+              const other = role.key === 'y1-col' ? state.y2Col : state.y1Col
+              renderRoleSelect(role.key, role, active, (i, stats) => {
+                if ((rule.x !== 'none' && i === state.xCol) || i === state.targetCol)
+                  return { allowed: false, reason: '该列当前承担其它数据角色' }
+                if (i === other) return { allowed: false, reason: '两个数值角色必须选择不同列' }
+                if (!stats.isNumeric) return { allowed: false, reason: '该列不是纯数值列' }
+                return null
+              })
+            }
           })
+          bindCustomSelects($('#data-modal') || document)
         }
         function renderDataTable() {
           const d = state.data
@@ -5766,11 +7192,24 @@
               '</tr>'
           })
           wrap.innerHTML = h + '</tbody></table>'
-          $$('.csv-table td').forEach((td) =>
+          $$('.csv-table td').forEach((td) => {
             td.addEventListener('input', () => {
-              state.data.rows[+td.dataset.r][+td.dataset.c] = td.textContent.trim()
-            }),
-          )
+              const r = Number(td.dataset.r),
+                c = Number(td.dataset.c)
+              if (!Number.isInteger(r) || !Number.isInteger(c) || !state.data.rows[r]) return
+              state.data.rows[r][c] = td.textContent.trim()
+              syncDataColumnSelects()
+            })
+            td.addEventListener('blur', () => {
+              const c = Number(td.dataset.c)
+              if (!Number.isInteger(c)) return
+              if (c === state.xCol || state.yCols.includes(c)) {
+                const validation = validateDataMapping(state.type)
+                if (!validation.valid) setStatus(validation.message, 'warn')
+                else renderChart(false)
+              }
+            })
+          })
           syncDataColumnSelects()
         }
         $('#data-add-row').onclick = () => {
@@ -5783,6 +7222,13 @@
           renderDataTable()
         }
         $('#data-apply').onclick = () => {
+          normalizeDataSelection()
+          const validation = validateDataMapping(state.type, { toastOnError: true })
+          syncDataColumnSelects()
+          if (!validation.valid) {
+            setStatus(validation.message, 'warn')
+            return
+          }
           closeDataModal()
           renderChart()
           setStatus('数据已应用')
@@ -5792,6 +7238,7 @@
           if (!raw) return
           try {
             state.data = parseTextData(raw)
+            normalizeDataSelection({ fillDefaults: true })
             renderDataTable()
             setStatus('粘贴数据已解析')
           } catch (e) {
@@ -5839,9 +7286,16 @@
               const raw = await f.text()
               state.data = parseTextData(raw)
             }
+            normalizeDataSelection({ fillDefaults: true })
             renderDataTable()
-            renderChart()
-            setStatus('已导入 · ' + f.name)
+            const validation = validateDataMapping(state.type)
+            if (validation.valid) {
+              renderChart()
+              setStatus('已导入 · ' + f.name)
+            } else {
+              renderChart(false)
+              setStatus('已导入 · ' + f.name + ' · ' + validation.message, 'warn')
+            }
           } catch (err) {
             console.error(err)
             setStatus('导入失败 · ' + (err.message || err), 'err')
@@ -6037,6 +7491,11 @@
             enginePropertyStores[id] = createEnginePropertyStore(id)
           })
           state.data = structuredClone(sample)
+          state.xCol = 0
+          state.yCols = [1, 2, 3]
+          state.targetCol = null
+          state.y1Col = 1
+          state.y2Col = 2
           state.engine = 'echarts'
           state.type = 'line'
           state.category = '论文'
@@ -6101,6 +7560,7 @@
           // 再次从当前引擎自己的存储装载一次，确保切换/刷新后的最终绘制状态完全来自该引擎存储。
           loadEnginePropertyStore(state.engine)
           normalizeLayoutPrefs()
+          normalizeDataSelection({ fillDefaults: true })
 
           const preferred = typeSupported(state.type, state.engine)
             ? state.type
