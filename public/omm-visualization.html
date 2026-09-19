@@ -2771,8 +2771,8 @@
         ]
         const ENGINE_DEFAULT_SCALE = {
           echarts: 100,
-          chartjs: 90,
-          apexcharts: 90,
+          chartjs: 100,
+          apexcharts: 100,
           zen: 100,
         }
         const BASE_ENGINE_PROPERTY_DEFAULTS = {}
@@ -3767,11 +3767,17 @@
             host.appendChild(el)
           })
         }
+        // 引擎属性完全独立保存。引擎切换时只读取目标引擎自己的 store，
+        // 不再把当前引擎的标题、字体、尺寸、留白、位置、图表比例等覆盖到目标引擎。
+        // 这样例如 Chart.js 单独设置为 95%，离开后再次切回仍会保持 95%。
+
         function selectEngine(id) {
           if (!engineReady(id)) {
             setStatus(`${engineInfo[id]?.short || id} 不可用 · 请检查网络或脚本加载`, 'err')
             return
           }
+          // 先保存离开前的引擎状态，再完整载入目标引擎自己的状态。
+          // 除当前引擎 / 当前图表 / 数据映射等工作区状态外，不再跨引擎复制任何属性。
           syncCurrentEnginePropertyStore()
           const oldType = state.type
           state.engine = id
@@ -4729,8 +4735,22 @@
             el.style.width = '100%'
             el.style.height = '100%'
             el.style.transformOrigin = '50% 50%'
-            el.style.transform = `translate3d(${moveX}px, ${moveY}px, 0) scale(${scale})`
+            // Chart.js 使用独立的内部尺寸承载 contentScale，避免 Canvas 在页面刷新、resize
+            // 或响应式重算时被二次 CSS 缩放，从而出现右侧明明是 95%、图形却按 100% 绘制的问题。
+            // 其它引擎继续沿用工作区整体 scale。
+            const renderScale = state.engine === 'chartjs' ? 1 : scale
+            el.style.transform = `translate3d(${moveX}px, ${moveY}px, 0) scale(${renderScale})`
           })
+          if (state.engine === 'chartjs' && mount) {
+            const host = mount.querySelector('.chartjs-scale-host')
+            if (host) {
+              host.style.width = `${scale * 100}%`
+              host.style.height = `${scale * 100}%`
+              host.style.left = '50%'
+              host.style.top = '50%'
+              host.style.transform = 'translate(-50%, -50%)'
+            }
+          }
         }
 
         function renderOverlay() {
@@ -5632,16 +5652,30 @@
           return Math.min(4, Math.max(nativeDpr, 2, 2.25 * contentScale))
         }
 
+        // Chart.js 使用与其它引擎相同的工作区布局状态；引擎切换时这些状态由 selectEngine 保持。
         function renderChartJS() {
           if (!window.Chart) {
             setStatus('Chart.js 未加载，请检查网络', 'err')
             return
           }
+          const scale = Math.max(0.6, Math.min(1.8, (Number(state.contentScale) || 100) / 100))
+          const mount = $('#chart-mount')
+          const scaleHost = document.createElement('div')
+          scaleHost.className = 'chartjs-scale-host'
+          scaleHost.style.position = 'absolute'
+          scaleHost.style.left = '50%'
+          scaleHost.style.top = '50%'
+          scaleHost.style.width = `${scale * 100}%`
+          scaleHost.style.height = `${scale * 100}%`
+          scaleHost.style.transform = 'translate(-50%, -50%)'
+          scaleHost.style.transformOrigin = '50% 50%'
+          scaleHost.style.overflow = 'hidden'
           const can = document.createElement('canvas')
           can.style.display = 'block'
           can.style.width = '100%'
           can.style.height = '100%'
-          $('#chart-mount').appendChild(can)
+          scaleHost.appendChild(can)
+          mount.appendChild(scaleHost)
           const ctx = can.getContext('2d'),
             s = rowsToSeries(),
             c = palette(),
@@ -7119,6 +7153,7 @@
               state.engine === 'chartjs' &&
               typeof state.chart.resize === 'function'
             ) {
+              applyChartMountLayout()
               const dpr = getChartJsDevicePixelRatio()
               if (state.chart.options && state.chart.options.devicePixelRatio !== dpr)
                 state.chart.options.devicePixelRatio = dpr
@@ -7173,6 +7208,7 @@
               state.engine === 'chartjs' &&
               typeof state.chart.resize === 'function'
             ) {
+              applyChartMountLayout()
               const dpr = getChartJsDevicePixelRatio()
               if (state.chart.options && state.chart.options.devicePixelRatio !== dpr)
                 state.chart.options.devicePixelRatio = dpr
