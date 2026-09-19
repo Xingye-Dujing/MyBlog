@@ -828,6 +828,24 @@
         flex-direction: row;
         width: max-content;
       }
+      .layout-legend.stream {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 70px;
+        max-width: none;
+        height: 100%;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        overflow: visible;
+        display: block;
+        pointer-events: none;
+      }
+      .layout-legend.stream .layout-legend-item.stream-item {
+        pointer-events: auto;
+        margin: 0;
+      }
       .layout-legend.pie .layout-legend-mark::before {
         left: 2px;
         right: 2px;
@@ -2040,8 +2058,7 @@
         <div class="modal-foot">
           <button class="ghost-btn" id="parse-paste">解析粘贴数据</button
           ><button class="ghost-btn" id="data-add-row">+ 行</button
-          ><button class="ghost-btn" id="data-add-col">+ 列</button
-          ><button class="ghost-btn" id="data-apply">应用</button>
+          ><button class="ghost-btn" id="data-add-col">+ 列</button>
         </div>
       </div>
     </div>
@@ -2137,7 +2154,7 @@
             'contour',
           ],
           人文: ['timeline', 'wordfreq'],
-          艺术: ['ribbon', 'radial', 'poster', 'field'],
+          艺术: ['ribbon', 'radial', 'poster', 'field', 'chord', 'spiral', 'swarm', 'stream'],
         }
 
         const engineInfo = {
@@ -2192,6 +2209,10 @@
               'radial',
               'poster',
               'field',
+              'chord',
+              'spiral',
+              'swarm',
+              'stream',
             ],
           },
         }
@@ -2235,6 +2256,10 @@
           radial: '径向',
           poster: '海报统计',
           field: '粒子场',
+          chord: '弦线艺术',
+          spiral: '螺旋构图',
+          swarm: '蜂群艺术',
+          stream: '流带艺术',
           contour: '等值矩阵',
         }
         const chartDataRules = {
@@ -2586,6 +2611,64 @@
               roles: [{ key: 'y-cols', label: '粒子驱动数值列', kind: 'numeric', multiple: false }],
             },
           },
+          chord: {
+            x: 'category',
+            target: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            positiveY: true,
+            completeY: true,
+            ui: {
+              note: '每一行表示一条关系，来源与去向围成环形，数值控制弦线粗细。',
+              roles: [
+                { key: 'x-col', label: '来源列', kind: 'category' },
+                { key: 'target-col', label: '去向列', kind: 'category' },
+                { key: 'y-cols', label: '权重列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          spiral: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            nonNegativeY: true,
+            ui: {
+              note: '分类沿螺旋展开，数值同时控制半径与节点强调程度。',
+              roles: [
+                { key: 'x-col', label: '分类名称列', kind: 'category' },
+                { key: 'y-cols', label: '螺旋数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          swarm: {
+            x: 'category',
+            minY: 1,
+            maxY: 1,
+            legend: 'none',
+            nonNegativeY: true,
+            ui: {
+              note: '每个分类对应一个艺术化气泡，数值控制气泡大小。',
+              roles: [
+                { key: 'x-col', label: '分类名称列', kind: 'category' },
+                { key: 'y-cols', label: '气泡数值列', kind: 'numeric', multiple: false },
+              ],
+            },
+          },
+          stream: {
+            x: 'category',
+            minY: 1,
+            maxY: 8,
+            legend: 'series',
+            ui: {
+              note: '多个数值系列组成流动的带状轨迹，图例对应系列列。',
+              roles: [
+                { key: 'x-col', label: '时间／顺序列', kind: 'category' },
+                { key: 'y-cols', label: '流带系列列', kind: 'numeric', multiple: true },
+              ],
+            },
+          },
         }
 
         const typeMeta = {
@@ -2614,6 +2697,10 @@
           radial: { engine: 'zen', cat: '艺术', desc: '极坐标构图' },
           poster: { engine: 'zen', cat: '艺术', desc: '信息海报' },
           field: { engine: 'zen', cat: '艺术', desc: '粒子／字段' },
+          chord: { engine: 'zen', cat: '艺术', desc: '环形关系与弦线' },
+          spiral: { engine: 'zen', cat: '艺术', desc: '数据螺旋构图' },
+          swarm: { engine: 'zen', cat: '艺术', desc: '气泡群与尺度' },
+          stream: { engine: 'zen', cat: '艺术', desc: '流动带状叙事' },
           contour: { engine: 'echarts', cat: '论文', desc: '数据矩阵等值表达' },
         }
         const sample = {
@@ -2708,7 +2795,7 @@
           lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
           timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
           dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
-          wordfreq: { minFont: 12, maxFont: 44, columns: 4, rotation: 0 },
+          wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
           smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
           correlation: { cellSize: 62, precision: 2, mode: '全部', intensity: 1, showGrid: true },
           histogram: { bins: 9, barGap: 2, opacity: 0.8, showValues: false, showGrid: true },
@@ -2718,6 +2805,10 @@
           radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
           poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
           field: { count: 180, size: 2, opacity: 0.25 },
+          chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+          spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+          swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+          stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
         }
 
         const ENGINE_PROPERTY_KEYS = [
@@ -3401,7 +3492,7 @@
                 titleFontFamily: 'simsun',
               },
               sankey: {
-                palette: 'science',
+                palette: 'culture',
                 title: '研究结果',
                 subtitle: '',
                 titlePosition: 'top-left',
@@ -3413,7 +3504,7 @@
                 paddingBottom: 4,
                 paddingLeft: 4,
                 positionTop: 0,
-                positionRight: 0,
+                positionRight: 80,
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
@@ -3504,9 +3595,9 @@
                 paddingLeft: 4,
                 positionTop: 0,
                 positionRight: 0,
-                positionBottom: 0,
-                positionLeft: 0,
-                contentScale: 85,
+                positionBottom: 22,
+                positionLeft: 15,
+                contentScale: 100,
                 xTitle: '指标',
                 yTitle: '数值',
                 fontSize: 12,
@@ -3536,7 +3627,7 @@
                 titleFontFamily: 'simsun',
               },
               boxplot: {
-                palette: 'science',
+                palette: 'culture',
                 title: '研究结果',
                 subtitle: '',
                 titlePosition: 'top-left',
@@ -3549,9 +3640,9 @@
                 paddingLeft: 4,
                 positionTop: 0,
                 positionRight: 0,
-                positionBottom: 14,
-                positionLeft: 0,
-                contentScale: 100,
+                positionBottom: 28,
+                positionLeft: 17,
+                contentScale: 105,
                 xTitle: '指标',
                 yTitle: '数值',
                 fontSize: 12,
@@ -3895,6 +3986,186 @@
                 legendFontFamily: 'simsun',
                 titleFontFamily: 'simsun',
               },
+              chord: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              spiral: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              swarm: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              stream: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
               contour: {
                 palette: 'culture',
                 title: '研究结果',
@@ -3992,11 +4263,11 @@
                 radius: 58,
                 fillOpacity: 0.12,
                 lineWidth: 2,
+                pointSize: 5,
+                showPoints: true,
                 shape: 'circle',
                 showLegend: true,
                 showGrid: true,
-                pointSize: 5,
-                showPoints: true,
               },
               heatmap: { cellGap: 6, showValues: true, showGrid: true, min: '', max: '' },
               network: {
@@ -4014,7 +4285,7 @@
               lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
               timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
               dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
-              wordfreq: { minFont: 12, maxFont: 44, columns: 4, rotation: 0 },
+              wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
               smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
@@ -4030,6 +4301,10 @@
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
               poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+              stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
             },
           },
           chartjs: {
@@ -5159,6 +5434,186 @@
                 legendFontFamily: 'simsun',
                 titleFontFamily: 'simsun',
               },
+              chord: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              spiral: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              swarm: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              stream: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
               contour: {
                 palette: 'science',
                 title: '研究结果',
@@ -5256,11 +5711,11 @@
                 radius: 58,
                 fillOpacity: 0.12,
                 lineWidth: 2,
+                pointSize: 5,
+                showPoints: true,
                 shape: 'polygon',
                 showLegend: true,
                 showGrid: true,
-                pointSize: 5,
-                showPoints: true,
               },
               heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
               network: {
@@ -5278,7 +5733,7 @@
               lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
               timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
               dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
-              wordfreq: { minFont: 12, maxFont: 44, columns: 4, rotation: 0 },
+              wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
               smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
@@ -5294,6 +5749,10 @@
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
               poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+              stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
             },
           },
           apexcharts: {
@@ -6423,6 +6882,186 @@
                 legendFontFamily: 'simsun',
                 titleFontFamily: 'simsun',
               },
+              chord: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              spiral: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              swarm: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              stream: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
               contour: {
                 palette: 'science',
                 title: '研究结果',
@@ -6520,11 +7159,11 @@
                 radius: 80,
                 fillOpacity: 0.12,
                 lineWidth: 1.5,
+                pointSize: 2,
+                showPoints: false,
                 shape: 'polygon',
                 showLegend: true,
                 showGrid: true,
-                pointSize: 5,
-                showPoints: true,
               },
               heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
               network: {
@@ -6542,7 +7181,7 @@
               lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
               timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
               dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
-              wordfreq: { minFont: 12, maxFont: 44, columns: 4, rotation: 0 },
+              wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
               smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
@@ -6558,6 +7197,10 @@
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
               poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+              stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
             },
           },
           zen: {
@@ -7069,7 +7712,7 @@
                 paddingRight: 4,
                 paddingBottom: 4,
                 paddingLeft: 4,
-                positionTop: 0,
+                positionTop: 80,
                 positionRight: 0,
                 positionBottom: 80,
                 positionLeft: 0,
@@ -7431,9 +8074,9 @@
                 paddingLeft: 4,
                 positionTop: 0,
                 positionRight: 0,
-                positionBottom: 0,
+                positionBottom: 14,
                 positionLeft: 0,
-                contentScale: 95,
+                contentScale: 115,
                 xTitle: '指标',
                 yTitle: '数值',
                 fontSize: 12,
@@ -7476,7 +8119,7 @@
                 paddingLeft: 4,
                 positionTop: 0,
                 positionRight: 0,
-                positionBottom: 0,
+                positionBottom: 80,
                 positionLeft: 0,
                 contentScale: 100,
                 xTitle: '指标',
@@ -7687,6 +8330,186 @@
                 legendFontFamily: 'simsun',
                 titleFontFamily: 'simsun',
               },
+              chord: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              spiral: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              swarm: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 165,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
+              stream: {
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
+                paddingTop: 4,
+                paddingRight: 4,
+                paddingBottom: 0,
+                paddingLeft: 4,
+                positionTop: 0,
+                positionRight: 0,
+                positionBottom: 22,
+                positionLeft: 8,
+                contentScale: 100,
+                xTitle: '指标',
+                yTitle: '数值',
+                fontSize: 12,
+                axisSize: 10,
+                rotateLabels: 0,
+                tension: 0.25,
+                stacked: false,
+                normalize: false,
+                width: 1000,
+                height: 620,
+                exportScale: 2,
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
+                annotations: true,
+                showLegend: true,
+                showGrid: true,
+                smooth: false,
+                showPoints: true,
+                pointSize: 5,
+                lineWidth: 2,
+                opacity: 0.9,
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
+              },
               contour: {
                 palette: 'science',
                 title: '研究结果',
@@ -7784,11 +8607,11 @@
                 radius: 58,
                 fillOpacity: 0.12,
                 lineWidth: 2,
+                pointSize: 5,
+                showPoints: true,
                 shape: 'polygon',
                 showLegend: true,
                 showGrid: true,
-                pointSize: 5,
-                showPoints: true,
               },
               heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
               network: {
@@ -7806,7 +8629,7 @@
               lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
               timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
               dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
-              wordfreq: { minFont: 12, maxFont: 44, columns: 4, rotation: 0 },
+              wordfreq: { minFont: 8, maxFont: 64, maxWords: 12, rotation: 24, spacing: 51 },
               smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
@@ -7822,6 +8645,10 @@
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
               poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.6, lineWidth: 4, pointSize: 3, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 16, spread: 500, jitter: 75, opacity: 0.8, showLabels: true },
+              stream: { bands: 4, amplitude: 120, width: 8, opacity: 0.48, showLabels: true },
             },
           },
         }
@@ -7830,9 +8657,29 @@
         const BASE_ENGINE_PROPERTY_DEFAULTS = structuredClone(
           RIGHT_PROPERTY_DEFAULTS.echarts?.typeStates?.line || {},
         )
-        const CHART_PROP_DEFAULTS = structuredClone(
-          RIGHT_PROPERTY_DEFAULTS.echarts?.chartProps || chartProps,
-        )
+        // 以程序内置的完整图表默认值为基础，再让用户提供的默认 JSON 覆盖同名字段。
+        // 这样新增加的图表（如 chord / spiral / swarm / stream）即使不在旧 JSON 中，
+        // 也不会得到空对象，从而避免右侧属性出现 undefined 以及 SVG NaN。
+        const CHART_PROP_DEFAULTS = structuredClone(chartProps)
+        const baseChartPropPreset = RIGHT_PROPERTY_DEFAULTS?.echarts?.chartProps
+        if (
+          baseChartPropPreset &&
+          typeof baseChartPropPreset === 'object' &&
+          !Array.isArray(baseChartPropPreset)
+        ) {
+          Object.keys(baseChartPropPreset).forEach((type) => {
+            if (
+              baseChartPropPreset[type] &&
+              typeof baseChartPropPreset[type] === 'object' &&
+              !Array.isArray(baseChartPropPreset[type])
+            ) {
+              CHART_PROP_DEFAULTS[type] = {
+                ...(CHART_PROP_DEFAULTS[type] || {}),
+                ...structuredClone(baseChartPropPreset[type]),
+              }
+            }
+          })
+        }
         const ENGINE_IDS = ['echarts', 'chartjs', 'apexcharts', 'zen']
         const CHART_TYPE_IDS = Object.keys(chartNames)
         const enginePropertyStores = {}
@@ -7848,18 +8695,33 @@
         }
 
         function getChartPropDefaults(id, type) {
+          const base =
+            CHART_PROP_DEFAULTS?.[type] && typeof CHART_PROP_DEFAULTS[type] === 'object'
+              ? structuredClone(CHART_PROP_DEFAULTS[type])
+              : {}
           const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps?.[type]
           if (preset && typeof preset === 'object' && !Array.isArray(preset)) {
-            return structuredClone(preset)
+            return { ...base, ...structuredClone(preset) }
           }
-          return structuredClone(CHART_PROP_DEFAULTS?.[type] || {})
+          return base
         }
 
         function createTypePropertyState(id, type = state.type) {
           return getTypePropertyDefaults(id, type)
         }
 
-        function createDataSelectionState() {
+        function createDataSelectionState(type = '') {
+          // 网络关系图 / 桑基图的默认映射避开第一列“分类/类别”列，直接使用后面的三列
+          // 作为 来源 → 去向 → 权重，这样示例数据加载后即可直接形成有效关系图。
+          if (type === 'network' || type === 'sankey') {
+            return {
+              xCol: 1,
+              yCols: [3],
+              targetCol: 2,
+              y1Col: 1,
+              y2Col: 2,
+            }
+          }
           return {
             xCol: 0,
             yCols: [1, 2, 3],
@@ -7872,7 +8734,7 @@
         function createDataSelectionStore() {
           const selections = {}
           CHART_TYPE_IDS.forEach((type) => {
-            selections[type] = createDataSelectionState()
+            selections[type] = createDataSelectionState(type)
           })
           return selections
         }
@@ -7883,12 +8745,28 @@
             typeStates[type] = createTypePropertyState(id, type)
           })
           const presetChartProps = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps
+          const mergedChartProps = structuredClone(CHART_PROP_DEFAULTS)
+          if (
+            presetChartProps &&
+            typeof presetChartProps === 'object' &&
+            !Array.isArray(presetChartProps)
+          ) {
+            Object.keys(presetChartProps).forEach((type) => {
+              if (
+                presetChartProps[type] &&
+                typeof presetChartProps[type] === 'object' &&
+                !Array.isArray(presetChartProps[type])
+              ) {
+                mergedChartProps[type] = {
+                  ...(mergedChartProps[type] || {}),
+                  ...structuredClone(presetChartProps[type]),
+                }
+              }
+            })
+          }
           return {
             typeStates,
-            chartProps:
-              presetChartProps && typeof presetChartProps === 'object'
-                ? structuredClone(presetChartProps)
-                : structuredClone(CHART_PROP_DEFAULTS),
+            chartProps: mergedChartProps,
             dataSelections: createDataSelectionStore(),
           }
         }
@@ -7909,10 +8787,20 @@
                 ? structuredClone(presetChartProps)
                 : structuredClone(CHART_PROP_DEFAULTS)
           }
-          if (!store.chartProps[type]) store.chartProps[type] = getChartPropDefaults(id, type)
+          // 无论旧存储中是缺失、空对象还是字段不完整，都与当前图表的默认值合并。
+          // 这一步专门兼容新增加图表以及旧版本已经写入的残缺 chartProps，避免 undefined 进入属性栏和 SVG 绘图。
+          store.chartProps[type] = {
+            ...getChartPropDefaults(id, type),
+            ...(store.chartProps[type] &&
+            typeof store.chartProps[type] === 'object' &&
+            !Array.isArray(store.chartProps[type])
+              ? structuredClone(store.chartProps[type])
+              : {}),
+          }
           if (!store.dataSelections || typeof store.dataSelections !== 'object')
             store.dataSelections = createDataSelectionStore()
-          if (!store.dataSelections[type]) store.dataSelections[type] = createDataSelectionState()
+          if (!store.dataSelections[type])
+            store.dataSelections[type] = createDataSelectionState(type)
           return {
             store,
             typeState: store.typeStates[type],
@@ -7938,7 +8826,7 @@
 
         function loadDataSelectionStore(id, type = state.type) {
           const current = getEngineTypePropertyStore(id, type)
-          const selection = current.dataSelection || createDataSelectionState()
+          const selection = current.dataSelection || createDataSelectionState(type)
           state.xCol = structuredClone(selection.xCol)
           state.yCols = structuredClone(selection.yCols)
           state.targetCol = structuredClone(selection.targetCol)
@@ -7990,7 +8878,17 @@
               RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps ||
               CHART_PROP_DEFAULTS,
           )
-          if (!chartProps[type]) chartProps[type] = getChartPropDefaults(id, type)
+          // 读取旧 Local Storage 时，当前图表属性也必须逐字段补齐默认值。
+          // 不能只判断“是否存在对象”，否则旧版本留下的 {} 会让所有属性变成 undefined。
+          chartProps[type] = {
+            ...getChartPropDefaults(id, type),
+            ...(chartProps[type] &&
+            typeof chartProps[type] === 'object' &&
+            !Array.isArray(chartProps[type])
+              ? structuredClone(chartProps[type])
+              : {}),
+          }
+          current.store.chartProps[type] = structuredClone(chartProps[type])
         }
 
         function resetCurrentEngineProperties() {
@@ -8036,7 +8934,21 @@
 
         function sanitizeChartProps(source, id = 'echarts') {
           const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps
-          const defaultsByType = preset && typeof preset === 'object' ? preset : CHART_PROP_DEFAULTS
+          const defaultsByType = structuredClone(CHART_PROP_DEFAULTS)
+          if (preset && typeof preset === 'object' && !Array.isArray(preset)) {
+            Object.keys(preset).forEach((type) => {
+              if (
+                preset[type] &&
+                typeof preset[type] === 'object' &&
+                !Array.isArray(preset[type])
+              ) {
+                defaultsByType[type] = {
+                  ...(defaultsByType[type] || {}),
+                  ...structuredClone(preset[type]),
+                }
+              }
+            })
+          }
           const result = structuredClone(defaultsByType)
           if (!source || typeof source !== 'object' || Array.isArray(source)) return result
           Object.keys(defaultsByType).forEach((type) => {
@@ -8093,8 +9005,8 @@
           return result
         }
 
-        function sanitizeDataSelection(source) {
-          const result = createDataSelectionState()
+        function sanitizeDataSelection(source, type = '') {
+          const result = createDataSelectionState(type)
           if (!source || typeof source !== 'object' || Array.isArray(source)) return result
           if (validPersistValue('xCol', source.xCol)) result.xCol = structuredClone(source.xCol)
           if (validPersistValue('yCols', source.yCols)) result.yCols = structuredClone(source.yCols)
@@ -8109,7 +9021,7 @@
           const result = createDataSelectionStore()
           if (!source || typeof source !== 'object' || Array.isArray(source)) return result
           CHART_TYPE_IDS.forEach((type) => {
-            result[type] = sanitizeDataSelection(source[type])
+            result[type] = sanitizeDataSelection(source[type], type)
           })
           return result
         }
@@ -9511,7 +10423,7 @@
             )}</section>`,
             timeline: `<section class="ins-group"><div class="ins-head"><b>时间线属性</b><span>03</span></div>${fieldRange('节点大小', 'pointSize', 2, 10, 1, p.pointSize)}${fieldRange('事件长度', 'stemLength', 35, 150, 5, p.stemLength)}${fieldToggle('交错排布', 'alternate', p.alternate)}${fieldToggle('显示数值', 'showValues', p.showValues)}</section>`,
             dotplot: `<section class="ins-group"><div class="ins-head"><b>点图属性</b><span>03</span></div>${fieldRange('点大小', 'pointSize', 2, 12, 1, p.pointSize)}${fieldRange('行间距', 'rowGap', 16, 55, 1, p.rowGap)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示基线', 'baseline', p.baseline)}</section>`,
-            wordfreq: `<section class="ins-group"><div class="ins-head"><b>词频属性</b><span>03</span></div>${fieldRange('最小字号', 'minFont', 8, 24, 1, p.minFont)}${fieldRange('最大字号', 'maxFont', 24, 64, 1, p.maxFont)}${fieldRange('列数', 'columns', 2, 6, 1, p.columns)}${fieldRange('旋转角度', 'rotation', -45, 45, 1, p.rotation)}</section>`,
+            wordfreq: `<section class="ins-group"><div class="ins-head"><b>词频属性</b><span>05</span></div>${fieldRange('最小字号', 'minFont', 8, 24, 1, p.minFont)}${fieldRange('最大字号', 'maxFont', 24, 64, 1, p.maxFont)}${fieldRange('词语数量', 'maxWords', 12, 60, 1, p.maxWords)}${fieldRange('旋转角度', 'rotation', -45, 45, 1, p.rotation)}${fieldRange('松散程度', 'spacing', 0, 100, 1, p.spacing)}</section>`,
             smallmultiples: `<section class="ins-group"><div class="ins-head"><b>小倍图属性</b><span>03</span></div>${fieldRange('列数', 'columns', 2, 4, 1, p.columns)}${fieldRange('间距', 'gap', 8, 48, 1, p.gap)}${fieldRange('线宽', 'lineWidth', 1, 5, 0.5, p.lineWidth)}${fieldToggle('显示边框', 'showFrame', p.showFrame)}</section>`,
             correlation: `<section class="ins-group"><div class="ins-head"><b>相关矩阵属性</b><span>03</span></div>${fieldRange('单元尺寸', 'cellSize', 42, 90, 1, p.cellSize)}${fieldRange('小数位数', 'precision', 0, 4, 1, p.precision)}${fieldRange('色彩强度', 'intensity', 0.4, 1.6, 0.1, p.intensity)}${fieldSelect(
               '显示范围',
@@ -9530,6 +10442,10 @@
             radial: `<section class="ins-group"><div class="ins-head"><b>径向属性</b><span>03</span></div>${fieldRange('半径', 'radius', 90, 260, 5, p.radius)}${fieldRange('射线宽度', 'spokeWidth', 0.5, 5, 0.5, p.spokeWidth)}${fieldRange('节点大小', 'nodeSize', 2, 10, 1, p.nodeSize)}</section>`,
             poster: `<section class="ins-group"><div class="ins-head"><b>海报属性</b><span>03</span></div>${fieldRange('柱数量', 'barCount', 3, 8, 1, p.barCount)}${fieldRange('柱宽', 'barWidth', 28, 80, 1, p.barWidth)}${fieldRange('柱高度', 'barHeight', 80, 260, 5, p.barHeight)}${fieldRange('主标题字号', 'headlineSize', 36, 96, 2, p.headlineSize)}</section>`,
             field: `<section class="ins-group"><div class="ins-head"><b>粒子场属性</b><span>03</span></div>${fieldRange('粒子数量', 'count', 60, 360, 10, p.count)}${fieldRange('粒子大小', 'size', 1, 6, 0.5, p.size)}${fieldRange('粒子透明度', 'opacity', 0.05, 0.7, 0.02, p.opacity)}</section>`,
+            chord: `<section class="ins-group"><div class="ins-head"><b>弦线艺术</b><span>04</span></div>${fieldRange('环形半径', 'radius', 140, 250, 5, p.radius)}${fieldRange('弦线宽度', 'lineWidth', 1, 12, 0.5, p.lineWidth)}${fieldRange('节点大小', 'nodeSize', 2, 10, 1, p.nodeSize)}${fieldRange('透明度', 'opacity', 0.15, 0.9, 0.05, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            spiral: `<section class="ins-group"><div class="ins-head"><b>螺旋构图</b><span>04</span></div>${fieldRange('旋转圈数', 'turns', 1.5, 5, 0.1, p.turns)}${fieldRange('线宽', 'lineWidth', 1, 5, 0.5, p.lineWidth)}${fieldRange('点大小', 'pointSize', 1, 10, 1, p.pointSize)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            swarm: `<section class="ins-group"><div class="ins-head"><b>蜂群艺术</b><span>04</span></div>${fieldRange('最大气泡', 'maxRadius', 10, 42, 1, p.maxRadius)}${fieldRange('横向展开', 'spread', 220, 500, 10, p.spread)}${fieldRange('随机感', 'jitter', 20, 110, 5, p.jitter)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            stream: `<section class="ins-group"><div class="ins-head"><b>流带艺术</b><span>04</span></div>${fieldRange('最多带状', 'bands', 2, 8, 1, p.bands)}${fieldRange('摆幅', 'amplitude', 35, 120, 1, p.amplitude)}${fieldRange('带宽', 'width', 8, 32, 1, p.width)}${fieldRange('透明度', 'opacity', 0.08, 0.7, 0.02, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
           }
           const extra =
             specs[type] ||
@@ -9608,16 +10524,20 @@
  </div></div>`
         }
         function fieldScale(label, key, value) {
-          return `<div class="field"><label>${label}</label><div class="layout-scale"><input type="range" min="60" max="180" step="5" value="${value}" data-layout-prop="${key}"><input class="layout-value-input" type="number" min="60" max="180" step="5" value="${value}" data-layout-number-prop="${key}" aria-label="${label}"><span class="layout-value-unit">%</span></div></div>`
+          const safeValue =
+            value == null || value === '' || !Number.isFinite(Number(value)) ? 100 : value
+          return `<div class="field"><label>${label}</label><div class="layout-scale"><input type="range" min="60" max="180" step="5" value="${safeValue}" data-layout-prop="${key}"><input class="layout-value-input" type="number" min="60" max="180" step="5" value="${safeValue}" data-layout-number-prop="${key}" aria-label="${label}"><span class="layout-value-unit">%</span></div></div>`
         }
         function field(label, type, key, value) {
-          return `<div class="field"><label>${label}</label><input type="${type}" id="field-${key}" value="${escapeHtml(value)}"></div>`
+          return `<div class="field"><label>${label}</label><input type="${type}" id="field-${key}" value="${escapeHtml(value ?? '')}"></div>`
         }
         function fieldNumber(label, key, value) {
           return `<div class="field"><label>${label}</label><input type="number" step="any" id="field-${key}" value="${value ?? ''}" placeholder="自动"></div>`
         }
         function fieldRange(label, key, min, max, step, value) {
-          return `<div class="field"><label>${label}</label><div class="range-wrap"><input id="field-${key}" data-prop="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><input class="range-number" type="number" min="${min}" max="${max}" step="${step}" value="${value}" data-range-number-for="${key}" aria-label="${label}"></div></div>`
+          const safeValue =
+            value == null || value === '' || !Number.isFinite(Number(value)) ? min : value
+          return `<div class="field"><label>${label}</label><div class="range-wrap"><input id="field-${key}" data-prop="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${safeValue}"><input class="range-number" type="number" min="${min}" max="${max}" step="${step}" value="${safeValue}" data-range-number-for="${key}" aria-label="${label}"></div></div>`
         }
         function fieldToggle(label, key, value) {
           return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-prop-toggle="${key}">${value ? '开启' : '关闭'}</button></div>`
@@ -10045,9 +10965,39 @@
           const rule = getChartDataRule(state.type)
           if (rule.legend === 'none') return []
           if (rule.legend === 'category') return getPieSlices().map((slice) => slice.name)
-          return rowsToSeries()
+          const series = rowsToSeries()
             .series.map((item) => item.name)
             .filter(Boolean)
+          if (state.type === 'stream') {
+            const maxBands = Math.max(1, Math.round(Number(chartProp('bands', 5)) || 5))
+            return series.slice(0, maxBands)
+          }
+          return series
+        }
+
+        function streamLegendRows() {
+          const p = chartProps.stream || {}
+          const s = rowsToSeries()
+          const maxBands = Math.max(1, Math.round(Number(p.bands) || 5))
+          const saved = legendSelectionByType.stream || {}
+          const source = s.series.slice(0, maxBands).map((ser, index) => ({ ser, index }))
+          const selected = source.filter(({ ser }) => saved[ser.name] !== false)
+          const totals = s.labels.map((_, j) =>
+            selected.reduce((sum, item) => sum + Math.max(0, numeric(item.ser.data[j]) ?? 0), 0),
+          )
+          const maxTotal = Math.max(...totals, 1)
+          return selected.map(({ ser, index }, visibleIndex) => {
+            const value = Math.max(0, numeric(ser.data[0]) ?? 0)
+            const current = value / maxTotal
+            const stack =
+              selected
+                .slice(0, visibleIndex)
+                .reduce((sum, item) => sum + Math.max(0, numeric(item.ser.data[0]) ?? 0), 0) /
+              maxTotal
+            const phase = Math.sin(index * 0.75) * 8
+            const yCenter = 315 + (stack + current / 2 - 0.5) * p.amplitude * 1.35 + phase
+            return { name: ser.name, index, y: yCenter }
+          })
         }
         function applyChartMountLayout() {
           const frame = $('#chart-frame'),
@@ -10125,8 +11075,13 @@
             if (names.length) {
               const saved = legendSelectionByType[state.type] || {}
               const legend = document.createElement('div')
-              legend.className = `layout-legend ${state.legendOrientation === 'vertical' ? 'vertical' : 'horizontal'}${state.type === 'pie' ? ' pie' : ''}`
+              const streamMode =
+                state.engine === 'zen' &&
+                state.type === 'stream' &&
+                (state.legendPosition === 'left' || state.legendPosition === 'top-left')
+              legend.className = `layout-legend ${state.legendOrientation === 'vertical' ? 'vertical' : 'horizontal'}${state.type === 'pie' ? ' pie' : ''}${streamMode ? ' stream' : ''}`
               legend.dataset.pos = state.legendPosition || 'top'
+              const streamRows = streamMode ? streamLegendRows() : []
               names.forEach((name, index) => {
                 const on = Object.prototype.hasOwnProperty.call(saved, name) ? !!saved[name] : true
                 const item = document.createElement('button')
@@ -10136,6 +11091,15 @@
                 item.dataset.legendIndex = String(index)
                 item.style.setProperty('--legend-color', palette()[index % palette().length])
                 item.innerHTML = `<span class="layout-legend-mark"></span><span>${escapeHtml(name)}</span>`
+                if (streamMode) {
+                  const row = streamRows.find((entry) => entry.name === name)
+                  if (row) {
+                    item.classList.add('stream-item')
+                    item.style.position = 'absolute'
+                    item.style.left = '0px'
+                    item.style.top = `${Math.max(0, row.y - 10)}px`
+                  }
+                }
                 item.onclick = (e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -10193,6 +11157,8 @@
                   true,
                 )
               }
+            } else if (state.engine === 'zen') {
+              renderChart(false)
             } else if (state.engine === 'echarts' && state.chart?.dispatchAction) {
               state.chart.dispatchAction({
                 type: saved[name] ? 'legendSelect' : 'legendUnSelect',
@@ -11646,6 +12612,10 @@
           else if (state.type === 'radial') drawRadial(svg, W, H)
           else if (state.type === 'poster') drawPoster(svg, W, H)
           else if (state.type === 'field') drawField(svg, W, H)
+          else if (state.type === 'chord') drawChord(svg, W, H)
+          else if (state.type === 'spiral') drawSpiral(svg, W, H)
+          else if (state.type === 'swarm') drawSwarm(svg, W, H)
+          else if (state.type === 'stream') drawStream(svg, W, H)
           else drawLollipop(svg, W, H)
           svg.querySelectorAll('text').forEach((el) => {
             el.style.fontFamily = getChartFontFamily('xAxis')
@@ -11905,34 +12875,192 @@
           )
         }
         function drawWordfreq(svg, W, H) {
-          const p = chartProps.wordfreq,
+          const p = chartProps.wordfreq || {},
             entries = getWordFreqEntries(),
-            words = entries.map((e) => e.word),
-            vals = entries.map((e) => e.value),
             c = palette(),
-            cols = p.columns,
-            maxVal = Math.max(...vals, 1),
-            minVal = Math.min(...vals.filter((v) => v > 0), maxVal)
-          vals.forEach((v, i) => {
-            const norm = (v - minVal) / (maxVal - minVal || 1)
-            const fs = p.minFont + Math.max(0, norm) * (p.maxFont - p.minFont)
-            const x = 70 + (i % cols) * (860 / cols) + (i % 2) * 8
-            const y = 120 + Math.floor(i / cols) * 105
-            svg.appendChild(
-              svgEl(
+            minFont = Math.max(8, Number(p.minFont) || 12),
+            maxFont = Math.max(minFont, Number(p.maxFont) || 44),
+            legacyColumns = Number(p.columns) || 4,
+            maxWords = Math.max(
+              12,
+              Math.min(80, Number(p.maxWords) || Math.round(legacyColumns * 10 + 8)),
+            ),
+            rotation = Number(p.rotation) || 0,
+            spacing = Math.max(
+              0,
+              Math.min(100, Number.isFinite(Number(p.spacing)) ? Number(p.spacing) : 32),
+            )
+          if (!entries.length) return
+
+          const words = entries.slice(0, Math.min(entries.length, maxWords)),
+            maxValue = Math.max(...words.map((d) => d.value), 1),
+            minValue = Math.min(...words.map((d) => d.value), 0),
+            areaX = 38,
+            areaY = 46,
+            areaW = Math.max(240, W - 76),
+            areaH = Math.max(190, H - 86),
+            placed = [],
+            // 松散程度同时控制碰撞留白与向外扩散速度。
+            // 0 更紧凑，100 更舒展；范围被限制，避免出现极端稀疏布局。
+            gap = 1.5 + spacing * 0.075,
+            radialScale = 0.72 + spacing * 0.004,
+            angularStep = 0.28 - spacing * 0.0008
+
+          const normalize = (value) => {
+            if (maxValue === minValue) return 1
+            return Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)))
+          }
+          const intersects = (a, b) =>
+            !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)
+          const rotatedBox = (width, height, angle) => {
+            const rad = (Math.abs(angle) * Math.PI) / 180,
+              cs = Math.cos(rad),
+              sn = Math.sin(rad)
+            return {
+              width: Math.abs(width * cs) + Math.abs(height * sn),
+              height: Math.abs(width * sn) + Math.abs(height * cs),
+            }
+          }
+          const canPlace = (box) => {
+            if (
+              box.left < areaX ||
+              box.right > areaX + areaW ||
+              box.top < areaY ||
+              box.bottom > areaY + areaH
+            )
+              return false
+            for (const other of placed) if (intersects(box, other)) return false
+            return true
+          }
+          const estimateBBox = (fontSize, text) => {
+            const ghost = svgEl(
+              'text',
+              {
+                x: 0,
+                y: 0,
+                'font-family': getChartFontFamily('xAxis'),
+                'font-size': fontSize,
+                'font-weight': fontSize >= minFont + (maxFont - minFont) * 0.55 ? 650 : 500,
+                visibility: 'hidden',
+              },
+              text,
+            )
+            svg.appendChild(ghost)
+            let box
+            try {
+              const b = ghost.getBBox()
+              box = { width: Math.max(2, b.width), height: Math.max(2, b.height) }
+            } catch (e) {
+              box = {
+                width: Math.max(2, text.length * fontSize * 0.72),
+                height: Math.max(2, fontSize),
+              }
+            }
+            ghost.remove()
+            return box
+          }
+
+          words.forEach((item, index) => {
+            const t = normalize(item.value),
+              // 标准词云的核心仍然是字号表达频率，而不是矩形面积。
+              fs = minFont + Math.pow(t, 0.62) * (maxFont - minFont),
+              angle = rotation === 0 ? 0 : index % 2 === 0 ? rotation : -rotation,
+              measured = estimateBBox(fs, item.word),
+              rotated = rotatedBox(measured.width, measured.height, angle),
+              halfW = rotated.width / 2 + gap,
+              halfH = rotated.height / 2 + gap,
+              cx = areaX + areaW / 2,
+              cy = areaY + areaH / 2
+            let found = null
+
+            // 先做中心优先测试，让高频词稳定占据中心。
+            const centerBox = {
+              left: cx - halfW,
+              right: cx + halfW,
+              top: cy - halfH,
+              bottom: cy + halfH,
+            }
+            if (canPlace(centerBox)) found = { x: cx, y: cy, box: centerBox }
+
+            // 多臂阿基米德螺线搜索。比单一螺线更容易填满空隙，减少局部过密/过疏。
+            if (!found) {
+              const armCount = 3,
+                maxRadius = Math.min(areaW, areaH) * 0.56
+              outer: for (let step = 1; step < 2600 && !found; step++) {
+                const radius = 3 + Math.pow(step, 0.86) * (1.52 + spacing * 0.018)
+                if (radius > maxRadius) break
+                for (let arm = 0; arm < armCount; arm++) {
+                  const theta =
+                      step * angularStep + index * 0.61 + arm * ((Math.PI * 2) / armCount),
+                    px = cx + Math.cos(theta) * radius,
+                    py = cy + Math.sin(theta) * radius * radialScale,
+                    box = {
+                      left: px - halfW,
+                      right: px + halfW,
+                      top: py - halfH,
+                      bottom: py + halfH,
+                    }
+                  if (canPlace(box)) {
+                    found = { x: px, y: py, box }
+                    break outer
+                  }
+                }
+              }
+            }
+
+            // 最后的规则扫描兜底，确保词语不会因为旋转或空间不足而消失。
+            if (!found) {
+              const stepX = Math.max(10, rotated.width + gap * 2.2),
+                stepY = Math.max(10, rotated.height + gap * 2.2),
+                offset = (index % 2) * stepX * 0.5
+              outer: for (
+                let yy = areaY + rotated.height / 2 + gap;
+                yy <= areaY + areaH - rotated.height / 2 - gap;
+                yy += stepY
+              ) {
+                for (
+                  let xx = areaX + rotated.width / 2 + gap + offset;
+                  xx <= areaX + areaW - rotated.width / 2 - gap;
+                  xx += stepX
+                ) {
+                  const box = {
+                    left: xx - halfW,
+                    right: xx + halfW,
+                    top: yy - halfH,
+                    bottom: yy + halfH,
+                  }
+                  if (canPlace(box)) {
+                    found = { x: xx, y: yy, box }
+                    break outer
+                  }
+                }
+              }
+            }
+
+            if (!found) return
+            placed.push(found.box)
+
+            const group = svgEl('g', {
+                transform: `translate(${found.x} ${found.y}) rotate(${angle})`,
+              }),
+              label = svgEl(
                 'text',
                 {
-                  x,
-                  y,
+                  x: 0,
+                  y: 0,
+                  'text-anchor': 'middle',
+                  'dominant-baseline': 'middle',
                   'font-family': getChartFontFamily('xAxis'),
                   'font-size': fs,
-                  fill: c[i % c.length],
-                  opacity: 0.48 + 0.52 * (1 - i / Math.max(1, vals.length)),
-                  transform: `rotate(${i % 3 === 0 ? p.rotation : 0} ${x} ${y})`,
+                  'font-weight': fs >= minFont + (maxFont - minFont) * 0.55 ? 650 : 500,
+                  fill: c[index % c.length],
+                  'fill-opacity': 0.92,
                 },
-                words[i],
-              ),
-            )
+                item.word,
+              )
+            group.appendChild(label)
+            group.appendChild(svgEl('title', {}, `${item.word} · ${item.value}`))
+            svg.appendChild(group)
           })
         }
         function drawSmallMultiples(svg, W, H) {
@@ -12447,6 +13575,282 @@
             svgEl('circle', { cx, cy, r: R, fill: 'none', stroke: 'rgba(21,21,21,.12)' }),
           )
         }
+        function drawChord(svg, W, H) {
+          const p = chartProps.chord,
+            rows = getFlowRows(),
+            nodes = Array.from(new Set(rows.flatMap((r) => [r.source, r.target]))).filter(Boolean),
+            cx = 500,
+            cy = 320,
+            R = Math.min(p.radius, 260),
+            c = palette(),
+            n = Math.max(1, nodes.length),
+            pos = new Map()
+          nodes.forEach((name, i) => {
+            const a = -Math.PI / 2 + (i / n) * Math.PI * 2
+            pos.set(name, { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, a })
+          })
+          svg.appendChild(
+            svgEl('circle', {
+              cx,
+              cy,
+              r: R,
+              fill: 'none',
+              stroke: 'rgba(21,21,21,.10)',
+              'stroke-width': 1,
+            }),
+          )
+          rows.forEach((row, i) => {
+            const a = pos.get(row.source),
+              b = pos.get(row.target)
+            if (!a || !b) return
+            const midX = cx + (a.x + b.x - 2 * cx) * 0.18,
+              midY = cy + (a.y + b.y - 2 * cy) * 0.18,
+              d = `M ${a.x} ${a.y} Q ${midX} ${midY} ${b.x} ${b.y}`,
+              col = c[i % c.length],
+              width = Math.max(
+                1,
+                p.lineWidth * (0.55 + Math.min(1.8, row.value / Math.max(1, rows[0]?.value || 1))),
+              )
+            svg.appendChild(
+              svgEl('path', {
+                d,
+                fill: 'none',
+                stroke: col,
+                'stroke-width': width,
+                opacity: p.opacity,
+                'stroke-linecap': 'round',
+              }),
+            )
+          })
+          nodes.forEach((name, i) => {
+            const q = pos.get(name),
+              col = c[i % c.length]
+            svg.appendChild(
+              svgEl('circle', {
+                cx: q.x,
+                cy: q.y,
+                r: p.nodeSize,
+                fill: '#fff',
+                stroke: col,
+                'stroke-width': 1.5,
+              }),
+            )
+            if (p.showLabels) {
+              const tx = cx + Math.cos(q.a) * (R + 18),
+                ty = cy + Math.sin(q.a) * (R + 18) + 3
+              svg.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    x: tx,
+                    y: ty,
+                    'text-anchor':
+                      Math.cos(q.a) > 0.35 ? 'start' : Math.cos(q.a) < -0.35 ? 'end' : 'middle',
+                    'font-size': 9,
+                    fill: 'rgba(21,21,21,.58)',
+                  },
+                  name,
+                ),
+              )
+            }
+          })
+        }
+        function drawSpiral(svg, W, H) {
+          const p = chartProps.spiral,
+            s = rowsToSeries(),
+            vals = s.series[0].data.map((v) => numeric(v)),
+            finite = vals.filter((v) => v !== null),
+            min = Math.min(...finite, 0),
+            max = Math.max(...finite, 1),
+            c = palette(),
+            cx = 500,
+            cy = 315,
+            total = Math.max(1, vals.length),
+            maxR = Math.min(245, 240),
+            d = []
+          vals.forEach((v, i) => {
+            const norm = (v === null ? min : v - min) / (max - min || 1),
+              t = (i / Math.max(1, total - 1)) * Math.PI * 2 * p.turns,
+              r = 18 + (i / Math.max(1, total - 1)) * maxR,
+              x = cx + Math.cos(t) * (r * (0.72 + norm * 0.28)),
+              y = cy + Math.sin(t) * (r * (0.55 + norm * 0.45))
+            d.push(`${d.length ? 'L' : 'M'}${x} ${y}`)
+            if (v !== null) {
+              const col = c[i % c.length]
+              svg.appendChild(
+                svgEl('circle', {
+                  cx: x,
+                  cy: y,
+                  r: p.pointSize * (0.75 + norm * 0.9),
+                  fill: '#fff',
+                  stroke: col,
+                  'stroke-width': 1.2,
+                  opacity: p.opacity,
+                }),
+              )
+              if (p.showLabels && (i % Math.max(1, Math.ceil(total / 9)) === 0 || i === total - 1))
+                svg.appendChild(
+                  svgEl(
+                    'text',
+                    {
+                      x,
+                      y: y - 9,
+                      'text-anchor': 'middle',
+                      'font-size': 8,
+                      fill: 'rgba(21,21,21,.54)',
+                    },
+                    s.labels[i] || '',
+                  ),
+                )
+            }
+          })
+          svg.insertBefore(
+            svgEl('path', {
+              d: d.join(' '),
+              fill: 'none',
+              stroke: c[0],
+              'stroke-width': p.lineWidth,
+              opacity: p.opacity * 0.92,
+              'stroke-linecap': 'round',
+            }),
+            svg.firstChild,
+          )
+        }
+        function drawSwarm(svg, W, H) {
+          const p = chartProps.swarm,
+            s = rowsToSeries(),
+            vals = s.series[0].data.map((v) => numeric(v)),
+            finite = vals.filter((v) => v !== null),
+            min = Math.min(...finite, 0),
+            max = Math.max(...finite, 1),
+            c = palette(),
+            count = vals.length,
+            baseX = 500 - p.spread / 2
+          vals.forEach((v, i) => {
+            if (v === null) return
+            const norm = (v - min) / (max - min || 1),
+              angle = i * 2.399963,
+              radius = p.maxRadius * (0.38 + norm * 0.62),
+              x =
+                baseX +
+                (i / Math.max(1, count - 1)) * p.spread +
+                Math.cos(angle) * p.jitter * (0.45 + norm * 0.55),
+              y = 320 + Math.sin(angle * 1.7) * p.jitter * (0.72 + (1 - norm) * 0.35),
+              col = c[i % c.length]
+            svg.appendChild(
+              svgEl('circle', { cx: x, cy: y, r: radius, fill: col, opacity: p.opacity }),
+            )
+            svg.appendChild(
+              svgEl('circle', {
+                cx: x - radius * 0.22,
+                cy: y - radius * 0.28,
+                r: Math.max(1, radius * 0.16),
+                fill: '#fff',
+                opacity: 0.42,
+              }),
+            )
+            if (p.showLabels && i % Math.max(1, Math.ceil(count / 10)) === 0)
+              svg.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    x,
+                    y: y + radius + 12,
+                    'text-anchor': 'middle',
+                    'font-size': 7.5,
+                    fill: 'rgba(21,21,21,.50)',
+                  },
+                  s.labels[i] || '',
+                ),
+              )
+          })
+          svg.appendChild(
+            svgEl('line', {
+              x1: baseX,
+              y1: 320,
+              x2: baseX + p.spread,
+              y2: 320,
+              stroke: 'rgba(21,21,21,.12)',
+              'stroke-width': 1,
+            }),
+          )
+        }
+        function drawStream(svg, W, H) {
+          const p = chartProps.stream,
+            s = rowsToSeries(),
+            saved = legendSelectionByType.stream || {},
+            bands = s.series
+              .slice(0, Math.max(1, Math.round(Number(p.bands) || 5)))
+              .map((ser, index) => ({ ser, index }))
+              .filter(({ ser }) => saved[ser.name] !== false),
+            c = palette(),
+            x0 = 65,
+            x1 = 935,
+            center = 315,
+            baseline = 0
+          const totals = s.labels.map((_, j) =>
+            bands.reduce((sum, item) => sum + Math.max(0, numeric(item.ser.data[j]) ?? 0), 0),
+          )
+          const maxTotal = Math.max(...totals, 1)
+          bands.forEach((item, i) => {
+            const ser = item.ser
+            const top = [],
+              bottom = [],
+              vals = ser.data.map((v) => Math.max(0, numeric(v) ?? 0))
+            for (let j = 0; j < vals.length; j++) {
+              const x = x0 + (j * (x1 - x0)) / Math.max(1, vals.length - 1),
+                current = vals[j] / maxTotal,
+                phase = Math.sin(j * 0.62 + i * 0.75) * 8,
+                stack =
+                  bands
+                    .slice(0, i)
+                    .reduce((sum, prev) => sum + Math.max(0, numeric(prev.ser.data[j]) ?? 0), 0) /
+                  maxTotal,
+                yCenter = center + (stack + current / 2 - 0.5) * p.amplitude * 1.35 + phase,
+                h = Math.max(8, current * p.amplitude * 2.2)
+              top.push({ x, y: yCenter - h / 2 })
+              bottom.push({ x, y: yCenter + h / 2 })
+            }
+            let d = ''
+            top.forEach((pt, j) => {
+              d += `${j ? 'L' : 'M'}${pt.x} ${pt.y} `
+            })
+            bottom
+              .slice()
+              .reverse()
+              .forEach((pt) => {
+                d += `L${pt.x} ${pt.y} `
+              })
+            d += 'Z'
+            const col = c[item.index % c.length]
+            svg.appendChild(
+              svgEl('path', {
+                d,
+                fill: col,
+                opacity: p.opacity,
+                stroke: col,
+                'stroke-width': p.width,
+                'stroke-opacity': Math.min(0.8, p.opacity + 0.1),
+              }),
+            )
+          })
+          if (p.showLabels)
+            bands.forEach((item, i) =>
+              svg.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    x: 55,
+                    y: streamLegendRows()[i]?.y ?? 120 + i * 18,
+                    'text-anchor': 'end',
+                    'font-size': 8,
+                    fill: 'rgba(21,21,21,.52)',
+                  },
+                  item.ser.name,
+                ),
+              ),
+            )
+        }
         function drawPoster(svg, W, H) {
           const p = chartProps.poster,
             s = rowsToSeries(),
@@ -12937,16 +14341,10 @@
                 c = Number(td.dataset.c)
               if (!Number.isInteger(r) || !Number.isInteger(c) || !state.data.rows[r]) return
               state.data.rows[r][c] = td.textContent.trim()
+              normalizeDataSelection()
               syncDataColumnSelects()
-            })
-            td.addEventListener('blur', () => {
-              const c = Number(td.dataset.c)
-              if (!Number.isInteger(c)) return
-              if (c === state.xCol || state.yCols.includes(c)) {
-                const validation = validateDataMapping(state.type)
-                if (!validation.valid) setStatus(validation.message, 'warn')
-                else renderChart(false)
-              }
+              schedulePersist()
+              renderChart(false)
             })
           })
           syncDataColumnSelects()
@@ -12954,23 +14352,15 @@
         $('#data-add-row').onclick = () => {
           state.data.rows.push(new Array(state.data.headers.length).fill(''))
           renderDataTable()
+          schedulePersist()
+          renderChart(false)
         }
         $('#data-add-col').onclick = () => {
           state.data.headers.push('系列' + state.data.headers.length)
           state.data.rows.forEach((r) => r.push(''))
           renderDataTable()
-        }
-        $('#data-apply').onclick = () => {
-          normalizeDataSelection()
-          const validation = validateDataMapping(state.type, { toastOnError: true })
-          syncDataColumnSelects()
-          if (!validation.valid) {
-            setStatus(validation.message, 'warn')
-            return
-          }
-          closeDataModal()
-          renderChart()
-          setStatus('数据已应用')
+          schedulePersist()
+          renderChart(false)
         }
         $('#parse-paste').onclick = () => {
           const raw = $('#paste-data').value.trim()
@@ -12979,6 +14369,8 @@
             state.data = parseTextData(raw)
             normalizeDataSelection({ fillDefaults: true })
             renderDataTable()
+            schedulePersist()
+            renderChart(false)
             setStatus('粘贴数据已解析')
           } catch (e) {
             reportError('数据解析失败', e, true)
