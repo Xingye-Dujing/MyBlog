@@ -42,6 +42,12 @@
         --menuH: 48px;
         --fscale: 1;
         --zoom: 1;
+        --editor-font-family:
+          'SFMono-Regular', 'Cascadia Mono', 'Cascadia Code', Consolas, 'Liberation Mono', Menlo,
+          'Courier New', monospace;
+        --editor-font-size: 11px;
+        --editor-line-height: 18px;
+        --editor-letter-spacing: 0px;
       }
       * {
         box-sizing: border-box;
@@ -402,7 +408,6 @@
       }
       .dd-item-row {
         display: flex;
-        overflow: hidden;
         align-items: center;
         justify-content: space-between;
         width: 100%;
@@ -410,12 +415,52 @@
         padding: 7px 10px;
         background: transparent;
         color: var(--dim);
-        font-size: 11px;
-        letter-spacing: 0.3px;
-        white-space: nowrap;
-        gap: 10px;
-        border: 1px solid transparent;
-        border-radius: var(--radius);
+        gap: 12px;
+      }
+      .dd-item-row.autodelay-row {
+        display: block;
+        padding: 9px 10px 10px;
+      }
+      .dd-item-row.autodelay-row > span:first-child {
+        display: block;
+        margin-bottom: 8px;
+      }
+      .autodelay-control {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+      }
+      .autodelay-control .settings-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        padding: 0;
+        border-radius: 50%;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-dim);
+        font-size: 10px;
+        line-height: 1;
+        letter-spacing: 0;
+        flex: 0 0 36px;
+      }
+      .autodelay-control .settings-btn:hover {
+        background: var(--hover);
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .autodelay-control .settings-btn.on {
+        background: transparent;
+        color: var(--ink);
+        border-color: var(--ink);
+        box-shadow: inset 0 0 0 1px var(--ink);
+      }
+      .autodelay-control .settings-value {
+        min-width: 22px;
+        margin-left: 2px;
+        font-size: 10px;
       }
       .settings-control {
         display: flex;
@@ -537,7 +582,7 @@
         inset: 0;
         padding: 14px 20px 54px;
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
         gap: 12px;
         z-index: 1;
         transition: padding-top 0.36s cubic-bezier(0.16, 1, 0.3, 1);
@@ -545,45 +590,6 @@
       body.submenu-open:not(.menu-pinned) #workspace,
       body.menu-pinned #workspace {
         padding-top: 60px;
-      }
-      .zen-head {
-        grid-column: 1/-1;
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        padding: 6px 0 10px;
-        border-bottom: 1px solid var(--line);
-        min-height: 48px;
-      }
-      .brand {
-        display: flex;
-        align-items: baseline;
-        gap: 14px;
-        min-width: 0;
-      }
-      .brand h1 {
-        font-size: 23px;
-        font-weight: 500;
-        letter-spacing: 3px;
-        white-space: nowrap;
-      }
-      .brand p {
-        font-size: 9px;
-        letter-spacing: 2px;
-        color: var(--dim);
-        white-space: nowrap;
-      }
-      .head-meta {
-        display: flex;
-        gap: 16px;
-        color: var(--dim);
-        font-size: 10px;
-        letter-spacing: 1px;
-        white-space: nowrap;
-      }
-      .head-meta b {
-        color: var(--ink);
-        font-weight: 500;
       }
 
       /* ---------- panes ---------- */
@@ -666,40 +672,23 @@
         border-color: var(--line);
         background: rgba(255, 255, 255, 0.92);
       }
+      .settings-btn.on {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--ink);
+      }
 
+      /* ---------- splitter：保留拖拽命中区域，但完全不显示分隔线 ---------- */
       #vsplit {
         position: relative;
         cursor: col-resize;
         background: transparent;
+        border: 0;
       }
-      #vsplit:before {
-        content: '';
-        position: absolute;
-        left: 4px;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: var(--line);
-        transition: background 0.12s;
-      }
-      #vsplit:hover:before,
-      #vsplit.dragging:before {
-        background: var(--ink);
-      }
-      #vsplit:after {
-        content: '';
-        position: absolute;
-        left: 2px;
-        top: 50%;
-        width: 5px;
-        height: 34px;
-        transform: translateY(-50%);
-        background-image: linear-gradient(var(--faint) 1px, transparent 1px);
-        background-size: 5px 5px;
-      }
-      #vsplit:hover:after,
-      #vsplit.dragging:after {
-        background-image: linear-gradient(var(--dim) 1px, transparent 1px);
+      #vsplit::before,
+      #vsplit::after {
+        display: none;
+        content: none;
       }
 
       /* ---------- editor ---------- */
@@ -713,15 +702,162 @@
         overflow: hidden;
         position: relative;
       }
+      .editor-setting {
+        min-width: 58px;
+        height: 26px;
+        padding: 4px 18px 4px 7px;
+        font-size: 9px;
+        letter-spacing: 0.2px;
+      }
+
+      .editor-size {
+        min-width: 54px;
+      }
+
+      .editor-spacing {
+        min-width: 58px;
+      }
+
+      .editor-code-wrap {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .editor-highlight {
+        position: absolute;
+        inset: 0;
+        overflow: visible;
+        pointer-events: none;
+        z-index: 1;
+        width: max-content;
+        min-width: 100%;
+        height: max-content;
+        min-height: 100%;
+        margin: 0;
+        padding: 10px 12px;
+        font-family: var(--editor-font-family);
+        font-size: var(--editor-font-size);
+        line-height: var(--editor-line-height);
+        letter-spacing: var(--editor-letter-spacing);
+        white-space: pre;
+        tab-size: 2;
+        color: var(--ink);
+        user-select: none;
+        will-change: transform;
+      }
+
+      .editor-highlight .tok-command {
+        color: #43566f;
+      }
+      .editor-highlight .tok-env {
+        color: #5c566f;
+      }
+      .editor-highlight .tok-comment {
+        color: rgba(26, 26, 26, 0.38);
+      }
+      .editor-highlight .tok-math {
+        color: #4d6659;
+      }
+      .editor-highlight .tok-brace {
+        color: #806548;
+      }
+      .editor-highlight .tok-option {
+        color: #6c6257;
+      }
+
+      #src {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        width: 100%;
+        height: 100%;
+        color: transparent;
+        caret-color: var(--ink);
+        text-shadow: 0 0 0 transparent;
+      }
+
+      #src::selection {
+        color: transparent;
+        background: rgba(26, 26, 26, 0.12);
+      }
+
+      .autocomplete {
+        position: fixed;
+        z-index: 4200;
+        min-width: 245px;
+        max-width: min(420px, 56vw);
+        max-height: 280px;
+        overflow: auto;
+        background: var(--bg);
+        border: 1px solid var(--ink);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        padding: 4px;
+      }
+
+      .autocomplete.hidden {
+        display: none;
+      }
+
+      .autocomplete-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        width: 100%;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--dim);
+        text-align: left;
+        padding: 6px 8px;
+        cursor: pointer;
+        font-size: 10px;
+        line-height: 1.35;
+      }
+
+      .autocomplete-item:hover,
+      .autocomplete-item.active {
+        color: var(--ink);
+        background: var(--hover);
+        border-color: var(--line);
+      }
+
+      .autocomplete-item .ac-main {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .autocomplete-item .ac-main b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .autocomplete-item .ac-desc {
+        color: var(--faint);
+        white-space: nowrap;
+      }
+
+      .autocomplete-hint {
+        padding: 5px 8px 4px;
+        color: var(--faint);
+        font-size: 8px;
+        letter-spacing: 0.4px;
+        border-top: 1px solid var(--line2);
+        margin-top: 3px;
+      }
+
       .gutter {
         flex: 0 0 auto;
         width: 48px;
         overflow: hidden;
         background: rgba(26, 26, 26, 0.02);
         border-right: 1px solid var(--line2);
-        font-family: var(--mono);
-        font-size: 11px;
-        line-height: 18px;
+        font-family: var(--editor-font-family);
+        font-size: var(--editor-font-size);
+        line-height: var(--editor-line-height);
         color: var(--faint);
         text-align: right;
         padding: 10px 7px 10px 0;
@@ -730,7 +866,7 @@
       }
       .gutter .gl {
         display: block;
-        height: 18px;
+        height: var(--editor-line-height);
         position: relative;
       }
       .gutter .gl.err {
@@ -745,17 +881,19 @@
         height: 3px;
         background: var(--err);
       }
+      .gutter {
+        letter-spacing: 0;
+      }
+
       #src {
-        flex: 1;
-        min-width: 0;
         border: 0;
         outline: none;
         resize: none;
         background: transparent;
-        font-family: var(--mono);
-        font-size: 11px;
-        line-height: 18px;
-        color: var(--ink);
+        font-family: var(--editor-font-family);
+        font-size: var(--editor-font-size);
+        line-height: var(--editor-line-height);
+        letter-spacing: var(--editor-letter-spacing);
         padding: 10px 12px;
         white-space: pre;
         overflow: auto;
@@ -775,44 +913,87 @@
         letter-spacing: 0.5px;
       }
 
-      /* ---------- pdf ---------- */
+      /* ---------- pdf 阅读器 ---------- */
       .view-pane {
         min-width: 0;
+      }
+      .pdf-controls {
+        align-items: center;
+      }
+      .pdf-zoom-label {
+        min-width: 54px;
+        text-align: center;
+        font-size: 9px;
+        color: var(--dim);
+        letter-spacing: 0.6px;
+        white-space: nowrap;
+      }
+      .pdf-page-label {
+        min-width: 52px;
+        text-align: center;
+        font-size: 9px;
+        color: var(--faint);
+        letter-spacing: 0.5px;
+        white-space: nowrap;
       }
       .pdf-scroll {
         flex: 1;
         min-height: 0;
         overflow: auto;
         position: relative;
-        background: rgba(26, 26, 26, 0.018);
+        background: var(--bg);
+        scrollbar-gutter: stable both-edges;
       }
       .pdf-pages {
+        box-sizing: border-box;
+        min-width: 100%;
+        width: max-content;
+        min-height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
-        padding: 18px 12px 30px;
+        gap: 18px;
+        padding: 22px 28px 42px;
       }
       .pdf-page {
-        background: #fff;
-        box-shadow:
-          0 1px 2px rgba(0, 0, 0, 0.07),
-          0 0 0 1px rgba(26, 26, 26, 0.07);
         flex: 0 0 auto;
         position: relative;
+        background: #fff;
         line-height: 0;
+        box-shadow:
+          0 1px 0 rgba(26, 26, 26, 0.08),
+          0 4px 18px rgba(26, 26, 26, 0.07);
+        outline: 1px solid rgba(26, 26, 26, 0.06);
       }
       .pdf-page canvas {
         display: block;
+        width: 100%;
+        height: auto;
+        background: #fff;
       }
       .pdf-page-idx {
         position: absolute;
-        right: 0;
-        bottom: -15px;
-        font-size: 9px;
+        left: 50%;
+        bottom: -23px;
+        transform: translateX(-50%);
+        font-size: 8px;
         color: var(--faint);
-        letter-spacing: 0.6px;
+        letter-spacing: 0.9px;
         line-height: 1;
+        white-space: nowrap;
+      }
+      .pdf-status {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.97);
+        z-index: 5;
+        overflow: auto;
+      }
+      .pdf-status.hidden {
+        display: none;
       }
       .pdf-empty {
         padding: 54px 24px;
@@ -980,6 +1161,25 @@
         padding: 2px 5px;
         letter-spacing: 0.6px;
         white-space: nowrap;
+      }
+      .data-stats {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+        color: var(--faint);
+        font-size: 8px;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+      }
+      .data-stats span {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .data-stats b {
+        color: var(--ink);
+        font-weight: 500;
       }
       .data-btn {
         border: 1px solid transparent;
@@ -1170,32 +1370,64 @@
     <div id="dropdowns"></div>
 
     <main id="workspace">
-      <header class="zen-head">
-        <div class="brand">
-          <h1>ZENTEX</h1>
-          <p>LaTeX 编译工作台 本地 MiKTeX · 真实编译</p>
-        </div>
-        <div class="head-meta">
-          <span>行数 <b id="meta-lines">0</b></span
-          ><span>字符 <b id="meta-chars">0</b></span
-          ><span>页数 <b id="meta-pages">-</b></span
-          ><span>耗时 <b id="meta-time">-</b></span>
-        </div>
-      </header>
-
       <div id="panes">
         <section class="panel editor-pane" id="editor-pane">
           <div class="panel-head">
             <span class="panel-title">源码</span>
             <div class="panel-head-right">
               <span class="panel-note" id="editor-name">main.tex</span>
+              <select class="ghost-btn editor-setting" id="sel-editor-font" title="编辑器字体">
+                <option value="mono">等宽</option>
+                <option value="literata">Literata</option>
+                <option value="song">宋体</option>
+                <option value="times">Times</option>
+              </select>
+              <select
+                class="ghost-btn editor-setting editor-size"
+                id="sel-editor-size"
+                title="编辑器字号"
+              >
+                <option value="10">10px</option>
+                <option value="11">11px</option>
+                <option value="12">12px</option>
+                <option value="13">13px</option>
+                <option value="14">14px</option>
+                <option value="15">15px</option>
+                <option value="16">16px</option>
+              </select>
+              <select
+                class="ghost-btn editor-setting editor-spacing"
+                id="sel-editor-line"
+                title="行间距"
+              >
+                <option value="1.45">行 1.45</option>
+                <option value="1.6">行 1.6</option>
+                <option value="1.64">行 1.64</option>
+                <option value="1.75">行 1.75</option>
+                <option value="1.9">行 1.9</option>
+                <option value="2.1">行 2.1</option>
+              </select>
+              <select
+                class="ghost-btn editor-setting editor-spacing"
+                id="sel-editor-letter"
+                title="字间距"
+              >
+                <option value="-0.2">字 −0.2</option>
+                <option value="0">字 0</option>
+                <option value="0.2">字 0.2</option>
+                <option value="0.4">字 0.4</option>
+                <option value="0.6">字 0.6</option>
+              </select>
               <button class="ghost-btn" id="btn-format" title="整理缩进">整理</button>
               <button class="ghost-btn" id="btn-copy">复制</button>
             </div>
           </div>
           <div class="editor-scroll">
             <div class="gutter" id="gutter"></div>
-            <textarea id="src" spellcheck="false" wrap="off"></textarea>
+            <div class="editor-code-wrap" id="editor-code-wrap">
+              <pre class="editor-highlight" id="editor-highlight" aria-hidden="true"></pre>
+              <textarea id="src" spellcheck="false" wrap="off"></textarea>
+            </div>
           </div>
           <div class="editor-foot">
             <span id="editor-pos">行 1 · 列 1</span>
@@ -1208,16 +1440,18 @@
         <section class="panel view-pane" id="view-pane">
           <div class="panel-head">
             <span class="panel-title">PDF</span>
-            <div class="panel-head-right">
+            <div class="panel-head-right pdf-controls">
               <button class="ghost-btn" id="btn-zoom-out" title="缩小">−</button>
-              <span class="panel-note" id="zoom-label">100%</span>
+              <span class="pdf-zoom-label" id="zoom-label">适应宽度</span>
               <button class="ghost-btn" id="btn-zoom-in" title="放大">+</button>
               <button class="ghost-btn" id="btn-fit" title="适应宽度">适应</button>
+              <span class="pdf-page-label" id="pdf-page-label">— / —</span>
               <button class="ghost-btn" id="btn-log" title="查看编译日志">日志</button>
             </div>
           </div>
           <div class="pdf-scroll" id="pdf-scroll">
             <div class="pdf-pages" id="pdf-pages"></div>
+            <div class="pdf-status" id="pdf-status"></div>
           </div>
         </section>
       </div>
@@ -1228,6 +1462,12 @@
         <span class="status-dot" id="status-dot"></span>
         <span class="status-text" id="status-text">就绪</span>
         <span class="engine-chip" id="engine-chip">正在检测本地服务</span>
+        <div class="data-stats" aria-label="文档统计">
+          <span>行 <b id="meta-lines">0</b></span>
+          <span>字 <b id="meta-chars">0</b></span>
+          <span>页 <b id="meta-pages">-</b></span>
+          <span>时 <b id="meta-time">-</b></span>
+        </div>
       </div>
       <div class="data-right">
         <button class="data-btn" id="btn-swap">左右调换</button>
@@ -1274,13 +1514,24 @@
           tex: '',
           engine: 'xelatex',
           passes: 2,
-          auto: false,
+          auto: true, // 改动后自动编译（停顿即编译）
+          autoLoad: true, // 载入模板 / 导入 .tex 后立即编译
+          autoDelay: 900, // 停顿编译延时（ms）：300 / 600 / 900 / 1500 / 2500
+          editorFont: 'mono',
+          editorSize: 11,
+          editorLine: 1.64,
+          editorLetter: 0,
+          lastCompiledTex: '', // 上次已编译的源码，用于避免无意义的重复编译
+          compileAfter: false, // 编译进行中又发生改动 → 结束后补编一次
+          editVersion: 0, // 每次用户内容变化递增，用于丢弃过期编译结果
           radius: 0,
           bg: 'body-grid',
           split: 0.46, // 编辑器占比
           flip: false, // true = 编辑器在右
-          zoom: 1,
-          fit: true,
+          pngDpi: 300, // 导出 PNG 的目标分辨率（DPI）
+          curPage: 1, // 当前可见页（用于“导出当前页”）
+          zoom: 1, // PDF 阅读器缩放倍率（相对于适应宽度）
+          fit: true, // PDF 是否处于适应宽度模式
           apiBase: '',
           service: null, // {engines, miktex}
           lastKey: '',
@@ -1773,9 +2024,9 @@
               '  \\schemestart',
               '    \\chemfig{R-C(=[:60]O)-[:-60]OH}',
               '    \\+',
-              '    \\chemfig{R\'-OH}',
+              "    \\chemfig{R'-OH}",
               '    \\arrow{->[H$^+$][$\\Delta$]}',
-              '    \\chemfig{R-C(=[:60]O)-[:-60]O-R\'}',
+              "    \\chemfig{R-C(=[:60]O)-[:-60]O-R'}",
               '    \\+',
               '    \\chemfig{H_2O}',
               '  \\schemestop',
@@ -2138,7 +2389,7 @@
               '  \\caption{本文档涵盖的绘图主题导图。}',
               '\\end{figure}',
               '',
-              '\\end{document}'
+              '\\end{document}',
             ].join('\n'),
           },
         ]
@@ -2210,6 +2461,39 @@
               '',
             ].join('\n'),
           },
+        ]
+
+        const AUTOCOMPLETE = [
+          { cmd: 'section', text: '\\section{' + '{{CURSOR}}' + '}', label: '章节标题' },
+          { cmd: 'subsection', text: '\\subsection{' + '{{CURSOR}}' + '}', label: '小节标题' },
+          {
+            cmd: 'subsubsection',
+            text: '\\subsubsection{' + '{{CURSOR}}' + '}',
+            label: '三级标题',
+          },
+          { cmd: 'textbf', text: '\\textbf{' + '{{CURSOR}}' + '}', label: '粗体' },
+          { cmd: 'textit', text: '\\textit{' + '{{CURSOR}}' + '}', label: '斜体' },
+          { cmd: 'emph', text: '\\emph{' + '{{CURSOR}}' + '}', label: '强调' },
+          { cmd: 'underline', text: '\\underline{' + '{{CURSOR}}' + '}', label: '下划线' },
+          { cmd: 'texttt', text: '\\texttt{' + '{{CURSOR}}' + '}', label: '等宽文本' },
+          { cmd: 'frac', text: '\\frac{' + '{{CURSOR}}' + '}{}', label: '分式' },
+          { cmd: 'sqrt', text: '\\sqrt{' + '{{CURSOR}}' + '}', label: '平方根' },
+          { cmd: 'sum', text: '\\sum_{' + '{{CURSOR}}' + '}^{ }', label: '求和号' },
+          { cmd: 'label', text: '\\label{' + '{{CURSOR}}' + '}', label: '设置标签' },
+          { cmd: 'ref', text: '\\ref{' + '{{CURSOR}}' + '}', label: '交叉引用' },
+          { cmd: 'cite', text: '\\cite{' + '{{CURSOR}}' + '}', label: '参考文献引用' },
+          { cmd: 'footnote', text: '\\footnote{' + '{{CURSOR}}' + '}', label: '脚注' },
+          { cmd: 'caption', text: '\\caption{' + '{{CURSOR}}' + '}', label: '图表标题' },
+          {
+            cmd: 'includegraphics',
+            text: '\\includegraphics[width=0.8\\linewidth]{' + '{{CURSOR}}' + '}',
+            label: '插入图片',
+          },
+          { cmd: 'begin', text: '\\begin{' + '{{CURSOR}}' + '}\n  \n\\end{}', label: '环境模板' },
+          { cmd: 'item', text: '\\item ' + '{{CURSOR}}', label: '列表项' },
+          { cmd: 'text', text: '\\text{' + '{{CURSOR}}' + '}', label: '数学文本' },
+          { cmd: 'mathbf', text: '\\mathbf{' + '{{CURSOR}}' + '}', label: '数学粗体' },
+          { cmd: 'operatorname', text: '\\operatorname{' + '{{CURSOR}}' + '}', label: '数学算子' },
         ]
 
         /* ===================== 样式调控 ===================== */
@@ -2296,7 +2580,11 @@
               ['passes:2', '编译两遍（目录与引用）', true, state.passes === 2],
               ['passes:3', '编译三遍', true, state.passes === 3],
               ['sep'],
-              ['toggle:auto', '改动后自动编译', true, state.auto],
+              ['toggle:auto', '改动后自动编译（停顿即编译）', true, state.auto],
+              ['sep'],
+              ['label', '自动编译策略'],
+              ['autodelayrow', '停顿延时'],
+              ['toggle:autoload', '载入/导入后自动编译', true, state.autoLoad],
               ['compile', '立即编译'],
               ['sep'],
               ['service-set', '服务地址 · ' + (state.apiBase ? state.apiBase : '同源')],
@@ -2318,8 +2606,13 @@
               ['split-pdf', 'PDF 加宽', true, Math.abs(state.split - 0.34) < 0.02],
             ],
             export: [
-              ['download', '下载 PDF'],
+              ['download', '下载 PDF（矢量·无损）'],
               ['export', '导出 .tex 源码'],
+              ['sep'],
+              ['label', '导出 PNG 分辨率'],
+              ['dpirow', 'dpi'],
+              ['export-png', '导出全部页 PNG'],
+              ['export-png1', '导出当前页 PNG（第 ' + (state.curPage || 1) + ' 页）'],
               ['sep'],
               ['print', '打印 PDF'],
               ['log', '查看编译日志'],
@@ -2350,6 +2643,42 @@
                   '<button class="settings-btn" type="button" data-dd="radius:down">−</button>' +
                   '<button class="settings-btn" type="button" data-dd="radius:up">+</button>' +
                   '</div></div>'
+                )
+              if (it[0] === 'dpirow')
+                return (
+                  '<div class="dd-item-row"><span>分辨率</span><div class="settings-control">' +
+                  [96, 150, 300, 600]
+                    .map(
+                      (d) =>
+                        '<button class="settings-btn' +
+                        (state.pngDpi === d ? ' on' : '') +
+                        '" type="button" data-dd="dpi:' +
+                        d +
+                        '">' +
+                        d +
+                        '</button>',
+                    )
+                    .join('') +
+                  '<span class="settings-value">DPI</span></div></div>'
+                )
+              if (it[0] === 'autodelayrow')
+                return (
+                  '<div class="dd-item-row autodelay-row"><span>停顿延时</span><div class="settings-control autodelay-control">' +
+                  [300, 600, 900, 1500, 2500]
+                    .map(
+                      (d) =>
+                        '<button class="settings-btn' +
+                        (state.autoDelay === d ? ' on' : '') +
+                        '" type="button" data-dd="autodelay:' +
+                        d +
+                        '" aria-label="停顿延时 ' +
+                        d +
+                        ' 毫秒">' +
+                        d +
+                        '</button>',
+                    )
+                    .join('') +
+                  '<span class="settings-value">ms</span></div></div>'
                 )
               if (it[0] === 'service' || (it[0] === 'tpl' && false))
                 return (
@@ -2441,7 +2770,7 @@
             setStatus(
               '编译器 · ' + { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }[e],
             )
-            scheduleCompile()
+            scheduleCompile({ force: true, immediate: true }) // 切换引擎后立即重编
             return
           }
           if (id.indexOf('passes:') === 0) {
@@ -2449,6 +2778,18 @@
             LS.set('passes', state.passes)
             buildDropdownsIfOpen('build')
             return setStatus('编译遍数 · ' + state.passes)
+          }
+          if (id.indexOf('autodelay:') === 0) {
+            state.autoDelay = Number(id.split(':')[1]) || 900
+            LS.set('autoDelay', state.autoDelay)
+            buildDropdownsIfOpen('build')
+            return setStatus('停顿编译延时 · ' + state.autoDelay + ' ms')
+          }
+          if (id.indexOf('dpi:') === 0) {
+            state.pngDpi = Number(id.split(':')[1]) || 300
+            LS.set('pngDpi', state.pngDpi)
+            refreshOpenDropdown('export')
+            return setStatus('PNG 分辨率 · ' + state.pngDpi + ' DPI')
           }
           if (id.indexOf('tpl:') === 0) {
             loadTemplate(id.slice(4))
@@ -2462,7 +2803,14 @@
               state.auto = !state.auto
               LS.set('auto', state.auto ? '1' : '0')
               buildDropdownsIfOpen('build')
-              return setStatus(state.auto ? '自动编译已开启' : '自动编译已关闭')
+              return setStatus(state.auto ? '改动后自动编译 · 开' : '改动后自动编译 · 关')
+            case 'toggle:autoload':
+              state.autoLoad = !state.autoLoad
+              LS.set('autoLoad', state.autoLoad ? '1' : '0')
+              buildDropdownsIfOpen('build')
+              return setStatus(
+                state.autoLoad ? '载入/导入后自动编译 · 开' : '载入/导入后自动编译 · 关',
+              )
             case 'import':
               closeDropdowns()
               return $id('file-input').click()
@@ -2472,6 +2820,12 @@
             case 'download':
               closeDropdowns()
               return downloadPdf()
+            case 'export-png':
+              closeDropdowns()
+              return exportPng(true)
+            case 'export-png1':
+              closeDropdowns()
+              return exportPng(false)
             case 'copy':
               closeDropdowns()
               return copyText(state.tex, '源码已复制')
@@ -2599,6 +2953,39 @@
           const w = window.open(pdfUrl(), '_blank')
           if (!w) toast('浏览器拦截了新窗口')
         }
+        function exportPng(all) {
+          if (!state.lastKey) return toast('请先编译')
+          const dpi = state.pngDpi || 300
+          const scale = dpi / 72 // PDF 1pt = 1/72 inch → 该缩放即目标 DPI
+          setStatus('正在导出 PNG（' + dpi + ' DPI）…')
+          ;(async () => {
+            // 预览现在使用浏览器原生 PDF 阅读器，因此 pdfDoc 只在真正需要 PNG 导出时
+            // 由 PDF.js 异步加载。不能在 ensurePdfDoc() 之前访问 pdfDoc.numPages，否则首次
+            // 导出时 pdfDoc 还是 null，会直接抛出 “Cannot read properties of null” 错误。
+            const doc = await ensurePdfDoc()
+            const total = doc && Number(doc.numPages) ? Number(doc.numPages) : 0
+            if (!total) throw new Error('无法读取 PDF 页数')
+            const start = clamp(all ? 1 : state.curPage || 1, 1, total)
+            const end = all ? total : start
+            let n = 0
+            for (let i = start; i <= end; i++) {
+              const page = await doc.getPage(i)
+              const vp = page.getViewport({ scale: scale })
+              const c = document.createElement('canvas')
+              c.width = Math.ceil(vp.width)
+              c.height = Math.ceil(vp.height)
+              const ctx = c.getContext('2d', { alpha: false })
+              if (!ctx) throw new Error('无法创建 PNG 画布')
+              await page.render({ canvasContext: ctx, viewport: vp }).promise
+              const blob = await new Promise((res, rej) => {
+                c.toBlob((b) => (b ? res(b) : rej(new Error('PNG 编码失败'))), 'image/png')
+              })
+              downloadBlob(blob, 'page-' + i + '.png')
+              n++
+            }
+            setStatus('已导出 ' + n + ' 张 PNG（' + dpi + ' DPI）')
+          })().catch((e) => setStatus('导出失败：' + (e && e.message ? e.message : e), 'err'))
+        }
         function pdfUrl() {
           return state.apiBase + '/pdf?key=' + encodeURIComponent(state.lastKey)
         }
@@ -2657,10 +3044,348 @@
           for (let i = 0; i < e.line - 1 && i < lines.length; i++) pos += lines[i].length + 1
           src.focus()
           src.setSelectionRange(pos, pos + (lines[e.line - 1] || '').length)
-          const lh = 18
+          const lh = editorLineHeight(Number(state.editorSize) || 11)
           src.scrollTop = Math.max(0, (e.line - 6) * lh)
           syncScroll()
           closeModal()
+        }
+
+        function editorFontFamily(name) {
+          return (
+            {
+              mono: "'SFMono-Regular', 'Cascadia Mono', 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, 'Courier New', monospace",
+              literata:
+                "'Literata', 'Georgia', 'Times New Roman', 'Songti SC', 'SimSun', '宋体', serif",
+              song: "'Songti SC', 'SimSun', '宋体', 'STSong', serif",
+              times: "'Times New Roman', 'Songti SC', 'SimSun', '宋体', serif",
+            }[name] ||
+            "'SFMono-Regular', 'Cascadia Mono', 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, 'Courier New', monospace"
+          )
+        }
+        function editorLineHeight(size) {
+          const factor = Number(state.editorLine)
+          return Math.max(16, Math.round(size * (Number.isFinite(factor) ? factor : 1.64)))
+        }
+        function applyEditorStyle() {
+          const size = [10, 11, 12, 13, 14, 15, 16].includes(Number(state.editorSize))
+            ? Number(state.editorSize)
+            : 11
+          state.editorSize = size
+          if (!['mono', 'literata', 'song', 'times'].includes(state.editorFont))
+            state.editorFont = 'mono'
+          const lineAllowed = [1.45, 1.6, 1.64, 1.75, 1.9, 2.1]
+          const line = lineAllowed.includes(Number(state.editorLine))
+            ? Number(state.editorLine)
+            : 1.64
+          state.editorLine = line
+          const letter = [-0.2, 0, 0.2, 0.4, 0.6].includes(Number(state.editorLetter))
+            ? Number(state.editorLetter)
+            : 0
+          state.editorLetter = letter
+          const root = document.documentElement
+          root.style.setProperty('--editor-font-family', editorFontFamily(state.editorFont))
+          root.style.setProperty('--editor-font-size', size + 'px')
+          root.style.setProperty('--editor-line-height', editorLineHeight(size) + 'px')
+          root.style.setProperty('--editor-letter-spacing', letter + 'px')
+          const fontSel = $id('sel-editor-font')
+          const sizeSel = $id('sel-editor-size')
+          const lineSel = $id('sel-editor-line')
+          const letterSel = $id('sel-editor-letter')
+          if (fontSel) fontSel.value = state.editorFont
+          if (sizeSel) sizeSel.value = String(size)
+          if (lineSel) lineSel.value = String(line)
+          if (letterSel) letterSel.value = String(letter)
+          updatePos()
+          syncGutter(true)
+          updateEditorHighlight()
+          syncScroll()
+        }
+        function saveEditorPrefs() {
+          LS.set(
+            'editor',
+            JSON.stringify({
+              font: state.editorFont,
+              size: state.editorSize,
+              line: state.editorLine,
+              letter: state.editorLetter,
+            }),
+          )
+        }
+        function setEditorFont(font) {
+          if (!['mono', 'literata', 'song', 'times'].includes(font)) return
+          state.editorFont = font
+          saveEditorPrefs()
+          applyEditorStyle()
+          positionAutocomplete()
+          setStatus(
+            '编辑器字体 · ' +
+              { mono: '等宽', literata: 'Literata', song: '宋体', times: 'Times' }[font],
+          )
+        }
+        function setEditorSize(size) {
+          size = Number(size)
+          if (![10, 11, 12, 13, 14, 15, 16].includes(size)) return
+          state.editorSize = size
+          saveEditorPrefs()
+          applyEditorStyle()
+          positionAutocomplete()
+          setStatus('编辑器字号 · ' + size + 'px')
+        }
+        function setEditorLine(value) {
+          const n = Number(value)
+          if (![1.45, 1.6, 1.64, 1.75, 1.9, 2.1].includes(n)) return
+          state.editorLine = n
+          saveEditorPrefs()
+          applyEditorStyle()
+          positionAutocomplete()
+          setStatus('编辑器行间距 · ' + n)
+        }
+        function setEditorLetter(value) {
+          const n = Number(value)
+          if (![-0.2, 0, 0.2, 0.4, 0.6].includes(n)) return
+          state.editorLetter = n
+          saveEditorPrefs()
+          applyEditorStyle()
+          positionAutocomplete()
+          setStatus('编辑器字间距 · ' + n + 'px')
+        }
+
+        function highlightLatex(text) {
+          const src = String(text == null ? '' : text)
+          if (!src) return ''
+          let out = ''
+          let i = 0
+          let mathMode = false
+          let mathDelimiter = ''
+          while (i < src.length) {
+            const ch = src[i]
+            const prev = i > 0 ? src[i - 1] : ''
+            if (ch === '%' && prev !== '\\') {
+              let j = src.indexOf('\n', i)
+              if (j < 0) j = src.length
+              out += '<span class=\"tok-comment\">' + esc(src.slice(i, j)) + '</span>'
+              i = j
+              continue
+            }
+            if (mathMode) {
+              if (mathDelimiter && src.startsWith(mathDelimiter, i)) {
+                out += esc(mathDelimiter)
+                i += mathDelimiter.length
+                mathMode = false
+                mathDelimiter = ''
+                continue
+              }
+              const token = src[i]
+              if (token === '\\' && /[A-Za-z@]/.test(src[i + 1] || '')) {
+                const m = src.slice(i).match(/^\\[A-Za-z@]+/)[0]
+                out += '<span class=\"tok-command\">' + esc(m) + '</span>'
+                i += m.length
+                continue
+              }
+              out += esc(token)
+              i++
+              continue
+            }
+            if (ch === '$') {
+              if (src.startsWith('$$', i)) {
+                out += '<span class=\"tok-math\">$$</span>'
+                i += 2
+                mathMode = true
+                mathDelimiter = '$$'
+              } else {
+                out += '<span class=\"tok-math\">$</span>'
+                i += 1
+                mathMode = true
+                mathDelimiter = '$'
+              }
+              continue
+            }
+            if (ch === '\\') {
+              const m = src.slice(i).match(/^\\(?:[A-Za-z@]+|.)/)[0]
+              const name = m.slice(1)
+              const cls = /^(begin|end)$/.test(name) ? 'tok-env' : 'tok-command'
+              out += '<span class=\"' + cls + '\">' + esc(m) + '</span>'
+              i += m.length
+              continue
+            }
+            if (ch === '[' || ch === ']') {
+              out += '<span class=\"tok-option\">' + esc(ch) + '</span>'
+              i++
+              continue
+            }
+            if (ch === '{' || ch === '}') {
+              out += '<span class=\"tok-brace\">' + esc(ch) + '</span>'
+              i++
+              continue
+            }
+            out += esc(ch)
+            i++
+          }
+          return out + (src.endsWith('\n') ? ' ' : '')
+        }
+        function updateEditorHighlight() {
+          const h = $id('editor-highlight')
+          const src = $id('src')
+          if (!h || !src) return
+          h.innerHTML = highlightLatex(src.value)
+          h.scrollLeft = 0
+          h.scrollTop = 0
+          syncHighlightScroll()
+        }
+        function syncHighlightScroll() {
+          const src = $id('src')
+          const h = $id('editor-highlight')
+          if (!src || !h) return
+          h.style.transform = 'translate(' + -src.scrollLeft + 'px,' + -src.scrollTop + 'px)'
+        }
+
+        let autocompleteEl = null
+        let autocompleteItems = []
+        let autocompleteIndex = 0
+        let autocompleteRange = null
+
+        function ensureAutocompleteEl() {
+          if (autocompleteEl) return autocompleteEl
+          autocompleteEl = document.createElement('div')
+          autocompleteEl.className = 'autocomplete hidden'
+          autocompleteEl.id = 'editor-autocomplete'
+          autocompleteEl.addEventListener('mousedown', (e) => {
+            const b = e.target.closest('[data-ac-index]')
+            if (!b) return
+            e.preventDefault()
+            acceptAutocomplete(Number(b.dataset.acIndex))
+          })
+          document.body.appendChild(autocompleteEl)
+          return autocompleteEl
+        }
+        function hideAutocomplete() {
+          if (!autocompleteEl) return
+          autocompleteEl.classList.add('hidden')
+          autocompleteItems = []
+          autocompleteIndex = 0
+          autocompleteRange = null
+        }
+        function caretBeforeCurrentToken() {
+          const src = $id('src')
+          const caret = src.selectionStart
+          const before = src.value.slice(0, caret)
+          const m = before.match(/\\([A-Za-z*@]*)$/)
+          if (!m) return null
+          return { start: caret - m[0].length, end: caret, prefix: m[1] || '' }
+        }
+        function currentAutocompleteItems(prefix) {
+          const p = String(prefix || '').toLowerCase()
+          return AUTOCOMPLETE.filter((x) => !p || x.cmd.toLowerCase().startsWith(p)).slice(0, 12)
+        }
+        function renderAutocomplete(prefix) {
+          const el = ensureAutocompleteEl()
+          autocompleteItems = currentAutocompleteItems(prefix)
+          if (!autocompleteItems.length) return hideAutocomplete()
+          autocompleteIndex = clamp(autocompleteIndex, 0, autocompleteItems.length - 1)
+          el.innerHTML =
+            autocompleteItems
+              .map((x, i) => {
+                const escaped = esc(x.cmd)
+                const p = String(prefix || '')
+                const idx = p ? escaped.toLowerCase().indexOf(p.toLowerCase()) : -1
+                let main = escaped
+                if (idx >= 0)
+                  main =
+                    escaped.slice(0, idx) +
+                    '<b>' +
+                    esc(escaped.slice(idx, idx + p.length)) +
+                    '</b>' +
+                    escaped.slice(idx + p.length)
+                return (
+                  '<button type="button" class="autocomplete-item' +
+                  (i === autocompleteIndex ? ' active' : '') +
+                  '" data-ac-index="' +
+                  i +
+                  '"><span class="ac-main">\\' +
+                  main +
+                  '</span><span class="ac-desc">' +
+                  esc(x.label) +
+                  '</span></button>'
+                )
+              })
+              .join('') +
+            '<div class="autocomplete-hint">↑↓ 选择 · Enter / Tab 补全 · Ctrl/⌘ + Space 调出</div>'
+          el.classList.remove('hidden')
+          positionAutocomplete()
+        }
+        function positionAutocomplete() {
+          if (!autocompleteEl || autocompleteEl.classList.contains('hidden')) return
+          const src = $id('src')
+          if (!src || document.activeElement !== src) return
+          const rect = src.getBoundingClientRect()
+          const cs = getComputedStyle(src)
+          const lineHeight = parseFloat(cs.lineHeight) || 18
+          const padLeft = parseFloat(cs.paddingLeft) || 0
+          const padTop = parseFloat(cs.paddingTop) || 0
+          const caret = src.selectionStart
+          const before = src.value.slice(0, caret)
+          const lines = before.split('\n')
+          const lastLine = lines[lines.length - 1] || ''
+          const measure = document.createElement('span')
+          measure.style.cssText =
+            'position:fixed;left:-100000px;top:-100000px;visibility:hidden;white-space:pre;font:' +
+            cs.font +
+            ';font-family:' +
+            cs.fontFamily +
+            ';font-size:' +
+            cs.fontSize +
+            ';font-weight:' +
+            cs.fontWeight +
+            ';letter-spacing:' +
+            cs.letterSpacing +
+            ';'
+          measure.textContent = lastLine
+          document.body.appendChild(measure)
+          const textWidth = measure.getBoundingClientRect().width
+          measure.remove()
+          let x = rect.left + padLeft + textWidth - src.scrollLeft
+          let y =
+            rect.top + padTop + (lines.length - 1) * lineHeight - src.scrollTop + lineHeight + 3
+          const w = autocompleteEl.offsetWidth || 250
+          const h = autocompleteEl.offsetHeight || 180
+          x = clamp(x, 8, innerWidth - w - 8)
+          if (y + h > innerHeight - 44)
+            y = rect.top + padTop + (lines.length - 1) * lineHeight - src.scrollTop - h - 3
+          y = clamp(y, 8, innerHeight - h - 8)
+          autocompleteEl.style.left = x + 'px'
+          autocompleteEl.style.top = y + 'px'
+        }
+        function maybeShowAutocomplete() {
+          const token = caretBeforeCurrentToken()
+          if (!token) return hideAutocomplete()
+          autocompleteRange = token
+          autocompleteIndex = 0
+          renderAutocomplete(token.prefix)
+        }
+        function acceptAutocomplete(index) {
+          const src = $id('src')
+          const token = autocompleteRange || caretBeforeCurrentToken()
+          const item = autocompleteItems[index]
+          if (!src || !token || !item) return
+          const marker = '{{CURSOR}}'
+          const raw = item.text
+          const markerAt = raw.indexOf(marker)
+          const insertText = raw.replace(marker, '')
+          const cursorOffset = markerAt >= 0 ? markerAt : insertText.length
+          src.focus()
+          src.setRangeText(insertText, token.start, token.end, 'start')
+          const next = token.start + cursorOffset
+          src.setSelectionRange(next, next)
+          hideAutocomplete()
+          onEdit()
+          updatePos()
+        }
+        function autocompleteMove(delta) {
+          if (!autocompleteItems.length) return false
+          autocompleteIndex =
+            (autocompleteIndex + delta + autocompleteItems.length) % autocompleteItems.length
+          renderAutocomplete(autocompleteRange ? autocompleteRange.prefix : '')
+          return true
         }
 
         /* ===================== 编辑器 ===================== */
@@ -2720,6 +3445,7 @@
             return '  '.repeat(depth) + line
           })
           $id('src').value = out.join('\n')
+          updateEditorHighlight()
           onEdit()
           toast('已整理缩进')
         }
@@ -2727,10 +3453,12 @@
           const src = $id('src')
           const pos = keepCursor ? src.selectionStart : 0
           src.value = text
+          if (state.tex !== text) state.editVersion += 1
           state.tex = text
           state.errors = []
           syncGutter(true)
           updateStats()
+          updateEditorHighlight()
           if (keepCursor) src.selectionStart = src.selectionEnd = Math.min(pos, text.length)
           updatePos()
         }
@@ -2743,7 +3471,7 @@
           buildDropdowns()
           setStatus('已载入模板 · ' + t.name)
           markClean()
-          scheduleCompile()
+          scheduleCompile({ load: true, immediate: true })
           if (!silent) closeDropdowns()
         }
         function markClean() {
@@ -2869,10 +3597,47 @@
 
         /* ===================== 编译 ===================== */
         let compiling = false
-        function scheduleCompile() {
-          if (!state.auto) return
+        // 智能自动编译调度：
+        // 普通编辑：按用户设置的“停顿延时”防抖，连续输入时不断后延，避免无意义高频编译。
+        // 载入/导入：立即编译一次，不等待普通停顿延时。
+        // 强制编译：用于切换编译器等配置变化。
+        function scheduleCompile(opts) {
+          opts = opts || {}
+          const allow = opts.load ? state.autoLoad : state.auto
+          if (!allow) return
+
+          const cur = $id('src').value
+          if (!opts.force && cur === state.lastCompiledTex) return
+
+          const immediate = !!(opts.immediate || opts.force)
+
+          // 编译中不并发启动新的编译任务。最新改动会在当前任务结束后再处理。
+          if (compiling) {
+            state.compileAfter = true
+            clearTimeout(autoTimer)
+            autoTimer = null
+            return
+          }
+
           clearTimeout(autoTimer)
-          autoTimer = setTimeout(() => compile(true), 1300)
+          autoTimer = null
+
+          const version = state.editVersion
+          if (immediate) {
+            autoTimer = setTimeout(() => {
+              autoTimer = null
+              if (version !== state.editVersion && !opts.load && !opts.force) return
+              compile(true)
+            }, 0)
+            return
+          }
+
+          // 普通输入：严格按照用户设置的停顿延时防抖。
+          autoTimer = setTimeout(() => {
+            autoTimer = null
+            if (version !== state.editVersion) return
+            compile(true)
+          }, state.autoDelay)
         }
         function setBusy(on) {
           compiling = on
@@ -2880,21 +3645,36 @@
           c.disabled = on
           c.textContent = on ? '编译中' : '编译'
           if (on) {
-            $id('pdf-pages').innerHTML =
+            showPdfStatus(
               '<div class="pdf-busy"><div class="bar"><i></i></div><span>正在调用 ' +
-              { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }[state.engine] +
-              ' 编译</span></div>'
+                { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }[state.engine] +
+                ' 编译</span></div>',
+              true,
+            )
             setStatus('编译中…', 'busy')
           }
         }
         async function compile(auto) {
-          if (compiling) return
+          if (compiling) {
+            state.compileAfter = true // 编译进行中又改动 → 结束后补编一次，避免并发编译
+            return
+          }
+          clearTimeout(autoTimer)
+          autoTimer = null
           if (!state.service && !(await detectService(false))) {
             setStatus('未检测到本地编译服务', 'err')
             toast('请先启动 latex-serve.py')
             return
           }
           setBusy(true)
+          const source = $id('src').value
+          const compileVersion = state.editVersion
+          const engine = state.engine
+          const passes = state.passes
+          // 记录本次真正送给编译服务的源码。
+          // 注意：编译期间若用户继续编辑，compileVersion 会变化，本次结果必须视为过期，
+          // 不能覆盖最新编辑后的 PDF。
+          state.lastCompiledTex = source
           const t0 = performance.now()
           try {
             const r = await fetchWithTimeout(
@@ -2903,23 +3683,34 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  tex: $id('src').value,
-                  engine: state.engine,
-                  passes: state.passes,
+                  tex: source,
+                  engine,
+                  passes,
                   mainfile: 'main.tex',
                 }),
               },
               300000,
             )
             const j = await r.json()
+            const stale = compileVersion !== state.editVersion
             state.log = j.log || ''
             state.errors = j.errors || []
             state.ms = j.ms || Math.round(performance.now() - t0)
             $id('meta-time').textContent = (state.ms / 1000).toFixed(1) + 's'
             syncGutter(true)
+
+            // 用户在编译期间已经继续编辑：本次结果已经过期，不显示旧结果为最新。
+            if (stale) {
+              state.compileAfter = true
+              setStatus('源码已更新 · 等待最新编译', 'busy')
+              return
+            }
+
             if (j.ok) {
+              const pdfChanged = state.lastKey !== j.key
               state.lastKey = j.key
               state.pages = j.pages || 0
+              if (pdfChanged) state.curPage = 1
               $id('meta-pages').textContent = state.pages || '-'
               $id('editor-msg').textContent = ''
               const hard = state.errors.filter((e) => e.level !== 'warning').length
@@ -2940,12 +3731,19 @@
             }
           } catch (e) {
             setStatus('无法连接本地编译服务', 'err')
-            $id('pdf-pages').innerHTML =
+            showPdfStatus(
               '<div class="pdf-empty"><h2>连接失败</h2><p>未能访问编译服务 <code>' +
-              esc(state.apiBase || '同源地址') +
-              '</code>。<br>请确认本机已运行 <code>latex-serve.py</code>，<br>并在「编译 → 服务地址」里填对地址。</p></div>'
+                esc(state.apiBase || '同源地址') +
+                '</code>。<br>请确认本机已运行 <code>latex-serve.py</code>，<br>并在「编译 → 服务地址」里填对地址。</p></div>',
+              true,
+            )
           } finally {
             setBusy(false)
+            if (state.compileAfter) {
+              state.compileAfter = false
+              // 编译期间有新改动：交给普通自动编译防抖处理，避免并发编译。
+              scheduleCompile()
+            }
           }
         }
         function showErrors(fallback) {
@@ -2965,103 +3763,229 @@
             '<div class="err-h">日志末尾</div><div class="log-box">' +
             esc((state.log || '').split('\n').slice(-60).join('\n')) +
             '</div>'
-          $id('pdf-pages').innerHTML = html
+          showPdfStatus(html, true)
         }
 
         /* ===================== PDF ===================== */
+        // 预览区使用 PDF.js 直接读取编译产生的原始 PDF。
+        // 这里不是把 PDF 预先转换成图片文件：缩放/重排时会从同一个 PDF 源重新渲染，
+        // 因而预览与“下载 PDF”始终来自同一份文件，同时阅读器外观完全由本页 CSS 控制。
         let pdfDoc = null
+        let pdfDocKey = ''
+        let pdfLoadTask = null
         let renderToken = 0
+        let activeRenderTasks = []
+
         if (window.pdfjsLib) {
           pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
         }
+
+        function showPdfStatus(html, visible = true) {
+          const status = $id('pdf-status')
+          if (!status) return
+          status.innerHTML = html || ''
+          status.classList.toggle('hidden', !visible)
+        }
+
+        function cancelPdfRenders() {
+          activeRenderTasks.forEach((t) => {
+            try {
+              t.cancel()
+            } catch (e) {}
+          })
+          activeRenderTasks = []
+        }
+
+        function clearPdfPages() {
+          const pages = $id('pdf-pages')
+          if (pages) pages.innerHTML = ''
+        }
+
+        function updatePdfZoomLabel() {
+          const label = $id('zoom-label')
+          if (!label) return
+          label.textContent = state.fit ? '适应宽度' : Math.round(state.zoom * 100) + '%'
+        }
+
+        function updatePdfPageLabel() {
+          const label = $id('pdf-page-label')
+          if (!label) return
+          const total = Number(state.pages || (pdfDoc && pdfDoc.numPages) || 0)
+          label.textContent = total ? (state.curPage || 1) + ' / ' + total : '— / —'
+        }
+
+        function getPdfScale(page) {
+          const base = page.getViewport({ scale: 1 })
+          const scroll = $id('pdf-scroll')
+          const horizontalPadding = 56
+          const usable = Math.max(
+            180,
+            (scroll ? scroll.clientWidth : base.width) - horizontalPadding,
+          )
+          const fitScale = usable / base.width
+          return fitScale * (state.fit ? 1 : state.zoom)
+        }
+
+        async function renderPdfPage(doc, pageNum, token) {
+          const page = await doc.getPage(pageNum)
+          if (token !== renderToken) return false
+
+          const viewport = page.getViewport({ scale: getPdfScale(page) })
+          const wrapper = document.createElement('div')
+          wrapper.className = 'pdf-page'
+          wrapper.dataset.page = String(pageNum)
+          wrapper.style.width = Math.ceil(viewport.width) + 'px'
+          wrapper.style.height = Math.ceil(viewport.height) + 'px'
+
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false })
+          if (!ctx) throw new Error('无法创建 PDF 阅读画布')
+
+          // 使用设备像素比进行一次性高分辨率绘制，并设置 CSS 尺寸为实际阅读尺寸。
+          // 不使用 CSS transform 缩放 Canvas，避免放大缩小时出现二次采样模糊或字符裁切。
+          const dpr = Math.max(1, window.devicePixelRatio || 1)
+          const maxCanvasSide = 32767
+          const safeScale = Math.min(
+            dpr,
+            maxCanvasSide / Math.max(1, viewport.width),
+            maxCanvasSide / Math.max(1, viewport.height),
+          )
+          canvas.width = Math.max(1, Math.ceil(viewport.width * safeScale))
+          canvas.height = Math.max(1, Math.ceil(viewport.height * safeScale))
+          canvas.style.width = Math.ceil(viewport.width) + 'px'
+          canvas.style.height = Math.ceil(viewport.height) + 'px'
+          wrapper.appendChild(canvas)
+
+          const idx = document.createElement('div')
+          idx.className = 'pdf-page-idx'
+          idx.textContent = 'PAGE ' + pageNum
+          wrapper.appendChild(idx)
+
+          $id('pdf-pages').appendChild(wrapper)
+
+          const renderTask = page.render({
+            canvasContext: ctx,
+            viewport,
+            transform: safeScale !== 1 ? [safeScale, 0, 0, safeScale, 0, 0] : null,
+            intent: 'display',
+          })
+          activeRenderTasks.push(renderTask)
+          try {
+            await renderTask.promise
+          } catch (e) {
+            if (e && e.name === 'RenderingCancelledException') return false
+            throw e
+          } finally {
+            activeRenderTasks = activeRenderTasks.filter((t) => t !== renderTask)
+          }
+          return token === renderToken
+        }
+
+        function updateCurrentPageFromScroll() {
+          const scroll = $id('pdf-scroll')
+          const pages = $$('#pdf-pages .pdf-page')
+          if (!scroll || !pages.length) return
+          const center = scroll.scrollTop + scroll.clientHeight / 2
+          let best = 1
+          let distance = Infinity
+          pages.forEach((el, i) => {
+            const mid = el.offsetTop + el.offsetHeight / 2
+            const d = Math.abs(mid - center)
+            if (d < distance) {
+              distance = d
+              best = i + 1
+            }
+          })
+          state.curPage = best
+          updatePdfPageLabel()
+        }
+
+        async function ensurePdfDoc() {
+          if (!window.pdfjsLib) throw new Error('PDF 组件未加载')
+          if (pdfDoc && pdfDoc.numPages && pdfDocKey === state.lastKey) return pdfDoc
+          if (pdfDoc) {
+            try {
+              pdfDoc.destroy()
+            } catch (e) {}
+            pdfDoc = null
+            pdfDocKey = ''
+          }
+          if (pdfLoadTask) return pdfLoadTask.promise
+          pdfLoadTask = pdfjsLib.getDocument({ url: pdfUrl(), disableAutoFetch: false })
+          try {
+            pdfDoc = await pdfLoadTask.promise
+            pdfDocKey = state.lastKey
+            return pdfDoc
+          } finally {
+            pdfLoadTask = null
+          }
+        }
+
         async function renderPdf() {
-          const host = $id('pdf-pages')
-          if (!window.pdfjsLib) {
-            host.innerHTML =
-              '<div class="pdf-empty"><h2>PDF 组件未加载</h2><p>无法加载 PDF.js，请检查网络后刷新。</p></div>'
+          const token = ++renderToken
+          cancelPdfRenders()
+          clearPdfPages()
+          updatePdfZoomLabel()
+          updatePdfPageLabel()
+
+          if (!state.lastKey) {
+            showPdfStatus(
+              '<div class="pdf-empty"><h2>暂无 PDF</h2><p>请先编译生成 PDF。</p></div>',
+              true,
+            )
             return
           }
-          const token = ++renderToken
+
+          showPdfStatus(
+            '<div class="pdf-busy"><div class="bar"><i></i></div><span>正在打开 PDF</span></div>',
+            true,
+          )
+
           try {
-            if (pdfDoc) {
-              try {
-                pdfDoc.destroy()
-              } catch (e) {}
-              pdfDoc = null
-            }
-            host.innerHTML =
-              '<div class="pdf-busy"><div class="bar"><i></i></div><span>正在渲染 PDF</span></div>'
-            const task = pdfjsLib.getDocument({ url: pdfUrl(), disableAutoFetch: false })
-            pdfDoc = await task.promise
+            const doc = await ensurePdfDoc()
             if (token !== renderToken) return
-            await paintPages(token)
+            state.pages = Number(doc.numPages || state.pages || 0)
+            updatePdfPageLabel()
+            // 新 PDF 总是从当前页开始，但保留用户在当前文档内的阅读页码。
+            state.curPage = clamp(state.curPage || 1, 1, state.pages || 1)
+            const total = state.pages || 1
+            for (let i = 1; i <= total; i++) {
+              if (token !== renderToken) return
+              await renderPdfPage(doc, i, token)
+            }
+            if (token !== renderToken) return
+            showPdfStatus('', false)
+            updateCurrentPageFromScroll()
           } catch (e) {
             if (token !== renderToken) return
-            host.innerHTML =
-              '<div class="pdf-empty"><h2>渲染失败</h2><p>' +
-              esc(String(e && e.message ? e.message : e)) +
-              '</p></div>'
+            clearPdfPages()
+            showPdfStatus(
+              '<div class="pdf-empty"><h2>PDF 打开失败</h2><p>' +
+                esc(e && e.message ? e.message : e) +
+                '</p></div>',
+              true,
+            )
           }
         }
-        async function paintPages(token) {
-          const host = $id('pdf-pages')
-          const scroll = $id('pdf-scroll')
-          if (!pdfDoc) return
-          const first = await pdfDoc.getPage(1)
-          const base = first.getViewport({ scale: 1 })
-          const availW = Math.max(200, scroll.clientWidth - 44)
-          const fitScale = availW / base.width
-          const scale = (state.fit ? fitScale : 1) * state.zoom
-          const dpr = Math.min(2, window.devicePixelRatio || 1)
-          host.innerHTML = ''
-          const frag = document.createDocumentFragment()
-          for (let i = 1; i <= pdfDoc.numPages; i++) {
-            if (token !== renderToken) return
-            const page = await pdfDoc.getPage(i)
-            const vp = page.getViewport({ scale: scale })
-            const wrap = document.createElement('div')
-            wrap.className = 'pdf-page'
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.floor(vp.width * dpr)
-            canvas.height = Math.floor(vp.height * dpr)
-            canvas.style.width = Math.floor(vp.width) + 'px'
-            canvas.style.height = Math.floor(vp.height) + 'px'
-            wrap.appendChild(canvas)
-            const idx = document.createElement('span')
-            idx.className = 'pdf-page-idx'
-            idx.textContent = i + ' / ' + pdfDoc.numPages
-            wrap.appendChild(idx)
-            frag.appendChild(wrap)
-            const ctx = canvas.getContext('2d')
-            await page.render({
-              canvasContext: ctx,
-              viewport: vp,
-              transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
-            }).promise
-          }
-          if (token !== renderToken) return
-          host.appendChild(frag)
-          updateZoomLabel()
-        }
-        function updateZoomLabel() {
-          $id('zoom-label').textContent = Math.round(state.zoom * 100) + '%'
-          $id('btn-fit').classList.toggle('on', state.fit)
-        }
-        function setZoom(z) {
-          state.zoom = clamp(z, 0.25, 4)
-          updateZoomLabel()
-          if (pdfDoc) paintPages(renderToken).catch(() => {})
-        }
-        function zoomBy(d) {
-          setFit(false)
-          setZoom(state.zoom + d)
-        }
+
         function setFit(on) {
           state.fit = !!on
-          if (on) state.zoom = 1
-          updateZoomLabel()
-          if (pdfDoc) paintPages(renderToken).catch(() => {})
+          if (state.fit) state.zoom = 1
+          updatePdfZoomLabel()
+          renderPdf()
+        }
+
+        function setZoom(value) {
+          state.fit = false
+          state.zoom = clamp(Number(value) || 1, 0.5, 3.5)
+          updatePdfZoomLabel()
+          renderPdf()
+        }
+
+        function zoomBy(delta) {
+          const base = state.fit ? 1 : state.zoom
+          setZoom(base + delta)
         }
 
         /* ===================== 布局 ===================== */
@@ -3085,7 +4009,6 @@
           applySplit()
           buildDropdowns()
           setStatus('编辑器已移到' + (state.flip ? '右' : '左') + '侧')
-          if (pdfDoc) setTimeout(() => paintPages(renderToken).catch(() => {}), 60)
         }
 
         /* ===================== 启动 ===================== */
@@ -3150,6 +4073,8 @@
           })
           document.addEventListener('click', (e) => {
             if (!e.target.closest('#top-menu') && !e.target.closest('.dropdown')) closeDropdowns()
+            if (!e.target.closest('#src') && !e.target.closest('#editor-autocomplete'))
+              hideAutocomplete()
           })
           document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') return closeDropdowns()
@@ -3179,16 +4104,94 @@
 
           // 编辑器
           const src = $id('src')
-          src.addEventListener('input', onEdit)
-          src.addEventListener('scroll', syncScroll)
-          src.addEventListener('keyup', updatePos)
-          src.addEventListener('click', updatePos)
-          src.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-              e.preventDefault()
-              insertAtCursor('  ')
+          src.addEventListener('input', (e) => {
+            onEdit()
+            const inputType = e.inputType || ''
+            if (inputType === 'insertText' || inputType === 'insertCompositionText') {
+              const token = caretBeforeCurrentToken()
+              if (token) {
+                autocompleteRange = token
+                autocompleteIndex = 0
+                renderAutocomplete(token.prefix)
+              } else {
+                hideAutocomplete()
+              }
+            } else {
+              hideAutocomplete()
             }
           })
+          src.addEventListener('scroll', () => {
+            syncScroll()
+            syncHighlightScroll()
+            positionAutocomplete()
+          })
+          src.addEventListener('keyup', () => {
+            updatePos()
+            positionAutocomplete()
+          })
+          src.addEventListener('click', () => {
+            updatePos()
+            maybeShowAutocomplete()
+          })
+          src.addEventListener('blur', () => setTimeout(hideAutocomplete, 120))
+          src.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
+              e.preventDefault()
+              e.stopPropagation()
+              const token = caretBeforeCurrentToken()
+              if (token) {
+                autocompleteRange = token
+                autocompleteIndex = 0
+                renderAutocomplete(token.prefix)
+              } else {
+                autocompleteRange = {
+                  start: src.selectionStart,
+                  end: src.selectionStart,
+                  prefix: '',
+                }
+                autocompleteIndex = 0
+                renderAutocomplete('')
+              }
+              return
+            }
+            if (!autocompleteEl || autocompleteEl.classList.contains('hidden')) {
+              if (e.key === 'Tab') {
+                e.preventDefault()
+                insertAtCursor('  ')
+              }
+              return
+            }
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              e.stopPropagation()
+              autocompleteMove(1)
+              return
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              e.stopPropagation()
+              autocompleteMove(-1)
+              return
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+              e.preventDefault()
+              e.stopPropagation()
+              acceptAutocomplete(autocompleteIndex)
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              hideAutocomplete()
+              return
+            }
+          })
+          $id('sel-editor-font').addEventListener('change', (e) => setEditorFont(e.target.value))
+          $id('sel-editor-size').addEventListener('change', (e) => setEditorSize(e.target.value))
+          $id('sel-editor-line').addEventListener('change', (e) => setEditorLine(e.target.value))
+          $id('sel-editor-letter').addEventListener('change', (e) =>
+            setEditorLetter(e.target.value),
+          )
           $id('btn-format').addEventListener('click', formatTex)
           $id('btn-copy').addEventListener('click', () => copyText(state.tex, '源码已复制'))
           $id('btn-compile').addEventListener('click', () => compile(false))
@@ -3230,11 +4233,13 @@
           $id('modal').addEventListener('click', (e) => {
             if (e.target === $id('modal')) closeModal()
           })
-          $id('btn-zoom-in').addEventListener('click', () => zoomBy(0.12))
-          $id('btn-zoom-out').addEventListener('click', () => zoomBy(-0.12))
-          $id('btn-fit').addEventListener('click', () => setFit(!state.fit))
           $id('btn-log').addEventListener('click', showLog)
-
+          $id('btn-zoom-out').addEventListener('click', () => zoomBy(-0.12))
+          $id('btn-zoom-in').addEventListener('click', () => zoomBy(0.12))
+          $id('btn-fit').addEventListener('click', () => setFit(true))
+          $id('pdf-scroll').addEventListener('scroll', updateCurrentPageFromScroll, {
+            passive: true,
+          })
           // 导入
           $id('file-input').addEventListener('change', (e) => {
             const f = e.target.files && e.target.files[0]
@@ -3244,10 +4249,18 @@
               setTex(String(rd.result))
               $id('editor-name').textContent = f.name
               setStatus('已导入 ' + f.name)
-              scheduleCompile()
+              scheduleCompile({ load: true, immediate: true })
             }
             rd.readAsText(f, 'utf-8')
             e.target.value = ''
+          })
+
+          // 切到后台时，若还有待编译的改动，提前编译好，回来即可直接看
+          document.addEventListener('visibilitychange', () => {
+            if (document.hidden && autoTimer) {
+              clearTimeout(autoTimer)
+              autoTimer = setTimeout(() => compile(true), 60)
+            }
           })
 
           // 分隔条拖动
@@ -3272,24 +4285,37 @@
             vs.classList.remove('dragging')
             document.body.style.cursor = ''
             LS.set('split', state.split)
-            if (pdfDoc) paintPages(renderToken).catch(() => {})
           })
 
-          // 窗口变化
+          // 窗口变化：适应宽度模式下直接重排 PDF；手动缩放模式也重新渲染以保持像素清晰。
           let rt = null
           window.addEventListener('resize', () => {
             clearTimeout(rt)
             rt = setTimeout(() => {
-              if (pdfDoc && state.fit) paintPages(renderToken).catch(() => {})
-            }, 220)
+              if (state.lastKey) renderPdf()
+            }, 180)
           })
         }
         function onEdit() {
-          state.tex = $id('src').value
+          const cur = $id('src').value
+          if (cur === state.tex) return
+
+          state.tex = cur
+          state.editVersion += 1
+          updateEditorHighlight()
           syncGutter(false)
           updateStats()
           updatePos()
           $id('editor-msg').textContent = '未编译'
+
+          if (compiling) {
+            state.compileAfter = true
+            clearTimeout(autoTimer)
+            autoTimer = null
+            return
+          }
+
+          // 所有手动编辑统一走普通停顿防抖。
           scheduleCompile()
         }
 
@@ -3307,11 +4333,27 @@
           state.engine = ['xelatex', 'pdflatex', 'lualatex'].includes(en) ? en : 'xelatex'
           const ps = Number(LS.get('passes', '2'))
           state.passes = [1, 2, 3].includes(ps) ? ps : 2
-          state.auto = LS.get('auto', '0') === '1'
+          state.auto = LS.get('auto', '1') === '1'
+          state.autoLoad = LS.get('autoLoad', '1') === '1'
+          const ad = Number(LS.get('autoDelay', '900'))
+          state.autoDelay = [300, 600, 900, 1500, 2500].includes(ad) ? ad : 900
+          try {
+            const ep = JSON.parse(LS.get('editor', '{}'))
+            if (ep && ['mono', 'literata', 'song', 'times'].includes(ep.font))
+              state.editorFont = ep.font
+            if (ep && [10, 11, 12, 13, 14, 15, 16].includes(Number(ep.size)))
+              state.editorSize = Number(ep.size)
+            if (ep && [1.45, 1.6, 1.64, 1.75, 1.9, 2.1].includes(Number(ep.line)))
+              state.editorLine = Number(ep.line)
+            if (ep && [-0.2, 0, 0.2, 0.4, 0.6].includes(Number(ep.letter)))
+              state.editorLetter = Number(ep.letter)
+          } catch (e) {}
+          const dpi = Number(LS.get('pngDpi', '300'))
+          state.pngDpi = [96, 150, 200, 300, 600].includes(dpi) ? dpi : 300
           applyRadius()
           applyBg(state.bg)
           applySplit()
-          updateZoomLabel()
+          applyEditorStyle()
         }
 
         function boot() {
@@ -3321,25 +4363,46 @@
           updateChip()
           syncGutter(true)
           updateStats()
+          updateEditorHighlight()
           updatePos()
           detectService(false).then((ok) => {
             if (!ok) {
-              $id('pdf-pages').innerHTML =
-                '<div class="pdf-empty"><h2>等待本地服务</h2><p>未检测到 MiKTeX 编译服务。<br>请在本机运行 <code>python latex-serve.py</code>，<br>再用「编译 → 服务地址」确认地址（默认 <code>http://127.0.0.1:8123</code>）。</p><p class="hint">服务启动后按 Ctrl/⌘ + Enter 重试</p></div>'
+              showPdfStatus(
+                '<div class="pdf-empty"><h2>等待本地服务</h2><p>未检测到 MiKTeX 编译服务。<br>请在本机运行 <code>python latex-serve.py</code>，<br>再用「编译 → 服务地址」确认地址（默认 <code>http://127.0.0.1:8123</code>）。</p><p class="hint">服务启动后按 Ctrl/⌘ + Enter 重试</p></div>',
+                true,
+              )
             } else {
               compile(true)
             }
           })
         }
 
+        // 启动页事件必须在 boot() 之前绑定。
+        // 这样即使后续初始化某一步发生异常，"启动"按钮也始终可用。
         const splashBtn = $id('splash-enter')
-        splashBtn.addEventListener('click', () => {
-          const s = $id('splash')
-          s.classList.add('fade-out')
-          setTimeout(() => (s.style.display = 'none'), 640)
-        })
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
-        else boot()
+        if (splashBtn) {
+          splashBtn.addEventListener('click', () => {
+            const s = $id('splash')
+            if (!s) return
+            s.classList.add('fade-out')
+            setTimeout(() => (s.style.display = 'none'), 640)
+          })
+        }
+
+        const runBoot = () => {
+          try {
+            boot()
+          } catch (e) {
+            console.error('[ZENTEX boot]', e)
+            const status = $id('status-text')
+            if (status) status.textContent = '初始化失败，请检查浏览器控制台'
+            const dot = $id('status-dot')
+            if (dot) dot.classList.add('err')
+          }
+        }
+        if (document.readyState === 'loading')
+          document.addEventListener('DOMContentLoaded', runBoot, { once: true })
+        else runBoot()
       })()
     </script>
   </body>
