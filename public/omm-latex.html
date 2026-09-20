@@ -2777,47 +2777,117 @@
             .trim()
             .replace(/\/+$/, '')
         }
+        // 本地编译服务运行在 loopback（127.0.0.1 / localhost）。
+        // Chrome 142+ 使用 Local Network Access（LNA）权限模型：
+        // 对 loopback 请求显式声明 targetAddressSpace，可以正确触发权限检查，
+        // 同时避免 HTTPS 页面访问 HTTP 本地服务时被混合内容策略误拦截。
+        function isLoopbackUrl(url) {
+          try {
+            const u = new URL(url, location.href)
+            const h = (u.hostname || '').toLowerCase()
+            return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]'
+          } catch (e) {
+            return false
+          }
+        }
+
+        async function loopbackPermissionState() {
+          if (!navigator.permissions || !navigator.permissions.query) return 'unknown'
+          try {
+            const p = await navigator.permissions.query({ name: 'loopback-network' })
+            return p && p.state ? p.state : 'unknown'
+          } catch (e) {
+            return 'unknown'
+          }
+        }
+
         // 带超时的 fetch：地址填错时（尤其是本机开着代理）不会一直挂着
         async function fetchWithTimeout(url, opts, ms) {
           const ctl = new AbortController()
           const timer = setTimeout(() => ctl.abort(), ms || 12000)
+          const init = Object.assign({}, opts || {}, { signal: ctl.signal })
+
+          // 云端 HTTPS 页面 -> 本机 HTTP 服务：
+          // 明确声明目标是 loopback，兼容 Chrome/Edge 的 LNA。
+          // 老浏览器不认识该字段时会忽略它，不影响普通 fetch。
+          if (isLoopbackUrl(url)) init.targetAddressSpace = 'loopback'
+
           try {
-            return await fetch(url, Object.assign({}, opts || {}, { signal: ctl.signal }))
+            return await fetch(url, init)
           } finally {
             clearTimeout(timer)
           }
         }
+
         function servicePref() {
           return normBase(LS.get('api', ''))
         }
+
         async function detectService(loud, override) {
           const pref = override !== undefined ? normBase(override) : servicePref()
-          // 指定了地址就只认它；没指定则先试同源，再试本机默认端口
-          const bases = pref ? [pref] : ['', 'http://127.0.0.1:8123']
+
+          // 云端页面优先直连本机服务，避免先请求云端同源 /api/env 浪费等待时间。
+          // 本地打开页面时仍保留同源优先。
+          const localDefault = 'http://127.0.0.1:8123'
+          const cloudPage = location.protocol === 'https:' || location.hostname !== '127.0.0.1'
+          const bases = pref ? [pref] : cloudPage ? [localDefault, ''] : ['', localDefault]
+
           if (state.apiBase && !bases.includes(state.apiBase)) bases.unshift(state.apiBase)
+
+          let lastError = ''
           for (const b of bases) {
             try {
-              const r = await fetchWithTimeout(b + '/api/env', { cache: 'no-store' }, 8000)
-              if (!r.ok) continue
+              const r = await fetchWithTimeout(
+                b + '/api/env',
+                { cache: 'no-store', mode: 'cors' },
+                8000,
+              )
+              if (!r.ok) {
+                lastError = 'HTTP ' + r.status
+                continue
+              }
               const j = await r.json()
+              if (!j || j.ok !== true || !j.engines) {
+                lastError = '服务返回的数据格式不正确'
+                continue
+              }
+
               state.apiBase = b
               LS.set('api', b)
               state.service = j
               updateChip()
               const av = Object.keys(j.engines || {}).filter((k) => j.engines[k])
-              setStatus('本地服务已连接 · MiKTeX ' + j.miktex + ' · 可用引擎 ' + av.length)
+              setStatus(
+                '本地服务已连接 · MiKTeX ' + (j.miktex || '未知版本') + ' · 可用引擎 ' + av.length,
+              )
               buildDropdowns()
-              if (loud) toast('已连接 MiKTeX ' + j.miktex)
+              if (loud) toast('已连接 MiKTeX ' + (j.miktex || ''))
               return true
-            } catch (e) {}
+            } catch (e) {
+              lastError = e && e.message ? e.message : String(e || '')
+            }
           }
-          // 连接失败：状态回落到已保存的配置，但不覆盖它
+
+          // 连接失败：给出 LNA 权限的明确诊断，而不是把浏览器拒绝全部吞掉。
           state.apiBase = servicePref()
           state.service = null
           updateChip()
-          setStatus(pref ? '无法连接 ' + pref : '未检测到本地编译服务', 'err')
+
+          const perm = await loopbackPermissionState()
+          if (perm === 'denied' && (pref || cloudPage)) {
+            setStatus(
+              '浏览器已拒绝本站访问本机服务，请在地址栏的网站权限中允许“本地网络”后重试',
+              'err',
+            )
+            if (loud) toast('请允许本站访问本地网络 / 本机服务')
+          } else if (pref) {
+            setStatus('无法连接 ' + pref + (lastError ? ' · ' + lastError : ''), 'err')
+            if (loud) toast('连接失败，请确认 latex-serve.py 已启动，并允许本站访问本地网络')
+          } else {
+            setStatus('未检测到本地编译服务' + (lastError ? ' · ' + lastError : ''), 'err')
+            if (loud) toast('请先启动 latex-serve.py')
+          }
           buildDropdowns()
-          if (loud) toast('连接失败，请检查服务是否已启动')
           return false
         }
         function openServiceModal() {
@@ -2992,6 +3062,8 @@
               state.apiBase + '/api/compile',
               {
                 method: 'POST',
+                mode: 'cors',
+                credentials: 'omit',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   tex: source,
@@ -3350,7 +3422,7 @@
           '<li>在云端页面里点「编译 → 服务地址」，填 <code>http://127.0.0.1:8123</code>，保存并连接。</li>',
           '</ul>',
           '<p>浏览器允许 HTTPS 页面访问 <code>http://127.0.0.1</code>——本地地址被视为可信来源，' +
-            '不会被当作混合内容拦截。Chrome 首次可能弹出「查找本地网络设备」的授权提示，允许即可。</p>',
+            '不会被当作混合内容拦截。Chrome/Edge 可能弹出“允许访问本地网络”的授权提示，允许本站访问即可。</p>',
           '<p><b>注意</b>：编译用的是你本机的 MiKTeX。换一台设备打开云端页面时，' +
             '那台设备也要运行服务并填它自己的地址。</p>',
           '<h4>编译器</h4>',

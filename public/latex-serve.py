@@ -284,12 +284,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ---------- 响应助手 ----------
     def _cors(self):
-        """允许被云端页面（其它源）调用；含 Chrome 私有网络访问所需的预检应答。"""
+        """允许被云端页面（其它源）调用；兼容跨源请求；Chrome/Edge 的 Local Network Access 权限由浏览器负责处理。"""
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Max-Age", "600")
-        # Chrome 的 Private Network Access：公网页面访问 127.0.0.1 时会先发预检
+        # 浏览器本地网络访问（LNA）：公网页面访问 loopback 服务时可能经过权限检查
         if (self.headers.get("Access-Control-Request-Private-Network") or "").lower() == "true":
             self.send_header("Access-Control-Allow-Private-Network", "true")
 
@@ -406,7 +406,7 @@ def main():
     print("  可用引擎: %s" % (", ".join(avail) if avail else "无（请检查 MiKTeX 路径）"))
     print("  本地打开: http://127.0.0.1:%d/omm-latex.html" % port)
     print("  云端页面: 在「编译 → 服务地址」填 http://127.0.0.1:%d" % port)
-    print("  （已开启跨域与私有网络访问预检，公网页面可直接调用本服务）")
+    print("  （已开启跨域；Chrome/Edge 的本地网络访问权限由浏览器负责检查）")
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     try:
         srv.serve_forever()
