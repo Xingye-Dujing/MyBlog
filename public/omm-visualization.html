@@ -858,9 +858,11 @@
       .layout-legend.pie .layout-legend-mark::after {
         display: none;
       }
-      .layout-legend.vertical {
+      .layout-legend.vertical:not(.stream) {
         flex-direction: column;
         align-items: flex-start;
+        max-height: calc(100% - 24px - var(--layout-pad-top) - var(--layout-pad-bottom));
+        overflow-y: auto;
       }
       .layout-legend-item {
         font-family: var(--chart-legend-font-family, SimSun, 宋体, serif);
@@ -11057,6 +11059,143 @@
           }
         }
 
+        // 图例项较多时的自动换行/换列：
+        // - 横排：一行放不下时自动换成多行，每行数量尽可能均分；
+        // - 竖排：一列放不下时自动换成多列，每列数量尽可能均分；
+        // 通过 CSS Grid 显式落位实现，行高/列宽取同组图例项的最大尺寸，整体居中，视觉均衡。
+        function balanceLegendLayout(legend, items, isVertical) {
+          if (!legend || !items.length || legend.classList.contains('stream')) return
+          const host = legend.parentElement
+          if (!host) return
+          const gap = 7
+          const pad = (v) => Math.max(0, Math.min(180, Number(v) || 0))
+          const pt = pad(state.paddingTop)
+          const pr = pad(state.paddingRight)
+          const pb = pad(state.paddingBottom)
+          const pl = pad(state.paddingLeft)
+          // 图例容器自身 border + padding 的近似占位
+          const boxW = 14
+          const boxH = 10
+          const availW = Math.max(80, host.clientWidth - 24 - pl - pr - boxW)
+          const availH = Math.max(60, host.clientHeight - 24 - pt - pb - boxH)
+          // 先还原为 flex 单行/单列，确保测量到的是每个图例项自身的宽度
+          legend.style.display = ''
+          legend.style.gridTemplateRows = ''
+          legend.style.gridTemplateColumns = ''
+          legend.style.justifyContent = ''
+          legend.style.alignContent = ''
+          legend.style.rowGap = ''
+          legend.style.columnGap = ''
+          items.forEach((it) => {
+            it.style.gridRow = ''
+            it.style.gridColumn = ''
+            it.style.justifySelf = ''
+          })
+          const widths = items.map((it) => it.offsetWidth || 0)
+          const itemH = items[0].offsetHeight || 18
+          const n = items.length
+          // 把 n 个图例项均分成 g 组：前 (n % g) 组各多 1 个，返回每组的 [start, end)
+          const groups = (g) => {
+            const q = Math.floor(n / g)
+            const rem = n % g
+            const list = []
+            let idx = 0
+            for (let i = 0; i < g; i++) {
+              const count = q + (i < rem ? 1 : 0)
+              list.push([idx, idx + count])
+              idx += count
+            }
+            return list
+          }
+          if (!isVertical) {
+            let oneRow = 0
+            widths.forEach((w, i) => {
+              oneRow += w + (i ? gap : 0)
+            })
+            if (oneRow <= availW) return // 单行放得下，保持原样
+            // 找最少的行数，使均分后每一行都不超宽
+            let chosen = 0
+            for (let rows = 2; rows <= n; rows++) {
+              const segs = groups(rows)
+              let ok = true
+              for (const [a, b] of segs) {
+                let w = 0
+                for (let i = a; i < b; i++) w += widths[i] + (i > a ? gap : 0)
+                if (w > availW) {
+                  ok = false
+                  break
+                }
+              }
+              if (ok) {
+                chosen = rows
+                break
+              }
+            }
+            if (!chosen) chosen = n
+            applyLegendGrid(legend, items, groups(chosen), 'row', gap)
+          } else {
+            const rowsFit = Math.max(1, Math.floor((availH + gap) / (itemH + gap)))
+            if (n <= rowsFit) return // 单列放得下，保持原样
+            // 从“每列最多 rowsFit 个”的最少列数开始，逐列增加直到总宽不超
+            let chosen = 0
+            for (let cols = Math.ceil(n / rowsFit); cols <= n; cols++) {
+              const segs = groups(cols)
+              let w = gap * (cols - 1)
+              for (const [a, b] of segs) {
+                let cw = 0
+                for (let i = a; i < b; i++) cw = Math.max(cw, widths[i])
+                w += cw
+              }
+              if (w <= availW) {
+                chosen = cols
+                break
+              }
+            }
+            if (!chosen) chosen = Math.ceil(n / rowsFit)
+            applyLegendGrid(legend, items, groups(chosen), 'column', gap)
+          }
+        }
+        function applyLegendGrid(legend, items, segs, flow, gap) {
+          legend.style.display = 'grid'
+          legend.style.justifyContent = 'center'
+          legend.style.alignContent = 'center'
+          if (flow === 'row') {
+            // 横排换行：行数由分组决定，行距收紧，列距沿用原间距
+            legend.style.gridTemplateRows = `repeat(${segs.length}, max-content)`
+            legend.style.rowGap = '3px'
+            legend.style.columnGap = gap + 'px'
+          } else {
+            // 竖排换列：列数由分组决定，列距放宽一点更透气
+            legend.style.gridTemplateColumns = `repeat(${segs.length}, max-content)`
+            legend.style.rowGap = '5px'
+            legend.style.columnGap = '14px'
+          }
+          items.forEach((item, i) => {
+            let g = 0
+            while (g < segs.length && !(i >= segs[g][0] && i < segs[g][1])) g++
+            if (g >= segs.length) return
+            const mainIndex = i - segs[g][0]
+            if (flow === 'row') {
+              item.style.gridRow = String(g + 1)
+              item.style.gridColumn = String(mainIndex + 1)
+            } else {
+              item.style.gridColumn = String(g + 1)
+              item.style.gridRow = String(mainIndex + 1)
+            }
+            // 不拉伸到轨道宽度，保持每项紧凑，同时保证后续重新测量准确
+            item.style.justifySelf = 'start'
+          })
+        }
+        function rebalanceOverlayLegend() {
+          const legend = document.querySelector('#chart-overlay .layout-legend')
+          if (!legend || legend.classList.contains('stream')) return
+          const items = Array.from(legend.querySelectorAll('.layout-legend-item'))
+          if (!items.length) return
+          try {
+            balanceLegendLayout(legend, items, legend.classList.contains('vertical'))
+          } catch (e) {}
+        }
+
         function renderOverlay() {
           const host = $('#chart-overlay')
           if (!host) return
@@ -11108,6 +11247,11 @@
                 legend.appendChild(item)
               })
               host.appendChild(legend)
+              balanceLegendLayout(
+                legend,
+                Array.from(legend.querySelectorAll('.layout-legend-item')),
+                state.legendOrientation === 'vertical',
+              )
             }
           }
         }
@@ -13988,6 +14132,8 @@
           frame.style.top = Math.round(y) + 'px'
           frame.style.width = w + 'px'
           frame.style.height = h + 'px'
+          // 容器尺寸变化后（窗口缩放、全屏预览切换），重新均衡图例的换行/换列
+          rebalanceOverlayLegend()
           return true
         }
         function resizeChart() {
@@ -14047,6 +14193,8 @@
           frame.style.top = Math.round(y) + 'px'
           frame.style.width = w + 'px'
           frame.style.height = h + 'px'
+          // 全屏预览尺寸变化后，重新均衡图例的换行/换列
+          rebalanceOverlayLegend()
           return true
         }
         function syncChartSize() {
