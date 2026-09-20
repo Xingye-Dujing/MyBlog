@@ -1,0 +1,3346 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>LaTeX 编译工作台</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <style>
+      :root {
+        --bg: #fff;
+        --paper: #fff;
+        --text: #1a1a1a;
+        --text-dim: rgba(26, 26, 26, 0.4);
+        --text-faint: rgba(26, 26, 26, 0.15);
+        --border: #1a1a1a;
+        --border-dim: rgba(26, 26, 26, 0.15);
+        --border-faint: rgba(26, 26, 26, 0.06);
+        --hover: rgba(26, 26, 26, 0.06);
+        --active-bg: #777;
+        --active-text: #fff;
+        --ink: #1a1a1a;
+        --dim: rgba(26, 26, 26, 0.4);
+        --faint: rgba(26, 26, 26, 0.15);
+        --muted: rgba(26, 26, 26, 0.55);
+        --line: rgba(26, 26, 26, 0.15);
+        --line2: rgba(26, 26, 26, 0.06);
+        --inverse: #fff;
+        --ok: #4e8061;
+        --warn: #9a7740;
+        --err: #a85454;
+        --serif: 'Literata', 'Georgia', 'Times New Roman', 'Songti SC', 'SimSun', '宋体', serif;
+        --sans: 'Literata', 'Georgia', 'Times New Roman', 'Songti SC', 'SimSun', '宋体', serif;
+        --mono:
+          'SFMono-Regular', 'Cascadia Mono', 'Cascadia Code', Consolas, 'Liberation Mono', 'Menlo',
+          'Courier New', monospace;
+        --radius: 0px;
+        --menuH: 48px;
+        --fscale: 1;
+        --zoom: 1;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        border-radius: var(--radius);
+      }
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+      }
+      body {
+        font-family: var(--serif);
+        font-size: 13px;
+        color: var(--text);
+        background: var(--bg);
+        overflow: hidden;
+        user-select: none;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        font-family: var(--serif);
+      }
+      button {
+        color: inherit;
+      }
+      ::selection {
+        background: rgba(80, 80, 80, 0.16);
+      }
+      .body-grid {
+        background-image:
+          linear-gradient(var(--line2) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line2) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+      .body-dots {
+        background-image: radial-gradient(circle, var(--line) 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+      .body-cross {
+        background-image:
+          linear-gradient(var(--line2) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line2) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 20px 20px;
+      }
+      .body-diagonal {
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 28px,
+          var(--line2) 28px,
+          var(--line2) 29px
+        );
+      }
+
+      /* ---------- 滚动条 ---------- */
+      ::-webkit-scrollbar {
+        width: 11px;
+        height: 11px;
+        background: transparent;
+      }
+      ::-webkit-scrollbar-track,
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: rgba(26, 26, 26, 0.17);
+        border: 3px solid transparent;
+        background-clip: padding-box;
+        border-radius: var(--radius);
+        transition: background-color 0.15s;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(26, 26, 26, 0.34);
+        background-clip: padding-box;
+      }
+      ::-webkit-scrollbar-thumb:active {
+        background-color: rgba(26, 26, 26, 0.48);
+        background-clip: padding-box;
+      }
+      /* Firefox 走标准属性；顶栏保持隐藏 */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(26, 26, 26, 0.24) transparent;
+      }
+      #top-menu {
+        scrollbar-width: none;
+      }
+
+      /* ---------- splash ---------- */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.6s;
+      }
+      #splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .splash-logo {
+        font-family: var(--serif);
+        font-size: calc(30px * var(--fscale));
+        color: var(--text);
+        letter-spacing: 10px;
+        margin-bottom: 8px;
+      }
+      .splash-tagline {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-dim);
+        letter-spacing: 3px;
+        margin-bottom: 40px;
+      }
+      .splash-enter {
+        padding: 10px 32px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--serif);
+        font-size: 11px;
+        letter-spacing: 2px;
+        cursor: pointer;
+        transition: all 0.15s;
+        font-weight: 500;
+      }
+      .splash-enter:hover {
+        color: var(--text);
+        border-color: var(--border);
+        box-shadow: inset 0 -2px 0 var(--text);
+        background: var(--hover);
+      }
+      .splash-note {
+        margin-top: 22px;
+        font-size: 9px;
+        color: var(--faint);
+        letter-spacing: 1.2px;
+      }
+
+      /* ---------- menu ---------- */
+      #menu-trigger {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 8px;
+        z-index: 1000;
+      }
+      #top-menu {
+        position: fixed;
+        left: 0;
+        top: -48px;
+        width: 100%;
+        height: 48px;
+        z-index: 999;
+        background: var(--bg);
+        border-bottom: 1px solid var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 0 10px;
+        overflow: auto;
+        scrollbar-width: none;
+        transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #top-menu::-webkit-scrollbar {
+        display: none;
+      }
+      #menu-trigger:hover ~ #top-menu,
+      #top-menu:hover,
+      #top-menu.pinned,
+      body.submenu-open #top-menu {
+        top: 0;
+      }
+      .menu-group {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 0 6px;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .menu-group + .menu-group:before {
+        content: '';
+        position: absolute;
+        left: -1px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1px;
+        height: 19px;
+        background: var(--line);
+      }
+      .menu-label {
+        font-size: 9px;
+        letter-spacing: 1.7px;
+        color: var(--faint);
+        padding: 0 4px;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .menu-btn,
+      .pin-btn {
+        background: transparent;
+        border: 1px solid transparent;
+        cursor: pointer;
+        border-radius: var(--radius);
+        transition: all 0.15s;
+        color: var(--dim);
+      }
+      .menu-btn {
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        padding: 4px 10px;
+        white-space: nowrap;
+      }
+      .menu-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .menu-btn.active {
+        color: var(--text);
+        background: var(--hover);
+        border-color: var(--border);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .pin-btn {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        color: var(--text-faint);
+        flex-shrink: 0;
+      }
+      .pin-btn svg {
+        width: 14px;
+        height: 14px;
+        transition: transform 0.15s ease;
+      }
+      .pin-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .pin-btn.pinned {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .pin-btn.pinned svg {
+        transform: rotate(180deg);
+      }
+      .pin-btn:focus-visible {
+        outline: none;
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .dropdown {
+        display: none;
+        position: fixed;
+        z-index: 1800;
+        background: var(--bg);
+        border: 1px solid var(--ink);
+        min-width: 220px;
+        padding: 4px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+        border-radius: var(--radius);
+        animation: dropIn 0.14s ease;
+        max-height: 74vh;
+        overflow: auto;
+      }
+      .dropdown.open {
+        display: block;
+      }
+      @keyframes dropIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .dd-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 7px 10px;
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--dim);
+        cursor: pointer;
+        text-align: left;
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        border-radius: var(--radius);
+      }
+      .dd-item:hover,
+      .dd-item-row:hover {
+        background: var(--hover);
+        color: var(--ink);
+        border-color: var(--line);
+      }
+      .dd-item:disabled {
+        opacity: 0.38;
+        cursor: not-allowed;
+      }
+      .dd-item:disabled:hover {
+        background: transparent;
+        color: var(--dim);
+        border-color: transparent;
+      }
+      .dd-item.active,
+      .dd-item.selected {
+        color: var(--ink);
+        background: var(--hover);
+        border-color: var(--ink);
+        box-shadow: inset 0 -2px 0 var(--ink);
+      }
+      .dd-item .muted {
+        color: var(--faint);
+        font-size: 9px;
+        letter-spacing: 0.6px;
+      }
+      .dd-divider {
+        height: 1px;
+        background: var(--line);
+        margin: 4px 0;
+      }
+      .dd-item-row > span:first-child {
+        font-size: 11px;
+        color: var(--dim);
+        letter-spacing: 0.3px;
+        flex: 0 0 auto;
+      }
+      .dd-label {
+        padding: 7px 10px 4px;
+        color: var(--faint);
+        font-size: 9px;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+      }
+      .dd-item-row {
+        display: flex;
+        overflow: hidden;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 28px;
+        padding: 7px 10px;
+        background: transparent;
+        color: var(--dim);
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+        gap: 10px;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+      }
+      .settings-control {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+      .settings-btn {
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 13px;
+        user-select: none;
+        border-radius: var(--radius);
+        flex-shrink: 0;
+      }
+      .settings-value {
+        min-width: 42px;
+        text-align: center;
+        color: var(--text);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .settings-btn:hover {
+        border-color: var(--border);
+        color: var(--text);
+        background: var(--hover);
+      }
+      .settings-bg-options {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+      .settings-bg-dot {
+        display: block;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        background-color: var(--bg);
+        transition: all 0.1s;
+        border-radius: var(--radius);
+        flex: 0 0 20px;
+      }
+      .settings-bg-dot:hover {
+        border-color: var(--text-dim);
+      }
+      .settings-bg-dot.active {
+        border-color: var(--ink);
+        outline: none;
+        box-shadow: none;
+        background-color: var(--bg);
+      }
+      .settings-bg-dot[data-bg='plain'] {
+        background: var(--bg);
+      }
+      .settings-bg-dot[data-bg='body-grid'] {
+        background-image:
+          linear-gradient(var(--border-dim) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+        background-size: 6px 6px;
+      }
+      .settings-bg-dot[data-bg='body-dots'] {
+        background-image: radial-gradient(circle, var(--text-dim) 1px, transparent 1px);
+        background-size: 5px 5px;
+      }
+      .settings-bg-dot[data-bg='body-cross'] {
+        background-image:
+          linear-gradient(var(--border-dim) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+        background-size: 8px 8px;
+        background-position: 4px 4px;
+      }
+      .settings-bg-dot[data-bg='body-diagonal'] {
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 4px,
+          var(--border-dim) 4px,
+          var(--border-dim) 5px
+        );
+      }
+      .settings-toggle {
+        display: flex;
+        gap: 3px;
+        flex-shrink: 0;
+      }
+      .settings-toggle button {
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-dim);
+        font-size: 10px;
+        padding: 3px 8px;
+        cursor: pointer;
+        border-radius: var(--radius);
+      }
+      .settings-toggle button.active {
+        border-color: var(--ink);
+        color: var(--ink);
+        box-shadow: inset 0 -2px 0 var(--ink);
+      }
+      .settings-toggle button:hover {
+        border-color: var(--border);
+        color: var(--text);
+      }
+
+      /* ---------- workspace ---------- */
+      #workspace {
+        position: absolute;
+        inset: 0;
+        padding: 14px 20px 54px;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 12px;
+        z-index: 1;
+        transition: padding-top 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      body.submenu-open:not(.menu-pinned) #workspace,
+      body.menu-pinned #workspace {
+        padding-top: 60px;
+      }
+      .zen-head {
+        grid-column: 1/-1;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        padding: 6px 0 10px;
+        border-bottom: 1px solid var(--line);
+        min-height: 48px;
+      }
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        min-width: 0;
+      }
+      .brand h1 {
+        font-size: 23px;
+        font-weight: 500;
+        letter-spacing: 3px;
+        white-space: nowrap;
+      }
+      .brand p {
+        font-size: 9px;
+        letter-spacing: 2px;
+        color: var(--dim);
+        white-space: nowrap;
+      }
+      .head-meta {
+        display: flex;
+        gap: 16px;
+        color: var(--dim);
+        font-size: 10px;
+        letter-spacing: 1px;
+        white-space: nowrap;
+      }
+      .head-meta b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      /* ---------- panes ---------- */
+      #panes {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 9px minmax(0, 1fr);
+        gap: 0;
+        min-height: 0;
+      }
+      .panel {
+        min-height: 0;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.94);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .panel-head {
+        position: relative;
+        z-index: 4;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 10px 11px 8px;
+        border-bottom: 1px solid var(--line2);
+        flex-shrink: 0;
+        gap: 8px;
+        min-height: 37px;
+      }
+      .panel-title {
+        font-size: 10px;
+        letter-spacing: 1.8px;
+        color: var(--dim);
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .panel-note {
+        font-size: 9px;
+        color: var(--faint);
+        letter-spacing: 0.6px;
+        white-space: nowrap;
+      }
+      .panel-head-right {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        flex-wrap: nowrap;
+      }
+      .panel-body {
+        min-height: 0;
+        overflow: auto;
+      }
+      .ghost-btn {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--line);
+        padding: 5px 8px;
+        cursor: pointer;
+        color: var(--dim);
+        font-size: 10px;
+        letter-spacing: 0.7px;
+        white-space: nowrap;
+      }
+      .ghost-btn:hover {
+        color: var(--ink);
+        border-color: var(--ink);
+        background: var(--bg);
+      }
+      .ghost-btn.on {
+        color: var(--ink);
+        border-color: var(--ink);
+        box-shadow: inset 0 -2px 0 var(--ink);
+      }
+      .ghost-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .ghost-btn:disabled:hover {
+        color: var(--dim);
+        border-color: var(--line);
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      #vsplit {
+        position: relative;
+        cursor: col-resize;
+        background: transparent;
+      }
+      #vsplit:before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--line);
+        transition: background 0.12s;
+      }
+      #vsplit:hover:before,
+      #vsplit.dragging:before {
+        background: var(--ink);
+      }
+      #vsplit:after {
+        content: '';
+        position: absolute;
+        left: 2px;
+        top: 50%;
+        width: 5px;
+        height: 34px;
+        transform: translateY(-50%);
+        background-image: linear-gradient(var(--faint) 1px, transparent 1px);
+        background-size: 5px 5px;
+      }
+      #vsplit:hover:after,
+      #vsplit.dragging:after {
+        background-image: linear-gradient(var(--dim) 1px, transparent 1px);
+      }
+
+      /* ---------- editor ---------- */
+      .editor-pane {
+        min-width: 0;
+      }
+      .editor-scroll {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+        position: relative;
+      }
+      .gutter {
+        flex: 0 0 auto;
+        width: 48px;
+        overflow: hidden;
+        background: rgba(26, 26, 26, 0.02);
+        border-right: 1px solid var(--line2);
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 18px;
+        color: var(--faint);
+        text-align: right;
+        padding: 10px 7px 10px 0;
+        user-select: none;
+        white-space: pre;
+      }
+      .gutter .gl {
+        display: block;
+        height: 18px;
+        position: relative;
+      }
+      .gutter .gl.err {
+        color: var(--err);
+      }
+      .gutter .gl.err:after {
+        content: '';
+        position: absolute;
+        right: -4px;
+        top: 7px;
+        width: 3px;
+        height: 3px;
+        background: var(--err);
+      }
+      #src {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: none;
+        resize: none;
+        background: transparent;
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 18px;
+        color: var(--ink);
+        padding: 10px 12px;
+        white-space: pre;
+        overflow: auto;
+        user-select: text;
+        tab-size: 2;
+      }
+      .editor-foot {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 5px 10px;
+        border-top: 1px solid var(--line2);
+        font-size: 9px;
+        color: var(--faint);
+        letter-spacing: 0.5px;
+      }
+
+      /* ---------- pdf ---------- */
+      .view-pane {
+        min-width: 0;
+      }
+      .pdf-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        position: relative;
+        background: rgba(26, 26, 26, 0.018);
+      }
+      .pdf-pages {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 12px 30px;
+      }
+      .pdf-page {
+        background: #fff;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.07),
+          0 0 0 1px rgba(26, 26, 26, 0.07);
+        flex: 0 0 auto;
+        position: relative;
+        line-height: 0;
+      }
+      .pdf-page canvas {
+        display: block;
+      }
+      .pdf-page-idx {
+        position: absolute;
+        right: 0;
+        bottom: -15px;
+        font-size: 9px;
+        color: var(--faint);
+        letter-spacing: 0.6px;
+        line-height: 1;
+      }
+      .pdf-empty {
+        padding: 54px 24px;
+        text-align: center;
+      }
+      .pdf-empty h2 {
+        font-size: 15px;
+        letter-spacing: 6px;
+        font-weight: 400;
+        color: var(--ink);
+        padding-bottom: 9px;
+      }
+      .pdf-empty p {
+        font-size: 10px;
+        line-height: 1.95;
+        letter-spacing: 0.6px;
+        color: var(--dim);
+      }
+      .pdf-empty .hint {
+        color: var(--faint);
+        font-size: 9px;
+      }
+      .pdf-busy {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 60px 20px;
+      }
+      .pdf-busy .bar {
+        width: 148px;
+        height: 2px;
+        background: var(--line2);
+        position: relative;
+        overflow: hidden;
+      }
+      .pdf-busy .bar i {
+        position: absolute;
+        left: -40%;
+        top: 0;
+        bottom: 0;
+        width: 40%;
+        background: var(--dim);
+        animation: slide 1.05s linear infinite;
+      }
+      @keyframes slide {
+        from {
+          left: -40%;
+        }
+        to {
+          left: 100%;
+        }
+      }
+      .pdf-busy span {
+        font-size: 10px;
+        color: var(--dim);
+        letter-spacing: 1.4px;
+      }
+      .err-list {
+        margin: 0;
+        padding: 4px 2px 10px;
+      }
+      .err-item {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        padding: 5px 9px;
+        border-left: 2px solid var(--err);
+        margin: 0 0 4px;
+        cursor: pointer;
+        background: transparent;
+        border-top: 0;
+        border-right: 0;
+        border-bottom: 0;
+        text-align: left;
+        width: 100%;
+      }
+      .err-item:hover {
+        background: var(--hover);
+      }
+      .err-item.soft {
+        border-left-color: var(--warn);
+      }
+      .err-item.soft .loc {
+        color: var(--warn);
+      }
+      .err-item .loc {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--err);
+        white-space: nowrap;
+        flex: 0 0 auto;
+      }
+      .err-item .msg {
+        font-size: 10px;
+        line-height: 1.55;
+        color: var(--dim);
+        word-break: break-word;
+      }
+      .err-h {
+        font-size: 9px;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: var(--faint);
+        padding: 8px 11px 4px;
+      }
+      .log-box {
+        font-family: var(--mono);
+        font-size: 10px;
+        line-height: 1.55;
+        color: var(--dim);
+        white-space: pre-wrap;
+        word-break: break-all;
+        padding: 8px 11px 16px;
+        user-select: text;
+      }
+
+      /* ---------- databar ---------- */
+      .databar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 500;
+        height: 34px;
+        border-top: 1px solid var(--ink);
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 8px;
+      }
+      .data-left,
+      .data-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        background: var(--ok);
+        flex-shrink: 0;
+      }
+      .status-dot.busy {
+        background: var(--warn);
+      }
+      .status-dot.err {
+        background: var(--err);
+      }
+      .status-text {
+        font-size: 9px;
+        color: var(--dim);
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .engine-chip {
+        font-size: 8px;
+        color: var(--faint);
+        border: 1px solid var(--line2);
+        padding: 2px 5px;
+        letter-spacing: 0.6px;
+        white-space: nowrap;
+      }
+      .data-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--dim);
+        padding: 4px 7px;
+        cursor: pointer;
+        font-size: 9px;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+      }
+      .data-btn:hover {
+        color: var(--ink);
+        border-color: var(--line);
+      }
+      .data-btn.strong {
+        border-color: var(--ink);
+        color: var(--ink);
+      }
+      .data-btn.strong:hover {
+        background: var(--hover);
+      }
+      .data-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .data-btn:disabled:hover {
+        color: var(--dim);
+        border-color: transparent;
+      }
+
+      /* ---------- toast / modal ---------- */
+      .toast {
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        z-index: 3000;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 6px 16px;
+        font-size: 11px;
+        letter-spacing: 0.7px;
+        color: var(--text);
+        font-family: var(--serif);
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+        pointer-events: none;
+        transition: all 0.2s;
+        max-width: 78vw;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 2400;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.55);
+      }
+      .modal.open {
+        display: flex;
+      }
+      .modal-card {
+        width: min(820px, calc(100vw - 28px));
+        max-height: min(82vh, 720px);
+        background: var(--bg);
+        border: 1px solid var(--ink);
+        box-shadow: 0 14px 38px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+      }
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 11px 13px;
+        border-bottom: 1px solid var(--line2);
+      }
+      .modal-head h3 {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.4px;
+      }
+      .modal-close {
+        width: 24px;
+        height: 24px;
+        border: 1px solid transparent;
+        background: transparent;
+        cursor: pointer;
+        color: var(--dim);
+        font-size: 14px;
+      }
+      .modal-close:hover {
+        border-color: var(--line);
+        color: var(--ink);
+      }
+      .modal-body {
+        padding: 12px 16px;
+        overflow: auto;
+        user-select: text;
+      }
+      .modal-body h4 {
+        font-size: 10px;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: var(--faint);
+        padding: 14px 0 7px;
+        font-weight: 400;
+      }
+      .modal-body h4:first-child {
+        padding-top: 0;
+      }
+      .modal-body p,
+      .modal-body li {
+        font-size: 11.5px;
+        line-height: 1.85;
+        color: var(--text);
+      }
+      .modal-body ul,
+      .modal-body ol {
+        padding-left: 20px;
+      }
+      .modal-body code {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        background: rgba(26, 26, 26, 0.05);
+        padding: 1px 4px;
+      }
+      .modal-foot {
+        padding: 9px 12px;
+        border-top: 1px solid var(--line2);
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash" aria-label="启动页">
+      <div class="splash-logo">ZENTEX</div>
+      <div class="splash-tagline">LaTeX 编译工作台 本地 MiKTeX · 真实编译</div>
+      <button class="splash-enter" id="splash-enter">启动</button>
+      <div class="splash-note">浏览器编辑 · 本机编译 · 即时 PDF</div>
+    </div>
+
+    <div id="menu-trigger"></div>
+    <nav id="top-menu" aria-label="ZENTEX菜单">
+      <div class="menu-group">
+        <span class="menu-label">文档</span><button class="menu-btn" data-menu="doc">文档</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">模板</span><button class="menu-btn" data-menu="tpl">模板</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">编译</span><button class="menu-btn" data-menu="build">编译</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">视图</span><button class="menu-btn" data-menu="view">视图</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">导出</span
+        ><button class="menu-btn" data-menu="export">导出</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">说明</span><button class="menu-btn" data-menu="help">说明</button>
+      </div>
+      <button class="pin-btn" id="pin-btn" type="button" title="固定菜单" aria-pressed="false">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </nav>
+    <div id="dropdowns"></div>
+
+    <main id="workspace">
+      <header class="zen-head">
+        <div class="brand">
+          <h1>ZENTEX</h1>
+          <p>LaTeX 编译工作台 本地 MiKTeX · 真实编译</p>
+        </div>
+        <div class="head-meta">
+          <span>行数 <b id="meta-lines">0</b></span
+          ><span>字符 <b id="meta-chars">0</b></span
+          ><span>页数 <b id="meta-pages">-</b></span
+          ><span>耗时 <b id="meta-time">-</b></span>
+        </div>
+      </header>
+
+      <div id="panes">
+        <section class="panel editor-pane" id="editor-pane">
+          <div class="panel-head">
+            <span class="panel-title">源码</span>
+            <div class="panel-head-right">
+              <span class="panel-note" id="editor-name">main.tex</span>
+              <button class="ghost-btn" id="btn-format" title="整理缩进">整理</button>
+              <button class="ghost-btn" id="btn-copy">复制</button>
+            </div>
+          </div>
+          <div class="editor-scroll">
+            <div class="gutter" id="gutter"></div>
+            <textarea id="src" spellcheck="false" wrap="off"></textarea>
+          </div>
+          <div class="editor-foot">
+            <span id="editor-pos">行 1 · 列 1</span>
+            <span id="editor-msg"></span>
+          </div>
+        </section>
+
+        <div id="vsplit" title="拖动调整宽度"></div>
+
+        <section class="panel view-pane" id="view-pane">
+          <div class="panel-head">
+            <span class="panel-title">PDF</span>
+            <div class="panel-head-right">
+              <button class="ghost-btn" id="btn-zoom-out" title="缩小">−</button>
+              <span class="panel-note" id="zoom-label">100%</span>
+              <button class="ghost-btn" id="btn-zoom-in" title="放大">+</button>
+              <button class="ghost-btn" id="btn-fit" title="适应宽度">适应</button>
+              <button class="ghost-btn" id="btn-log" title="查看编译日志">日志</button>
+            </div>
+          </div>
+          <div class="pdf-scroll" id="pdf-scroll">
+            <div class="pdf-pages" id="pdf-pages"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="databar">
+      <div class="data-left">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-text" id="status-text">就绪</span>
+        <span class="engine-chip" id="engine-chip">正在检测本地服务</span>
+      </div>
+      <div class="data-right">
+        <button class="data-btn" id="btn-swap">左右调换</button>
+        <button class="data-btn" id="btn-insert">插入片段</button>
+        <button class="data-btn" id="btn-download">下载 PDF</button>
+        <button class="data-btn" id="btn-export">导出 .tex</button>
+        <button class="data-btn strong" id="btn-compile">编译</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="modal" id="modal">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="modal-title">说明</h3>
+          <button class="modal-close" id="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-foot">
+          <button class="ghost-btn" id="modal-ok" type="button">好</button>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" id="file-input" accept=".tex,.txt,.latex" class="hidden" />
+
+    <script>
+      ;(function () {
+        'use strict'
+        const $ = (s) => document.querySelector(s)
+        const $$ = (s) => Array.from(document.querySelectorAll(s))
+        const $id = (s) => document.getElementById(s)
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
+        const esc = (s) =>
+          String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+
+        /* ===================== 状态 ===================== */
+        const state = {
+          tex: '',
+          engine: 'xelatex',
+          passes: 2,
+          auto: false,
+          radius: 0,
+          bg: 'body-grid',
+          split: 0.46, // 编辑器占比
+          flip: false, // true = 编辑器在右
+          zoom: 1,
+          fit: true,
+          apiBase: '',
+          service: null, // {engines, miktex}
+          lastKey: '',
+          pages: 0,
+          ms: 0,
+          errors: [],
+          log: '',
+        }
+        const LS = {
+          get(k, d) {
+            try {
+              const v = localStorage.getItem('zentex.' + k)
+              return v == null ? d : v
+            } catch (e) {
+              return d
+            }
+          },
+          set(k, v) {
+            try {
+              localStorage.setItem('zentex.' + k, String(v))
+            } catch (e) {}
+          },
+        }
+
+        /* ===================== 模板 ===================== */
+        const TEMPLATES = [
+          {
+            id: 'paper',
+            name: '中文学术论文',
+            hint: 'ctexart',
+            body: [
+              '\\documentclass[11pt,a4paper]{ctexart}',
+              '\\usepackage{amsmath,amssymb}',
+              '\\usepackage{booktabs}',
+              '\\usepackage{graphicx}',
+              '\\usepackage{geometry}',
+              '\\geometry{left=2.6cm,right=2.6cm,top=2.8cm,bottom=2.8cm}',
+              '\\usepackage{titlesec}',
+              '\\usepackage[hidelinks]{hyperref}',
+              '\\newcommand{\\keywords}[1]{\\par\\vspace{0.9em}\\noindent{\\heiti 关键词：}#1}',
+              '',
+              '\\title{\\heiti 近代中国报刊与公共舆论的生成}',
+              '\\author{某某\\quad 指导教师：某某某}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '\\maketitle',
+              '',
+              '\\begin{abstract}',
+              '本文以 1915 至 1937 年间若干代表性报刊为对象，考察公共舆论在近代中国的生成机制。',
+              '研究发现，报刊不仅是信息载体，更是意见交换的制度性空间；编辑、作者与读者之间的',
+              '互动塑造了独特的公共话语结构。',
+              '\\keywords{报刊史；公共舆论；近代中国；话语分析}',
+              '\\end{abstract}',
+              '',
+              '\\section{引言}',
+              '近代报刊研究长期存在两种取向：一是以报刊为中心的内容分析，二是以读者为中心的',
+              '接受研究。本文尝试整合两种路径，将报刊视为一个\\emph{关系性}的场域。',
+              '',
+              '\\subsection{问题的提出}',
+              '既有研究多强调报刊的单向传播功能，对读者反馈机制关注不足。据文献统计，一九二〇年代',
+              '读者来信的刊载比例约为\\textbf{百分之十七}，至一九三〇年代升至百分之三十一。',
+              '',
+              '\\section{数据与方法}',
+              '本文使用的主要指标如下表所示。',
+              '',
+              '\\begin{table}[htbp]',
+              '  \\centering',
+              '  \\caption{各时期报刊与读者来信统计}',
+              '  \\begin{tabular}{lrrr}',
+              '    \\toprule',
+              '    时期 & 报刊种数 & 来信篇数 & 刊载率 \\\\',
+              '    \\midrule',
+              '    1915--1920 & 46 & 138 & 17.2\\% \\\\',
+              '    1921--1927 & 112 & 402 & 23.6\\% \\\\',
+              '    1928--1937 & 158 & 760 & 31.4\\% \\\\',
+              '    \\bottomrule',
+              '  \\end{tabular}',
+              '\\end{table}',
+              '',
+              '交往密度的增长可以用一个简单的模型刻画：',
+              '\\begin{equation}',
+              '  D(t) = \\frac{N(t)\\,R(t)}{V(t)^{\\alpha}}, \\qquad \\alpha \\in (0,1)',
+              '\\end{equation}',
+              '其中 $N$ 为报刊数，$R$ 为来信数，$V$ 为版面容量。',
+              '',
+              '\\section{结论}',
+              '报刊所塑造的公共舆论，其生成并非单中心的，而是沿着\\emph{编辑---作者---读者}的',
+              '三角关系展开。理解这一结构，有助于重新评估近代中国的思想流通方式。',
+              '',
+              '\\begin{thebibliography}{9}',
+              '\\bibitem{ref1} 张某某. 近代报刊与社会变迁. 北京: 某出版社, 2018.',
+              '\\bibitem{ref2} 李某某. 读者来信与公共空间. 新闻与传播研究, 2020(4): 55--72.',
+              '\\end{thebibliography}',
+              '',
+              '\\end{document}',
+            ].join('\n'),
+          },
+          {
+            id: 'report',
+            name: '读书报告',
+            hint: '简洁',
+            body: [
+              '\\documentclass[11pt,a4paper]{ctexart}',
+              '\\usepackage{geometry}',
+              '\\geometry{left=2.8cm,right=2.8cm,top=3cm,bottom=3cm}',
+              '\\usepackage{enumitem}',
+              '',
+              '\\title{\\heiti 《乡土中国》读书报告}',
+              '\\author{某某}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '\\maketitle',
+              '',
+              '\\section{全书脉络}',
+              '费孝通以\\emph{差序格局}为核心概念，勾勒出中国乡土社会的基本结构。',
+              '全书十四篇，可归为三组：',
+              '\\begin{enumerate}[label=(\\arabic*)]',
+              '  \\item 乡土本色与文字下乡；',
+              '  \\item 差序格局、家族与礼治秩序；',
+              '  \\item 血缘与地缘、从欲望到需要。',
+              '\\end{enumerate}',
+              '',
+              '\\section{核心命题}',
+              '\\subsection{差序格局}',
+              '西方社会是团体格局，中国乡土社会则是以己为中心推出去的波纹。',
+              '这一比喻的关键在于\\textbf{关系的可伸缩性}。',
+              '',
+              '\\subsection{礼治与法治}',
+              '礼治并非人治，而是依据传统与教化维持的秩序。',
+              '',
+              '\\section{评价}',
+              '该书以经验观察支撑理论建构，对理解当代基层社会仍有启发。',
+              '',
+              '\\end{document}',
+            ].join('\n'),
+          },
+          {
+            id: 'english',
+            name: '英文 Term Paper',
+            hint: 'article',
+            body: [
+              '\\documentclass[11pt]{article}',
+              '\\usepackage[T1]{fontenc}',
+              '\\usepackage{mathptmx}',
+              '\\usepackage{geometry}',
+              '\\geometry{letterpaper,margin=1in}',
+              '\\usepackage{booktabs}',
+              '\\usepackage{amsmath}',
+              '',
+              '\\title{Readers and Writers: The Making of a Public Sphere}',
+              '\\author{Author Name\\\\Department of History}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '\\maketitle',
+              '',
+              '\\begin{abstract}',
+              'This paper examines how periodicals between 1915 and 1937 constituted a',
+              'space of opinion exchange, and argues that editorial correspondence',
+              'columns functioned as an institutionalized public sphere.',
+              '\\end{abstract}',
+              '',
+              '\\section{Introduction}',
+              'Scholarship on the periodical press has long been divided between content',
+              'analysis and reception studies. This paper integrates both by treating the',
+              'periodical as a relational field.\\footnote{All translations are mine.}',
+              '',
+              '\\section{Evidence}',
+              '\\begin{table}[htbp]',
+              '  \\centering',
+              '  \\caption{Correspondence published by period}',
+              '  \\begin{tabular}{lrr}',
+              '    \\toprule',
+              '    Period & Letters & Share \\\\',
+              '    \\midrule',
+              '    1915--1920 & 138 & 17.2\\\\% \\\\',
+              '    1921--1927 & 402 & 23.6\\\\% \\\\',
+              '    1928--1937 & 760 & 31.4\\\\% \\\\',
+              '    \\bottomrule',
+              '  \\end{tabular}',
+              '\\end{table}',
+              '',
+              'The density of exchange can be summarized as',
+              '\\begin{equation}',
+              '  D(t) = \\frac{N(t)\\,R(t)}{V(t)^{\\alpha}}.',
+              '\\end{equation}',
+              '',
+              '\\section{Conclusion}',
+              'The public sphere was triangulated among editors, authors, and readers.',
+              '',
+              '\\end{document}',
+            ].join('\n'),
+          },
+          {
+            id: 'tikz',
+            name: '图形与数据',
+            hint: 'TikZ / pgfplots',
+            body: [
+              '\\documentclass[11pt]{ctexart}',
+              '\\usepackage{geometry}',
+              '\\geometry{margin=2.6cm}',
+              '\\usepackage{pgfplots}',
+              '\\pgfplotsset{compat=1.17}',
+              '\\usepackage{tikz}',
+              '\\usetikzlibrary{positioning}',
+              '',
+              '\\title{\\heiti 近代白话与文言的消长}',
+              '\\author{某某}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '\\maketitle',
+              '',
+              '\\section{趋势}',
+              '下图给出两种文体的刊载占比变化。',
+              '',
+              '\\begin{figure}[htbp]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{axis}[',
+              '      width=12cm, height=7cm,',
+              '      xlabel={年份}, ylabel={占比 (\\%)},',
+              '      xmin=1915, xmax=1930, ymin=0, ymax=100,',
+              '      legend pos=north west,',
+              '      grid=major,',
+              '      ]',
+              '      \\addplot[color=black, mark=*, thick] coordinates {',
+              '        (1915,8) (1918,24) (1921,46) (1924,62) (1927,78) (1930,91)',
+              '      };',
+              '      \\addlegendentry{白话文}',
+              '      \\addplot[color=black!55, mark=square*, dashed, thick] coordinates {',
+              '        (1915,86) (1918,72) (1921,51) (1924,34) (1927,19) (1930,11)',
+              '      };',
+              '      \\addlegendentry{文言文}',
+              '    \\end{axis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{白话文与文言文刊载占比的变化}',
+              '\\end{figure}',
+              '',
+              '\\section{结构}',
+              '\\begin{figure}[htbp]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[node distance=1.6cm, every node/.style={draw, minimum width=2.4cm}]',
+              '    \\node (e) {编辑};',
+              '    \\node (a) [right=of e] {作者};',
+              '    \\node (r) [below=of a] {读者};',
+              '    \\draw[->] (e) -- (a);',
+              '    \\draw[->] (a) -- (r);',
+              '    \\draw[->] (r) -- (e);',
+              '  \\end{tikzpicture}',
+              '  \\caption{公共舆论的三角结构}',
+              '\\end{figure}',
+              '',
+              '\\end{document}',
+            ].join('\n'),
+          },
+          {
+            id: 'slides',
+            name: '幻灯片',
+            hint: 'Beamer',
+            body: [
+              '\\documentclass[aspectratio=169]{ctexbeamer}',
+              '\\usetheme{default}',
+              '\\usecolortheme{default}',
+              '',
+              '\\title{近代报刊与公共舆论}',
+              '\\author{某某}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '',
+              '\\begin{frame}',
+              '  \\titlepage',
+              '\\end{frame}',
+              '',
+              '\\begin{frame}{研究问题}',
+              '  \\begin{itemize}',
+              '    \\item 报刊如何塑造公共舆论？',
+              '    \\item 读者反馈在其中扮演什么角色？',
+              '  \\end{itemize}',
+              '\\end{frame}',
+              '',
+              '\\begin{frame}{主要发现}',
+              '  \\begin{enumerate}',
+              '    \\item 报刊是制度性的意见空间；',
+              '    \\item 编辑、作者、读者构成三角关系；',
+              '    \\item 刊载率随时间显著上升。',
+              '  \\end{enumerate}',
+              '\\end{frame}',
+              '',
+              '\\end{document}',
+            ].join('\n'),
+          },
+          {
+            id: 'blank',
+            name: '空白文档',
+            hint: '最小骨架',
+            body: [
+              '\\documentclass[11pt]{ctexart}',
+              '\\usepackage{geometry}',
+              '\\geometry{margin=2.6cm}',
+              '',
+              '\\title{标题}',
+              '\\author{作者}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '\\maketitle',
+              '',
+              '\\section{第一节}',
+              '在这里开始写作。',
+              '',
+              '\\end{document}',
+            ].join('\n'),
+          },
+          {
+            id: 'drawing',
+            name: '科研绘图集',
+            hint: '电路 / 化学 / 生物 / 统计',
+            body: [
+              '\\documentclass[11pt,a4paper]{ctexart}',
+              '\\usepackage{geometry}',
+              '\\geometry{left=2.4cm,right=2.4cm,top=2.6cm,bottom=2.6cm}',
+              '\\usepackage{amsmath,amssymb}',
+              '\\usepackage{graphicx}',
+              '\\usepackage{xcolor}',
+              '\\usepackage{tikz}',
+              '\\usetikzlibrary{positioning, arrows.meta, decorations.pathmorphing,',
+              '  decorations.markings, patterns, calc, shapes.geometric,',
+              '  shapes.misc, fadings, bending, mindmap, trees, backgrounds, intersections}',
+              '\\usepackage{circuitikz}',
+              '\\usepackage{chemfig}',
+              '\\usepackage{pgfplots}',
+              '\\pgfplotsset{compat=1.18}',
+              '\\usepgfplotslibrary{statistics, polar, fillbetween}',
+              '\\usepackage{float}',
+              '\\usepackage{booktabs}',
+              '\\usepackage{caption}',
+              '\\usepackage{titlesec}',
+              '\\usepackage[hidelinks]{hyperref}',
+              '',
+              '% ---------------- 统一配色 ----------------',
+              '\\definecolor{cBlue}{HTML}{2c7fb8}',
+              '\\definecolor{cTeal}{HTML}{2ca8a0}',
+              '\\definecolor{cOrange}{HTML}{e07b1e}',
+              '\\definecolor{cRed}{HTML}{c0392b}',
+              '\\definecolor{cGreen}{HTML}{27a567}',
+              '\\definecolor{cPurple}{HTML}{7b5ea7}',
+              '\\definecolor{cGray}{HTML}{8a94a0}',
+              '\\definecolor{cInk}{HTML}{2d3748}',
+              '',
+              '\\title{\\bfseries LaTeX 科研绘图能力展示}',
+              '\\author{基于 \\texttt{TikZ} / \\texttt{circuitikz} / \\texttt{chemfig} / \\texttt{pgfplots}}',
+              '\\date{\\today}',
+              '',
+              '\\begin{document}',
+              '\\maketitle',
+              '',
+              '\\begin{abstract}',
+              '本文档集中展示 \\LaTeX{} 生态下以矢量方式绘制科研图形的能力：从电路原理图、',
+              '有机化学结构式，到生物学示意图、常用数学与统计图表，再到流程图与思维导图。',
+              '全部图形由代码精确生成，可无损缩放、与正文共用同一套字体与配色。',
+              '\\end{abstract}',
+              '',
+              '\\tableofcontents',
+              '\\newpage',
+              '',
+              '% ============================================================',
+              '\\section{电路原理图（circuitikz）}',
+              '\\LaTeX{} 的 \\texttt{circuitikz} 宏包以 \\texttt{TikZ} 为基础，能够精确绘制',
+              '各类模拟与数字电路。以下给出四种典型电路。',
+              '',
+              '\\subsection{RC 低通滤波器}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{circuitikz}[scale=1.05]',
+              '    \\draw (0,0) to[sV, l=$V_{in}$, *-*] (0,3)',
+              '                to[R, l=$R$] (3,3)',
+              '                to[C, l=$C$] (3,0)',
+              '                to[short] (0,0);',
+              '    \\draw (3,3) to[short, -o] (5.2,3) node[right]{$V_{out}$};',
+              '    \\draw (3,0) to[short, -o] (5.2,0);',
+              '    \\node[font=\\small, cGray] at (1.5,-0.6) {截止频率 $f_c=\\dfrac{1}{2\\pi RC}$};',
+              '  \\end{circuitikz}',
+              '  \\caption{RC 一阶低通滤波器。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{反相比例放大电路（运算放大器）}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{circuitikz}[scale=1.05]',
+              '    \\node[op amp] (oa) at (5,0) {};',
+              '    \\draw (oa.-) -- ++(-2.2,0) to[R=$R_1$] ++(-2.2,0)',
+              '                to[sV, l=$V_{in}$] ++(0,-2.2) node[ground]{};',
+              '    \\draw (oa.+) -- ++(0,-1.6) node[ground]{};',
+              '    \\coordinate (fA) at ($(oa.-)+(0,1.7)$);',
+              '    \\coordinate (fB) at ($(oa.out)+(0,1.7)$);',
+              '    \\draw (oa.-) -- (fA);',
+              '    \\draw (fA) to[R=$R_f$] (fB);',
+              '    \\draw (fB) -- (oa.out);',
+              '    \\fill (oa.-) circle (1.6pt);',
+              '    \\draw (oa.out) to[short, -o] ++(2.6,0) node[right]{$V_{out}$};',
+              '    \\node[font=\\small, cGray] at (5,3.2) {增益 $A_v=-\\dfrac{R_f}{R_1}$};',
+              '  \\end{circuitikz}',
+              '  \\caption{反相比例放大器。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{共发射极晶体管放大电路}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{circuitikz}[scale=1.0]',
+              '    \\node[npn] (Q) at (5,3) {};',
+              '    % 供电与集电极电阻',
+              '    \\draw (5,6) node[vcc]{$V_{CC}$} to[R=$R_C$, *-] (Q.C);',
+              '    % 发射极电阻 + 旁路电容',
+              '    \\draw (Q.E) to[R=$R_E$] (5,1) to[short] (5,0.4) node[ground]{};',
+              '    \\draw (Q.E) to[short, *-] (7,3) to[C=$C_E$] (7,1) to[short, *-] (5,1);',
+              '    % 基极偏置',
+              '    \\draw (Q.B) to[short, *-] (3,3);',
+              '    \\draw (3,3) to[R=$R_1$] (3,6) to[short] (5,6);',
+              '    \\draw (3,3) to[R=$R_2$] (3,0.4) to[short] (5,0.4);',
+              '    % 输入耦合',
+              '    \\draw (0,3) to[C=$C_1$, o-] (3,3);',
+              '    \\draw (0,3) to[sV, l=$V_{in}$] (0,0.4) node[ground]{};',
+              '    % 输出',
+              '    \\draw (Q.C) to[short, *-] (8.5,3) to[short, -o] (9.5,3) node[right]{$V_{out}$};',
+              '  \\end{circuitikz}',
+              '  \\caption{共发射极（CE）三极管放大电路。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{桥式整流电路}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{circuitikz}[scale=1.0]',
+              '    % 四个二极管构成桥',
+              '    \\draw (0,0)   to[D, l=$D_1$] (2,2);',
+              '    \\draw (4,0)   to[D, l=$D_2$] (2,2);',
+              '    \\draw (2,-2)  to[D, l=$D_3$] (0,0);',
+              '    \\draw (2,-2)  to[D, l=$D_4$] (4,0);',
+              '    % 交流输入（跨左右两角）',
+              '    \\draw (0,0) to[sV, l_=$V_{AC}$] (4,0);',
+              '    % 直流输出（上下两角）+ 负载与滤波',
+              '    \\draw (2,2) to[short, *-] (4.5,2)',
+              '                to[R, l=$R_L$] (4.5,-2)',
+              '                to[short, *-] (2,-2);',
+              '    \\draw (4.5,2) to[short, -*] (6.6,2);',
+              '    \\draw (4.5,-2) to[short, -*] (6.6,-2);',
+              '    \\draw (6.6,2) to[C, l=$C$] (6.6,-2);',
+              '    \\draw (6.6,2) to[short, -o] (8.6,2) node[right]{$+$};',
+              '    \\draw (6.6,-2) to[short, -o] (8.6,-2) node[right]{$-$};',
+              '    \\node[font=\\small, cBlue] at (2,2.45) {$+$};',
+              '    \\node[font=\\small, cRed] at (2,-2.45) {$-$};',
+              '  \\end{circuitikz}',
+              '  \\caption{二极管桥式全波整流与电容滤波。}',
+              '\\end{figure}',
+              '',
+              '\\newpage',
+              '% ============================================================',
+              '\\section{化学结构式（chemfig）}',
+              '\\texttt{chemfig} 用字符串描述分子拓扑，自动排布键角并渲染共振、立体与反应机理。',
+              '',
+              '\\subsection{苯环与共振结构}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\chemfig{*6(-=-=-=)}',
+              '  \\hspace{1.2cm}',
+              '  \\chemfig{*6(=-=-=-)}',
+              '  \\caption{苯的两个等价凯库勒共振式。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{阿司匹林（乙酰水杨酸）}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\chemfig{*6(-(-COOH)=(-O-C(=[:60]O)-[:-30]CH_3)-=-=)}',
+              '  \\caption{阿司匹林：邻乙酰氧基苯甲酸。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{D-葡萄糖（费歇尔投影）}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\chemfig{CHO-[:30]CHOH-[:-30]CHOH-[:30]CHOH-[:-30]CHOH-[:30]CH_2OH}',
+              '  \\caption{D-葡萄糖的开链费歇尔投影。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{酯化反应机理}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\schemestart',
+              '    \\chemfig{R-C(=[:60]O)-[:-60]OH}',
+              '    \\+',
+              '    \\chemfig{R\'-OH}',
+              '    \\arrow{->[H$^+$][$\\Delta$]}',
+              '    \\chemfig{R-C(=[:60]O)-[:-60]O-R\'}',
+              '    \\+',
+              '    \\chemfig{H_2O}',
+              '  \\schemestop',
+              '  \\caption{羧酸与醇的酯化反应。}',
+              '\\end{figure}',
+              '',
+              '\\newpage',
+              '% ============================================================',
+              '\\section{生物学示意图（TikZ）}',
+              '纯 \\texttt{TikZ} 即可绘制细胞、核酸、神经元与系统进化树等生物学图形。',
+              '',
+              '\\subsection{动物细胞结构}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[>=Stealth,',
+              '      mem/.style={draw=cBlue!70!black, fill=cBlue!6, line width=1.3pt},',
+              '      organ/.style={draw, line width=1pt},',
+              '      lbl/.style={font=\\footnotesize\\bfseries, cInk}]',
+              '    % 细胞膜',
+              '    \\draw[mem] (0,0) ellipse (5cm and 3.4cm);',
+              '    % 细胞核',
+              '    \\draw[organ, fill=cPurple!18, draw=cPurple!80!black] (-1.4,0.2) circle (1.5cm);',
+              '    \\node[lbl, cPurple!80!black] at (-1.4,0.2) {细胞核};',
+              '    \\draw[fill=cPurple!45] (-1.7,-0.3) circle (0.45cm);',
+              '    \\node[font=\\tiny, cPurple!80!black] at (-1.7,-0.3) {核仁};',
+              '    % 线粒体',
+              '    \\draw[organ, fill=cOrange!16, draw=cOrange!80!black] (2.4,1.3) ellipse (1.1cm and 0.55cm);',
+              '    \\draw[draw=cOrange!80!black, line width=0.8pt]',
+              '      (1.5,1.3) .. controls (2.4,0.95) and (2.4,1.65) .. (3.3,1.3);',
+              '    \\node[lbl, cOrange!80!black, above] at (2.4,2.0) {线粒体};',
+              '    % 内质网',
+              '    \\draw[organ, draw=cTeal!80!black, line width=0.9pt]',
+              '      (0.5,0.4) .. controls (1.3,1.0) and (0.7,1.3) .. (1.5,1.1)',
+              '      .. controls (2.1,0.7) and (1.5,0.3) .. (2.1,0.7);',
+              '    \\node[lbl, cTeal!80!black, above right] at (0.6,1.3) {内质网};',
+              '    % 高尔基体',
+              '    \\foreach \\y in {0,0.32,0.64,0.96} {',
+              '      \\draw[organ, draw=cGreen!80!black, fill=cGreen!12]',
+              '        (3.0,-1.4+\\y) arc (0:180:1.05 and 0.34);',
+              '    }',
+              '    \\node[lbl, cGreen!80!black, right] at (4.2,-0.7) {高尔基体};',
+              '    % 溶酶体',
+              '    \\draw[organ, fill=cRed!14, draw=cRed!80!black] (0.4,-2.1) circle (0.5cm);',
+              '    \\node[lbl, cRed!80!black] at (0.4,-2.1) {溶酶体};',
+              '    % 中心体',
+              '    \\draw[organ, draw=cGray!80!black, line width=1pt] (-3.6,-1.5) ellipse (0.22 and 0.55);',
+              '    \\draw[organ, draw=cGray!80!black, line width=1pt] (-3.25,-1.5) ellipse (0.22 and 0.55);',
+              '    \\node[lbl, cGray!80!black, below] at (-3.4,-2.2) {中心体};',
+              '    % 核糖体（散点）',
+              '    \\foreach \\p in {(3.6,1.9),(4.0,1.5),(4.3,2.1),(1.2,-1.1),(1.7,-1.5),',
+              '                   (4.1,-1.9),(3.5,0.3),(0.9,2.1),(3.0,2.2)} {',
+              '      \\fill[cInk] \\p circle (1.6pt);',
+              '    }',
+              '    \\node[lbl, right] at (4.5,1.9) {核糖体};',
+              '  \\end{tikzpicture}',
+              '  \\caption{动物细胞主要细胞器示意。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{DNA 双螺旋}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[>=Stealth, scale=0.66]',
+              '    \\def\\N{20}',
+              '    \\draw[line width=2pt, cBlue]',
+              '      plot[domain=0:\\N, samples=320, smooth] (\\x, {1.5*sin(\\x*36)});',
+              '    \\draw[line width=2pt, cRed]',
+              '      plot[domain=0:\\N, samples=320, smooth] (\\x, {-1.5*sin(\\x*36)});',
+              '    \\foreach \\x in {0,1,...,\\N} {',
+              '      \\draw[line width=1pt, cGray!75!black]',
+              '        (\\x, {1.5*sin(\\x*36)}) -- (\\x, {-1.5*sin(\\x*36)});',
+              '    }',
+              '    \\foreach \\x in {2,6,10,14,18} {',
+              '      \\fill[cGreen!80!black] (\\x, {1.5*sin(\\x*36)}) circle (3.2pt);',
+              '      \\fill[cOrange!85!black] (\\x, {-1.5*sin(\\x*36)}) circle (3.2pt);',
+              '    }',
+              '    \\node[font=\\small, cBlue] at (0,2.6) {糖--磷酸骨架};',
+              '    \\node[font=\\small, cGreen!80!black] at (\\N,2.6) {碱基对};',
+              '  \\end{tikzpicture}',
+              '  \\caption{DNA 双螺旋的“扭曲阶梯”模型。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{神经元结构}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[>=Stealth,',
+              '      soma/.style={fill=cGreen!15, draw=cGreen!70!black, line width=1.4pt},',
+              '      axon/.style={line width=2.4pt, draw=cGreen!60!black},',
+              '      my/.style={fill=cOrange!25, draw=cOrange!80!black, line width=1.2pt},',
+              '      lbl/.style={font=\\footnotesize\\bfseries, cInk}]',
+              '    % 树突',
+              '    \\foreach \\a/\\len in {150/1.7,120/2.1,100/1.5,80/2.2,60/1.8,35/1.6} {',
+              '      \\draw[line width=1.6pt, draw=cGreen!60!black] (0,0) -- (\\a:\\len);',
+              '      \\draw[line width=1.6pt, draw=cGreen!60!black]',
+              '        (\\a:\\len) -- (\\a+16:{\\len+0.6});',
+              '      \\draw[line width=1.6pt, draw=cGreen!60!black]',
+              '        (\\a:\\len) -- (\\a-16:{\\len+0.6});',
+              '    }',
+              '    % 胞体',
+              '    \\draw[soma] (0,0) circle (1.1cm);',
+              '    \\node[lbl, cGreen!80!black] at (0,0) {胞体};',
+              '    % 轴突',
+              '    \\draw[axon] (1.1,0) -- (8,0);',
+              '    % 髓鞘',
+              '    \\foreach \\x in {2,3.2,4.4,5.6,6.8} {',
+              '      \\draw[my] (\\x,0) ellipse (0.55cm and 0.42cm);',
+              '    }',
+              '    % 神经末梢',
+              '    \\foreach \\t in {200,235,270,305,340} {',
+              '      \\draw[line width=1.4pt, draw=cGreen!60!black]',
+              '        (8,0) -- (8.7,0) -- ($(8.7,0)+(\\t:0.95)$)',
+              '        node[circle, fill=cGreen!40, draw=cGreen!70!black, inner sep=1.6pt]{};',
+              '    }',
+              '    \\node[lbl] at (-1.6,2.4) {树突};',
+              '    \\node[lbl] at (4,1.0) {轴突};',
+              '    \\node[lbl, cOrange!80!black] at (4,-1.0) {髓鞘};',
+              '    \\node[lbl] at (9.4,0.8) {神经末梢};',
+              '  \\end{tikzpicture}',
+              '  \\caption{神经元：树突、胞体、轴突髓鞘与末梢。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{系统进化树}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[>=Stealth,',
+              '      edge/.style={draw=cInk, line width=1.2pt},',
+              '      tip/.style={font=\\small\\bfseries, cInk}]',
+              '    \\draw[edge] (0,0) -- (2.5,0);',
+              '    \\draw[edge] (2.5,0) -- (2.5,2) -- (5,2.6) node[tip, right]{鱼类};',
+              '    \\draw[edge] (2.5,2) -- (5,1.4) node[tip, right]{两栖类};',
+              '    \\draw[edge] (2.5,0) -- (2.5,-2) -- (5,-1.4) node[tip, right]{爬行类};',
+              '    \\draw[edge] (2.5,-2) -- (5,-2.6) node[tip, right]{鸟类};',
+              '    \\draw[edge] (2.5,0) -- (5,0) node[tip, right]{哺乳类};',
+              '    \\fill[cInk] (2.5,2) circle (2pt);',
+              '    \\fill[cInk] (2.5,-2) circle (2pt);',
+              '    \\fill[cInk] (0,0) circle (2.2pt);',
+              '    \\node[font=\\small, cGray] at (0,-1.4) {共同祖先};',
+              '  \\end{tikzpicture}',
+              '  \\caption{脊椎动物简化分支系统树。}',
+              '\\end{figure}',
+              '',
+              '\\newpage',
+              '% ============================================================',
+              '\\section{数学与统计图（pgfplots）}',
+              '\\texttt{pgfplots} 直接读取数据并在 \\LaTeX{} 内绘制坐标轴、拟合线与各类统计图。',
+              '',
+              '\\subsection{分组柱状图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{axis}[',
+              '      width=11.5cm, height=6.2cm, ybar, ymin=0, ymax=100, bar width=9pt,',
+              '      xtick={1,2,3,4}, xticklabels={方案A,方案B,方案C,方案D},',
+              '      ylabel={得分 (\\%)}, xlabel={实验方案},',
+              '      legend pos=north west, grid=major, grid style={draw=gray!20},',
+              '      ]',
+              '      \\addplot[fill=cBlue!55, draw=cBlue!80!black] coordinates {(1,78)(2,85)(3,69)(4,92)};',
+              '      \\addplot[fill=cOrange!55, draw=cOrange!80!black] coordinates {(1,65)(2,72)(3,80)(4,74)};',
+              '      \\legend{准确率, 召回率}',
+              '    \\end{axis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{四种方案的性能对比。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{多序列折线图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{axis}[',
+              '      width=11.5cm, height=6.2cm, xlabel={年份}, ylabel={占比 (\\%)},',
+              '      xmin=2015, xmax=2030, ymin=0, ymax=100,',
+              '      legend pos=south east, grid=major, grid style={draw=gray!20}, smooth,',
+              '      xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=0,',
+              '                        /pgf/number format/1000 sep=},',
+              '      ]',
+              '      \\addplot[color=cBlue, mark=*, thick] coordinates',
+              '        {(2015,8)(2018,24)(2021,46)(2024,62)(2027,78)(2030,91)};',
+              '      \\addplot[color=cRed, mark=square*, dashed, thick] coordinates',
+              '        {(2015,86)(2018,72)(2021,51)(2024,34)(2027,19)(2030,11)};',
+              '      \\legend{白话文, 文言文}',
+              '    \\end{axis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{两种文体占比随时间的变化。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{散点图与拟合直线}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{axis}[',
+              '      width=11.5cm, height=6.2cm, xlabel={样本序号}, ylabel={观测值},',
+              '      grid=major, grid style={draw=gray!20}, legend pos=north west,',
+              '      xmin=0, xmax=11, ymin=0, ymax=11,',
+              '      ]',
+              '      \\addplot[only marks, mark=*, color=cTeal, mark size=2.6pt] coordinates {',
+              '        (1,1.8)(2,2.6)(3,3.1)(4,4.2)(5,4.9)(6,5.5)(7,6.3)(8,7.0)(9,8.2)(10,9.0)};',
+              '      \\addplot[no markers, color=cRed, thick, domain=0:11] {0.92*x+0.7};',
+              '      \\legend{数据点, 拟合直线 $y=0.92x+0.7$}',
+              '    \\end{axis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{最小二乘线性拟合示例。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{频率分布直方图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{axis}[',
+              '      width=11.5cm, height=6.2cm, ylabel={频数}, xlabel={数值},',
+              '      grid=major, grid style={draw=gray!20}, ymin=0,',
+              '      ]',
+              '      \\addplot+[hist={bins=10, data min=0, data max=10}, mark=none,',
+              '                fill=cOrange!40, draw=cOrange!80!black, thick]',
+              '        table[row sep=\\\\, y index=0] {',
+              '        0.8\\\\1.2\\\\1.5\\\\1.9\\\\2.1\\\\2.4\\\\2.8\\\\3.0\\\\3.3\\\\3.6\\\\3.9\\\\4.1\\\\',
+              '        4.4\\\\4.7\\\\4.9\\\\5.2\\\\5.5\\\\5.8\\\\6.0\\\\6.3\\\\6.6\\\\6.9\\\\7.1\\\\7.4\\\\',
+              '        7.7\\\\8.0\\\\8.3\\\\8.6\\\\8.9\\\\9.2\\\\9.5\\\\9.8\\\\',
+              '        };',
+              '    \\end{axis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{32 个样本的数值分布。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{箱线图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[line join=round, x=1.25cm, y=0.86cm]',
+              '    % 纵坐标映射：Y = (分值 - 30) / 10',
+              '    \\draw[->, line width=1pt] (0.6,0) -- (0.6,7.15) node[left, font=\\small]{得分};',
+              '    \\draw[line width=1pt] (0.6,0) -- (5.6,0);',
+              '    \\foreach \\sc/\\yy in {40/1.0,50/2.0,60/3.0,70/4.0,80/5.0,90/6.0,100/7.0} {',
+              '      \\draw[gray!35] (0.6,\\yy) -- (5.6,\\yy);',
+              '      \\node[left, font=\\scriptsize, cGray] at (0.58,\\yy) {\\sc};',
+              '    }',
+              '    % 两组箱线图（\\lw..\\uw 为映射后的坐标）',
+              '    \\foreach \\x/\\lw/\\lq/\\md/\\uq/\\uw/\\col in {',
+              '        1.7/1.2/2.5/3.8/5.0/6.2/cBlue, 3.7/2.5/4.0/5.3/6.0/6.8/cOrange} {',
+              '      \\draw[line width=1pt, \\col!85!black] (\\x,\\lw) -- (\\x,\\uw);',
+              '      \\draw[line width=1pt, \\col!85!black] (\\x-0.32,\\lw) -- (\\x+0.32,\\lw);',
+              '      \\draw[line width=1pt, \\col!85!black] (\\x-0.32,\\uw) -- (\\x+0.32,\\uw);',
+              '      \\draw[line width=1pt, fill=\\col!30, draw=\\col!85!black]',
+              '        (\\x-0.45,\\lq) rectangle (\\x+0.45,\\uq);',
+              '      \\draw[line width=1.8pt, cRed] (\\x-0.45,\\md) -- (\\x+0.45,\\md);',
+              '    }',
+              '    \\node[font=\\small] at (1.7,-0.55) {对照组};',
+              '    \\node[font=\\small] at (3.7,-0.55) {实验组};',
+              '  \\end{tikzpicture}',
+              '  \\caption{两组数据的五数概括对比（红线为中位数）。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{饼图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\def\\R{2.4}',
+              '    \\draw[fill=cBlue!70, draw=white, line width=1pt] (0,0) -- (90:\\R)',
+              '      arc[start angle=90, end angle=-36, radius=\\R] -- cycle;',
+              '    \\draw[fill=cOrange!75, draw=white, line width=1pt] (0,0) -- (-36:\\R)',
+              '      arc[start angle=-36, end angle=-126, radius=\\R] -- cycle;',
+              '    \\draw[fill=cGreen!70, draw=white, line width=1pt] (0,0) -- (-126:\\R)',
+              '      arc[start angle=-126, end angle=-198, radius=\\R] -- cycle;',
+              '    \\draw[fill=cPurple!70, draw=white, line width=1pt] (0,0) -- (-198:\\R)',
+              '      arc[start angle=-198, end angle=-241.2, radius=\\R] -- cycle;',
+              '    \\draw[fill=cRed!70, draw=white, line width=1pt] (0,0) -- (-241.2:\\R)',
+              '      arc[start angle=-241.2, end angle=-270, radius=\\R] -- cycle;',
+              '    \\foreach \\a/\\t in {27/{35\\%}, -81/{25\\%}, -162/{20\\%}, -219.6/{12\\%}, -256/{8\\%}} {',
+              '      \\node[font=\\small\\bfseries, white] at (\\a:1.5) {\\t};',
+              '    }',
+              '    % 图例',
+              '    \\foreach \\i/\\c/\\n in {0/cBlue/{方案A}, 1/cOrange/{方案B}, 2/cGreen/{方案C},',
+              '                          3/cPurple/{方案D}, 4/cRed/{其他}} {',
+              '      \\fill[\\c!70] (3.3,{1.2-0.72*\\i}) rectangle ++(0.36,0.36);',
+              '      \\node[font=\\small, anchor=west] at (3.85,{1.38-0.72*\\i}) {\\n};',
+              '    }',
+              '  \\end{tikzpicture}',
+              '  \\caption{各方案占比（饼图）。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{极坐标玫瑰曲线}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{polaraxis}[',
+              '      width=9cm, height=9cm,',
+              '      xtick={0,30,...,330}, ytick={0.2,0.4,0.6,0.8,1.0},',
+              '      grid=major, grid style={draw=gray!20}, axis line style={cGray},',
+              '      title={玫瑰曲线 $r=|\\sin 3\\theta|$},',
+              '      ]',
+              '      \\addplot[mark=none, domain=0:360, samples=240, thick, color=cPurple]',
+              '        ({x}, {abs(sin(3*x))});',
+              '    \\end{polaraxis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{极坐标下的玫瑰曲线（$r=|\\sin 3\\theta|$ 实际呈六瓣）。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{三维曲面}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}',
+              '    \\begin{axis}[',
+              '      width=11cm, height=8cm, view={35}{30},',
+              '      xlabel=$x$, ylabel=$y$, zlabel=$z$,',
+              '      colormap/hot, colorbar,',
+              '      ]',
+              '      \\addplot3[surf, shader=interp, domain=-3:3, y domain=-3:3,',
+              '        samples=41, z buffer=sort]',
+              '        {exp(-(x^2+y^2)/2) * cos(deg(x^2+y^2)*1.5)};',
+              '    \\end{axis}',
+              '  \\end{tikzpicture}',
+              '  \\caption{二维衰减波纹曲面 $z=e^{-(x^2+y^2)/2}\\cos(1.5(x^2+y^2))$。}',
+              '\\end{figure}',
+              '',
+              '\\newpage',
+              '% ============================================================',
+              '\\section{流程图与思维导图（TikZ）}',
+              '\\texttt{TikZ} 的 \\texttt{shapes} 与 \\texttt{mindmap} 库可绘制算法流程图与概念导图。',
+              '',
+              '\\subsection{算法流程图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[>=Stealth,',
+              '      startstop/.style={rectangle, rounded corners, draw=cInk,',
+              '        fill=cGray!20, minimum width=2.3cm, minimum height=0.9cm, font=\\small},',
+              '      process/.style={rectangle, draw=cBlue!70!black, fill=cBlue!10,',
+              '        minimum width=2.6cm, minimum height=0.9cm, font=\\small},',
+              '      decision/.style={diamond, aspect=2.2, draw=cOrange!80!black,',
+              '        fill=cOrange!12, font=\\small, inner sep=1pt},',
+              '      io/.style={trapezium, trapezium left angle=70, trapezium right angle=110,',
+              '        draw=cGreen!80!black, fill=cGreen!12, minimum width=2.3cm,',
+              '        minimum height=0.9cm, font=\\small},',
+              '      arr/.style={->, line width=1.1pt, draw=cInk}]',
+              '    \\node[startstop] (s) at (0,0) {开始};',
+              '    \\node[io] (i) at (0,-1.7) {输入数据};',
+              '    \\node[process] (p) at (0,-3.4) {预处理};',
+              '    \\node[decision] (d) at (0,-5.4) {收敛?};',
+              '    \\node[process] (q) at (3.4,-5.4) {迭代优化};',
+              '    \\node[startstop] (e) at (0,-7.4) {输出结果};',
+              '    \\draw[arr] (s) -- (i);',
+              '    \\draw[arr] (i) -- (p);',
+              '    \\draw[arr] (p) -- (d);',
+              '    \\draw[arr] (d) -- node[right,font=\\tiny]{否} (q);',
+              '    \\draw[arr] (q) |- (p);',
+              '    \\draw[arr] (d) -- node[right,font=\\tiny]{是} (e);',
+              '  \\end{tikzpicture}',
+              '  \\caption{带反馈回路的迭代算法流程。}',
+              '\\end{figure}',
+              '',
+              '\\subsection{思维导图}',
+              '\\begin{figure}[H]',
+              '  \\centering',
+              '  \\begin{tikzpicture}[mindmap, concept color=cBlue,',
+              '      level 1 concept/.append style={font=\\small\\bfseries},',
+              '      every node/.style={align=center}]',
+              '    \\node[concept, font=\\bfseries] {LaTeX\\\\绘图}',
+              '      child[grow=120, concept color=cTeal]   {node[concept]{电路图}}',
+              '      child[grow=200, concept color=cOrange] {node[concept]{化学结构}}',
+              '      child[grow=290, concept color=cGreen]  {node[concept]{生物示意}}',
+              '      child[grow=20,  concept color=cPurple]{node[concept]{统计图表}}',
+              '      child[grow=340, concept color=cRed]    {node[concept]{流程图}};',
+              '  \\end{tikzpicture}',
+              '  \\caption{本文档涵盖的绘图主题导图。}',
+              '\\end{figure}',
+              '',
+              '\\end{document}'
+            ].join('\n'),
+          },
+        ]
+
+        const SNIPPETS = [
+          {
+            id: 'sec',
+            name: '章节',
+            text: ['', '\\section{新章节}', '正文段落。', ''].join('\n'),
+          },
+          {
+            id: 'eq',
+            name: '公式',
+            text: ['', '\\begin{equation}', '  E = mc^2', '\\end{equation}', ''].join('\n'),
+          },
+          {
+            id: 'table',
+            name: '三线表',
+            text: [
+              '',
+              '\\begin{table}[htbp]',
+              '  \\centering',
+              '  \\caption{表题}',
+              '  \\begin{tabular}{lrr}',
+              '    \\toprule',
+              '    项目 & 数值 & 占比 \\\\',
+              '    \\midrule',
+              '    甲 & 46 & 32\\% \\\\',
+              '    乙 & 112 & 48\\% \\\\',
+              '    \\bottomrule',
+              '  \\end{tabular}',
+              '\\end{table}',
+              '',
+            ].join('\n'),
+          },
+          {
+            id: 'fig',
+            name: '图片',
+            text: [
+              '',
+              '\\begin{figure}[htbp]',
+              '  \\centering',
+              '  \\includegraphics[width=0.7\\linewidth]{figure.png}',
+              '  \\caption{图题}',
+              '\\end{figure}',
+              '',
+            ].join('\n'),
+          },
+          {
+            id: 'list',
+            name: '列表',
+            text: [
+              '',
+              '\\begin{itemize}',
+              '  \\item 第一点',
+              '  \\item 第二点',
+              '\\end{itemize}',
+              '',
+            ].join('\n'),
+          },
+          {
+            id: 'bib',
+            name: '参考文献',
+            text: [
+              '',
+              '\\begin{thebibliography}{9}',
+              '\\bibitem{ref1} 作者. 书名. 出版地: 出版社, 年份.',
+              '\\end{thebibliography}',
+              '',
+            ].join('\n'),
+          },
+        ]
+
+        /* ===================== 样式调控 ===================== */
+        function applyRadius() {
+          document.documentElement.style.setProperty('--radius', state.radius + 'px')
+        }
+        function changeRadius(delta) {
+          state.radius = clamp(state.radius + delta, 0, 12)
+          applyRadius()
+          LS.set('radius', state.radius)
+          refreshOpenDropdown('view')
+          setStatus('统一圆角 · ' + state.radius + 'px')
+        }
+        function applyBg(cls) {
+          const bg = cls || 'plain'
+          document.body.classList.remove('body-grid', 'body-dots', 'body-cross', 'body-diagonal')
+          if (['body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg))
+            document.body.classList.add(bg)
+          state.bg = bg
+          $$('.settings-bg-dot').forEach((el) => {
+            const active = el.dataset.bg === bg
+            el.classList.toggle('active', active)
+            el.setAttribute('aria-pressed', active ? 'true' : 'false')
+          })
+        }
+
+        /* ===================== 菜单 ===================== */
+        let autoTimer = null
+
+        function shortcutFor(id) {
+          return (
+            {
+              compile: '⌘↵',
+              download: '⌘S',
+              export: '⌘⇧S',
+              import: '⌘O',
+              swap: '⌘\\',
+              fit: '⌘0',
+            }[id] || ''
+          )
+        }
+
+        function menuHtml(menu) {
+          const engName = { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }
+          const items = {
+            doc: [
+              ['tpl:paper', '新建：中文学术论文'],
+              ['import', '导入 .tex 文件'],
+              ['sep'],
+              ['export', '导出 .tex 源码'],
+              ['copy', '复制源码到剪贴板'],
+              ['sep'],
+              ['reset', '清空为空白文档'],
+            ],
+            tpl: TEMPLATES.map((t) => [
+              'tpl:' + t.id,
+              t.name + ' · ' + t.hint,
+              true,
+              state.tplId === t.id,
+            ]),
+            build: [
+              ['label', '编译器'],
+              [
+                'engine:xelatex',
+                'XeLaTeX · 中文首选',
+                state.service ? state.service.engines.xelatex : false,
+                state.engine === 'xelatex',
+              ],
+              [
+                'engine:pdflatex',
+                'pdfLaTeX · 仅西文',
+                state.service ? state.service.engines.pdflatex : false,
+                state.engine === 'pdflatex',
+              ],
+              [
+                'engine:lualatex',
+                'LuaLaTeX · 现代内核',
+                state.service ? state.service.engines.lualatex : false,
+                state.engine === 'lualatex',
+              ],
+              ['sep'],
+              ['label', '编译方式'],
+              ['passes:1', '编译一遍', true, state.passes === 1],
+              ['passes:2', '编译两遍（目录与引用）', true, state.passes === 2],
+              ['passes:3', '编译三遍', true, state.passes === 3],
+              ['sep'],
+              ['toggle:auto', '改动后自动编译', true, state.auto],
+              ['compile', '立即编译'],
+              ['sep'],
+              ['service-set', '服务地址 · ' + (state.apiBase ? state.apiBase : '同源')],
+              [
+                'service',
+                state.service
+                  ? '本地服务已连接 · MiKTeX ' + state.service.miktex
+                  : '本地服务未连接',
+              ],
+            ],
+            view: [
+              ['bgrow', '背景'],
+              ['radiusrow', '圆角'],
+              ['sep'],
+              ['label', '布局'],
+              ['swap', state.flip ? '编辑器移到左侧' : '编辑器移到右侧', true, false],
+              ['split-even', '左右各半', true, Math.abs(state.split - 0.5) < 0.02],
+              ['split-editor', '编辑器加宽', true, Math.abs(state.split - 0.66) < 0.02],
+              ['split-pdf', 'PDF 加宽', true, Math.abs(state.split - 0.34) < 0.02],
+            ],
+            export: [
+              ['download', '下载 PDF'],
+              ['export', '导出 .tex 源码'],
+              ['sep'],
+              ['print', '打印 PDF'],
+              ['log', '查看编译日志'],
+              ['sep'],
+              ['copy-log', '复制编译日志'],
+            ],
+          }
+          return (items[menu] || [])
+            .map((it) => {
+              if (it[0] === 'sep') return '<div class="dd-divider"></div>'
+              if (it[0] === 'label') return '<div class="dd-label">' + esc(it[1]) + '</div>'
+              if (it[0] === 'bgrow')
+                return (
+                  '<div class="dd-item-row"><span>背景</span><div class="settings-bg-options">' +
+                  bgDot('plain', '纯白') +
+                  bgDot('body-grid', '网格') +
+                  bgDot('body-dots', '圆点') +
+                  bgDot('body-cross', '十字') +
+                  bgDot('body-diagonal', '斜线') +
+                  '</div></div>'
+                )
+              if (it[0] === 'radiusrow')
+                return (
+                  '<div class="dd-item-row"><span>圆角</span><div class="settings-control">' +
+                  '<span class="settings-value">' +
+                  state.radius +
+                  'px</span>' +
+                  '<button class="settings-btn" type="button" data-dd="radius:down">−</button>' +
+                  '<button class="settings-btn" type="button" data-dd="radius:up">+</button>' +
+                  '</div></div>'
+                )
+              if (it[0] === 'service' || (it[0] === 'tpl' && false))
+                return (
+                  '<div class="dd-item-row"><span>' +
+                  esc(it[1]) +
+                  '</span><span class="settings-value" style="color:var(--faint);font-size:9px"></span></div>'
+                )
+              return (
+                '<button class="dd-item' +
+                (it[3] ? ' selected' : '') +
+                '" type="button"' +
+                (it[2] === false ? ' disabled' : '') +
+                ' data-dd="' +
+                it[0] +
+                '"><span>' +
+                esc(it[1]) +
+                '</span><span class="muted">' +
+                shortcutFor(it[0]) +
+                '</span></button>'
+              )
+            })
+            .join('')
+        }
+
+        function bgDot(cls, label) {
+          const active = (state.bg || 'plain') === cls
+          return (
+            '<button class="settings-bg-dot' +
+            (active ? ' active' : '') +
+            '" type="button" title="' +
+            label +
+            '" data-dd="bg:' +
+            cls +
+            '" data-bg="' +
+            cls +
+            '" aria-pressed="' +
+            (active ? 'true' : 'false') +
+            '"></button>'
+          )
+        }
+
+        function openDropdown(menu, btn) {
+          closeDropdowns()
+          const el = document.createElement('div')
+          el.className = 'dropdown open'
+          el.id = 'dd-' + menu
+          el.dataset.menu = menu
+          el.innerHTML = menuHtml(menu)
+          document.body.appendChild(el)
+          const r = btn.getBoundingClientRect()
+          el.style.left = Math.max(8, Math.min(r.left, innerWidth - el.offsetWidth - 8)) + 'px'
+          el.style.top = r.bottom + 3 + 'px'
+          btn.classList.add('active')
+          setTimeout(() => document.body.classList.add('submenu-open'), 0)
+          el.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-dd]')
+            if (!b) return
+            e.stopPropagation()
+            handleDropdown(b.dataset.dd)
+          })
+        }
+        function refreshOpenDropdown(menu) {
+          const el = $id('dd-' + menu)
+          if (el) el.innerHTML = menuHtml(menu)
+        }
+        function closeDropdowns() {
+          $$('.dropdown').forEach((e) => e.remove())
+          const a = $('.menu-btn.active')
+          if (a) a.classList.remove('active')
+          document.body.classList.remove('submenu-open')
+        }
+
+        function handleDropdown(id) {
+          if (!id) return
+          if (id.indexOf('radius:') === 0) return changeRadius(id.endsWith('up') ? 1 : -1)
+          if (id.indexOf('bg:') === 0) {
+            const v = id.split(':')[1] || 'plain'
+            applyBg(v)
+            LS.set('bg', v)
+            refreshOpenDropdown('view')
+            return setStatus('背景 · ' + (v === 'plain' ? '纯白' : v.replace('body-', '')))
+          }
+          if (id.indexOf('engine:') === 0) {
+            const e = id.split(':')[1]
+            state.engine = e
+            LS.set('engine', e)
+            updateChip()
+            buildDropdownsIfOpen('build')
+            setStatus(
+              '编译器 · ' + { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }[e],
+            )
+            scheduleCompile()
+            return
+          }
+          if (id.indexOf('passes:') === 0) {
+            state.passes = Number(id.split(':')[1]) || 2
+            LS.set('passes', state.passes)
+            buildDropdownsIfOpen('build')
+            return setStatus('编译遍数 · ' + state.passes)
+          }
+          if (id.indexOf('tpl:') === 0) {
+            loadTemplate(id.slice(4))
+            return
+          }
+          switch (id) {
+            case 'compile':
+              closeDropdowns()
+              return compile(false)
+            case 'toggle:auto':
+              state.auto = !state.auto
+              LS.set('auto', state.auto ? '1' : '0')
+              buildDropdownsIfOpen('build')
+              return setStatus(state.auto ? '自动编译已开启' : '自动编译已关闭')
+            case 'import':
+              closeDropdowns()
+              return $id('file-input').click()
+            case 'export':
+              closeDropdowns()
+              return exportTex()
+            case 'download':
+              closeDropdowns()
+              return downloadPdf()
+            case 'copy':
+              closeDropdowns()
+              return copyText(state.tex, '源码已复制')
+            case 'copy-log':
+              closeDropdowns()
+              return copyText(state.log || '（暂无日志）', '编译日志已复制')
+            case 'print':
+              closeDropdowns()
+              return printPdf()
+            case 'log':
+              closeDropdowns()
+              return showLog()
+            case 'reset':
+              closeDropdowns()
+              return loadTemplate('blank', true)
+            case 'swap':
+              closeDropdowns()
+              return setFlip(!state.flip)
+            case 'split-even':
+              return setSplit(0.5)
+            case 'split-editor':
+              return setSplit(0.66)
+            case 'split-pdf':
+              return setSplit(0.34)
+            case 'fit':
+              closeDropdowns()
+              return setFit(true)
+            case 'zoom-in':
+              return zoomBy(0.12)
+            case 'zoom-out':
+              return zoomBy(-0.12)
+            case 'zoom-reset':
+              closeDropdowns()
+              return setZoom(1)
+            case 'help':
+              closeDropdowns()
+              return openModal('使用说明', HELP_HTML)
+            case 'service-set':
+              closeDropdowns()
+              return openServiceModal()
+            case 'service':
+              closeDropdowns()
+              return detectService(true)
+          }
+        }
+
+        function buildDropdownsIfOpen(menu) {
+          if ($id('dd-' + menu)) refreshOpenDropdown(menu)
+        }
+        function buildDropdowns() {
+          const open = $('.dropdown')
+          if (open) refreshOpenDropdown(open.dataset.menu)
+        }
+
+        /* ===================== 基础 UI ===================== */
+        let toastTimer = null
+        function toast(msg) {
+          const t = $id('toast')
+          t.textContent = msg
+          t.classList.add('show')
+          clearTimeout(toastTimer)
+          toastTimer = setTimeout(() => t.classList.remove('show'), 1900)
+        }
+        function setStatus(msg, kind) {
+          $id('status-text').textContent = msg
+          const d = $id('status-dot')
+          d.classList.toggle('busy', kind === 'busy')
+          d.classList.toggle('err', kind === 'err')
+        }
+        function openModal(title, html) {
+          $id('modal-title').textContent = title
+          $id('modal-body').innerHTML = html
+          $id('modal').classList.add('open')
+        }
+        function closeModal() {
+          $id('modal').classList.remove('open')
+        }
+        function copyText(text, okMsg) {
+          const done = () => toast(okMsg || '已复制')
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done))
+          } else fallbackCopy(text, done)
+        }
+        function fallbackCopy(text, done) {
+          const ta = document.createElement('textarea')
+          ta.value = text
+          ta.style.position = 'fixed'
+          ta.style.left = '-9999px'
+          document.body.appendChild(ta)
+          ta.select()
+          try {
+            document.execCommand('copy')
+            done()
+          } catch (e) {
+            toast('复制失败，请手动选择')
+          }
+          ta.remove()
+        }
+        function downloadBlob(blob, filename) {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 4000)
+        }
+        function exportTex() {
+          downloadBlob(new Blob([state.tex], { type: 'text/x-tex;charset=utf-8' }), 'main.tex')
+          setStatus('已导出 main.tex')
+        }
+        function downloadPdf() {
+          if (!state.lastKey) return toast('请先编译')
+          const a = document.createElement('a')
+          a.href = pdfUrl()
+          a.download = 'main.pdf'
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          setStatus('已开始下载 PDF')
+        }
+        function printPdf() {
+          if (!state.lastKey) return toast('请先编译')
+          const w = window.open(pdfUrl(), '_blank')
+          if (!w) toast('浏览器拦截了新窗口')
+        }
+        function pdfUrl() {
+          return state.apiBase + '/pdf?key=' + encodeURIComponent(state.lastKey)
+        }
+        function splitProblems() {
+          const hard = []
+          const soft = []
+          state.errors.forEach((e, i) => (e.level === 'warning' ? soft : hard).push(i))
+          return { hard, soft }
+        }
+        function showLog() {
+          const { hard, soft } = splitProblems()
+          let body = ''
+          if (hard.length) body += '<h4>错误 ' + hard.length + '</h4>' + errListHtml(hard)
+          if (soft.length) body += '<h4>警告 ' + soft.length + '</h4>' + errListHtml(soft)
+          if (!state.errors.length) body = '<h4>错误</h4><p>无错误。</p>'
+          openModal(
+            '编译日志',
+            body +
+              '<h4>完整日志</h4><div class="log-box">' +
+              esc(state.log || '（暂无日志）') +
+              '</div>',
+          )
+        }
+        function errListHtml(idxList) {
+          const list = idxList || state.errors.map((_, i) => i)
+          return (
+            '<div class="err-list">' +
+            list
+              .map((i) => {
+                const e = state.errors[i]
+                if (!e) return ''
+                const soft = e.level === 'warning'
+                return (
+                  '<button class="err-item' +
+                  (soft ? ' soft' : '') +
+                  '" type="button" data-err="' +
+                  i +
+                  '"><span class="loc">' +
+                  esc(e.file) +
+                  (e.line ? ':' + e.line : '') +
+                  '</span><span class="msg">' +
+                  esc(e.msg) +
+                  '</span></button>'
+                )
+              })
+              .join('') +
+            '</div>'
+          )
+        }
+        function jumpToError(item) {
+          const e = state.errors[item]
+          if (!e || !e.line) return
+          const src = $id('src')
+          const lines = src.value.split('\n')
+          let pos = 0
+          for (let i = 0; i < e.line - 1 && i < lines.length; i++) pos += lines[i].length + 1
+          src.focus()
+          src.setSelectionRange(pos, pos + (lines[e.line - 1] || '').length)
+          const lh = 18
+          src.scrollTop = Math.max(0, (e.line - 6) * lh)
+          syncScroll()
+          closeModal()
+        }
+
+        /* ===================== 编辑器 ===================== */
+        let gutterLines = 0
+        function syncScroll() {
+          $id('gutter').scrollTop = $id('src').scrollTop
+        }
+        function syncGutter(force) {
+          const src = $id('src')
+          const n = src.value.split('\n').length
+          if (!force && n === gutterLines) return
+          gutterLines = n
+          const errSet = new Set(
+            state.errors.filter((e) => e.line && e.level !== 'warning').map((e) => e.line),
+          )
+          const out = []
+          for (let i = 1; i <= n; i++) {
+            out.push('<span class="gl' + (errSet.has(i) ? ' err' : '') + '">' + i + '</span>')
+          }
+          $id('gutter').innerHTML = out.join('')
+        }
+        function updateStats() {
+          const v = $id('src').value
+          const chars = v.length
+          const lines = v.split('\n').length
+          $id('meta-lines').textContent = lines
+          $id('meta-chars').textContent = chars
+        }
+        function updatePos() {
+          const src = $id('src')
+          const upto = src.value.slice(0, src.selectionStart)
+          const line = upto.split('\n').length
+          const col = upto.length - upto.lastIndexOf('\n')
+          $id('editor-pos').textContent = '行 ' + line + ' · 列 ' + col
+        }
+        function insertAtCursor(text) {
+          const src = $id('src')
+          const s = src.selectionStart
+          const e = src.selectionEnd
+          src.value = src.value.slice(0, s) + text + src.value.slice(e)
+          src.selectionStart = src.selectionEnd = s + text.length
+          src.focus()
+          onEdit()
+        }
+        function formatTex() {
+          const lines = $id('src').value.split('\n')
+          let depth = 0
+          const out = lines.map((raw) => {
+            let s = raw.trim()
+            if (s === '') return ''
+            const closes = /^\s*(\\end\{|\\\}|\)|\])/.test(s) || /^\\end\{/.test(s)
+            if (closes) depth = Math.max(0, depth - 1)
+            const line = s
+            if (/^\\end\{/.test(s)) depth = Math.max(0, depth)
+            else if (/^\\begin\{|^\\(section|subsection|chapter)\b/.test(s))
+              depth += /^\\begin\{/.test(s) ? 1 : 0
+            return '  '.repeat(depth) + line
+          })
+          $id('src').value = out.join('\n')
+          onEdit()
+          toast('已整理缩进')
+        }
+        function setTex(text, keepCursor) {
+          const src = $id('src')
+          const pos = keepCursor ? src.selectionStart : 0
+          src.value = text
+          state.tex = text
+          state.errors = []
+          syncGutter(true)
+          updateStats()
+          if (keepCursor) src.selectionStart = src.selectionEnd = Math.min(pos, text.length)
+          updatePos()
+        }
+        function loadTemplate(id, silent) {
+          const t = TEMPLATES.find((x) => x.id === id)
+          if (!t) return
+          state.tplId = id
+          setTex(t.body)
+          $id('editor-name').textContent = 'main.tex'
+          buildDropdowns()
+          setStatus('已载入模板 · ' + t.name)
+          markClean()
+          scheduleCompile()
+          if (!silent) closeDropdowns()
+        }
+        function markClean() {
+          $id('editor-msg').textContent = ''
+        }
+
+        /* ===================== 服务检测 ===================== */
+        function normBase(u) {
+          return String(u || '')
+            .trim()
+            .replace(/\/+$/, '')
+        }
+        // 带超时的 fetch：地址填错时（尤其是本机开着代理）不会一直挂着
+        async function fetchWithTimeout(url, opts, ms) {
+          const ctl = new AbortController()
+          const timer = setTimeout(() => ctl.abort(), ms || 12000)
+          try {
+            return await fetch(url, Object.assign({}, opts || {}, { signal: ctl.signal }))
+          } finally {
+            clearTimeout(timer)
+          }
+        }
+        function servicePref() {
+          return normBase(LS.get('api', ''))
+        }
+        async function detectService(loud, override) {
+          const pref = override !== undefined ? normBase(override) : servicePref()
+          // 指定了地址就只认它；没指定则先试同源，再试本机默认端口
+          const bases = pref ? [pref] : ['', 'http://127.0.0.1:8123']
+          if (state.apiBase && !bases.includes(state.apiBase)) bases.unshift(state.apiBase)
+          for (const b of bases) {
+            try {
+              const r = await fetchWithTimeout(b + '/api/env', { cache: 'no-store' }, 8000)
+              if (!r.ok) continue
+              const j = await r.json()
+              state.apiBase = b
+              LS.set('api', b)
+              state.service = j
+              updateChip()
+              const av = Object.keys(j.engines || {}).filter((k) => j.engines[k])
+              setStatus('本地服务已连接 · MiKTeX ' + j.miktex + ' · 可用引擎 ' + av.length)
+              buildDropdowns()
+              if (loud) toast('已连接 MiKTeX ' + j.miktex)
+              return true
+            } catch (e) {}
+          }
+          // 连接失败：状态回落到已保存的配置，但不覆盖它
+          state.apiBase = servicePref()
+          state.service = null
+          updateChip()
+          setStatus(pref ? '无法连接 ' + pref : '未检测到本地编译服务', 'err')
+          buildDropdowns()
+          if (loud) toast('连接失败，请检查服务是否已启动')
+          return false
+        }
+        function openServiceModal() {
+          const pref = servicePref()
+          openModal(
+            '本地编译服务地址',
+            '<h4>当前</h4>' +
+              '<p>' +
+              (state.service
+                ? '已连接 <code>' +
+                  esc(state.apiBase || location.origin) +
+                  '</code> · MiKTeX ' +
+                  esc(state.service.miktex)
+                : '未连接' + (pref ? '（正在尝试 <code>' + esc(pref) + '</code>）' : '')) +
+              '</p>' +
+              '<h4>地址</h4>' +
+              '<div class="field"><label>服务地址</label>' +
+              '<input id="svc-input" spellcheck="false" value="' +
+              esc(pref) +
+              '" placeholder="http://127.0.0.1:8123" /></div>' +
+              '<p style="font-size:10.5px;line-height:1.9;color:var(--faint);margin-top:4px">' +
+              '留空表示使用同源地址（页面与编译服务在同一端口）。' +
+              '若本页托管在云端，请填 <code>http://127.0.0.1:8123</code>，' +
+              '并让本机保持运行 <code>latex-serve.py</code>。</p>' +
+              '<div style="display:flex;gap:6px;padding-top:10px">' +
+              '<button class="ghost-btn" data-svc="save">保存并连接</button>' +
+              '<button class="ghost-btn" data-svc="clear">恢复同源</button>' +
+              '</div>' +
+              '<div id="svc-msg" style="font-size:10px;color:var(--dim);padding-top:9px;line-height:1.8"></div>',
+          )
+        }
+        async function saveServiceInput(clear) {
+          const msg = $id('svc-msg')
+          const v = clear ? '' : normBase($id('svc-input') ? $id('svc-input').value : '')
+          if (!clear && v && !/^https?:\/\//i.test(v)) {
+            msg.textContent = '地址需要以 http:// 或 https:// 开头'
+            msg.style.color = 'var(--err)'
+            return
+          }
+          if (clear) LS.set('api', '')
+          if (msg) {
+            msg.textContent = '正在测试 ' + (v || '同源地址') + ' …'
+            msg.style.color = 'var(--dim)'
+          }
+          // 只有连上了才把地址写进配置，填错不会留下坏设置
+          const ok = await detectService(false, v)
+          if (msg) {
+            msg.textContent = ok
+              ? '连通成功，已切换到 ' + (state.apiBase || '同源地址') + '。'
+              : '连接失败。请确认地址正确，且本机已运行 latex-serve.py。'
+            msg.style.color = ok ? 'var(--ok)' : 'var(--err)'
+          }
+          if (ok) {
+            toast('已连接本地服务')
+            compile(true)
+          }
+        }
+        function updateChip() {
+          const chip = $id('engine-chip')
+          const name = { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }[
+            state.engine
+          ]
+          if (!state.service) {
+            chip.textContent = '本地服务未连接'
+            return
+          }
+          const ok = state.service.engines[state.engine]
+          chip.textContent = name + (ok ? ' · MiKTeX ' + state.service.miktex : ' · 不可用')
+        }
+
+        /* ===================== 编译 ===================== */
+        let compiling = false
+        function scheduleCompile() {
+          if (!state.auto) return
+          clearTimeout(autoTimer)
+          autoTimer = setTimeout(() => compile(true), 1300)
+        }
+        function setBusy(on) {
+          compiling = on
+          const c = $id('btn-compile')
+          c.disabled = on
+          c.textContent = on ? '编译中' : '编译'
+          if (on) {
+            $id('pdf-pages').innerHTML =
+              '<div class="pdf-busy"><div class="bar"><i></i></div><span>正在调用 ' +
+              { xelatex: 'XeLaTeX', pdflatex: 'pdfLaTeX', lualatex: 'LuaLaTeX' }[state.engine] +
+              ' 编译</span></div>'
+            setStatus('编译中…', 'busy')
+          }
+        }
+        async function compile(auto) {
+          if (compiling) return
+          if (!state.service && !(await detectService(false))) {
+            setStatus('未检测到本地编译服务', 'err')
+            toast('请先启动 latex-serve.py')
+            return
+          }
+          setBusy(true)
+          const t0 = performance.now()
+          try {
+            const r = await fetchWithTimeout(
+              state.apiBase + '/api/compile',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tex: $id('src').value,
+                  engine: state.engine,
+                  passes: state.passes,
+                  mainfile: 'main.tex',
+                }),
+              },
+              300000,
+            )
+            const j = await r.json()
+            state.log = j.log || ''
+            state.errors = j.errors || []
+            state.ms = j.ms || Math.round(performance.now() - t0)
+            $id('meta-time').textContent = (state.ms / 1000).toFixed(1) + 's'
+            syncGutter(true)
+            if (j.ok) {
+              state.lastKey = j.key
+              state.pages = j.pages || 0
+              $id('meta-pages').textContent = state.pages || '-'
+              $id('editor-msg').textContent = ''
+              const hard = state.errors.filter((e) => e.level !== 'warning').length
+              const soft = state.errors.length - hard
+              let extra = ''
+              if (hard) extra = ' · ' + hard + ' 个错误'
+              else if (soft) extra = ' · ' + soft + ' 条警告'
+              setStatus(
+                '编译成功 · ' + state.pages + ' 页 · ' + (state.ms / 1000).toFixed(1) + 's' + extra,
+              )
+              await renderPdf()
+            } else {
+              $id('meta-pages').textContent = '-'
+              const hard = state.errors.filter((e) => e.level !== 'warning').length
+              setStatus('编译失败 · ' + (hard || state.errors.length) + ' 个错误', 'err')
+              showErrors(j.error)
+              $id('editor-msg').textContent = '编译失败'
+            }
+          } catch (e) {
+            setStatus('无法连接本地编译服务', 'err')
+            $id('pdf-pages').innerHTML =
+              '<div class="pdf-empty"><h2>连接失败</h2><p>未能访问编译服务 <code>' +
+              esc(state.apiBase || '同源地址') +
+              '</code>。<br>请确认本机已运行 <code>latex-serve.py</code>，<br>并在「编译 → 服务地址」里填对地址。</p></div>'
+          } finally {
+            setBusy(false)
+          }
+        }
+        function showErrors(fallback) {
+          const { hard, soft } = splitProblems()
+          let html = ''
+          if (hard.length)
+            html += '<div class="err-h">错误 ' + hard.length + '</div>' + errListHtml(hard)
+          if (soft.length)
+            html += '<div class="err-h">警告 ' + soft.length + '</div>' + errListHtml(soft)
+          if (!state.errors.length) {
+            html +=
+              '<div class="pdf-empty"><h2>编译失败</h2><p>' +
+              esc(fallback || '未能生成 PDF') +
+              '</p></div>'
+          }
+          html +=
+            '<div class="err-h">日志末尾</div><div class="log-box">' +
+            esc((state.log || '').split('\n').slice(-60).join('\n')) +
+            '</div>'
+          $id('pdf-pages').innerHTML = html
+        }
+
+        /* ===================== PDF ===================== */
+        let pdfDoc = null
+        let renderToken = 0
+        if (window.pdfjsLib) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+        }
+        async function renderPdf() {
+          const host = $id('pdf-pages')
+          if (!window.pdfjsLib) {
+            host.innerHTML =
+              '<div class="pdf-empty"><h2>PDF 组件未加载</h2><p>无法加载 PDF.js，请检查网络后刷新。</p></div>'
+            return
+          }
+          const token = ++renderToken
+          try {
+            if (pdfDoc) {
+              try {
+                pdfDoc.destroy()
+              } catch (e) {}
+              pdfDoc = null
+            }
+            host.innerHTML =
+              '<div class="pdf-busy"><div class="bar"><i></i></div><span>正在渲染 PDF</span></div>'
+            const task = pdfjsLib.getDocument({ url: pdfUrl(), disableAutoFetch: false })
+            pdfDoc = await task.promise
+            if (token !== renderToken) return
+            await paintPages(token)
+          } catch (e) {
+            if (token !== renderToken) return
+            host.innerHTML =
+              '<div class="pdf-empty"><h2>渲染失败</h2><p>' +
+              esc(String(e && e.message ? e.message : e)) +
+              '</p></div>'
+          }
+        }
+        async function paintPages(token) {
+          const host = $id('pdf-pages')
+          const scroll = $id('pdf-scroll')
+          if (!pdfDoc) return
+          const first = await pdfDoc.getPage(1)
+          const base = first.getViewport({ scale: 1 })
+          const availW = Math.max(200, scroll.clientWidth - 44)
+          const fitScale = availW / base.width
+          const scale = (state.fit ? fitScale : 1) * state.zoom
+          const dpr = Math.min(2, window.devicePixelRatio || 1)
+          host.innerHTML = ''
+          const frag = document.createDocumentFragment()
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            if (token !== renderToken) return
+            const page = await pdfDoc.getPage(i)
+            const vp = page.getViewport({ scale: scale })
+            const wrap = document.createElement('div')
+            wrap.className = 'pdf-page'
+            const canvas = document.createElement('canvas')
+            canvas.width = Math.floor(vp.width * dpr)
+            canvas.height = Math.floor(vp.height * dpr)
+            canvas.style.width = Math.floor(vp.width) + 'px'
+            canvas.style.height = Math.floor(vp.height) + 'px'
+            wrap.appendChild(canvas)
+            const idx = document.createElement('span')
+            idx.className = 'pdf-page-idx'
+            idx.textContent = i + ' / ' + pdfDoc.numPages
+            wrap.appendChild(idx)
+            frag.appendChild(wrap)
+            const ctx = canvas.getContext('2d')
+            await page.render({
+              canvasContext: ctx,
+              viewport: vp,
+              transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
+            }).promise
+          }
+          if (token !== renderToken) return
+          host.appendChild(frag)
+          updateZoomLabel()
+        }
+        function updateZoomLabel() {
+          $id('zoom-label').textContent = Math.round(state.zoom * 100) + '%'
+          $id('btn-fit').classList.toggle('on', state.fit)
+        }
+        function setZoom(z) {
+          state.zoom = clamp(z, 0.25, 4)
+          updateZoomLabel()
+          if (pdfDoc) paintPages(renderToken).catch(() => {})
+        }
+        function zoomBy(d) {
+          setFit(false)
+          setZoom(state.zoom + d)
+        }
+        function setFit(on) {
+          state.fit = !!on
+          if (on) state.zoom = 1
+          updateZoomLabel()
+          if (pdfDoc) paintPages(renderToken).catch(() => {})
+        }
+
+        /* ===================== 布局 ===================== */
+        function applySplit() {
+          const a = state.flip ? 1 - state.split : state.split
+          $id('panes').style.gridTemplateColumns =
+            'minmax(0,' + a.toFixed(4) + 'fr) 9px minmax(0,' + (1 - a).toFixed(4) + 'fr)'
+          $id('editor-pane').style.order = state.flip ? 3 : 1
+          $id('vsplit').style.order = 2
+          $id('view-pane').style.order = state.flip ? 1 : 3
+        }
+        function setSplit(v) {
+          state.split = clamp(v, 0.15, 0.85)
+          LS.set('split', state.split)
+          applySplit()
+          buildDropdowns()
+        }
+        function setFlip(on) {
+          state.flip = !!on
+          LS.set('flip', state.flip ? '1' : '0')
+          applySplit()
+          buildDropdowns()
+          setStatus('编辑器已移到' + (state.flip ? '右' : '左') + '侧')
+          if (pdfDoc) setTimeout(() => paintPages(renderToken).catch(() => {}), 60)
+        }
+
+        /* ===================== 启动 ===================== */
+        const HELP_HTML = [
+          '<h4>这是什么</h4>',
+          '<p>ZENTEX 把 LaTeX 编辑器与本地编译器放在同一个页面里：左边写源码，右边直接看到编译出来的 PDF。真正干活的是你本机安装的 <b>MiKTeX</b>，不依赖任何在线服务。</p>',
+          '<h4>怎么用</h4>',
+          '<ol>',
+          '<li>在本机 <code>public</code> 目录运行 <code>python latex-serve.py</code>（默认端口 8123）。</li>',
+          '<li>打开本页：本地使用时用 <code>http://127.0.0.1:8123/omm-latex.html</code>；' +
+            '托管在云端时用云端地址，再到「编译 → 服务地址」填 <code>http://127.0.0.1:8123</code>。</li>',
+          '<li>写源码，按 <code>Ctrl/⌘ + Enter</code> 或点右下角「编译」。</li>',
+          '</ol>',
+          '<h4>把页面托管到云端</h4>',
+          '<p>可以。本页只是前端，编译始终发生在你自己的电脑上：</p>',
+          '<ul>',
+          '<li>把 <code>omm-latex.html</code> 传到任意静态托管（GitHub Pages、对象存储、自己的服务器都行）。</li>',
+          '<li>本机照常运行 <code>latex-serve.py</code>。</li>',
+          '<li>在云端页面里点「编译 → 服务地址」，填 <code>http://127.0.0.1:8123</code>，保存并连接。</li>',
+          '</ul>',
+          '<p>浏览器允许 HTTPS 页面访问 <code>http://127.0.0.1</code>——本地地址被视为可信来源，' +
+            '不会被当作混合内容拦截。Chrome 首次可能弹出「查找本地网络设备」的授权提示，允许即可。</p>',
+          '<p><b>注意</b>：编译用的是你本机的 MiKTeX。换一台设备打开云端页面时，' +
+            '那台设备也要运行服务并填它自己的地址。</p>',
+          '<h4>编译器</h4>',
+          '<p>默认 <b>XeLaTeX</b>，因为它是中文排版的首选（配合 <code>ctex</code> 宏包）。纯英文文档可换 pdfLaTeX，速度略快；LuaLaTeX 内核最新，适合复杂宏包。</p>',
+          '<p>「编译两遍」用于生成目录、交叉引用与参考文献编号——LaTeX 需要跑两趟才能把页码填回去。</p>',
+          '<h4>布局</h4>',
+          '<p>拖动中间的竖线可以调整两边宽度；「左右调换」把编辑器换到右侧。「视图」菜单里的「背景」与「圆角」会统一作用于整个界面，设置会保存在本地。</p>',
+          '<h4>错误定位</h4>',
+          '<p>编译失败时，右边会列出错误（带 <code>文件:行号</code>），点一下即可跳到源码对应行；左侧行号也会标红。</p>',
+          '<h4>快捷键</h4>',
+          '<p><code>Ctrl/⌘ + Enter</code> 编译　<code>Ctrl/⌘ + S</code> 下载 PDF　<code>Ctrl/⌘ + ⇧ + S</code> 导出 .tex　<code>Ctrl/⌘ + O</code> 导入　<code>Ctrl/⌘ + \\</code> 左右调换　<code>Ctrl/⌘ + 0</code> 适应宽度　<code>Esc</code> 关闭弹层</p>',
+          '<h4>关于写法</h4>',
+          '<p>源码就是标准的 LaTeX 文件，导言区、宏包、环境都按常规写。本页不做任何改写——你在别处能编译的文件，在这里同样能编译。</p>',
+        ].join('')
+
+        function bindEvents() {
+          // 菜单
+          $$('.menu-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation()
+              const menu = btn.dataset.menu
+              // 「说明」没有下级内容，直接开弹窗
+              if (menu === 'help') {
+                closeDropdowns()
+                openModal('使用说明', HELP_HTML)
+                return
+              }
+              if (btn.classList.contains('active')) closeDropdowns()
+              else openDropdown(menu, btn)
+            })
+          })
+          $id('pin-btn').addEventListener('click', () => {
+            const on = !$id('top-menu').classList.contains('pinned')
+            $id('top-menu').classList.toggle('pinned', on)
+            document.body.classList.toggle('menu-pinned', on)
+            $id('pin-btn').classList.toggle('pinned', on)
+            $id('pin-btn').setAttribute('aria-pressed', on ? 'true' : 'false')
+            $id('pin-btn').setAttribute('title', on ? '取消固定菜单' : '固定菜单')
+            if (!on) closeDropdowns()
+          })
+          document.addEventListener('click', (e) => {
+            if (!e.target.closest('#top-menu') && !e.target.closest('.dropdown')) closeDropdowns()
+          })
+          document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') return closeDropdowns()
+            const mod = e.ctrlKey || e.metaKey
+            if (!mod) return
+            const k = e.key.toLowerCase()
+            if (k === 'enter') {
+              e.preventDefault()
+              compile(false)
+            } else if (k === 's' && e.shiftKey) {
+              e.preventDefault()
+              exportTex()
+            } else if (k === 's') {
+              e.preventDefault()
+              downloadPdf()
+            } else if (k === 'o') {
+              e.preventDefault()
+              $id('file-input').click()
+            } else if (k === '\\') {
+              e.preventDefault()
+              setFlip(!state.flip)
+            } else if (k === '0') {
+              e.preventDefault()
+              setFit(true)
+            }
+          })
+
+          // 编辑器
+          const src = $id('src')
+          src.addEventListener('input', onEdit)
+          src.addEventListener('scroll', syncScroll)
+          src.addEventListener('keyup', updatePos)
+          src.addEventListener('click', updatePos)
+          src.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              insertAtCursor('  ')
+            }
+          })
+          $id('btn-format').addEventListener('click', formatTex)
+          $id('btn-copy').addEventListener('click', () => copyText(state.tex, '源码已复制'))
+          $id('btn-compile').addEventListener('click', () => compile(false))
+          $id('btn-swap').addEventListener('click', () => setFlip(!state.flip))
+          $id('btn-download').addEventListener('click', downloadPdf)
+          $id('btn-export').addEventListener('click', exportTex)
+          $id('btn-insert').addEventListener('click', () => {
+            openModal(
+              '插入片段',
+              '<div class="err-list">' +
+                SNIPPETS.map(
+                  (s) =>
+                    '<button class="err-item" type="button" data-frag="' +
+                    s.id +
+                    '"><span class="loc">' +
+                    esc(s.name) +
+                    '</span><span class="msg">插入到光标处</span></button>',
+                ).join('') +
+                '</div>',
+            )
+          })
+          $id('modal-body').addEventListener('click', (e) => {
+            const f = e.target.closest('[data-frag]')
+            if (f) {
+              const s = SNIPPETS.find((x) => x.id === f.dataset.frag)
+              if (s) {
+                closeModal()
+                insertAtCursor(s.text)
+              }
+              return
+            }
+            const sv = e.target.closest('[data-svc]')
+            if (sv) return saveServiceInput(sv.dataset.svc === 'clear')
+            const er = e.target.closest('[data-err]')
+            if (er) jumpToError(Number(er.dataset.err))
+          })
+          $id('modal-close').addEventListener('click', closeModal)
+          $id('modal-ok').addEventListener('click', closeModal)
+          $id('modal').addEventListener('click', (e) => {
+            if (e.target === $id('modal')) closeModal()
+          })
+          $id('btn-zoom-in').addEventListener('click', () => zoomBy(0.12))
+          $id('btn-zoom-out').addEventListener('click', () => zoomBy(-0.12))
+          $id('btn-fit').addEventListener('click', () => setFit(!state.fit))
+          $id('btn-log').addEventListener('click', showLog)
+
+          // 导入
+          $id('file-input').addEventListener('change', (e) => {
+            const f = e.target.files && e.target.files[0]
+            if (!f) return
+            const rd = new FileReader()
+            rd.onload = () => {
+              setTex(String(rd.result))
+              $id('editor-name').textContent = f.name
+              setStatus('已导入 ' + f.name)
+              scheduleCompile()
+            }
+            rd.readAsText(f, 'utf-8')
+            e.target.value = ''
+          })
+
+          // 分隔条拖动
+          const vs = $id('vsplit')
+          let dragging = false
+          vs.addEventListener('mousedown', (e) => {
+            dragging = true
+            vs.classList.add('dragging')
+            document.body.style.cursor = 'col-resize'
+            e.preventDefault()
+          })
+          window.addEventListener('mousemove', (e) => {
+            if (!dragging) return
+            const r = $id('panes').getBoundingClientRect()
+            let p = (e.clientX - r.left) / r.width
+            if (state.flip) p = 1 - p
+            setSplit(p)
+          })
+          window.addEventListener('mouseup', () => {
+            if (!dragging) return
+            dragging = false
+            vs.classList.remove('dragging')
+            document.body.style.cursor = ''
+            LS.set('split', state.split)
+            if (pdfDoc) paintPages(renderToken).catch(() => {})
+          })
+
+          // 窗口变化
+          let rt = null
+          window.addEventListener('resize', () => {
+            clearTimeout(rt)
+            rt = setTimeout(() => {
+              if (pdfDoc && state.fit) paintPages(renderToken).catch(() => {})
+            }, 220)
+          })
+        }
+        function onEdit() {
+          state.tex = $id('src').value
+          syncGutter(false)
+          updateStats()
+          updatePos()
+          $id('editor-msg').textContent = '未编译'
+          scheduleCompile()
+        }
+
+        function restorePrefs() {
+          const r = Number(LS.get('radius', '0'))
+          if (Number.isFinite(r)) state.radius = clamp(r, 0, 12)
+          const bg = LS.get('bg', 'plain')
+          state.bg = ['plain', 'body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg)
+            ? bg
+            : 'plain'
+          const sp = Number(LS.get('split', '0.46'))
+          if (Number.isFinite(sp)) state.split = clamp(sp, 0.15, 0.85)
+          state.flip = LS.get('flip', '0') === '1'
+          const en = LS.get('engine', 'xelatex')
+          state.engine = ['xelatex', 'pdflatex', 'lualatex'].includes(en) ? en : 'xelatex'
+          const ps = Number(LS.get('passes', '2'))
+          state.passes = [1, 2, 3].includes(ps) ? ps : 2
+          state.auto = LS.get('auto', '0') === '1'
+          applyRadius()
+          applyBg(state.bg)
+          applySplit()
+          updateZoomLabel()
+        }
+
+        function boot() {
+          restorePrefs()
+          bindEvents()
+          loadTemplate(LS.get('tpl', 'paper'), true)
+          updateChip()
+          syncGutter(true)
+          updateStats()
+          updatePos()
+          detectService(false).then((ok) => {
+            if (!ok) {
+              $id('pdf-pages').innerHTML =
+                '<div class="pdf-empty"><h2>等待本地服务</h2><p>未检测到 MiKTeX 编译服务。<br>请在本机运行 <code>python latex-serve.py</code>，<br>再用「编译 → 服务地址」确认地址（默认 <code>http://127.0.0.1:8123</code>）。</p><p class="hint">服务启动后按 Ctrl/⌘ + Enter 重试</p></div>'
+            } else {
+              compile(true)
+            }
+          })
+        }
+
+        const splashBtn = $id('splash-enter')
+        splashBtn.addEventListener('click', () => {
+          const s = $id('splash')
+          s.classList.add('fade-out')
+          setTimeout(() => (s.style.display = 'none'), 640)
+        })
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
+        else boot()
+      })()
+    </script>
+  </body>
+</html>
