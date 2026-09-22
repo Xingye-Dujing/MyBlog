@@ -5653,6 +5653,7 @@ notify pgrst, 'reload schema';</textarea
             tag: String(r.tag || ''),
             subtasks: normSubtasks(r.subtasks),
             created: r.created || 0,
+            order: typeof r.order === 'number' ? r.order : -1,
             renderPast: r.renderPast !== undefined ? !!r.renderPast : true,
             doneMap: r.doneMap && typeof r.doneMap === 'object' ? r.doneMap : {},
             rrule: {
@@ -6227,12 +6228,20 @@ notify pgrst, 'reload schema';</textarea
             return true
           },
           nextOrder(ds) {
-            if (S.newItemPos === 'first') return 0
-            return (
-              this.day(ds).reduce(function (m, e) {
-                return Math.max(m, e.order || 0)
-              }, 0) + 1
-            )
+            // 新建位置必须拿到与同级现有条目“严格不等”的 order：
+            // 最前 → 当日（含重复实例）最小 order - 1；最后 → 最大 order + 1。
+            // 旧实现“最前”恒返回 0，会与既有条目 order 打平，
+            // 随后落入 sortCmp 的 created 升序兜底比较，新条目反而排到同级末尾。
+            const list = this.day(ds).concat(Rules.instancesOn(ds))
+            if (!list.length) return 0
+            let min = Infinity
+            let max = -Infinity
+            list.forEach(function (e) {
+              const o = typeof e.order === 'number' ? e.order : 0
+              if (o < min) min = o
+              if (o > max) max = o
+            })
+            return S.newItemPos === 'first' ? min - 1 : max + 1
           },
           touch(ds) {
             if (this.events[ds] && !this.events[ds].length) delete this.events[ds]
@@ -6403,7 +6412,7 @@ notify pgrst, 'reload schema';</textarea
               subtasks: r.subtasks,
               done: r.doneMap[ds] === true ? true : r.doneMap[ds] === 'failed' ? 'failed' : false,
               created: r.created || 0,
-              order: -1,
+              order: typeof r.order === 'number' ? r.order : -1,
               _virt: true,
               _mode: r.rrule.mode,
             }
@@ -7581,6 +7590,8 @@ notify pgrst, 'reload schema';</textarea
                 {
                   id: uid(),
                   created: old && old.created ? old.created : Date.now(),
+                  order:
+                    old && typeof old.order === 'number' ? old.order : Store.nextOrder(rrStart),
                   doneMap: {},
                   renderPast: S.edRenderPast !== false,
                   rrule: rr,
