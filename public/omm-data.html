@@ -2896,6 +2896,9 @@
       <div class="dd-item danger" data-action="clClearData">
         <span data-i18n="cl.clear">清空表内数据</span>
       </div>
+      <div class="dd-item danger" data-action="resetAll">
+        <span data-i18n="cl.resetAll">重置为初始状态</span>
+      </div>
     </div>
 
     <!-- ===== Settings Dropdown ===== -->
@@ -3217,6 +3220,9 @@
         <button type="button" class="ms-item danger" data-action="clClearData">
           <span class="ic" data-ico="trash"></span><span data-i18n="cl.clear">清空</span>
         </button>
+        <button type="button" class="ms-item danger" data-action="resetAll">
+          <span class="ic" data-ico="broom"></span><span data-i18n="cl.resetAll">重置</span>
+        </button>
       </div>
     </div>
 
@@ -3524,6 +3530,7 @@ notify pgrst, 'reload schema';</textarea
           LS_DOC: 'zendata.v1.doc',
           LS_SET: 'zendata.v1.settings',
           LS_SEED: 'zendata.v1.seed',
+          LS_REV: 'zendata.v1.rev',
           BASE_FONT: 13,
           MIN_ZOOM: 0.7,
           MAX_ZOOM: 1.6,
@@ -3621,6 +3628,8 @@ notify pgrst, 'reload schema';</textarea
             'sync.cloudOverwritten': '已用云端数据覆盖本地：{0}',
             'sync.localPushed': '已把本地数据同步到云端',
             'sync.localPushedDirty': '检测到本地有未上传的内容，已把本地内容同步到云端',
+            'sync.aligned': '已与云端对齐：{0}',
+            'sync.settingsPushed': '本机外观设置已同步到云端',
             'sync.cloudEmptyPush': '云端还没有数据，已上传本地数据',
             'sync.signOut': '退出登录',
             'sync.syncNow': '从云端同步',
@@ -3742,6 +3751,10 @@ notify pgrst, 'reload schema';</textarea
             'cl.header': '首行设为列名',
             'cl.reheader': '列名重置为字母',
             'cl.clear': '清空表内数据',
+            'cl.resetAll': '重置为初始状态',
+            'ask.resetAll':
+              '重置为初始状态？将删除本机全部表格、筛选、排序与查询记录，并恢复为初始示例数据（外观设置保留）。若云同步仍在登录状态，请先退出登录，否则下次自动同步会把云端内容拉回来。',
+            'msg.resetDone': '已重置为初始状态',
             'dd.settings.appearance': '外观',
             'dd.settings.theme': '主题',
             'dd.settings.bg': '背景',
@@ -3967,6 +3980,8 @@ notify pgrst, 'reload schema';</textarea
             'sync.localPushed': 'Local data synced to the cloud',
             'sync.localPushedDirty':
               'Local content had not been uploaded; local content has been synced to the cloud',
+            'sync.aligned': 'Aligned with the cloud: {0}',
+            'sync.settingsPushed': 'Local display settings synced to the cloud',
             'sync.cloudEmptyPush': 'The cloud was empty. Local data has been uploaded',
             'sync.signOut': 'Sign out',
             'sync.syncNow': 'PULL FROM CLOUD',
@@ -4094,6 +4109,10 @@ notify pgrst, 'reload schema';</textarea
             'cl.header': 'First row as header',
             'cl.reheader': 'Reset names to letters',
             'cl.clear': 'Clear table data',
+            'cl.resetAll': 'Reset to initial state',
+            'ask.resetAll':
+              'Reset to initial state? This deletes every table, filter, sort and query record on this device and restores the initial sample data (appearance settings are kept). If cloud sync is still signed in, sign out first — otherwise the next auto-sync will pull the cloud content back.',
+            'msg.resetDone': 'Reset to initial state',
             'dd.settings.appearance': 'Appearance',
             'dd.settings.theme': 'Theme',
             'dd.settings.bg': 'Background',
@@ -4381,58 +4400,327 @@ notify pgrst, 'reload schema';</textarea
         /* ============================================================
            3. SETTINGS
            ============================================================ */
+        /* ============================================================
+           3a. STORAGE —— localStorage 是唯一数据源
+           所有状态都写进 localStorage、也从 localStorage 读，内存里只保留一份
+           “带版本号校验的解析缓存”用于性能。每次写入都会递增版本号；读取时若发现
+           版本号变了（被清空 / 另一个标签页写入 / DevTools 手改），立刻丢弃缓存
+           重新解析 —— 因此不会再有旧的内存副本顶掉存储里的真实数据。
+           ============================================================ */
+        var Storage = {
+          _doc: null,
+          _docRaw: null,
+          _set: null,
+          _setRaw: null,
+          raw: function (k) {
+            try {
+              return localStorage.getItem(k)
+            } catch (e) {
+              return null
+            }
+          },
+          rev: function () {
+            return this.raw(CONFIG.LS_REV) || '0'
+          },
+          bump: function () {
+            var n = String((+this.rev() || 0) + 1)
+            try {
+              localStorage.setItem(CONFIG.LS_REV, n)
+            } catch (e) {}
+            return n
+          },
+          /* 文档（表格数据）：从 localStorage 读；键不存在时是空文档。
+             缓存用“上次读到的原始字符串”校验，存储内容一变就重新解析 */
+          doc: function () {
+            var raw = this.raw(CONFIG.LS_DOC)
+            if (this._doc && this._docRaw !== null && raw === this._docRaw) return this._doc
+            var v = null
+            if (raw) {
+              try {
+                v = JSON.parse(raw)
+              } catch (e) {
+                v = null
+              }
+            }
+            if (!v || !Array.isArray(v.tables)) v = { tables: [], activeId: null }
+            this._doc = v
+            this._docRaw = raw
+            return v
+          },
+          hasDoc: function () {
+            return this.raw(CONFIG.LS_DOC) !== null
+          },
+          writeDoc: function (tables, activeId) {
+            var v = { tables: tables, activeId: activeId },
+              raw = ''
+            try {
+              raw = JSON.stringify(v)
+            } catch (e) {
+              raw = ''
+            }
+            try {
+              localStorage.setItem(CONFIG.LS_DOC, raw)
+            } catch (e) {}
+            this._doc = v
+            this._docRaw = raw
+            this.bump()
+          },
+          /* 外观 + 工作台状态 */
+          settings: function () {
+            var raw = this.raw(CONFIG.LS_SET)
+            if (this._set && this._setRaw !== null && raw === this._setRaw) return this._set
+            var v = {}
+            if (raw) {
+              try {
+                v = JSON.parse(raw) || {}
+              } catch (e) {
+                v = {}
+              }
+            }
+            this._set = v
+            this._setRaw = raw
+            return v
+          },
+          writeSettings: function (o) {
+            var raw = ''
+            try {
+              raw = JSON.stringify(o)
+            } catch (e) {
+              raw = ''
+            }
+            try {
+              localStorage.setItem(CONFIG.LS_SET, raw)
+            } catch (e) {}
+            this._set = o
+            this._setRaw = raw
+            this.bump()
+          },
+          /* 缓存是否已被本进程之外的改动弄脏（invalidate 后 _raw 为 null 也视为脏） */
+          docStale: function () {
+            if (!this._doc) return false
+            return this._docRaw !== this.raw(CONFIG.LS_DOC)
+          },
+          setStale: function () {
+            if (!this._set) return false
+            return this._setRaw !== this.raw(CONFIG.LS_SET)
+          },
+          /* 丢弃缓存，下次读取直接从 localStorage 重新解析 */
+          invalidate: function () {
+            this._docRaw = null
+            this._setRaw = null
+          },
+        }
+        /* 供独立的云同步脚本在写入 localStorage 后递增版本号，
+           好让本页的缓存立即失效（否则自动拉取后界面会继续读旧缓存） */
+        window.ZDStorage = {
+          bump: function () {
+            return Storage.bump()
+          },
+          invalidate: function () {
+            Storage.invalidate()
+          },
+        }
+
+        /* ---- 外部清空检测：让“清除站点数据 / 删除 localStorage”真的回到初始状态 ----
+           页面内存里始终保留着当前内容，任何自动保存或刷新都会把它写回 localStorage，
+           于是用户删掉键之后内容又“长回来”，看起来像删不掉。
+           这里在 init() 结束时记录两个关键键是否存在，之后一旦发现被外部删除，
+           就立刻停止回写并刷新页面，按初始状态重新开始。 */
+        var storageGuard = { doc: false, set: false, resetting: false }
+        function initStorageGuard() {
+          try {
+            storageGuard.doc = localStorage.getItem(CONFIG.LS_DOC) !== null
+            storageGuard.set = localStorage.getItem(CONFIG.LS_SET) !== null
+          } catch (e) {}
+        }
+        function externalResetDetected() {
+          if (storageGuard.resetting) return true
+          try {
+            var lost =
+              (storageGuard.doc && localStorage.getItem(CONFIG.LS_DOC) === null) ||
+              (storageGuard.set && localStorage.getItem(CONFIG.LS_SET) === null)
+            if (lost) {
+              storageGuard.resetting = true
+              /* 存储被清空：停止一切回写，并立刻刷新回初始状态 */
+              setTimeout(function () {
+                location.reload()
+              }, 0)
+            }
+          } catch (e) {}
+          return storageGuard.resetting
+        }
+
+        /* 查询结果集：最多保留 2000 行（与结果区展示上限一致），避免载荷无谓膨胀 */
+        function lastResultForSave() {
+          var r = S.lastResult
+          if (!r || !r.cols || !r.cols.length) return null
+          return {
+            cols: r.cols.slice(),
+            rows: (r.rows || []).slice(0, 2000),
+            msg: r.msg || '',
+          }
+        }
+
         var Settings = {
           save: function () {
             try {
-              localStorage.setItem(
-                CONFIG.LS_SET,
-                JSON.stringify({
-                  lang: S.lang,
-                  theme: S.theme,
-                  bg: S.bg,
-                  zoom: S.zoom,
-                  radius: S.radius,
-                  fontSize: S.fontSize,
-                  cellFont: S.cellFont,
-                  colW: S.colW,
-                  rowH: S.rowH,
-                  statusBarVisible: S.statusBarVisible,
-                  menuPinned: S.menuPinned,
-                  view: S.view,
-                }),
-              )
+              /* 存储被外部清空后不再回写，否则用户“删了又回来” */
+              if (externalResetDetected()) return
+              /* 写入 localStorage（唯一数据源）并递增版本号 */
+              Storage.writeSettings({
+                lang: S.lang,
+                theme: S.theme,
+                bg: S.bg,
+                zoom: S.zoom,
+                radius: S.radius,
+                fontSize: S.fontSize,
+                cellFont: S.cellFont,
+                colW: S.colW,
+                rowH: S.rowH,
+                statusBarVisible: S.statusBarVisible,
+                menuPinned: S.menuPinned,
+                view: S.view,
+                /* 以下为“工作台状态”：筛选 / 查找 / 排序 / 查询页内容。
+                   一并落盘，才能随云同步原样带到其它设备。
+                   派生数据（filter.rows、find.hits/re）不入库，加载时重算。 */
+                filter: {
+                  on: !!S.filter.on,
+                  mode: S.filter.mode,
+                  cs: !!S.filter.cs,
+                  conds: S.filter.conds || [],
+                },
+                find: S.find
+                  ? {
+                      q: S.find.q,
+                      rep: S.find.rep,
+                      regex: !!S.find.regex,
+                      cs: !!S.find.cs,
+                      whole: !!S.find.whole,
+                    }
+                  : null,
+                sort: {
+                  dim: S.sort.dim,
+                  by: S.sort.by,
+                  crit: S.sort.crit,
+                  crit2: S.sort.crit2,
+                  dir: S.sort.dir,
+                  nulls: S.sort.nulls,
+                },
+                sortMark: S.sortMark
+                  ? { dim: S.sortMark.dim, by: S.sortMark.by, dir: S.sortMark.dir }
+                  : null,
+                sql: DOM.sqlInput ? DOM.sqlInput.value : '',
+                sqlHist: (S.sqlHist || []).slice(0, 20),
+                findHist: (S.findHist || []).slice(0, 20),
+                repHist: (S.repHist || []).slice(0, 20),
+                lastResult: lastResultForSave(),
+              })
             } catch (e) {}
           },
-          load: function () {
-            try {
-              var raw = localStorage.getItem(CONFIG.LS_SET)
-              if (!raw) return
-              var o = JSON.parse(raw)
-              ;[
-                'lang',
-                'theme',
-                'bg',
-                'zoom',
-                'radius',
-                'fontSize',
-                'cellFont',
-                'colW',
-                'rowH',
-                'statusBarVisible',
-                'menuPinned',
-                'view',
-              ].forEach(function (k) {
-                if (o[k] !== undefined) S[k] = o[k]
+          /* 把一份已解析的设置对象灌进 S（load 与 hydrate 共用） */
+          applyFrom: function (o) {
+            ;[
+              'lang',
+              'theme',
+              'bg',
+              'zoom',
+              'radius',
+              'fontSize',
+              'cellFont',
+              'colW',
+              'rowH',
+              'statusBarVisible',
+              'menuPinned',
+              'view',
+            ].forEach(function (k) {
+              if (o[k] !== undefined) S[k] = o[k]
+            })
+            S.zoom = clamp(+S.zoom || 1, CONFIG.MIN_ZOOM, CONFIG.MAX_ZOOM)
+            S.radius = clamp(+S.radius || 0, 0, 12)
+            S.fontSize = clamp(+S.fontSize || 13, 11, 20)
+            S.cellFont = clamp(+S.cellFont || 13, 11, 22)
+            S.colW = clamp(+S.colW || 150, 80, 340)
+            S.rowH = clamp(+S.rowH || 30, 24, 52)
+
+            /* ---- 工作台状态（随云同步一起过来） ---- */
+            if (o.filter && typeof o.filter === 'object') {
+              S.filter.on = !!o.filter.on
+              S.filter.mode = o.filter.mode === 'or' ? 'or' : 'and'
+              S.filter.cs = !!o.filter.cs
+              S.filter.conds = Array.isArray(o.filter.conds)
+                ? o.filter.conds
+                    .filter(function (c) {
+                      return c && typeof c === 'object'
+                    })
+                    .map(function (c) {
+                      return {
+                        col: +c.col || 0,
+                        op: c.op || 'contains',
+                        val: c.val === undefined || c.val === null ? '' : String(c.val),
+                      }
+                    })
+                : []
+            } else {
+              S.filter.on = false
+              S.filter.conds = []
+            }
+            S.find =
+              o.find && typeof o.find === 'object'
+                ? {
+                    q: String(o.find.q || ''),
+                    rep: String(o.find.rep || ''),
+                    regex: !!o.find.regex,
+                    cs: !!o.find.cs,
+                    whole: !!o.find.whole,
+                    hits: [],
+                    cur: -1,
+                    re: null,
+                  }
+                : null
+            if (o.sort && typeof o.sort === 'object') {
+              ;['dim', 'by', 'crit', 'crit2', 'dir', 'nulls'].forEach(function (k) {
+                if (o.sort[k] !== undefined) S.sort[k] = o.sort[k]
               })
-              S.zoom = clamp(+S.zoom || 1, CONFIG.MIN_ZOOM, CONFIG.MAX_ZOOM)
-              S.radius = clamp(+S.radius || 0, 0, 12)
-              S.fontSize = clamp(+S.fontSize || 13, 11, 20)
-              S.cellFont = clamp(+S.cellFont || 13, 11, 22)
-              S.colW = clamp(+S.colW || 150, 80, 340)
-              S.rowH = clamp(+S.rowH || 30, 24, 52)
-            } catch (e) {}
+              S.sort.by = +S.sort.by || 0
+            }
+            S.sortMark =
+              o.sortMark && typeof o.sortMark === 'object'
+                ? {
+                    dim: o.sortMark.dim,
+                    by: +o.sortMark.by || 0,
+                    dir: o.sortMark.dir === 'desc' ? 'desc' : 'asc',
+                  }
+                : null
+            S.sqlHist = Array.isArray(o.sqlHist) ? o.sqlHist.slice(0, 20) : []
+            S.findHist = Array.isArray(o.findHist) ? o.findHist.slice(0, 20) : []
+            S.repHist = Array.isArray(o.repHist) ? o.repHist.slice(0, 20) : []
+            S.lastResult =
+              o.lastResult && Array.isArray(o.lastResult.cols) && o.lastResult.cols.length
+                ? {
+                    cols: o.lastResult.cols,
+                    rows: Array.isArray(o.lastResult.rows) ? o.lastResult.rows : [],
+                    msg: o.lastResult.msg || '',
+                  }
+                : null
+            /* 查询页输入框：bind() 已先执行，这里可以直接回填 */
+            if (DOM.sqlInput && typeof o.sql === 'string') DOM.sqlInput.value = o.sql
+          },
+          /* 首次进入页面：从 localStorage 读（唯一数据源） */
+          load: function () {
+            var o = Storage.settings()
+            if (!o || !Object.keys(o).length) return
+            this.applyFrom(o)
+          },
+          /* 存储被本进程之外改动过（清空 / 另一个标签页 / DevTools 手改）时，
+             重新以 localStorage 为准刷新内存里的设置与工作台状态 */
+          hydrate: function () {
+            if (!Storage.setStale()) return false
+            this.applyFrom(Storage.settings())
+            return true
           },
           apply: function () {
+            /* 先以 localStorage 为准对齐（外部改动在这里被采纳） */
+            Settings.hydrate()
             ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach(function (c) {
               document.body.classList.remove(c)
             })
@@ -4478,6 +4766,14 @@ notify pgrst, 'reload schema';</textarea
           },
         }
 
+        /* 任何交互产生的状态改动都**立刻**写进 localStorage，不做内存暂存。
+           SQL 输入框的文字由 focusout / 运行查询 / 关闭页面这几个提交点写入，
+           输入过程中内容只存在于该输入控件本身，不存在应用侧的内存副本。 */
+        function scheduleStateFlush() {
+          if (externalResetDetected()) return
+          Settings.save()
+        }
+
         function applyI18n() {
           document.documentElement.lang = S.lang === 'zh' ? 'zh-CN' : 'en'
           $$('[data-i18n]').forEach(function (el) {
@@ -4507,32 +4803,33 @@ notify pgrst, 'reload schema';</textarea
           }
         }
 
+        /* 表格数据的读写全部落在 localStorage 上（唯一数据源）。
+           tables / activeId 用 getter/setter 直接映射到 Storage 的文档缓存，
+           因此每一次读取都经过版本校验：存储被清空或外部改动时，读到的就是存储里的真实内容。 */
         var Store = {
-          tables: [],
-          activeId: null,
           active: function () {
-            if (!this.tables.length) this.tables.push(newTable('sheet1'))
-            var f = null
-            for (var i = 0; i < this.tables.length; i++)
-              if (this.tables[i].id === this.activeId) f = this.tables[i]
+            var tables = this.tables
+            if (!tables.length) {
+              tables.push(newTable('sheet1'))
+              /* 补建的表必须写回 localStorage，否则它只活在缓存里，刷新就没了 */
+              this.persist()
+            }
+            var f = null,
+              act = this.activeId
+            for (var i = 0; i < tables.length; i++) if (tables[i].id === act) f = tables[i]
             if (!f) {
-              f = this.tables[0]
+              f = tables[0]
               this.activeId = f.id
             }
             return f
           },
           load: function () {
-            try {
-              var raw = localStorage.getItem(CONFIG.LS_DOC)
-              if (raw) {
-                var d = JSON.parse(raw)
-                if (d && Array.isArray(d.tables) && d.tables.length) {
-                  this.tables = d.tables.map(normTable)
-                  this.activeId = d.activeId || this.tables[0].id
-                  return
-                }
-              }
-            } catch (e) {}
+            var d = Storage.doc()
+            if (d.tables && d.tables.length) {
+              this.tables = d.tables.map(normTable)
+              this.activeId = d.activeId || this.tables[0].id
+              return
+            }
             var st = sampleTable()
             this.tables = [st]
             this.activeId = st.id
@@ -4543,14 +4840,29 @@ notify pgrst, 'reload schema';</textarea
             } catch (e) {}
           },
           persist: function () {
-            try {
-              localStorage.setItem(
-                CONFIG.LS_DOC,
-                JSON.stringify({ tables: this.tables, activeId: this.activeId }),
-              )
-            } catch (e) {}
+            /* 存储被外部清空后不再回写 */
+            if (externalResetDetected()) return
+            Storage.writeDoc(this.tables, this.activeId)
           },
         }
+        Object.defineProperty(Store, 'tables', {
+          enumerable: true,
+          get: function () {
+            return Storage.doc().tables
+          },
+          set: function (v) {
+            Storage.doc().tables = v
+          },
+        })
+        Object.defineProperty(Store, 'activeId', {
+          enumerable: true,
+          get: function () {
+            return Storage.doc().activeId
+          },
+          set: function (v) {
+            Storage.doc().activeId = v
+          },
+        })
 
         function normTable(x) {
           var t = {
@@ -4562,9 +4874,14 @@ notify pgrst, 'reload schema';</textarea
           }
           var cs = Array.isArray(x.cols) ? x.cols : []
           for (var i = 0; i < cs.length; i++) {
-            if (typeof cs[i] === 'string') t.cols.push({ name: cs[i], type: 'text' })
+            /* 源数据没有 type 的列先留空，交给 inferTypes 推断；
+               已有 type 的列（含在「结构」页手动设置的）原样保留 */
+            if (typeof cs[i] === 'string') t.cols.push({ name: cs[i], type: undefined })
             else
-              t.cols.push({ name: String(cs[i].name || idxToCol(i)), type: cs[i].type || 'text' })
+              t.cols.push({
+                name: String(cs[i].name || idxToCol(i)),
+                type: cs[i].type || undefined,
+              })
           }
           var rs = Array.isArray(x.rows) ? x.rows : []
           for (var j = 0; j < rs.length; j++) {
@@ -4573,11 +4890,15 @@ notify pgrst, 'reload schema';</textarea
           var maxc = t.cols.length
           for (var k = 0; k < t.rows.length; k++)
             if (t.rows[k].length > maxc) maxc = t.rows[k].length
-          while (t.cols.length < maxc) t.cols.push({ name: idxToCol(t.cols.length), type: 'text' })
+          while (t.cols.length < maxc)
+            t.cols.push({ name: idxToCol(t.cols.length), type: undefined })
           for (var m = 0; m < t.rows.length; m++)
             while (t.rows[m].length < maxc) t.rows[m].push(null)
           if (!t.rows.length) t.rows.push(new Array(maxc).fill(null))
-          inferTypes(t)
+          /* 只推断“没有类型”的列：保留在「结构」页手动设置过的列类型，
+             否则每次加载（包括从云端拉取）都会把列类型重算回去 */
+          inferTypes(t, true)
+          for (var q = 0; q < t.cols.length; q++) if (!t.cols[q].type) t.cols[q].type = 'text'
           return t
         }
 
@@ -4626,8 +4947,12 @@ notify pgrst, 'reload schema';</textarea
           return n - 1
         }
 
-        function inferTypes(t) {
+        function inferTypes(t, onlyMissing) {
           for (var c = 0; c < t.cols.length; c++) {
+            /* 加载已保存的数据时只补齐“没有类型”的列。
+               否则会把手动在「结构」页设置的列类型重算掉 —— 本地刷新和云端拉取都一样，
+               这正是「结构页的改动同步不过去」的原因。 */
+            if (onlyMissing && t.cols[c].type) continue
             var seen = 0,
               num = 0,
               date = 0,
@@ -6561,6 +6886,9 @@ notify pgrst, 'reload schema';</textarea
         }
 
         function renderAll() {
+          /* 渲染前先以 localStorage 为准对齐设置与工作台状态：
+             外部改动（清空 / 别的标签页 / DevTools）在这里被采纳 */
+          Settings.hydrate()
           renderHead()
           renderTabs()
           renderCtxBar()
@@ -6570,7 +6898,46 @@ notify pgrst, 'reload schema';</textarea
           renderStatus()
         }
 
+        /* 回到页面 / 另一个标签页改过存储时，丢弃缓存并整体重读一遍，
+           保证界面显示的永远是 localStorage 里的真实内容 */
+        function syncFromStorage() {
+          if (externalResetDetected()) return
+          if (!Storage.docStale() && !Storage.setStale()) return
+          Storage.invalidate()
+          if (Storage.hasDoc()) {
+            var d = Storage.doc()
+            Store.tables = d.tables.map(normTable)
+            Store.activeId = d.activeId || Store.tables[0].id
+          }
+          Settings.applyFrom(Storage.settings())
+          restoreWorkbench()
+          renderFilterConds()
+          Settings.apply()
+          renderAll()
+          renderHist()
+        }
+        window.addEventListener('storage', function () {
+          Storage.invalidate()
+          syncFromStorage()
+        })
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') {
+            syncFromStorage()
+            return
+          }
+          /* 切到后台：立刻把当前内容写进 localStorage。
+             内存里不留“待写”的副本，页面被系统回收也不会丢改动。 */
+          if (externalResetDetected()) return
+          Store.persist()
+          Settings.save()
+        })
+        window.addEventListener('focus', function () {
+          syncFromStorage()
+        })
+
         function afterChange() {
+          /* 存储已被外部清空 -> 停止保存并刷新回初始状态 */
+          if (externalResetDetected()) return
           if (S.filter.on) recomputeFilter(true)
           if (S.find && S.find.q) computeFind()
           /* 本机已产生真实改动，示例数据标记失效（云同步据此认为本机内容需要上传） */
@@ -9506,6 +9873,49 @@ notify pgrst, 'reload schema';</textarea
             })
           },
 
+          /* 重置为初始状态：删除全部表格与工作台状态，恢复初始示例数据。
+             注意：仅靠 DevTools 删除 localStorage 是无效的 —— 页面内存里还留着数据，
+             任何改动或刷新（beforeunload）都会把它写回去。 */
+          resetAll: function () {
+            showConfirm(T('ask.resetAll'), T('confirm.ok'), true).then(function (ok) {
+              if (!ok) return
+              pushUndo()
+              var st = sampleTable()
+              Store.tables = [st]
+              Store.activeId = st.id
+              S.filter.on = false
+              S.filter.mode = 'and'
+              S.filter.cs = false
+              S.filter.conds = []
+              S.filter.rows = null
+              S.find = null
+              S.sortMark = null
+              S.sortSnap = null
+              S.sel = { r: 0, c: 0 }
+              S.sel2 = null
+              S.sqlHist = []
+              S.findHist = []
+              S.repHist = []
+              S.lastResult = null
+              if (DOM.sqlInput) DOM.sqlInput.value = ''
+              Store.persist()
+              /* 清掉同步簿记并把本机标记回“只有示例数据的空白设备”，
+                 这样云同步不会拿这份示例数据去覆盖云端已有内容 */
+              if (window.ZDCloudSync && typeof window.ZDCloudSync.forgetSync === 'function')
+                window.ZDCloudSync.forgetSync()
+              try {
+                localStorage.setItem(CONFIG.LS_SEED, '1')
+              } catch (e) {}
+              Settings.save()
+              Settings.apply()
+              renderFilterConds()
+              renderResult(null)
+              renderAll()
+              renderHist()
+              notify(T('msg.resetDone'))
+            })
+          },
+
           /* tables */
           tableAdd: function () {
             var nt = newTable(
@@ -9593,6 +10003,8 @@ notify pgrst, 'reload schema';</textarea
               renderTabs()
               renderStatus()
             }
+            /* 查询语句、历史、结果集都属于要同步的工作台状态，立即落盘 */
+            Settings.save()
           },
           sqlClear: function () {
             DOM.sqlInput.value = ''
@@ -10559,7 +10971,19 @@ notify pgrst, 'reload schema';</textarea
           })
 
           window.addEventListener('beforeunload', function () {
+            /* 关键：刷新/关闭前若发现存储已被清除，绝不能把内存里的旧数据写回去，
+               否则“删掉 localStorage 再刷新”会被这一步悄悄还原 */
+            if (externalResetDetected()) return
             Store.persist()
+            Settings.save()
+          })
+
+          /* 交互后立刻落盘。用冒泡阶段（不加捕获）：
+             必须等各处理器把状态改完再写，否则写进去的是改动前的值。
+             不监听 input/keyup：输入过程不产生内存暂存，
+             SQL 文本在 focusout / 运行查询 / 关闭页面时提交。 */
+          ;['click', 'change', 'focusout'].forEach(function (ev) {
+            document.addEventListener(ev, scheduleStateFlush)
           })
         }
 
@@ -10628,16 +11052,41 @@ notify pgrst, 'reload schema';</textarea
         /* ============================================================
            22. INIT
            ============================================================ */
+        /* 恢复随云同步一起带过来的工作台状态。
+           必须在 Store.load() 之后、renderAll() 之前执行：
+           筛选命中行 / 查找高亮 / SQL 结果区都依赖已加载的数据。 */
+        function restoreWorkbench() {
+          if (S.filter.on && S.filter.conds.length) recomputeFilter(true)
+          else S.filter.rows = null
+          var fh = document.getElementById('filter-hits')
+          if (fh) fh.textContent = S.filter.on && S.filter.rows ? String(S.filter.rows.length) : ''
+          if (S.find && S.find.q) {
+            computeFind()
+            var fcount = document.getElementById('find-count')
+            if (fcount) fcount.textContent = S.find.hits ? String(S.find.hits.length) : '0'
+          }
+          if (DOM.resWrap) {
+            if (S.lastResult) {
+              DOM.resMsg.className = 'ok'
+              DOM.resMsg.textContent = S.lastResult.msg || T('msg.sqlOk')
+            }
+            renderResult(S.lastResult)
+          }
+        }
+
         function init() {
           bind()
           injectIcons()
           Settings.load()
           Store.load()
+          restoreWorkbench()
           renderFilterConds()
           Settings.apply()
           setView(S.view || 'grid')
           renderAll()
           renderHist()
+          /* 所有键都已就绪，从这里开始监视是否被外部清空 */
+          initStorageGuard()
         }
 
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
@@ -10666,6 +11115,8 @@ notify pgrst, 'reload schema';</textarea
           syncing = false,
           authing = false,
           lastHash = '',
+          lastDocHash = '',
+          bootHash = '',
           pollTimer = null,
           pushTimer = null,
           state = { statusKey: 'sync.unconfiguredLabel', busy: false, lastCloudTs: 0 }
@@ -10798,14 +11249,29 @@ notify pgrst, 'reload schema';</textarea
           var lbl = E('zp-sync-label')
           if (lbl) lbl.textContent = v
         }
-        function dataHash() {
-          var s = ''
-          try {
-            s = (localStorage.getItem(DATA_KEY) || '') + '|' + (localStorage.getItem(SET_KEY) || '')
-          } catch (_) {}
+        function hashStr(s) {
           var h = 5381
           for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
           return s.length + ':' + h
+        }
+        /* 表格内容指纹：只反映正文数据，切换视图 / 改主题等外观操作不会影响它 */
+        function docHash() {
+          var s = ''
+          try {
+            s = localStorage.getItem(DATA_KEY) || ''
+          } catch (_) {}
+          return hashStr(s)
+        }
+        /* 外观设置指纹 */
+        function setHash() {
+          var s = ''
+          try {
+            s = localStorage.getItem(SET_KEY) || ''
+          } catch (_) {}
+          return hashStr(s)
+        }
+        function dataHash() {
+          return docHash() + '/' + setHash()
         }
         function stopWatcher() {
           if (pollTimer) clearInterval(pollTimer)
@@ -10816,15 +11282,23 @@ notify pgrst, 'reload schema';</textarea
         function startWatcher() {
           stopWatcher()
           lastHash = dataHash()
+          lastDocHash = docHash()
           pollTimer = setInterval(function () {
             if (!autoSyncOn || !session || !unlockPassword || syncing) return
             var h = dataHash()
             if (h === lastHash) return
             lastHash = h
+            var dH = docHash(),
+              docChanged = dH !== lastDocHash
+            lastDocHash = dH
             if (pushTimer) clearTimeout(pushTimer)
             pushTimer = setTimeout(function () {
               pushTimer = null
-              if (autoSyncOn && session && unlockPassword && !syncing) autoPush()
+              if (!autoSyncOn || !session || !unlockPassword || syncing) return
+              /* 表格内容变了 -> 立刻上传（这是“立即同步”的承诺）；
+                 只有外观设置变了 -> 走一次完整判定，避免拿本机旧表格覆盖对端内容 */
+              if (docChanged) autoPush()
+              else autoResolve()
             }, PUSH_DEBOUNCE)
           }, POLL_MS)
         }
@@ -10839,6 +11313,7 @@ notify pgrst, 'reload schema';</textarea
           } finally {
             syncing = false
             lastHash = dataHash()
+            lastDocHash = docHash()
           }
         }
         async function pullQuiet(r) {
@@ -10847,17 +11322,19 @@ notify pgrst, 'reload schema';</textarea
           state.lastCloudTs = Number(r.client_updated_at || 0)
           reloadOnce()
         }
-        // 后台自动同步时静默载入云端数据，用 sessionStorage 防止反复刷新
+        /* 自动把云端数据载入本机后，只有内容确实变了才刷新页面：
+           否则会出现“云端已写进 localStorage，界面却还是旧表，
+           用户随手一编辑又把旧表写回去并上传”的来回覆盖，两端永远不一致。 */
         function reloadOnce() {
           try {
+            if (dataHash() === bootHash) return
             var k = 'zendata-auto-pull-at',
               last = Number(sessionStorage.getItem(k) || 0)
-            if (Date.now() - last > 15000) {
-              sessionStorage.setItem(k, String(Date.now()))
-              setTimeout(function () {
-                location.reload()
-              }, 250)
-            }
+            if (Date.now() - last < 3000) return
+            sessionStorage.setItem(k, String(Date.now()))
+            setTimeout(function () {
+              location.reload()
+            }, 250)
           } catch (_) {}
         }
         async function autoResolve() {
@@ -10868,27 +11345,33 @@ notify pgrst, 'reload schema';</textarea
           try {
             var r = await remote(),
               m = meta(),
-              h = dataHash(),
-              syncedHash = typeof m.syncedHash === 'string' ? m.syncedHash : '',
-              localTs = Number(m.updatedAt || 0),
-              /* 本地相对“上次成功同步”是否有改动；从未同步过一律视为有改动 */
-              localDirty = syncedHash ? syncedHash !== h : true,
-              /* 从未同步过、且本机只有自动灌入的示例表 => 空白设备，可直接采用云端内容 */
-              pristine = !syncedHash && !!localStorage.getItem(SEED_KEY)
+              dH = docHash(),
+              sH = setHash(),
+              hasHistory = !!(m.syncedDocHash || m.syncedHash),
+              /* 本机表格内容相对“上次成功同步”是否有改动；从未同步过一律视为有改动 */
+              docDirty = hasHistory ? (m.syncedDocHash ? m.syncedDocHash !== dH : false) : true,
+              setDirty = m.syncedSetHash ? m.syncedSetHash !== sH : true,
+              /* 从未同步过、且本机仍只有自动灌入的示例表 => 空白设备，直接采用云端内容 */
+              pristine = !hasHistory && !!localStorage.getItem(SEED_KEY)
             if (!r) {
+              /* 云端还没有数据 */
               await push()
               setMsg('sync.cloudEmptyPush')
-            } else if (localDirty && !pristine) {
-              /* 本机有未上传的内容：内容优先，上传本地并覆盖云端
-                 （与开启云同步时提示的“本地改动会覆盖云端”一致，避免本地内容被悄悄丢弃） */
+            } else if (docDirty && !pristine) {
+              /* 本机有未上传的表格内容：内容优先，上传本地并覆盖云端
+                 （与开启云同步时的提示一致，避免本地内容被悄悄丢弃） */
               await push()
               setMsg('sync.localPushedDirty')
-            } else if (Number(r.client_updated_at || 0) > localTs) {
-              await pullQuiet(r)
-              setMsg('sync.cloudOverwritten', new Date(state.lastCloudTs).toLocaleString())
-            } else {
+            } else if (setDirty && (await sameContent(r))) {
+              /* 只改了外观设置、且云端表格内容与本机一致：上传设置是安全的 */
               await push()
-              setMsg('sync.localPushed')
+              setMsg('sync.settingsPushed')
+            } else {
+              /* 本机表格内容干净 => 一律对齐云端。
+                 这里刻意不靠时间戳判断方向：两台机器的本地时钟可能有偏差，
+                 只比时间戳会导致永远同步不上、两端内容长期不一致。 */
+              await pullQuiet(r)
+              setMsg('sync.aligned', new Date(state.lastCloudTs).toLocaleString())
             }
             labelKey('sync.synced', true)
           } catch (e) {
@@ -10898,6 +11381,7 @@ notify pgrst, 'reload schema';</textarea
             syncing = false
             busy(false)
             lastHash = dataHash()
+            lastDocHash = docHash()
           }
         }
         function tr(key) {
@@ -10967,11 +11451,15 @@ notify pgrst, 'reload schema';</textarea
         }
         function mark(ts) {
           try {
-            /* syncedHash 记录“最近一次成功同步所对应的本地内容指纹”，
-               用来判断本地是否还有未上传的改动（不能只看时间戳） */
+            /* 分别记录内容指纹与设置指纹：判断“本地是否有未上传的表格内容”时
+               只看内容，避免切个视图、改个主题就被当成内容改动去覆盖云端 */
             localStorage.setItem(
               META_KEY,
-              JSON.stringify({ updatedAt: ts || now(), syncedHash: dataHash() }),
+              JSON.stringify({
+                updatedAt: ts || now(),
+                syncedDocHash: docHash(),
+                syncedSetHash: setHash(),
+              }),
             )
           } catch (_) {}
         }
@@ -11135,6 +11623,46 @@ notify pgrst, 'reload schema';</textarea
           if (r.error) throw r.error
           return r.data || null
         }
+        /* 稳定序列化：不同写入顺序也能得到相同字符串，用于内容比对 */
+        function canonJSON(v) {
+          if (Array.isArray(v))
+            return (
+              '[' +
+              v
+                .map(function (x) {
+                  return canonJSON(x)
+                })
+                .join(',') +
+              ']'
+            )
+          if (v && typeof v === 'object')
+            return (
+              '{' +
+              Object.keys(v)
+                .sort()
+                .map(function (k) {
+                  return JSON.stringify(k) + ':' + canonJSON(v[k])
+                })
+                .join(',') +
+              '}'
+            )
+          return JSON.stringify(v === undefined ? null : v)
+        }
+        /* 只比较表格正文（tables + activeId），不含外观设置 */
+        function canonDoc(d) {
+          return canonJSON({
+            tables: (d && d.tables) || [],
+            activeId: (d && d.activeId) || null,
+          })
+        }
+        /* 云端表格内容是否与本机一致：一致时才允许为了同步外观设置而上传 */
+        async function sameContent(r) {
+          try {
+            return canonDoc(await dec(r.payload, unlockPassword)) === canonDoc(localData())
+          } catch (e) {
+            return false
+          }
+        }
         function writeLocal(d) {
           try {
             var copy = JSON.parse(JSON.stringify(d || {}))
@@ -11144,6 +11672,11 @@ notify pgrst, 'reload schema';</textarea
             if (settings && typeof settings === 'object')
               localStorage.setItem(SET_KEY, JSON.stringify(settings))
             mark(now())
+            /* 通知页面脚本：存储已被写入，内存缓存立即作废（否则会继续读旧内容） */
+            if (window.ZDStorage && typeof window.ZDStorage.invalidate === 'function')
+              window.ZDStorage.invalidate()
+            if (window.ZDStorage && typeof window.ZDStorage.bump === 'function')
+              window.ZDStorage.bump()
           } catch (e) {
             throw new Error(tr('sync.localWriteFailed'))
           }
@@ -11404,6 +11937,14 @@ notify pgrst, 'reload schema';</textarea
           autoResolve: autoResolve,
           toggleAutoSync: toggleAutoSync,
           prefs: prefs,
+          /* 本机内容被重置时调用：清掉同步簿记，让下一次判定按“从未同步过”处理，
+             从而不会拿重置后的示例数据去覆盖云端已有内容 */
+          forgetSync: function () {
+            try {
+              localStorage.removeItem(META_KEY)
+              state.lastCloudTs = 0
+            } catch (_) {}
+          },
         }
         function autosizeSql() {
           var x = E('zp-sql-box')
@@ -11621,6 +12162,8 @@ notify pgrst, 'reload schema';</textarea
           setup()
           refreshI18n()
           autosizeSql()
+          /* 记录进入页面时的内容指纹：自动拉取后若指纹变了就必须刷新界面 */
+          bootHash = dataHash()
           var c = cfg()
           if (!c.url || !c.key) {
             refresh()
