@@ -1,0 +1,5731 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>文本标注</title>
+    <link rel="icon" href="icon.ico" type="image/x-icon" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,700;1,7..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1a1a1a;
+        --text-dim: rgba(26, 26, 26, 0.4);
+        --text-faint: rgba(26, 26, 26, 0.15);
+        --border: #1a1a1a;
+        --border-dim: rgba(26, 26, 26, 0.15);
+        --border-faint: rgba(26, 26, 26, 0.06);
+        --hover: rgba(26, 26, 26, 0.06);
+        --active-bg: #1a1a1a;
+        --active-text: #ffffff;
+        --accent-red: #cc3333;
+        --accent-green: #339933;
+        --accent-blue: #3366cc;
+        --font-mono: 'Literata', 'SimSun', '宋体', 'NSimSun', 'Songti SC', 'STSong', serif;
+        --zoom: 1;
+        --radius: 0px;
+        --fscale: 1;
+        --bfscale: 1;
+        --lh: 1.95;
+        --rail-bg: rgba(26, 26, 26, 0.022);
+      }
+      body.theme-dark {
+        --bg: #1a1a1a;
+        --text: #e8e8e8;
+        --text-dim: rgba(232, 232, 232, 0.4);
+        --text-faint: rgba(232, 232, 232, 0.15);
+        --border: #e8e8e8;
+        --border-dim: rgba(232, 232, 232, 0.15);
+        --border-faint: rgba(232, 232, 232, 0.06);
+        --hover: rgba(232, 232, 232, 0.08);
+        --active-bg: #e8e8e8;
+        --active-text: #1a1a1a;
+        --rail-bg: rgba(255, 255, 255, 0.028);
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: var(--font-mono);
+        overflow: hidden;
+        user-select: none;
+        transition:
+          background-color 0.3s,
+          color 0.3s;
+        font-size: calc(13px * var(--fscale));
+      }
+      ::selection {
+        background: rgba(136, 136, 136, 0.3);
+        color: inherit;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font-family: var(--font-mono);
+      }
+
+      body.bg-void {
+        background: var(--bg);
+      }
+      body.bg-grid {
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+      body.bg-dots {
+        background-color: var(--bg);
+        background-image: radial-gradient(circle, var(--border-dim) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      body.bg-cross {
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 20px 20px;
+      }
+      body.bg-diagonal {
+        background-color: var(--bg);
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 28px,
+          var(--border-faint) 28px,
+          var(--border-faint) 29px
+        );
+      }
+
+      /* ================= MENU ================= */
+      #menu-trigger {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        z-index: 1000;
+      }
+      #top-menu {
+        position: fixed;
+        top: -48px;
+        left: 0;
+        width: 100%;
+        height: 48px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        border-radius: var(--radius);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        z-index: 999;
+        transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        padding: 0 12px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      #top-menu::-webkit-scrollbar {
+        display: none;
+      }
+      #menu-trigger:hover ~ #top-menu,
+      #top-menu:hover,
+      #top-menu.pinned,
+      body.submenu-open #top-menu,
+      body.m-nav-open #top-menu {
+        top: 0;
+      }
+      .menu-group {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 0 6px;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .menu-group + .menu-group::before {
+        content: '';
+        position: absolute;
+        left: -2px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1px;
+        height: 20px;
+        background: var(--border-dim);
+      }
+      .menu-label {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        padding: 0 4px;
+        font-weight: 500;
+        flex-shrink: 0;
+      }
+      .menu-btn {
+        color: var(--text-dim);
+        cursor: pointer;
+        padding: 4px 10px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+        font-family: var(--font-mono);
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+        background: transparent;
+        border-radius: var(--radius);
+        user-select: none;
+      }
+      .menu-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .menu-btn.active {
+        color: var(--text);
+        background: var(--hover);
+        border-color: var(--border);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .menu-date {
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(10px * var(--fscale));
+        padding: 3px 8px;
+        outline: none;
+        cursor: pointer;
+        border-radius: var(--radius);
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+        max-width: 190px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .menu-date:hover {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .pin-btn {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        cursor: pointer;
+        color: var(--text-faint);
+        font-size: calc(14px * var(--fscale));
+        transition: all 0.15s;
+        margin-left: 2px;
+        background: transparent;
+        font-family: var(--font-mono);
+        flex-shrink: 0;
+        border-radius: var(--radius);
+      }
+      .pin-btn:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .pin-btn.pinned {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .pin-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .dropdown {
+        position: fixed;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 4px;
+        min-width: 200px;
+        z-index: 1001;
+        display: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        max-height: 80vh;
+        overflow-y: auto;
+        animation: ddIn 0.15s ease;
+        border-radius: var(--radius);
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
+      .dropdown::-webkit-scrollbar {
+        width: 4px;
+      }
+      .dropdown::-webkit-scrollbar-track {
+        margin: calc(var(--radius) + 4px) 0;
+        background: transparent;
+      }
+      .dropdown::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+        border-radius: 2px;
+      }
+      @keyframes ddIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .dropdown.open {
+        display: block;
+      }
+      .dropdown.closing {
+        animation: ddOut 0.14s ease forwards;
+      }
+      @keyframes ddOut {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+      }
+      .dd-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+        cursor: pointer;
+        transition: all 0.1s;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        border: 1px solid transparent;
+        font-family: var(--font-mono);
+        background: transparent;
+        width: 100%;
+        text-align: left;
+        border-radius: var(--radius);
+      }
+      .dd-item:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .dd-item.selected {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .dd-item .hint {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        margin-left: 12px;
+      }
+      .dd-divider {
+        height: 1px;
+        background: var(--border-dim);
+        margin: 4px 0;
+      }
+      .dd-label {
+        padding: 6px 10px 2px;
+        font-size: calc(9px * var(--fscale));
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        font-weight: 500;
+        font-family: var(--font-mono);
+      }
+      .dd-item-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 5px 10px;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        gap: 8px;
+      }
+      .dd-item-row:hover {
+        background: var(--hover);
+      }
+      .settings-control {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex-shrink: 0;
+      }
+      .settings-btn {
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: calc(13px * var(--fscale));
+        transition: all 0.1s;
+        user-select: none;
+        border-radius: var(--radius);
+      }
+      .settings-btn:hover {
+        border-color: var(--border);
+        color: var(--text);
+        background: var(--hover);
+      }
+      .settings-value {
+        min-width: 38px;
+        text-align: center;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text);
+        font-family: var(--font-mono);
+      }
+      .settings-bg-options {
+        display: flex;
+        gap: 3px;
+        flex-shrink: 0;
+      }
+      .settings-bg-dot {
+        display: block;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: all 0.1s;
+        background-color: var(--bg);
+        border-radius: var(--radius);
+      }
+      .settings-bg-dot:hover {
+        border-color: var(--text-dim);
+      }
+      .settings-bg-dot.active {
+        border-color: var(--text);
+      }
+      #dd-settings {
+        min-width: 300px;
+      }
+      #dd-search {
+        min-width: 320px;
+        max-height: 480px;
+      }
+      .search-input-wrap {
+        padding: 2px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
+      #search-input {
+        width: 100%;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(13px * var(--fscale));
+        padding: 8px;
+      }
+      #search-input::placeholder {
+        color: var(--text-faint);
+      }
+
+      /* ================= LAYOUT ================= */
+      #main {
+        position: absolute;
+        inset: 0;
+        /* 菜单隐藏时贴顶，不留空隙 */
+        padding: 0 0 26px;
+        display: flex;
+        flex-direction: column;
+        z-index: 1;
+        transition: padding 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      /* 仅菜单置顶或子菜单展开时主体下移；
+         非置顶状态 hover 显现时主体高度不变（菜单浮于内容之上，与 planner 一致） */
+      #top-menu.pinned ~ #main,
+      body.menu-pinned #main,
+      body.submenu-open #main {
+        padding-top: 48px;
+      }
+      /* 状态栏关闭时主体回收底部预留空间 */
+      body.no-statusbar #main {
+        padding-bottom: 0;
+      }
+      #app {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+      .rail {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex-shrink: 0;
+        position: relative;
+      }
+      /* 侧栏用极淡背景色与留白建立结构，不再使用竖向分隔线 */
+      #left-rail {
+        width: 216px;
+        background: var(--rail-bg);
+      }
+      #right-rail {
+        width: 272px;
+        background: var(--rail-bg);
+      }
+      .rail-head {
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        flex-shrink: 0;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .rail-x {
+        display: none;
+      }
+      .rail-head .rh-act {
+        cursor: pointer;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 0;
+      }
+      .rail-head .rh-act:hover {
+        color: var(--text);
+      }
+      .rail-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .rail-foot {
+        border-top: 1px solid var(--border-faint);
+        display: flex;
+        flex-shrink: 0;
+      }
+      .rbtn {
+        flex: 1;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        cursor: pointer;
+        transition: all 0.15s;
+        border-right: 1px solid var(--border-faint);
+      }
+      .rbtn:last-child {
+        border-right: none;
+      }
+      .rbtn:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      #right-rail .rr-sec {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      #rr-codes {
+        flex: 1 1 58%;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      #rr-detail {
+        flex: 1 1 42%;
+      }
+
+      .rail-body::-webkit-scrollbar,
+      .paper-scroll::-webkit-scrollbar,
+      #modal-body::-webkit-scrollbar,
+      .mx-wrap::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+      }
+      .rail-body::-webkit-scrollbar-track,
+      .paper-scroll::-webkit-scrollbar-track,
+      #modal-body::-webkit-scrollbar-track,
+      .mx-wrap::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .rail-body::-webkit-scrollbar-thumb,
+      .paper-scroll::-webkit-scrollbar-thumb,
+      #modal-body::-webkit-scrollbar-thumb,
+      .mx-wrap::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+      }
+
+      /* ---- doc list ---- */
+      .doc-item {
+        padding: 9px 12px 10px;
+        cursor: pointer;
+        transition: background 0.15s;
+        margin-top: 2px;
+        border-radius: var(--radius);
+        position: relative;
+      }
+      .doc-item:hover {
+        background: var(--hover);
+      }
+      .doc-item.active {
+        background: var(--hover);
+      }
+      .doc-title {
+        font-size: calc(12.5px * var(--fscale));
+        line-height: 1.5;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .doc-meta {
+        font-size: calc(9.5px * var(--fscale));
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        margin-top: 3px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .doc-bar {
+        height: 2px;
+        background: var(--border-faint);
+        margin-top: 7px;
+      }
+      .doc-bar i {
+        display: block;
+        height: 100%;
+        background: var(--text-dim);
+        transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .empty-hint {
+        padding: 24px 16px;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 1px;
+        line-height: 1.9;
+      }
+
+      /* ---- code list ---- */
+      .code-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        cursor: pointer;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        transition: background 0.12s;
+        position: relative;
+        border-radius: var(--radius);
+      }
+      .code-row:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .code-row.on {
+        background: var(--hover);
+        box-shadow: inset 2px 0 0 var(--text);
+        color: var(--text);
+      }
+      .code-lv {
+        font-size: calc(8px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-faint);
+        border: 1px solid var(--border-dim);
+        padding: 0 3px;
+        flex-shrink: 0;
+        text-transform: uppercase;
+        border-radius: var(--radius);
+      }
+      .code-dot {
+        width: 6px;
+        height: 6px;
+        flex-shrink: 0;
+        background: var(--c, #888888);
+        border-radius: var(--radius);
+      }
+      .code-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .code-n {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        flex-shrink: 0;
+      }
+      .code-act {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        opacity: 0;
+        flex-shrink: 0;
+        padding: 0 2px;
+        border-radius: var(--radius);
+      }
+      .code-row:hover .code-act {
+        opacity: 1;
+      }
+      .code-act:hover {
+        color: var(--text);
+      }
+      .code-sub {
+        padding: 6px 12px 8px 22px;
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-faint);
+        border-bottom: 1px solid var(--border-faint);
+        background: var(--bg);
+      }
+
+      /* ================= STAGE ================= */
+      #stage {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .view {
+        flex: 1;
+        min-height: 0;
+        display: none;
+        flex-direction: column;
+      }
+      .view.on {
+        display: flex;
+      }
+      .paper-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 34px 12px;
+        border-bottom: 1px solid var(--border-dim);
+        flex-shrink: 0;
+      }
+      .ph-left {
+        min-width: 0;
+      }
+      .ph-title {
+        font-size: calc(18px * var(--fscale));
+        font-weight: 500;
+        letter-spacing: 2px;
+        line-height: 1.3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ph-sub {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1.2px;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+      .ph-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .ph-right b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .ph-btn {
+        border: 1px solid var(--border-dim);
+        padding: 2px 8px;
+        cursor: pointer;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        transition: all 0.15s;
+        border-radius: var(--radius);
+      }
+      .ph-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .paper-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 34px 40px 60px;
+        user-select: text;
+        cursor: text;
+      }
+      #paper {
+        max-width: 720px;
+        margin: 0 auto;
+        font-size: calc(15px * var(--bfscale));
+        line-height: var(--lh);
+        letter-spacing: 0.2px;
+        color: var(--text);
+      }
+      #paper p {
+        margin: 0 0 0.85em;
+        text-align: justify;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #paper p:empty {
+        min-height: 0.6em;
+        margin-bottom: 0.4em;
+      }
+      .seg {
+        border-bottom: 1px solid var(--c, var(--text-dim));
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .seg:hover {
+        background: var(--hover);
+      }
+      .seg.on {
+        background: var(--hover);
+        box-shadow: inset 0 -2px 0 var(--c, var(--text));
+      }
+      .seg.dim {
+        opacity: 0.3;
+      }
+      .seg.review {
+        border-bottom-style: dashed;
+      }
+      .seg sup {
+        font-size: 0.58em;
+        letter-spacing: 0.5px;
+        color: var(--text-faint);
+        margin-left: 2px;
+        vertical-align: super;
+        line-height: 1;
+      }
+      .paper-empty {
+        max-width: 720px;
+        margin: 8vh auto 0;
+        text-align: center;
+      }
+      .pe-mark {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 4px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+      }
+      .pe-title {
+        font-size: calc(20px * var(--fscale));
+        letter-spacing: 3px;
+        margin-top: 14px;
+        color: var(--text-dim);
+      }
+      .pe-note {
+        font-size: calc(11px * var(--fscale));
+        line-height: 2;
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        margin-top: 20px;
+      }
+
+      /* ---- codes view ---- */
+      .cv-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 34px;
+        border-bottom: 1px solid var(--border-faint);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+      }
+      .cv-bar .spacer {
+        flex: 1;
+      }
+      .mini-label {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+      }
+      .cv-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 8px 34px 60px;
+      }
+      .cv-group {
+        margin: 0 auto;
+        max-width: 900px;
+      }
+      .cg-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 18px 0 8px;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      .cg-no {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+      }
+      .cg-name {
+        font-size: calc(15px * var(--fscale));
+        letter-spacing: 2px;
+        font-weight: 500;
+      }
+      .cg-def {
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.8;
+        color: var(--text-faint);
+        padding: 8px 0 10px;
+      }
+      .cg-count {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-dim);
+        letter-spacing: 1px;
+      }
+      .a-row {
+        display: flex;
+        gap: 10px;
+        padding: 9px 10px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: background 0.12s;
+        margin-bottom: 8px;
+      }
+      .a-row:hover {
+        background: var(--hover);
+      }
+      .a-row.sel {
+        background: color-mix(in srgb, var(--text) 9%, transparent);
+      }
+      .a-main {
+        flex: 1;
+        min-width: 0;
+      }
+      .a-quote {
+        font-size: calc(13px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text);
+      }
+      .a-sub {
+        display: flex;
+        gap: 12px;
+        margin-top: 4px;
+        font-size: calc(9.5px * var(--fscale));
+        letter-spacing: 0.8px;
+        color: var(--text-faint);
+      }
+      .a-code {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--text-dim);
+        max-width: 46%;
+        flex-shrink: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .a-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius);
+        flex-shrink: 0;
+        background: var(--c, var(--text-dim));
+      }
+      .a-memo {
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-dim);
+        margin-top: 5px;
+        padding-left: 8px;
+        border-left: 1px solid var(--border-faint);
+      }
+      .st {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1px;
+        border: 1px solid var(--border-dim);
+        padding: 0 4px;
+        color: var(--text-faint);
+      }
+      .st.review {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+
+      /* ---- matrix ---- */
+      .mx-wrap {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 20px 34px 60px;
+      }
+      table.mx {
+        border-collapse: collapse;
+        margin: 0 auto;
+        font-size: calc(11px * var(--fscale));
+      }
+      table.mx th,
+      table.mx td {
+        border: 1px solid var(--border-faint);
+        padding: 6px 9px;
+        text-align: center;
+        white-space: nowrap;
+        color: var(--text-dim);
+        font-weight: 400;
+      }
+      table.mx thead th {
+        border-bottom: 1px solid var(--border-dim);
+        color: var(--text-faint);
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        font-weight: 500;
+        max-width: 130px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      table.mx th.rowh {
+        text-align: left;
+        color: var(--text);
+        white-space: nowrap;
+        border-right: 1px solid var(--border-dim);
+      }
+      table.mx td.sum,
+      table.mx th.sum {
+        border-left: 1px solid var(--border-dim);
+        color: var(--text);
+      }
+      table.mx td.hit {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .mx-title {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        margin: 26px auto 10px;
+        max-width: 900px;
+      }
+      .mx-title:first-child {
+        margin-top: 0;
+      }
+      .mx-note {
+        max-width: 900px;
+        margin: 10px auto 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.9;
+        color: var(--text-faint);
+      }
+
+      /* ---- memo ---- */
+      .mv-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 18px 34px 60px;
+      }
+      .mv-list {
+        max-width: 820px;
+        margin: 0 auto;
+      }
+      .memo-card {
+        border: 1px solid var(--border-faint);
+        padding: 14px 16px 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: border-color 0.15s;
+        border-radius: var(--radius);
+      }
+      .memo-card:hover {
+        border-color: var(--border-dim);
+        background: var(--hover);
+      }
+      .mc-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .mc-title {
+        font-size: calc(14px * var(--fscale));
+        letter-spacing: 1.5px;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mc-type {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-faint);
+        border: 1px solid var(--border-dim);
+        padding: 0 5px;
+        flex-shrink: 0;
+      }
+      .mc-body {
+        font-size: calc(12px * var(--fscale));
+        line-height: 1.9;
+        color: var(--text-dim);
+        margin-top: 8px;
+        white-space: pre-wrap;
+        display: -webkit-box;
+        line-clamp: 4;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .mc-foot {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: calc(9.5px * var(--fscale));
+        letter-spacing: 0.8px;
+        color: var(--text-faint);
+      }
+
+      /* ================= 候选区 · 统一自定义 ================= */
+      .sug {
+        position: fixed;
+        z-index: 9500;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        border-radius: var(--radius);
+        display: none;
+        max-height: 224px;
+        overflow-y: auto;
+        padding: 3px;
+        animation: ddIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
+      .sug.open {
+        display: block;
+      }
+      .sug.inline {
+        position: static;
+        display: block;
+        border: none;
+        box-shadow: none;
+        border-radius: var(--radius);
+        max-height: 224px;
+      }
+      .sug::-webkit-scrollbar {
+        width: 4px;
+      }
+      /* track 上下内缩，避免 thumb 在滚动到两端时溢出圆角 */
+      .sug::-webkit-scrollbar-track {
+        margin: calc(var(--radius) + 4px) 0;
+        background: transparent;
+      }
+      .sug::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+        border-radius: 2px;
+      }
+      .sug-item,
+      .sp-item,
+      .sr-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 9px;
+        cursor: pointer;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        letter-spacing: 0.5px;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        background: transparent;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+      .sug-item:hover,
+      .sug-item.hl,
+      .sp-item:hover,
+      .sp-item.hl,
+      .sr-item:hover,
+      .sr-item.hl {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .sug-item.on,
+      .sp-item.on,
+      .sr-item.on {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .sug-item .hint,
+      .sp-item .hint,
+      .sr-item .hint {
+        margin-left: auto;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        flex-shrink: 0;
+      }
+      .sug-key {
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        border: 1px solid var(--border-dim);
+        padding: 0 3px;
+        flex-shrink: 0;
+      }
+      .sug-dot {
+        width: 6px;
+        height: 6px;
+        flex-shrink: 0;
+        background: var(--c, #888888);
+      }
+      .sug-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .sug-empty {
+        padding: 10px 9px;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 1px;
+      }
+
+      /* ---- 自定义选择框（替代原生 select） ---- */
+      .se {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(12.5px * var(--fscale));
+        letter-spacing: 0.4px;
+        padding: 5px 8px;
+        cursor: pointer;
+        border-radius: var(--radius);
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+        user-select: none;
+      }
+      .se:hover,
+      .se.open {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .se.mini {
+        padding: 2px 7px;
+        font-size: calc(10.5px * var(--fscale));
+        letter-spacing: 0.6px;
+        width: auto;
+        max-width: 180px;
+        color: var(--text-dim);
+      }
+      .se .se-v {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .se .se-a {
+        font-size: calc(8px * var(--fscale));
+        color: var(--text-faint);
+        flex-shrink: 0;
+      }
+      .fm-two .se {
+        flex: 1;
+        min-width: 0;
+      }
+      #m-doc-sel {
+        width: 100%;
+        max-width: none;
+      }
+      .cv-bar .se.mini {
+        flex-shrink: 0;
+      }
+
+      /* ================= SELECTION POPUP ================= */
+      #sel-pop {
+        position: fixed;
+        z-index: 1200;
+        width: 264px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        display: none;
+        border-radius: var(--radius);
+        animation: ddIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #sel-pop.open {
+        display: block;
+      }
+      .sp-quote {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border-faint);
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-dim);
+        max-height: 52px;
+        overflow: hidden;
+      }
+      #sp-input {
+        width: 100%;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(12px * var(--fscale));
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      #sp-input::placeholder {
+        color: var(--text-faint);
+      }
+      #sp-list {
+        max-height: 218px;
+        overflow-y: auto;
+        padding: 3px;
+      }
+      #sp-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      #sp-list::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+      }
+      .sp-foot {
+        display: flex;
+        border-top: 1px solid var(--border-dim);
+      }
+      .sp-btn {
+        flex: 1;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        cursor: pointer;
+        border-right: 1px solid var(--border-faint);
+        transition: all 0.15s;
+      }
+      .sp-btn:last-child {
+        border-right: none;
+      }
+      .sp-btn:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+
+      #tip {
+        position: fixed;
+        z-index: 1250;
+        max-width: 280px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-dim);
+        display: none;
+        pointer-events: none;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+        border-radius: var(--radius);
+      }
+      #tip b {
+        color: var(--text);
+        font-weight: 500;
+        letter-spacing: 1px;
+      }
+
+      /* ================= DETAIL PANEL ================= */
+      .dt-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px 12px 14px;
+      }
+      .dt-quote {
+        font-size: calc(12px * var(--fscale));
+        line-height: 1.8;
+        color: var(--text);
+        border-left: 2px solid var(--c, var(--text-dim));
+        padding-left: 10px;
+        border-radius: var(--radius);
+      }
+      .dt-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 9px;
+        font-size: calc(10.5px * var(--fscale));
+        letter-spacing: 0.6px;
+        color: var(--text-dim);
+      }
+      .dt-k {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        flex-shrink: 0;
+        width: 34px;
+      }
+      .dt-v {
+        flex: 1;
+        min-width: 0;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dt-v:hover {
+        color: var(--text);
+      }
+      .dt-ta {
+        width: 100%;
+        min-height: 62px;
+        margin-top: 9px;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(11.5px * var(--fscale));
+        line-height: 1.8;
+        padding: 6px 7px;
+        outline: none;
+        resize: vertical;
+        border-radius: var(--radius);
+      }
+      .dt-ta:focus {
+        border-color: var(--border);
+      }
+      .dt-acts {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .dt-btn {
+        border: 1px solid var(--border-dim);
+        padding: 2px 8px;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        cursor: pointer;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+      }
+      .dt-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .dt-btn.danger:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+      .rel-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid var(--border-dim);
+        padding: 1px 6px;
+        font-size: calc(9.5px * var(--fscale));
+        letter-spacing: 0.8px;
+        color: var(--text-dim);
+        margin: 5px 5px 0 0;
+        border-radius: var(--radius);
+      }
+      .rel-chip i {
+        font-style: normal;
+        color: var(--text-faint);
+        cursor: pointer;
+      }
+
+      /* ================= FORMS ================= */
+      .fm-row {
+        padding: 7px 16px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .fm-lb {
+        width: 62px;
+        flex-shrink: 0;
+        padding-top: 5px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+      }
+      .fm-f {
+        flex: 1;
+        min-width: 0;
+      }
+      .fm-in,
+      .fm-ta,
+      .fm-se {
+        width: 100%;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(12.5px * var(--fscale));
+        padding: 5px 8px;
+        outline: none;
+        border-radius: var(--radius);
+      }
+      .fm-ta {
+        min-height: 96px;
+        resize: vertical;
+        line-height: 1.85;
+      }
+      .fm-in:focus,
+      .fm-ta:focus,
+      .fm-se:focus {
+        border-color: var(--border);
+      }
+      .fm-hint {
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-faint);
+        margin-top: 5px;
+      }
+      .fm-warn {
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.7;
+        color: var(--accent-red);
+        margin-top: 5px;
+      }
+      .fm-two {
+        display: flex;
+        gap: 8px;
+      }
+      .fm-colors {
+        display: flex;
+        gap: 4px;
+      }
+      .fm-cd {
+        width: 18px;
+        height: 18px;
+        border: 2px solid transparent;
+        cursor: pointer;
+        border-radius: var(--radius);
+      }
+      .fm-cd.on {
+        border-color: var(--text);
+      }
+      .fm-chk {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .fm-chip {
+        border: 1px solid var(--border-dim);
+        padding: 1px 7px;
+        font-size: calc(10.5px * var(--fscale));
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: var(--radius);
+      }
+      .fm-chip.on {
+        border-color: var(--border);
+        background: var(--hover);
+        color: var(--text);
+      }
+      .fm-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px 16px 14px;
+        border-top: 1px solid var(--border-faint);
+      }
+      .fm-sub {
+        padding: 6px 20px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: calc(10.5px * var(--fscale));
+        letter-spacing: 1.5px;
+        cursor: pointer;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+        text-transform: uppercase;
+      }
+      .fm-sub:hover {
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .fm-sub.ghost {
+        border-color: var(--border-dim);
+        color: var(--text-dim);
+      }
+      .fm-sub.ghost:hover {
+        box-shadow: none;
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .fm-sub.del:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+        box-shadow: none;
+      }
+      .st-block {
+        padding: 4px 16px 12px;
+        font-size: calc(12px * var(--fscale));
+        line-height: 2;
+        color: var(--text-dim);
+      }
+      .st-row {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border-faint);
+        padding: 4px 0;
+      }
+      .st-row b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .help-h {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        margin: 16px 0 6px;
+      }
+      .help-h:first-child {
+        margin-top: 4px;
+      }
+      .help-p {
+        font-size: calc(11.5px * var(--fscale));
+        line-height: 1.95;
+        color: var(--text-dim);
+      }
+      .help-p kbd {
+        font-family: var(--font-mono);
+        border: 1px solid var(--border-dim);
+        padding: 0 4px;
+        font-size: 0.92em;
+        color: var(--text);
+        border-radius: var(--radius);
+      }
+
+      /* ================= STATUS / NOTIFY / MODAL ================= */
+      #status-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        letter-spacing: 0.5px;
+        z-index: 100;
+        transition:
+          opacity 0.3s,
+          transform 0.3s;
+        border-radius: var(--radius);
+      }
+      #status-bar.hidden {
+        opacity: 0;
+        transform: translateY(100%);
+        pointer-events: none;
+      }
+      #notification {
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%) translateY(10px);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 6px 16px;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text);
+        font-family: var(--font-mono);
+        z-index: 3000;
+        opacity: 0;
+        transition: all 0.2s;
+        pointer-events: none;
+        max-width: 86vw;
+      }
+      #notification.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      #custom-confirm {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      #custom-confirm.active {
+        display: flex;
+      }
+      .confirm-box {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 32px 40px 28px;
+        max-width: 420px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        border-radius: var(--radius);
+      }
+      .confirm-box .msg {
+        font-family: var(--font-mono);
+        font-size: calc(14px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text);
+        margin-bottom: 28px;
+        line-height: 1.6;
+      }
+      .confirm-box .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+      .confirm-box .actions button {
+        font-family: var(--font-mono);
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        padding: 8px 24px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        cursor: pointer;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+      }
+      .confirm-box .actions button:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .confirm-box .actions button.confirm {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .confirm-box .actions button.confirm:hover {
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      #modal {
+        position: fixed;
+        inset: 0;
+        z-index: 9000;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(2px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      #modal.open {
+        display: flex;
+      }
+      .modal-box {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        width: 520px;
+        max-width: 92vw;
+        max-height: 84vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        border-radius: var(--radius);
+      }
+      .modal-head {
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border-dim);
+        flex-shrink: 0;
+      }
+      .modal-title {
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text);
+      }
+      .ed-close {
+        cursor: pointer;
+        font-size: calc(15px * var(--fscale));
+        color: var(--text-faint);
+        line-height: 1;
+      }
+      .ed-close:hover {
+        color: var(--text);
+      }
+      #modal-body {
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+      }
+
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.6s;
+      }
+      #splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .splash-logo {
+        font-family: var(--font-mono);
+        font-size: calc(30px * var(--fscale));
+        color: var(--text);
+        letter-spacing: 10px;
+        margin-bottom: 8px;
+      }
+      .splash-tagline {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-dim);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-bottom: 40px;
+      }
+      .splash-enter {
+        padding: 10px 32px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+        font-weight: 500;
+      }
+      .splash-enter:hover {
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+
+      /* ================= MOBILE ================= */
+      #m-nav,
+      #m-tabs,
+      #m-mask,
+      #m-sheet {
+        display: none;
+      }
+      @media (max-width: 720px) {
+        #menu-trigger,
+        #top-menu {
+          display: none !important;
+        }
+        body.m-nav-open #top-menu {
+          display: flex !important;
+        }
+        #main {
+          padding: 0 0 calc(56px + env(safe-area-inset-bottom));
+        }
+        body.no-statusbar #main {
+          padding-bottom: calc(56px + env(safe-area-inset-bottom));
+        }
+        body.menu-pinned #main,
+        body:not(.menu-pinned) #main {
+          padding-top: calc(44px + env(safe-area-inset-top));
+        }
+        #status-bar {
+          display: none;
+        }
+        #notification {
+          bottom: auto;
+          top: 54px;
+          white-space: normal;
+          text-align: center;
+        }
+        #m-nav {
+          display: flex;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: calc(44px + env(safe-area-inset-top));
+          padding: env(safe-area-inset-top) 10px 0;
+          align-items: center;
+          gap: 8px;
+          background: var(--bg);
+          border-bottom: 1px solid var(--border);
+          z-index: 998;
+        }
+        .mn-btn {
+          height: 30px;
+          min-width: 34px;
+          padding: 0 8px;
+          background: transparent;
+          border: 1px solid var(--border-dim);
+          color: var(--text-dim);
+          font-size: 11px;
+          letter-spacing: 1px;
+          cursor: pointer;
+          border-radius: var(--radius);
+          font-family: var(--font-mono);
+        }
+        .mn-btn:active {
+          background: var(--hover);
+          color: var(--text);
+        }
+        #m-goto-slot {
+          flex: 1;
+          min-width: 0;
+        }
+        #m-doc-sel {
+          width: 100%;
+          height: 30px;
+          background: transparent;
+          border: 1px solid var(--border-dim);
+          color: var(--text);
+          font-family: var(--font-mono);
+          font-size: 11px;
+          letter-spacing: 0.5px;
+          padding: 0 6px;
+          outline: none;
+          border-radius: var(--radius);
+        }
+        #m-tabs {
+          display: flex;
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: calc(56px + env(safe-area-inset-bottom));
+          padding-bottom: env(safe-area-inset-bottom);
+          background: var(--bg);
+          border-top: 1px solid var(--border);
+          z-index: 998;
+        }
+        .mt-item {
+          flex: 1;
+          height: 100%;
+          background: transparent;
+          border: none;
+          border-right: 1px solid var(--border-faint);
+          color: var(--text-faint);
+          font-size: 10px;
+          letter-spacing: 1.5px;
+          cursor: pointer;
+          font-family: var(--font-mono);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+        }
+        .mt-item:last-child {
+          border-right: none;
+        }
+        .mt-item.on {
+          color: var(--text);
+          box-shadow: inset 0 -2px 0 var(--text);
+        }
+        #m-mask {
+          display: none;
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.4);
+          z-index: 1002;
+        }
+        #m-mask.on {
+          display: block;
+        }
+        #m-sheet {
+          display: block;
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: var(--bg);
+          border-top: 1px solid var(--border);
+          z-index: 1003;
+          transform: translateY(100%);
+          transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+          max-height: 78vh;
+          overflow-y: auto;
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+        #m-sheet.on {
+          transform: translateY(0);
+        }
+        .ms-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          height: 40px;
+          padding: 0 14px;
+          border-bottom: 1px solid var(--border-dim);
+          font-size: 9px;
+          letter-spacing: 2px;
+          color: var(--text-faint);
+          text-transform: uppercase;
+        }
+        .ms-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+        }
+        .ms-item {
+          height: 62px;
+          background: transparent;
+          border: none;
+          border-right: 1px solid var(--border-faint);
+          border-bottom: 1px solid var(--border-faint);
+          color: var(--text-dim);
+          font-size: 10px;
+          letter-spacing: 1px;
+          cursor: pointer;
+          font-family: var(--font-mono);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          padding: 0 2px;
+          text-align: center;
+        }
+        .ms-item:active {
+          background: var(--hover);
+          color: var(--text);
+        }
+        .ms-item.danger {
+          color: var(--accent-red);
+        }
+        .ms-ic {
+          font-size: 13px;
+          color: var(--text-faint);
+          line-height: 1;
+        }
+        #app {
+          flex-direction: column;
+        }
+        #left-rail,
+        #right-rail {
+          display: none;
+          width: 100%;
+          border: none;
+          background: transparent;
+        }
+        .rail-x {
+          display: inline;
+          margin-left: 8px;
+        }
+        body.rail-left #left-rail,
+        body.rail-right #right-rail {
+          display: flex;
+          position: fixed;
+          left: 0;
+          right: 0;
+          top: calc(44px + env(safe-area-inset-top));
+          bottom: calc(56px + env(safe-area-inset-bottom));
+          background: var(--bg);
+          z-index: 990;
+        }
+        .paper-head {
+          padding: 0 16px 10px;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+        }
+        .ph-title {
+          font-size: calc(15px * var(--fscale));
+        }
+        .paper-scroll {
+          padding: 20px 16px 40px;
+        }
+        .cv-bar,
+        .cv-scroll,
+        .mx-wrap,
+        .mv-scroll {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .dropdown,
+        #sel-pop {
+          left: 10px !important;
+          right: 10px !important;
+          width: auto !important;
+          min-width: 0 !important;
+          top: auto !important;
+          bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+          max-height: 62vh;
+        }
+        #sel-pop {
+          max-width: none;
+        }
+        .modal-box {
+          width: 100%;
+          max-width: 100%;
+          max-height: 90vh;
+        }
+      }
+
+      @media print {
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        body {
+          overflow: visible;
+          background: #fff !important;
+          color: #000 !important;
+        }
+        #menu-trigger,
+        #top-menu,
+        #status-bar,
+        #left-rail,
+        #right-rail,
+        #notification,
+        #splash,
+        #custom-confirm,
+        #modal,
+        #sel-pop,
+        #tip,
+        #m-nav,
+        #m-tabs,
+        #m-mask,
+        #m-sheet,
+        .cv-bar,
+        .dropdown,
+        .ph-btn {
+          display: none !important;
+        }
+        #main {
+          position: static !important;
+          padding: 0 !important;
+          inset: auto !important;
+          height: auto !important;
+          overflow: visible !important;
+        }
+        .paper-scroll {
+          overflow: visible !important;
+          padding: 0 0 20px !important;
+        }
+        .paper-head {
+          border-bottom: 1px solid #000;
+          padding: 0 0 10px !important;
+        }
+        .view {
+          display: none !important;
+        }
+        .view.on {
+          display: block !important;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-void">
+    <!-- ===== Splash ===== -->
+    <div id="splash">
+      <div class="splash-logo">ZENMARK</div>
+      <div class="splash-tagline">质性文本标注工作台</div>
+      <button type="button" class="splash-enter" data-action="enter">进入</button>
+    </div>
+
+    <!-- ===== Menu Trigger ===== -->
+    <div id="menu-trigger"></div>
+
+    <!-- ===== Top Menu ===== -->
+    <div id="top-menu">
+      <div class="menu-group">
+        <span class="menu-label">视图</span>
+        <div class="menu-btn" id="btn-annotate" data-action="viewAnnotate">标注</div>
+        <div class="menu-btn" id="btn-codes" data-action="viewCodes">编码</div>
+        <div class="menu-btn" id="btn-matrix" data-action="viewMatrix">矩阵</div>
+        <div class="menu-btn" id="btn-memo" data-action="viewMemo">备忘</div>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">材料</span>
+        <div class="menu-btn" data-action="docPrev" title="上一份材料（Alt + ←）">‹</div>
+        <div class="menu-btn menu-date" id="doc-picker" data-action="showDocs">—</div>
+        <div class="menu-btn" data-action="docNext" title="下一份材料（Alt + →）">›</div>
+        <div class="menu-btn" data-action="docNew">新建</div>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">编码</span>
+        <div class="menu-btn" data-action="codeNew">新码号</div>
+        <div class="menu-btn" data-action="showCodebook">码表</div>
+        <div class="menu-btn" data-action="showSearch">检索</div>
+        <div class="menu-btn" data-action="showStats">质检</div>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">文件</span>
+        <div class="menu-btn" data-action="showExport">导出</div>
+        <div class="menu-btn" data-action="importFile">导入</div>
+        <div class="menu-btn" data-action="printView">打印</div>
+        <div class="menu-btn" data-action="clearAll">清空</div>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">设置</span>
+        <div class="menu-btn" data-action="showSettings">样式</div>
+        <div class="menu-btn" data-action="showHelp">说明</div>
+      </div>
+      <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" title="固定菜单栏">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- ===== Docs Dropdown ===== -->
+    <div class="dropdown" id="dd-docs">
+      <div class="dd-label">材料索引</div>
+      <div id="doc-list-dd"></div>
+    </div>
+
+    <!-- ===== Export Dropdown ===== -->
+    <div class="dropdown" id="dd-export">
+      <div class="dd-label">导出当前项目</div>
+      <div class="dd-item" data-action="exportJson">
+        <span>项目备份</span><span class="hint">.json</span>
+      </div>
+      <div class="dd-item" data-action="exportMd">
+        <span>编码报告</span><span class="hint">.md</span>
+      </div>
+      <div class="dd-item" data-action="exportCsv">
+        <span>编码表</span><span class="hint">.csv</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-action="exportQuotes">
+        <span>引用清单</span><span class="hint">.txt</span>
+      </div>
+    </div>
+
+    <!-- ===== Search Dropdown ===== -->
+    <div class="dropdown" id="dd-search">
+      <div class="search-input-wrap">
+        <input
+          type="text"
+          id="search-input"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="检索原文 / 备注 / 码号名称"
+        />
+      </div>
+      <div id="search-results" class="sug inline"></div>
+    </div>
+
+    <!-- ===== Settings Dropdown ===== -->
+    <div class="dropdown" id="dd-settings">
+      <div class="dd-label">外观</div>
+      <div class="dd-item" data-action="settingsToggleTheme">
+        <span>主题</span><span class="hint" id="sv-theme">浅色</span>
+      </div>
+      <div class="dd-item-row">
+        <span>背景</span>
+        <div class="settings-bg-options" id="sv-bg-options">
+          <span
+            class="settings-bg-dot active"
+            data-bg="bg-void"
+            style="background: var(--bg); border: 1px solid var(--border)"
+          ></span
+          ><span
+            class="settings-bg-dot"
+            data-bg="bg-grid"
+            style="
+              background-image:
+                linear-gradient(var(--border-dim) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+              background-size: 6px 6px;
+            "
+          ></span
+          ><span
+            class="settings-bg-dot"
+            data-bg="bg-dots"
+            style="
+              background-image: radial-gradient(circle, var(--text-dim) 1px, transparent 1px);
+              background-size: 5px 5px;
+            "
+          ></span
+          ><span
+            class="settings-bg-dot"
+            data-bg="bg-cross"
+            style="
+              background-image:
+                linear-gradient(var(--border-dim) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+              background-size: 6px 6px;
+              background-position: 3px 3px;
+            "
+          ></span
+          ><span
+            class="settings-bg-dot"
+            data-bg="bg-diagonal"
+            style="
+              background-image: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 5px,
+                var(--border-dim) 5px,
+                var(--border-dim) 6px
+              );
+            "
+          ></span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>缩放</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-zoom">100%</span
+          ><span class="settings-btn" data-action="zoomDown">−</span
+          ><span class="settings-btn" data-action="zoomUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>圆角</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-radius">0</span
+          ><span class="settings-btn" data-action="radiusDown">−</span
+          ><span class="settings-btn" data-action="radiusUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>界面字体</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-fontsize">13px</span
+          ><span class="settings-btn" data-action="fontDown">−</span
+          ><span class="settings-btn" data-action="fontUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>正文字号</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-bodyfont">15px</span
+          ><span class="settings-btn" data-action="bodyFontDown">−</span
+          ><span class="settings-btn" data-action="bodyFontUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>行距</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-lh">1.95</span
+          ><span class="settings-btn" data-action="lhDown">−</span
+          ><span class="settings-btn" data-action="lhUp">+</span>
+        </div>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-label">显示</div>
+      <div class="dd-item" data-action="settingsToggleNums">
+        <span>码号编号</span><span class="hint" id="sv-nums">开</span>
+      </div>
+      <div class="dd-item" data-action="settingsToggleDef">
+        <span>码号定义</span><span class="hint" id="sv-def">开</span>
+      </div>
+      <div class="dd-item" data-action="settingsToggleStatusbar">
+        <span>状态栏</span><span class="hint" id="sv-statusbar">开</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-action="settingsResetStyles" style="color: var(--text-dim)">
+        <span>重置样式</span>
+      </div>
+    </div>
+
+    <!-- ===== Main ===== -->
+    <div id="main">
+      <div id="app">
+        <!-- LEFT -->
+        <aside class="rail" id="left-rail">
+          <div class="rail-head">
+            <span>材料 · Corpus</span
+            ><span
+              ><span class="rh-act" data-action="docNew">＋</span
+              ><span class="rh-act rail-x" data-action="railLeft">×</span></span
+            >
+          </div>
+          <div class="rail-body" id="doc-list"></div>
+          <div class="rail-foot">
+            <div class="rbtn" data-action="importFile">导入</div>
+            <div class="rbtn" data-action="docNew">新建</div>
+            <div class="rbtn" data-action="showStats">质检</div>
+          </div>
+        </aside>
+
+        <!-- STAGE -->
+        <section id="stage">
+          <!-- 标注 -->
+          <div class="view on" id="view-annotate">
+            <div class="paper-head">
+              <div class="ph-left">
+                <div class="ph-title" id="ph-title">—</div>
+                <div class="ph-sub" id="ph-sub">—</div>
+              </div>
+              <div class="ph-right">
+                <span>覆盖 <b id="ph-cov">0%</b></span>
+                <span>片段 <b id="ph-cnt">0</b></span>
+                <span class="ph-btn" data-action="docEdit">编辑材料</span>
+              </div>
+            </div>
+            <div class="paper-scroll" id="paper-scroll">
+              <div id="paper"></div>
+            </div>
+          </div>
+
+          <!-- 编码 -->
+          <div class="view" id="view-codes">
+            <div class="cv-bar">
+              <span class="mini-label">筛选</span>
+              <div class="se mini" id="cv-doc" data-v="all">
+                <span class="se-v">全部材料</span><span class="se-a">▾</span>
+              </div>
+              <div class="se mini" id="cv-status" data-v="all">
+                <span class="se-v">全部状态</span><span class="se-a">▾</span>
+              </div>
+              <div class="se mini" id="cv-level" data-v="all">
+                <span class="se-v">全部层级</span><span class="se-a">▾</span>
+              </div>
+              <span class="spacer"></span>
+              <span class="mini-label" id="cv-count">0 条</span>
+            </div>
+            <div class="cv-scroll" id="cv-scroll"></div>
+          </div>
+
+          <!-- 矩阵 -->
+          <div class="view" id="view-matrix">
+            <div class="mx-wrap" id="mx-wrap"></div>
+          </div>
+
+          <!-- 备忘 -->
+          <div class="view" id="view-memo">
+            <div class="cv-bar">
+              <span class="mini-label">备忘录 · Memo</span>
+              <span class="spacer"></span>
+              <span class="ph-btn" data-action="memoNew">新建备忘录</span>
+            </div>
+            <div class="mv-scroll" id="mv-scroll"></div>
+          </div>
+        </section>
+
+        <!-- RIGHT -->
+        <aside class="rail" id="right-rail">
+          <div class="rr-sec" id="rr-codes">
+            <div class="rail-head">
+              <span>码表 · Codebook</span
+              ><span
+                ><span class="rh-act" data-action="codeNew">＋</span
+                ><span class="rh-act rail-x" data-action="railRight">×</span></span
+              >
+            </div>
+            <div class="rail-body" id="code-list"></div>
+          </div>
+          <div class="rr-sec" id="rr-detail">
+            <div class="rail-head">
+              <span>片段 · Segment</span
+              ><span class="rh-act" id="dt-close" data-action="dtClose">×</span>
+            </div>
+            <div class="dt-body" id="dt-body"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ===== Status Bar ===== -->
+    <div id="status-bar">
+      <span id="stat-left"></span>
+      <span>ZENMARK</span>
+    </div>
+
+    <!-- ===== Selection Popup ===== -->
+    <div id="sel-pop">
+      <div class="sp-quote" id="sp-quote"></div>
+      <input
+        type="text"
+        id="sp-input"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="选码号 / 输入新码号名称"
+      />
+      <div id="sp-list" class="sug inline"></div>
+      <div class="sp-foot">
+        <div class="sp-btn" data-act="new">新建</div>
+        <div class="sp-btn" data-act="review">待复核</div>
+        <div class="sp-btn" data-act="close">取消</div>
+      </div>
+    </div>
+
+    <div id="tip"></div>
+
+    <!-- ===== 统一候选区面板 ===== -->
+    <div class="sug" id="sug"></div>
+
+    <!-- ===== Notification ===== -->
+    <div id="notification"></div>
+
+    <!-- ===== Confirm ===== -->
+    <div id="custom-confirm">
+      <div class="confirm-box">
+        <div class="msg" id="confirm-msg"></div>
+        <div class="actions">
+          <button type="button" id="confirm-cancel">取消</button>
+          <button type="button" id="confirm-ok" class="confirm">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Modal ===== -->
+    <div id="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span class="modal-title" id="modal-title"></span>
+          <span class="ed-close" data-action="modalClose">×</span>
+        </div>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- ===== Mobile ===== -->
+    <div id="m-nav">
+      <button type="button" class="mn-btn" data-action="docPrev">‹</button>
+      <span id="m-goto-slot"
+        ><div class="se mini" id="m-doc-sel" data-v="">
+          <span class="se-v">—</span><span class="se-a">▾</span>
+        </div></span
+      >
+      <button type="button" class="mn-btn" data-action="docNext">›</button>
+      <button type="button" class="mn-btn" data-action="mToggleMenu">菜单</button>
+    </div>
+    <nav id="m-tabs">
+      <button type="button" class="mt-item on" data-mview="annotate">
+        <span class="ms-ic">¶</span><span>标注</span>
+      </button>
+      <button type="button" class="mt-item" data-mview="codes">
+        <span class="ms-ic">≡</span><span>编码</span>
+      </button>
+      <button type="button" class="mt-item" data-mview="matrix">
+        <span class="ms-ic">▦</span><span>矩阵</span>
+      </button>
+      <button type="button" class="mt-item" data-mview="memo">
+        <span class="ms-ic">✎</span><span>备忘</span>
+      </button>
+      <button type="button" class="mt-item" data-action="mMore">
+        <span class="ms-ic">⋯</span><span>更多</span>
+      </button>
+    </nav>
+    <div id="m-mask" data-action="mClose"></div>
+    <div id="m-sheet">
+      <div class="ms-head">
+        <span>More · 全部功能</span><span class="ed-close" data-action="mClose">×</span>
+      </div>
+      <div class="ms-grid">
+        <button type="button" class="ms-item" data-action="docNew">
+          <span class="ms-ic">＋</span><span>新材料</span>
+        </button>
+        <button type="button" class="ms-item" data-action="railLeft">
+          <span class="ms-ic">▤</span><span>材料库</span>
+        </button>
+        <button type="button" class="ms-item" data-action="railRight">
+          <span class="ms-ic">◫</span><span>码表</span>
+        </button>
+        <button type="button" class="ms-item" data-action="codeNew">
+          <span class="ms-ic">◈</span><span>新码号</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showCodebook">
+          <span class="ms-ic">◫</span><span>码表</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showSearch">
+          <span class="ms-ic">⌕</span><span>检索</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showStats">
+          <span class="ms-ic">◔</span><span>质检</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showExport">
+          <span class="ms-ic">↥</span><span>导出</span>
+        </button>
+        <button type="button" class="ms-item" data-action="importFile">
+          <span class="ms-ic">↧</span><span>导入</span>
+        </button>
+        <button type="button" class="ms-item" data-action="printView">
+          <span class="ms-ic">⎙</span><span>打印</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showSettings">
+          <span class="ms-ic">◐</span><span>样式</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showHelp">
+          <span class="ms-ic">?</span><span>说明</span>
+        </button>
+        <button type="button" class="ms-item" data-action="togglePin">
+          <span class="ms-ic">⌄</span><span>置顶</span>
+        </button>
+        <button type="button" class="ms-item danger" data-action="clearAll">
+          <span class="ms-ic">⌫</span><span>清空</span>
+        </button>
+      </div>
+    </div>
+
+    <input type="file" id="file-input" accept=".txt,.md,.json" multiple style="display: none" />
+
+    <script>
+      ;(function () {
+        'use strict'
+
+        // ================================================================
+        // 1. CONSTANTS
+        // ================================================================
+        var LS_S = 'zencode.settings.v1'
+        var LS_P = 'zencode.project.v1'
+        var NOTIFY_MS = 2000
+
+        // iOS 风格、低饱和的克制色板：仅用于小色点/细线下划等极少处区分码号，不滥用
+        var COLORS = [
+          '#4a86d4',
+          '#3aa6a0',
+          '#5aa45a',
+          '#d7b13e',
+          '#e0913b',
+          '#cf5b54',
+          '#c76b9e',
+          '#8f74c4',
+          '#5b6fc4',
+          '#9c7a52',
+          '#6b7a8f',
+          '#8a8f98',
+        ]
+        var LV = { open: 'OPEN', axial: 'AXIAL', selective: 'CORE' }
+        var LVNAME = { open: '开放式编码', axial: '轴心式编码', selective: '选择式编码' }
+        var LVORDER = { open: 0, axial: 1, selective: 2 }
+        var RELS = ['因果', '对立', '递进', '例证', '条件', '并列']
+        var DOCTYPES = [
+          '访谈转录',
+          '新闻报道',
+          '社交媒体文本',
+          '评论文本',
+          '政策文本',
+          '田野笔记',
+          '视频转录',
+          '其他',
+        ]
+        var MEMOTYPES = ['理论备忘录', '方法备忘录', '编码备忘录', '个人反思']
+
+        var TPL_CODES = [
+          {
+            no: '01',
+            name: '议题属性',
+            level: 'open',
+            def: '文本所讨论的公共议题及其属性归属，如民生、时政、娱乐、科技、教育等。',
+            incl: '出现明确的议题指称或议题场域。',
+            excl: '仅作背景交代、无议题指涉的表述。',
+          },
+          {
+            no: '02',
+            name: '话语主体',
+            level: 'open',
+            def: '谁在发声：官方机构、主流媒体、自媒体、专家学者、普通用户、平台方。',
+            incl: '出现可辨识的发言者身份或机构归属。',
+            excl: '转述他人观点但未标明来源。',
+          },
+          {
+            no: '03',
+            name: '媒介呈现',
+            level: 'open',
+            def: '材料以何种媒介形态被呈现：图文、短视频、直播、长文、播客等。',
+            incl: '描述媒介形态、载体或呈现方式。',
+            excl: '仅涉及内容主题而无形态描述。',
+          },
+          {
+            no: '04',
+            name: '叙事策略',
+            level: 'open',
+            def: '讲述故事的方法：悬念设置、对比、细节白描、数据引用、亲历者视角、反转。',
+            incl: '可辨识的叙事手法或结构安排。',
+            excl: '平铺直叙的信息陈述。',
+          },
+          {
+            no: '05',
+            name: '情感动员',
+            level: 'open',
+            def: '诉诸情绪的表达方式：愤怒、同情、恐惧、戏谑、怀旧、爱国等。',
+            incl: '带有明显情绪色彩或唤起性修辞。',
+            excl: '中性事实描述。',
+          },
+          {
+            no: '06',
+            name: '用户参与',
+            level: 'open',
+            def: '受众的参与行为：评论、转发、二创、弹幕、打卡、举报、二次传播。',
+            incl: '描述具体的参与动作与互动痕迹。',
+            excl: '抽象的"受众"概念讨论。',
+          },
+          {
+            no: '07',
+            name: '平台机制',
+            level: 'open',
+            def: '算法推荐、流量分发、审核规则、话题聚合、榜单等平台技术逻辑。',
+            incl: '涉及平台规则、算法、流量、审核等机制。',
+            excl: '单纯描述用户使用行为。',
+          },
+          {
+            no: '08',
+            name: '视觉修辞',
+            level: 'open',
+            def: '图像、剪辑、版式、表情包、封面等视觉元素所承担的说服功能。',
+            incl: '讨论画面、镜头、构图、配图等视觉要素。',
+            excl: '纯文字内容分析。',
+          },
+          {
+            no: '09',
+            name: '传播路径',
+            level: 'open',
+            def: '信息自何处首发、经由哪些渠道扩散、形成何种传播链条。',
+            incl: '出现传播源、渠道、扩散过程的描述。',
+            excl: '仅描述内容本身。',
+          },
+          {
+            no: '10',
+            name: '商业逻辑',
+            level: 'open',
+            def: '变现、带货、广告植入、品牌合作、MCN 运作、流量生意。',
+            incl: '涉及收益、营销、商业合作。',
+            excl: '公益或非营利导向的表述。',
+          },
+          {
+            no: '11',
+            name: '框架类型',
+            level: 'axial',
+            def: '新闻框架的归类：事实框架、人情趣味框架、冲突框架、责任归因框架、道德框架。',
+            incl: '可归入某一新闻框架的段落。',
+            excl: '无框架指向的碎片信息。',
+          },
+          {
+            no: '12',
+            name: '情感倾向',
+            level: 'axial',
+            def: '对对象的态度取向：正向、负向、中立、混合。',
+            incl: '可判断态度方向的表述。',
+            excl: '纯事实、无态度。',
+          },
+          {
+            no: '13',
+            name: '权力关系',
+            level: 'axial',
+            def: '支配、抵抗、协商、边缘化、话语权争夺等关系结构。',
+            incl: '出现权力不对等或博弈的描述。',
+            excl: '平等协作式的中性描述。',
+          },
+          {
+            no: '14',
+            name: '媒介逻辑',
+            level: 'axial',
+            def: '平台化、可视化、即时性、可分享性对内容生产的重塑。',
+            incl: '讨论媒介形式如何改变内容。',
+            excl: '仅讨论内容主题。',
+          },
+          {
+            no: '15',
+            name: '受众解读',
+            level: 'axial',
+            def: '受众的意义生产方式：主导式、协商式、对抗式解读。',
+            incl: '出现明确的受众理解或再阐释。',
+            excl: '传者一侧的意图声明。',
+          },
+          {
+            no: '16',
+            name: '核心范畴',
+            level: 'selective',
+            def: '统领全部材料、能够串联各范畴的中心概念，用于理论建构。',
+            incl: '具有高度概括力的核心表述。',
+            excl: '局部概念或单一现象。',
+          },
+          {
+            no: '17',
+            name: '理论饱和',
+            level: 'selective',
+            def: '新增材料不再产生新属性、新维度的判断节点，用于说明抽样何时停止。',
+            incl: '出现重复、无新增信息的段落。',
+            excl: '产生新维度的段落。',
+          },
+        ]
+
+        var DEMO_TEXT = [
+          '受访者 A：我最早是在刷短视频的时候看到这件事的。那天晚上大概十一点多，算法连续给我推了三条同一个事件的视频，封面都很夸张，标题写着"现场曝光"。我点进去看完，其实内容差不多，但情绪一次比一次强烈。',
+          '',
+          '访谈者：你当时有去核实信息来源吗？',
+          '',
+          '受访者 A：没有。我承认我当时第一反应是愤怒，而不是怀疑。后来第二天官方通报出来了，跟我前一晚看到的说法差别很大，我才意识到自己被带了一波节奏。但说实话，我已经转发过了，评论区也有人在骂人。',
+          '',
+          '访谈者：你会删除那条转发吗？',
+          '',
+          '受访者 A：不会删。删了好像显得我很蠢。我改了置顶评论，说"等官方通报"。这算是一种补救吧。我觉得平台应该在第一条视频下面挂一个"未经核实"的提示，但它没有，它只会让我看更多同类内容。',
+        ].join('\n')
+
+        // ================================================================
+        // 2. STATE
+        // ================================================================
+        var S = {
+          view: 'annotate',
+          docId: null,
+          selAnn: null,
+          activeCode: null,
+          theme: 'light',
+          bg: 'bg-void',
+          zoom: 1,
+          radius: 0,
+          fontSize: 13,
+          bodyFont: 15,
+          lh: 1.95,
+          showNums: true,
+          showDef: true,
+          statusBar: true,
+          menuPinned: true,
+          recent: [],
+        }
+
+        var P = {
+          title: '未命名研究项目',
+          desc: '',
+          docs: [],
+          codes: [],
+          anns: [],
+          rels: [],
+          memos: [],
+        }
+
+        var pendingSel = null
+        var spFiltered = []
+        var spIdx = 0
+        var srIdx = 0
+        var notifyTimer = null
+        var confirmResolve = null
+
+        // ================================================================
+        // 3. HELPERS
+        // ================================================================
+        function el(id) {
+          return document.getElementById(id)
+        }
+        function esc(s) {
+          return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+          })
+        }
+        function uid(p) {
+          return (p || 'x') + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+        }
+        function pad2(n) {
+          return n < 10 ? '0' + n : '' + n
+        }
+        function nowStr() {
+          var d = new Date()
+          return (
+            d.getFullYear() +
+            '-' +
+            pad2(d.getMonth() + 1) +
+            '-' +
+            pad2(d.getDate()) +
+            ' ' +
+            pad2(d.getHours()) +
+            ':' +
+            pad2(d.getMinutes())
+          )
+        }
+        function clamp(v, a, b) {
+          return Math.max(a, Math.min(b, v))
+        }
+        function notify(msg) {
+          var n = el('notification')
+          n.textContent = msg
+          n.classList.add('show')
+          clearTimeout(notifyTimer)
+          notifyTimer = setTimeout(function () {
+            n.classList.remove('show')
+          }, NOTIFY_MS)
+        }
+        function showConfirm(msg, okText) {
+          return new Promise(function (resolve) {
+            el('confirm-msg').textContent = msg
+            el('confirm-ok').textContent = okText || '确定'
+            el('custom-confirm').classList.add('active')
+            confirmResolve = resolve
+          })
+        }
+        function download(name, content, mime) {
+          var blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' })
+          var url = URL.createObjectURL(blob)
+          var a = document.createElement('a')
+          a.href = url
+          a.download = name
+          document.body.appendChild(a)
+          a.click()
+          setTimeout(function () {
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+          }, 200)
+        }
+
+        function docById(id) {
+          for (var i = 0; i < P.docs.length; i++) if (P.docs[i].id === id) return P.docs[i]
+          return null
+        }
+        function codeById(id) {
+          for (var i = 0; i < P.codes.length; i++) if (P.codes[i].id === id) return P.codes[i]
+          return null
+        }
+        function annById(id) {
+          for (var i = 0; i < P.anns.length; i++) if (P.anns[i].id === id) return P.anns[i]
+          return null
+        }
+        function curDoc() {
+          return docById(S.docId)
+        }
+        function annCount(codeId, docId) {
+          var n = 0
+          for (var i = 0; i < P.anns.length; i++) {
+            var a = P.anns[i]
+            if (a.code !== codeId) continue
+            if (docId && a.doc !== docId) continue
+            n++
+          }
+          return n
+        }
+        function annCountDoc(docId) {
+          var n = 0
+          for (var i = 0; i < P.anns.length; i++) if (P.anns[i].doc === docId) n++
+          return n
+        }
+        function coverage(docId) {
+          var d = docById(docId)
+          if (!d || !d.text.length) return 0
+          var list = []
+          for (var i = 0; i < P.anns.length; i++)
+            if (P.anns[i].doc === docId) list.push([P.anns[i].start, P.anns[i].end])
+          if (!list.length) return 0
+          list.sort(function (a, b) {
+            return a[0] - b[0]
+          })
+          var total = 0,
+            cs = list[0][0],
+            ce = list[0][1]
+          for (var j = 1; j < list.length; j++) {
+            if (list[j][0] <= ce) ce = Math.max(ce, list[j][1])
+            else {
+              total += ce - cs
+              cs = list[j][0]
+              ce = list[j][1]
+            }
+          }
+          total += ce - cs
+          return Math.min(100, Math.round((total / d.text.length) * 100))
+        }
+
+        // ================================================================
+        // 4. PERSISTENCE
+        // ================================================================
+        var Settings = {
+          load: function () {
+            try {
+              var raw = localStorage.getItem(LS_S)
+              if (raw) {
+                var o = JSON.parse(raw)
+                for (var k in o) if (k in S) S[k] = o[k]
+              }
+            } catch (e) {}
+          },
+          save: function () {
+            try {
+              localStorage.setItem(LS_S, JSON.stringify(S))
+            } catch (e) {}
+          },
+          apply: function () {
+            document.body.classList.remove('theme-dark')
+            if (S.theme === 'dark') document.body.classList.add('theme-dark')
+            ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach(function (c) {
+              document.body.classList.remove(c)
+            })
+            document.body.classList.add(S.bg)
+            document.documentElement.style.setProperty('--zoom', S.zoom)
+            document.documentElement.style.setProperty('--radius', S.radius + 'px')
+            document.documentElement.style.setProperty('--fscale', (S.fontSize / 13).toFixed(3))
+            document.documentElement.style.setProperty(
+              '--bfscale',
+              ((S.bodyFont / 15) * S.zoom).toFixed(3),
+            )
+            document.documentElement.style.setProperty('--lh', S.lh)
+            el('status-bar').classList.toggle('hidden', !S.statusBar)
+            document.body.classList.toggle('no-statusbar', !S.statusBar)
+            el('top-menu').classList.toggle('pinned', S.menuPinned)
+            el('pin-btn').classList.toggle('pinned', S.menuPinned)
+            document.body.classList.toggle('menu-pinned', S.menuPinned)
+            updateSettingsUI()
+          },
+        }
+
+        var Store = {
+          save: function () {
+            try {
+              localStorage.setItem(LS_P, JSON.stringify(P))
+            } catch (e) {
+              notify('本地存储空间不足')
+            }
+          },
+          load: function () {
+            try {
+              var raw = localStorage.getItem(LS_P)
+              if (!raw) return false
+              var o = JSON.parse(raw)
+              if (!o || !Array.isArray(o.codes)) return false
+              P.title = o.title || '未命名研究项目'
+              P.desc = o.desc || ''
+              P.docs = o.docs || []
+              P.codes = o.codes || []
+              // 颜色迁移：统一到黑灰色板（去除早期的多彩配色与纯黑）
+              P.codes.forEach(function (c, i) {
+                if (!c.color || COLORS.indexOf(c.color) === -1) c.color = COLORS[i % COLORS.length]
+              })
+              P.anns = o.anns || []
+              P.rels = o.rels || []
+              P.memos = o.memos || []
+              return true
+            } catch (e) {
+              return false
+            }
+          },
+        }
+
+        function seed() {
+          P.title = '网络与新媒体 · 质性文本编码'
+          P.desc = '面向新闻传播学与网络与新媒体研究的文本标注与编码工作簿'
+          var d = {
+            id: uid('d'),
+            title: '受访者 A 关于短视频信息接触的访谈（节选）',
+            source: '深度访谈 · 2026 年 3 月',
+            type: '访谈转录',
+            date: '2026-03-14',
+            note: '用于预编码与码表试用的示例材料，可随时替换或删除。',
+            text: DEMO_TEXT,
+          }
+          P.docs.push(d)
+          TPL_CODES.forEach(function (c, i) {
+            P.codes.push({
+              id: uid('c'),
+              no: c.no,
+              name: c.name,
+              level: c.level,
+              parent: '',
+              def: c.def,
+              incl: c.incl || '',
+              excl: c.excl || '',
+              eg: '',
+              color: COLORS[i % COLORS.length],
+              memo: '',
+            })
+          })
+          S.docId = d.id
+          var seeds = [
+            ['算法连续给我推了三条同一个事件的视频', 0],
+            ['我承认我当时第一反应是愤怒，而不是怀疑', 4],
+            ['平台应该在第一条视频下面挂一个"未经核实"的提示', 6],
+          ]
+          seeds.forEach(function (s) {
+            var idx = d.text.indexOf(s[0])
+            if (idx < 0) return
+            var code = P.codes[s[1]]
+            if (!code) return
+            P.anns.push({
+              id: uid('a'),
+              doc: d.id,
+              start: idx,
+              end: idx + s[0].length,
+              quote: s[0],
+              code: code.id,
+              memo: '',
+              status: 'done',
+              ts: nowStr(),
+            })
+          })
+          P.memos.push({
+            id: uid('m'),
+            title: '关于"情绪先行"的初步想法',
+            type: '理论备忘录',
+            body: '受访者反复强调"先愤怒、后核实"，提示平台化分发可能在事实核查之前完成情感动员。后续需在更多材料中检验这一顺序是否稳定。',
+            codes: [P.codes[4].id, P.codes[6].id],
+            ts: nowStr(),
+          })
+        }
+
+        // ================================================================
+        // 5. PAPER RENDER
+        // ================================================================
+        function paras(text) {
+          var out = []
+          var lines = String(text).split('\n')
+          var s = 0
+          for (var i = 0; i < lines.length; i++) {
+            out.push({ start: s, end: s + lines[i].length, text: lines[i] })
+            s += lines[i].length + 1
+          }
+          return out
+        }
+
+        function buildSegs(p, docId) {
+          var list = []
+          for (var i = 0; i < P.anns.length; i++) {
+            var a = P.anns[i]
+            if (a.doc === docId && a.start < p.end && a.end > p.start) list.push(a)
+          }
+          if (!list.length) return []
+          var pts = {}
+          pts[p.start] = 1
+          pts[p.end] = 1
+          list.forEach(function (a) {
+            if (a.start > p.start && a.start < p.end) pts[a.start] = 1
+            if (a.end > p.start && a.end < p.end) pts[a.end] = 1
+          })
+          var arr = Object.keys(pts)
+            .map(Number)
+            .sort(function (x, y) {
+              return x - y
+            })
+          var segs = []
+          for (var j = 0; j < arr.length - 1; j++) {
+            var s = arr[j],
+              e = arr[j + 1]
+            if (e <= s) continue
+            var cover = list.filter(function (a) {
+              return a.start <= s && a.end >= e
+            })
+            var txt = p.text.slice(s - p.start, e - p.start)
+            if (!cover.length) {
+              segs.push({ raw: true, text: txt })
+              continue
+            }
+            var top = cover[cover.length - 1]
+            var c = codeById(top.code)
+            segs.push({
+              raw: false,
+              text: txt,
+              ids: cover.map(function (a) {
+                return a.id
+              }),
+              nos: cover.map(function (a) {
+                var cc = codeById(a.code)
+                return cc ? cc.no : '·'
+              }),
+              color: c ? c.color : '#888888',
+              review: cover.some(function (a) {
+                return a.status === 'review'
+              }),
+            })
+          }
+          return segs
+        }
+
+        function renderPaper() {
+          var d = curDoc()
+          var paper = el('paper')
+          if (!d) {
+            paper.innerHTML =
+              '<div class="paper-empty"><div class="pe-mark">No Source</div>' +
+              '<div class="pe-title">尚 无 材 料</div>' +
+              '<div class="pe-note">从左侧导入或新建一份材料，即可开始标注。<br />支持 .txt / .md 文本，也支持直接粘贴。</div></div>'
+            el('ph-title').textContent = '—'
+            el('ph-sub').textContent = '—'
+            el('ph-cov').textContent = '0%'
+            el('ph-cnt').textContent = '0'
+            el('doc-picker').textContent = '—'
+            return
+          }
+          var ps = paras(d.text)
+          var html = ''
+          for (var i = 0; i < ps.length; i++) {
+            var p = ps[i]
+            var segs = buildSegs(p, d.id)
+            if (!segs.length) {
+              html += '<p data-s="' + p.start + '">' + esc(p.text) + '</p>'
+              continue
+            }
+            var inner = ''
+            for (var j = 0; j < segs.length; j++) {
+              var sg = segs[j]
+              if (sg.raw) {
+                inner += esc(sg.text)
+                continue
+              }
+              var cls = 'seg' + (sg.review ? ' review' : '')
+              if (sg.ids.indexOf(S.selAnn) >= 0) cls += ' on'
+              if (S.activeCode) {
+                var hit = sg.ids.some(function (id) {
+                  var a = annById(id)
+                  return a && a.code === S.activeCode
+                })
+                if (!hit) cls += ' dim'
+              }
+              var sup = S.showNums ? '<sup>' + esc(sg.nos.join('·')) + '</sup>' : ''
+              inner +=
+                '<span class="' +
+                cls +
+                '" data-ids="' +
+                sg.ids.join(' ') +
+                '" style="--c:' +
+                sg.color +
+                '">' +
+                esc(sg.text) +
+                sup +
+                '</span>'
+            }
+            html += '<p data-s="' + p.start + '">' + inner + '</p>'
+          }
+          paper.innerHTML = html
+          el('ph-title').textContent = d.title
+          el('ph-sub').textContent = [d.source, d.type, d.date].filter(Boolean).join(' · ')
+          el('ph-cov').textContent = coverage(d.id) + '%'
+          el('ph-cnt').textContent = annCountDoc(d.id)
+          el('doc-picker').textContent = d.title
+        }
+
+        // ---- offsets ----
+        function paraEl(node) {
+          var n = node
+          var paper = el('paper')
+          while (n && n !== paper) {
+            if (n.nodeType === 1 && n.getAttribute && n.getAttribute('data-s') !== null) return n
+            n = n.parentNode
+          }
+          return null
+        }
+        function offIn(pEl, node, off) {
+          var map = [],
+            acc = 0,
+            cur
+          var w = document.createTreeWalker(pEl, NodeFilter.SHOW_TEXT, {
+            acceptNode: function (n) {
+              return n.parentNode && n.parentNode.tagName === 'SUP'
+                ? NodeFilter.FILTER_REJECT
+                : NodeFilter.FILTER_ACCEPT
+            },
+          })
+          while ((cur = w.nextNode())) {
+            map.push({ n: cur, s: acc })
+            acc += cur.nodeValue.length
+          }
+          if (node.nodeType === 3) {
+            for (var i = 0; i < map.length; i++) if (map[i].n === node) return map[i].s + off
+            return acc
+          }
+          var kids = node.childNodes
+          if (off <= 0) {
+            for (var k = 0; k < map.length; k++) if (node.contains(map[k].n)) return map[k].s
+            return 0
+          }
+          var last = kids[off - 1]
+          if (last) {
+            var best = -1
+            for (var m = 0; m < map.length; m++) {
+              if (last === map[m].n || (last.contains && last.contains(map[m].n)))
+                best = map[m].s + map[m].n.nodeValue.length
+            }
+            if (best >= 0) return best
+          }
+          return acc
+        }
+        function selOffsets() {
+          var sel = window.getSelection()
+          if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null
+          var r = sel.getRangeAt(0)
+          var pS = paraEl(r.startContainer)
+          var pE = paraEl(r.endContainer)
+          if (!pS || !pE) return null
+          var s =
+            parseInt(pS.getAttribute('data-s'), 10) + offIn(pS, r.startContainer, r.startOffset)
+          var e = parseInt(pE.getAttribute('data-s'), 10) + offIn(pE, r.endContainer, r.endOffset)
+          if (e <= s) return null
+          var d = curDoc()
+          if (!d) return null
+          s = clamp(s, 0, d.text.length)
+          e = clamp(e, 0, d.text.length)
+          return { s: s, e: e }
+        }
+
+        // ================================================================
+        // 6. RAILS
+        // ================================================================
+        function renderDocs() {
+          var box = el('doc-list')
+          if (!P.docs.length) {
+            box.innerHTML =
+              '<div class="empty-hint">尚无材料。<br />可导入 .txt / .md，或直接新建。</div>'
+          } else {
+            var h = ''
+            P.docs.forEach(function (d) {
+              h +=
+                '<div class="doc-item' +
+                (d.id === S.docId ? ' active' : '') +
+                '" data-doc="' +
+                d.id +
+                '">' +
+                '<div class="doc-title">' +
+                esc(d.title) +
+                '</div>' +
+                '<div class="doc-meta">' +
+                esc([d.type, d.source].filter(Boolean).join(' · ') || '未标注来源') +
+                '</div>' +
+                '<div class="doc-bar"><i style="width:' +
+                coverage(d.id) +
+                '%"></i></div>' +
+                '</div>'
+            })
+            box.innerHTML = h
+          }
+          var dd = el('doc-list-dd')
+          if (!P.docs.length) {
+            dd.innerHTML = '<div class="sug-empty">尚无材料</div>'
+          } else {
+            var g = ''
+            P.docs.forEach(function (d) {
+              g +=
+                '<div class="dd-item' +
+                (d.id === S.docId ? ' selected' : '') +
+                '" data-doc="' +
+                d.id +
+                '"><span>' +
+                esc(d.title) +
+                '</span><span class="hint">' +
+                annCountDoc(d.id) +
+                '</span></div>'
+            })
+            dd.innerHTML = g
+          }
+          var ms = el('m-doc-sel')
+          if (ms) {
+            var mitems = P.docs.map(function (d) {
+              return { v: d.id, label: d.title }
+            })
+            var mkeep = selVal(ms)
+            selMount(ms, mitems, docById(mkeep) ? mkeep : S.docId, function (v) {
+              S.docId = v
+              S.selAnn = null
+              renderAll()
+            })
+          }
+          var cv = el('cv-doc')
+          if (cv) {
+            var ckeep = selVal(cv) || 'all'
+            var citems = [{ v: 'all', label: '全部材料' }].concat(
+              P.docs.map(function (d) {
+                return { v: d.id, label: d.title }
+              }),
+            )
+            selMount(cv, citems, ckeep === 'all' || docById(ckeep) ? ckeep : 'all', function () {
+              renderCodesView()
+            })
+          }
+        }
+
+        function sortedCodes() {
+          return P.codes.slice().sort(function (a, b) {
+            var la = LVORDER[a.level] == null ? 9 : LVORDER[a.level]
+            var lb = LVORDER[b.level] == null ? 9 : LVORDER[b.level]
+            if (la !== lb) return la - lb
+            return String(a.no).localeCompare(String(b.no), 'zh')
+          })
+        }
+
+        function renderCodes() {
+          var box = el('code-list')
+          if (!P.codes.length) {
+            box.innerHTML =
+              '<div class="empty-hint">码表为空。<br />点击右上 ＋ 新建码号，<br />或选中文本后直接命名。</div>'
+            return
+          }
+          var list = sortedCodes()
+          var h = ''
+          list.forEach(function (c) {
+            var n = annCount(c.id)
+            h +=
+              '<div class="code-row' +
+              (S.activeCode === c.id ? ' on' : '') +
+              '" data-code="' +
+              c.id +
+              '">' +
+              '<span class="code-lv">' +
+              LV[c.level] +
+              '</span>' +
+              '<span class="code-dot" style="--c:' +
+              c.color +
+              '"></span>' +
+              '<span class="code-name">' +
+              esc(c.no + ' ' + c.name) +
+              '</span>' +
+              '<span class="code-n">' +
+              n +
+              '</span>' +
+              '<span class="code-act" data-act="edit" data-code="' +
+              c.id +
+              '">编</span>' +
+              '<span class="code-act" data-act="del" data-code="' +
+              c.id +
+              '">删</span>' +
+              '</div>'
+            if (S.showDef && c.def) {
+              h += '<div class="code-sub">' + esc(c.def) + '</div>'
+            }
+          })
+          box.innerHTML = h
+        }
+
+        function renderDetail() {
+          var box = el('dt-body')
+          var a = annById(S.selAnn)
+          if (!a) {
+            box.innerHTML =
+              '<div class="empty-hint">未选中片段。<br />在阅读区点击任一标注，<br />或选中文本后指派码号。</div>'
+            return
+          }
+          var c = codeById(a.code)
+          var d = docById(a.doc)
+          var col = c ? c.color : '#888888'
+          var h =
+            '<div class="dt-quote" style="--c:' +
+            col +
+            '">' +
+            esc(a.quote) +
+            '</div>' +
+            '<div class="dt-line"><span class="dt-k">码号</span><span class="dt-v" data-act="code" title="点击更换码号">' +
+            esc(c ? c.no + ' ' + c.name : '—') +
+            '</span></div>' +
+            '<div class="dt-line"><span class="dt-k">出处</span><span class="dt-v" data-act="goto" title="点击跳转">' +
+            esc(d ? d.title : '—') +
+            '</span></div>' +
+            '<div class="dt-line"><span class="dt-k">状态</span><span class="dt-v" data-act="status">' +
+            (a.status === 'review' ? '待复核' : '已确认') +
+            '</span></div>' +
+            '<textarea class="dt-ta" id="dt-memo" autocomplete="off" spellcheck="false" placeholder="片段备注 / 分析笔记…">' +
+            esc(a.memo || '') +
+            '</textarea>'
+          var rels = P.rels.filter(function (r) {
+            return r.a === a.id || r.b === a.id
+          })
+          if (rels.length) {
+            h += '<div class="dt-line"><span class="dt-k">关联</span></div><div>'
+            rels.forEach(function (r) {
+              var other = annById(r.a === a.id ? r.b : r.a)
+              if (!other) return
+              h +=
+                '<span class="rel-chip" data-rel="' +
+                r.id +
+                '">' +
+                esc(r.type) +
+                ' · ' +
+                esc(other.quote.slice(0, 10)) +
+                '…<i data-act="unrel" data-rel="' +
+                r.id +
+                '">×</i></span>'
+            })
+            h += '</div>'
+          }
+          h +=
+            '<div class="dt-acts">' +
+            '<span class="dt-btn" data-act="goto">定位</span>' +
+            '<span class="dt-btn" data-act="relate">关联</span>' +
+            '<span class="dt-btn" data-act="status">' +
+            (a.status === 'review' ? '标记已确认' : '标记待复核') +
+            '</span>' +
+            '<span class="dt-btn danger" data-act="del">删除</span>' +
+            '</div>'
+          box.innerHTML = h
+          var ta = el('dt-memo')
+          if (ta)
+            ta.addEventListener('blur', function () {
+              a.memo = ta.value
+              Store.save()
+            })
+        }
+
+        function renderStatus() {
+          var cov = 0
+          if (P.docs.length) {
+            var t = 0
+            P.docs.forEach(function (d) {
+              t += coverage(d.id)
+            })
+            cov = Math.round(t / P.docs.length)
+          }
+          var rv = P.anns.filter(function (a) {
+            return a.status === 'review'
+          }).length
+          el('stat-left').textContent =
+            '材料 ' +
+            P.docs.length +
+            ' · 码号 ' +
+            P.codes.length +
+            ' · 片段 ' +
+            P.anns.length +
+            ' · 覆盖 ' +
+            cov +
+            '% · 待复核 ' +
+            rv
+        }
+
+        function renderAll() {
+          renderDocs()
+          renderCodes()
+          renderPaper()
+          renderDetail()
+          renderStatus()
+          renderCodesView()
+          renderMatrix()
+          renderMemos()
+        }
+
+        // ================================================================
+        // 7. VIEWS
+        // ================================================================
+        function setView(v) {
+          S.view = v
+          ;['annotate', 'codes', 'matrix', 'memo'].forEach(function (k) {
+            el('view-' + k).classList.toggle('on', k === v)
+            var b = el('btn-' + k)
+            if (b) b.classList.toggle('active', k === v)
+          })
+          document.querySelectorAll('.mt-item[data-mview]').forEach(function (b) {
+            b.classList.toggle('on', b.getAttribute('data-mview') === v)
+          })
+          if (v === 'codes') renderCodesView()
+          if (v === 'matrix') renderMatrix()
+          if (v === 'memo') renderMemos()
+        }
+
+        function renderCodesView() {
+          var box = el('cv-scroll')
+          var fd = selVal(el('cv-doc')) || 'all'
+          var fs = selVal(el('cv-status')) || 'all'
+          var fl = selVal(el('cv-level')) || 'all'
+          var list = P.anns.filter(function (a) {
+            if (fd !== 'all' && a.doc !== fd) return false
+            if (fs !== 'all' && a.status !== fs) return false
+            var c = codeById(a.code)
+            if (fl !== 'all' && (!c || c.level !== fl)) return false
+            if (S.activeCode && a.code !== S.activeCode) return false
+            return true
+          })
+          el('cv-count').textContent = list.length + ' 条'
+          if (!list.length) {
+            box.innerHTML = '<div class="empty-hint">当前筛选条件下没有编码片段。</div>'
+            return
+          }
+          var groups = {}
+          list.forEach(function (a) {
+            var c = codeById(a.code)
+            var key = c ? c.id : '_none'
+            if (!groups[key]) groups[key] = { code: c, items: [] }
+            groups[key].items.push(a)
+          })
+          var order = sortedCodes()
+          var html = '<div class="cv-group">'
+          order.forEach(function (c) {
+            if (!groups[c.id]) return
+            var g = groups[c.id]
+            html +=
+              '<div class="cg-head"><span class="cg-no">' +
+              esc(c.no) +
+              '</span><span class="cg-name">' +
+              esc(c.name) +
+              '</span><span class="code-lv">' +
+              LV[c.level] +
+              '</span><span class="spacer"></span><span class="cg-count">' +
+              g.items.length +
+              ' 条</span></div>'
+            if (c.def) html += '<div class="cg-def">' + esc(c.def) + '</div>'
+            g.items.forEach(function (a) {
+              var d = docById(a.doc)
+              html +=
+                '<div class="a-row" data-ann="' +
+                a.id +
+                '" style="--c:' +
+                c.color +
+                '"><div class="a-main">' +
+                '<div class="a-quote">' +
+                esc(a.quote) +
+                '</div>' +
+                '<div class="a-sub"><span class="a-code"><i class="a-dot"></i>' +
+                esc(c.no + ' ' + c.name) +
+                '</span><span>' +
+                esc(d ? d.title : '—') +
+                '</span><span>' +
+                a.ts +
+                '</span><span class="st' +
+                (a.status === 'review' ? ' review' : '') +
+                '">' +
+                (a.status === 'review' ? '待复核' : '已确认') +
+                '</span></div>' +
+                (a.memo ? '<div class="a-memo">' + esc(a.memo) + '</div>' : '') +
+                '</div></div>'
+            })
+          })
+          if (groups['_none']) {
+            html += '<div class="cg-head"><span class="cg-name">未指派码号</span></div>'
+            groups['_none'].items.forEach(function (a) {
+              html +=
+                '<div class="a-row" data-ann="' +
+                a.id +
+                '"><div class="a-main"><div class="a-quote">' +
+                esc(a.quote) +
+                '</div></div></div>'
+            })
+          }
+          html += '</div>'
+          box.innerHTML = html
+        }
+
+        function renderMatrix() {
+          var box = el('mx-wrap')
+          if (!P.docs.length || !P.codes.length) {
+            box.innerHTML = '<div class="mx-note">矩阵需要至少一份材料与一个码号。</div>'
+            return
+          }
+          var docs = P.docs
+          var codes = sortedCodes()
+          var h =
+            '<div class="mx-title">码号 × 材料 · 编码频次矩阵</div><table class="mx"><thead><tr><th class="rowh">码号</th>'
+          docs.forEach(function (d) {
+            h += '<th title="' + esc(d.title) + '">' + esc(d.title.slice(0, 8)) + '</th>'
+          })
+          h += '<th class="sum">合计</th></tr></thead><tbody>'
+          codes.forEach(function (c) {
+            var tot = 0
+            h += '<tr><th class="rowh">' + esc(c.no + ' ' + c.name) + '</th>'
+            docs.forEach(function (d) {
+              var n = annCount(c.id, d.id)
+              tot += n
+              h += '<td' + (n ? ' class="hit"' : '') + '>' + (n || '·') + '</td>'
+            })
+            h += '<td class="sum">' + tot + '</td></tr>'
+          })
+          h += '<tr><th class="rowh">覆盖率</th>'
+          docs.forEach(function (d) {
+            h += '<td class="sum">' + coverage(d.id) + '%</td>'
+          })
+          h += '<td class="sum">—</td></tr></tbody></table>'
+
+          // 共现
+          var pairs = {}
+          P.anns.forEach(function (a) {
+            P.anns.forEach(function (b) {
+              if (a.id >= b.id) return
+              if (a.doc !== b.doc) return
+              if (a.end <= b.start || b.end <= a.start) return
+              var key = [a.code, b.code].sort().join('|')
+              pairs[key] = (pairs[key] || 0) + 1
+            })
+          })
+          var ks = Object.keys(pairs)
+          if (ks.length) {
+            ks.sort(function (x, y) {
+              return pairs[y] - pairs[x]
+            })
+            h +=
+              '<div class="mx-title">码号共现 · 重叠编码（前 12 组）</div><table class="mx"><thead><tr><th class="rowh">码号 A</th><th class="rowh">码号 B</th><th class="sum">共现</th></tr></thead><tbody>'
+            ks.slice(0, 12).forEach(function (k) {
+              var ids = k.split('|')
+              var ca = codeById(ids[0]),
+                cb = codeById(ids[1])
+              h +=
+                '<tr><th class="rowh">' +
+                esc(ca ? ca.no + ' ' + ca.name : '—') +
+                '</th><th class="rowh">' +
+                esc(cb ? cb.no + ' ' + cb.name : '—') +
+                '</th><td class="sum">' +
+                pairs[k] +
+                '</td></tr>'
+            })
+            h += '</tbody></table>'
+            h +=
+              '<div class="mx-note">共现指同一材料中被同时指派到重叠文本区间的码号组合，可用于轴心式编码阶段的范畴关联分析。</div>'
+          }
+          box.innerHTML = h
+        }
+
+        function renderMemos() {
+          var box = el('mv-scroll')
+          if (!P.memos.length) {
+            box.innerHTML =
+              '<div class="empty-hint">尚无备忘录。<br />备忘录用于记录编码过程中的理论想法与方法反思。</div>'
+            return
+          }
+          var h = '<div class="mv-list">'
+          P.memos
+            .slice()
+            .reverse()
+            .forEach(function (m) {
+              var cs = (m.codes || [])
+                .map(function (id) {
+                  var c = codeById(id)
+                  return c ? c.no + ' ' + c.name : ''
+                })
+                .filter(Boolean)
+              h +=
+                '<div class="memo-card" data-memo="' +
+                m.id +
+                '"><div class="mc-head"><span class="mc-title">' +
+                esc(m.title) +
+                '</span><span class="mc-type">' +
+                esc(m.type) +
+                '</span></div>' +
+                '<div class="mc-body">' +
+                esc(m.body || '（空）') +
+                '</div>' +
+                '<div class="mc-foot"><span>' +
+                m.ts +
+                '</span>' +
+                (cs.length ? '<span>' + esc(cs.join(' · ')) + '</span>' : '') +
+                '</div></div>'
+            })
+          h += '</div>'
+          box.innerHTML = h
+        }
+
+        // ================================================================
+        // 8. SELECTION POPUP
+        // ================================================================
+        function codeListForPopup(q) {
+          var list = P.codes.slice()
+          var rec = S.recent || []
+          list.sort(function (a, b) {
+            var ia = rec.indexOf(a.id),
+              ib = rec.indexOf(b.id)
+            ia = ia < 0 ? 999 : ia
+            ib = ib < 0 ? 999 : ib
+            if (ia !== ib) return ia - ib
+            return String(a.no).localeCompare(String(b.no), 'zh')
+          })
+          if (q) {
+            var k = q.toLowerCase()
+            list = list.filter(function (c) {
+              return (
+                c.name.toLowerCase().indexOf(k) >= 0 ||
+                String(c.no).indexOf(k) >= 0 ||
+                (c.def || '').toLowerCase().indexOf(k) >= 0
+              )
+            })
+          }
+          return list
+        }
+
+        function renderSpList(q) {
+          spFiltered = codeListForPopup(q)
+          spIdx = 0
+          var box = el('sp-list')
+          if (!spFiltered.length) {
+            box.innerHTML = '<div class="sug-empty">无匹配码号 · 回车新建' + esc(q) + '</div>'
+            return
+          }
+          var h = ''
+          spFiltered.slice(0, 9).forEach(function (c, i) {
+            h +=
+              '<div class="sug-item' +
+              (i === 0 ? ' hl' : '') +
+              '" data-code="' +
+              c.id +
+              '">' +
+              '<span class="sug-key">' +
+              (i + 1) +
+              '</span>' +
+              '<span class="sug-dot" style="--c:' +
+              c.color +
+              '"></span>' +
+              '<span class="sug-name">' +
+              esc(c.no + ' ' + c.name) +
+              '</span>' +
+              '</div>'
+          })
+          box.innerHTML = h
+        }
+
+        function showSelPop(rect, s, e) {
+          var d = curDoc()
+          if (!d) return
+          pendingSel = { s: s, e: e }
+          var pop = el('sel-pop')
+          el('sp-quote').textContent = d.text.slice(s, e)
+          el('sp-input').value = ''
+          renderSpList('')
+          pop.classList.add('open')
+          var w = 264
+          var top = rect.bottom + 8
+          var left = clamp(rect.left, 10, Math.max(10, window.innerWidth - w - 10))
+          if (top + pop.offsetHeight > window.innerHeight - 10)
+            top = Math.max(10, rect.top - pop.offsetHeight - 8)
+          pop.style.top = top + 'px'
+          pop.style.left = left + 'px'
+          setTimeout(function () {
+            try {
+              el('sp-input').focus()
+            } catch (err) {}
+          }, 20)
+        }
+
+        function hideSelPop(keep) {
+          el('sel-pop').classList.remove('open')
+          if (!keep) pendingSel = null
+        }
+
+        function applyCode(codeId, status) {
+          if (!pendingSel) return
+          var d = curDoc()
+          var a = {
+            id: uid('a'),
+            doc: d.id,
+            start: pendingSel.s,
+            end: pendingSel.e,
+            quote: d.text.slice(pendingSel.s, pendingSel.e),
+            code: codeId,
+            memo: '',
+            status: status || 'done',
+            ts: nowStr(),
+          }
+          P.anns.push(a)
+          S.recent = [codeId].concat(
+            (S.recent || []).filter(function (x) {
+              return x !== codeId
+            }),
+          )
+          S.selAnn = a.id
+          Store.save()
+          Settings.save()
+          hideSelPop()
+          window.getSelection().removeAllRanges()
+          renderAll()
+          notify('已编码 · ' + (codeById(codeId) ? codeById(codeId).name : ''))
+        }
+
+        // ================================================================
+        // 9. MODAL FORMS
+        // ================================================================
+        var modalSubmit = null
+        function openModal(title, html, onSubmit) {
+          sugClose()
+          el('modal-title').textContent = title
+          el('modal-body').innerHTML = html
+          el('modal').classList.add('open')
+          modalSubmit = onSubmit || null
+          el('modal-body')
+            .querySelectorAll('input,textarea')
+            .forEach(function (x) {
+              if (x.type !== 'hidden') x.setAttribute('autocomplete', 'off')
+              x.setAttribute('spellcheck', 'false')
+            })
+          setTimeout(function () {
+            var f = el('modal-body').querySelector('input,textarea')
+            if (f && !el('modal-body').querySelector('textarea.fm-ta')) {
+              try {
+                f.focus()
+              } catch (e) {}
+            }
+          }, 30)
+        }
+        function closeModal() {
+          sugClose()
+          el('modal').classList.remove('open')
+          modalSubmit = null
+        }
+
+        function openCodeModal(codeId, applyAfter) {
+          var c = codeById(codeId)
+          var isNew = !c
+          if (isNew)
+            c = {
+              id: '',
+              no: pad2(P.codes.length + 1),
+              name: applyAfter ? applyAfter.name : '',
+              level: 'open',
+              parent: '',
+              def: '',
+              incl: '',
+              excl: '',
+              eg: '',
+              color: COLORS[1],
+              memo: '',
+            }
+          var lvItems = ['open', 'axial', 'selective'].map(function (k) {
+            return { v: k, label: LVNAME[k], hint: LV[k] }
+          })
+          var parItems = [{ v: '', label: '（无）' }]
+          P.codes.forEach(function (x) {
+            if (x.id === c.id) return
+            parItems.push({ v: x.id, label: x.no + ' ' + x.name, hint: LV[x.level] })
+          })
+          var cds = ''
+          COLORS.forEach(function (col) {
+            cds +=
+              '<span class="fm-cd' +
+              (c.color === col ? ' on' : '') +
+              '" data-color="' +
+              col +
+              '" style="background:' +
+              col +
+              '"></span>'
+          })
+          var h =
+            '<div class="fm-row"><div class="fm-lb">编号</div><div class="fm-f"><input class="fm-in" id="f-no" value="' +
+            esc(c.no) +
+            '" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">名称</div><div class="fm-f"><input class="fm-in" id="f-name" value="' +
+            esc(c.name) +
+            '" placeholder="如：情感动员" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">层级</div><div class="fm-f"><div class="se" id="f-level">' +
+            '<span class="se-v"></span><span class="se-a">▾</span></div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">上级码</div><div class="fm-f"><div class="se" id="f-parent">' +
+            '<span class="se-v"></span><span class="se-a">▾</span></div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">标记色</div><div class="fm-f"><div class="fm-colors" id="f-colors">' +
+            cds +
+            '</div><div class="fm-hint">颜色仅用于区分与检索，不承担评价含义。</div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">操作性定义</div><div class="fm-f"><textarea class="fm-ta" id="f-def" placeholder="这一码号指什么？研究者如何判断一段文本属于它？">' +
+            esc(c.def) +
+            '</textarea></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">纳入标准</div><div class="fm-f"><textarea class="fm-ta" id="f-incl" style="min-height:56px">' +
+            esc(c.incl) +
+            '</textarea></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">排除标准</div><div class="fm-f"><textarea class="fm-ta" id="f-excl" style="min-height:56px">' +
+            esc(c.excl) +
+            '</textarea></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">典型例证</div><div class="fm-f"><textarea class="fm-ta" id="f-eg" style="min-height:56px">' +
+            esc(c.eg) +
+            '</textarea></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">备注</div><div class="fm-f"><textarea class="fm-ta" id="f-memo" style="min-height:56px">' +
+            esc(c.memo) +
+            '</textarea></div></div>' +
+            '<div class="fm-foot">' +
+            (isNew ? '' : '<button type="button" class="fm-sub del" id="f-del">删除</button>') +
+            '<button type="button" class="fm-sub ghost" id="f-cancel">取消</button>' +
+            '<button type="button" class="fm-sub" id="f-ok">保存</button>' +
+            '</div>' +
+            '<input type="hidden" id="f-id" value="' +
+            c.id +
+            '" />' +
+            '<input type="hidden" id="f-color" value="' +
+            c.color +
+            '" />' +
+            '<input type="hidden" id="f-apply" value="' +
+            (applyAfter ? '1' : '') +
+            '" />'
+          openModal(isNew ? '新建码号' : '编辑码号 · ' + c.name, h, null)
+
+          selMount(el('f-level'), lvItems, c.level, null)
+          selMount(el('f-parent'), parItems, c.parent, null)
+          bindNameSug(el('f-name'))
+
+          el('f-colors').addEventListener('click', function (e) {
+            var t = e.target.closest('.fm-cd')
+            if (!t) return
+            el('f-colors')
+              .querySelectorAll('.fm-cd')
+              .forEach(function (x) {
+                x.classList.remove('on')
+              })
+            t.classList.add('on')
+            el('f-color').value = t.getAttribute('data-color')
+          })
+          el('f-cancel').addEventListener('click', closeModal)
+          if (!isNew)
+            el('f-del').addEventListener('click', function () {
+              var id = el('f-id').value
+              var n = annCount(id)
+              showConfirm('删除码号将同时移除其 ' + n + ' 条编码片段，确定删除？', '删除').then(
+                function (ok) {
+                  if (!ok) return
+                  P.anns = P.anns.filter(function (a) {
+                    return a.code !== id
+                  })
+                  P.codes = P.codes.filter(function (x) {
+                    return x.id !== id
+                  })
+                  if (S.activeCode === id) S.activeCode = null
+                  Store.save()
+                  closeModal()
+                  renderAll()
+                  notify('码号已删除')
+                },
+              )
+            })
+          el('f-ok').addEventListener('click', function () {
+            var name = el('f-name').value.trim()
+            if (!name) {
+              notify('请填写码号名称')
+              return
+            }
+            var target
+            if (isNew) {
+              target = {
+                id: uid('c'),
+                no: el('f-no').value.trim() || pad2(P.codes.length + 1),
+                name: name,
+                level: selVal(el('f-level')) || 'open',
+                parent: selVal(el('f-parent')),
+                def: el('f-def').value,
+                incl: el('f-incl').value,
+                excl: el('f-excl').value,
+                eg: el('f-eg').value,
+                color: el('f-color').value,
+                memo: el('f-memo').value,
+              }
+              P.codes.push(target)
+            } else {
+              target = codeById(el('f-id').value)
+              if (!target) return closeModal()
+              target.no = el('f-no').value.trim() || target.no
+              target.name = name
+              target.level = selVal(el('f-level')) || target.level
+              target.parent = selVal(el('f-parent'))
+              target.def = el('f-def').value
+              target.incl = el('f-incl').value
+              target.excl = el('f-excl').value
+              target.eg = el('f-eg').value
+              target.color = el('f-color').value
+              target.memo = el('f-memo').value
+            }
+            Store.save()
+            closeModal()
+            renderAll()
+            if (el('f-apply').value === '1' && pendingSel) applyCode(target.id)
+            else notify(isNew ? '码号已新建' : '码号已更新')
+          })
+        }
+
+        function openDocModal(docId) {
+          var d = docId ? docById(docId) : null
+          var isNew = !d
+          if (isNew)
+            d = { id: '', title: '', source: '', type: '访谈转录', date: '', note: '', text: '' }
+          var typeItems = DOCTYPES.map(function (t) {
+            return { v: t, label: t }
+          })
+          var h =
+            '<div class="fm-row"><div class="fm-lb">标题</div><div class="fm-f"><input class="fm-in" id="f-title" value="' +
+            esc(d.title) +
+            '" placeholder="材料标题" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">来源</div><div class="fm-f"><input class="fm-in" id="f-source" value="' +
+            esc(d.source) +
+            '" placeholder="平台 / 媒体 / 访谈编号" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">体裁</div><div class="fm-f fm-two"><div class="se" id="f-type">' +
+            '<span class="se-v"></span><span class="se-a">▾</span></div><input class="fm-in" id="f-date" value="' +
+            esc(d.date) +
+            '" placeholder="2026-03-14" style="max-width:130px" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">备注</div><div class="fm-f"><textarea class="fm-ta" id="f-note" style="min-height:56px">' +
+            esc(d.note) +
+            '</textarea></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">正文</div><div class="fm-f"><textarea class="fm-ta" id="f-text" style="min-height:200px" placeholder="粘贴或输入待标注文本">' +
+            esc(d.text) +
+            '</textarea>' +
+            (isNew
+              ? '<div class="fm-hint">空行将保留为段落分隔。同一材料可随时继续补充正文。</div>'
+              : '<div class="fm-warn">修改正文后，已有编码片段的位置可能发生偏移，请谨慎编辑。</div>') +
+            '</div></div>' +
+            '<div class="fm-foot">' +
+            (isNew ? '' : '<button type="button" class="fm-sub del" id="f-del">删除</button>') +
+            '<button type="button" class="fm-sub ghost" id="f-cancel">取消</button>' +
+            '<button type="button" class="fm-sub" id="f-ok">保存</button>' +
+            '</div>' +
+            '<input type="hidden" id="f-id" value="' +
+            d.id +
+            '" />'
+          openModal(isNew ? '新建材料' : '编辑材料', h, null)
+          selMount(el('f-type'), typeItems, d.type, null)
+          el('f-cancel').addEventListener('click', closeModal)
+          if (!isNew)
+            el('f-del').addEventListener('click', function () {
+              var id = el('f-id').value
+              var n = annCountDoc(id)
+              showConfirm('删除材料将同时移除其 ' + n + ' 条编码片段，确定删除？', '删除').then(
+                function (ok) {
+                  if (!ok) return
+                  P.docs = P.docs.filter(function (x) {
+                    return x.id !== id
+                  })
+                  P.anns = P.anns.filter(function (a) {
+                    return a.doc !== id
+                  })
+                  if (S.docId === id) S.docId = P.docs.length ? P.docs[0].id : null
+                  Store.save()
+                  closeModal()
+                  renderAll()
+                  notify('材料已删除')
+                },
+              )
+            })
+          el('f-ok').addEventListener('click', function () {
+            var title = el('f-title').value.trim()
+            if (!title) {
+              notify('请填写材料标题')
+              return
+            }
+            var text = el('f-text').value
+            if (isNew) {
+              var nd = {
+                id: uid('d'),
+                title: title,
+                source: el('f-source').value,
+                type: selVal(el('f-type')) || '其他',
+                date: el('f-date').value,
+                note: el('f-note').value,
+                text: text,
+              }
+              P.docs.push(nd)
+              S.docId = nd.id
+            } else {
+              var t = docById(el('f-id').value)
+              if (!t) return closeModal()
+              t.title = title
+              t.source = el('f-source').value
+              t.type = selVal(el('f-type')) || t.type
+              t.date = el('f-date').value
+              t.note = el('f-note').value
+              t.text = text
+            }
+            Store.save()
+            closeModal()
+            renderAll()
+            notify(isNew ? '材料已新建' : '材料已更新')
+          })
+        }
+
+        function openMemoModal(memoId) {
+          var m = memoId
+            ? P.memos.filter(function (x) {
+                return x.id === memoId
+              })[0]
+            : null
+          var isNew = !m
+          if (isNew) m = { id: '', title: '', type: '理论备忘录', body: '', codes: [], ts: '' }
+          var mtypeItems = MEMOTYPES.map(function (t) {
+            return { v: t, label: t }
+          })
+          var chips = ''
+          sortedCodes().forEach(function (c) {
+            chips +=
+              '<span class="fm-chip' +
+              ((m.codes || []).indexOf(c.id) >= 0 ? ' on' : '') +
+              '" data-code="' +
+              c.id +
+              '">' +
+              esc(c.no + ' ' + c.name) +
+              '</span>'
+          })
+          var h =
+            '<div class="fm-row"><div class="fm-lb">标题</div><div class="fm-f"><input class="fm-in" id="f-title" value="' +
+            esc(m.title) +
+            '" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">类型</div><div class="fm-f"><div class="se" id="f-type">' +
+            '<span class="se-v"></span><span class="se-a">▾</span></div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">正文</div><div class="fm-f"><textarea class="fm-ta" id="f-body" style="min-height:200px">' +
+            esc(m.body) +
+            '</textarea></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">关联码号</div><div class="fm-f"><div class="fm-chk" id="f-codes">' +
+            (chips || '<span class="fm-hint">码表为空</span>') +
+            '</div></div></div>' +
+            '<div class="fm-foot">' +
+            (isNew ? '' : '<button type="button" class="fm-sub del" id="f-del">删除</button>') +
+            '<button type="button" class="fm-sub ghost" id="f-cancel">取消</button>' +
+            '<button type="button" class="fm-sub" id="f-ok">保存</button>' +
+            '</div>' +
+            '<input type="hidden" id="f-id" value="' +
+            m.id +
+            '" />'
+          openModal(isNew ? '新建备忘录' : '编辑备忘录', h, null)
+          selMount(el('f-type'), mtypeItems, m.type, null)
+          el('f-codes').addEventListener('click', function (e) {
+            var t = e.target.closest('.fm-chip')
+            if (t) t.classList.toggle('on')
+          })
+          el('f-cancel').addEventListener('click', closeModal)
+          if (!isNew)
+            el('f-del').addEventListener('click', function () {
+              P.memos = P.memos.filter(function (x) {
+                return x.id !== el('f-id').value
+              })
+              Store.save()
+              closeModal()
+              renderMemos()
+              notify('备忘录已删除')
+            })
+          el('f-ok').addEventListener('click', function () {
+            var title = el('f-title').value.trim()
+            if (!title) {
+              notify('请填写标题')
+              return
+            }
+            var codes = []
+            el('f-codes')
+              .querySelectorAll('.fm-chip.on')
+              .forEach(function (x) {
+                codes.push(x.getAttribute('data-code'))
+              })
+            if (isNew) {
+              P.memos.push({
+                id: uid('m'),
+                title: title,
+                type: selVal(el('f-type')) || '理论备忘录',
+                body: el('f-body').value,
+                codes: codes,
+                ts: nowStr(),
+              })
+            } else {
+              var t = P.memos.filter(function (x) {
+                return x.id === el('f-id').value
+              })[0]
+              if (!t) return closeModal()
+              t.title = title
+              t.type = selVal(el('f-type')) || t.type
+              t.body = el('f-body').value
+              t.codes = codes
+            }
+            Store.save()
+            closeModal()
+            renderMemos()
+            notify('备忘录已保存')
+          })
+        }
+
+        function openRelateModal(annId) {
+          var a = annById(annId)
+          if (!a) return
+          var cands = P.anns.filter(function (x) {
+            return x.doc === a.doc && x.id !== a.id
+          })
+          if (!cands.length) {
+            notify('本材料暂无其他片段可关联')
+            return
+          }
+          var relItems = RELS.map(function (r) {
+            return { v: r, label: r }
+          })
+          var h =
+            '<div class="fm-row"><div class="fm-lb">关系</div><div class="fm-f"><div class="se" id="f-rel">' +
+            '<span class="se-v"></span><span class="se-a">▾</span></div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">目标片段</div><div class="fm-f"><div id="f-list" class="sug inline" style="max-height:280px">'
+          cands.forEach(function (x) {
+            var cc = codeById(x.code)
+            h +=
+              '<div class="sug-item" data-ann="' +
+              x.id +
+              '"><span class="sug-name">' +
+              esc(x.quote.slice(0, 40)) +
+              '</span><span class="hint">' +
+              esc(cc ? cc.no : '') +
+              '</span></div>'
+          })
+          h +=
+            '</div></div></div><div class="fm-foot"><button type="button" class="fm-sub ghost" id="f-cancel">取消</button></div>'
+          openModal('建立片段关联 · ' + RELS[0], h, null)
+          selMount(el('f-rel'), relItems, RELS[0], function (v) {
+            el('modal-title').textContent = '建立片段关联 · ' + v
+          })
+          el('f-cancel').addEventListener('click', closeModal)
+          el('f-list').addEventListener('click', function (e) {
+            var t = e.target.closest('[data-ann]')
+            if (!t) return
+            P.rels.push({
+              id: uid('r'),
+              a: a.id,
+              b: t.getAttribute('data-ann'),
+              type: selVal(el('f-rel')) || RELS[0],
+            })
+            Store.save()
+            closeModal()
+            renderDetail()
+            notify('关联已建立')
+          })
+        }
+
+        function openCodebookModal() {
+          var list = sortedCodes()
+          var h = '<div class="st-block">'
+          if (!list.length) {
+            h += '<div class="fm-hint">码表为空。</div>'
+          } else {
+            ;['open', 'axial', 'selective'].forEach(function (lv) {
+              var g = list.filter(function (c) {
+                return c.level === lv
+              })
+              if (!g.length) return
+              h += '<div class="help-h">' + LVNAME[lv] + ' · ' + g.length + '</div>'
+              g.forEach(function (c) {
+                h +=
+                  '<div class="st-row"><span>' +
+                  esc(c.no + '　' + c.name) +
+                  '</span><b>' +
+                  annCount(c.id) +
+                  '</b></div>'
+                if (c.def)
+                  h +=
+                    '<div class="fm-hint" style="margin:2px 0 6px">定义：' + esc(c.def) + '</div>'
+                if (c.incl)
+                  h += '<div class="fm-hint" style="margin:0 0 2px">纳入：' + esc(c.incl) + '</div>'
+                if (c.excl)
+                  h += '<div class="fm-hint" style="margin:0 0 6px">排除：' + esc(c.excl) + '</div>'
+              })
+            })
+          }
+          h +=
+            '</div><div class="fm-foot"><button type="button" class="fm-sub ghost" id="f-cancel">关闭</button>'
+          h += '<button type="button" class="fm-sub" id="f-new">新建码号</button></div>'
+          openModal('码表 · Codebook', h, null)
+          el('f-cancel').addEventListener('click', closeModal)
+          el('f-new').addEventListener('click', function () {
+            closeModal()
+            openCodeModal(null)
+          })
+        }
+
+        function openStatsModal() {
+          var totalAnn = P.anns.length
+          var review = P.anns.filter(function (a) {
+            return a.status === 'review'
+          }).length
+          var cov = 0
+          P.docs.forEach(function (d) {
+            cov += coverage(d.id)
+          })
+          cov = P.docs.length ? Math.round(cov / P.docs.length) : 0
+          var orphan = P.codes.filter(function (c) {
+            return annCount(c.id) === 0
+          })
+          var lens = P.anns.map(function (a) {
+            return a.end - a.start
+          })
+          var avg = lens.length
+            ? Math.round(
+                lens.reduce(function (x, y) {
+                  return x + y
+                }, 0) / lens.length,
+              )
+            : 0
+          var unDoc = P.docs.filter(function (d) {
+            return annCountDoc(d.id) === 0
+          })
+          var h = '<div class="st-block">'
+          h += '<div class="st-row"><span>材料总数</span><b>' + P.docs.length + '</b></div>'
+          h += '<div class="st-row"><span>码号总数</span><b>' + P.codes.length + '</b></div>'
+          h += '<div class="st-row"><span>编码片段</span><b>' + totalAnn + '</b></div>'
+          h += '<div class="st-row"><span>平均片段长度</span><b>' + avg + ' 字</b></div>'
+          h += '<div class="st-row"><span>整体覆盖率</span><b>' + cov + '%</b></div>'
+          h += '<div class="st-row"><span>待复核片段</span><b>' + review + '</b></div>'
+          h += '<div class="st-row"><span>未被使用的码号</span><b>' + orphan.length + '</b></div>'
+          h += '<div class="st-row"><span>尚未编码的材料</span><b>' + unDoc.length + '</b></div>'
+          h += '</div>'
+          h +=
+            '<div class="help-h" style="padding:0 16px">质检提示</div><div class="st-block" style="padding-top:0">'
+          if (!P.docs.length) h += '<div class="fm-hint">尚无材料，无法评估。</div>'
+          else {
+            if (unDoc.length)
+              h +=
+                '<div class="fm-hint">· 有 ' +
+                unDoc.length +
+                ' 份材料尚未编码：' +
+                esc(
+                  unDoc
+                    .map(function (d) {
+                      return d.title
+                    })
+                    .join('、'),
+                ) +
+                '</div>'
+            if (orphan.length)
+              h +=
+                '<div class="fm-hint">· 有 ' +
+                orphan.length +
+                ' 个码号未被使用，考虑合并或删除：' +
+                esc(
+                  orphan
+                    .map(function (c) {
+                      return c.no + ' ' + c.name
+                    })
+                    .join('、'),
+                ) +
+                '</div>'
+            if (review)
+              h +=
+                '<div class="fm-hint">· 有 ' +
+                review +
+                ' 条片段处于待复核状态，建议在轴心式编码阶段统一处理。</div>'
+            if (cov < 20)
+              h += '<div class="fm-hint">· 整体覆盖率低于 20%，开放式编码可能尚不充分。</div>'
+            h +=
+              '<div class="fm-hint">· 理论饱和度无法自动判定，请以新素材是否持续产生新属性为准。</div>'
+          }
+          h += '</div>'
+          h +=
+            '<div class="fm-foot"><button type="button" class="fm-sub ghost" id="f-cancel">关闭</button></div>'
+          openModal('编码质检 · Quality', h, null)
+          el('f-cancel').addEventListener('click', closeModal)
+        }
+
+        function openHelpModal() {
+          var h = '<div class="st-block">'
+          h +=
+            '<div class="help-h">流程</div><div class="help-p">材料入库 → 开放式编码（逐段命名）→ 轴心式编码（范畴归并）→ 选择式编码（核心范畴）→ 备忘录 → 导出编码表。</div>'
+          h +=
+            '<div class="help-h">标注</div><div class="help-p">在阅读区选中一段文本，浮动面板出现后点击码号即可完成编码；也可直接输入名称并按 <kbd>Enter</kbd> 新建码号。同一段文本可被多个码号重叠编码。</div>'
+          h += '<div class="help-h">快捷键</div><div class="help-p">'
+          h += '<kbd>1</kbd>–<kbd>9</kbd> 指派面板中对应码号　<kbd>Enter</kbd> 指派首个码号<br />'
+          h += '<kbd>Esc</kbd> 关闭面板 / 弹窗　<kbd>Alt</kbd>+<kbd>← →</kbd> 切换材料<br />'
+          h +=
+            '<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd> 检索　<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd> 导出备份'
+          h += '</div>'
+          h +=
+            '<div class="help-h">码号定义</div><div class="help-p">每个码号应写清"操作性定义、纳入标准、排除标准、典型例证"，这是保证编码一致性与可复核性的前提。面板中悬停片段可查看定义。</div>'
+          h +=
+            '<div class="help-h">导出</div><div class="help-p">CSV 编码表可直接进入 Excel / SPSS 做频次与交叉分析；Markdown 报告适合作为论文附录的编码簿；JSON 用于项目备份与迁移。</div>'
+          h +=
+            '</div><div class="fm-foot"><button type="button" class="fm-sub ghost" id="f-cancel">关闭</button></div>'
+          openModal('使用说明', h, null)
+          el('f-cancel').addEventListener('click', closeModal)
+        }
+
+        // ================================================================
+        // 10. EXPORT / IMPORT
+        // ================================================================
+        var Export = {
+          json: function () {
+            var data = {
+              app: 'zenmark',
+              version: 1,
+              exportedAt: nowStr(),
+              project: P,
+            }
+            download('zenmark-project.json', JSON.stringify(data, null, 2), 'application/json')
+            notify('已导出项目备份')
+          },
+          md: function () {
+            var out = '# ' + P.title + '\n\n'
+            if (P.desc) out += '> ' + P.desc + '\n\n'
+            out +=
+              '导出时间：' +
+              nowStr() +
+              '　材料：' +
+              P.docs.length +
+              '　码号：' +
+              P.codes.length +
+              '　片段：' +
+              P.anns.length +
+              '\n\n'
+            out += '## 一、码表\n\n'
+            ;['open', 'axial', 'selective'].forEach(function (lv) {
+              var g = sortedCodes().filter(function (c) {
+                return c.level === lv
+              })
+              if (!g.length) return
+              out += '### ' + LVNAME[lv] + '\n\n'
+              g.forEach(function (c) {
+                out += '- **' + c.no + '　' + c.name + '**（' + annCount(c.id) + ' 条）\n'
+                if (c.def) out += '  - 定义：' + c.def + '\n'
+                if (c.incl) out += '  - 纳入：' + c.incl + '\n'
+                if (c.excl) out += '  - 排除：' + c.excl + '\n'
+                if (c.eg) out += '  - 例证：' + c.eg + '\n'
+              })
+              out += '\n'
+            })
+            out += '## 二、编码片段\n\n'
+            sortedCodes().forEach(function (c) {
+              var list = P.anns.filter(function (a) {
+                return a.code === c.id
+              })
+              if (!list.length) return
+              out += '### ' + c.no + '　' + c.name + '\n\n'
+              list.forEach(function (a) {
+                var d = docById(a.doc)
+                out +=
+                  '- ' +
+                  a.quote +
+                  '\n  - 出处：' +
+                  (d ? d.title : '—') +
+                  '　状态：' +
+                  (a.status === 'review' ? '待复核' : '已确认') +
+                  '　' +
+                  a.ts +
+                  '\n'
+                if (a.memo) out += '  - 备注：' + a.memo + '\n'
+              })
+              out += '\n'
+            })
+            if (P.memos.length) {
+              out += '## 三、备忘录\n\n'
+              P.memos.forEach(function (m) {
+                out += '### ' + m.title + '（' + m.type + '）\n\n' + (m.body || '') + '\n\n'
+              })
+            }
+            download('zenmark-report.md', out, 'text/markdown;charset=utf-8')
+            notify('已导出编码报告')
+          },
+          csv: function () {
+            var rows = [
+              [
+                '片段ID',
+                '材料',
+                '体裁',
+                '起始',
+                '结束',
+                '原文',
+                '码号编号',
+                '码号名称',
+                '编码层级',
+                '上级码',
+                '状态',
+                '备注',
+                '时间',
+              ],
+            ]
+            P.anns.forEach(function (a) {
+              var c = codeById(a.code)
+              var d = docById(a.doc)
+              var pc = c && c.parent ? codeById(c.parent) : null
+              rows.push([
+                a.id,
+                d ? d.title : '',
+                d ? d.type : '',
+                a.start,
+                a.end,
+                a.quote,
+                c ? c.no : '',
+                c ? c.name : '',
+                c ? LVNAME[c.level] : '',
+                pc ? pc.no + ' ' + pc.name : '',
+                a.status === 'review' ? '待复核' : '已确认',
+                a.memo || '',
+                a.ts,
+              ])
+            })
+            var csv = rows
+              .map(function (r) {
+                return r
+                  .map(function (v) {
+                    return '"' + String(v).replace(/"/g, '""') + '"'
+                  })
+                  .join(',')
+              })
+              .join('\r\n')
+            download('zenmark-coding-sheet.csv', '\ufeff' + csv, 'text/csv;charset=utf-8')
+            notify('已导出编码表')
+          },
+          quotes: function () {
+            var out = P.title + '\n' + '导出时间：' + nowStr() + '\n\n'
+            sortedCodes().forEach(function (c) {
+              var list = P.anns.filter(function (a) {
+                return a.code === c.id
+              })
+              if (!list.length) return
+              out += '【' + c.no + '　' + c.name + '】' + (c.def ? '　' + c.def : '') + '\n'
+              list.forEach(function (a) {
+                var d = docById(a.doc)
+                out += '　· ' + a.quote + '　—— ' + (d ? d.title : '—') + '\n'
+                if (a.memo) out += '　　备注：' + a.memo + '\n'
+              })
+              out += '\n'
+            })
+            download('zenmark-quotes.txt', out)
+            notify('已导出引用清单')
+          },
+        }
+
+        function importFiles(files) {
+          var arr = Array.prototype.slice.call(files)
+          if (!arr.length) return
+          var rest = []
+          arr.forEach(function (f) {
+            if (/\.json$/i.test(f.name)) rest.push(f)
+          })
+          var texts = arr.filter(function (f) {
+            return !/\.json$/i.test(f.name)
+          })
+          var done = 0
+          function finish() {
+            Store.save()
+            renderAll()
+            if (done) notify('已导入 ' + done + ' 份材料')
+          }
+          texts.forEach(function (f) {
+            var fr = new FileReader()
+            fr.onload = function () {
+              P.docs.push({
+                id: uid('d'),
+                title: f.name.replace(/\.(txt|md)$/i, ''),
+                source: '',
+                type: '其他',
+                date: '',
+                note: '由文件导入：' + f.name,
+                text: String(fr.result || ''),
+              })
+              if (!S.docId) S.docId = P.docs[P.docs.length - 1].id
+              done++
+              finish()
+            }
+            fr.readAsText(f, 'utf-8')
+          })
+          if (rest.length) {
+            var fr2 = new FileReader()
+            fr2.onload = function () {
+              try {
+                var o = JSON.parse(String(fr2.result))
+                var pr = o && o.project ? o.project : o
+                if (!pr || !Array.isArray(pr.codes)) throw new Error('bad')
+                showConfirm('检测到项目备份，导入将替换当前全部数据，确定继续？', '导入').then(
+                  function (ok) {
+                    if (!ok) return finish()
+                    P.title = pr.title || P.title
+                    P.desc = pr.desc || ''
+                    P.docs = pr.docs || []
+                    P.codes = pr.codes || []
+                    P.anns = pr.anns || []
+                    P.rels = pr.rels || []
+                    P.memos = pr.memos || []
+                    S.docId = P.docs.length ? P.docs[0].id : null
+                    Store.save()
+                    renderAll()
+                    notify('项目已导入')
+                  },
+                )
+              } catch (e) {
+                notify('项目文件解析失败')
+                finish()
+              }
+            }
+            fr2.readAsText(rest[0], 'utf-8')
+          } else if (!texts.length) {
+            notify('未选择可导入的文件')
+          }
+        }
+
+        // ================================================================
+        // 11. SEARCH
+        // ================================================================
+        function renderSearch(q) {
+          var box = el('search-results')
+          srIdx = 0
+          if (!q) {
+            box.innerHTML = '<div class="sug-empty">输入关键词以检索片段</div>'
+            return
+          }
+          var k = q.toLowerCase()
+          var hits = []
+          P.anns.forEach(function (a) {
+            var c = codeById(a.code)
+            if (
+              a.quote.toLowerCase().indexOf(k) >= 0 ||
+              (a.memo || '').toLowerCase().indexOf(k) >= 0 ||
+              (c && (c.name.toLowerCase().indexOf(k) >= 0 || String(c.no).indexOf(k) >= 0))
+            )
+              hits.push({ type: 'ann', a: a, c: c })
+          })
+          P.docs.forEach(function (d) {
+            if (
+              d.title.toLowerCase().indexOf(k) >= 0 ||
+              (d.text || '').toLowerCase().indexOf(k) >= 0
+            )
+              hits.push({ type: 'doc', d: d })
+          })
+          if (!hits.length) {
+            box.innerHTML = '<div class="sug-empty">无匹配结果</div>'
+            return
+          }
+          var h = ''
+          hits.slice(0, 60).forEach(function (x, i) {
+            var hl = i === 0 ? ' hl' : ''
+            if (x.type === 'ann') {
+              h +=
+                '<div class="sr-item' +
+                hl +
+                '" data-ann="' +
+                x.a.id +
+                '"><span class="sug-key">' +
+                esc(x.c ? x.c.no : '·') +
+                '</span><span class="sug-name">' +
+                esc(x.a.quote.slice(0, 40)) +
+                '</span><span class="hint">片段</span></div>'
+            } else {
+              h +=
+                '<div class="sr-item' +
+                hl +
+                '" data-doc="' +
+                x.d.id +
+                '"><span class="sug-key">材料</span><span class="sug-name">' +
+                esc(x.d.title) +
+                '</span></div>'
+            }
+          })
+          box.innerHTML = h
+        }
+
+        function gotoAnn(id) {
+          var a = annById(id)
+          if (!a) return
+          S.docId = a.doc
+          S.selAnn = id
+          setView('annotate')
+          renderAll()
+          setTimeout(function () {
+            var node = el('paper').querySelector('.seg.on')
+            if (node && node.scrollIntoView)
+              node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }, 60)
+          renderDetail()
+        }
+
+        // ================================================================
+        // 12. UI MANAGER (menu / dropdowns / pin)
+        // ================================================================
+        var SH_TOKEN = 0
+        function softHide(elx) {
+          if (!elx || !elx.classList.contains('open')) return
+          var my = ++SH_TOKEN
+          elx._sh = my
+          elx.classList.add('closing')
+          setTimeout(function () {
+            if (elx._sh === my) elx.classList.remove('open', 'closing')
+          }, 150)
+        }
+
+        // ================================================================
+        // 12. 候选区 / 自定义选择框
+        // ================================================================
+        var sug = { host: null, items: [], idx: -1, onPick: null, keep: false }
+
+        function sugItems() {
+          return sug.items || []
+        }
+        function sugRender() {
+          var p = el('sug')
+          var items = sugItems()
+          if (!items.length) {
+            p.innerHTML = '<div class="sug-empty">无匹配项</div>'
+            return
+          }
+          p.innerHTML = items
+            .map(function (x, i) {
+              return (
+                '<div class="sug-item' +
+                (i === sug.idx ? ' hl' : '') +
+                (x.on ? ' on' : '') +
+                '" data-i="' +
+                i +
+                '">' +
+                (x.html ||
+                  '<span class="sug-name">' +
+                    esc(x.label) +
+                    '</span>' +
+                    (x.hint ? '<span class="hint">' + esc(x.hint) + '</span>' : '')) +
+                '</div>'
+              )
+            })
+            .join('')
+        }
+        function sugPaint() {
+          var p = el('sug')
+          p.querySelectorAll('.sug-item').forEach(function (n, i) {
+            n.classList.toggle('hl', i === sug.idx)
+          })
+        }
+        function sugPlace() {
+          var p = el('sug')
+          var host = sug.host
+          if (!host) return
+          var r = host.getBoundingClientRect()
+          p.style.minWidth = Math.max(160, Math.min(r.width, 460)) + 'px'
+          p.style.maxWidth = '92vw'
+          var top = r.bottom + 4
+          var h = p.offsetHeight
+          if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4)
+          p.style.top = top + 'px'
+          p.style.left = clamp(r.left, 8, Math.max(8, window.innerWidth - p.offsetWidth - 8)) + 'px'
+        }
+        function sugOpen(host, items, onPick, opts) {
+          sugClose()
+          sug.host = host
+          sug.items = items || []
+          sug.onPick = onPick || null
+          sug.keep = !!(opts && opts.keep)
+          sug.idx = -1
+          for (var i = 0; i < sug.items.length; i++)
+            if (sug.items[i].on) {
+              sug.idx = i
+              break
+            }
+          var p = el('sug')
+          p.classList.remove('inline')
+          p.classList.add('open')
+          sugRender()
+          sugPlace()
+          if (host.classList) {
+            host.classList.add('open')
+            sug._host = host
+          }
+        }
+        function sugClose() {
+          var p = el('sug')
+          if (p) {
+            p.classList.remove('open')
+            p.innerHTML = ''
+          }
+          if (sug._host) {
+            sug._host.classList.remove('open')
+            sug._host = null
+          }
+          sug.host = null
+          sug.items = []
+          sug.idx = -1
+          sug.onPick = null
+          sug.keep = false
+        }
+        function sugPick(i) {
+          var x = sugItems()[i]
+          if (!x) return
+          var cb = sug.onPick
+          var host = sug.host
+          sugClose()
+          if (cb) cb(x, host)
+        }
+        function sugMove(d) {
+          var n = sugItems().length
+          if (!n) return
+          sug.idx = (sug.idx + d + n) % n
+          if (sug.idx < -1) sug.idx = n - 1
+          sugPaint()
+          var node = el('sug').querySelector('.sug-item.hl')
+          if (node && node.scrollIntoView) node.scrollIntoView({ block: 'nearest' })
+        }
+
+        // ---- 自定义选择框 ----
+        function selVal(node) {
+          if (!node) return ''
+          return node.getAttribute('data-v') || ''
+        }
+        function selSet(node, value, items, label) {
+          if (!node) return
+          node.setAttribute('data-v', value == null ? '' : String(value))
+          node._items = items || node._items || []
+          var txt = label
+          if (txt == null) {
+            txt = '—'
+            for (var i = 0; i < node._items.length; i++)
+              if (String(node._items[i].v) === String(value)) txt = node._items[i].label
+          }
+          var v = node.querySelector('.se-v')
+          if (v) v.textContent = txt
+        }
+        function selMount(node, items, value, onChange, label) {
+          if (!node) return
+          node._items = items
+          node._onChange = onChange || null
+          selSet(node, value, items, label)
+        }
+
+        // ---- 输入框候选：码号名称 ----
+        function bindNameSug(input) {
+          if (!input) return
+          input.setAttribute('autocomplete', 'off')
+          input.setAttribute('spellcheck', 'false')
+          function paint() {
+            var q = (input.value || '').trim().toLowerCase()
+            var items = sortedCodes()
+              .filter(function (c) {
+                return !q || c.name.toLowerCase().indexOf(q) >= 0 || String(c.no).indexOf(q) >= 0
+              })
+              .slice(0, 8)
+              .map(function (c) {
+                return {
+                  v: c.id,
+                  label: c.no + ' ' + c.name,
+                  html:
+                    '<span class="sug-dot" style="--c:' +
+                    c.color +
+                    '"></span><span class="sug-name">' +
+                    esc(c.no + ' ' + c.name) +
+                    '</span><span class="hint">' +
+                    LV[c.level] +
+                    '</span>',
+                }
+              })
+            if (
+              document.activeElement !== input ||
+              !items.length ||
+              !el('modal').classList.contains('open')
+            )
+              return sugClose()
+            sugOpen(input, items, function (x) {
+              input.value = x.label.replace(/^\S+\s+/, '')
+              sugClose()
+            })
+          }
+          input.addEventListener('focus', paint)
+          input.addEventListener('input', paint)
+          input.addEventListener('blur', function () {
+            setTimeout(sugClose, 140)
+          })
+        }
+
+        var UIMgr = {
+          closeDropdowns: function () {
+            document.querySelectorAll('.dropdown.open').forEach(function (d) {
+              softHide(d)
+            })
+            document.body.classList.remove('submenu-open')
+            document.querySelectorAll('.menu-btn.active').forEach(function (b) {
+              if (['btn-annotate', 'btn-codes', 'btn-matrix', 'btn-memo'].indexOf(b.id) < 0)
+                b.classList.remove('active')
+            })
+          },
+          showDropdown: function (id, btn) {
+            var dd = el(id)
+            var wasOpen = dd.classList.contains('open')
+            UIMgr.closeDropdowns()
+            if (wasOpen) return
+            dd.classList.add('open')
+            dd._sh = null
+            var rect = btn.getBoundingClientRect()
+            var w = dd.offsetWidth || 300
+            dd.style.top = rect.bottom + 6 + 'px'
+            dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 10)) + 'px'
+            if (btn.classList.contains('menu-btn')) btn.classList.add('active')
+            document.body.classList.add('submenu-open')
+          },
+          togglePin: function () {
+            S.menuPinned = !S.menuPinned
+            Settings.apply()
+            Settings.save()
+            notify(S.menuPinned ? '菜单栏已固定' : '菜单栏已隐藏')
+          },
+        }
+
+        function updateSettingsUI() {
+          el('sv-theme').textContent = S.theme === 'dark' ? '深色' : '浅色'
+          el('sv-zoom').textContent = Math.round(S.zoom * 100) + '%'
+          el('sv-radius').textContent = String(S.radius)
+          el('sv-fontsize').textContent = S.fontSize + 'px'
+          el('sv-bodyfont').textContent = S.bodyFont + 'px'
+          el('sv-lh').textContent = Number(S.lh).toFixed(2)
+          el('sv-nums').textContent = S.showNums ? '开' : '关'
+          el('sv-def').textContent = S.showDef ? '开' : '关'
+          el('sv-statusbar').textContent = S.statusBar ? '开' : '关'
+          document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach(function (d) {
+            d.classList.toggle('active', d.getAttribute('data-bg') === S.bg)
+          })
+        }
+
+        // ================================================================
+        // 13. ACTIONS
+        // ================================================================
+        var ACTIONS = {
+          enter: function () {
+            el('splash').classList.add('fade-out')
+            setTimeout(function () {
+              el('splash').style.display = 'none'
+            }, 600)
+          },
+          viewAnnotate: function () {
+            setView('annotate')
+          },
+          viewCodes: function () {
+            setView('codes')
+          },
+          viewMatrix: function () {
+            setView('matrix')
+          },
+          viewMemo: function () {
+            setView('memo')
+          },
+          docPrev: function () {
+            stepDoc(-1)
+          },
+          docNext: function () {
+            stepDoc(1)
+          },
+          docNew: function () {
+            openDocModal(null)
+          },
+          docEdit: function () {
+            if (S.docId) openDocModal(S.docId)
+            else openDocModal(null)
+          },
+          showDocs: function (btn) {
+            UIMgr.showDropdown('dd-docs', btn)
+          },
+          codeNew: function () {
+            openCodeModal(null, pendingSel ? { name: '' } : null)
+          },
+          showCodebook: function () {
+            openCodebookModal()
+          },
+          showSearch: function (btn) {
+            if (btn) UIMgr.showDropdown('dd-search', btn)
+            el('search-input').value = ''
+            renderSearch('')
+            setTimeout(function () {
+              try {
+                el('search-input').focus()
+              } catch (e) {}
+            }, 40)
+          },
+          showStats: function () {
+            openStatsModal()
+          },
+          showExport: function (btn) {
+            UIMgr.showDropdown('dd-export', btn)
+          },
+          showSettings: function (btn) {
+            UIMgr.showDropdown('dd-settings', btn)
+          },
+          showHelp: function () {
+            openHelpModal()
+          },
+          exportJson: function () {
+            Export.json()
+          },
+          exportMd: function () {
+            Export.md()
+          },
+          exportCsv: function () {
+            Export.csv()
+          },
+          exportQuotes: function () {
+            Export.quotes()
+          },
+          importFile: function () {
+            el('file-input').click()
+          },
+          printView: function () {
+            window.print()
+          },
+          clearAll: function () {
+            showConfirm('清空将删除全部材料、码号、编码与备忘录，确定继续？', '清空').then(
+              function (ok) {
+                if (!ok) return
+                P.docs = []
+                P.codes = []
+                P.anns = []
+                P.rels = []
+                P.memos = []
+                S.docId = null
+                S.selAnn = null
+                S.activeCode = null
+                Store.save()
+                renderAll()
+                notify('项目已清空')
+              },
+            )
+          },
+          dtClose: function () {
+            S.selAnn = null
+            renderPaper()
+            renderDetail()
+          },
+          memoNew: function () {
+            openMemoModal(null)
+          },
+          modalClose: function () {
+            closeModal()
+          },
+          togglePin: function () {
+            UIMgr.togglePin()
+          },
+          settingsToggleTheme: function () {
+            S.theme = S.theme === 'dark' ? 'light' : 'dark'
+            Settings.apply()
+            Settings.save()
+          },
+          settingsToggleNums: function () {
+            S.showNums = !S.showNums
+            Settings.apply()
+            Settings.save()
+            renderPaper()
+          },
+          settingsToggleDef: function () {
+            S.showDef = !S.showDef
+            Settings.apply()
+            Settings.save()
+            renderCodes()
+          },
+          settingsToggleStatusbar: function () {
+            S.statusBar = !S.statusBar
+            Settings.apply()
+            Settings.save()
+          },
+          zoomUp: function () {
+            S.zoom = clamp(Math.round((S.zoom + 0.05) * 100) / 100, 0.7, 1.6)
+            Settings.apply()
+            Settings.save()
+          },
+          zoomDown: function () {
+            S.zoom = clamp(Math.round((S.zoom - 0.05) * 100) / 100, 0.7, 1.6)
+            Settings.apply()
+            Settings.save()
+          },
+          radiusUp: function () {
+            S.radius = clamp(S.radius + 1, 0, 12)
+            Settings.apply()
+            Settings.save()
+          },
+          radiusDown: function () {
+            S.radius = clamp(S.radius - 1, 0, 12)
+            Settings.apply()
+            Settings.save()
+          },
+          fontUp: function () {
+            S.fontSize = clamp(S.fontSize + 1, 11, 20)
+            Settings.apply()
+            Settings.save()
+          },
+          fontDown: function () {
+            S.fontSize = clamp(S.fontSize - 1, 11, 20)
+            Settings.apply()
+            Settings.save()
+          },
+          bodyFontUp: function () {
+            S.bodyFont = clamp(S.bodyFont + 1, 13, 24)
+            Settings.apply()
+            Settings.save()
+          },
+          bodyFontDown: function () {
+            S.bodyFont = clamp(S.bodyFont - 1, 13, 24)
+            Settings.apply()
+            Settings.save()
+          },
+          lhUp: function () {
+            S.lh = clamp(Math.round((S.lh + 0.05) * 100) / 100, 1.5, 2.6)
+            Settings.apply()
+            Settings.save()
+          },
+          lhDown: function () {
+            S.lh = clamp(Math.round((S.lh - 0.05) * 100) / 100, 1.5, 2.6)
+            Settings.apply()
+            Settings.save()
+          },
+          settingsResetStyles: function () {
+            S.theme = 'light'
+            S.bg = 'bg-void'
+            S.zoom = 1
+            S.radius = 0
+            S.fontSize = 13
+            S.bodyFont = 15
+            S.lh = 1.95
+            S.showNums = true
+            S.showDef = true
+            S.statusBar = true
+            Settings.apply()
+            Settings.save()
+            renderPaper()
+            notify('样式已重置')
+          },
+          mMore: function () {
+            el('m-mask').classList.add('on')
+            el('m-sheet').classList.add('on')
+          },
+          mClose: function () {
+            el('m-mask').classList.remove('on')
+            el('m-sheet').classList.remove('on')
+          },
+          mToggleMenu: function () {
+            document.body.classList.toggle('m-nav-open')
+          },
+          railLeft: function () {
+            document.body.classList.remove('rail-right')
+            document.body.classList.toggle('rail-left')
+            ACTIONS.mClose()
+          },
+          railRight: function () {
+            document.body.classList.remove('rail-left')
+            document.body.classList.toggle('rail-right')
+            ACTIONS.mClose()
+          },
+        }
+
+        function stepDoc(dir) {
+          if (!P.docs.length) return
+          var i = 0
+          for (var k = 0; k < P.docs.length; k++) if (P.docs[k].id === S.docId) i = k
+          i = (i + dir + P.docs.length) % P.docs.length
+          S.docId = P.docs[i].id
+          S.selAnn = null
+          hideSelPop()
+          renderAll()
+        }
+
+        // ================================================================
+        // 14. EVENTS
+        // ================================================================
+        function bindGlobal() {
+          document.addEventListener('click', function (e) {
+            // dropdown items
+            var sr = e.target.closest('.sr-item')
+            if (sr) {
+              UIMgr.closeDropdowns()
+              if (sr.getAttribute('data-ann')) gotoAnn(sr.getAttribute('data-ann'))
+              else if (sr.getAttribute('data-doc')) {
+                S.docId = sr.getAttribute('data-doc')
+                setView('annotate')
+                renderAll()
+              }
+              return
+            }
+            var di = e.target.closest('#doc-list-dd [data-doc]')
+            if (di) {
+              UIMgr.closeDropdowns()
+              S.docId = di.getAttribute('data-doc')
+              renderAll()
+              return
+            }
+            var docItem = e.target.closest('#doc-list [data-doc]')
+            if (docItem) {
+              S.docId = docItem.getAttribute('data-doc')
+              S.selAnn = null
+              hideSelPop()
+              document.body.classList.remove('rail-left')
+              renderAll()
+              return
+            }
+            var codeAct = e.target.closest('.code-act')
+            if (codeAct) {
+              e.stopPropagation()
+              var act = codeAct.getAttribute('data-act')
+              if (act === 'del') {
+                var cid = codeAct.getAttribute('data-code')
+                var cc = codeById(cid)
+                var n = annCount(cid)
+                showConfirm(
+                  '删除码号' +
+                    (cc ? cc.no + ' ' + cc.name : '') +
+                    '将同时移除其 ' +
+                    n +
+                    ' 条编码片段，确定删除？',
+                  '删除',
+                ).then(function (ok) {
+                  if (!ok) return
+                  P.anns = P.anns.filter(function (a) {
+                    return a.code !== cid
+                  })
+                  P.codes = P.codes.filter(function (x) {
+                    return x.id !== cid
+                  })
+                  P.codes.forEach(function (x) {
+                    if (x.parent === cid) x.parent = ''
+                  })
+                  P.rels = P.rels.filter(function (r) {
+                    return r.from !== cid && r.to !== cid
+                  })
+                  if (S.activeCode === cid) S.activeCode = null
+                  save()
+                  renderAll()
+                  notify('已删除码号')
+                })
+                return
+              }
+              openCodeModal(codeAct.getAttribute('data-code'))
+              return
+            }
+            var codeRow = e.target.closest('#code-list [data-code]')
+            if (codeRow) {
+              var id = codeRow.getAttribute('data-code')
+              S.activeCode = S.activeCode === id ? null : id
+              renderAll()
+              if (S.view !== 'annotate' && S.view !== 'codes') setView('codes')
+              return
+            }
+            var arow = e.target.closest('.a-row')
+            if (arow) {
+              gotoAnn(arow.getAttribute('data-ann'))
+              return
+            }
+            var memoCard = e.target.closest('.memo-card')
+            if (memoCard) {
+              openMemoModal(memoCard.getAttribute('data-memo'))
+              return
+            }
+            var spItem = e.target.closest('#sp-list .sug-item')
+            if (spItem) {
+              applyCode(spItem.getAttribute('data-code'))
+              return
+            }
+            var spBtn = e.target.closest('#sel-pop .sp-btn')
+            if (spBtn) {
+              var act = spBtn.getAttribute('data-act')
+              if (act === 'close') hideSelPop()
+              else if (act === 'new') {
+                var nm = el('sp-input').value.trim()
+                hideSelPop(true)
+                openCodeModal(null, { name: nm })
+              } else if (act === 'review') {
+                var list0 = codeListForPopup(el('sp-input').value.trim())
+                if (list0.length) applyCode(list0[0].id, 'review')
+                else notify('请先选择一个码号')
+              }
+              return
+            }
+            var dtAct = e.target.closest('#dt-body [data-act]')
+            if (dtAct) {
+              handleDetailAct(dtAct.getAttribute('data-act'), dtAct)
+              return
+            }
+            var seg = e.target.closest('.seg')
+            if (seg) {
+              var ids = (seg.getAttribute('data-ids') || '').split(' ')
+              var pick = ids[ids.length - 1]
+              if (pick) {
+                S.selAnn = pick
+                renderPaper()
+                renderDetail()
+              }
+              return
+            }
+            var bgDot = e.target.closest('.settings-bg-dot')
+            if (bgDot) {
+              S.bg = bgDot.getAttribute('data-bg')
+              Settings.apply()
+              Settings.save()
+              return
+            }
+
+            var inDD = e.target.closest('.dropdown')
+            var inPop = e.target.closest('#sel-pop')
+            var inMenu = e.target.closest('#top-menu')
+            var inModal = e.target.closest('#modal')
+            var inConfirm = e.target.closest('#custom-confirm')
+            var opener = e.target.closest(
+              '[data-action="showExport"],[data-action="showSettings"],[data-action="showSearch"],[data-action="showDocs"]',
+            )
+            if (!inDD && !inPop && !inMenu && !inModal && !inConfirm && !opener)
+              UIMgr.closeDropdowns()
+
+            var target = e.target.closest('[data-action]')
+            if (target) {
+              var name = target.getAttribute('data-action')
+              if (ACTIONS[name]) {
+                if (
+                  name === 'showExport' ||
+                  name === 'showSettings' ||
+                  name === 'showSearch' ||
+                  name === 'showDocs'
+                )
+                  ACTIONS[name](target)
+                else ACTIONS[name]()
+                return
+              }
+            }
+            if (inPop || inModal || inConfirm) return
+          })
+
+          // ---- 遮罩点击关闭弹窗 ----
+          el('modal').addEventListener('click', function (e) {
+            if (e.target === el('modal')) closeModal()
+          })
+
+          // ---- 自定义选择框 / 统一候选区 ----
+          document.addEventListener('mousedown', function (e) {
+            var se = e.target.closest('.se')
+            if (se) {
+              e.preventDefault()
+              if (sug.host === se && el('sug').classList.contains('open')) return sugClose()
+              var cur = selVal(se)
+              var items = (se._items || []).map(function (x) {
+                return {
+                  v: x.v,
+                  label: x.label,
+                  hint: x.hint,
+                  on: String(x.v) === String(cur),
+                }
+              })
+              sugOpen(se, items, function (x, host) {
+                selSet(host, x.v, host._items)
+                if (host._onChange) host._onChange(x.v)
+              })
+              return
+            }
+            if (e.target.closest('#sug')) return
+            if (el('sug').classList.contains('open')) sugClose()
+          })
+          el('sug').addEventListener('mousedown', function (e) {
+            var it = e.target.closest('.sug-item')
+            if (!it) return
+            e.preventDefault()
+            sugPick(parseInt(it.getAttribute('data-i'), 10))
+          })
+          window.addEventListener(
+            'scroll',
+            function () {
+              if (el('sug').classList.contains('open')) sugPlace()
+            },
+            true,
+          )
+          el('custom-confirm').addEventListener('click', function (e) {
+            if (e.target !== el('custom-confirm')) return
+            el('custom-confirm').classList.remove('active')
+            if (confirmResolve) confirmResolve(false)
+            confirmResolve = null
+          })
+
+          // ---- paper selection ----
+          el('paper-scroll').addEventListener('mouseup', function (e) {
+            setTimeout(function () {
+              if (e.target.closest('#sel-pop')) return
+              var o = selOffsets()
+              if (!o) return hideSelPop()
+              var sel = window.getSelection()
+              if (!sel || sel.isCollapsed) return hideSelPop()
+              var rect = sel.getRangeAt(0).getBoundingClientRect()
+              showSelPop(rect, o.s, o.e)
+            }, 10)
+          })
+          el('paper-scroll').addEventListener('mousedown', function (e) {
+            if (!e.target.closest('#sel-pop')) hideSelPop()
+          })
+
+          // ---- hover tooltip ----
+          el('paper').addEventListener('mouseover', function (e) {
+            var seg = e.target.closest('.seg')
+            var tip = el('tip')
+            if (!seg) return tip.style.setProperty('display', 'none')
+            var ids = (seg.getAttribute('data-ids') || '').split(' ')
+            var h = ''
+            ids.forEach(function (id) {
+              var a = annById(id)
+              if (!a) return
+              var c = codeById(a.code)
+              h +=
+                '<div><b>' +
+                esc(c ? c.no + ' ' + c.name : '—') +
+                '</b>' +
+                (a.status === 'review' ? ' · 待复核' : '') +
+                '</div>'
+              if (c && c.def) h += '<div>' + esc(c.def) + '</div>'
+              if (a.memo) h += '<div style="margin-top:4px">备注：' + esc(a.memo) + '</div>'
+            })
+            if (!h) return tip.style.setProperty('display', 'none')
+            tip.innerHTML = h
+            tip.style.setProperty('display', 'block')
+            var r = seg.getBoundingClientRect()
+            var tw = 280
+            tip.style.left = clamp(r.left, 8, Math.max(8, window.innerWidth - tw - 8)) + 'px'
+            var top = r.bottom + 6
+            if (top + tip.offsetHeight > window.innerHeight - 8)
+              top = Math.max(8, r.top - tip.offsetHeight - 6)
+            tip.style.top = top + 'px'
+          })
+          el('paper').addEventListener('mouseout', function () {
+            el('tip').style.setProperty('display', 'none')
+          })
+
+          // ---- sp input ----
+          el('sp-input').addEventListener('input', function () {
+            renderSpList(el('sp-input').value.trim())
+          })
+          function spMove(d) {
+            var nodes = el('sp-list').querySelectorAll('.sug-item')
+            if (!nodes.length) return
+            spIdx = (spIdx + d + nodes.length) % nodes.length
+            nodes.forEach(function (n, i) {
+              n.classList.toggle('hl', i === spIdx)
+            })
+            if (nodes[spIdx].scrollIntoView) nodes[spIdx].scrollIntoView({ block: 'nearest' })
+          }
+          el('sp-input').addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              spMove(1)
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              spMove(-1)
+            } else if (e.key === 'Enter') {
+              var q = el('sp-input').value.trim()
+              if (spFiltered[spIdx]) applyCode(spFiltered[spIdx].id)
+              else if (q) {
+                hideSelPop(true)
+                openCodeModal(null, { name: q })
+              }
+            } else if (e.key === 'Escape') {
+              hideSelPop()
+            } else if (/^[1-9]$/.test(e.key)) {
+              var i = parseInt(e.key, 10) - 1
+              if (spFiltered[i]) applyCode(spFiltered[i].id)
+            }
+            e.stopPropagation()
+          })
+
+          // ---- search ----
+          el('search-input').addEventListener('input', function () {
+            renderSearch(el('search-input').value.trim())
+          })
+          function srMove(d) {
+            var nodes = el('search-results').querySelectorAll('.sr-item')
+            if (!nodes.length) return
+            srIdx = (srIdx + d + nodes.length) % nodes.length
+            nodes.forEach(function (n, i) {
+              n.classList.toggle('hl', i === srIdx)
+            })
+            if (nodes[srIdx].scrollIntoView) nodes[srIdx].scrollIntoView({ block: 'nearest' })
+          }
+          el('search-input').addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              srMove(1)
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              srMove(-1)
+            } else if (e.key === 'Escape') {
+              UIMgr.closeDropdowns()
+            } else if (e.key === 'Enter') {
+              var f =
+                el('search-results').querySelector('.sr-item.hl') ||
+                el('search-results').querySelector('.sr-item')
+              if (f) {
+                UIMgr.closeDropdowns()
+                if (f.getAttribute('data-ann')) gotoAnn(f.getAttribute('data-ann'))
+                else if (f.getAttribute('data-doc')) {
+                  S.docId = f.getAttribute('data-doc')
+                  setView('annotate')
+                  renderAll()
+                }
+              }
+            }
+            e.stopPropagation()
+          })
+
+          // ---- filters ----
+          selMount(
+            el('cv-status'),
+            [
+              { v: 'all', label: '全部状态' },
+              { v: 'done', label: '已确认' },
+              { v: 'review', label: '待复核' },
+            ],
+            'all',
+            function () {
+              renderCodesView()
+            },
+          )
+          selMount(
+            el('cv-level'),
+            [
+              { v: 'all', label: '全部层级' },
+              { v: 'open', label: '开放式编码', hint: 'OPEN' },
+              { v: 'axial', label: '轴心式编码', hint: 'AXIAL' },
+              { v: 'selective', label: '选择式编码', hint: 'CORE' },
+            ],
+            'all',
+            function () {
+              renderCodesView()
+            },
+          )
+          document.querySelectorAll('.mt-item[data-mview]').forEach(function (b) {
+            b.addEventListener('click', function () {
+              setView(b.getAttribute('data-mview'))
+            })
+          })
+
+          // ---- confirm ----
+          el('confirm-ok').addEventListener('click', function () {
+            el('custom-confirm').classList.remove('active')
+            if (confirmResolve) confirmResolve(true)
+            confirmResolve = null
+          })
+          el('confirm-cancel').addEventListener('click', function () {
+            el('custom-confirm').classList.remove('active')
+            if (confirmResolve) confirmResolve(false)
+            confirmResolve = null
+          })
+
+          // ---- file ----
+          el('file-input').addEventListener('change', function (e) {
+            importFiles(e.target.files)
+            e.target.value = ''
+          })
+
+          // ---- keyboard ----
+          document.addEventListener('keydown', function (e) {
+            if (el('sug').classList.contains('open')) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                sugMove(1)
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                sugMove(-1)
+                return
+              }
+              if (e.key === 'Enter' && sug.idx >= 0) {
+                e.preventDefault()
+                sugPick(sug.idx)
+                return
+              }
+              if (e.key === 'Tab') {
+                sugClose()
+              }
+              if (e.key === 'Escape') {
+                sugClose()
+                return
+              }
+            }
+            if (e.key === 'Escape') {
+              if (el('modal').classList.contains('open')) return closeModal()
+              if (el('sel-pop').classList.contains('open')) return hideSelPop()
+              UIMgr.closeDropdowns()
+              return
+            }
+            var tag = (e.target.tagName || '').toLowerCase()
+            var typing = tag === 'input' || tag === 'textarea' || tag === 'select'
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+              e.preventDefault()
+              ACTIONS.showSearch(el('top-menu').querySelector('[data-action="showSearch"]'))
+              return
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+              e.preventDefault()
+              Export.json()
+              return
+            }
+            if (typing) return
+            if (e.altKey && e.key === 'ArrowLeft') {
+              e.preventDefault()
+              stepDoc(-1)
+            } else if (e.altKey && e.key === 'ArrowRight') {
+              e.preventDefault()
+              stepDoc(1)
+            }
+          })
+
+          window.addEventListener('resize', function () {
+            hideSelPop()
+            sugClose()
+          })
+        }
+
+        function handleDetailAct(act, node) {
+          var a = annById(S.selAnn)
+          if (!a) return
+          if (act === 'del') {
+            showConfirm('删除该编码片段？', '删除').then(function (ok) {
+              if (!ok) return
+              P.anns = P.anns.filter(function (x) {
+                return x.id !== a.id
+              })
+              P.rels = P.rels.filter(function (r) {
+                return r.a !== a.id && r.b !== a.id
+              })
+              S.selAnn = null
+              Store.save()
+              renderAll()
+              notify('片段已删除')
+            })
+          } else if (act === 'status') {
+            a.status = a.status === 'review' ? 'done' : 'review'
+            Store.save()
+            renderAll()
+            notify(a.status === 'review' ? '已标记为待复核' : '已标记为已确认')
+          } else if (act === 'goto') {
+            gotoAnn(a.id)
+          } else if (act === 'relate') {
+            openRelateModal(a.id)
+          } else if (act === 'code') {
+            openPickCodeModal(a)
+          } else if (act === 'unrel') {
+            var rid = node.getAttribute('data-rel')
+            P.rels = P.rels.filter(function (r) {
+              return r.id !== rid
+            })
+            Store.save()
+            renderDetail()
+            notify('关联已解除')
+          }
+        }
+
+        function openPickCodeModal(a) {
+          var h =
+            '<div class="fm-row"><div class="fm-f"><div id="f-list" class="sug inline" style="max-height:320px">'
+          sortedCodes().forEach(function (c) {
+            h +=
+              '<div class="sug-item' +
+              (a.code === c.id ? ' on' : '') +
+              '" data-code="' +
+              c.id +
+              '"><span class="sug-dot" style="--c:' +
+              c.color +
+              '"></span><span class="sug-name">' +
+              esc(c.no + ' ' + c.name) +
+              '</span><span class="hint">' +
+              LV[c.level] +
+              '</span></div>'
+          })
+          h +=
+            '</div></div></div><div class="fm-foot"><button type="button" class="fm-sub ghost" id="f-cancel">取消</button></div>'
+          openModal('更换码号', h, null)
+          el('f-cancel').addEventListener('click', closeModal)
+          el('f-list').addEventListener('click', function (e) {
+            var t = e.target.closest('[data-code]')
+            if (!t) return
+            a.code = t.getAttribute('data-code')
+            Store.save()
+            closeModal()
+            renderAll()
+            notify('码号已更换')
+          })
+        }
+
+        // ================================================================
+        // 15. INIT
+        // ================================================================
+        function init() {
+          Settings.load()
+          if (!Store.load()) seed()
+          if (!S.docId && P.docs.length) S.docId = P.docs[0].id
+          Settings.apply()
+          setView(S.view || 'annotate')
+          renderAll()
+          bindGlobal()
+        }
+
+        init()
+      })()
+    </script>
+  </body>
+</html>
