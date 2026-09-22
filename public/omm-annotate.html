@@ -3280,38 +3280,7 @@
           </div>
           <div class="zp-cloud-hidden" id="zp-sql-panel">
             <div class="zp-cloud-label" style="margin-bottom: 6px">SQL 编辑器</div>
-            <textarea id="zp-sql-box" readonly spellcheck="false">
-create table if not exists public.zenplan_sync (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  payload text not null,
-  client_updated_at bigint not null,
-  updated_at timestamptz not null default now()
-);
-
-alter table public.zenplan_sync enable row level security;
-grant select, insert, update, delete on public.zenplan_sync to authenticated;
-revoke all on public.zenplan_sync from anon;
-
-drop policy if exists "zenplan_select_own" on public.zenplan_sync;
-drop policy if exists "zenplan_insert_own" on public.zenplan_sync;
-drop policy if exists "zenplan_update_own" on public.zenplan_sync;
-drop policy if exists "zenplan_delete_own" on public.zenplan_sync;
-
-create policy "zenplan_select_own" on public.zenplan_sync for select to authenticated using (auth.uid() = user_id);
-create policy "zenplan_insert_own" on public.zenplan_sync for insert to authenticated with check (auth.uid() = user_id);
-create policy "zenplan_update_own" on public.zenplan_sync for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "zenplan_delete_own" on public.zenplan_sync for delete to authenticated using (auth.uid() = user_id);
-
-alter table public.zenplan_sync replica identity full;
-do $$
-begin
-  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='zenplan_sync') then
-    alter publication supabase_realtime add table public.zenplan_sync;
-  end if;
-end $$;
-
-notify pgrst, 'reload schema';</textarea
-            >
+            <textarea id="zp-sql-box" readonly spellcheck="false"></textarea>
             <div class="zp-cloud-actions">
               <button class="zp-cloud-btn primary" id="zp-copy-sql" type="button">复制 SQL</button
               ><button class="zp-cloud-btn" id="zp-back-config" type="button">返回设置</button>
@@ -6464,7 +6433,12 @@ notify pgrst, 'reload schema';</textarea
           META_KEY = 'zencode-sync-meta-v1',
           DATA_KEY = 'zencode.project.v1',
           SETTINGS_KEY = 'zencode.settings.v1',
-          TABLE = 'zenplan_sync'
+          // 表名按应用隔离：本应用（ZenCode 标注工作台）独占下面这张表。
+          // 切勿改成 zenplan_sync / zendata_sync / zencanvas_sync / zenglish_sync 等
+          // 其它应用的表名，否则会覆盖它们的数据。改这里即可，建表 SQL 会自动同步。
+          APP_ID = 'omm-annotate',
+          TABLE = 'omm_annotate_sync',
+          POLICY = 'omm_annotate'
         var POLL_MS = 2500,
           PUSH_DEBOUNCE = 1200
         var sb = null,
@@ -7113,9 +7087,118 @@ notify pgrst, 'reload schema';</textarea
           var b = E('zp-sync-btn')
           if (b && typeof b.focus === 'function') b.focus()
         }
+        // 建表 SQL 由表名常量实时生成，保证「代码实际读写表」与「让用户执行的 SQL」永远一致
+        function buildSql() {
+          var t = 'public.' + TABLE,
+            sel = POLICY + '_select_own',
+            ins = POLICY + '_insert_own',
+            upd = POLICY + '_update_own',
+            del = POLICY + '_delete_own'
+          return (
+            '-- =====================================================================\n' +
+            '-- 应用：ZenCode 标注工作台（' +
+            APP_ID +
+            '）\n' +
+            '-- 表名：' +
+            t +
+            '\n' +
+            '--\n' +
+            '-- 重要：表名按应用隔离。本应用只会读写 ' +
+            t +
+            '，不会触碰\n' +
+            '--        zenplan_sync / zendata_sync / zencanvas_sync / zenglish_sync 等\n' +
+            '--        其它应用的表；也请不要把多个应用指向同一张表，否则会互相覆盖。\n' +
+            '-- 说明：每个登录用户一行，payload 存放整包数据的 JSON 文本。\n' +
+            '-- =====================================================================\n' +
+            '\n' +
+            'create table if not exists ' +
+            t +
+            ' (\n' +
+            '  user_id           uuid primary key references auth.users(id) on delete cascade,\n' +
+            '  payload           text not null,\n' +
+            '  client_updated_at bigint not null,\n' +
+            '  updated_at        timestamptz not null default now()\n' +
+            ');\n' +
+            '\n' +
+            'alter table ' +
+            t +
+            ' enable row level security;\n' +
+            'grant select, insert, update, delete on ' +
+            t +
+            ' to authenticated;\n' +
+            'revoke all on ' +
+            t +
+            ' from anon;\n' +
+            '\n' +
+            'drop policy if exists "' +
+            sel +
+            '" on ' +
+            t +
+            ';\n' +
+            'drop policy if exists "' +
+            ins +
+            '" on ' +
+            t +
+            ';\n' +
+            'drop policy if exists "' +
+            upd +
+            '" on ' +
+            t +
+            ';\n' +
+            'drop policy if exists "' +
+            del +
+            '" on ' +
+            t +
+            ';\n' +
+            '\n' +
+            'create policy "' +
+            sel +
+            '" on ' +
+            t +
+            ' for select to authenticated using (auth.uid() = user_id);\n' +
+            'create policy "' +
+            ins +
+            '" on ' +
+            t +
+            ' for insert to authenticated with check (auth.uid() = user_id);\n' +
+            'create policy "' +
+            upd +
+            '" on ' +
+            t +
+            ' for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);\n' +
+            'create policy "' +
+            del +
+            '" on ' +
+            t +
+            ' for delete to authenticated using (auth.uid() = user_id);\n' +
+            '\n' +
+            'comment on table ' +
+            t +
+            " is 'ZenCode 标注工作台（" +
+            APP_ID +
+            "）云同步数据，每用户一行';\n" +
+            '\n' +
+            'alter table ' +
+            t +
+            ' replica identity full;\n' +
+            'do $$\n' +
+            'begin\n' +
+            "  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = '" +
+            TABLE +
+            "') then\n" +
+            '    alter publication supabase_realtime add table ' +
+            t +
+            ';\n' +
+            '  end if;\n' +
+            'end $$;\n' +
+            '\n' +
+            "notify pgrst, 'reload schema';\n"
+          )
+        }
         function autosizeSql() {
           var x = E('zp-sql-box')
           if (!x) return
+          if (!x.value) x.value = buildSql()
           x.style.height = 'auto'
           x.style.height = x.scrollHeight + 'px'
         }
