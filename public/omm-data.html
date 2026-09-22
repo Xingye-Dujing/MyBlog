@@ -3523,6 +3523,7 @@ notify pgrst, 'reload schema';</textarea
         var CONFIG = {
           LS_DOC: 'zendata.v1.doc',
           LS_SET: 'zendata.v1.settings',
+          LS_SEED: 'zendata.v1.seed',
           BASE_FONT: 13,
           MIN_ZOOM: 0.7,
           MAX_ZOOM: 1.6,
@@ -3619,6 +3620,7 @@ notify pgrst, 'reload schema';</textarea
             'sync.autoSynced': '已自动同步到云端：{0}',
             'sync.cloudOverwritten': '已用云端数据覆盖本地：{0}',
             'sync.localPushed': '已把本地数据同步到云端',
+            'sync.localPushedDirty': '检测到本地有未上传的内容，已把本地内容同步到云端',
             'sync.cloudEmptyPush': '云端还没有数据，已上传本地数据',
             'sync.signOut': '退出登录',
             'sync.syncNow': '从云端同步',
@@ -3963,6 +3965,8 @@ notify pgrst, 'reload schema';</textarea
             'sync.autoSynced': 'Auto synced to cloud: {0}',
             'sync.cloudOverwritten': 'Local data overwritten by cloud: {0}',
             'sync.localPushed': 'Local data synced to the cloud',
+            'sync.localPushedDirty':
+              'Local content had not been uploaded; local content has been synced to the cloud',
             'sync.cloudEmptyPush': 'The cloud was empty. Local data has been uploaded',
             'sync.signOut': 'Sign out',
             'sync.syncNow': 'PULL FROM CLOUD',
@@ -4533,6 +4537,10 @@ notify pgrst, 'reload schema';</textarea
             this.tables = [st]
             this.activeId = st.id
             this.persist()
+            /* 记录“本机内容仍只是自动生成的示例表”，云同步据此判断本机是否为空白设备 */
+            try {
+              localStorage.setItem(CONFIG.LS_SEED, '1')
+            } catch (e) {}
           },
           persist: function () {
             try {
@@ -6565,6 +6573,10 @@ notify pgrst, 'reload schema';</textarea
         function afterChange() {
           if (S.filter.on) recomputeFilter(true)
           if (S.find && S.find.q) computeFind()
+          /* 本机已产生真实改动，示例数据标记失效（云同步据此认为本机内容需要上传） */
+          try {
+            localStorage.removeItem(CONFIG.LS_SEED)
+          } catch (e) {}
           Store.persist()
           renderAll()
         }
@@ -10641,6 +10653,9 @@ notify pgrst, 'reload schema';</textarea
           META_KEY = 'zendata-sync-meta-v1',
           DATA_KEY = 'zendata.v1.doc',
           SET_KEY = 'zendata.v1.settings',
+          /* 主程序在“本地无数据、自动灌入示例表”时写入的标记；
+             它存在 => 本机从未产生过真实内容，可以安全采用云端数据 */
+          SEED_KEY = 'zendata.v1.seed',
           TABLE = 'zendata_sync'
         var POLL_MS = 2500,
           PUSH_DEBOUNCE = 1200
@@ -10852,10 +10867,22 @@ notify pgrst, 'reload schema';</textarea
           setMsg('sync.syncing')
           try {
             var r = await remote(),
-              localTs = Number(meta().updatedAt || 0)
+              m = meta(),
+              h = dataHash(),
+              syncedHash = typeof m.syncedHash === 'string' ? m.syncedHash : '',
+              localTs = Number(m.updatedAt || 0),
+              /* 本地相对“上次成功同步”是否有改动；从未同步过一律视为有改动 */
+              localDirty = syncedHash ? syncedHash !== h : true,
+              /* 从未同步过、且本机只有自动灌入的示例表 => 空白设备，可直接采用云端内容 */
+              pristine = !syncedHash && !!localStorage.getItem(SEED_KEY)
             if (!r) {
               await push()
               setMsg('sync.cloudEmptyPush')
+            } else if (localDirty && !pristine) {
+              /* 本机有未上传的内容：内容优先，上传本地并覆盖云端
+                 （与开启云同步时提示的“本地改动会覆盖云端”一致，避免本地内容被悄悄丢弃） */
+              await push()
+              setMsg('sync.localPushedDirty')
             } else if (Number(r.client_updated_at || 0) > localTs) {
               await pullQuiet(r)
               setMsg('sync.cloudOverwritten', new Date(state.lastCloudTs).toLocaleString())
@@ -10940,7 +10967,12 @@ notify pgrst, 'reload schema';</textarea
         }
         function mark(ts) {
           try {
-            localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
+            /* syncedHash 记录“最近一次成功同步所对应的本地内容指纹”，
+               用来判断本地是否还有未上传的改动（不能只看时间戳） */
+            localStorage.setItem(
+              META_KEY,
+              JSON.stringify({ updatedAt: ts || now(), syncedHash: dataHash() }),
+            )
           } catch (_) {}
         }
         function localData() {
