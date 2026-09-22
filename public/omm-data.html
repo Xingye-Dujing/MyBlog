@@ -1905,6 +1905,9 @@
       .ic {
         display: inline-flex;
       }
+      #zp-sync-label {
+        margin-left: 8px;
+      }
       @media (min-width: 721px) {
         #m-nav,
         #m-tabs,
@@ -2070,6 +2073,522 @@
         }
       }
     </style>
+
+    <style id="zp-cloud-sync-style">
+      #zp-cloud-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(5px);
+      }
+      #zp-cloud-modal.open {
+        display: flex;
+      }
+      #zp-cloud-card {
+        width: 460px;
+        max-width: calc(100vw - 28px);
+        max-height: calc(100vh - 32px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+      }
+      .zp-cloud-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-faint);
+        flex: 0 0 auto;
+      }
+      .zp-cloud-title {
+        font-size: calc(12px * var(--fscale));
+        letter-spacing: 2px;
+        font-weight: 500;
+        min-width: 0;
+      }
+      .zp-cloud-close {
+        width: 28px;
+        height: 28px;
+        flex: 0 0 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-dim);
+        cursor: pointer;
+        font: inherit;
+        border-radius: var(--radius);
+        padding: 0;
+      }
+      .zp-cloud-close:hover {
+        border-color: var(--border-dim);
+        color: var(--text);
+      }
+      .zp-cloud-body {
+        padding: 16px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        min-height: 0;
+      }
+      .zp-cloud-status {
+        padding: 9px 10px;
+        border: 1px solid var(--border-faint);
+        color: var(--text-dim);
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.5;
+        border-radius: var(--radius);
+      }
+      .zp-cloud-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 12px;
+        min-width: 0;
+      }
+      .zp-cloud-label {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+      }
+      .zp-cloud-input {
+        width: 100%;
+        max-width: 100%;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border-dim);
+        padding: 8px 9px;
+        outline: none;
+        font: inherit;
+        border-radius: var(--radius);
+        min-height: 36px;
+      }
+      .zp-cloud-input:focus {
+        border-color: var(--text);
+      }
+      .zp-cloud-help {
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.55;
+        color: var(--text-faint);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .zp-cloud-note {
+        margin-top: 12px;
+        padding: 9px 10px;
+        border-left: 2px solid var(--text);
+        background: var(--hover);
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-dim);
+        border-radius: var(--radius) !important;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .zp-cloud-note strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .zp-cloud-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        min-width: 0;
+      }
+      .zp-cloud-actions-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .zp-cloud-btn {
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        background: transparent;
+        color: var(--text-dim);
+        border: 1px solid var(--border-dim);
+        cursor: pointer;
+        font: inherit;
+        border-radius: var(--radius);
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .zp-cloud-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .zp-cloud-btn.primary {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .zp-cloud-btn.danger:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+      .zp-cloud-hidden {
+        display: none !important;
+      }
+
+      .zp-remember {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-top: 8px;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.55;
+        color: var(--text-dim);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .zp-remember:hover {
+        color: var(--text);
+      }
+      .zp-remember input {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .zp-cbox {
+        width: 14px;
+        height: 14px;
+        margin-top: 2px;
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.15s ease;
+      }
+      .zp-cbox svg {
+        width: 9px;
+        height: 9px;
+        display: block;
+        fill: none;
+        stroke: var(--accent-green);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .zp-remember input:checked + .zp-cbox svg {
+        opacity: 1;
+      }
+      /* 同步策略 */
+      .zp-autosync {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 9px 10px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+      }
+      .zp-autosync-main {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .zp-autosync-title {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        line-height: 1.45;
+      }
+      .zp-autosync-desc {
+        margin-top: 3px;
+        font-size: calc(9px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-faint);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .zp-autosync-btn {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 30px;
+        padding: 6px 10px;
+        background: transparent;
+        color: var(--text-dim);
+        border: 1px solid var(--border-dim);
+        cursor: pointer;
+        font: inherit;
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.4;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .zp-autosync-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .zp-autosync-btn.on {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .zp-as-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-faint);
+        flex: 0 0 auto;
+        display: inline-block;
+      }
+      .zp-autosync-btn.on .zp-as-dot {
+        background: var(--accent-green);
+      }
+      /* 开启云同步前的警告 */
+      .zp-warn-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 13000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(5px);
+        box-sizing: border-box;
+      }
+      .zp-warn-modal.open {
+        display: flex;
+      }
+      .zp-warn-card {
+        width: 400px;
+        max-width: calc(100vw - 28px);
+        max-height: calc(100vh - 40px);
+        overflow: auto;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+        padding: 16px;
+        box-sizing: border-box;
+      }
+      .zp-warn-title {
+        font-size: calc(12px * var(--fscale));
+        letter-spacing: 1.6px;
+        font-weight: 500;
+        line-height: 1.5;
+      }
+      .zp-warn-body {
+        margin-top: 10px;
+        padding: 10px;
+        border-left: 2px solid var(--accent-red);
+        background: var(--hover);
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-dim);
+        border-radius: var(--radius);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .zp-warn-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .zp-sync-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-faint);
+        display: inline-block;
+        flex: 0 0 auto;
+      }
+      .zp-online .zp-sync-dot {
+        background: var(--accent-green);
+      }
+      .zp-busy .zp-sync-dot {
+        animation: zpSyncPulse 1s ease-in-out infinite;
+      }
+      @keyframes zpSyncPulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.8);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+      }
+      #zp-sql-box {
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        overflow: hidden;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border-dim);
+        padding: 9px;
+        font: inherit;
+        line-height: 1.55;
+        resize: none;
+        border-radius: var(--radius);
+        user-select: none;
+        cursor: default;
+        display: block;
+        box-sizing: border-box;
+        scrollbar-width: none;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      #zp-sql-box::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+      .zp-cloud-input,
+      .zp-cloud-btn,
+      .zp-cloud-close,
+      #zp-sql-box,
+      .zp-cloud-status,
+      .zp-cloud-note {
+        border-radius: var(--radius) !important;
+      }
+      .zp-cloud-copy-status {
+        min-height: 1.2em;
+        margin-top: 7px;
+        font-size: calc(9px * var(--fscale));
+        line-height: 1.4;
+        color: var(--text-dim);
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+      .zp-cloud-copy-status.show {
+        color: var(--text);
+      }
+      #zp-cloud-modal ::selection {
+        background: rgba(136, 136, 136, 0.3);
+        color: inherit;
+      }
+      .zp-cloud-footer {
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border-faint);
+        font-size: calc(9px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-faint);
+        flex: 0 0 auto;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      @media (max-width: 720px) {
+        #zp-cloud-modal {
+          padding: 0;
+          align-items: flex-end;
+        }
+        #zp-cloud-card {
+          width: 100%;
+          max-width: none;
+          max-height: min(92vh, 760px);
+          border-radius: var(--radius) var(--radius) 0 0;
+          border-left: 0;
+          border-right: 0;
+          border-bottom: 0;
+        }
+        .zp-cloud-head {
+          padding: 13px 14px;
+        }
+        .zp-cloud-title {
+          font-size: calc(11px * var(--fscale));
+          letter-spacing: 1.5px;
+        }
+        .zp-cloud-close {
+          width: 32px;
+          height: 32px;
+          flex-basis: 32px;
+        }
+        .zp-cloud-body {
+          padding: 14px;
+          overflow-y: auto;
+        }
+        .zp-cloud-field {
+          margin-top: 10px;
+        }
+        .zp-cloud-input {
+          min-height: 40px;
+          padding: 9px 10px;
+          font-size: calc(12px * var(--fscale));
+        }
+        .zp-cloud-help {
+          line-height: 1.6;
+        }
+        .zp-cloud-note {
+          line-height: 1.65;
+          padding: 10px;
+        }
+        .zp-cloud-actions {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 8px;
+          margin-top: 10px;
+        }
+        .zp-cloud-actions-3 {
+          grid-template-columns: 1fr;
+        }
+        .zp-cloud-btn {
+          width: 100%;
+          min-height: 40px;
+          padding: 9px 11px;
+          font-size: calc(11px * var(--fscale));
+          line-height: 1.5;
+        }
+        #zp-sql-box {
+          font-size: calc(10px * var(--fscale));
+          line-height: 1.55;
+          padding: 9px;
+        }
+        .zp-cloud-copy-status {
+          margin-top: 6px;
+          font-size: calc(9px * var(--fscale));
+        }
+        .zp-cloud-footer {
+          padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+          font-size: calc(9px * var(--fscale));
+          line-height: 1.65;
+        }
+      }
+      @media (min-width: 721px) {
+        #zp-cloud-modal {
+          overscroll-behavior: contain;
+        }
+      }
+      @media (max-width: 380px) {
+        .zp-cloud-body {
+          padding: 12px;
+        }
+        .zp-cloud-head {
+          padding: 12px;
+        }
+        .zp-cloud-footer {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+      }
+    </style>
   </head>
   <body class="bg-void">
     <!-- ===== Splash ===== -->
@@ -2125,6 +2644,19 @@
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.settings">设置</span>
         <div class="menu-btn" data-action="showSettings" data-i18n="menu.style"></div>
+      </div>
+      <div class="menu-group" id="zp-sync-group">
+        <span class="menu-label" data-i18n="menu.sync">同步</span>
+        <div
+          class="menu-btn"
+          id="zp-sync-btn"
+          role="button"
+          tabindex="0"
+          data-i18n-title="sync.openTitle"
+          title="Supabase 云同步"
+        >
+          <span class="zp-sync-dot"></span><span id="zp-sync-label">未配置</span>
+        </div>
       </div>
       <div
         class="pin-btn pinned"
@@ -2679,9 +3211,305 @@
         <button type="button" class="ms-item" data-action="showSettings">
           <span class="ic" data-ico="gear"></span><span data-i18n="menu.style">样式</span>
         </button>
+        <button type="button" class="ms-item" data-action="cloudSync">
+          <span class="ic" data-ico="cloud"></span><span data-i18n="menu.sync">同步</span>
+        </button>
         <button type="button" class="ms-item danger" data-action="clClearData">
           <span class="ic" data-ico="trash"></span><span data-i18n="cl.clear">清空</span>
         </button>
+      </div>
+    </div>
+
+    <!-- ===== Cloud Sync Modal ===== -->
+    <div id="zp-cloud-modal" aria-hidden="true" inert>
+      <div id="zp-cloud-card" role="dialog" aria-modal="true" aria-labelledby="zp-cloud-title">
+        <div class="zp-cloud-head">
+          <div class="zp-cloud-title" id="zp-cloud-title" data-i18n="sync.title">云同步</div>
+          <button
+            class="zp-cloud-close"
+            id="zp-cloud-close"
+            type="button"
+            data-i18n-title="sync.close"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <div class="zp-cloud-body">
+          <div class="zp-cloud-status" id="zp-cloud-status" data-i18n="sync.notConfigured">
+            未配置 Supabase
+          </div>
+          <div id="zp-config-panel">
+            <div class="zp-cloud-field">
+              <div class="zp-cloud-label" data-i18n="sync.projectUrl">Project URL</div>
+              <input
+                class="zp-cloud-input"
+                id="zp-sb-url"
+                type="url"
+                autocomplete="off"
+                spellcheck="false"
+                data-i18n-placeholder="sync.urlPlaceholder"
+                placeholder="https://xxxx.supabase.co"
+              />
+            </div>
+            <div class="zp-cloud-field">
+              <div class="zp-cloud-label" data-i18n="sync.publishableKey">Publishable Key</div>
+              <input
+                class="zp-cloud-input"
+                id="zp-sb-key"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                data-i18n-placeholder="sync.keyPlaceholder"
+                placeholder="sb_publishable_..."
+              />
+              <div class="zp-cloud-help" data-i18n="sync.keyHelp">
+                只填 Supabase Publishable key，不要把 service_role / secret key 放进页面
+              </div>
+            </div>
+            <div class="zp-cloud-field">
+              <div class="zp-cloud-label" data-i18n="sync.authEmail">Auth 邮箱</div>
+              <input
+                class="zp-cloud-input"
+                id="zp-auth-email-config"
+                type="email"
+                autocomplete="off"
+                spellcheck="false"
+                data-i18n-placeholder="sync.emailPlaceholder"
+                placeholder="your@email.com"
+              />
+              <div class="zp-cloud-help" data-i18n="sync.authEmailHelp">
+                只保存邮箱地址用于登录；密码仅在勾选“记住密码”后保存到本机
+              </div>
+            </div>
+            <div class="zp-cloud-note">
+              <strong data-i18n="sync.accountGuideTitle">账号与密码</strong><br /><span
+                data-i18n="sync.accountGuide"
+                >这个页面不提供注册请先登录 Supabase Dashboard，在 Authentication → Users 中创建一个
+                Auth 用户，然后使用该用户的邮箱和密码登录本应用</span
+              >
+            </div>
+            <div class="zp-cloud-actions">
+              <button
+                class="zp-cloud-btn primary"
+                id="zp-save-config"
+                type="button"
+                data-i18n="sync.saveConfig"
+              >
+                保存连接设置</button
+              ><button
+                class="zp-cloud-btn"
+                id="zp-open-dashboard"
+                type="button"
+                data-i18n="sync.openDashboard"
+              >
+                打开 Supabase Dashboard
+              </button>
+            </div>
+            <div class="zp-cloud-actions">
+              <button class="zp-cloud-btn" id="zp-open-sql" type="button" data-i18n="sync.viewSql">
+                查看建表 SQL
+              </button>
+            </div>
+          </div>
+          <div id="zp-auth-panel" class="zp-cloud-hidden">
+            <div class="zp-cloud-note">
+              <strong data-i18n="sync.loginGuideTitle">登录与同步</strong><br /><span
+                data-i18n="sync.loginGuide"
+                >登录时无需再次输入账号，账号邮箱来自连接设置，下面只需要输入密码</span
+              >
+            </div>
+            <div class="zp-cloud-field">
+              <div class="zp-cloud-label" data-i18n="sync.password">密码</div>
+              <input
+                class="zp-cloud-input"
+                id="zp-password"
+                type="password"
+                autocomplete="current-password"
+                spellcheck="false"
+                data-i18n-placeholder="sync.passwordPlaceholder"
+                placeholder="Supabase 登录密码"
+              />
+              <div class="zp-cloud-help" data-i18n="sync.passwordHelp">
+                密码用于 Supabase Auth 验证和客户端 AES 解密。勾选“记住密码”后只存在本机浏览器的
+                LocalStorage 里，不会上传到云端
+              </div>
+              <label class="zp-remember" for="zp-remember-pw">
+                <input type="checkbox" id="zp-remember-pw" />
+                <span class="zp-cbox" aria-hidden="true"
+                  ><svg viewBox="0 0 12 12"><polyline points="1.6,6.4 4.4,9.2 10.4,2.9" /></svg
+                ></span>
+                <span data-i18n="sync.rememberPw"
+                  >记住密码（下次打开页面自动登录，无需再次输入）</span
+                >
+              </label>
+            </div>
+
+            <div class="zp-autosync">
+              <div class="zp-autosync-main">
+                <div class="zp-autosync-title" data-i18n="sync.syncStrategy">同步策略</div>
+                <div class="zp-autosync-desc" id="zp-autosync-desc">
+                  手动同步：只在点击同步按钮时与云端交换数据
+                </div>
+              </div>
+              <button
+                class="zp-autosync-btn"
+                id="zp-autosync-btn"
+                type="button"
+                aria-pressed="false"
+              >
+                <span class="zp-as-dot"></span><span id="zp-autosync-text">手动同步</span>
+              </button>
+            </div>
+            <div class="zp-cloud-actions zp-cloud-actions-3">
+              <button
+                class="zp-cloud-btn primary"
+                id="zp-login-only"
+                type="button"
+                data-i18n="sync.loginOnly"
+              >
+                登录
+              </button>
+              <button
+                class="zp-cloud-btn"
+                id="zp-login-pull"
+                type="button"
+                data-i18n="sync.loginAndPull"
+              >
+                登录并从云端同步
+              </button>
+              <button
+                class="zp-cloud-btn"
+                id="zp-login-push"
+                type="button"
+                data-i18n="sync.loginAndPush"
+              >
+                登录并上传本地
+              </button>
+            </div>
+            <div class="zp-cloud-actions">
+              <button
+                class="zp-cloud-btn"
+                id="zp-open-sql-auth"
+                type="button"
+                data-i18n="sync.viewSql"
+              >
+                查看建表 SQL
+              </button>
+              <button
+                class="zp-cloud-btn danger"
+                id="zp-signout"
+                type="button"
+                data-i18n="sync.signOut"
+              >
+                退出登录
+              </button>
+            </div>
+            <div class="zp-cloud-actions zp-cloud-hidden" id="zp-sync-actions">
+              <button class="zp-cloud-btn" id="zp-sync-now" type="button" data-i18n="sync.syncNow">
+                从云端同步</button
+              ><button
+                class="zp-cloud-btn"
+                id="zp-upload-now"
+                type="button"
+                data-i18n="sync.uploadNow"
+              >
+                上传本地</button
+              ><button class="zp-cloud-btn" id="zp-lock" type="button" data-i18n="sync.lock">
+                锁定数据
+              </button>
+            </div>
+          </div>
+          <div class="zp-cloud-hidden" id="zp-sql-panel">
+            <div class="zp-cloud-label" style="margin-bottom: 6px" data-i18n="sync.sqlEditor">
+              SQL 编辑器
+            </div>
+            <textarea id="zp-sql-box" readonly spellcheck="false">
+create table if not exists public.zendata_sync (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload text not null,
+  client_updated_at bigint not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.zendata_sync enable row level security;
+grant select, insert, update, delete on public.zendata_sync to authenticated;
+revoke all on public.zendata_sync from anon;
+
+drop policy if exists "zendata_select_own" on public.zendata_sync;
+drop policy if exists "zendata_insert_own" on public.zendata_sync;
+drop policy if exists "zendata_update_own" on public.zendata_sync;
+drop policy if exists "zendata_delete_own" on public.zendata_sync;
+
+create policy "zendata_select_own" on public.zendata_sync for select to authenticated using (auth.uid() = user_id);
+create policy "zendata_insert_own" on public.zendata_sync for insert to authenticated with check (auth.uid() = user_id);
+create policy "zendata_update_own" on public.zendata_sync for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "zendata_delete_own" on public.zendata_sync for delete to authenticated using (auth.uid() = user_id);
+
+alter table public.zendata_sync replica identity full;
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='zendata_sync') then
+    alter publication supabase_realtime add table public.zendata_sync;
+  end if;
+end $$;
+
+notify pgrst, 'reload schema';</textarea
+            >
+            <div class="zp-cloud-actions">
+              <button
+                class="zp-cloud-btn primary"
+                id="zp-copy-sql"
+                type="button"
+                data-i18n="sync.copySql"
+              >
+                复制 SQL</button
+              ><button
+                class="zp-cloud-btn"
+                id="zp-back-config"
+                type="button"
+                data-i18n="sync.backConfig"
+              >
+                返回设置
+              </button>
+            </div>
+            <div class="zp-cloud-copy-status" id="zp-sql-copy-status" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="zp-cloud-footer" data-i18n="sync.footer">
+          Supabase Auth 负责身份验证，RLS 负责用户隔离；数据表内容上传前在浏览器端使用 AES-GCM
+          加密。应用只使用 Publishable key，不需要 service_role / secret key
+        </div>
+      </div>
+    </div>
+
+    <div id="zp-warn-modal" class="zp-warn-modal" aria-hidden="true">
+      <div class="zp-warn-card" role="dialog" aria-modal="true" aria-labelledby="zp-warn-title">
+        <div class="zp-warn-title" id="zp-warn-title" data-i18n="sync.warnTitle">
+          开启云同步前请注意
+        </div>
+        <div class="zp-warn-body" id="zp-warn-body" data-i18n="sync.warnBody">
+          开启后，本页的任何改动都会立刻写入云端并覆盖此前保存的云端数据。<br />
+          云端不会保留任何历史记录的备份，误删除、误改动都无法回滚，并且会立刻影响到所有登录同一账号的设备。
+        </div>
+        <div class="zp-warn-actions">
+          <button
+            class="zp-cloud-btn"
+            id="zp-warn-cancel"
+            type="button"
+            data-i18n="sync.warnCancel"
+          >
+            取消
+          </button>
+          <button
+            class="zp-cloud-btn primary"
+            id="zp-warn-ok"
+            type="button"
+            data-i18n="sync.warnOk"
+          >
+            我已了解，开启
+          </button>
+        </div>
       </div>
     </div>
 
@@ -2729,6 +3557,121 @@
             'menu.textIn': '文本',
             'menu.settings': '设置',
             'menu.style': '样式',
+            'menu.sync': '同步',
+            'sync.openTitle': 'Supabase 云同步',
+            'sync.title': '云同步',
+            'sync.close': '关闭',
+            'sync.projectUrl': 'PROJECT URL',
+            'sync.publishableKey': 'PUBLISHABLE KEY',
+            'sync.authEmail': 'AUTH 邮箱',
+            'sync.authEmailHelp': '只保存邮箱地址用于登录；密码仅在勾选“记住密码”后保存到本机',
+            'sync.keyHelp':
+              '只填 Supabase Publishable key，不要把 service_role / secret key 放进页面',
+            'sync.saveConfig': '保存连接设置',
+            'sync.openDashboard': '打开 Supabase Dashboard',
+            'sync.viewSql': '查看建表 SQL',
+            'sync.accountGuideTitle': '账号与密码',
+            'sync.loginGuideTitle': '登录与同步',
+            'sync.loginGuide': '登录时无需再次输入账号，账号邮箱来自连接设置，下面只需要输入密码',
+            'sync.authEmailMissing': '请先在连接设置中填写 Auth 邮箱',
+            'sync.loggedInReady': '已登录，可手动选择同步方向',
+            'sync.fromCloudDone': '已从云端同步到本地',
+            'sync.toCloudDone': '已将本地数据上传到云端',
+            'sync.uploadNow': '上传本地',
+            'sync.unlock': '解锁',
+            'sync.unlockAndPull': '解锁并从云端同步',
+            'sync.unlockAndPush': '解锁并上传本地',
+            'sync.accountGuide':
+              '这个页面不提供注册。请先登录 Supabase Dashboard，在 Authentication → Users 中创建一个 Auth 用户，然后使用该用户的邮箱和密码登录本应用',
+            'sync.accountGuideShort':
+              '本页面不提供注册。请使用 Supabase Authentication → Users 中已有的 Auth 用户登录',
+            'sync.login': '登录',
+            'sync.loginOnly': '登录',
+            'sync.loginAndPull': '登录并从云端同步',
+            'sync.loginAndPush': '登录并上传本地',
+            'sync.email': '邮箱',
+            'sync.password': '密码',
+            'sync.urlPlaceholder': 'https://xxxx.supabase.co',
+            'sync.keyPlaceholder': 'sb_publishable_...',
+            'sync.emailPlaceholder': 'your@email.com',
+            'sync.passwordPlaceholder': 'Supabase 登录密码',
+            'sync.passwordHelp':
+              '密码用于 Supabase Auth 验证和客户端 AES 解密。勾选“记住密码”后只存在本机浏览器的 LocalStorage 里，不会上传到云端',
+            'sync.rememberPw': '记住密码（下次打开页面自动登录，无需再次输入）',
+            'sync.syncStrategy': '同步策略',
+            'sync.modeManual': '手动同步',
+            'sync.modeAuto': '立即同步',
+            'sync.modeManualDesc': '手动同步：只在点击同步按钮时与云端交换数据',
+            'sync.modeAutoDesc': '立即同步：打开页面自动对齐云端，本地一有改动立刻上传并覆盖云端',
+            'sync.warnTitle': '开启云同步前请注意',
+            'sync.warnBody':
+              '开启后，本页的任何改动都会立刻写入云端并覆盖此前保存的云端数据。<br />云端不会保留任何历史记录的备份，误删除、误改动都无法回滚，并且会立刻影响到所有登录同一账号的设备。',
+            'sync.warnOk': '我已了解，开启',
+            'sync.warnCancel': '取消',
+            'sync.modeManualOn': '已切换为手动同步',
+            'sync.modeAutoOn': '已开启立即同步，本地改动会立刻写入云端',
+            'sync.rememberOn': '已记住密码，下次打开页面自动登录',
+            'sync.rememberOff': '已取消记住密码，本机不再保存密码',
+            'sync.cancelled': '已取消，未与云端交换数据',
+            'sync.autoLoginFailed': '自动登录失败，请手动输入密码',
+            'sync.autoLoginReady': '已自动登录，当前为手动同步',
+            'sync.lockedCleared': '已锁定数据，并清除了本机保存的密码',
+            'sync.autoSynced': '已自动同步到云端：{0}',
+            'sync.cloudOverwritten': '已用云端数据覆盖本地：{0}',
+            'sync.localPushed': '已把本地数据同步到云端',
+            'sync.cloudEmptyPush': '云端还没有数据，已上传本地数据',
+            'sync.signOut': '退出登录',
+            'sync.syncNow': '从云端同步',
+            'sync.lock': '锁定数据',
+            'sync.copySql': '复制 SQL',
+            'sync.sqlCopiedInline': 'SQL 已复制',
+            'sync.copyFailed': '复制失败',
+            'sync.backConfig': '返回设置',
+            'sync.sqlEditor': 'SQL 编辑器',
+            'sync.footer':
+              'Supabase Auth 负责身份验证，RLS 负责用户隔离；数据表内容上传前在浏览器端使用 AES-GCM 加密。应用只使用 Publishable key，不需要 service_role / secret key',
+            'sync.notConfigured': '未配置 Supabase',
+            'sync.unconfiguredLabel': '未配置',
+            'sync.offlineLabel': '离线',
+            'sync.signInLabel': '未登录',
+            'sync.signedIn': '已登录',
+            'sync.loggedInLocked': '已登录，数据已锁定',
+            'sync.loggedInUnlocked': '已登录，数据已解锁',
+            'sync.synced': '已同步',
+            'sync.syncing': '同步中',
+            'sync.errorLabel': '错误',
+            'sync.connectFirst': '请先保存 Supabase 连接设置',
+            'sync.savedConnected': 'Supabase 连接设置已保存',
+            'sync.saveFailed': '保存连接设置失败：{0}',
+            'sync.loginRequired': '请先登录',
+            'sync.passwordRequired': '请输入密码',
+            'sync.emailPasswordRequired': '请输入邮箱和密码',
+            'sync.invalidLogin':
+              '邮箱或密码不正确，请确认该邮箱已在 Authentication → Users 中创建为 Auth 用户',
+            'sync.emailNotConfirmed': '该邮箱尚未确认，请先在 Supabase Auth 中完成邮箱确认',
+            'sync.networkFailed': '网络请求失败，请检查网络或 Supabase 项目是否可访问',
+            'sync.localWriteFailed': '本机存储写入失败，请清理浏览器存储空间或退出无痕模式后重试',
+            'sync.unknownError': '操作失败，请重试或查看浏览器控制台日志',
+            'sync.operationFailed': '操作失败：{0}',
+            'sync.tableMissing':
+              '云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次',
+            'sync.noLocalData': '没有可同步的本地数据',
+            'sync.cloudEmpty': '云端还没有数据',
+            'sync.sdkFailed': 'Supabase SDK 加载失败',
+            'sync.sdkNetworkFailed': 'Supabase SDK 加载失败，请检查网络',
+            'sync.unsupportedFormat': '云端数据格式不支持',
+            'sync.unlockRequired': '请先解锁云数据',
+            'sync.decryptFailed': '云端数据解密失败，请确认密码正确',
+            'sync.syncFailed': '同步失败：{0}',
+            'sync.syncComplete': '同步完成：{0}',
+            'sync.alreadyLatest': '数据已是最新',
+            'sync.otherDevice': '已收到其他设备的最新数据',
+            'sync.connectedToast': '云同步已连接',
+            'sync.loggedOut': '已退出登录',
+            'sync.locked': '云数据已锁定',
+            'sync.sqlCopied': 'SQL 已复制',
+            'sync.errConfig': '请填写合法的 Project URL（https:// 开头）和 Publishable Key',
+            'sync.openDashboardFailed': '无法打开 Dashboard，请手动访问 supabase.com/dashboard',
             'pin.title': '固定菜单栏',
             'sheet.add': '新建表',
             'confirm.cancel': '取消',
@@ -2954,6 +3897,131 @@
             'menu.textIn': 'Text',
             'menu.settings': 'Settings',
             'menu.style': 'Style',
+            'menu.sync': 'Sync',
+            'sync.openTitle': 'Supabase Cloud Sync',
+            'sync.title': 'Cloud Sync',
+            'sync.close': 'Close',
+            'sync.projectUrl': 'PROJECT URL',
+            'sync.publishableKey': 'PUBLISHABLE KEY',
+            'sync.authEmail': 'AUTH EMAIL',
+            'sync.authEmailHelp':
+              'Only the email is saved for sign-in; the password is stored on this device only when "Remember password" is checked',
+            'sync.keyHelp':
+              'Use only the Supabase Publishable key. Never put a service_role or secret key in this page.',
+            'sync.saveConfig': 'SAVE CONNECTION',
+            'sync.openDashboard': 'OPEN SUPABASE DASHBOARD',
+            'sync.viewSql': 'VIEW SQL',
+            'sync.accountGuideTitle': 'Account & password',
+            'sync.loginGuideTitle': 'Sign in & sync',
+            'sync.loginGuide':
+              'You do not need to re-enter the account when signing in; it comes from the connection settings. Only the password is required below.',
+            'sync.authEmailMissing': 'Enter the Auth email in the connection settings first',
+            'sync.loggedInReady': 'Signed in. Choose a sync direction manually',
+            'sync.fromCloudDone': 'Downloaded cloud data to this device',
+            'sync.toCloudDone': 'Uploaded local data to the cloud',
+            'sync.uploadNow': 'UPLOAD LOCAL',
+            'sync.unlock': 'UNLOCK',
+            'sync.unlockAndPull': 'UNLOCK & PULL',
+            'sync.unlockAndPush': 'UNLOCK & PUSH',
+            'sync.accountGuide':
+              'This page does not provide sign-up. Log in to the Supabase Dashboard, create an Auth user under Authentication → Users, then use that user’s email and password here.',
+            'sync.accountGuideShort':
+              'This page has no sign-up. Use an existing Auth user from Supabase Authentication → Users.',
+            'sync.login': 'Sign in',
+            'sync.loginOnly': 'SIGN IN',
+            'sync.loginAndPull': 'SIGN IN & PULL',
+            'sync.loginAndPush': 'SIGN IN & PUSH',
+            'sync.email': 'Email',
+            'sync.password': 'Password',
+            'sync.urlPlaceholder': 'https://xxxx.supabase.co',
+            'sync.keyPlaceholder': 'sb_publishable_...',
+            'sync.emailPlaceholder': 'your@email.com',
+            'sync.passwordPlaceholder': 'Supabase account password',
+            'sync.passwordHelp':
+              'Your password is used for Supabase Auth verification and client-side AES decryption. When "Remember password" is checked it stays only in this browser LocalStorage and is never uploaded to the cloud.',
+            'sync.rememberPw': 'Remember password (auto sign-in next time)',
+            'sync.syncStrategy': 'Sync strategy',
+            'sync.modeManual': 'Manual sync',
+            'sync.modeAuto': 'Instant sync',
+            'sync.modeManualDesc':
+              'Manual sync: exchange data with the cloud only when the sync button is clicked',
+            'sync.modeAutoDesc':
+              'Instant sync: align with the cloud on load and upload local changes immediately, overwriting the cloud copy',
+            'sync.warnTitle': 'Before enabling cloud sync',
+            'sync.warnBody':
+              'Once enabled, any change on this page is written to the cloud immediately and overwrites the previously saved cloud data.<br />The cloud keeps no backup history; mistakes cannot be rolled back and will immediately affect every device signed in to the same account.',
+            'sync.warnOk': 'I UNDERSTAND, ENABLE',
+            'sync.warnCancel': 'Cancel',
+            'sync.modeManualOn': 'Switched to manual sync',
+            'sync.modeAutoOn': 'Instant sync is on. Local changes are uploaded immediately',
+            'sync.rememberOn': 'Password remembered. You will be signed in automatically next time',
+            'sync.rememberOff': 'Password forgotten. It is no longer stored on this device',
+            'sync.cancelled': 'Cancelled. No data was exchanged with the cloud',
+            'sync.autoLoginFailed': 'Auto sign-in failed. Enter your password manually',
+            'sync.autoLoginReady': 'Signed in automatically. Manual sync is active',
+            'sync.lockedCleared': 'Data locked and the locally saved password was cleared',
+            'sync.autoSynced': 'Auto synced to cloud: {0}',
+            'sync.cloudOverwritten': 'Local data overwritten by cloud: {0}',
+            'sync.localPushed': 'Local data synced to the cloud',
+            'sync.cloudEmptyPush': 'The cloud was empty. Local data has been uploaded',
+            'sync.signOut': 'Sign out',
+            'sync.syncNow': 'PULL FROM CLOUD',
+            'sync.lock': 'LOCK DATA',
+            'sync.copySql': 'COPY SQL',
+            'sync.sqlCopiedInline': 'SQL copied',
+            'sync.copyFailed': 'Copy failed',
+            'sync.backConfig': 'BACK',
+            'sync.sqlEditor': 'SQL editor',
+            'sync.footer':
+              'Supabase Auth handles identity and RLS isolates users; table content is encrypted in the browser with AES-GCM before upload. Only the Publishable key is used in this page.',
+            'sync.notConfigured': 'Supabase is not configured',
+            'sync.unconfiguredLabel': 'Not configured',
+            'sync.offlineLabel': 'Offline',
+            'sync.signInLabel': 'Not signed in',
+            'sync.signedIn': 'Signed in',
+            'sync.loggedInLocked': 'Signed in, data locked',
+            'sync.loggedInUnlocked': 'Signed in, data unlocked',
+            'sync.synced': 'Synced',
+            'sync.syncing': 'Syncing',
+            'sync.errorLabel': 'Error',
+            'sync.connectFirst': 'Save your Supabase connection settings first',
+            'sync.savedConnected': 'Supabase connection settings saved',
+            'sync.saveFailed': 'Failed to save connection settings: {0}',
+            'sync.loginRequired': 'Please sign in first',
+            'sync.passwordRequired': 'Please enter your password',
+            'sync.emailPasswordRequired': 'Enter email and password',
+            'sync.invalidLogin':
+              'Incorrect email or password. Make sure this email exists as an Auth user under Authentication → Users.',
+            'sync.emailNotConfirmed':
+              'This email has not been confirmed yet. Complete email confirmation in Supabase Auth first.',
+            'sync.networkFailed':
+              'The network request failed. Check your connection and whether the Supabase project is reachable',
+            'sync.localWriteFailed':
+              'Local storage write failed. Free up browser storage or exit private mode and retry',
+            'sync.unknownError': 'Operation failed. Retry or check the browser console',
+            'sync.operationFailed': 'Operation failed: {0}',
+            'sync.tableMissing':
+              'The sync table does not exist yet. Open “VIEW SQL” and run it once in the Supabase SQL Editor',
+            'sync.noLocalData': 'No local data to sync',
+            'sync.cloudEmpty': 'The cloud has no data yet',
+            'sync.sdkFailed': 'Failed to load the Supabase SDK.',
+            'sync.sdkNetworkFailed':
+              'Failed to load the Supabase SDK. Check your network connection.',
+            'sync.unsupportedFormat': 'Unsupported cloud data format',
+            'sync.unlockRequired': 'Unlock cloud data first',
+            'sync.decryptFailed': 'Cloud data decryption failed. Make sure the password is correct',
+            'sync.syncFailed': 'Sync failed: {0}',
+            'sync.syncComplete': 'Sync complete: {0}',
+            'sync.alreadyLatest': 'Data is already up to date',
+            'sync.otherDevice': 'Received the latest data from another device',
+            'sync.connectedToast': 'Cloud sync connected',
+            'sync.loggedOut': 'Signed out',
+            'sync.locked': 'Cloud data locked',
+            'sync.sqlCopied': 'SQL copied',
+            'sync.errConfig':
+              'Enter a valid Project URL (starting with https://) and a Publishable Key',
+            'sync.openDashboardFailed':
+              'Could not open the Dashboard. Visit supabase.com/dashboard manually.',
             'pin.title': 'Pin menu bar',
             'sheet.add': 'New table',
             'confirm.cancel': 'Cancel',
@@ -3199,8 +4267,20 @@
         }
         function T(k) {
           var d = STR[S.lang] || STR.zh
-          if (d[k] !== undefined) return d[k]
-          return STR.zh[k] !== undefined ? STR.zh[k] : k
+          var s = d[k] !== undefined ? d[k] : STR.zh[k] !== undefined ? STR.zh[k] : k
+          /* 支持 {0} / {1} / ... 占位符插值（云同步等模块会传参） */
+          for (var i = 1; i < arguments.length; i++)
+            s = String(s).replace('{' + (i - 1) + '}', arguments[i])
+          return s
+        }
+        /* 供独立的云同步脚本访问 i18n */
+        window.ZDI18n = {
+          t: function () {
+            return T.apply(null, arguments)
+          },
+          getLang: function () {
+            return S.lang
+          },
         }
         function uid() {
           return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4)
@@ -3234,6 +4314,8 @@
             n.classList.remove('show')
           }, CONFIG.NOTIFY_DURATION)
         }
+        /* 供独立的云同步脚本弹出提示 */
+        window.ZDNotify = notify
 
         function showConfirm(msg, okText, danger) {
           return new Promise(function (resolve) {
@@ -3403,6 +4485,9 @@
           $$('[data-i18n-placeholder]').forEach(function (el) {
             el.placeholder = T(el.dataset.i18nPlaceholder)
           })
+          /* 云同步弹窗内有动态文案与富文本，需在通用本地化之后单独刷新 */
+          if (window.ZDCloudSync && typeof window.ZDCloudSync.refreshI18n === 'function')
+            window.ZDCloudSync.refreshI18n()
         }
 
         /* ============================================================
@@ -8640,6 +9725,10 @@
             DOM.mMask.classList.remove('open')
             DOM.mSheet.classList.remove('open')
           },
+          cloudSync: function () {
+            if (window.ZDCloudSync && typeof window.ZDCloudSync.open === 'function')
+              window.ZDCloudSync.open()
+          },
         }
 
         function renderHist() {
@@ -8873,6 +9962,22 @@
           'settingsToggleStatusbar',
           'settingsToggleLang',
         ]
+
+        /* 复制 / 粘贴的落点若在输入框、文本域、可编辑区或浮层（云同步弹窗）内，
+           应交给浏览器原生处理，不能劫持给网格。返回 true 表示网格可以接管。 */
+        function gridOwnsClipboard(el) {
+          if (!el) return true
+          if (el === DOM.cellEditor) return true
+          var tag = (el.tagName || '').toLowerCase()
+          if (tag === 'input' || tag === 'textarea' || tag === 'select') return false
+          if (el.isContentEditable) return false
+          if (el.closest && el.closest('#zp-cloud-modal, #zp-warn-modal')) return false
+          return true
+        }
+        /* 焦点在云同步弹窗内时不响应应用级快捷键，由弹窗与浏览器自行处理 */
+        function inCloudModal(el) {
+          return !!(el && el.closest && el.closest('#zp-cloud-modal, #zp-warn-modal'))
+        }
 
         function bind() {
           DOM.splash = document.getElementById('splash')
@@ -9369,6 +10474,9 @@
 
           /* keyboard */
           document.addEventListener('keydown', function (e) {
+            /* 焦点在云同步弹窗内：交给弹窗自身的键位（Esc 关闭、Enter 登录）与浏览器处理，
+               避免方向键 / Ctrl+Z / Ctrl+F / 输入被网格逻辑劫持 */
+            if (inCloudModal(e.target)) return
             var tag = (e.target.tagName || '').toLowerCase()
             var typing = tag === 'input' || tag === 'textarea' || tag === 'select'
             if (e.key === 'Escape') {
@@ -9422,6 +10530,7 @@
           /* clipboard */
           document.addEventListener('copy', function (e) {
             if (S.view !== 'grid' || S.editing) return
+            if (!gridOwnsClipboard(e.target)) return
             if (document.activeElement === DOM.cellEditor) return
             var txt = selToText('\t')
             if (!txt) return
@@ -9430,6 +10539,7 @@
           })
           document.addEventListener('paste', function (e) {
             if (S.view !== 'grid' || S.editing) return
+            if (!gridOwnsClipboard(e.target)) return
             var txt = (e.clipboardData || window.clipboardData).getData('text')
             if (!txt) return
             e.preventDefault()
@@ -9490,6 +10600,8 @@
           gear: '<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>',
           trash:
             '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+          cloud:
+            '<path d="M17.5 19H7a4.5 4.5 0 0 1-.6-8.96A5.5 5.5 0 0 1 17 9.2a4.9 4.9 0 0 1 .5 9.8z"/>',
         }
         function injectIcons() {
           $$('.ic[data-ico]').forEach(function (el) {
@@ -9518,6 +10630,994 @@
 
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
         else init()
+      })()
+    </script>
+
+    <script id="zp-cloud-sync-script">
+      ;(function () {
+        'use strict'
+        var SUPABASE_CDN = 'https://cdn.jsdmirror.com/npm/@supabase/supabase-js@2',
+          CFG_KEY = 'zendata-supabase-config-v1',
+          META_KEY = 'zendata-sync-meta-v1',
+          DATA_KEY = 'zendata.v1.doc',
+          SET_KEY = 'zendata.v1.settings',
+          TABLE = 'zendata_sync'
+        var POLL_MS = 2500,
+          PUSH_DEBOUNCE = 1200
+        var sb = null,
+          session = null,
+          unlockPassword = '',
+          autoSyncOn = false,
+          syncing = false,
+          authing = false,
+          lastHash = '',
+          pollTimer = null,
+          pushTimer = null,
+          state = { statusKey: 'sync.unconfiguredLabel', busy: false, lastCloudTs: 0 }
+        function E(id) {
+          return document.getElementById(id)
+        }
+
+        function prefs() {
+          var c = cfg()
+          return {
+            remember: !!c.remember,
+            autoSync: !!c.autoSync,
+            warnAck: !!c.warnAck,
+            password: typeof c.password === 'string' ? c.password : '',
+          }
+        }
+        function patchCfg(part) {
+          var c = cfg()
+          Object.keys(part).forEach(function (k) {
+            if (part[k] === undefined) delete c[k]
+            else c[k] = part[k]
+          })
+          try {
+            localStorage.setItem(CFG_KEY, JSON.stringify(c))
+          } catch (_) {}
+          return cfg()
+        }
+        function savePrefs(next) {
+          var p = prefs(),
+            remember = next.remember !== undefined ? !!next.remember : p.remember,
+            pw = next.password !== undefined ? next.password : p.password
+          return patchCfg({
+            remember: remember,
+            autoSync: next.autoSync !== undefined ? !!next.autoSync : p.autoSync,
+            warnAck: next.warnAck !== undefined ? !!next.warnAck : p.warnAck,
+            password: remember ? pw : undefined,
+          })
+        }
+        function syncPrefsUI() {
+          var p = prefs(),
+            cb = E('zp-remember-pw')
+          if (cb) cb.checked = p.remember
+          var b = E('zp-autosync-btn')
+          if (b) {
+            b.classList.toggle('on', p.autoSync)
+            b.setAttribute('aria-pressed', p.autoSync ? 'true' : 'false')
+            if (E('zp-autosync-text'))
+              E('zp-autosync-text').textContent = tr(
+                p.autoSync ? 'sync.modeAuto' : 'sync.modeManual',
+              )
+            if (E('zp-autosync-desc'))
+              E('zp-autosync-desc').textContent = tr(
+                p.autoSync ? 'sync.modeAutoDesc' : 'sync.modeManualDesc',
+              )
+          }
+        }
+        function openWarn(onOk, onCancel) {
+          var m = E('zp-warn-modal'),
+            ok = E('zp-warn-ok'),
+            cc = E('zp-warn-cancel')
+          if (!m || !ok || !cc) {
+            if (onOk) onOk()
+            return
+          }
+          function done(confirmed) {
+            m.classList.remove('open')
+            m.setAttribute('aria-hidden', 'true')
+            ok.onclick = null
+            cc.onclick = null
+            m.onclick = null
+            if (!confirmed && onCancel) onCancel()
+          }
+          m.onclick = function (e) {
+            if (e.target === m) done(false)
+          }
+          cc.onclick = function () {
+            done(false)
+          }
+          ok.onclick = function () {
+            done(true)
+            if (onOk) onOk()
+          }
+          m.classList.add('open')
+          m.setAttribute('aria-hidden', 'false')
+          setTimeout(function () {
+            try {
+              ok.focus()
+            } catch (_) {}
+          }, 0)
+        }
+        function ensureWarnAck() {
+          return new Promise(function (ok) {
+            var p = prefs()
+            if (!p.autoSync || p.warnAck) return ok(true)
+            openWarn(
+              function () {
+                savePrefs({ warnAck: true })
+                ok(true)
+              },
+              function () {
+                ok(false)
+              },
+            )
+          })
+        }
+        function toggleAutoSync() {
+          var p = prefs()
+          if (p.autoSync) {
+            savePrefs({ autoSync: false, warnAck: false })
+            autoSyncOn = false
+            stopWatcher()
+            syncPrefsUI()
+            setMsg('sync.modeManualOn')
+            return
+          }
+          openWarn(function () {
+            savePrefs({ autoSync: true, warnAck: true })
+            autoSyncOn = true
+            syncPrefsUI()
+            startWatcher()
+            setMsg('sync.modeAutoOn')
+            if (session && unlockPassword) autoResolve()
+          })
+        }
+        // 直接写状态文本（不覆盖 state.statusKey 的常规状态显示）
+        function setMsg(key) {
+          state.statusKey = key
+          var v = tr.apply(null, arguments)
+          if (E('zp-cloud-status')) E('zp-cloud-status').textContent = v
+          var lbl = E('zp-sync-label')
+          if (lbl) lbl.textContent = v
+        }
+        function dataHash() {
+          var s = ''
+          try {
+            s = (localStorage.getItem(DATA_KEY) || '') + '|' + (localStorage.getItem(SET_KEY) || '')
+          } catch (_) {}
+          var h = 5381
+          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+          return s.length + ':' + h
+        }
+        function stopWatcher() {
+          if (pollTimer) clearInterval(pollTimer)
+          pollTimer = null
+          if (pushTimer) clearTimeout(pushTimer)
+          pushTimer = null
+        }
+        function startWatcher() {
+          stopWatcher()
+          lastHash = dataHash()
+          pollTimer = setInterval(function () {
+            if (!autoSyncOn || !session || !unlockPassword || syncing) return
+            var h = dataHash()
+            if (h === lastHash) return
+            lastHash = h
+            if (pushTimer) clearTimeout(pushTimer)
+            pushTimer = setTimeout(function () {
+              pushTimer = null
+              if (autoSyncOn && session && unlockPassword && !syncing) autoPush()
+            }, PUSH_DEBOUNCE)
+          }, POLL_MS)
+        }
+        async function autoPush() {
+          if (syncing || !session || !unlockPassword) return
+          syncing = true
+          try {
+            await push()
+            setMsg('sync.autoSynced', new Date().toLocaleTimeString())
+          } catch (e) {
+            setMsg(friendly(e))
+          } finally {
+            syncing = false
+            lastHash = dataHash()
+          }
+        }
+        async function pullQuiet(r) {
+          var d = await dec(r.payload, unlockPassword)
+          writeLocal(d)
+          state.lastCloudTs = Number(r.client_updated_at || 0)
+          reloadOnce()
+        }
+        // 后台自动同步时静默载入云端数据，用 sessionStorage 防止反复刷新
+        function reloadOnce() {
+          try {
+            var k = 'zendata-auto-pull-at',
+              last = Number(sessionStorage.getItem(k) || 0)
+            if (Date.now() - last > 15000) {
+              sessionStorage.setItem(k, String(Date.now()))
+              setTimeout(function () {
+                location.reload()
+              }, 250)
+            }
+          } catch (_) {}
+        }
+        async function autoResolve() {
+          if (!session || !unlockPassword || syncing) return
+          syncing = true
+          busy(true)
+          setMsg('sync.syncing')
+          try {
+            var r = await remote(),
+              localTs = Number(meta().updatedAt || 0)
+            if (!r) {
+              await push()
+              setMsg('sync.cloudEmptyPush')
+            } else if (Number(r.client_updated_at || 0) > localTs) {
+              await pullQuiet(r)
+              setMsg('sync.cloudOverwritten', new Date(state.lastCloudTs).toLocaleString())
+            } else {
+              await push()
+              setMsg('sync.localPushed')
+            }
+            labelKey('sync.synced', true)
+          } catch (e) {
+            setMsg(friendly(e))
+            console.warn('[ZenData Sync] auto resolve failed', e)
+          } finally {
+            syncing = false
+            busy(false)
+            lastHash = dataHash()
+          }
+        }
+        function tr(key) {
+          var args = [].slice.call(arguments, 1)
+          try {
+            if (window.ZDI18n && typeof window.ZDI18n.t === 'function')
+              return window.ZDI18n.t.apply(null, [key].concat(args))
+          } catch (_) {}
+          return key
+        }
+        function cfg() {
+          try {
+            return JSON.parse(localStorage.getItem(CFG_KEY) || '{}')
+          } catch (_) {
+            return {}
+          }
+        }
+        function statusKey(k) {
+          state.statusKey = k
+          var v = tr(k)
+          var e = E('zp-cloud-status')
+          if (e) e.textContent = v
+        }
+
+        function setStatusText(v) {
+          var e = E('zp-cloud-status')
+          if (e) e.textContent = v
+        }
+
+        function toggleCls(id, cls, on) {
+          var e = E(id)
+          if (e) e.classList.toggle(cls, !!on)
+        }
+        function setText(id, v) {
+          var e = E(id)
+          if (e) e.textContent = v
+        }
+        function labelKey(k, on) {
+          state.statusKey = k
+          var e = E('zp-sync-label')
+          if (e) e.textContent = tr(k)
+          var b = E('zp-sync-btn')
+          if (b) b.classList.toggle('zp-online', !!on)
+        }
+        function busy(v) {
+          state.busy = !!v
+          var b = E('zp-sync-btn')
+          if (b) b.classList.toggle('zp-busy', !!v)
+        }
+        function toast(m) {
+          try {
+            if (window.ZDNotify) window.ZDNotify(m)
+            else console.log(m)
+          } catch (_) {
+            console.log(m)
+          }
+        }
+        function now() {
+          return Date.now()
+        }
+        function meta() {
+          try {
+            return JSON.parse(localStorage.getItem(META_KEY) || '{}')
+          } catch (_) {
+            return {}
+          }
+        }
+        function mark(ts) {
+          try {
+            localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
+          } catch (_) {}
+        }
+        function localData() {
+          var r = localStorage.getItem(DATA_KEY)
+          if (!r) throw new Error(tr('sync.noLocalData'))
+          var d = JSON.parse(r)
+          try {
+            var sr = localStorage.getItem(SET_KEY)
+            d.settings = sr ? JSON.parse(sr) : {}
+          } catch (_) {
+            d.settings = {}
+          }
+          return d
+        }
+        function emptyData(d) {
+          return !d || !Array.isArray(d.tables) || !d.tables.length
+        }
+        function mergeData(a, b) {
+          if (!a) return b
+          if (!b) return a
+          var o = JSON.parse(JSON.stringify(b))
+          o.tables = o.tables || []
+          ;(a.tables || []).forEach(function (t) {
+            if (
+              !o.tables.some(function (x) {
+                return x.id === t.id
+              })
+            )
+              o.tables.push(t)
+          })
+          if (!o.activeId && a.activeId) o.activeId = a.activeId
+          return o
+        }
+        function isTableMissing(err) {
+          return !!(
+            err &&
+            (err.code === 'PGRST205' ||
+              /schema cache|Could not find the table/i.test(err.message || ''))
+          )
+        }
+        function friendly(err) {
+          var m =
+            ((err && err.name ? err.name + ' ' : '') + ((err && err.message) || '')).trim() ||
+            String(err || '')
+          if (isTableMissing(err)) return tr('sync.tableMissing')
+          if (/Invalid login credentials/i.test(m)) return tr('sync.invalidLogin')
+          if (/Email not confirmed/i.test(m)) return tr('sync.emailNotConfirmed')
+          if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return tr('sync.networkFailed')
+          if (/decrypt|OperationError|InvalidStateError/i.test(m)) return tr('sync.decryptFailed')
+          if (/JSON|Unexpected token|is not valid JSON/i.test(m)) return tr('sync.decryptFailed')
+          return /^\[object /.test(m) ? tr('sync.unknownError') : m || tr('sync.unknownError')
+        }
+        var libPromise = null
+        function ensureLib() {
+          if (window.supabase && window.supabase.createClient) return Promise.resolve()
+
+          if (libPromise) return libPromise
+          libPromise = new Promise(function (ok, no) {
+            var s = document.createElement('script')
+            s.src = SUPABASE_CDN
+            s.async = true
+            s.onload = function () {
+              if (window.supabase && window.supabase.createClient) return ok()
+              libPromise = null
+              no(new Error(tr('sync.sdkFailed')))
+            }
+            s.onerror = function () {
+              libPromise = null
+              no(new Error(tr('sync.sdkNetworkFailed')))
+            }
+            document.head.appendChild(s)
+          })
+          return libPromise
+        }
+        async function connect() {
+          var c = cfg()
+          if (!c.url || !c.key) throw new Error(tr('sync.connectFirst'))
+          await ensureLib()
+          if (!sb)
+            sb = window.supabase.createClient(c.url, c.key, {
+              auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
+            })
+          var r = await sb.auth.getSession()
+          if (r.error) throw r.error
+          session = r.data.session || null
+          labelKey(
+            session
+              ? unlockPassword
+                ? 'sync.loggedInUnlocked'
+                : 'sync.loggedInLocked'
+              : 'sync.signInLabel',
+            !!session,
+          )
+        }
+        function b64(b) {
+          var a = new Uint8Array(b),
+            s = ''
+          for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i])
+          return btoa(s)
+        }
+        function ub64(s) {
+          var b = atob(s),
+            a = new Uint8Array(b.length)
+          for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i)
+          return a.buffer
+        }
+        async function keyFor(pw, salt) {
+          var base = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(pw),
+            'PBKDF2',
+            false,
+            ['deriveKey'],
+          )
+          return crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' },
+            base,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt'],
+          )
+        }
+        async function enc(data, pw) {
+          var salt = crypto.getRandomValues(new Uint8Array(16)),
+            iv = crypto.getRandomValues(new Uint8Array(12)),
+            k = await keyFor(pw, salt),
+            ct = await crypto.subtle.encrypt(
+              { name: 'AES-GCM', iv: iv },
+              k,
+              new TextEncoder().encode(JSON.stringify({ v: 1, data: data })),
+            )
+          return JSON.stringify({
+            v: 1,
+            alg: 'AES-GCM',
+            kdf: 'PBKDF2-SHA256',
+            iter: 310000,
+            salt: b64(salt),
+            iv: b64(iv),
+            cipher: b64(ct),
+          })
+        }
+        async function dec(payload, pw) {
+          var o = typeof payload === 'string' ? JSON.parse(payload) : payload
+          if (!o || o.v !== 1 || o.alg !== 'AES-GCM') throw new Error(tr('sync.unsupportedFormat'))
+          var k = await keyFor(pw, new Uint8Array(ub64(o.salt))),
+            pt = await crypto.subtle.decrypt(
+              { name: 'AES-GCM', iv: new Uint8Array(ub64(o.iv)) },
+              k,
+              new Uint8Array(ub64(o.cipher)),
+            ),
+            x = JSON.parse(new TextDecoder().decode(pt))
+          return x.data
+        }
+        async function remote() {
+          var r = await sb
+            .from(TABLE)
+            .select('payload,client_updated_at')
+            .eq('user_id', session.user.id)
+            .maybeSingle()
+          if (r.error) throw r.error
+          return r.data || null
+        }
+        function writeLocal(d) {
+          try {
+            var copy = JSON.parse(JSON.stringify(d || {}))
+            var settings = copy.settings
+            delete copy.settings
+            localStorage.setItem(DATA_KEY, JSON.stringify(copy))
+            if (settings && typeof settings === 'object')
+              localStorage.setItem(SET_KEY, JSON.stringify(settings))
+            mark(now())
+          } catch (e) {
+            throw new Error(tr('sync.localWriteFailed'))
+          }
+        }
+        async function push() {
+          if (!session || !unlockPassword) throw new Error(tr('sync.unlockRequired'))
+          busy(true)
+          statusKey('sync.syncing')
+          try {
+            var ts = now()
+            var payload = await enc(localData(), unlockPassword),
+              r = await sb
+                .from(TABLE)
+                .upsert(
+                  {
+                    user_id: session.user.id,
+                    payload: payload,
+                    client_updated_at: ts,
+                    updated_at: new Date(ts).toISOString(),
+                  },
+                  { onConflict: 'user_id' },
+                )
+                .select('client_updated_at')
+                .single()
+            if (r.error) throw r.error
+            state.lastCloudTs = Number(r.data.client_updated_at || ts)
+            mark(ts)
+            labelKey('sync.synced', true)
+            setStatusText(tr('sync.syncComplete', new Date(ts).toLocaleString()))
+          } finally {
+            busy(false)
+          }
+        }
+        async function pull(r) {
+          var d = await dec(r.payload, unlockPassword)
+          writeLocal(d)
+          state.lastCloudTs = Number(r.client_updated_at || 0)
+        }
+        function refresh() {
+          var c = cfg(),
+            ok = !!(c.url && c.key)
+          syncPrefsUI()
+          toggleCls('zp-config-panel', 'zp-cloud-hidden', ok)
+          toggleCls('zp-auth-panel', 'zp-cloud-hidden', !ok)
+          toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
+          toggleCls('zp-sync-actions', 'zp-cloud-hidden', !session || !unlockPassword)
+          setText('zp-login-pull', tr(session ? 'sync.unlockAndPull' : 'sync.loginAndPull'))
+          setText('zp-login-push', tr(session ? 'sync.unlockAndPush' : 'sync.loginAndPush'))
+          setText('zp-login-only', tr(session ? 'sync.unlock' : 'sync.loginOnly'))
+          if (!ok) {
+            statusKey('sync.notConfigured')
+            return
+          }
+          if (session) {
+            statusKey(unlockPassword ? 'sync.loggedInUnlocked' : 'sync.loggedInLocked')
+          } else statusKey('sync.signInLabel')
+        }
+        async function auth(mode) {
+          if (syncing || authing) {
+            statusKey('sync.syncing')
+            return
+          }
+          authing = true
+          var email = (cfg().email || '').trim(),
+            pw = E('zp-password').value || ''
+          try {
+            if (!email) {
+              statusKey('sync.authEmailMissing')
+              throw new Error(tr('sync.authEmailMissing'))
+            }
+            if (!pw) {
+              statusKey('sync.passwordRequired')
+              throw new Error(tr('sync.passwordRequired'))
+            }
+            await connect()
+            busy(true)
+            if (!session) {
+              var si = await sb.auth.signInWithPassword({ email: email, password: pw })
+              if (si.error) throw si.error
+              session = si.data.session || null
+              if (!session) throw new Error(tr('sync.loginRequired'))
+            }
+            if (mode === 'pull' || mode === 'push') {
+              var agreed = await ensureWarnAck()
+              if (!agreed) {
+                setMsg('sync.cancelled')
+                return
+              }
+            }
+            var remember = E('zp-remember-pw') ? E('zp-remember-pw').checked : false
+            savePrefs({ remember: remember, password: remember ? pw : '' })
+            unlockPassword = pw
+            E('zp-password').value = ''
+            refresh()
+            statusKey('sync.loggedInUnlocked')
+            labelKey('sync.loggedInUnlocked', true)
+            if (mode === 'pull') {
+              await syncFromCloud()
+            } else if (mode === 'push') {
+              await uploadLocal()
+            } else if (prefs().autoSync) {
+              autoSyncOn = true
+              startWatcher()
+              await autoResolve()
+            } else {
+              statusKey('sync.loggedInReady')
+            }
+
+            if (prefs().autoSync && !autoSyncOn) {
+              autoSyncOn = true
+              startWatcher()
+            }
+          } catch (e) {
+            unlockPassword = ''
+            E('zp-password').value = ''
+            var msg = friendly(e)
+            setStatusText(msg)
+            labelKey('sync.errorLabel', false)
+          } finally {
+            authing = false
+            busy(false)
+            E('zp-password').value = ''
+          }
+        }
+        async function syncFromCloud() {
+          if (!session || !unlockPassword) throw new Error(tr('sync.unlockRequired'))
+          if (syncing) {
+            statusKey('sync.syncing')
+            return
+          }
+          syncing = true
+          busy(true)
+          try {
+            statusKey('sync.syncing')
+            var r = await remote()
+            if (!r) throw new Error(tr('sync.cloudEmpty'))
+            await pull(r)
+            statusKey('sync.fromCloudDone')
+            labelKey('sync.synced', true)
+            setTimeout(function () {
+              location.reload()
+            }, 250)
+          } finally {
+            syncing = false
+            busy(false)
+          }
+        }
+        async function uploadLocal() {
+          if (!session || !unlockPassword) throw new Error(tr('sync.unlockRequired'))
+          if (syncing) {
+            statusKey('sync.syncing')
+            return
+          }
+          syncing = true
+          busy(true)
+          try {
+            await push()
+            statusKey('sync.toCloudDone')
+            toast(tr('sync.connectedToast'))
+          } finally {
+            syncing = false
+            busy(false)
+          }
+        }
+        async function syncNow() {
+          if (syncing) {
+            statusKey('sync.syncing')
+            return
+          }
+          try {
+            await syncFromCloud()
+          } catch (e) {
+            setStatusText(friendly(e))
+            labelKey('sync.errorLabel', false)
+          }
+        }
+        async function lockData() {
+          unlockPassword = ''
+          autoSyncOn = false
+          stopWatcher()
+          E('zp-password').value = ''
+
+          var cleared = prefs().remember
+          if (cleared) savePrefs({ remember: false, password: '' })
+          refresh()
+          if (cleared) setMsg('sync.lockedCleared')
+          else statusKey('sync.loggedInLocked')
+          labelKey('sync.loggedInLocked', true)
+        }
+        function openModal() {
+          var m = E('zp-cloud-modal')
+          if (!m) return
+          refresh()
+          refreshI18n()
+          m.classList.add('open')
+          m.setAttribute('aria-hidden', 'false')
+          m.inert = false
+          setTimeout(function () {
+            var f = cfg().url && cfg().key ? E('zp-password') : E('zp-sb-url')
+            if (f) f.focus()
+          }, 0)
+        }
+        function closeModal() {
+          var m = E('zp-cloud-modal')
+          if (!m) return
+          var a = document.activeElement
+          if (a && m.contains(a) && typeof a.blur === 'function') a.blur()
+          m.classList.remove('open')
+          m.setAttribute('aria-hidden', 'true')
+          m.inert = true
+          var b = E('zp-sync-btn')
+          if (b && typeof b.focus === 'function') b.focus()
+        }
+        function refreshI18n() {
+          var m = E('zp-cloud-modal')
+          if (!m) return
+          m.querySelectorAll('[data-i18n]').forEach(function (x) {
+            if (x.id === 'zp-cloud-status') return
+            x.textContent = tr(x.dataset.i18n)
+          })
+          m.querySelectorAll('[data-i18n-title]').forEach(function (x) {
+            var v = tr(x.dataset.i18nTitle)
+            x.title = v
+            x.setAttribute('aria-label', v)
+          })
+          m.querySelectorAll('[data-i18n-placeholder]').forEach(function (x) {
+            x.placeholder = tr(x.dataset.i18nPlaceholder)
+          })
+          ;[
+            ['zp-login-only', 'sync.unlock', 'sync.loginOnly'],
+            ['zp-login-pull', 'sync.unlockAndPull', 'sync.loginAndPull'],
+            ['zp-login-push', 'sync.unlockAndPush', 'sync.loginAndPush'],
+          ].forEach(function (p) {
+            var b = E(p[0])
+            if (b) b.textContent = tr(session ? p[1] : p[2])
+          })
+          if (E('zp-password')) E('zp-password').placeholder = tr('sync.passwordPlaceholder')
+          var st = E('zp-sync-label')
+          if (st) st.textContent = tr(state.statusKey || 'sync.unconfiguredLabel')
+          if (!state.busy && E('zp-cloud-status'))
+            setStatusText(tr(state.statusKey || 'sync.notConfigured'))
+
+          syncPrefsUI()
+          var wm = E('zp-warn-modal')
+          if (wm) {
+            wm.querySelectorAll('[data-i18n]').forEach(function (x) {
+              if (x.id === 'zp-warn-body') x.innerHTML = tr(x.dataset.i18n)
+              else x.textContent = tr(x.dataset.i18n)
+            })
+          }
+          autosizeSql()
+        }
+        window.ZDCloudSync = {
+          open: openModal,
+          close: closeModal,
+          refreshI18n: refreshI18n,
+          autoLogin: autoLogin,
+          autoResolve: autoResolve,
+          toggleAutoSync: toggleAutoSync,
+          prefs: prefs,
+        }
+        function autosizeSql() {
+          var x = E('zp-sql-box')
+          if (!x) return
+          x.style.height = 'auto'
+          x.style.height = x.scrollHeight + 'px'
+        }
+        function setup() {
+          var b = E('zp-sync-btn')
+          if (b) {
+            b.onclick = openModal
+            b.onkeydown = function (e) {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                openModal()
+              }
+            }
+          }
+          var c = E('zp-cloud-close')
+          if (c) c.onclick = closeModal
+          var m = E('zp-cloud-modal')
+          if (m)
+            m.onclick = function (e) {
+              if (e.target === m) closeModal()
+            }
+          E('zp-save-config').onclick = async function () {
+            try {
+              var u = (E('zp-sb-url').value || '').trim().replace(/\/$/, ''),
+                k = (E('zp-sb-key').value || '').trim(),
+                email = (E('zp-auth-email-config').value || '').trim()
+              if (!/^https:\/\/[^\s]+$/i.test(u) || !k) throw new Error(tr('sync.errConfig'))
+              var prevCfg = cfg()
+              patchCfg({ url: u, key: k, email: email })
+
+              if (prevCfg.url !== u || prevCfg.key !== k || prevCfg.email !== email)
+                savePrefs({ remember: false, password: '' })
+              sb = null
+              session = null
+              unlockPassword = ''
+              await connect()
+              refresh()
+              statusKey('sync.savedConnected')
+            } catch (e) {
+              setStatusText(friendly(e))
+              labelKey('sync.errorLabel', false)
+            }
+          }
+          E('zp-open-dashboard').onclick = function () {
+            var w = window.open('https://supabase.com/dashboard', '_blank', 'noopener')
+            if (!w) toast(tr('sync.openDashboardFailed'))
+          }
+          E('zp-open-sql').onclick = function () {
+            toggleCls('zp-config-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-auth-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zp-cloud-hidden', false)
+            autosizeSql()
+            statusKey('sync.tableMissing')
+          }
+          E('zp-back-config').onclick = function () {
+            toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
+            refresh()
+          }
+          E('zp-copy-sql').onclick = async function () {
+            var n = E('zp-sql-copy-status')
+            if (n) n.classList.remove('show')
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(E('zp-sql-box').value)
+              } else {
+                var t = document.createElement('textarea')
+                t.value = E('zp-sql-box').value
+                t.setAttribute('readonly', '')
+                t.style.position = 'fixed'
+                t.style.left = '-9999px'
+                document.body.appendChild(t)
+                t.select()
+                document.execCommand('copy')
+                t.remove()
+              }
+              if (n) {
+                n.textContent = tr('sync.sqlCopiedInline')
+                n.classList.add('show')
+              }
+            } catch (_) {
+              if (n) {
+                n.textContent = tr('sync.copyFailed')
+                n.classList.add('show')
+              }
+            }
+          }
+          E('zp-login-only').onclick = function () {
+            auth('login')
+          }
+          E('zp-login-pull').onclick = function () {
+            auth('pull')
+          }
+          E('zp-login-push').onclick = function () {
+            auth('push')
+          }
+          E('zp-sync-now').onclick = syncNow
+          E('zp-upload-now').onclick = function () {
+            uploadLocal().catch(function (e) {
+              setStatusText(friendly(e))
+              labelKey('sync.errorLabel', false)
+            })
+          }
+          if (E('zp-remember-pw'))
+            E('zp-remember-pw').onchange = function () {
+              var on = E('zp-remember-pw').checked
+              var v = (E('zp-password').value || '').trim() || unlockPassword
+              if (on && !v) {
+                E('zp-remember-pw').checked = false
+                setMsg('sync.passwordRequired')
+                return
+              }
+              savePrefs({ remember: on, password: on ? v : '' })
+              setMsg(on ? 'sync.rememberOn' : 'sync.rememberOff')
+            }
+          if (E('zp-autosync-btn'))
+            E('zp-autosync-btn').onclick = function (e) {
+              e.preventDefault()
+              toggleAutoSync()
+            }
+          document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') return
+            var wm = E('zp-warn-modal')
+            if (wm && wm.classList.contains('open')) {
+              var cc = E('zp-warn-cancel')
+              if (cc) cc.click()
+              return
+            }
+            var mm = E('zp-cloud-modal')
+            if (mm && mm.classList.contains('open')) closeModal()
+          })
+          E('zp-open-sql-auth').onclick = function () {
+            toggleCls('zp-config-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-auth-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zp-cloud-hidden', false)
+            autosizeSql()
+            statusKey('sync.tableMissing')
+          }
+          E('zp-password').onkeydown = function (e) {
+            if (e.key === 'Enter') auth('login')
+          }
+          E('zp-signout').onclick = async function () {
+            try {
+              if (sb) await sb.auth.signOut({ scope: 'local' })
+            } catch (_) {}
+            try {
+              Object.keys(localStorage).forEach(function (k) {
+                if (/^sb-.*-auth-token$/i.test(k) || k === 'supabase.auth.token')
+                  localStorage.removeItem(k)
+              })
+              localStorage.removeItem(CFG_KEY)
+              localStorage.removeItem(META_KEY)
+            } catch (_) {}
+            sb = null
+            session = null
+            unlockPassword = ''
+            state.lastCloudTs = 0
+            autoSyncOn = false
+            stopWatcher()
+            var sp = E('zp-sql-panel')
+            if (sp) sp.classList.add('zp-cloud-hidden')
+            refresh()
+            statusKey('sync.loggedOut')
+            labelKey('sync.unconfiguredLabel', false)
+          }
+
+          E('zp-lock').onclick = function () {
+            Promise.resolve()
+              .then(lockData)
+              .catch(function (e) {
+                console.error('[ZenData Sync] lock failed', e)
+              })
+          }
+        }
+
+        async function autoLogin() {
+          var p = prefs(),
+            c = cfg()
+          if (!p.remember || !p.password) return false
+          if (!c.url || !c.key || !c.email) return false
+          try {
+            await connect()
+            if (!session) {
+              var si = await sb.auth.signInWithPassword({
+                email: (c.email || '').trim(),
+                password: p.password,
+              })
+              if (si.error) throw si.error
+              session = si.data.session || null
+            }
+            if (!session) throw new Error(tr('sync.loginRequired'))
+            unlockPassword = p.password
+            refresh()
+            labelKey('sync.loggedInUnlocked', true)
+            if (p.autoSync) {
+              autoSyncOn = true
+              startWatcher()
+              await autoResolve()
+            } else setMsg('sync.autoLoginReady')
+            return true
+          } catch (e) {
+            unlockPassword = ''
+            autoSyncOn = false
+            stopWatcher()
+            refresh()
+            setMsg('sync.autoLoginFailed')
+            console.warn('[ZenData Sync] auto login failed', e)
+            return false
+          }
+        }
+        async function boot() {
+          setup()
+          refreshI18n()
+          autosizeSql()
+          var c = cfg()
+          if (!c.url || !c.key) {
+            refresh()
+            labelKey('sync.unconfiguredLabel', false)
+            return
+          }
+          try {
+            await connect()
+            var logged = await autoLogin()
+            if (!logged && session) {
+              statusKey('sync.loggedInLocked')
+              labelKey('sync.loggedInLocked', true)
+            }
+          } catch (e) {
+            console.warn(e)
+            labelKey('sync.offlineLabel', false)
+          }
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState !== 'visible') return
+            if (!autoSyncOn || !session || !unlockPassword || syncing) return
+            if (Date.now() - state.lastCloudTs < 60000) return
+            autoResolve()
+          })
+        }
+        window.addEventListener('resize', function () {
+          autosizeSql()
+        })
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
+        else boot()
       })()
     </script>
   </body>
