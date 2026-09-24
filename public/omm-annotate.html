@@ -1031,6 +1031,7 @@
         color: var(--text-faint);
         letter-spacing: 1px;
       }
+      /* 文本层只负责「选区」与「命中判定」，视觉（高亮色块）交给下方的 .pf-hl */
       .pf-tl {
         position: absolute;
         left: 0;
@@ -1044,14 +1045,64 @@
         color: transparent;
         transform-origin: 0% 0%;
         cursor: text;
+        user-select: text;
+        -webkit-user-select: text;
       }
       .pf-tl > span::selection,
       .pf-tl .mk::selection {
         background: rgba(70, 130, 220, 0.4);
       }
-      /* 版式模式下高亮用正片叠底，避免色块盖住 PDF 上的文字 */
-      .pf-tl .mk {
-        mix-blend-mode: multiply;
+      /* 版式模式下 .mk 只是点击/悬浮的命中区，视觉全部交给 .pf-hl 那一层。
+         必须逐个样式写，且特异性高于后面的 `.mk.hl` 等：
+         那些规则写在后面、特异性相同（都是 0,2,0），会反过来赢，
+         结果隐形文字层会再画一份位置对不上的高亮（表现为「高亮在左、边框在右」）。 */
+      .pf-tl .mk,
+      .pf-tl .mk.hl,
+      .pf-tl .mk.note,
+      .pf-tl .mk.ul,
+      .pf-tl .mk.st,
+      .pf-tl .mk.code,
+      .pf-tl .mk.mk-on {
+        background: none;
+        border: 0;
+        text-decoration: none;
+        text-decoration-thickness: 0;
+        box-shadow: none;
+        mix-blend-mode: normal;
+      }
+      /* 高亮层：按「视觉行」合并后绘制的连续圆角色块。
+         这里用「半透明色」而不是 mix-blend-mode:multiply —— 正片叠底在本页的
+         层叠环境里会被隔离成不透明色块，反而把 PDF 文字盖住。 */
+      .pf-hl {
+        position: absolute;
+        left: 0;
+        top: 0;
+        overflow: hidden;
+        pointer-events: none;
+        line-height: 1;
+      }
+      .pf-hl > i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        display: block;
+        transform-origin: 0% 0%;
+        /* 圆角由内联样式算出（受「设置 → 圆角」控制，见 mkRadiusPxCss），此处只作兜底 */
+        border-radius: var(--radius);
+      }
+      .pf-hl > i.hl,
+      .pf-hl > i.note {
+        background: var(--mc);
+      }
+      .pf-hl > i.ul,
+      .pf-hl > i.st {
+        background: var(--mc-line);
+      }
+      .pf-hl > i.code {
+        background: repeating-linear-gradient(to right, var(--mc-line) 0 3px, transparent 3px 6px);
+      }
+      .pf-hl > i.mk-on {
+        box-shadow: inset 0 0 0 1px var(--text);
       }
       .pf-ph {
         display: flex;
@@ -1081,26 +1132,29 @@
       .mk {
         cursor: pointer;
         transition: background 0.15s;
+        /* 圆角与版式模式同源：受「设置 → 圆角」控制（见 mkRadiusCss），此处只作兜底 */
+        border-radius: var(--radius);
       }
       .mk.hl {
         background: var(--mc);
       }
+      /* 用背景绘制「线」，线头才能跟着圆角走 */
       .mk.ul {
-        border-bottom: 2px solid var(--mc);
+        background: linear-gradient(var(--mc-line), var(--mc-line)) left bottom / 100% 2px no-repeat;
       }
       .mk.st {
-        text-decoration: line-through;
-        text-decoration-thickness: 2px;
-        text-decoration-color: var(--mc);
+        background: linear-gradient(var(--mc-line), var(--mc-line)) left center / 100% 2px no-repeat;
       }
       .mk.note {
-        background: linear-gradient(to top, var(--mc) 0.4em, transparent 0.4em);
+        /* 0.5em：厚度要够，圆角才不会被钳成胶囊（与版式模式的 HLFMT.note 对应） */
+        background: linear-gradient(to top, var(--mc) 0.5em, transparent 0.5em);
       }
       .mk.code {
-        border-bottom: 1px dashed var(--text-dim);
+        background: repeating-linear-gradient(to right, var(--mc-line) 0 3px, transparent 3px 6px)
+          left bottom / 100% 2px no-repeat;
       }
       .mk.mk-on {
-        box-shadow: 0 0 0 1px var(--text);
+        box-shadow: inset 0 0 0 1px var(--text);
       }
       .mk sup {
         font-size: 0.55em;
@@ -1109,7 +1163,7 @@
         vertical-align: super;
         line-height: 1;
       }
-      /* 右栏批注列表 */
+      /* 右栏批注列表：行规格整体沿用「码表 · Codebook」，两栏观感统一 */
       #rr-notes {
         flex: 1 1 46%;
         border-bottom: 1px solid var(--border-dim);
@@ -1122,37 +1176,50 @@
         display: flex;
       }
       .nt-row {
-        padding: 8px 12px 9px;
+        padding: 5px 12px 6px;
         cursor: pointer;
         position: relative;
+        color: var(--text-dim);
         border-radius: var(--radius);
         transition: background 0.12s;
       }
       .nt-row:hover {
         background: var(--hover);
+        color: var(--text);
       }
       .nt-row.on {
         background: var(--hover);
         box-shadow: inset 2px 0 0 var(--text);
+        color: var(--text);
       }
       .nt-top {
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1px;
-        color: var(--text-faint);
+        font-size: calc(12px * var(--fscale));
       }
       .nt-dot {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
         flex-shrink: 0;
-        background: var(--mc, #dddddd);
+        background: var(--mc-solid, #888888);
+        border-radius: var(--radius);
+      }
+      .nt-sty {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .nt-pg {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        flex-shrink: 0;
       }
       .nt-q {
         font-size: calc(11.5px * var(--fscale));
         line-height: 1.7;
-        color: var(--text);
+        color: inherit;
         margin-top: 3px;
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -1163,7 +1230,7 @@
       .nt-note {
         font-size: calc(10.5px * var(--fscale));
         line-height: 1.65;
-        color: var(--text-dim);
+        color: var(--text-faint);
         margin-top: 4px;
         padding-left: 7px;
         border-left: 1px solid var(--border-faint);
@@ -1177,9 +1244,12 @@
         font-size: calc(10px * var(--fscale));
         color: var(--text-faint);
         opacity: 0;
-        padding: 0 2px;
-        margin-left: auto;
         flex-shrink: 0;
+        padding: 0 2px;
+        border-radius: var(--radius);
+      }
+      .nt-act:hover {
+        color: var(--text);
       }
       .nt-row:hover .nt-act {
         opacity: 1;
@@ -4118,6 +4188,50 @@
         ]
         var MKSTY = { note: '批注', hl: '高亮', ul: '下划线', st: '删除线', code: '编码' }
         var MKORDER = { note: 0, hl: 1, ul: 2, st: 3, code: 4 }
+        // 注意：MKORDER.note 是 0，直接写 `MKORDER[sty] || 9` 会把「批注」当成最低优先级，
+        // 重叠时反而被高亮盖住——必须用 hasOwnProperty 判断。
+        function mkOrder(sty) {
+          return Object.prototype.hasOwnProperty.call(MKORDER, sty) ? MKORDER[sty] : 9
+        }
+
+        // ---- 批注标记的统一观感参数（文本模式与版式模式共用，改一处两边一起变）----
+        // 色块半透明：PDF 原件在画布上，色块必须透出下面的文字才算「不遮盖」
+        var MK_BLOCK_A = 0.38
+        // 下划线/删除线/虚线较细，透明度低就看不见了
+        var MK_LINE_A = 0.92
+        // 圆角上限 = 自身厚度 × 该比例。细线（删除线/下划线）只有 0.13em 厚，
+        // 若直接吃满设置里的圆角，浏览器会把圆角钳到厚度的一半，细线就变成一根
+        // 「香肠」，看起来比高亮块的圆角大得多 —— 所以统一按自身厚度收一次。
+        var MK_RADIUS_CAP = 0.3
+        function mkRgba(c, a) {
+          var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c || '')
+          if (!m) return c || 'rgba(180, 180, 180, ' + a + ')'
+          var h = m[1]
+          if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
+          var n = parseInt(h, 16)
+          return (
+            'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'
+          )
+        }
+        // 一个批注要同时提供两个色值：--mc 给色块（半透明）、--mc-line 给细线（较实）
+        function mkVars(color) {
+          return '--mc:' + mkRgba(color, MK_BLOCK_A) + ';--mc-line:' + mkRgba(color, MK_LINE_A)
+        }
+        // 批注圆角统一受「设置 → 圆角」（CSS 变量 --radius）控制，再按自身厚度收敛：
+        //   半径 = min(--radius, 厚度 × MK_RADIUS_CAP)
+        // 用 CSS min() 表达，样式里只有一个出处。
+        // 文本模式：厚度用 em，随正文排版字号缩放
+        function mkRadiusCss(sty) {
+          var cap = (MK_RADIUS_CAP * (HLFMT[sty] || HLFMT.hl).h).toFixed(4) + 'em'
+          var e = 'min(var(--radius), ' + cap + ')'
+          return HL_ROUND_BOTTOM[sty] ? '0 0 ' + e + ' ' + e : e
+        }
+        // 版式模式：该样式色块的厚度（px）已经算出来了，直接用 px
+        function mkRadiusPxCss(sty, h) {
+          var cap = (MK_RADIUS_CAP * h).toFixed(2) + 'px'
+          var e = 'min(var(--radius), ' + cap + ')'
+          return HL_ROUND_BOTTOM[sty] ? '0 0 ' + e + ' ' + e : e
+        }
         var DOCTYPES = [
           '访谈转录',
           '新闻报道',
@@ -5034,6 +5148,13 @@
                 return runNext(1).then(function () {
                   PDFV.cache[docId] = info
                   delete PDFV.busy[docId]
+                  // 版式的坐标基于本次提取的 info.text，而批注偏移基于项目里存的 d.text。
+                  // 两者必须一致，否则两种模式的批注会对不上；这里只在异常时提醒，不擅自改写数据。
+                  try {
+                    var d0 = docById(docId)
+                    if (d0 && d0.text && d0.text !== info.text)
+                      console.warn('[ZenMark] PDF 提取文本与项目记录不一致，批注位置可能偏移')
+                  } catch (e) {}
                   return info
                 })
               })
@@ -5118,7 +5239,7 @@
             var top = null
             list.forEach(function (m) {
               if (m.start > s || m.end < e) return
-              if (!top || (MKORDER[m.sty] || 9) < (MKORDER[top.sty] || 9)) top = m
+              if (!top || mkOrder(m.sty) < mkOrder(top.sty)) top = m
             })
             if (!top) {
               html += esc(seg)
@@ -5131,8 +5252,10 @@
               cls +
               '" data-mk="' +
               top.id +
-              '" style="--mc:' +
-              top.color +
+              '" style="' +
+              mkVars(top.color) +
+              ';border-radius:' +
+              mkRadiusCss(top.sty) +
               '">' +
               esc(seg) +
               sup +
@@ -5167,12 +5290,18 @@
           if (pg) pg.style.display = 'none'
         }
 
-        // 局部刷新标记，避免重排整份 PDF 导致阅读位置丢失
+        // 局部刷新标记，避免重排整份 PDF 导致阅读位置丢失。
+        // 版式模式：只重建受影响页的高亮层；文本模式：只重建受影响段落
         function refreshMarks(s, e) {
           var d = curDoc()
           if (!d) return
           var host = el('rv-scroll')
           if (!host) return
+          host.querySelectorAll('.rv-page').forEach(function (pg) {
+            var geo = pg._geo
+            if (!geo || geo.end <= s || geo.start >= e) return
+            paintPageHl(pg, d.id)
+          })
           host.querySelectorAll('span[data-o]').forEach(function (sp) {
             var o = parseInt(sp.getAttribute('data-o'), 10)
             var l = parseInt(sp.getAttribute('data-l'), 10) || 0
@@ -5185,6 +5314,30 @@
             if (o + n <= s || o >= e) return
             p.innerHTML = markSpanHTML(d.text.slice(o, o + n), o, d.id, true)
           })
+        }
+
+        // 同步「当前选中批注」的高亮态：文本模式的 .mk 与版式模式的高亮色块都要跟上
+        function syncMarkOn() {
+          document.querySelectorAll('.mk.mk-on').forEach(function (n) {
+            n.classList.remove('mk-on')
+          })
+          if (!S.selMark) return
+          document.querySelectorAll('.mk[data-mk="' + S.selMark + '"]').forEach(function (n) {
+            n.classList.add('mk-on')
+          })
+        }
+
+        // 几何命中：点/悬停落在哪个高亮色块里。
+        // 版式模式下的色块才是最准的视觉依据（隐形文字层只是近似排版），
+        // 所以命中优先看它；DOM 里靠后的 = 画得越上层，取最后一个。
+        function markRectAt(x, y) {
+          var nodes = document.querySelectorAll('#rv-scroll .pf-hl > i[data-mk]')
+          var hit = null
+          for (var i = 0; i < nodes.length; i++) {
+            var r = nodes[i].getBoundingClientRect()
+            if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) hit = nodes[i]
+          }
+          return hit
         }
         function afterMarkChange(s, e) {
           Store.save()
@@ -5275,6 +5428,1076 @@
           host.scrollTop = Math.max(0, top - 8)
         }
 
+        // ================================================================
+        // 版式模式 · 几何换算 / 文本层 / 高亮层
+        // ================================================================
+        // 把一个文本片段换算到「页面 CSS 像素」坐标系里的盒子。
+        // 说明：pdf.js 的 item.width 已包含该片段自身的字号与横向缩放，所以只需
+        // 再乘以视口的线性缩放即得到 CSS 像素宽度（与 pdf.js 自带 TextLayer 的
+        // canvasWidth * viewport.scale 一致）。每个片段携带自己的全局文本偏移
+        // it.o / it.len，正是它让版式模式与文本模式共用同一套批注坐标。
+        function pageGeom(p, vp) {
+          var s = vp.width / p.w
+          return p.items.map(function (it) {
+            var t = mtx(vp.transform, it.tr)
+            return {
+              it: it,
+              x: t[4], // 基线起点 x
+              y: t[5], // 基线 y（向下为正）
+              w: it.w * s, // 片段宽度
+              fh: Math.sqrt(t[2] * t[2] + t[3] * t[3]), // 字号
+              hs: Math.sqrt(t[0] * t[0] + t[1] * t[1]), // 横向缩放
+              ang: Math.atan2(t[1], t[0]), // 书写方向（支持旋转/竖排文本）
+            }
+          })
+        }
+
+        // 视觉顺序：先按基线分行，行内再按 x 排序。
+        // DOM 顺序决定了拖选的走向，只有与所见顺序一致，选区才不会跳行、串栏。
+        function visualOrder(gs) {
+          var arr = gs.slice().sort(function (a, b) {
+            return a.y - b.y || a.x - b.x
+          })
+          var lines = [],
+            cur = null
+          arr.forEach(function (g) {
+            if (cur && Math.abs(g.y - cur.y) <= Math.max(1, Math.min(g.fh, cur.fh) * 0.4)) {
+              cur.list.push(g)
+              return
+            }
+            cur = { y: g.y, fh: g.fh, list: [g] }
+            lines.push(cur)
+          })
+          var out = []
+          lines.forEach(function (L) {
+            L.list.sort(function (a, b) {
+              return a.x - b.x
+            })
+            out = out.concat(L.list)
+          })
+          return out
+        }
+
+        // 相邻且文本连续的片段合并成一个 span：选区连贯、可以选中完整词语，
+        // 也不怕某些 PDF 把一个词甚至一个字切成若干片段。
+        function tlCanMerge(a, b) {
+          if (!a.it.str || !b.it.str) return false
+          if (a.it.o + a.it.len !== b.it.o) return false // 必须严格连续（中间不能夹 \n）
+          if (Math.abs(a.ang - b.ang) > 0.02) return false
+          if (Math.abs(a.y - b.y) > a.fh * 0.2) return false // 同一基线
+          if (Math.abs(a.fh - b.fh) > Math.max(0.5, a.fh * 0.03)) return false
+          if (Math.abs(a.hs - b.hs) > a.fh * 0.05) return false
+          var ux = Math.cos(a.ang),
+            uy = Math.sin(a.ang)
+          var gap = (b.x - (a.x + a.w * ux)) * ux + (b.y - (a.y + a.w * uy)) * uy
+          return gap > -a.fh * 0.5 && gap < a.fh * 0.35
+        }
+
+        // 把一段文本按空白切成「词」（给出词在段内的偏移与长度）
+        function wordTokens(txt) {
+          var out = []
+          var re = /\S+/g
+          var m
+          while ((m = re.exec(txt))) out.push({ s: m.index, len: m[0].length })
+          return out
+        }
+
+        // 用画布墨迹把一行的每个词对到真实横坐标。
+        // 若整行只做一个 span 再靠字体拉伸凑总宽，行内会累积漂移（不同字体字宽比例不同），
+        // 拖选/点选就会「对不齐」；按词贴到墨迹上之后基本与真实字形重合。
+        // 滤掉「蹭进来的邻居墨迹」：
+        // 1) 中心落在排版盒 [bx0,bx1] 外的段（邻居词的起笔/收尾）；
+        // 2) 贴着扫描区 [x0,x1] 边缘的窄条 —— 那是被扫描区裁断的邻居字形碎片，
+        //    留着它，合并段时会先并掉它（间隙略小于词间距），把词段右沿拉歪。
+        function tlFilterSegs(segs, bx0, bx1, x0, x1, em) {
+          var minW = Math.max(0.75, em * 0.05)
+          return segs.filter(function (s) {
+            var c = (s[0] + s[1]) / 2
+            if (c < bx0 || c > bx1) return false
+            if (s[1] - s[0] < minW && (s[0] <= x0 + 0.75 || s[1] >= x1 - 0.75)) return false
+            return true
+          })
+        }
+
+        function wordPlacements(pageEl, geo, g, txt, spanX0, spanW) {
+          var em = g.fh
+          var toks = wordTokens(txt)
+          if (!toks.length) return null
+          var yTop = g.y - em * 0.95
+          var yBot = g.y + em * 0.3
+          var key = 'tl:' + Math.round(spanX0) + ':' + Math.round(spanW) + ':' + Math.round(yTop)
+          var ink = geo.inkCache && geo.inkCache[key]
+          if (ink === undefined) {
+            ink = measureInk(pageEl, geo, spanX0, spanX0 + spanW, yTop, yBot)
+            if (!geo.inkCache) geo.inkCache = {}
+            geo.inkCache[key] = ink
+          }
+          if (!ink || !ink.segs || !ink.segs.length) return null
+          // 先按排版盒滤掉盒外的段（邻居词的起笔混进来会把词段拉歪），
+          // 再把「最小的间隙」两两合并，直到段数等于词数。
+          // 只有一个词也要走这套锚定 —— 此前要求 ≥2 个词，
+          // 「每词一个 text item」的 PDF 会整组退回按前进宽度摆放，
+          // 右沿能偏出十几个像素，且误差随字号（缩放）等比放大。
+          var segs = tlFilterSegs(
+            ink.segs,
+            spanX0 - 0.6,
+            spanX0 + spanW + 0.6,
+            spanX0,
+            spanX0 + spanW,
+            em,
+          )
+          if (!segs.length) return null
+          while (segs.length > toks.length) {
+            var mi = 0
+            var mg = Infinity
+            for (var q = 1; q < segs.length; q++) {
+              var gg = segs[q][0] - segs[q - 1][1]
+              if (gg < mg) {
+                mg = gg
+                mi = q
+              }
+            }
+            segs[mi - 1][1] = segs[mi][1]
+            segs.splice(mi, 1)
+          }
+          if (segs.length !== toks.length) return null
+          var out = []
+          for (var i = 0; i < toks.length; i++) {
+            var rw = segs[i][1] - segs[i][0]
+            // 宽度要与词长量级相符，否则说明切错了（比如空格太窄被并进同一段墨迹）
+            if (!(rw > em * 0.14 * toks[i].len && rw < em * 2.6 * toks[i].len)) return null
+            out.push({ o: toks[i].s, len: toks[i].len, x0: segs[i][0], w: rw })
+          }
+          return out
+        }
+
+        // 文本层：隐形但可选中；内部 .mk 只作命中区（点击/悬浮），本身不着色
+        function buildTextLayer(pageEl, docId, p, gs, vp, geo) {
+          var tl = pageEl.querySelector('.pf-tl')
+          if (!tl) {
+            tl = document.createElement('div')
+            tl.className = 'pf-tl'
+            pageEl.appendChild(tl)
+          }
+          tl.innerHTML = ''
+          tl.style.width = vp.width + 'px'
+          tl.style.height = vp.height + 'px'
+          tl.style.transform = 'none'
+          tl.style.transformOrigin = '0 0'
+          var groups = []
+          visualOrder(gs).forEach(function (g) {
+            var last = groups[groups.length - 1]
+            // 合并只为把被切碎的词拼回来，宽度上限 5em：
+            // 不能让一整行并成一个 span，否则位置精度会跟着变差
+            if (last && tlCanMerge(last[last.length - 1], g) && last.w + g.w < g.fh * 5) {
+              last.push(g)
+              last.w += g.w
+            } else {
+              groups.push([g])
+              groups[groups.length - 1].w = g.w
+            }
+          })
+          var pool = markPool(docId, p.start, p.end)
+          var frag = document.createDocumentFragment()
+          var made = []
+          // 先收集所有词片段（带全局文本偏移）。词与词之间的空白原本不属于任何
+          // span —— 那里没有文本节点，划选跨过空格就断成两截（看着像选择错位），
+          // 所以后面要按偏移把空白的片段补回来。
+          var pieces = []
+          groups.forEach(function (grp) {
+            var a = grp[0]
+            var last = grp[grp.length - 1]
+            var txt = '',
+              len = 0
+            grp.forEach(function (g) {
+              txt += g.it.str
+              len += g.it.len
+            })
+            var ux = Math.cos(a.ang),
+              uy = Math.sin(a.ang)
+            // 目标宽度 = 首片段起点 → 末片段终点（沿书写方向投影）
+            var tw = (last.x + last.w * ux - a.x) * ux + (last.y + last.w * uy - a.y) * uy
+            var pcs = null
+            if (geo && Math.abs(a.ang) < 0.01) pcs = wordPlacements(pageEl, geo, a, txt, a.x, tw)
+            ;(pcs || [{ o: 0, len: len, x0: a.x, w: tw }]).forEach(function (pc) {
+              pieces.push({
+                o: a.it.o + pc.o,
+                len: pc.len,
+                txt: txt.slice(pc.o, pc.o + pc.len),
+                x0: pc.x0,
+                w: pc.w,
+                y: a.y,
+                ang: a.ang,
+                fh: a.fh,
+              })
+            })
+          })
+          // 补空格片段：两个词片段之间、同一行、文本上确实隔着字符的地方。
+          // 宽到离谱（制表位/分栏）或旋转文本不补。
+          var laid = []
+          pieces.forEach(function (pc, i) {
+            laid.push(pc)
+            var nx = pieces[i + 1]
+            if (!nx) return
+            if (Math.abs(pc.ang) > 0.01 || Math.abs(nx.ang) > 0.01) return
+            if (Math.abs(nx.y - pc.y) > pc.fh * 0.4) return
+            var go = pc.o + pc.len
+            var gl = nx.o - go
+            if (gl <= 0) return
+            // 向左叠盖几像素：词 span 的选区矩形在词尾会吃掉一点右侧字距，
+            // 严格首尾相接会露出两三像素的缝；选区背景是并集，叠盖不可见
+            var gx = pc.x0 + pc.w - Math.min(3, pc.w * 0.3)
+            var gw = nx.x0 - gx
+            if (gw < -0.5 || gw > pc.fh * 3) return
+            laid.push({
+              o: go,
+              len: gl,
+              txt: '',
+              x0: gx,
+              w: Math.max(gw, 0.5),
+              y: pc.y,
+              ang: 0,
+              fh: pc.fh,
+              space: true,
+            })
+          })
+          // 行高覆盖到下一行基线：span 盒子原本只有 1 个字号高，PDF 行距通常
+          // 1.3~2 个字号，行间会露出横向白带（跨行划选看着「断了」）。
+          // 让每行的盒子接到下一行（+1px 叠盖），与文本模式的连续行盒一致。
+          // 同一行的所有片段用同一行高，否则行内盒子高矮不齐。
+          var lineGroups = []
+          laid.forEach(function (pc) {
+            var cur = lineGroups[lineGroups.length - 1]
+            if (cur && Math.abs(pc.y - cur.y) <= pc.fh * 0.4) cur.list.push(pc)
+            else lineGroups.push({ y: pc.y, fh: pc.fh, list: [pc] })
+          })
+          for (var li3 = 0; li3 < lineGroups.length - 1; li3++) {
+            var L = lineGroups[li3]
+            var N = lineGroups[li3 + 1]
+            if (Math.abs(L.list[0].ang) > 0.01 || Math.abs(N.list[0].ang) > 0.01) continue
+            var dy3 = N.y - L.y
+            if (dy3 < L.fh * 0.4 || dy3 > L.fh * 3) continue
+            var lh3 = Math.min(dy3 + 0.82 * (L.fh - N.fh) + 1, L.fh * 3)
+            L.list.forEach(function (pc) {
+              pc.lh = lh3
+            })
+          }
+          laid.forEach(function (pc) {
+            var sp = document.createElement('span')
+            sp.setAttribute('data-o', pc.o)
+            sp.setAttribute('data-l', pc.len)
+            // 用「基线原点 + 变换」定位，旋转文本也能落到正确朝向
+            sp.style.left = pc.x0 + 'px'
+            sp.style.top = pc.y + 'px'
+            sp.style.fontSize = Math.max(1, pc.fh * 0.82) + 'px'
+            sp.style.lineHeight = Math.max(1, pc.lh || pc.fh) + 'px'
+            if (pc.space) {
+              // 空格片段：跨元素选区里 Chrome 对纯空格文本节点按字体原始宽度
+              // 画选区（不吃 scaleX），缝会露出来。改成块级 + 显式宽度，
+              // 选区背景就按元素边框盒铺满整个空档。
+              sp.style.display = 'block'
+              sp.style.width = pc.w.toFixed(2) + 'px'
+              sp.textContent = new Array(pc.len + 1).join(' ')
+            } else sp.innerHTML = markSpanHTML(pc.txt, pc.o, docId, false, pool)
+            frag.appendChild(sp)
+            made.push({ sp: sp, tw: pc.w, ang: pc.ang, fh: pc.fh, space: !!pc.space })
+          })
+          tl.appendChild(frag)
+          // 先把宽度一次性读完（只触发一次重排），再统一写 transform，避免读写交替。
+          // 注意：挂在 DocumentFragment 里的节点没有布局，offsetWidth 恒为 0，
+          // 必须插入文档后再测量，否则 scaleX 永远不生效、字形与实际字宽对不上。
+          var sxs = []
+          made.forEach(function (m) {
+            var aw = m.sp.offsetWidth
+            var sx = aw > 0 && m.tw > 0 ? m.tw / aw : 1
+            sxs.push(aw > 0 && m.tw > 0 && Math.abs(sx - 1) > 0.01 && sx > 0.15 && sx < 6 ? sx : 0)
+          })
+          made.forEach(function (m, i) {
+            var s = ''
+            if (Math.abs(m.ang) > 0.005) s += 'rotate(' + m.ang.toFixed(4) + 'rad) '
+            s += 'translate(0,' + (-m.fh * 0.82).toFixed(2) + 'px)'
+            if (!m.space && sxs[i]) s += ' scaleX(' + sxs[i].toFixed(4) + ')'
+            m.sp.style.transform = s
+          })
+          // 有旋转文本的页退回浏览器原生拖选（几何映射只支持水平文本）
+          tl._noDrag = made.some(function (m) {
+            return Math.abs(m.ang) > 0.01
+          })
+          bindTlDrag(tl)
+        }
+
+        // ---- 版式文本层：自定义拖选 ----------------------------------------
+        // 原生拖拽在「绝对定位 + scaleX 变换」的小 span 上表现不稳：
+        // 行尾、行缝、页边这些没有文本节点的死区会让焦点停住甚至吸附到文档开头
+        // （看着像「往外一拖就变成从头选到那里」），选到一半也会断。
+        // 改成：指针按下后按几何坐标计算锚点/焦点，用 setBaseAndExtent 驱动原生
+        // 选区渲染 —— 任何坐标都映射到最近的字符位置，不再有死区。
+        function tlMetrics(tl, tr) {
+          // 返回「相对文本层左上角」的本地坐标：滚动/视口变化全部免疫，
+          // 每次拖动时只需再读一次文本层自身的 rect 做平移即可。
+          var out = []
+          var spans = tl.children
+          for (var i = 0; i < spans.length; i++) {
+            var sp = spans[i]
+            if (!sp.getAttribute || sp.getAttribute('data-o') === null) continue
+            var r = sp.getBoundingClientRect()
+            if (r.width < 0.3) continue
+            out.push({
+              sp: sp,
+              o: parseInt(sp.getAttribute('data-o'), 10) || 0,
+              x0: r.left - tr.left,
+              x1: r.right - tr.left,
+              y0: r.top - tr.top,
+              y1: r.bottom - tr.top,
+              len: parseInt(sp.getAttribute('data-l'), 10) || 0,
+            })
+          }
+          return out
+        }
+        // (clientX, clientY) → 最近的「span + 字符下标」
+        function tlPosAt(ms, x, y) {
+          if (!ms.length) return null
+          // 按行聚类（span 在 DOM 里就是视觉顺序）
+          var lines = []
+          var cur = null
+          ms.forEach(function (m) {
+            var cy = (m.y0 + m.y1) / 2
+            if (cur && Math.abs(cy - cur.cy) <= Math.max(2, (m.y1 - m.y0) * 0.6)) {
+              cur.list.push(m)
+              var n = cur.list.length
+              cur.cy = (cur.cy * (n - 1) + cy) / n
+            } else {
+              cur = { cy: cy, list: [m] }
+              lines.push(cur)
+            }
+          })
+          var li = lines.length - 1
+          for (var i = 0; i < lines.length; i++) {
+            var bound = i + 1 < lines.length ? (lines[i].cy + lines[i + 1].cy) / 2 : Infinity
+            if (y < bound) {
+              li = i
+              break
+            }
+          }
+          var list = lines[li].list
+          var first = list[0]
+          var last = list[list.length - 1]
+          if (x <= first.x0) return { m: first, idx: 0 }
+          if (x >= last.x1) return { m: last, idx: last.len }
+          for (var k = 0; k < list.length; k++) {
+            var m = list[k]
+            if (x < m.x0) {
+              var prev = list[k - 1]
+              return x - prev.x1 <= m.x0 - x ? { m: prev, idx: prev.len } : { m: m, idx: 0 }
+            }
+            if (x <= m.x1) {
+              var f = m.x1 > m.x0 ? (x - m.x0) / (m.x1 - m.x0) : 0
+              return { m: m, idx: clamp(Math.round(f * m.len), 0, m.len) }
+            }
+          }
+          return { m: last, idx: last.len }
+        }
+        // span 内第 idx 个字符 → DOM 位置（span 里可能嵌着 .mk 等小 span）
+        function tlDomPos(sp, idx) {
+          var len = parseInt(sp.getAttribute('data-l'), 10) || 0
+          idx = clamp(idx, 0, len)
+          var w = document.createTreeWalker(sp, NodeFilter.SHOW_TEXT)
+          var acc = 0
+          var n
+          var last = null
+          while ((n = w.nextNode())) {
+            var nl = n.nodeValue.length
+            if (acc + nl >= idx) return { node: n, off: idx - acc }
+            acc += nl
+            last = n
+          }
+          if (last) return { node: last, off: last.nodeValue.length }
+          return { node: sp, off: 0 }
+        }
+        function bindTlDrag(tl) {
+          if (tl._dragBound) return
+          tl._dragBound = 1
+          var st = null
+          // 注意：不能在 pointerdown 上 preventDefault —— 那会抑制整段兼容鼠标
+          // 事件（mousedown/mouseup/click 都不再派发），挂在 rv-scroll mouseup
+          // 上的「选中弹窗」和 click 上的「点选批注」会全部失效。
+          // 也不能只拦 selectstart —— Chrome 里 cancel selectstart 挡不住鼠标
+          // 拖选（原生按词粒度吸附，还会冻结成文本拖放）。
+          // 拦 mousedown 的默认行为才是对的：阻止原生选区/拖放，
+          // 但 mouseup / click / dblclick 照常派发。
+          tl.addEventListener('mousedown', function (e) {
+            if (e.button !== 0 || tl._noDrag) return
+            e.preventDefault()
+          })
+          tl.addEventListener('selectstart', function (e) {
+            if (!tl._noDrag) e.preventDefault()
+          })
+          tl.addEventListener('dragstart', function (e) {
+            e.preventDefault()
+          })
+          function metricsFor(t) {
+            if (!st.cache) st.cache = new Map()
+            var m = st.cache.get(t)
+            // 文本层可能在拖动中途被重建（滚动触发 IntersectionObserver →
+            // paintPage → buildTextLayer）：缓存的 span 引用会变成游离节点，
+            // 拿去 setBaseAndExtent 选区会漂到页头。检测到游离就地重算。
+            if (!m || !m.length || !m[0].sp.isConnected) {
+              m = tlMetrics(t, t.getBoundingClientRect())
+              st.cache.set(t, m)
+            }
+            return m
+          }
+          // 锚点 span 被重建后按 data-o 找回（buildTextLayer 的分段是确定性的，
+          // 重建后同一段会有相同的 data-o）；找不到就结束这次拖动。
+          function resolveAnchor() {
+            var a = st.anchor
+            if (a.m.sp && a.m.sp.isConnected) return true
+            var ms = metricsFor(st.tl)
+            for (var i = 0; i < ms.length; i++) {
+              if (ms[i].o === a.base) {
+                a.m = ms[i]
+                return true
+              }
+            }
+            return false
+          }
+          tl.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0 || tl._noDrag) return
+            var ms = tlMetrics(tl, tl.getBoundingClientRect())
+            if (!ms.length) return
+            var tr = tl.getBoundingClientRect()
+            var p = tlPosAt(ms, e.clientX - tr.left, e.clientY - tr.top)
+            if (!p) return
+            st = { id: e.pointerId, anchor: p, base: p.m.o, tl: tl, cache: new Map() }
+            st.cache.set(tl, ms)
+            try {
+              tl.setPointerCapture(e.pointerId)
+            } catch (err) {}
+            var a = tlDomPos(p.m.sp, p.idx)
+            var sel = window.getSelection()
+            sel.removeAllRanges()
+            if (sel.setBaseAndExtent) sel.setBaseAndExtent(a.node, a.off, a.node, a.off)
+          })
+          tl.addEventListener('pointermove', function (e) {
+            if (!st || e.pointerId !== st.id) return
+            // 跨页：指针进入另一页的文本层时换用那一页的几何
+            var target = st.tl
+            var host = document.elementFromPoint(e.clientX, e.clientY)
+            var tl2 = host && host.closest ? host.closest('.pf-tl') : null
+            if (tl2 && tl2 !== target && tl2._dragBound && !tl2._noDrag) target = tl2
+            var tr = target.getBoundingClientRect()
+            var p = tlPosAt(metricsFor(target), e.clientX - tr.left, e.clientY - tr.top)
+            if (!p) return
+            if (!resolveAnchor()) {
+              st = null
+              return
+            }
+            var sel = window.getSelection()
+            if (!sel.setBaseAndExtent) return
+            var a = tlDomPos(st.anchor.m.sp, st.anchor.idx)
+            var f = tlDomPos(p.m.sp, p.idx)
+            try {
+              sel.setBaseAndExtent(a.node, a.off, f.node, f.off)
+            } catch (err) {}
+            // 拖到容器边缘时自动滚动（原生拖选自带，自定义后要自己补）。
+            // 步子要小：几何是本地坐标，滚动本身不影响映射，但大步滚动
+            // 会连环触发页面重建，体验也差。
+            var sc = tl.closest('.rv-scroll')
+            if (sc) {
+              var r = sc.getBoundingClientRect()
+              if (e.clientY < r.top + 24) sc.scrollTop -= 6
+              else if (e.clientY > r.bottom - 24) sc.scrollTop += 6
+            }
+          })
+          function done(e) {
+            if (!st || (e && e.pointerId !== undefined && e.pointerId !== st.id)) return
+            st = null
+          }
+          tl.addEventListener('pointerup', done)
+          tl.addEventListener('pointercancel', done)
+          // 双击选词（原生双击选词已被 pointerdown 的 preventDefault 拦掉，自己补）
+          tl.addEventListener('dblclick', function (e) {
+            if (tl._noDrag) return
+            var tr = tl.getBoundingClientRect()
+            var p = tlPosAt(tlMetrics(tl, tr), e.clientX - tr.left, e.clientY - tr.top)
+            if (!p || !p.m.len) return
+            var sel = window.getSelection()
+            if (!sel.setBaseAndExtent) return
+            var a = tlDomPos(p.m.sp, 0)
+            var b = tlDomPos(p.m.sp, p.m.len)
+            try {
+              sel.setBaseAndExtent(a.node, a.off, b.node, b.off)
+            } catch (err) {}
+          })
+        }
+
+        // 高亮层：每条批注 × 每个视觉行 → 一段连续圆角色块
+        // off = 色块上沿距基线的高度（相对字号，向上为正）；h = 色块厚度
+        // 这组数值只是「量不到墨迹时」的退路（见 measureInk）：
+        // 不同 PDF 的字体差异极大，「字面高 ÷ 字号」常见 0.6~0.75，
+        // 只按字号推算，色块会比文字高出一大截、整体发飘。
+        var HLFMT = {
+          hl: { off: 0.86, h: 1.06 },
+          note: { off: 0.28, h: 0.5 },
+          ul: { off: -0.09, h: 0.13 },
+          st: { off: 0.27, h: 0.13 },
+          code: { off: -0.09, h: 0.12 },
+        }
+        // 只有底部两角圆：与文本模式一致（那边是贴着行框底边画的背景，上沿天然是直角）
+        var HL_ROUND_BOTTOM = { note: 1 }
+
+        // ---- 竖直位置：直接量画布上的墨迹 ----------------------------------
+        // 各样式相对「墨迹盒」的位置：t/b 为墨迹上下沿、H 为墨迹高（页面 CSS 像素）
+        var HL_INK = {
+          hl: function (t, b, H) {
+            var pad = H * 0.1
+            return [t - pad, b + pad]
+          },
+          note: function (t, b, H) {
+            return [b - H * 0.45, b + H * 0.12]
+          },
+          ul: function (t, b, H) {
+            var th = Math.max(1, H * 0.1)
+            return [b + H * 0.08, b + H * 0.08 + th]
+          },
+          st: function (t, b, H) {
+            var th = Math.max(1, H * 0.09)
+            var c = t + H * 0.55
+            return [c - th / 2, c + th / 2]
+          },
+          code: function (t, b, H) {
+            var th = Math.max(1, H * 0.08)
+            return [b + H * 0.06, b + H * 0.06 + th]
+          },
+        }
+
+        // 量出 [x0,x1] × [yTop,yBot] 范围内的墨迹（页面 CSS 像素）
+        // wantRuns：希望把墨迹列切成几段（= 这一行有几个词），用来把词对到真实横坐标；
+        //           传 0/1 表示不需要切段。
+        function measureInk(pageEl, geo, x0, x1, yTop, yBot, wantRuns) {
+          var cv = pageEl.querySelector('canvas')
+          if (!cv || !cv.width || !geo.w || !geo.h) return null
+          var sx = cv.width / geo.w
+          var sy = cv.height / geo.h
+          var px0 = Math.max(0, Math.round(x0 * sx))
+          var px1 = Math.min(cv.width - 1, Math.round(x1 * sx))
+          var py0 = Math.max(0, Math.round(yTop * sy))
+          var py1 = Math.min(cv.height - 1, Math.round(yBot * sy))
+          var w = px1 - px0 + 1
+          var h = py1 - py0 + 1
+          if (w < 2 || h < 3) return null
+          var d
+          try {
+            d = cv.getContext('2d').getImageData(px0, py0, w, h).data
+          } catch (e) {
+            return null
+          }
+          // 纸张亮度取出现最多的亮度档，明显比纸暗的算「墨」。
+          // 注意：很多 PDF 的页面底色是「透明」的（画布没画白底），
+          // 透明像素会被读成 rgba(0,0,0,0)，不排除掉就会被整片判成墨迹。
+          var hist = new Uint32Array(32)
+          var i, y, x, L
+          var opaque = 0
+          for (i = 0; i < d.length; i += 4) {
+            if (d[i + 3] < 25) continue
+            opaque++
+            L = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
+            hist[L > 254 ? 31 : L >> 3]++
+          }
+          if (opaque < w * h * 0.2) return null
+          var bi = 0
+          for (i = 1; i < 32; i++) if (hist[i] > hist[bi]) bi = i
+          var thr = Math.max(48, ((bi << 3) + 4) * 0.7)
+          var on = []
+          for (y = 0; y < h; y++) {
+            var n = 0
+            for (x = 0; x < w; x++) {
+              i = (y * w + x) * 4
+              if (d[i + 3] < 25) continue
+              if ((d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 < thr) n++
+            }
+            on.push(n)
+          }
+          // 纵向墨迹带：以墨迹最密的一行为锚（必然是文字主体），向上下按
+          // 「行内有墨即算」扩展，小间隙（笔画间空档）允许跨过。
+          // 不能自下而上取「第一段连续墨迹」——降部/升部/标点的窄竖笔只有
+          // 一两个暗像素，容易被行门槛筛掉后变成孤立行，把墨迹带拦腰截断，
+          // 扫描区一宽（minN 随宽度抬高）整个测量就失败了。
+          var peak = 0
+          for (y = 1; y < h; y++) if (on[y] > on[peak]) peak = y
+          if (!on[peak]) return null
+          var maxGap = Math.max(2, Math.round(h * 0.08))
+          var bot = peak
+          var gap = 0
+          for (y = peak + 1; y < h; y++) {
+            if (on[y] > 0) {
+              bot = y
+              gap = 0
+            } else if (++gap > maxGap) break
+          }
+          var top = peak
+          gap = 0
+          for (y = peak - 1; y >= 0; y--) {
+            if (on[y] > 0) {
+              top = y
+              gap = 0
+            } else if (++gap > maxGap) break
+          }
+          if (bot - top < 2) return null
+          // 在同一段墨迹的行范围内再扫一遍列，得到墨迹左右沿与「墨迹段」：
+          // 左右沿用来收掉横向估出来的余量；墨迹段用来把每个词对到真实横坐标。
+          // 先按最小间隙切碎，再把「最小的那几个间隙」合并掉，直到段数等于
+          // 期望词数 wantRuns —— 比用固定阈值切可靠得多（字距大的字体也不会被拆开）。
+          var gapN = 2
+          var segs = []
+          var runS = -1
+          var lastHit = -99999
+          var left = -1
+          var right = -1
+          for (x = 0; x < w; x++) {
+            var hit = 0
+            for (y = top; y <= bot; y++) {
+              i = (y * w + x) * 4
+              if (d[i + 3] < 25) continue
+              if ((d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 < thr) {
+                hit = 1
+                break
+              }
+            }
+            if (!hit) continue
+            if (runS < 0) runS = x
+            else if (x - lastHit > gapN) {
+              segs.push([runS, lastHit])
+              runS = x
+            }
+            lastHit = x
+            if (left < 0) left = x
+            right = x
+          }
+          if (runS >= 0) segs.push([runS, lastHit])
+          // 原始字形段（每个字一段），留给「词内定位」用
+          var rawSegs = segs.slice()
+          if (wantRuns > 1) {
+            while (segs.length > wantRuns) {
+              var mi = 0
+              var mg = Infinity
+              for (var q = 1; q < segs.length; q++) {
+                var gg = segs[q][0] - segs[q - 1][1]
+                if (gg < mg) {
+                  mg = gg
+                  mi = q
+                }
+              }
+              segs[mi - 1][1] = segs[mi][1]
+              segs.splice(mi, 1)
+            }
+          }
+          return {
+            top: (py0 + top) / sy,
+            bot: (py0 + bot) / sy,
+            left: left < 0 ? null : (px0 + left) / sx,
+            right: left < 0 ? null : (px0 + right) / sx,
+            runs: segs.map(function (r) {
+              return [(px0 + r[0]) / sx, (px0 + r[1]) / sx]
+            }),
+            segs: rawSegs.map(function (r) {
+              return [(px0 + r[0]) / sx, (px0 + r[1]) / sx]
+            }),
+          }
+        }
+
+        // 一条色块的盒子（页面 CSS 像素）：竖直优先贴墨迹，水平修掉估出来的余量
+        function rectBox(pageEl, geo, r, fmt) {
+          var em = r.fh
+          var box = {
+            x0: r.x,
+            x1: r.x + r.len,
+            y0: r.y - fmt.off * em,
+            y1: r.y - fmt.off * em + fmt.h * em,
+          }
+          if (Math.abs(r.ang) > 0.01) return box // 旋转文本不做实测
+          var key =
+            'hl:' + r.id + ':' + Math.round(r.x) + ':' + Math.round(r.y) + ':' + Math.round(r.len)
+          var ink = geo.inkCache && geo.inkCache[key]
+          if (ink === undefined) {
+            ink = measureInk(pageEl, geo, r.x, r.x + r.len, r.y - em * 0.95, r.y + em * 0.3)
+            if (!geo.inkCache) geo.inkCache = {}
+            geo.inkCache[key] = ink
+          }
+          if (!ink) return box
+          var vb = (HL_INK[r.sty] || HL_INK.hl)(ink.top, ink.bot, ink.bot - ink.top)
+          // 明显不合理就退回字号推算，避免被图形/底色带偏
+          var okV =
+            vb[1] - vb[0] >= em * 0.12 &&
+            vb[1] - vb[0] <= em * 1.6 &&
+            vb[1] >= r.y - em * 1.5 &&
+            vb[0] <= r.y + em * 0.6
+          if (okV) {
+            box.y0 = vb[0]
+            box.y1 = vb[1]
+          }
+          // 水平：只有「没能锚到实测字形」的片段才走老式收边。
+          // 已经锚准的片段不能再收，否则会把字边缘啃掉。
+          if (r.na && ink.left != null && ink.right != null) {
+            var padX = em * 0.06
+            var nl = Math.max(box.x0, ink.left - padX)
+            var nr = Math.min(box.x1, ink.right + padX)
+            if (nr - nl > em * 0.15 && nr - nl > (box.x1 - box.x0) * 0.4) {
+              box.x0 = nl
+              box.x1 = nr
+            }
+          }
+          return box
+        }
+
+        // 子串宽度占比：比「按字符数均分」准得多（宽窄字混排时尤其明显）。
+        // 文本层本身就是用页面这套字体做 scaleX 校正的，所以用同一字体量比例是可信的。
+        function mkFracMeasurer(pageEl) {
+          var ctx = null
+          try {
+            ctx = document.createElement('canvas').getContext('2d')
+          } catch (e) {}
+          if (!ctx) return null
+          var fam = 'serif'
+          try {
+            var sp = pageEl.querySelector('.pf-tl > span')
+            if (sp) fam = window.getComputedStyle(sp).fontFamily || fam
+          } catch (e) {}
+          ctx.font = '100px ' + fam
+          return function (whole, n) {
+            if (!whole || !whole.length) return 0
+            if (n <= 0) return 0
+            if (n >= whole.length) return 1
+            var total = ctx.measureText(whole).width
+            if (!total) return n / whole.length
+            return ctx.measureText(whole.slice(0, n)).width / total
+          }
+        }
+
+        // 一个文本项里「每个词」的真实左右沿（实测画布墨迹），外加原始字形段（每个字一段）。
+        // 部分覆盖的片段不能靠回退字体估宽度：PDF 内嵌字体与页面字体的字宽比例不同，
+        // 估出来的位置会整体漂移（实测能漂半个到一整个字），所以改成量真实字形。
+        // 量不到（无画布 / 底色干扰 / 词数对不上）返回 null，调用处退回原估算。
+        function itemWordRuns(pageEl, geo, g) {
+          var it = g.it
+          if (!it || !it.str) return null
+          var toks = wordTokens(it.str)
+          if (!toks.length) return null
+          var em = g.fh
+          var cache = geo.inkCache || (geo.inkCache = {})
+          var key = 'iw:' + Math.round(g.x) + ':' + Math.round(g.y) + ':' + Math.round(g.w)
+          if (key in cache) return cache[key]
+          var x0 = g.x - em * 0.12
+          var x1 = g.x + g.w + em * 0.12
+          var yTop = g.y - em * 0.95
+          var yBot = g.y + em * 0.3
+          var res = null
+          var ik = measureInk(pageEl, geo, x0, x1, yTop, yBot)
+          if (ik && ik.left != null && ik.segs && ik.segs.length) {
+            // 扫描区比文本项的排版盒宽（前后各留 0.12em 余量），邻居的起笔
+            // 会混进段里，把词段右沿拉到隔壁词上。先滤掉盒外的段和边缘碎片。
+            var fsegs = tlFilterSegs(ik.segs, g.x - 0.6, g.x + g.w + 0.6, x0, x1, em)
+            if (fsegs.length) {
+              if (toks.length === 1) {
+                var lo = fsegs[0][0]
+                var hi = fsegs[fsegs.length - 1][1]
+                if (hi - lo > 0.5)
+                  res = {
+                    runs: [{ o: toks[0].s, len: toks[0].len, x0: lo, x1: hi }],
+                    segs: ik.segs,
+                  }
+              } else {
+                // 把「最小的那几个间隙」合并掉，直到段数等于词数
+                while (fsegs.length > toks.length) {
+                  var mi = 0
+                  var mg = Infinity
+                  for (var q = 1; q < fsegs.length; q++) {
+                    var gg = fsegs[q][0] - fsegs[q - 1][1]
+                    if (gg < mg) {
+                      mg = gg
+                      mi = q
+                    }
+                  }
+                  fsegs[mi - 1][1] = fsegs[mi][1]
+                  fsegs.splice(mi, 1)
+                }
+                if (fsegs.length === toks.length) {
+                  var ok2 = true
+                  var runs = toks.map(function (t, i2) {
+                    var a = fsegs[i2][0]
+                    var b = fsegs[i2][1]
+                    var rw = b - a
+                    // 每段宽度要与词长量级相符，否则说明切错（空格太窄被并进同一段墨迹）
+                    if (!(rw > em * 0.14 * t.len && rw < em * 2.6 * t.len)) ok2 = false
+                    return { o: t.s, len: t.len, x0: a, x1: b }
+                  })
+                  if (ok2) res = { runs: runs, segs: ik.segs }
+                }
+              }
+            }
+          }
+          cache[key] = res
+          return res
+        }
+
+        // 在某个词段内部定位「第 k 个字」的边界。
+        // 优先用字形段一个一个对上（字形能分开时完全精确，与字体无关）；
+        // 对不上再退回按字宽比例插值（k=0 / k=词长 两端本来就是精确的）。
+        function subWordX(W, isSegs, word, k, side, frac) {
+          if (k <= 0) return W.x0
+          if (k >= word.length) return W.x1
+          var inner = isSegs.filter(function (s) {
+            return s[0] >= W.x0 - 0.75 && s[1] <= W.x1 + 0.75
+          })
+          if (inner.length === word.length) {
+            var s = inner[side === 'L' ? k : k - 1]
+            return side === 'L' ? s[0] : s[1]
+          }
+          if (!frac) return null
+          return W.x0 + (W.x1 - W.x0) * frac(word, k)
+        }
+
+        // 把「本项里被批注覆盖的那一段」锚到实测字形上。
+        // 返回 [起点, 终点]（页面 CSS 像素），锚不上返回 null。
+        function anchorPiece(pageEl, geo, g, it, cs, ce, frac) {
+          if (Math.abs(g.ang) > 0.01) return null
+          var wr = itemWordRuns(pageEl, geo, g)
+          if (!wr || !wr.runs.length) return null
+          var wrs = wr.runs
+          var rel0 = cs - it.o
+          var rel1 = ce - it.o
+          var i0 = -1
+          var i1 = -1
+          for (var i = 0; i < wrs.length; i++) {
+            if (rel0 < wrs[i].o + wrs[i].len && rel1 > wrs[i].o) {
+              if (i0 < 0) i0 = i
+              i1 = i
+            }
+          }
+          if (i0 < 0) return null
+          var A = wrs[i0]
+          var B = wrs[i1]
+          var wa = it.str.slice(A.o, A.o + A.len)
+          var wb = it.str.slice(B.o, B.o + B.len)
+          var ax = subWordX(A, wr.segs, wa, clamp(rel0 - A.o, 0, A.len), 'L', frac)
+          var bx = subWordX(B, wr.segs, wb, clamp(rel1 - B.o, 0, B.len), 'R', frac)
+          if (ax == null || bx == null) return null
+          if (!(bx - ax > 0.3)) return null
+          // 与估算值差太多，说明墨迹被判错（图形/表格线干扰），退回估算
+          var ex = g.x + g.w * (frac ? frac(it.str, rel0) : rel0 / it.len)
+          var ex1 = g.x + g.w * (frac ? frac(it.str, rel1) : rel1 / it.len)
+          if (
+            Math.abs(ax - ex) > g.fh * 1.6 ||
+            Math.abs(bx - ex1) > g.fh * 1.6 ||
+            !isFinite(ax) ||
+            !isFinite(bx)
+          )
+            return null
+          return [ax, bx]
+        }
+
+        function emitMarkRect(m, run, rects, frac, pageEl, geo) {
+          var pieces = []
+          run.forEach(function (g) {
+            var it = g.it
+            var cs = Math.max(m.start, it.o)
+            var ce = Math.min(m.end, it.o + it.len)
+            if (ce <= cs) return
+            var ux = Math.cos(g.ang),
+              uy = Math.sin(g.ang)
+            var x1, y1, x2, y2
+            var anch = anchorPiece(pageEl, geo, g, it, cs, ce, frac)
+            if (anch) {
+              x1 = anch[0]
+              y1 = g.y
+              x2 = anch[1]
+              y2 = g.y
+            } else {
+              // 锚不上：退回按字宽比例估算
+              var f0
+              var f1
+              if (cs === it.o && ce === it.o + it.len) {
+                f0 = 0
+                f1 = 1
+              } else if (frac) {
+                f0 = frac(it.str, cs - it.o)
+                f1 = frac(it.str, ce - it.o)
+              } else {
+                f0 = (cs - it.o) / it.len
+                f1 = (ce - it.o) / it.len
+              }
+              x1 = g.x + g.w * f0 * ux
+              y1 = g.y + g.w * f0 * uy
+              x2 = g.x + g.w * f1 * ux
+              y2 = g.y + g.w * f1 * uy
+            }
+            var last = pieces[pieces.length - 1]
+            var d = last
+              ? Math.sqrt(Math.pow(x1 - last.x2, 2) + Math.pow(y1 - last.y2, 2))
+              : Infinity
+            var joined = last && last.it.o + last.it.len === it.o
+            if (last && (joined || d < Math.max(1.5, g.fh * 0.9))) {
+              last.x2 = x2
+              last.y2 = y2
+              last.it = it
+              last.fh = Math.max(last.fh, g.fh)
+              // 只要有一段是估算的，整条就还留着估算的边，允许后面做兜底收边
+              last.na = !!(last.na && !anch)
+            } else
+              pieces.push({
+                x1: x1,
+                y1: y1,
+                x2: x2,
+                y2: y2,
+                ang: g.ang,
+                fh: g.fh,
+                it: it,
+                na: !anch,
+              })
+          })
+          pieces.forEach(function (pc) {
+            var len = Math.sqrt(Math.pow(pc.x2 - pc.x1, 2) + Math.pow(pc.y2 - pc.y1, 2))
+            if (len <= 0.3) return
+            var ux = Math.cos(pc.ang),
+              uy = Math.sin(pc.ang)
+            var pad = clamp(pc.fh * 0.06, 0.5, 4)
+            rects.push({
+              id: m.id,
+              sty: m.sty || 'hl',
+              color: m.color || MARKC[0],
+              x: pc.x1 - pad * ux,
+              y: pc.y1 - pad * uy,
+              len: len + pad * 2,
+              ang: pc.ang,
+              fh: pc.fh,
+              na: pc.na,
+            })
+          })
+        }
+
+        function pageHlRects(pageEl, geo, docId, frac) {
+          var list = markPool(docId, geo.start, geo.end)
+          if (!list.length) return []
+          // MKORDER 小的更优先，最后画 → 叠在最上层（与文本模式的取舍一致）
+          list.sort(function (x, y) {
+            return mkOrder(y.sty) - mkOrder(x.sty)
+          })
+          var order = visualOrder(geo.gs)
+          var rects = []
+          list.forEach(function (m) {
+            var hits = []
+            order.forEach(function (g) {
+              var it = g.it
+              if (it.o + it.len <= m.start || it.o >= m.end) return
+              hits.push(g)
+            })
+            // 同一行里按视觉连续性切「段」：
+            // 文本上本来就首尾相接的片段直接合并（空格通常包在片段里），
+            // 中间跳过了字符的（表格列、页眉页脚）才按间隙判断，间隙大就断开。
+            var runs = []
+            hits.forEach(function (g, n) {
+              var prev = hits[n - 1]
+              if (!n) return runs.push([g])
+              var joined = prev.it.o + prev.it.len === g.it.o
+              var ux = Math.cos(prev.ang),
+                uy = Math.sin(prev.ang)
+              var gap = (g.x - (prev.x + prev.w * ux)) * ux + (g.y - (prev.y + prev.w * uy)) * uy
+              var sameLine = Math.abs(g.y - prev.y) <= Math.max(1, Math.min(g.fh, prev.fh) * 0.4)
+              if (sameLine && (joined || gap < Math.max(2, prev.fh * 0.9)))
+                runs[runs.length - 1].push(g)
+              else runs.push([g])
+            })
+            runs.forEach(function (run) {
+              emitMarkRect(m, run, rects, frac, pageEl, geo)
+            })
+          })
+          return rects
+        }
+
+        function paintPageHl(pageEl, docId) {
+          var geo = pageEl._geo
+          if (!geo) return
+          var hl = pageEl.querySelector('.pf-hl')
+          if (!hl) {
+            hl = document.createElement('div')
+            hl.className = 'pf-hl'
+            var tl = pageEl.querySelector('.pf-tl')
+            if (tl) pageEl.insertBefore(hl, tl)
+            else pageEl.appendChild(hl)
+          }
+          hl.style.width = geo.w + 'px'
+          hl.style.height = geo.h + 'px'
+          hl.innerHTML = (function () {
+            var rs = pageHlRects(pageEl, geo, docId, mkFracMeasurer(pageEl))
+            var items = rs.map(function (r) {
+              var fmt = HLFMT[r.sty] || HLFMT.hl
+              // 竖直贴墨迹、水平收掉估出来的余量
+              return { r: r, box: rectBox(pageEl, geo, r, fmt) }
+            })
+            // 同一批注跨行时，每行的墨迹带高矮不一（有的行没有升部/降部），
+            // 行距处会露出白缝。把纵向相邻、横向有交叠的两块把缝平分补上，
+            // 视觉上与文本模式的连续底色一致；表格栏之间的大空档不桥。
+            var byId = {}
+            items.forEach(function (b) {
+              if (Math.abs(b.r.ang) > 0.01) return
+              ;(byId[b.r.id] || (byId[b.r.id] = [])).push(b)
+            })
+            Object.keys(byId).forEach(function (id) {
+              var arr = byId[id].sort(function (a, b) {
+                return a.box.y0 - b.box.y0 || a.box.x0 - b.box.x0
+              })
+              for (var i = 1; i < arr.length; i++) {
+                var pa = arr[i - 1]
+                var pb = arr[i]
+                var a = pa.box
+                var b = pb.box
+                var dy = b.y0 - a.y1
+                if (dy <= 0) continue // 已重叠/相接
+                if (dy > Math.max(pa.r.fh, pb.r.fh) * 1.5) continue // 隔了整行/插图
+                var ow = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)
+                if (ow < Math.min(a.x1 - a.x0, b.x1 - b.x0) * 0.3) continue // 不同栏
+                var mid = (a.y1 + b.y0) / 2
+                a.y1 = mid
+                b.y0 = mid
+              }
+            })
+            return items
+              .map(function (b) {
+                var r = b.r
+                var box = b.box
+                var w = Math.max(1, box.x1 - box.x0)
+                var h = Math.max(1, box.y1 - box.y0)
+                // 圆角与文本模式同源：都是 min(--radius, 厚度 × MK_RADIUS_CAP)
+                var radiusCss = mkRadiusPxCss(r.sty, h)
+                return (
+                  '<i class="mk ' +
+                  r.sty +
+                  (S.selMark === r.id ? ' mk-on' : '') +
+                  '" data-mk="' +
+                  r.id +
+                  '" style="' +
+                  mkVars(r.color) +
+                  ';border-radius:' +
+                  radiusCss +
+                  ';width:' +
+                  w.toFixed(2) +
+                  'px;height:' +
+                  h.toFixed(2) +
+                  'px;transform:translate(' +
+                  box.x0.toFixed(2) +
+                  'px,' +
+                  r.y.toFixed(2) +
+                  'px)' +
+                  (Math.abs(r.ang) > 0.005 ? ' rotate(' + r.ang.toFixed(4) + 'rad)' : '') +
+                  ' translateY(' +
+                  (box.y0 - r.y).toFixed(2) +
+                  'px)"></i>'
+                )
+              })
+              .join('')
+          })()
+        }
+
         function paintPage(pageEl, docId, idx) {
           return PDFV.info(docId).then(function (info) {
             var p = info.pages[idx]
@@ -5283,8 +6506,8 @@
               var host = el('rv-scroll')
               var dw = rvPageWidth(host)
               var dpr = Math.min(2, window.devicePixelRatio || 1)
-              var sc = (dw / p.w) * dpr
-              var vp = page.getViewport({ scale: sc })
+              // 文本层 / 高亮层用 CSS 像素坐标；画布按 DPR 提高清晰度
+              var vpC = page.getViewport({ scale: dw / p.w })
               var cv = pageEl.querySelector('canvas')
               if (!cv) {
                 // 清掉占位期遗留的文本节点（页码等），否则会露在页面上
@@ -5294,52 +6517,30 @@
                 cv = document.createElement('canvas')
                 pageEl.appendChild(cv)
               }
+              var vp = page.getViewport({ scale: (dw / p.w) * dpr })
               cv.width = Math.floor(vp.width)
               cv.height = Math.floor(vp.height)
               cv.style.width = dw + 'px'
               cv.style.height = Math.round((vp.height * dw) / vp.width) + 'px'
               pageEl.style.width = rvPageOuter(dw) + 'px'
               pageEl.style.height = 'auto'
-              return page
-                .render({ canvasContext: cv.getContext('2d'), viewport: vp })
-                .promise.then(function () {
-                  var tl = pageEl.querySelector('.pf-tl')
-                  if (!tl) {
-                    tl = document.createElement('div')
-                    tl.className = 'pf-tl'
-                    pageEl.appendChild(tl)
-                  }
-                  tl.innerHTML = ''
-                  tl.style.width = vp.width + 'px'
-                  tl.style.height = vp.height + 'px'
-                  tl.style.transform = 'scale(' + dw / vp.width + ')'
-                  tl.style.transformOrigin = '0 0'
-                  var frag = document.createDocumentFragment()
-                  var pool = markPool(docId, p.start, p.end)
-                  p.items.forEach(function (it) {
-                    var tx = mtx(vp.transform, it.tr)
-                    var fh = Math.sqrt(it.tr[2] * it.tr[2] + it.tr[3] * it.tr[3]) * sc
-                    var sp = document.createElement('span')
-                    sp.setAttribute('data-o', it.o)
-                    sp.setAttribute('data-l', it.len)
-                    sp.style.left = tx[2] + 'px'
-                    sp.style.top = tx[3] - fh * 0.82 + 'px'
-                    sp.style.fontSize = Math.max(1, fh * 0.82) + 'px'
-                    sp.style.lineHeight = Math.max(1, fh) + 'px'
-                    sp.innerHTML = markSpanHTML(it.str, it.o, docId, false, pool)
-                    frag.appendChild(sp)
-                    var tw = it.w * sc
-                    var aw = sp.offsetWidth
-                    if (aw > 0 && tw > 0) {
-                      var sx = tw / aw
-                      if (Math.abs(sx - 1) > 0.01 && sx > 0.15 && sx < 6)
-                        sp.style.transform = 'scaleX(' + sx + ')'
-                    }
-                  })
-                  tl.appendChild(frag)
-                  pageEl.classList.remove('pf-ph')
-                  pageEl._done = true
-                })
+              // willReadFrequently：measureInk 会频繁 getImageData 量墨迹，
+              // 首次取上下文时就声明，否则每次量都触发 Canvas2D 警告
+              var c2d = cv.getContext('2d', { willReadFrequently: true })
+              return page.render({ canvasContext: c2d, viewport: vp }).promise.then(function () {
+                pageEl._geo = {
+                  idx: idx,
+                  start: p.start,
+                  end: p.end,
+                  gs: pageGeom(p, vpC),
+                  w: vpC.width,
+                  h: vpC.height,
+                }
+                buildTextLayer(pageEl, docId, p, pageEl._geo.gs, vpC, pageEl._geo)
+                paintPageHl(pageEl, docId)
+                pageEl.classList.remove('pf-ph')
+                pageEl._done = true
+              })
             })
           })
         }
@@ -5721,12 +6922,12 @@
               (S.selMark === m.id ? ' on' : '') +
               '" data-mk="' +
               m.id +
-              '" style="--mc:' +
+              '" style="--mc-solid:' +
               m.color +
               '">' +
-              '<div class="nt-top"><i class="nt-dot"></i><span>' +
+              '<div class="nt-top"><i class="nt-dot"></i><span class="nt-sty">' +
               MKSTY[m.sty || 'hl'] +
-              '</span><span>' +
+              '</span><span class="nt-pg">' +
               (pg || '#' + (i + 1)) +
               '</span>' +
               '<span class="nt-act" data-act="edit" data-mk="' +
@@ -6464,11 +7665,7 @@
             renderNotes()
             renderStatus()
           } else {
-            document.querySelectorAll('.mk.mk-on').forEach(function (n) {
-              n.classList.remove('mk-on')
-            })
-            var nd = document.querySelector('.mk[data-mk="' + id + '"]')
-            if (nd) nd.classList.add('mk-on')
+            syncMarkOn()
             renderDetail()
             renderNotes()
           }
@@ -8174,8 +9371,13 @@
             )
           },
           dtClose: function () {
+            // 详情面板里既可能选中「编码片段」，也可能选中「阅读批注」，
+            // 只清 S.selAnn 时，在阅读模式（选中批注）下点叉会毫无反应。
             S.selAnn = null
+            S.selMark = null
+            syncMarkOn()
             renderPaper()
+            renderNotes()
             renderDetail()
           },
           memoNew: function () {
@@ -8657,13 +9859,19 @@
           })
           // ---- reader: 点击已有标记 ----
           el('rv-scroll').addEventListener('click', function (e) {
-            var mk = e.target.closest('.mk[data-mk]')
+            // 正在划选文字时不抢点击
+            var cs = null
+            try {
+              cs = window.getSelection()
+            } catch (err) {}
+            if (cs && !cs.isCollapsed && cs.toString()) return
+            // 先按几何命中：点落在哪个高亮色块里就选中它。
+            // 隐形文字层是用正文那套字体近似排版的，位置可能差几十像素，
+            // 只靠它命中会出现「点左边的高亮，选中了右边那条」。
+            var mk = markRectAt(e.clientX, e.clientY)
+            if (!mk) mk = e.target.closest('.mk[data-mk]')
             if (!mk) return
             var id = mk.getAttribute('data-mk')
-            document.querySelectorAll('.mk.mk-on').forEach(function (n) {
-              n.classList.remove('mk-on')
-            })
-            mk.classList.add('mk-on')
             if (markById(id)) {
               S.selMark = id
               S.selAnn = null
@@ -8671,12 +9879,14 @@
               S.selAnn = id
               S.selMark = null
             }
+            // 版式模式的高亮色块与文本模式的 .mk 都要跟上选中态
+            syncMarkOn()
             renderDetail()
             renderNotes()
           })
           // ---- reader: hover 显示批注 ----
           el('rv-scroll').addEventListener('mouseover', function (e) {
-            var mk = e.target.closest('.mk[data-mk]')
+            var mk = markRectAt(e.clientX, e.clientY) || e.target.closest('.mk[data-mk]')
             var tip = el('tip')
             if (!mk) return tip.style.setProperty('display', 'none')
             var m = markById(mk.getAttribute('data-mk'))
