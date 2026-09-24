@@ -864,6 +864,30 @@
         color: var(--text);
         background: var(--hover);
       }
+      /* 列头上的排序手柄：单击列头为“选中整列”，排序改由这里 / 双击列头触发 */
+      .gh .gs {
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        flex-shrink: 0;
+        cursor: pointer;
+        padding: 0 2px;
+        border-radius: var(--radius);
+        line-height: 1;
+      }
+      .gh .gs:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      .gh .gs.on {
+        color: var(--text);
+      }
+      /* 整行 / 整列被选中时的高亮：只用底色，不加边框 */
+      .gc.rowline {
+        background: var(--hover);
+      }
+      .gc.colline {
+        background: var(--hover);
+      }
       .gh-res {
         position: absolute;
         right: -3px;
@@ -875,6 +899,13 @@
       }
       .gh-res:hover {
         background: var(--border-dim);
+      }
+      /* 定位（Ctrl+G）子菜单 */
+      .goto-tip {
+        padding: 0 2px 6px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        line-height: 1.5;
       }
       .grow {
         display: grid;
@@ -2627,6 +2658,12 @@
         <div class="menu-btn" data-action="addCol" data-i18n="menu.addCol" title="插入列"></div>
         <div class="menu-btn" data-action="delRow" data-i18n="menu.delRow" title="删除行"></div>
         <div class="menu-btn" data-action="delCol" data-i18n="menu.delCol" title="删除列"></div>
+        <div
+          class="menu-btn"
+          data-action="showGoto"
+          data-i18n="menu.goto"
+          title="定位到单元格 (Ctrl+G)"
+        ></div>
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.data">数据</span>
@@ -2864,6 +2901,35 @@
       </div>
     </div>
 
+    <!-- ===== Go to cell Dropdown ===== -->
+    <div class="dropdown" id="dd-goto">
+      <div class="dd-label" data-i18n="goto.title">定位到单元格</div>
+      <div style="padding: 2px; border-bottom: 1px solid var(--border-dim); margin-bottom: 4px">
+        <input
+          type="text"
+          class="dd-text"
+          id="goto-input"
+          autocomplete="off"
+          spellcheck="false"
+          data-i18n-placeholder="goto.placeholder"
+          placeholder="如 B12 或 12,3"
+        />
+      </div>
+      <div class="goto-tip" data-i18n="goto.tip">支持 A1、B12、12,3、12:3 等写法</div>
+      <div class="dd-item-row">
+        <span data-i18n="goto.current">当前</span
+        ><span class="settings-value" id="goto-cur">A1</span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="goto.size">范围</span
+        ><span class="settings-value" id="goto-size">0 × 0</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-action="gotoApply">
+        <span data-i18n="goto.go">跳转</span><span class="hint">↵</span>
+      </div>
+    </div>
+
     <!-- ===== Clean Dropdown ===== -->
     <div class="dropdown" id="dd-clean">
       <div class="dd-label" data-i18n="cl.quick">快速处理</div>
@@ -3015,6 +3081,16 @@
       </div>
       <div class="dd-item" data-action="settingsToggleLang">
         <span data-i18n="dd.settings.lang">语言</span><span class="hint" id="sv-lang">中文</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-label" data-i18n="dd.settings.editing">编辑</div>
+      <div class="dd-item" data-action="settingsToggleAutoGrow">
+        <span data-i18n="dd.settings.autogrow">方向键到边界自动加行/列</span
+        ><span class="hint" id="sv-autogrow">开</span>
+      </div>
+      <div class="dd-item" data-action="settingsToggleTrimEmpty">
+        <span data-i18n="dd.settings.trimempty">离开末尾空行/空列时删除</span
+        ><span class="hint" id="sv-trimempty">开</span>
       </div>
       <div class="dd-divider"></div>
       <div class="dd-item" data-action="settingsHelp">
@@ -3210,6 +3286,9 @@
         </button>
         <button type="button" class="ms-item" data-action="delRow">
           <span class="ic" data-ico="rowdel"></span><span data-i18n="menu.delRow">删行</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showGoto">
+          <span class="ic" data-ico="search"></span><span data-i18n="menu.goto">定位</span>
         </button>
         <button type="button" class="ms-item" data-action="showSettings">
           <span class="ic" data-ico="gear"></span><span data-i18n="menu.style">样式</span>
@@ -3769,6 +3848,22 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.lang': '语言',
             'dd.settings.help': '使用说明',
             'dd.settings.resetStyles': '重置样式',
+            'dd.settings.editing': '编辑',
+            'dd.settings.autogrow': '方向键到边界自动加行/列',
+            'dd.settings.trimempty': '离开末尾空行/空列时删除',
+            'menu.goto': '定位',
+            'goto.title': '定位到单元格',
+            'goto.tip': '支持 A1、B12、12,3、12:3 等写法',
+            'goto.placeholder': '如 B12 或 12,3',
+            'goto.go': '跳转',
+            'goto.sortTip': '点击排序（升 → 降 → 取消）',
+            'goto.current': '当前',
+            'goto.size': '范围',
+            'msg.gotoBad': '无法识别这个位置',
+            'msg.gotoDone': '已跳转到 {0}',
+            'msg.delLine': '已删除选中的{0}',
+            'msg.row': '行',
+            'msg.col': '列',
             'theme.light': '浅色',
             'theme.dark': '深色',
             'lang.zh': '中文',
@@ -4127,6 +4222,22 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.lang': 'Language',
             'dd.settings.help': 'Help',
             'dd.settings.resetStyles': 'Reset styles',
+            'dd.settings.editing': 'Editing',
+            'dd.settings.autogrow': 'Arrow keys add row/col at the edge',
+            'dd.settings.trimempty': 'Remove a trailing empty row/col when leaving it',
+            'menu.goto': 'Go to',
+            'goto.title': 'Go to cell',
+            'goto.tip': 'Accepts A1, B12, 12,3 or 12:3',
+            'goto.placeholder': 'e.g. B12 or 12,3',
+            'goto.go': 'Go',
+            'goto.sortTip': 'Click to sort (asc → desc → off)',
+            'goto.current': 'Current',
+            'goto.size': 'Size',
+            'msg.gotoBad': 'Could not parse that location',
+            'msg.gotoDone': 'Jumped to {0}',
+            'msg.delLine': 'Deleted the selected {0}',
+            'msg.row': 'row(s)',
+            'msg.col': 'column(s)',
             'theme.light': 'Light',
             'theme.dark': 'Dark',
             'lang.zh': '中文',
@@ -4263,6 +4374,9 @@ notify pgrst, 'reload schema';</textarea
           statusBarVisible: true,
           menuPinned: true,
           view: 'grid',
+          /* 方向键：走到边界自动加行/列；离开末尾空行/空列时删掉它 */
+          autoGrow: true,
+          trimEmpty: true,
           sel: { r: 0, c: 0 },
           sel2: null,
           editing: null,
@@ -4580,6 +4694,8 @@ notify pgrst, 'reload schema';</textarea
                 statusBarVisible: S.statusBarVisible,
                 menuPinned: S.menuPinned,
                 view: S.view,
+                autoGrow: S.autoGrow,
+                trimEmpty: S.trimEmpty,
                 /* 以下为“工作台状态”：筛选 / 查找 / 排序 / 查询页内容。
                    一并落盘，才能随云同步原样带到其它设备。
                    派生数据（filter.rows、find.hits/re）不入库，加载时重算。 */
@@ -4632,9 +4748,13 @@ notify pgrst, 'reload schema';</textarea
               'statusBarVisible',
               'menuPinned',
               'view',
+              'autoGrow',
+              'trimEmpty',
             ].forEach(function (k) {
               if (o[k] !== undefined) S[k] = o[k]
             })
+            S.autoGrow = S.autoGrow !== false
+            S.trimEmpty = S.trimEmpty !== false
             S.zoom = clamp(+S.zoom || 1, CONFIG.MIN_ZOOM, CONFIG.MAX_ZOOM)
             S.radius = clamp(+S.radius || 0, 0, 12)
             S.fontSize = clamp(+S.fontSize || 13, 11, 20)
@@ -4759,6 +4879,8 @@ notify pgrst, 'reload schema';</textarea
             sv('sv-colw', S.colW)
             sv('sv-rowh', S.rowH)
             sv('sv-statusbar', S.statusBarVisible ? T('on') : T('off'))
+            sv('sv-autogrow', S.autoGrow ? T('on') : T('off'))
+            sv('sv-trimempty', S.trimEmpty ? T('on') : T('off'))
             sv('sv-lang', S.lang === 'zh' ? T('lang.zh') : T('lang.en'))
             $$('#sv-bg-options .settings-bg-dot').forEach(function (d) {
               d.classList.toggle('active', d.dataset.bg === S.bg)
@@ -6655,11 +6777,11 @@ notify pgrst, 'reload schema';</textarea
 
           /* header */
           var hh = '<div class="gh corner">' + (S.filter.on ? '⇥' : '#') + '</div>'
+          var fullCol = r.r1 === 0 && r.r2 >= t.rows.length - 1
           for (var c = 0; c < nc; c++) {
             var act = c >= r.c1 && c <= r.c2
-            var mark = ''
-            if (S.sortMark && S.sortMark.dim === 'row' && S.sortMark.by === c)
-              mark = S.sortMark.dir === 'asc' ? '▲' : '▼'
+            var sorted = S.sortMark && S.sortMark.dim === 'row' && S.sortMark.by === c
+            var mark = sorted ? (S.sortMark.dir === 'asc' ? '▲' : '▼') : '⇅'
             hh +=
               '<div class="gh' +
               (act ? ' act' : '') +
@@ -6674,7 +6796,15 @@ notify pgrst, 'reload schema';</textarea
               '<span class="gn">' +
               esc(t.cols[c].name) +
               '</span>' +
-              (mark ? '<span class="gs">' + mark + '</span>' : '') +
+              '<span class="gs' +
+              (sorted ? ' on' : '') +
+              '" data-sort="' +
+              c +
+              '" title="' +
+              esc(T('goto.sortTip')) +
+              '">' +
+              mark +
+              '</span>' +
               '<span class="gt">' +
               esc(t.cols[c].type) +
               '</span>' +
@@ -6704,6 +6834,7 @@ notify pgrst, 'reload schema';</textarea
           DOM.gsTop.style.height = start * rh + 'px'
           DOM.gsBot.style.height = Math.max(0, (total - end) * rh) + 'px'
 
+          var fullRow = r.c1 === 0 && r.c2 >= nc - 1
           var hits = S.find && S.find.hits ? S.find.hits : null
           var hitSet = {}
           if (hits) {
@@ -6716,6 +6847,7 @@ notify pgrst, 'reload schema';</textarea
             var ri = idx[j]
             var row = t.rows[ri] || []
             var rowAct = ri >= r.r1 && ri <= r.r2
+            var rowLine = rowAct && fullRow
             body +=
               '<div class="grow" style="grid-template-columns:' +
               tc +
@@ -6737,6 +6869,9 @@ notify pgrst, 'reload schema';</textarea
               if (nil) cls += ' nil'
               if (ri >= r.r1 && ri <= r.r2 && cc >= r.c1 && cc <= r.c2) {
                 if (r.r2 > r.r1 || r.c2 > r.c1) cls += ' inrange'
+                /* 整行 / 整列被选中：给出明显的行列高亮 */
+                if (rowLine) cls += ' rowline'
+                if (fullCol) cls += ' colline'
               }
               if (ri === S.sel.r && cc === S.sel.c) cls += ' sel'
               if (hitSet[ri + ':' + cc] !== undefined) cls += ' hit'
@@ -7005,6 +7140,7 @@ notify pgrst, 'reload schema';</textarea
           if (move === 'down') S.sel = { r: Math.min(e.r + 1, t.rows.length - 1), c: e.c }
           else if (move === 'up') S.sel = { r: Math.max(e.r - 1, 0), c: e.c }
           else if (move === 'right') S.sel = { r: e.r, c: Math.min(e.c + 1, t.cols.length - 1) }
+          else if (move === 'left') S.sel = { r: e.r, c: Math.max(e.c - 1, 0) }
           else S.sel = { r: e.r, c: e.c }
           S.sel2 = null
           afterChange()
@@ -8431,9 +8567,12 @@ notify pgrst, 'reload schema';</textarea
             document.body.classList.add('submenu-open')
           },
           modal: function (title, html) {
-            var fresh = DOM.modalBody.cloneNode(false)
-            DOM.modalBody.parentNode.replaceChild(fresh, DOM.modalBody)
-            DOM.modalBody = fresh
+            /* 换掉 body 节点，顺带清掉上一批监听器；拿不到父节点时退化为直接复用 */
+            if (DOM.modalBody.parentNode) {
+              var fresh = DOM.modalBody.cloneNode(false)
+              DOM.modalBody.parentNode.replaceChild(fresh, DOM.modalBody)
+              DOM.modalBody = fresh
+            }
             DOM.modalTitle.textContent = title
             DOM.modalBody.innerHTML = html
             DOM.modal.classList.add('open')
@@ -9229,10 +9368,17 @@ notify pgrst, 'reload schema';</textarea
           var h = '<div style="padding:6px 0 8px">'
           var L = [
             ['视图', '表格为可编辑网格；查询为 SQL 控制台；结构为列与类型。'],
-            ['编辑', '双击或输入即进入编辑。Enter 下移，Tab 右移，Delete 清空，Ctrl+Z 撤销。'],
+            [
+              '编辑',
+              '双击或直接输入即进入编辑。Enter 下移，Tab 右移；编辑框为空时方向键可直接跳到相邻格。Delete 清空内容，Ctrl+Delete 删除整行 / 整列。',
+            ],
+            [
+              '方向键',
+              '走到表格边界会自动补一行 / 一列；离开末尾的空行 / 空列时会自动把它删掉（两者均可在「样式 → 编辑」中开关）。',
+            ],
             [
               '排序',
-              '点击列头可快速升 / 降序；数据菜单中可按行或列、按文本 / 数字 / 日期 / 长度 / 自然序排序。',
+              '单击列头选中整列，点击列头的 ⇅ 或双击列头排序（升 → 降 → 取消）；数据菜单中可按行或列、按文本 / 数字 / 日期 / 长度 / 自然序排序。',
             ],
             ['筛选', '支持包含、等于、正则、比较与空值判断，多条件可按「全部 / 任一」组合。'],
             ['查找', '支持正则、整格匹配与区分大小写；可逐个或全部替换。'],
@@ -9246,7 +9392,7 @@ notify pgrst, 'reload schema';</textarea
             ],
             [
               '快捷键',
-              'Ctrl+F 查找 · Ctrl+Z 撤销 · Ctrl+Shift+Z 重做 · Ctrl+C / Ctrl+V 复制粘贴选区 · Ctrl+Enter 运行 SQL。',
+              'Ctrl+G 定位 · Ctrl+F 查找 · Ctrl+Z 撤销 · Ctrl+Shift+Z 重做 · Ctrl+C / Ctrl+V 复制粘贴选区 · Ctrl+Enter 运行 SQL。',
             ],
           ]
           if (S.lang === 'en')
@@ -9257,11 +9403,15 @@ notify pgrst, 'reload schema';</textarea
               ],
               [
                 'Edit',
-                'Double-click or type to edit. Enter moves down, Tab moves right, Delete clears, Ctrl+Z undoes.',
+                'Double-click or type to edit. Enter moves down, Tab moves right; when the editor is empty the arrow keys jump to the neighbouring cell. Delete clears, Ctrl+Delete removes whole rows / columns.',
+              ],
+              [
+                'Arrow keys',
+                'Reaching the edge appends a row / column; leaving a trailing empty row / column removes it (both toggleable in Style → Editing).',
               ],
               [
                 'Sort',
-                'Click a column header to sort; the Data menu sorts rows or columns by text / number / date / length / natural.',
+                'Click a header to select the whole column; use the ⇅ handle or double-click the header to sort (asc → desc → off). The Data menu sorts rows or columns by text / number / date / length / natural.',
               ],
               [
                 'Filter',
@@ -9278,7 +9428,7 @@ notify pgrst, 'reload schema';</textarea
               ],
               [
                 'Shortcuts',
-                'Ctrl+F find · Ctrl+Z undo · Ctrl+Shift+Z redo · Ctrl+C / Ctrl+V · Ctrl+Enter run SQL.',
+                'Ctrl+G go to · Ctrl+F find · Ctrl+Z undo · Ctrl+Shift+Z redo · Ctrl+C / Ctrl+V · Ctrl+Enter run SQL.',
               ],
             ]
           L.forEach(function (x) {
@@ -9440,6 +9590,13 @@ notify pgrst, 'reload schema';</textarea
               el.focus()
               el.select()
             }, 40)
+          },
+          showGoto: function () {
+            if (S.view !== 'grid') setView('grid')
+            openGoto()
+          },
+          gotoApply: function () {
+            applyGoto()
           },
           showClean: function () {
             var t = Store.active()
@@ -10056,6 +10213,18 @@ notify pgrst, 'reload schema';</textarea
             S.statusBarVisible = !S.statusBarVisible
             Settings.apply()
           },
+          settingsToggleAutoGrow: function () {
+            S.autoGrow = !S.autoGrow
+            Settings.save()
+            Settings.syncUI()
+            notify(T('dd.settings.autogrow') + '：' + (S.autoGrow ? T('on') : T('off')))
+          },
+          settingsToggleTrimEmpty: function () {
+            S.trimEmpty = !S.trimEmpty
+            Settings.save()
+            Settings.syncUI()
+            notify(T('dd.settings.trimempty') + '：' + (S.trimEmpty ? T('on') : T('off')))
+          },
           settingsToggleLang: function () {
             S.lang = S.lang === 'zh' ? 'en' : 'zh'
             Settings.apply()
@@ -10299,6 +10468,147 @@ notify pgrst, 'reload schema';</textarea
           },
         }
 
+        /* ---- 5. 格子定位跳转 ----
+           支持：B12 / b12 / 12,3 / 12:3 / 12（只给行号则保持当前列） */
+        function parseGotoRef(s, t) {
+          var v = String(s || '').trim()
+          if (!v) return null
+          var row = null,
+            col = null
+          var m = /^([A-Za-z]+)\s*[:,\s]?\s*(\d+)$/.exec(v)
+          if (m) {
+            col = colRefToIdx(m[1])
+            row = parseInt(m[2], 10) - 1
+          } else {
+            m = /^(\d+)\s*[:,\s]\s*(\d+)$/.exec(v)
+            if (m) {
+              row = parseInt(m[1], 10) - 1
+              col = parseInt(m[2], 10) - 1
+            } else {
+              m = /^(\d+)$/.exec(v)
+              if (m) {
+                row = parseInt(m[1], 10) - 1
+                col = null
+              } else {
+                m = /^([A-Za-z]+)$/.exec(v)
+                if (!m) return null
+                col = colRefToIdx(m[1])
+                row = null
+              }
+            }
+          }
+          if (row === null) row = S.sel.r
+          if (col === null) col = S.sel.c
+          if (isNaN(row) || isNaN(col)) return null
+          return { r: row, c: col }
+        }
+
+        function gotoCell(s) {
+          var t = Store.active()
+          var p = parseGotoRef(s, t)
+          if (!p) {
+            notify(T('msg.gotoBad'))
+            return false
+          }
+          var grew = false
+          /* 目标超出范围时按需补齐（若关闭了自动扩展，就夹到边界） */
+          if (S.autoGrow) {
+            if (p.r > t.rows.length - 1) {
+              pushUndo()
+              while (t.rows.length <= p.r) t.rows.push(new Array(t.cols.length).fill(null))
+              grew = true
+            }
+            if (p.c > t.cols.length - 1) {
+              pushUndo()
+              while (t.cols.length <= p.c) {
+                t.cols.push({ name: idxToCol(t.cols.length), type: 'text' })
+                t.colW.push(undefined)
+                t.rows.forEach(function (row) {
+                  row.push(null)
+                })
+              }
+              grew = true
+            }
+          }
+          S.sel = {
+            r: clamp(p.r, 0, t.rows.length - 1),
+            c: clamp(p.c, 0, t.cols.length - 1),
+          }
+          S.sel2 = null
+          if (grew) afterChange()
+          scrollToCell(S.sel.r, S.sel.c)
+          renderGrid()
+          renderStatus()
+          notify(T('msg.gotoDone', idxToCol(S.sel.c) + (S.sel.r + 1)))
+          return true
+        }
+
+        /* 定位做成子菜单（与查找、清理等一致），不开弹窗 */
+        function openGoto() {
+          var t = Store.active()
+          var cur = idxToCol(S.sel.c) + (S.sel.r + 1)
+          var el = document.getElementById('goto-input')
+          if (el) el.value = cur
+          var sv = function (id, v) {
+            var n = document.getElementById(id)
+            if (n) n.textContent = v
+          }
+          sv('goto-cur', cur)
+          sv('goto-size', t.rows.length + ' × ' + t.cols.length)
+          UIMgr.showDropdown(
+            'dd-goto',
+            document.querySelector('#top-menu [data-action="showGoto"]'),
+          )
+          setTimeout(function () {
+            if (!el) return
+            el.focus()
+            el.select()
+          }, 40)
+        }
+
+        function applyGoto() {
+          var el = document.getElementById('goto-input')
+          if (!el) return
+          if (gotoCell(el.value)) UIMgr.closeDropdowns()
+        }
+
+        /* Ctrl+Delete：按当前选区删除整行或整列。
+           整行选区（列方向铺满）→ 删行；整列选区（行方向铺满）→ 删列；
+           两者都铺满（全表）→ 删行；都不铺满 → 按范围更大的那一维删。 */
+        function delSelectedLine() {
+          var t = Store.active()
+          var r = rng()
+          var fullRow = r.c1 === 0 && r.c2 >= t.cols.length - 1
+          var fullCol = r.r1 === 0 && r.r2 >= t.rows.length - 1
+          var delRows
+          if (fullRow && fullCol) delRows = true
+          else if (fullRow) delRows = true
+          else if (fullCol) delRows = false
+          else delRows = r.r2 - r.r1 >= r.c2 - r.c1
+          if (delRows) {
+            if (t.rows.length <= r.r2 - r.r1 + 1) {
+              notify(T('msg.lastRow'))
+              return
+            }
+            ACTIONS.delRow()
+            notify(T('msg.delLine', T('msg.row')))
+          } else {
+            if (t.cols.length <= r.c2 - r.c1 + 1) {
+              notify(T('msg.lastCol'))
+              return
+            }
+            ACTIONS.delCol()
+            notify(T('msg.delLine', T('msg.col')))
+          }
+        }
+
+        /* 列头排序：升 → 降 → 取消 */
+        function cycleSort(c) {
+          if (!S.sortMark || S.sortMark.by !== c || S.sortMark.dim !== 'row') quickSort(c, 'asc')
+          else if (S.sortMark.dir === 'asc') quickSort(c, 'desc')
+          else resetSort()
+        }
+
         function quickSort(c, dir) {
           var o = {
             dim: 'row',
@@ -10473,13 +10783,20 @@ notify pgrst, 'reload schema';</textarea
           })
           DOM.gridScroll.addEventListener('click', function (e) {
             if (e.target.closest('.gh-res')) return
+            /* 列头上的排序手柄：升 → 降 → 取消 */
+            var so = e.target.closest('.gh .gs[data-sort]')
+            if (so) {
+              cycleSort(+so.dataset.sort)
+              return
+            }
             var gh = e.target.closest('.gh[data-c]')
             if (gh) {
+              /* 单击列头 = 选中整列（高亮），不再直接排序 */
               var c = +gh.dataset.c
-              if (!S.sortMark || S.sortMark.by !== c || S.sortMark.dim !== 'row')
-                quickSort(c, 'asc')
-              else if (S.sortMark.dir === 'asc') quickSort(c, 'desc')
-              else resetSort()
+              S.sel = { r: 0, c: c }
+              S.sel2 = { r: Store.active().rows.length - 1, c: c }
+              renderGrid()
+              renderStatus()
               return
             }
             var cell = e.target.closest('.gc[data-r]')
@@ -10498,6 +10815,12 @@ notify pgrst, 'reload schema';</textarea
             renderStatus()
           })
           DOM.gridScroll.addEventListener('dblclick', function (e) {
+            /* 双击列头也能排序（沿用旧习惯） */
+            var gh = e.target.closest('.gh[data-c]')
+            if (gh && !e.target.closest('.gs')) {
+              cycleSort(+gh.dataset.c)
+              return
+            }
             var cell = e.target.closest('.gc[data-r][data-c]')
             if (!cell) return
             openEditor(+cell.dataset.r, +cell.dataset.c)
@@ -10558,14 +10881,39 @@ notify pgrst, 'reload schema';</textarea
             } else if (e.key === 'Escape') {
               e.preventDefault()
               cancelEditor()
-            } else if (e.key === 'ArrowUp' && !DOM.cellEditor.value) {
+            } else if (
+              /* 输入框为空时方向键直接跳到相邻格，连续录入不用反复按 Enter */
+              !DOM.cellEditor.value &&
+              ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.key) >= 0
+            ) {
               e.preventDefault()
-              commitEditor('up')
+              commitEditor(
+                e.key === 'ArrowUp'
+                  ? 'up'
+                  : e.key === 'ArrowDown'
+                    ? 'down'
+                    : e.key === 'ArrowLeft'
+                      ? 'left'
+                      : 'right',
+              )
             }
           })
           DOM.cellEditor.addEventListener('blur', function () {
             if (S.editing) commitEditor(null)
           })
+
+          /* 定位输入框：回车跳转、Esc 收起子菜单 */
+          var gi = document.getElementById('goto-input')
+          if (gi)
+            gi.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                applyGoto()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                UIMgr.closeDropdowns()
+              }
+            })
 
           /* sheet tabs */
           DOM.sheetTabs.addEventListener('click', function (e) {
@@ -10921,6 +11269,23 @@ notify pgrst, 'reload schema';</textarea
               ACTIONS.showFind()
               return
             }
+            /* Ctrl+G：定位到单元格 */
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g' && S.view === 'grid') {
+              e.preventDefault()
+              ACTIONS.showGoto()
+              return
+            }
+            /* Ctrl+Delete / Ctrl+Backspace：删除选中的整行 / 整列
+               （整行选区删行，整列选区删列，否则按范围更大的那一维处理） */
+            if (
+              (e.ctrlKey || e.metaKey) &&
+              (e.key === 'Delete' || e.key === 'Backspace') &&
+              S.view === 'grid'
+            ) {
+              e.preventDefault()
+              delSelectedLine()
+              return
+            }
             if (typing) return
             if (S.view !== 'grid' || S.editing) return
             var t = Store.active()
@@ -10943,8 +11308,10 @@ notify pgrst, 'reload schema';</textarea
               e.preventDefault()
               moveSel(0, e.shiftKey ? -1 : 1, false)
             } else if (e.key === 'Delete' || e.key === 'Backspace') {
+              /* 注意：清空选区在 CTX 上，ACTIONS 里没有这一项。
+                 之前写成 ACTIONS.ctxClearSel ? ... 让 Delete 键一直是空操作。 */
               e.preventDefault()
-              ACTIONS.ctxClearSel ? CTX.ctxClearSel() : null
+              CTX.ctxClearSel()
             } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
               openEditor(S.sel.r, S.sel.c, e.key)
               e.preventDefault()
@@ -10987,23 +11354,107 @@ notify pgrst, 'reload schema';</textarea
           })
         }
 
+        function rowBlank(t, ri) {
+          var row = t.rows[ri]
+          if (!row) return false
+          for (var i = 0; i < t.cols.length; i++) if (!isNil(row[i])) return false
+          return true
+        }
+        function colBlank(t, ci) {
+          for (var i = 0; i < t.rows.length; i++) if (!isNil(t.rows[i][ci])) return false
+          return true
+        }
+
+        /* 方向键移动：
+           1) 常规移动；
+           2) 走到边界时自动补一行 / 一列（S.autoGrow）；
+           3) 离开末尾的空行 / 空列时把它删掉（S.trimEmpty）。
+           2 与 3 配合，等于给方向键一套“临时行 / 列”的快捷编辑体验。 */
         function moveSel(dr, dc, shift) {
           var t = Store.active()
-          var r = clamp(S.sel.r + dr, 0, t.rows.length - 1)
-          var c = clamp(S.sel.c + dc, 0, t.cols.length - 1)
-          if (shift) {
-            S.sel2 = S.sel2 || { r: S.sel.r, c: S.sel.c }
+          var r = S.sel.r,
+            c = S.sel.c
+          var nr = r + dr,
+            nc = c + dc
+          var changed = false,
+            snapped = false
+          function snap() {
+            if (snapped) return
+            pushUndo()
+            snapped = true
+          }
+
+          if (!shift) {
+            /* 3. 往回走出“末尾的空行”时删除它（只删末尾那条，不误伤数据中间的空白行）。
+                  只在往回走（dr < 0）时清理：继续往下走是“再要一行”，不能被清掉，
+                  否则连按方向键永远只能多出一行。 */
+            if (
+              S.trimEmpty &&
+              dr < 0 &&
+              r === t.rows.length - 1 &&
+              t.rows.length > 1 &&
+              rowBlank(t, r)
+            ) {
+              snap()
+              t.rows.splice(r, 1)
+              if (nr > r) nr--
+              changed = true
+            }
+            /* 3. 往回走出“末尾的空列”时删除它 */
+            if (
+              S.trimEmpty &&
+              dc < 0 &&
+              c === t.cols.length - 1 &&
+              t.cols.length > 1 &&
+              colBlank(t, c)
+            ) {
+              snap()
+              t.cols.splice(c, 1)
+              t.colW.splice(c, 1)
+              t.rows.forEach(function (row) {
+                row.splice(c, 1)
+              })
+              if (nc > c) nc--
+              changed = true
+            }
+            /* 2. 向下 / 向右走出边界时自动补行 / 补列 */
+            if (S.autoGrow && nr > t.rows.length - 1) {
+              snap()
+              while (t.rows.length <= nr) t.rows.push(new Array(t.cols.length).fill(null))
+              changed = true
+            }
+            if (S.autoGrow && nc > t.cols.length - 1) {
+              snap()
+              while (t.cols.length <= nc) {
+                t.cols.push({ name: idxToCol(t.cols.length), type: 'text' })
+                t.colW.push(undefined)
+                t.rows.forEach(function (row) {
+                  row.push(null)
+                })
+              }
+              changed = true
+            }
+            if (nr < 0) nr = 0
+            if (nc < 0) nc = 0
+            nr = Math.min(nr, t.rows.length - 1)
+            nc = Math.min(nc, t.cols.length - 1)
+            S.sel = { r: nr, c: nc }
+            S.sel2 = null
+          } else {
+            /* Shift 扩选：只做纯移动，不改结构，避免选区跨过刚删掉的行 */
+            S.sel2 = S.sel2 || { r: r, c: c }
             S.sel2 = {
               r: clamp(S.sel2.r + dr, 0, t.rows.length - 1),
               c: clamp(S.sel2.c + dc, 0, t.cols.length - 1),
             }
-          } else {
-            S.sel = { r: r, c: c }
-            S.sel2 = null
           }
+
           scrollToCell(S.sel.r, S.sel.c)
-          renderGrid()
-          renderStatus()
+          if (changed) afterChange()
+          else {
+            renderGrid()
+            renderStatus()
+          }
         }
 
         /* ============================================================
