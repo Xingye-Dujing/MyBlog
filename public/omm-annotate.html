@@ -556,24 +556,69 @@
         flex: 1 1 42%;
       }
 
+      .rail-body,
+      .paper-scroll,
+      .cv-scroll,
+      .rv-scroll,
+      .mv-scroll,
+      .mx-wrap,
+      .pg-list,
+      .dt-body,
+      #modal-body {
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
       .rail-body::-webkit-scrollbar,
       .paper-scroll::-webkit-scrollbar,
-      #modal-body::-webkit-scrollbar,
-      .mx-wrap::-webkit-scrollbar {
-        width: 4px;
-        height: 4px;
+      .cv-scroll::-webkit-scrollbar,
+      .rv-scroll::-webkit-scrollbar,
+      .mv-scroll::-webkit-scrollbar,
+      .mx-wrap::-webkit-scrollbar,
+      .pg-list::-webkit-scrollbar,
+      .dt-body::-webkit-scrollbar,
+      #modal-body::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
       }
       .rail-body::-webkit-scrollbar-track,
       .paper-scroll::-webkit-scrollbar-track,
-      #modal-body::-webkit-scrollbar-track,
-      .mx-wrap::-webkit-scrollbar-track {
+      .cv-scroll::-webkit-scrollbar-track,
+      .rv-scroll::-webkit-scrollbar-track,
+      .mv-scroll::-webkit-scrollbar-track,
+      .mx-wrap::-webkit-scrollbar-track,
+      .pg-list::-webkit-scrollbar-track,
+      .dt-body::-webkit-scrollbar-track,
+      #modal-body::-webkit-scrollbar-track {
         background: transparent;
+        /* 轨道上下内缩，避免滑块滚到两端时溢出圆角容器 */
+        margin: calc(var(--radius) + 3px) 0;
       }
       .rail-body::-webkit-scrollbar-thumb,
       .paper-scroll::-webkit-scrollbar-thumb,
-      #modal-body::-webkit-scrollbar-thumb,
-      .mx-wrap::-webkit-scrollbar-thumb {
+      .cv-scroll::-webkit-scrollbar-thumb,
+      .rv-scroll::-webkit-scrollbar-thumb,
+      .mv-scroll::-webkit-scrollbar-thumb,
+      .mx-wrap::-webkit-scrollbar-thumb,
+      .pg-list::-webkit-scrollbar-thumb,
+      .dt-body::-webkit-scrollbar-thumb,
+      #modal-body::-webkit-scrollbar-thumb {
+        background: var(--border-faint);
+        border-radius: 99px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+        transition: background 0.18s;
+      }
+      .rail-body::-webkit-scrollbar-thumb:hover,
+      .paper-scroll::-webkit-scrollbar-thumb:hover,
+      .cv-scroll::-webkit-scrollbar-thumb:hover,
+      .rv-scroll::-webkit-scrollbar-thumb:hover,
+      .mv-scroll::-webkit-scrollbar-thumb:hover,
+      .mx-wrap::-webkit-scrollbar-thumb:hover,
+      .pg-list::-webkit-scrollbar-thumb:hover,
+      .dt-body::-webkit-scrollbar-thumb:hover,
+      #modal-body::-webkit-scrollbar-thumb:hover {
         background: var(--border-dim);
+        background-clip: content-box;
       }
 
       /* ---- doc list ---- */
@@ -590,6 +635,31 @@
       }
       .doc-item.active {
         background: var(--hover);
+      }
+      .doc-del {
+        position: absolute;
+        top: 7px;
+        right: 7px;
+        width: 18px;
+        height: 18px;
+        line-height: 16px;
+        text-align: center;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        color: var(--text-faint);
+        font-size: calc(12px * var(--fscale));
+        opacity: 0;
+        transition: all 0.15s;
+        cursor: pointer;
+      }
+      .doc-del:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+        background: var(--bg);
+      }
+      .doc-item:hover .doc-del,
+      .doc-item.active:hover .doc-del {
+        opacity: 1;
       }
       .doc-title {
         font-size: calc(12.5px * var(--fscale));
@@ -773,6 +843,11 @@
         border-color: var(--border);
         background: var(--hover);
       }
+      .ph-btn.on {
+        color: var(--accent-green);
+        border-color: var(--accent-green);
+        background: var(--hover);
+      }
       .paper-scroll {
         flex: 1;
         min-height: 0;
@@ -848,6 +923,376 @@
         letter-spacing: 0.6px;
         color: var(--text-faint);
         margin-top: 20px;
+      }
+
+      /* ---- reader view · 阅读批注 ---- */
+      .rv-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 34px;
+        border-bottom: 1px solid var(--border-faint);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+      }
+      .rv-bar .spacer {
+        flex: 1;
+      }
+      .rv-scroll {
+        flex: 1;
+        min-height: 0;
+        /* 横向也可能滚动（放大时页面比视窗宽），两轴都交给容器处理 */
+        overflow: auto;
+        padding: 20px 34px 60px;
+        user-select: text;
+        cursor: text;
+      }
+      /* 页面容器：宽度取「最宽的一页」，容器自身再居中。
+         这样放大时页面两侧等量溢出且左侧可被滚到，视觉上始终居中，不会只往右长。 */
+      .rv-paper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: max-content;
+        min-width: 100%;
+        margin: 0 auto;
+      }
+      .rv-page {
+        background: #fff;
+        flex: none;
+        margin: 0 0 20px;
+        position: relative;
+        /* 页面边框统一受「圆角」设置控制 */
+        border: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+        overflow: hidden;
+      }
+      .rv-page canvas {
+        display: block;
+        margin: 0 auto;
+      }
+      /* 页码控件：浮动在阅读区右上角（相对内容层定位，不压工具栏） */
+      .rv-body {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      #rv-pager {
+        position: absolute;
+        top: 12px;
+        right: 26px;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 3px 6px;
+        background: var(--bg);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        font-family: var(--font-mono);
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-dim);
+        user-select: none;
+      }
+      #rv-pager .pg-nav {
+        cursor: pointer;
+        padding: 1px 7px 2px;
+        line-height: 1.2;
+        color: var(--text-dim);
+        border-radius: var(--radius);
+        transition: all 0.15s;
+      }
+      #rv-pager .pg-nav:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      #rv-pg {
+        min-width: 66px;
+        text-align: center;
+        letter-spacing: 0.5px;
+        padding: 0 2px;
+      }
+      #rv-pg b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      #rv-pg i {
+        font-style: normal;
+        padding: 0 2px;
+        color: var(--text-faint);
+      }
+      #rv-pg .pg-unit {
+        font-size: calc(9px * var(--fscale));
+        margin-left: 3px;
+        color: var(--text-faint);
+        letter-spacing: 1px;
+      }
+      .pf-tl {
+        position: absolute;
+        left: 0;
+        top: 0;
+        overflow: hidden;
+        line-height: 1;
+      }
+      .pf-tl > span {
+        position: absolute;
+        white-space: pre;
+        color: transparent;
+        transform-origin: 0% 0%;
+        cursor: text;
+      }
+      .pf-tl > span::selection,
+      .pf-tl .mk::selection {
+        background: rgba(70, 130, 220, 0.4);
+      }
+      /* 版式模式下高亮用正片叠底，避免色块盖住 PDF 上的文字 */
+      .pf-tl .mk {
+        mix-blend-mode: multiply;
+      }
+      .pf-ph {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fafafa;
+        color: #9a9a9a;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 2px;
+      }
+      .rv-text {
+        max-width: 780px;
+        margin: 0 auto;
+        font-size: calc(15px * var(--bfscale));
+        line-height: var(--lh);
+        color: var(--text);
+      }
+      .rv-text p {
+        margin: 0 0 0.85em;
+        text-align: justify;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .rv-text p:empty {
+        min-height: 0.6em;
+      }
+      .mk {
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .mk.hl {
+        background: var(--mc);
+      }
+      .mk.ul {
+        border-bottom: 2px solid var(--mc);
+      }
+      .mk.st {
+        text-decoration: line-through;
+        text-decoration-thickness: 2px;
+        text-decoration-color: var(--mc);
+      }
+      .mk.note {
+        background: linear-gradient(to top, var(--mc) 0.4em, transparent 0.4em);
+      }
+      .mk.code {
+        border-bottom: 1px dashed var(--text-dim);
+      }
+      .mk.mk-on {
+        box-shadow: 0 0 0 1px var(--text);
+      }
+      .mk sup {
+        font-size: 0.55em;
+        color: var(--text-faint);
+        margin-left: 1px;
+        vertical-align: super;
+        line-height: 1;
+      }
+      /* 右栏批注列表 */
+      #rr-notes {
+        flex: 1 1 46%;
+        border-bottom: 1px solid var(--border-dim);
+        display: none;
+      }
+      body.reader-mode #rr-codes {
+        display: none;
+      }
+      body.reader-mode #rr-notes {
+        display: flex;
+      }
+      .nt-row {
+        padding: 8px 12px 9px;
+        cursor: pointer;
+        position: relative;
+        border-radius: var(--radius);
+        transition: background 0.12s;
+      }
+      .nt-row:hover {
+        background: var(--hover);
+      }
+      .nt-row.on {
+        background: var(--hover);
+        box-shadow: inset 2px 0 0 var(--text);
+      }
+      .nt-top {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-faint);
+      }
+      .nt-dot {
+        width: 8px;
+        height: 8px;
+        flex-shrink: 0;
+        background: var(--mc, #dddddd);
+      }
+      .nt-q {
+        font-size: calc(11.5px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text);
+        margin-top: 3px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .nt-note {
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.65;
+        color: var(--text-dim);
+        margin-top: 4px;
+        padding-left: 7px;
+        border-left: 1px solid var(--border-faint);
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .nt-act {
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+        opacity: 0;
+        padding: 0 2px;
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      .nt-row:hover .nt-act {
+        opacity: 1;
+      }
+      .nt-act:hover {
+        color: var(--text);
+      }
+      /* 批注弹出面板 */
+      #mark-pop {
+        position: fixed;
+        z-index: 1200;
+        width: 286px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        display: none;
+        border-radius: var(--radius);
+        animation: ddIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #mark-pop.open {
+        display: block;
+      }
+      .mp-quote {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border-faint);
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-dim);
+        max-height: 52px;
+        overflow: hidden;
+      }
+      .mp-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+      }
+      .mp-lb {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        width: 30px;
+        flex-shrink: 0;
+      }
+      .mp-sty {
+        border: 1px solid var(--border-dim);
+        padding: 1px 7px;
+        font-size: calc(10.5px * var(--fscale));
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .mp-sty.on {
+        border-color: var(--border);
+        background: var(--hover);
+        color: var(--text);
+      }
+      .mp-cds {
+        display: flex;
+        gap: 4px;
+      }
+      .mp-cd {
+        width: 18px;
+        height: 18px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        border-radius: var(--radius);
+      }
+      .mp-cd.on {
+        border-color: var(--text);
+      }
+      #mp-note {
+        width: 100%;
+        min-height: 62px;
+        background: transparent;
+        border: none;
+        border-top: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(11.5px * var(--fscale));
+        line-height: 1.8;
+        padding: 8px 10px;
+        outline: none;
+        resize: vertical;
+      }
+      #mp-note::placeholder {
+        color: var(--text-faint);
+      }
+      .mp-foot {
+        display: flex;
+        border-top: 1px solid var(--border-dim);
+      }
+      .mp-btn {
+        flex: 1;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        cursor: pointer;
+        border-right: 1px solid var(--border-faint);
+        transition: all 0.15s;
+      }
+      .mp-btn:last-child {
+        border-right: none;
+      }
+      .mp-btn:hover {
+        color: var(--text);
+        background: var(--hover);
       }
 
       /* ---- codes view ---- */
@@ -969,6 +1414,7 @@
         font-size: calc(9px * var(--fscale));
         letter-spacing: 1px;
         border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
         padding: 0 4px;
         color: var(--text-faint);
       }
@@ -1085,6 +1531,7 @@
         letter-spacing: 1px;
         color: var(--text-faint);
         border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
         padding: 0 5px;
         flex-shrink: 0;
       }
@@ -1195,6 +1642,7 @@
         font-size: calc(9px * var(--fscale));
         color: var(--text-faint);
         border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
         padding: 0 3px;
         flex-shrink: 0;
       }
@@ -1692,6 +2140,176 @@
         opacity: 1;
         transform: translateX(-50%) translateY(0);
       }
+
+      /* ===== PDF 导入进度面板 ===== */
+      #pdf-prog {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        width: 344px;
+        max-width: calc(100vw - 32px);
+        background: var(--bg);
+        /* 统一受「圆角」设置控制，且不使用黑/蓝色 */
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 26px rgba(0, 0, 0, 0.1);
+        font-family: var(--font-mono);
+        font-size: calc(11px * var(--fscale));
+        z-index: 3200;
+        display: none;
+      }
+      #pdf-prog.open {
+        display: block;
+      }
+      .pg-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px 9px 13px;
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .pg-head .spacer {
+        flex: 1;
+      }
+      .pg-chip {
+        flex: none;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        padding: 1px 6px 2px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-dim);
+      }
+      .pg-close {
+        cursor: pointer;
+        color: var(--text-faint);
+        line-height: 1;
+        padding: 2px 3px;
+        border-radius: var(--radius);
+        transition: all 0.15s;
+      }
+      .pg-close:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      .pg-body {
+        padding: 12px 13px 10px;
+      }
+      .pg-file {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 9px;
+        color: var(--text);
+      }
+      .pg-bar {
+        position: relative;
+        height: 4px;
+        background: var(--border-faint);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .pg-bar > i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0%;
+        background: var(--accent-green);
+        border-radius: var(--radius);
+        transition: width 0.2s linear;
+      }
+      .pg-bar.err > i {
+        background: var(--accent-red);
+      }
+      .pg-sub {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 8px;
+        color: var(--text-dim);
+      }
+      .pg-list {
+        margin-top: 11px;
+        max-height: 170px;
+        overflow-y: auto;
+        border-top: 1px solid var(--border-faint);
+      }
+      .pg-row {
+        display: flex;
+        gap: 9px;
+        padding: 6px 2px;
+        border-bottom: 1px solid var(--border-faint);
+        line-height: 1.55;
+      }
+      .pg-row:last-child {
+        border-bottom: 0;
+      }
+      .pg-ic {
+        flex: none;
+        width: 15px;
+        height: 15px;
+        margin-top: 2px;
+        line-height: 13px;
+        text-align: center;
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+      }
+      .pg-row.ok .pg-ic {
+        color: var(--accent-green);
+        border-color: var(--accent-green);
+      }
+      .pg-row.bad .pg-ic {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+      .pg-row.bad .pg-name {
+        color: var(--accent-red);
+      }
+      .pg-name {
+        flex: 1;
+        word-break: break-all;
+      }
+      .pg-note {
+        color: var(--text-dim);
+      }
+      .pg-foot {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 13px 11px;
+        border-top: 1px solid var(--border-faint);
+      }
+      .pg-foot .pg-sum {
+        flex: 1;
+        color: var(--text-dim);
+      }
+      .pg-btn {
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        padding: 3px 14px;
+        cursor: pointer;
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        background: transparent;
+        transition: all 0.15s;
+      }
+      .pg-btn:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      /* 次要操作：文字按钮，不带描边 */
+      .pg-btn.ghost {
+        border-color: transparent;
+        padding-left: 4px;
+        padding-right: 4px;
+      }
+      .pg-btn.ghost:hover {
+        border-color: var(--border-dim);
+      }
       #custom-confirm {
         position: fixed;
         inset: 0;
@@ -2090,12 +2708,15 @@
         .cv-bar,
         .cv-scroll,
         .mx-wrap,
-        .mv-scroll {
+        .mv-scroll,
+        .rv-bar,
+        .rv-scroll {
           padding-left: 16px;
           padding-right: 16px;
         }
         .dropdown,
-        #sel-pop {
+        #sel-pop,
+        #mark-pop {
           left: 10px !important;
           right: 10px !important;
           width: auto !important;
@@ -2107,10 +2728,22 @@
         #sel-pop {
           max-width: none;
         }
+        #rv-pager {
+          top: 8px;
+          right: 12px;
+        }
         .modal-box {
           width: 100%;
           max-width: 100%;
           max-height: 90vh;
+        }
+        #pdf-prog {
+          left: 10px;
+          right: 10px;
+          width: auto;
+          width: auto;
+          max-width: none;
+          bottom: calc(64px + env(safe-area-inset-bottom));
         }
       }
 
@@ -2130,17 +2763,21 @@
         #left-rail,
         #right-rail,
         #notification,
+        #pdf-prog,
         #splash,
         #custom-confirm,
         #modal,
         #sel-pop,
+        #mark-pop,
         #tip,
         #m-nav,
         #m-tabs,
         #m-mask,
         #m-sheet,
         .cv-bar,
+        .rv-bar,
         .dropdown,
+        #rv-pager,
         .ph-btn {
           display: none !important;
         }
@@ -2151,9 +2788,14 @@
           height: auto !important;
           overflow: visible !important;
         }
-        .paper-scroll {
+        .paper-scroll,
+        .rv-scroll {
           overflow: visible !important;
           padding: 0 0 20px !important;
+        }
+        .rv-page {
+          box-shadow: none !important;
+          page-break-after: always;
         }
         .paper-head {
           border-bottom: 1px solid #000;
@@ -2697,6 +3339,7 @@
       <div class="menu-group">
         <span class="menu-label">视图</span>
         <div class="menu-btn" id="btn-annotate" data-action="viewAnnotate">标注</div>
+        <div class="menu-btn" id="btn-reader" data-action="viewReader">阅读</div>
         <div class="menu-btn" id="btn-codes" data-action="viewCodes">编码</div>
         <div class="menu-btn" id="btn-matrix" data-action="viewMatrix">矩阵</div>
         <div class="menu-btn" id="btn-memo" data-action="viewMemo">备忘</div>
@@ -2718,7 +3361,10 @@
       <div class="menu-group">
         <span class="menu-label">文件</span>
         <div class="menu-btn" data-action="showExport">导出</div>
-        <div class="menu-btn" data-action="importFile">导入</div>
+        <div class="menu-btn" data-action="importFile">导入文本</div>
+        <div class="menu-btn" data-action="importPdf" title="导入 PDF 论文用于阅读批注">
+          导入 PDF
+        </div>
         <div class="menu-btn" data-action="printView">打印</div>
         <div class="menu-btn" data-action="clearAll">清空</div>
       </div>
@@ -2768,6 +3414,14 @@
       <div class="dd-divider"></div>
       <div class="dd-item" data-action="exportQuotes">
         <span>引用清单</span><span class="hint">.txt</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-label">阅读批注</div>
+      <div class="dd-item" data-action="exportMarks">
+        <span>批注笔记</span><span class="hint">.md</span>
+      </div>
+      <div class="dd-item" data-action="exportMarksCsv">
+        <span>批注清单</span><span class="hint">.csv</span>
       </div>
     </div>
 
@@ -2894,6 +3548,9 @@
       <div class="dd-item" data-action="settingsToggleStatusbar">
         <span>状态栏</span><span class="hint" id="sv-statusbar">开</span>
       </div>
+      <div class="dd-item" data-action="settingsToggleCodeMark">
+        <span>阅读显编码</span><span class="hint" id="sv-codemark">开</span>
+      </div>
       <div class="dd-divider"></div>
       <div class="dd-item" data-action="settingsResetStyles" style="color: var(--text-dim)">
         <span>重置样式</span>
@@ -2937,6 +3594,39 @@
             </div>
             <div class="paper-scroll" id="paper-scroll">
               <div id="paper"></div>
+            </div>
+          </div>
+
+          <!-- 阅读批注 -->
+          <div class="view" id="view-reader">
+            <div class="rv-bar">
+              <span class="mini-label">阅读</span>
+              <div class="se mini" id="rv-mode" data-v="layout">
+                <span class="se-v">版式</span><span class="se-a">▾</span>
+              </div>
+              <span class="ph-btn" id="rv-reload" data-action="importPdf" style="display: none"
+                >重载 PDF</span
+              >
+              <span class="spacer"></span>
+              <span class="ph-btn" id="rv-fit" data-action="rvFit" title="页面宽度适应可用宽度"
+                >适应</span
+              >
+              <span class="ph-btn" data-action="rvZoomOut" title="缩小版面">－</span>
+              <span class="mini-label" id="rv-zoom" title="当前版面宽度">适应</span>
+              <span class="ph-btn" data-action="rvZoomIn" title="放大版面">＋</span>
+              <div class="se mini" id="rv-filter" data-v="all">
+                <span class="se-v">全部批注</span><span class="se-a">▾</span>
+              </div>
+              <span class="mini-label" id="rv-count">0 条</span>
+            </div>
+            <div class="rv-body">
+              <div class="rv-scroll" id="rv-scroll"></div>
+              <!-- 页码控件（右上角悬浮） -->
+              <div id="rv-pager">
+                <span class="pg-nav" data-action="rvPrev" title="上一页（PageUp）">‹</span>
+                <span id="rv-pg">—</span>
+                <span class="pg-nav" data-action="rvNext" title="下一页（PageDown）">›</span>
+              </div>
             </div>
           </div>
 
@@ -2987,6 +3677,16 @@
             </div>
             <div class="rail-body" id="code-list"></div>
           </div>
+          <div class="rr-sec" id="rr-notes">
+            <div class="rail-head">
+              <span>批注 · Marks</span
+              ><span
+                ><span class="rh-act" data-action="exportMarks">导出</span
+                ><span class="rh-act rail-x" data-action="railRight">×</span></span
+              >
+            </div>
+            <div class="rail-body" id="note-list"></div>
+          </div>
           <div class="rr-sec" id="rr-detail">
             <div class="rail-head">
               <span>片段 · Segment</span
@@ -3022,6 +3722,34 @@
       </div>
     </div>
 
+    <!-- ===== Mark Popup ===== -->
+    <div id="mark-pop">
+      <div class="mp-quote" id="mp-quote"></div>
+      <div class="mp-row">
+        <span class="mp-lb">样式</span>
+        <div class="mp-sty on" data-sty="hl">高亮</div>
+        <div class="mp-sty" data-sty="ul">下划线</div>
+        <div class="mp-sty" data-sty="st">删除线</div>
+        <div class="mp-sty" data-sty="note">批注</div>
+      </div>
+      <div class="mp-row">
+        <span class="mp-lb">颜色</span>
+        <div class="mp-cds" id="mp-cds"></div>
+      </div>
+      <textarea
+        id="mp-note"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="写下你的批注…（可留空，只做标记）"
+      ></textarea>
+      <div class="mp-foot">
+        <div class="mp-btn" data-act="save">保存</div>
+        <div class="mp-btn" data-act="code" title="改用码号编码这段">编码</div>
+        <div class="mp-btn" data-act="del">删除</div>
+        <div class="mp-btn" data-act="close">取消</div>
+      </div>
+    </div>
+
     <div id="tip"></div>
 
     <!-- ===== 统一候选区面板 ===== -->
@@ -3029,6 +3757,27 @@
 
     <!-- ===== Notification ===== -->
     <div id="notification"></div>
+
+    <!-- ===== PDF 导入进度 ===== -->
+    <div id="pdf-prog">
+      <div class="pg-head">
+        <span class="pg-chip">PDF</span>
+        <span id="pg-title">正在导入 PDF</span>
+        <span class="spacer"></span>
+        <span class="pg-close" data-pg="hide" title="隐藏">✕</span>
+      </div>
+      <div class="pg-body">
+        <div class="pg-file" id="pg-file">—</div>
+        <div class="pg-bar" id="pg-bar"><i></i></div>
+        <div class="pg-sub"><span id="pg-stage">准备中…</span><span id="pg-pct">0%</span></div>
+        <div class="pg-list" id="pg-list"></div>
+      </div>
+      <div class="pg-foot">
+        <span class="pg-sum" id="pg-sum"></span>
+        <div class="pg-btn ghost" id="pg-cancel" data-pg="cancel">取消剩余</div>
+        <div class="pg-btn" id="pg-close" data-pg="hide" style="display: none">关闭</div>
+      </div>
+    </div>
 
     <!-- ===== Confirm ===== -->
     <div id="custom-confirm">
@@ -3066,6 +3815,9 @@
     <nav id="m-tabs">
       <button type="button" class="mt-item on" data-mview="annotate">
         <span class="ms-ic">¶</span><span>标注</span>
+      </button>
+      <button type="button" class="mt-item" data-mview="reader">
+        <span class="ms-ic">▤</span><span>阅读</span>
       </button>
       <button type="button" class="mt-item" data-mview="codes">
         <span class="ms-ic">≡</span><span>编码</span>
@@ -3113,6 +3865,12 @@
         <button type="button" class="ms-item" data-action="importFile">
           <span class="ms-ic">↧</span><span>导入</span>
         </button>
+        <button type="button" class="ms-item" data-action="importPdf">
+          <span class="ms-ic">▤</span><span>导入 PDF</span>
+        </button>
+        <button type="button" class="ms-item" data-action="exportMarks">
+          <span class="ms-ic">✎</span><span>导出批注</span>
+        </button>
         <button type="button" class="ms-item" data-action="printView">
           <span class="ms-ic">⎙</span><span>打印</span>
         </button>
@@ -3148,6 +3906,13 @@
     </div>
 
     <input type="file" id="file-input" accept=".txt,.md,.json" multiple style="display: none" />
+    <input
+      type="file"
+      id="pdf-input"
+      accept=".pdf,application/pdf"
+      multiple
+      style="display: none"
+    />
 
     <div id="zp-cloud-modal" aria-hidden="true" inert>
       <div id="zp-cloud-card" role="dialog" aria-modal="true" aria-labelledby="zp-cloud-title">
@@ -3339,6 +4104,20 @@
         var LVNAME = { open: '开放式编码', axial: '轴心式编码', selective: '选择式编码' }
         var LVORDER = { open: 0, axial: 1, selective: 2 }
         var RELS = ['因果', '对立', '递进', '例证', '条件', '并列']
+
+        // 阅读批注：柔和高亮色（仅用于标记，不承担评价含义）
+        var MARKC = [
+          '#f6dd8a',
+          '#b6e2a6',
+          '#a8cdee',
+          '#f2b1c5',
+          '#cbb6ea',
+          '#f7c28d',
+          '#a4dcd4',
+          '#c6cfd8',
+        ]
+        var MKSTY = { note: '批注', hl: '高亮', ul: '下划线', st: '删除线', code: '编码' }
+        var MKORDER = { note: 0, hl: 1, ul: 2, st: 3, code: 4 }
         var DOCTYPES = [
           '访谈转录',
           '新闻报道',
@@ -3347,6 +4126,7 @@
           '政策文本',
           '田野笔记',
           '视频转录',
+          '学术文献',
           '其他',
         ]
         var MEMOTYPES = ['理论备忘录', '方法备忘录', '编码备忘录', '个人反思']
@@ -3521,6 +4301,16 @@
           showDef: true,
           statusBar: true,
           menuPinned: true,
+          codeMark: true,
+          readerMode: 'layout',
+          markFilter: 'all',
+          selMark: null,
+          pdfScale: 1,
+          /* true = 版面宽度适应可用宽度；false = 按 pdfScale 的百分比 */
+          pdfFit: true,
+          /* 重排后要回到的页码（内部使用） */
+          rvRestorePage: null,
+          pdfLostId: null,
           recent: [],
         }
 
@@ -3532,6 +4322,7 @@
           anns: [],
           rels: [],
           memos: [],
+          marks: [],
         }
 
         var pendingSel = null
@@ -3636,6 +4427,24 @@
           for (var i = 0; i < P.anns.length; i++) if (P.anns[i].doc === docId) n++
           return n
         }
+        function markById(id) {
+          for (var i = 0; i < P.marks.length; i++) if (P.marks[i].id === id) return P.marks[i]
+          return null
+        }
+        function marksOfDoc(docId) {
+          return P.marks.filter(function (m) {
+            return m.doc === docId
+          })
+        }
+        function markCountDoc(docId) {
+          return marksOfDoc(docId).length
+        }
+        function markCountNote(docId) {
+          return P.marks.filter(function (m) {
+            return (!docId || m.doc === docId) && m.text
+          }).length
+        }
+
         function coverage(docId) {
           var d = docById(docId)
           if (!d || !d.text.length) return 0
@@ -3728,6 +4537,10 @@
               P.anns = o.anns || []
               P.rels = o.rels || []
               P.memos = o.memos || []
+              P.marks = o.marks || []
+              P.docs.forEach(function (d) {
+                if (!d.kind) d.kind = 'text'
+              })
               return true
             } catch (e) {
               return false
@@ -3971,16 +4784,30 @@
           }
           return acc
         }
+        // 找到承载全局偏移的锚点：PDF 文本层用 data-o，纯文本段落用 data-s
+        function anchorOf(node) {
+          var n = node
+          if (n && n.nodeType === 3) n = n.parentNode
+          while (n && n.nodeType === 1) {
+            if (n.getAttribute && n.getAttribute('data-o') !== null)
+              return { el: n, base: parseInt(n.getAttribute('data-o'), 10) }
+            if (n.getAttribute && n.getAttribute('data-s') !== null)
+              return { el: n, base: parseInt(n.getAttribute('data-s'), 10) }
+            if (n.id === 'paper' || n.id === 'rv-scroll' || n.tagName === 'BODY') return null
+            n = n.parentNode
+          }
+          return null
+        }
+
         function selOffsets() {
           var sel = window.getSelection()
           if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null
           var r = sel.getRangeAt(0)
-          var pS = paraEl(r.startContainer)
-          var pE = paraEl(r.endContainer)
-          if (!pS || !pE) return null
-          var s =
-            parseInt(pS.getAttribute('data-s'), 10) + offIn(pS, r.startContainer, r.startOffset)
-          var e = parseInt(pE.getAttribute('data-s'), 10) + offIn(pE, r.endContainer, r.endOffset)
+          var aS = anchorOf(r.startContainer)
+          var aE = anchorOf(r.endContainer)
+          if (!aS || !aE) return null
+          var s = aS.base + offIn(aS.el, r.startContainer, r.startOffset)
+          var e = aE.base + offIn(aE.el, r.endContainer, r.endOffset)
           if (e <= s) return null
           var d = curDoc()
           if (!d) return null
@@ -3990,8 +4817,739 @@
         }
 
         // ================================================================
+        // 5.5 PDF 引擎 · 阅读批注
+        // ================================================================
+        // 多 CDN 回退：优先 jsDelivr 镜像，失败时依次尝试官方源
+        var PDFJS_SOURCES = [
+          {
+            lib: 'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+            worker: 'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+            cmap: 'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/cmaps/',
+          },
+          {
+            lib: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+            worker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+            cmap: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+          },
+          {
+            lib: 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
+            worker: 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+            cmap: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+          },
+        ]
+
+        // ---- 简易 IndexedDB：保存 PDF 原始文件，避免污染 localStorage ----
+        var IDB = {
+          db: null,
+          open: function () {
+            if (IDB.db) return Promise.resolve(IDB.db)
+            return new Promise(function (res, rej) {
+              var rq
+              try {
+                rq = indexedDB.open('zenmark-files', 1)
+              } catch (e) {
+                return rej(new Error('本机不支持 IndexedDB'))
+              }
+              rq.onupgradeneeded = function () {
+                var db = rq.result
+                if (!db.objectStoreNames.contains('files')) db.createObjectStore('files')
+              }
+              rq.onsuccess = function () {
+                IDB.db = rq.result
+                res(IDB.db)
+              }
+              rq.onerror = function () {
+                rej(rq.error || new Error('IndexedDB 打开失败'))
+              }
+            })
+          },
+          put: function (k, v) {
+            return IDB.open().then(function (db) {
+              return new Promise(function (res, rej) {
+                var tx = db.transaction('files', 'readwrite')
+                tx.objectStore('files').put(v, k)
+                tx.oncomplete = function () {
+                  res(true)
+                }
+                tx.onerror = function () {
+                  rej(tx.error)
+                }
+              })
+            })
+          },
+          get: function (k) {
+            return IDB.open().then(function (db) {
+              return new Promise(function (res, rej) {
+                var tx = db.transaction('files', 'readonly')
+                var rq = tx.objectStore('files').get(k)
+                rq.onsuccess = function () {
+                  res(rq.result || null)
+                }
+                rq.onerror = function () {
+                  rej(rq.error)
+                }
+              })
+            })
+          },
+          del: function (k) {
+            return IDB.open()
+              .then(function (db) {
+                return new Promise(function (res) {
+                  var tx = db.transaction('files', 'readwrite')
+                  tx.objectStore('files').delete(k)
+                  tx.oncomplete = function () {
+                    res(true)
+                  }
+                  tx.onerror = function () {
+                    res(false)
+                  }
+                })
+              })
+              .catch(function () {
+                return false
+              })
+          },
+        }
+
+        function mtx(m1, m2) {
+          return [
+            m1[0] * m2[0] + m1[2] * m2[1],
+            m1[1] * m2[0] + m1[3] * m2[1],
+            m1[0] * m2[2] + m1[2] * m2[3],
+            m1[1] * m2[2] + m1[3] * m2[3],
+            m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+            m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+          ]
+        }
+
+        var PDFV = {
+          libP: null,
+          cur: 0,
+          cache: {},
+          busy: {},
+          io: null,
+          loadSrc: function (i) {
+            if (i >= PDFJS_SOURCES.length) return Promise.reject(new Error('PDF 引擎加载失败'))
+            var src = PDFJS_SOURCES[i]
+            return new Promise(function (ok, no) {
+              var s = document.createElement('script')
+              s.src = src.lib
+              s.async = true
+              s.onload = function () {
+                if (!window.pdfjsLib) return no(new Error('bad'))
+                try {
+                  window.pdfjsLib.GlobalWorkerOptions.workerSrc = src.worker
+                } catch (e) {}
+                PDFV.cur = i
+                ok(window.pdfjsLib)
+              }
+              s.onerror = function () {
+                s.remove()
+                no(new Error('net'))
+              }
+              document.head.appendChild(s)
+            }).catch(function () {
+              return PDFV.loadSrc(i + 1)
+            })
+          },
+          ensureLib: function () {
+            if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib)
+            if (PDFV.libP) return PDFV.libP
+            PDFV.libP = PDFV.loadSrc(0)
+            PDFV.libP.catch(function () {
+              PDFV.libP = null
+            })
+            return PDFV.libP
+          },
+          drop: function (docId) {
+            delete PDFV.cache[docId]
+            delete PDFV.busy[docId]
+          },
+          info: function (docId, onProg) {
+            if (PDFV.cache[docId]) return Promise.resolve(PDFV.cache[docId])
+            if (PDFV.busy[docId]) return PDFV.busy[docId]
+            var task = IDB.get(docId)
+              .catch(function () {
+                return null
+              })
+              .then(function (blob) {
+                if (!blob) throw new Error('PDF 文件不在本机缓存中')
+                return PDFV.ensureLib().then(function (lib) {
+                  return blob.arrayBuffer().then(function (buf) {
+                    // cMapUrl 用于正确解析中文/日文 CID 字体，缺失会导致文字乱码
+                    var src = PDFJS_SOURCES[PDFV.cur] || PDFJS_SOURCES[0]
+                    return lib.getDocument({
+                      data: new Uint8Array(buf),
+                      cMapUrl: src.cmap,
+                      cMapPacked: true,
+                    }).promise
+                  })
+                })
+              })
+              .then(function (pdf) {
+                var info = { pdf: pdf, numPages: pdf.numPages, pages: [], text: '' }
+                if (onProg) onProg(0, pdf.numPages)
+                // 逐页串行提取。必须让每一步的 promise 由前一步推导而来，
+                // 不能把海量的 then 挂在「自身」上，否则首尾互等会永久挂起。
+                function runNext(i) {
+                  if (i > pdf.numPages) return Promise.resolve()
+                  return pdf
+                    .getPage(i)
+                    .then(function (page) {
+                      var vp0 = page.getViewport({ scale: 1 })
+                      return page.getTextContent().then(function (tc) {
+                        var start = info.text.length
+                        var items = []
+                        tc.items.forEach(function (it) {
+                          if (!it || !it.str) return
+                          items.push({
+                            str: it.str,
+                            o: info.text.length,
+                            len: it.str.length,
+                            tr: it.transform,
+                            w: it.width,
+                            h: it.height,
+                          })
+                          info.text += it.str
+                          if (it.hasEOL) info.text += '\n'
+                        })
+                        if (info.text.length && info.text.charAt(info.text.length - 1) !== '\n')
+                          info.text += '\n'
+                        info.text += '\n'
+                        info.pages.push({
+                          no: i,
+                          start: start,
+                          end: info.text.length,
+                          w: vp0.width,
+                          h: vp0.height,
+                          items: items,
+                        })
+                      })
+                    })
+                    .then(function () {
+                      if (onProg) onProg(i, pdf.numPages)
+                      return runNext(i + 1)
+                    })
+                }
+                return runNext(1).then(function () {
+                  PDFV.cache[docId] = info
+                  delete PDFV.busy[docId]
+                  return info
+                })
+              })
+            PDFV.busy[docId] = task
+            task.catch(function () {
+              delete PDFV.busy[docId]
+            })
+            return task
+          },
+          pageOf: function (info, off) {
+            for (var i = 0; i < info.pages.length; i++) {
+              if (off >= info.pages[i].start && off < info.pages[i].end) return i
+            }
+            return info.pages.length ? info.pages.length - 1 : 0
+          },
+        }
+
+        // 取出与 [s,e) 相交的批注（+ 可选编码标记），供切片渲染使用
+        function markPool(docId, s, e) {
+          var out = []
+          P.marks.forEach(function (m) {
+            if (m.doc !== docId) return
+            if (m.end <= s || m.start >= e) return
+            out.push({
+              start: m.start,
+              end: m.end,
+              sty: m.sty || 'hl',
+              color: m.color || MARKC[0],
+              id: m.id,
+              text: m.text || '',
+            })
+          })
+          if (S.codeMark) {
+            P.anns.forEach(function (a) {
+              if (a.doc !== docId) return
+              if (a.end <= s || a.start >= e) return
+              var c = codeById(a.code)
+              out.push({
+                start: a.start,
+                end: a.end,
+                sty: 'code',
+                color: c ? c.color : '#888888',
+                id: a.id,
+                text: c ? c.no + ' ' + c.name : '',
+              })
+            })
+          }
+          return out
+        }
+
+        // 把一段文本按批注切分成带标记的 HTML
+        function markSpanHTML(text, base, docId, showSup, pool) {
+          var end = base + text.length
+          var list = []
+          ;(pool || markPool(docId, base, end)).forEach(function (m) {
+            if (m.end <= base || m.start >= end) return
+            list.push(m)
+          })
+          if (!list.length) return esc(text)
+          var pts = [base, end]
+          list.forEach(function (m) {
+            if (m.start > base && m.start < end) pts.push(m.start)
+            if (m.end > base && m.end < end) pts.push(m.end)
+          })
+          pts.sort(function (x, y) {
+            return x - y
+          })
+          var seen = {},
+            up = []
+          pts.forEach(function (x) {
+            if (!seen[x]) {
+              seen[x] = 1
+              up.push(x)
+            }
+          })
+          var html = ''
+          for (var i = 0; i < up.length - 1; i++) {
+            var s = up[i],
+              e = up[i + 1]
+            if (e <= s) continue
+            var seg = text.slice(s - base, e - base)
+            var top = null
+            list.forEach(function (m) {
+              if (m.start > s || m.end < e) return
+              if (!top || (MKORDER[m.sty] || 9) < (MKORDER[top.sty] || 9)) top = m
+            })
+            if (!top) {
+              html += esc(seg)
+              continue
+            }
+            var cls = 'mk ' + top.sty + (S.selMark && S.selMark === top.id ? ' mk-on' : '')
+            var sup = showSup && top.text && top.sty !== 'code' ? '<sup>✎</sup>' : ''
+            html +=
+              '<span class="' +
+              cls +
+              '" data-mk="' +
+              top.id +
+              '" style="--mc:' +
+              top.color +
+              '">' +
+              esc(seg) +
+              sup +
+              '</span>'
+          }
+          return html
+        }
+
+        function readerIsPdf(d) {
+          return !!(d && d.kind === 'pdf')
+        }
+        function readerUseLayout(d) {
+          return readerIsPdf(d) && selVal(el('rv-mode')) !== 'text'
+        }
+
+        function renderReaderText(d, host) {
+          var ps = paras(d.text)
+          var html = ''
+          var pool = S.codeMark || P.marks.length ? markPool(d.id, 0, d.text.length) : []
+          ps.forEach(function (p) {
+            html +=
+              '<p data-s="' +
+              p.start +
+              '" data-n="' +
+              p.text.length +
+              '">' +
+              markSpanHTML(p.text, p.start, d.id, true, pool) +
+              '</p>'
+          })
+          host.innerHTML = '<div class="rv-text">' + html + '</div>'
+          var pg = el('rv-pager')
+          if (pg) pg.style.display = 'none'
+        }
+
+        // 局部刷新标记，避免重排整份 PDF 导致阅读位置丢失
+        function refreshMarks(s, e) {
+          var d = curDoc()
+          if (!d) return
+          var host = el('rv-scroll')
+          if (!host) return
+          host.querySelectorAll('span[data-o]').forEach(function (sp) {
+            var o = parseInt(sp.getAttribute('data-o'), 10)
+            var l = parseInt(sp.getAttribute('data-l'), 10) || 0
+            if (l && (o + l <= s || o >= e)) return
+            sp.innerHTML = markSpanHTML(d.text.slice(o, o + l), o, d.id, false)
+          })
+          host.querySelectorAll('p[data-s]').forEach(function (p) {
+            var o = parseInt(p.getAttribute('data-s'), 10)
+            var n = parseInt(p.getAttribute('data-n'), 10) || 0
+            if (o + n <= s || o >= e) return
+            p.innerHTML = markSpanHTML(d.text.slice(o, o + n), o, d.id, true)
+          })
+        }
+        function afterMarkChange(s, e) {
+          Store.save()
+          renderStatus()
+          renderNotes()
+          renderDetail()
+          refreshMarks(s, e)
+          var d = curDoc()
+          if (d) el('rv-count').textContent = marksOfDoc(d.id).length + ' 条'
+        }
+
+        function readerPadX(host) {
+          try {
+            var cs = window.getComputedStyle(host)
+            return (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+          } catch (e) {
+            return 68
+          }
+        }
+
+        // 阅读区内容可用宽度（已扣左右留白）
+        function rvAvailWidth(host) {
+          host = host || el('rv-scroll')
+          if (!host) return 700
+          return Math.max(240, (host.clientWidth || 700) - readerPadX(host))
+        }
+
+        // 单页画布宽度：适应模式 = 可用宽度再留 8px 余量；否则 = 适应宽度 × 缩放百分比
+        function rvPageWidth(host) {
+          var base = Math.max(240, rvAvailWidth(host) - 8)
+          return S.pdfFit ? base : Math.max(240, Math.round(base * (S.pdfScale || 1)))
+        }
+
+        // 页面外框宽度 = 画布宽度 + 左右各 1px 边框（全局 border-box）
+        function rvPageOuter(dw) {
+          return dw + 2
+        }
+
+        // 容器跟着最宽的页面变宽，保证页面横向居中（而不是只往右溢出）
+        function rvSyncPaperWidth(paper, dw, avail) {
+          if (!paper) return
+          var outer = rvPageOuter(dw)
+          paper.style.width = outer > avail ? outer + 'px' : ''
+        }
+
+        function rvZoomLabel() {
+          var b = el('rv-zoom')
+          if (b) b.textContent = S.pdfFit ? '适应' : Math.round((S.pdfScale || 1) * 100) + '%'
+          var fb = el('rv-fit')
+          if (fb) fb.classList.toggle('on', !!S.pdfFit)
+        }
+
+        // 当前所处页码（用于缩放后恢复阅读位置）
+        function rvCurPageIdx() {
+          var host = el('rv-scroll')
+          var paper = el('rv-paper')
+          if (!host || !paper || !paper.children.length) return 0
+          var kids = paper.children
+          var cur = 0
+          for (var i = 0; i < kids.length; i++) {
+            if (kids[i].offsetTop <= host.scrollTop + 40) cur = i
+          }
+          return cur
+        }
+
+        // 版面比视窗宽时，横向滚动到居中位置
+        function rvCenterX() {
+          var host = el('rv-scroll')
+          if (!host) return
+          var max = host.scrollWidth - host.clientWidth
+          host.scrollLeft = max > 1 ? Math.round(max / 2) : 0
+        }
+
+        // 把某页顶端滚到视窗顶部
+        function rvScrollToPage(idx) {
+          var host = el('rv-scroll')
+          var paper = el('rv-paper')
+          if (!host || !paper) return
+          var kid = paper.children[idx]
+          if (!kid) return
+          var top = 0
+          var n = kid
+          while (n && n !== host) {
+            top += n.offsetTop
+            n = n.offsetParent
+          }
+          if (n !== host) return
+          host.scrollTop = Math.max(0, top - 8)
+        }
+
+        function paintPage(pageEl, docId, idx) {
+          return PDFV.info(docId).then(function (info) {
+            var p = info.pages[idx]
+            if (!p) return
+            return info.pdf.getPage(p.no).then(function (page) {
+              var host = el('rv-scroll')
+              var dw = rvPageWidth(host)
+              var dpr = Math.min(2, window.devicePixelRatio || 1)
+              var sc = (dw / p.w) * dpr
+              var vp = page.getViewport({ scale: sc })
+              var cv = pageEl.querySelector('canvas')
+              if (!cv) {
+                // 清掉占位期遗留的文本节点（页码等），否则会露在页面上
+                Array.prototype.slice.call(pageEl.childNodes).forEach(function (n) {
+                  if (n.nodeType !== 1) pageEl.removeChild(n)
+                })
+                cv = document.createElement('canvas')
+                pageEl.appendChild(cv)
+              }
+              cv.width = Math.floor(vp.width)
+              cv.height = Math.floor(vp.height)
+              cv.style.width = dw + 'px'
+              cv.style.height = Math.round((vp.height * dw) / vp.width) + 'px'
+              pageEl.style.width = rvPageOuter(dw) + 'px'
+              pageEl.style.height = 'auto'
+              return page
+                .render({ canvasContext: cv.getContext('2d'), viewport: vp })
+                .promise.then(function () {
+                  var tl = pageEl.querySelector('.pf-tl')
+                  if (!tl) {
+                    tl = document.createElement('div')
+                    tl.className = 'pf-tl'
+                    pageEl.appendChild(tl)
+                  }
+                  tl.innerHTML = ''
+                  tl.style.width = vp.width + 'px'
+                  tl.style.height = vp.height + 'px'
+                  tl.style.transform = 'scale(' + dw / vp.width + ')'
+                  tl.style.transformOrigin = '0 0'
+                  var frag = document.createDocumentFragment()
+                  var pool = markPool(docId, p.start, p.end)
+                  p.items.forEach(function (it) {
+                    var tx = mtx(vp.transform, it.tr)
+                    var fh = Math.sqrt(it.tr[2] * it.tr[2] + it.tr[3] * it.tr[3]) * sc
+                    var sp = document.createElement('span')
+                    sp.setAttribute('data-o', it.o)
+                    sp.setAttribute('data-l', it.len)
+                    sp.style.left = tx[2] + 'px'
+                    sp.style.top = tx[3] - fh * 0.82 + 'px'
+                    sp.style.fontSize = Math.max(1, fh * 0.82) + 'px'
+                    sp.style.lineHeight = Math.max(1, fh) + 'px'
+                    sp.innerHTML = markSpanHTML(it.str, it.o, docId, false, pool)
+                    frag.appendChild(sp)
+                    var tw = it.w * sc
+                    var aw = sp.offsetWidth
+                    if (aw > 0 && tw > 0) {
+                      var sx = tw / aw
+                      if (Math.abs(sx - 1) > 0.01 && sx > 0.15 && sx < 6)
+                        sp.style.transform = 'scaleX(' + sx + ')'
+                    }
+                  })
+                  tl.appendChild(frag)
+                  pageEl.classList.remove('pf-ph')
+                  pageEl._done = true
+                })
+            })
+          })
+        }
+
+        function renderReaderPdf(d, host) {
+          if (PDFV.io) {
+            PDFV.io.disconnect()
+            PDFV.io = null
+          }
+          host.innerHTML =
+            '<div class="rv-paper" id="rv-paper"><div class="pf-load" style="text-align:center;color:var(--text-faint);font-size:calc(11px*var(--fscale));letter-spacing:2px;padding:40px 0">正在解析 PDF…</div></div>'
+          PDFV.info(d.id).then(
+            function (info) {
+              var total = info.pages.length
+              var back = S.rvRestorePage
+              S.rvRestorePage = null
+              var passes = 0
+
+              function build() {
+                passes++
+                if (PDFV.io) {
+                  PDFV.io.disconnect()
+                  PDFV.io = null
+                }
+                var avail = rvAvailWidth(host)
+                var dw = rvPageWidth(host)
+                var h = ''
+                info.pages.forEach(function (p, i) {
+                  h +=
+                    '<div class="rv-page pf-ph" data-pg="' +
+                    i +
+                    '" style="width:' +
+                    rvPageOuter(dw) +
+                    'px;height:' +
+                    (Math.round((dw * p.h) / p.w) + 2) +
+                    'px"></div>'
+                })
+                el('rv-paper').innerHTML = h
+                rvSyncPaperWidth(el('rv-paper'), dw, avail)
+                el('rv-pager').style.display = ''
+                setPg(1, total)
+                if (back != null) {
+                  requestAnimationFrame(function () {
+                    rvCenterX()
+                    rvScrollToPage(back)
+                  })
+                }
+                var io = new IntersectionObserver(
+                  function (entries) {
+                    entries.forEach(function (en) {
+                      if (!en.isIntersecting) return
+                      var t = en.target
+                      io.unobserve(t)
+                      paintPage(t, d.id, parseInt(t.getAttribute('data-pg'), 10)).catch(
+                        function (e) {
+                          t.classList.add('pf-ph')
+                          t.textContent = '渲染失败'
+                          console.warn('[ZenMark] page render failed', e)
+                        },
+                      )
+                    })
+                  },
+                  { root: host, rootMargin: '700px 0px' },
+                )
+                PDFV.io = io
+                el('rv-paper')
+                  .querySelectorAll('.rv-page')
+                  .forEach(function (x) {
+                    io.observe(x)
+                  })
+                // 页面插入后纵向滚动条才出现，clientWidth 随之变小——
+                // 若按旧宽度排的版会产生横向滚动条，这里二次校正（最多两轮）
+                if (passes < 2) {
+                  requestAnimationFrame(function () {
+                    if (PDFV.io !== io) return
+                    var dw2 = rvPageWidth(host)
+                    if (Math.abs(dw2 - dw) > 1) build()
+                  })
+                }
+              }
+              build()
+            },
+            function (err) {
+              // 版面不可用（本机没有 PDF 文件）→ 降级为文本模式并提示
+              el('rv-reload').style.display = ''
+              S.pdfLostId = d.id
+              selMount(
+                el('rv-mode'),
+                [
+                  { v: 'layout', label: '版式' },
+                  { v: 'text', label: '文本' },
+                ],
+                'text',
+                function () {
+                  S.readerMode = selVal(el('rv-mode'))
+                  Settings.save()
+                  renderReader()
+                },
+              )
+              renderReaderText(d, host)
+              notify('本机未缓存该 PDF 版面，已切换为文本模式')
+              console.warn('[ZenMark] pdf load failed', err)
+            },
+          )
+        }
+
+        function setPg(cur, tot) {
+          var box = el('rv-pg')
+          if (!box) return
+          if (!tot) {
+            box.textContent = '—'
+            return
+          }
+          box.innerHTML = '<b>' + cur + '</b><i>/</i>' + tot + '<span class="pg-unit">页</span>'
+        }
+
+        function renderReader() {
+          var host = el('rv-scroll')
+          var d = curDoc()
+          rvZoomLabel()
+          if (!d) {
+            host.innerHTML =
+              '<div class="rv-empty"><div class="pe-mark">No Source</div>' +
+              '<div class="pe-title">尚 无 材 料</div>' +
+              '<div class="pe-note">可导入 .txt / .md 文本，或导入 PDF 论文开始批注阅读。</div></div>'
+            el('rv-count').textContent = '0 条'
+            setPg(0, 0)
+            el('rv-pager').style.display = 'none'
+            el('rv-reload').style.display = 'none'
+            return
+          }
+          var modeItems = readerIsPdf(d)
+            ? [
+                { v: 'layout', label: '版式' },
+                { v: 'text', label: '文本' },
+              ]
+            : [{ v: 'text', label: '文本' }]
+          selMount(el('rv-mode'), modeItems, readerIsPdf(d) ? S.readerMode : 'text', function () {
+            S.readerMode = selVal(el('rv-mode'))
+            Settings.save()
+            renderReader()
+          })
+          el('rv-reload').style.display = 'none'
+          var fItems = [
+            { v: 'all', label: '全部批注' },
+            { v: 'note', label: '有批注文字' },
+            { v: 'hl', label: '高亮' },
+            { v: 'ul', label: '下划线' },
+            { v: 'st', label: '删除线' },
+          ]
+          selMount(el('rv-filter'), fItems, S.markFilter || 'all', function () {
+            S.markFilter = selVal(el('rv-filter'))
+            renderNotes()
+          })
+          var n = marksOfDoc(d.id).length
+          el('rv-count').textContent = n + ' 条'
+          if (!d.text) {
+            host.innerHTML =
+              '<div class="rv-empty"><div class="pe-mark">Empty</div>' +
+              '<div class="pe-title">该 材 料 没 有 正 文</div></div>'
+            return
+          }
+          if (readerUseLayout(d)) renderReaderPdf(d, host)
+          else renderReaderText(d, host)
+        }
+
+        // ================================================================
         // 6. RAILS
         // ================================================================
+        // 删除一份材料：清理正文/编码/批注/关联缓存，并写回 Local Storage
+        function deleteDocById(id, done) {
+          var d = docById(id)
+          if (!d) return
+          var n = annCountDoc(id)
+          var mk = markCountDoc(id)
+          showConfirm(
+            '删除「' +
+              d.title +
+              '」将同时移除其 ' +
+              n +
+              ' 条编码片段' +
+              (mk ? '、' + mk + ' 条批注' : '') +
+              '，确定删除？',
+            '删除',
+          ).then(function (ok) {
+            if (!ok) return
+            P.docs = P.docs.filter(function (x) {
+              return x.id !== id
+            })
+            P.anns = P.anns.filter(function (a) {
+              return a.doc !== id
+            })
+            P.marks = P.marks.filter(function (m) {
+              return m.doc !== id
+            })
+            if (S.docId === id) S.docId = P.docs.length ? P.docs[0].id : null
+            if (S.selMark) {
+              var sm = markById(S.selMark)
+              if (!sm || sm.doc === id) S.selMark = null
+            }
+            if (S.pdfLostId === id) S.pdfLostId = null
+            PDFV.drop(id)
+            IDB.del(id)
+            Store.save()
+            if (done) done()
+            renderAll()
+            notify('材料已删除')
+          })
+        }
+
         function renderDocs() {
           var box = el('doc-list')
           if (!P.docs.length) {
@@ -4009,8 +5567,12 @@
                 '<div class="doc-title">' +
                 esc(d.title) +
                 '</div>' +
+                '<span class="doc-del" data-docdel="' +
+                d.id +
+                '" title="删除这份材料">×</span>' +
                 '<div class="doc-meta">' +
                 esc([d.type, d.source].filter(Boolean).join(' · ') || '未标注来源') +
+                (markCountDoc(d.id) ? ' · 批注 ' + markCountDoc(d.id) : '') +
                 '</div>' +
                 '<div class="doc-bar"><i style="width:' +
                 coverage(d.id) +
@@ -4047,6 +5609,7 @@
             selMount(ms, mitems, docById(mkeep) ? mkeep : S.docId, function (v) {
               S.docId = v
               S.selAnn = null
+              S.selMark = null
               renderAll()
             })
           }
@@ -4116,7 +5679,117 @@
           box.innerHTML = h
         }
 
+        // ---- 批注：右栏列表 ----
+        function markPageLabel(m) {
+          var d = docById(m.doc)
+          if (!d || d.kind !== 'pdf') return ''
+          var info = PDFV.cache[d.id]
+          if (!info) return ''
+          return 'P' + (PDFV.pageOf(info, m.start) + 1)
+        }
+
+        function renderNotes() {
+          var box = el('note-list')
+          var d = curDoc()
+          if (!d) {
+            box.innerHTML = '<div class="empty-hint">尚无材料。</div>'
+            return
+          }
+          var f = S.markFilter || 'all'
+          var list = marksOfDoc(d.id).filter(function (m) {
+            if (f === 'all') return true
+            if (f === 'note') return !!m.text
+            return (m.sty || 'hl') === f
+          })
+          list.sort(function (x, y) {
+            return x.start - y.start
+          })
+          if (!list.length) {
+            box.innerHTML =
+              '<div class="empty-hint">' +
+              (marksOfDoc(d.id).length
+                ? '当前筛选下没有批注。'
+                : '本材料还没有批注。<br />在阅读区选中文本即可高亮或写批注。') +
+              '</div>'
+            return
+          }
+          var h = ''
+          list.forEach(function (m, i) {
+            var pg = markPageLabel(m)
+            h +=
+              '<div class="nt-row' +
+              (S.selMark === m.id ? ' on' : '') +
+              '" data-mk="' +
+              m.id +
+              '" style="--mc:' +
+              m.color +
+              '">' +
+              '<div class="nt-top"><i class="nt-dot"></i><span>' +
+              MKSTY[m.sty || 'hl'] +
+              '</span><span>' +
+              (pg || '#' + (i + 1)) +
+              '</span>' +
+              '<span class="nt-act" data-act="edit" data-mk="' +
+              m.id +
+              '">改</span>' +
+              '<span class="nt-act" data-act="del" data-mk="' +
+              m.id +
+              '">删</span></div>' +
+              '<div class="nt-q">' +
+              esc(m.quote) +
+              '</div>' +
+              (m.text ? '<div class="nt-note">' + esc(m.text) + '</div>' : '') +
+              '</div>'
+          })
+          box.innerHTML = h
+        }
+
+        // ---- 批注：详情面板 ----
+        function renderMarkDetail() {
+          var box = el('dt-body')
+          var m = markById(S.selMark)
+          if (!m) {
+            S.selMark = null
+            return renderDetail()
+          }
+          var d = docById(m.doc)
+          var h =
+            '<div class="dt-quote" style="--c:' +
+            m.color +
+            '">' +
+            esc(m.quote) +
+            '</div>' +
+            '<div class="dt-line"><span class="dt-k">样式</span><span class="dt-v" data-mact="sty">' +
+            MKSTY[m.sty || 'hl'] +
+            '</span></div>' +
+            '<div class="dt-line"><span class="dt-k">颜色</span><span class="dt-v" data-mact="color"><i style="display:inline-block;width:34px;height:9px;vertical-align:middle;background:' +
+            m.color +
+            '"></i></span></div>' +
+            '<div class="dt-line"><span class="dt-k">出处</span><span class="dt-v" data-mact="goto">' +
+            esc(d ? d.title : '—') +
+            (markPageLabel(m) ? ' · ' + markPageLabel(m) : '') +
+            '</span></div>' +
+            '<textarea class="dt-ta" id="dt-mnote" autocomplete="off" spellcheck="false" placeholder="批注内容…">' +
+            esc(m.text || '') +
+            '</textarea>' +
+            '<div class="dt-acts">' +
+            '<span class="dt-btn" data-mact="goto">定位</span>' +
+            '<span class="dt-btn" data-mact="copy">复制原文</span>' +
+            '<span class="dt-btn" data-mact="tomemo">存入备忘</span>' +
+            '<span class="dt-btn danger" data-mact="del">删除</span>' +
+            '</div>'
+          box.innerHTML = h
+          var ta = el('dt-mnote')
+          if (ta)
+            ta.addEventListener('blur', function () {
+              m.text = ta.value
+              Store.save()
+              renderNotes()
+            })
+        }
+
         function renderDetail() {
+          if (S.selMark) return renderMarkDetail()
           var box = el('dt-body')
           var a = annById(S.selAnn)
           if (!a) {
@@ -4203,6 +5876,8 @@
             P.codes.length +
             ' · 片段 ' +
             P.anns.length +
+            ' · 批注 ' +
+            P.marks.length +
             ' · 覆盖 ' +
             cov +
             '% · 待复核 ' +
@@ -4218,21 +5893,32 @@
           renderCodesView()
           renderMatrix()
           renderMemos()
+          renderNotes()
+          if (S.view === 'reader') renderReader()
         }
 
         // ================================================================
         // 7. VIEWS
         // ================================================================
+        // 顶部菜单按钮与视图的一一对应；菜单按钮 id = 'btn-' + view
+        var VIEWS = ['annotate', 'reader', 'codes', 'matrix', 'memo']
+        function syncViewBtns() {
+          VIEWS.forEach(function (k) {
+            var v = el('view-' + k)
+            if (v) v.classList.toggle('on', k === S.view)
+            var b = el('btn-' + k)
+            if (b) b.classList.toggle('active', k === S.view)
+          })
+          document.body.classList.toggle('reader-mode', S.view === 'reader')
+        }
+
         function setView(v) {
           S.view = v
-          ;['annotate', 'codes', 'matrix', 'memo'].forEach(function (k) {
-            el('view-' + k).classList.toggle('on', k === v)
-            var b = el('btn-' + k)
-            if (b) b.classList.toggle('active', k === v)
-          })
+          syncViewBtns()
           document.querySelectorAll('.mt-item[data-mview]').forEach(function (b) {
             b.classList.toggle('on', b.getAttribute('data-mview') === v)
           })
+          if (v === 'reader') renderReader()
           if (v === 'codes') renderCodesView()
           if (v === 'matrix') renderMatrix()
           if (v === 'memo') renderMemos()
@@ -4484,6 +6170,15 @@
           box.innerHTML = h
         }
 
+        function placePop(pop, rect, w) {
+          var top = rect.bottom + 8
+          var left = clamp(rect.left, 10, Math.max(10, window.innerWidth - w - 10))
+          if (top + pop.offsetHeight > window.innerHeight - 10)
+            top = Math.max(10, rect.top - pop.offsetHeight - 8)
+          pop.style.top = top + 'px'
+          pop.style.left = left + 'px'
+        }
+
         function showSelPop(rect, s, e) {
           var d = curDoc()
           if (!d) return
@@ -4493,13 +6188,7 @@
           el('sp-input').value = ''
           renderSpList('')
           pop.classList.add('open')
-          var w = 264
-          var top = rect.bottom + 8
-          var left = clamp(rect.left, 10, Math.max(10, window.innerWidth - w - 10))
-          if (top + pop.offsetHeight > window.innerHeight - 10)
-            top = Math.max(10, rect.top - pop.offsetHeight - 8)
-          pop.style.top = top + 'px'
-          pop.style.left = left + 'px'
+          placePop(pop, rect, 264)
           setTimeout(function () {
             try {
               el('sp-input').focus()
@@ -4510,6 +6199,308 @@
         function hideSelPop(keep) {
           el('sel-pop').classList.remove('open')
           if (!keep) pendingSel = null
+        }
+
+        // ================================================================
+        // 8.5 批注面板 · MARK POPUP
+        // ================================================================
+        var pendingMark = null
+        var mpSty = 'hl'
+        var mpColor = MARKC[0]
+
+        function mpSetSty(s) {
+          mpSty = s
+          el('mark-pop')
+            .querySelectorAll('.mp-sty')
+            .forEach(function (x) {
+              x.classList.toggle('on', x.getAttribute('data-sty') === s)
+            })
+        }
+        function mpSetColor(c) {
+          mpColor = c
+          el('mp-cds')
+            .querySelectorAll('.mp-cd')
+            .forEach(function (x) {
+              x.classList.toggle('on', x.getAttribute('data-c') === c)
+            })
+        }
+        function buildMpColors() {
+          el('mp-cds').innerHTML = MARKC.map(function (c, i) {
+            return (
+              '<span class="mp-cd' +
+              (i === 0 ? ' on' : '') +
+              '" data-c="' +
+              c +
+              '" style="background:' +
+              c +
+              '"></span>'
+            )
+          }).join('')
+        }
+        function showMarkPop(rect, s, e) {
+          var d = curDoc()
+          if (!d) return
+          pendingMark = { s: s, e: e }
+          var pop = el('mark-pop')
+          el('mp-quote').textContent = d.text.slice(s, e)
+          el('mp-note').value = ''
+          mpSetSty(mpSty)
+          mpSetColor(mpColor)
+          pop.classList.add('open')
+          placePop(pop, rect, 286)
+          setTimeout(function () {
+            try {
+              el('mp-note').focus()
+            } catch (err) {}
+          }, 20)
+        }
+        function hideMarkPop(keep) {
+          el('mark-pop').classList.remove('open')
+          if (!keep) pendingMark = null
+        }
+        function saveMark() {
+          if (!pendingMark) return
+          var d = curDoc()
+          if (!d) return
+          var m = {
+            id: uid('k'),
+            doc: d.id,
+            start: pendingMark.s,
+            end: pendingMark.e,
+            quote: d.text.slice(pendingMark.s, pendingMark.e),
+            sty: mpSty,
+            color: mpColor,
+            text: el('mp-note').value.trim(),
+            ts: nowStr(),
+          }
+          P.marks.push(m)
+          S.selMark = m.id
+          S.selAnn = null
+          hideMarkPop()
+          try {
+            window.getSelection().removeAllRanges()
+          } catch (e) {}
+          afterMarkChange(m.start, m.end)
+          notify(m.text ? '批注已保存' : '已标记 · ' + MKSTY[mpSty])
+        }
+        function clearMarksInRange() {
+          if (!pendingMark) return
+          var d = curDoc()
+          if (!d) return
+          var s = pendingMark.s,
+            e = pendingMark.e,
+            n = 0
+          P.marks = P.marks.filter(function (m) {
+            if (m.doc === d.id && m.start < e && m.end > s) {
+              n++
+              return false
+            }
+            return true
+          })
+          hideMarkPop()
+          S.selMark = null
+          afterMarkChange(s, e)
+          notify(n ? '已清除 ' + n + ' 处标记' : '该处没有标记')
+        }
+
+        function openMarkModal(markId) {
+          var m = markById(markId)
+          if (!m) return
+          var cds = MARKC.map(function (c) {
+            return (
+              '<span class="fm-cd' +
+              (m.color === c ? ' on' : '') +
+              '" data-color="' +
+              c +
+              '" style="background:' +
+              c +
+              '"></span>'
+            )
+          }).join('')
+          var stys = ['hl', 'ul', 'st', 'note']
+            .map(function (k) {
+              return (
+                '<span class="fm-chip' +
+                (m.sty === k ? ' on' : '') +
+                '" data-sty="' +
+                k +
+                '">' +
+                MKSTY[k] +
+                '</span>'
+              )
+            })
+            .join('')
+          var h =
+            '<div class="fm-row"><div class="fm-lb">原文</div><div class="fm-f"><div class="fm-hint" style="margin:0;line-height:1.9;color:var(--text-dim)">' +
+            esc(m.quote) +
+            '</div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">样式</div><div class="fm-f"><div class="fm-chk" id="f-stys">' +
+            stys +
+            '</div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">颜色</div><div class="fm-f"><div class="fm-colors" id="f-mcolors">' +
+            cds +
+            '</div></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">批注</div><div class="fm-f"><textarea class="fm-ta" id="f-text" placeholder="写下你的批注…">' +
+            esc(m.text || '') +
+            '</textarea></div></div>' +
+            '<div class="fm-foot">' +
+            '<button type="button" class="fm-sub del" id="f-del">删除</button>' +
+            '<button type="button" class="fm-sub ghost" id="f-cancel">取消</button>' +
+            '<button type="button" class="fm-sub" id="f-ok">保存</button>' +
+            '</div>'
+          openModal('编辑批注', h, null)
+          el('f-stys').addEventListener('click', function (e) {
+            var t = e.target.closest('.fm-chip')
+            if (!t) return
+            el('f-stys')
+              .querySelectorAll('.fm-chip')
+              .forEach(function (x) {
+                x.classList.remove('on')
+              })
+            t.classList.add('on')
+          })
+          el('f-mcolors').addEventListener('click', function (e) {
+            var t = e.target.closest('.fm-cd')
+            if (!t) return
+            el('f-mcolors')
+              .querySelectorAll('.fm-cd')
+              .forEach(function (x) {
+                x.classList.remove('on')
+              })
+            t.classList.add('on')
+          })
+          el('f-cancel').addEventListener('click', closeModal)
+          el('f-del').addEventListener('click', function () {
+            P.marks = P.marks.filter(function (x) {
+              return x.id !== m.id
+            })
+            if (S.selMark === m.id) S.selMark = null
+            closeModal()
+            afterMarkChange(m.start, m.end)
+            notify('批注已删除')
+          })
+          el('f-ok').addEventListener('click', function () {
+            var st = el('f-stys').querySelector('.fm-chip.on')
+            var cd = el('f-mcolors').querySelector('.fm-cd.on')
+            m.sty = st ? st.getAttribute('data-sty') : m.sty
+            m.color = cd ? cd.getAttribute('data-color') : m.color
+            m.text = el('f-text').value
+            closeModal()
+            afterMarkChange(m.start, m.end)
+            notify('批注已更新')
+          })
+        }
+
+        function copyText(t) {
+          function fallback() {
+            var ta = document.createElement('textarea')
+            ta.value = t
+            ta.style.position = 'fixed'
+            ta.style.left = '-9999px'
+            document.body.appendChild(ta)
+            ta.select()
+            try {
+              document.execCommand('copy')
+              notify('已复制')
+            } catch (e) {
+              notify('复制失败')
+            }
+            ta.remove()
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText)
+            navigator.clipboard.writeText(t).then(function () {
+              notify('已复制')
+            }, fallback)
+          else fallback()
+        }
+
+        function handleMarkAct(act) {
+          var m = markById(S.selMark)
+          if (!m) return
+          if (act === 'del') {
+            showConfirm('删除这条批注？', '删除').then(function (ok) {
+              if (!ok) return
+              P.marks = P.marks.filter(function (x) {
+                return x.id !== m.id
+              })
+              S.selMark = null
+              afterMarkChange(m.start, m.end)
+              notify('批注已删除')
+            })
+          } else if (act === 'sty' || act === 'color') {
+            openMarkModal(m.id)
+          } else if (act === 'goto') {
+            gotoMark(m.id)
+          } else if (act === 'copy') {
+            copyText(m.quote)
+          } else if (act === 'tomemo') {
+            P.memos.push({
+              id: uid('m'),
+              title: (m.text || m.quote || '来自批注').slice(0, 18),
+              type: '编码备忘录',
+              body: '> ' + String(m.quote).replace(/\n/g, ' ') + '\n\n' + (m.text || ''),
+              codes: [],
+              ts: nowStr(),
+            })
+            Store.save()
+            setView('memo')
+            renderMemos()
+            notify('已存入备忘录')
+          }
+        }
+
+        // 跳转到某条批注所在位置
+        function gotoMark(id) {
+          var m = markById(id)
+          if (!m) return
+          var same = S.docId === m.doc && S.view === 'reader'
+          S.docId = m.doc
+          S.selMark = id
+          S.selAnn = null
+          if (!same) {
+            setView('reader')
+            renderDocs()
+            renderDetail()
+            renderNotes()
+            renderStatus()
+          } else {
+            document.querySelectorAll('.mk.mk-on').forEach(function (n) {
+              n.classList.remove('mk-on')
+            })
+            var nd = document.querySelector('.mk[data-mk="' + id + '"]')
+            if (nd) nd.classList.add('mk-on')
+            renderDetail()
+            renderNotes()
+          }
+          setTimeout(function () {
+            var d = docById(m.doc)
+            if (d && readerUseLayout(d) && PDFV.cache[d.id]) {
+              var info = PDFV.cache[d.id]
+              var idx = PDFV.pageOf(info, m.start)
+              var pg = el('rv-paper')
+              if (pg && pg.children[idx]) {
+                var t = pg.children[idx]
+                t.scrollIntoView({ block: 'start', behavior: 'smooth' })
+                if (!t._done)
+                  paintPage(t, d.id, idx)
+                    .catch(function () {})
+                    .then(function () {
+                      highlightMarkNode(id)
+                    })
+                else highlightMarkNode(id)
+                setPg(idx + 1, info.pages.length)
+                return
+              }
+            }
+            var node = document.querySelector('.mk[data-mk="' + id + '"]')
+            if (node && node.scrollIntoView)
+              node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }, 80)
+        }
+        function highlightMarkNode(id) {
+          var node = document.querySelector('.mk[data-mk="' + id + '"]')
+          if (node && node.scrollIntoView)
+            node.scrollIntoView({ block: 'center', behavior: 'smooth' })
         }
 
         function applyCode(codeId, status) {
@@ -4533,6 +6524,7 @@
             }),
           )
           S.selAnn = a.id
+          S.selMark = null
           Store.save()
           Settings.save()
           hideSelPop()
@@ -4777,23 +6769,7 @@
           if (!isNew)
             el('f-del').addEventListener('click', function () {
               var id = el('f-id').value
-              var n = annCountDoc(id)
-              showConfirm('删除材料将同时移除其 ' + n + ' 条编码片段，确定删除？', '删除').then(
-                function (ok) {
-                  if (!ok) return
-                  P.docs = P.docs.filter(function (x) {
-                    return x.id !== id
-                  })
-                  P.anns = P.anns.filter(function (a) {
-                    return a.doc !== id
-                  })
-                  if (S.docId === id) S.docId = P.docs.length ? P.docs[0].id : null
-                  Store.save()
-                  closeModal()
-                  renderAll()
-                  notify('材料已删除')
-                },
-              )
+              deleteDocById(id, closeModal)
             })
           el('f-ok').addEventListener('click', function () {
             var title = el('f-title').value.trim()
@@ -5049,6 +7025,14 @@
           h += '<div class="st-row"><span>材料总数</span><b>' + P.docs.length + '</b></div>'
           h += '<div class="st-row"><span>码号总数</span><b>' + P.codes.length + '</b></div>'
           h += '<div class="st-row"><span>编码片段</span><b>' + totalAnn + '</b></div>'
+          h += '<div class="st-row"><span>阅读批注</span><b>' + P.marks.length + '</b></div>'
+          h += '<div class="st-row"><span>含批注文字</span><b>' + markCountNote() + '</b></div>'
+          h +=
+            '<div class="st-row"><span>PDF 材料</span><b>' +
+            P.docs.filter(function (d) {
+              return d.kind === 'pdf'
+            }).length +
+            '</b></div>'
           h += '<div class="st-row"><span>平均片段长度</span><b>' + avg + ' 字</b></div>'
           h += '<div class="st-row"><span>整体覆盖率</span><b>' + cov + '%</b></div>'
           h += '<div class="st-row"><span>待复核片段</span><b>' + review + '</b></div>'
@@ -5112,10 +7096,16 @@
           h += '<kbd>1</kbd>–<kbd>9</kbd> 指派面板中对应码号　<kbd>Enter</kbd> 指派首个码号<br />'
           h += '<kbd>Esc</kbd> 关闭面板 / 弹窗　<kbd>Alt</kbd>+<kbd>← →</kbd> 切换材料<br />'
           h +=
+            '阅读视图内选中文本后：<kbd>H</kbd> 高亮　<kbd>U</kbd> 下划线　<kbd>S</kbd> 删除线　<kbd>N</kbd> 写批注<br />'
+          h +=
             '<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd> 检索　<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd> 导出备份'
           h += '</div>'
           h +=
             '<div class="help-h">码号定义</div><div class="help-p">每个码号应写清"操作性定义、纳入标准、排除标准、典型例证"，这是保证编码一致性与可复核性的前提。面板中悬停片段可查看定义。</div>'
+          h +=
+            '<div class="help-h">阅读批注</div><div class="help-p">切到"阅读"视图即可像读 PDF 一样批注文献：导入 PDF 后按<b>版式</b>渲染原文，选中文字即可高亮、下划线、删除线或写旁注；<b>文本</b>模式则按纯文本重排，便于长文细读。右栏"批注"列表可按类型筛选并跳转，批注可一键存入备忘录，也可导出为 Markdown 笔记或 CSV 清单。批注与语义编码互不干扰：同一份材料既能做逐段编码，也能做阅读批注。</div>'
+          h +=
+            '<div class="help-h">PDF 说明</div><div class="help-p">PDF 在浏览器本地解析，原始文件存于本机浏览器数据库，不会上传；提取的文本随项目一起备份与同步。换设备或清理浏览器数据后若版面丢失，点"重载 PDF"重新导入同名文件即可恢复版式（批注位置按文本偏移保存，不受影响）。</div>'
           h +=
             '<div class="help-h">导出</div><div class="help-p">CSV 编码表可直接进入 Excel / SPSS 做频次与交叉分析；Markdown 报告适合作为论文附录的编码簿；JSON 用于项目备份与迁移。</div>'
           h +=
@@ -5267,6 +7257,77 @@
             download('zenmark-quotes.txt', out)
             notify('已导出引用清单')
           },
+          marksMd: function () {
+            if (!P.marks.length) return notify('还没有任何批注')
+            var out = '# 阅读批注 · ' + P.title + '\n\n'
+            out +=
+              '导出时间：' +
+              nowStr() +
+              '　材料：' +
+              P.docs.length +
+              '　批注：' +
+              P.marks.length +
+              ' 条\n\n'
+            P.docs.forEach(function (d) {
+              var list = marksOfDoc(d.id)
+                .slice()
+                .sort(function (a, b) {
+                  return a.start - b.start
+                })
+              if (!list.length) return
+              out += '## ' + d.title + '\n\n'
+              if (d.source) out += '> 来源：' + d.source + '\n\n'
+              list.forEach(function (m, i) {
+                var pg = markPageLabel(m)
+                out +=
+                  '### ' +
+                  (i + 1) +
+                  '　[' +
+                  MKSTY[m.sty || 'hl'] +
+                  ']' +
+                  (pg ? '　' + pg : '') +
+                  '\n\n'
+                out += '> ' + String(m.quote).replace(/\n/g, ' ') + '\n\n'
+                out += (m.text || '（仅标记，无批注文字）') + '\n\n'
+              })
+            })
+            download('zenmark-notes.md', out, 'text/markdown;charset=utf-8')
+            notify('已导出批注笔记')
+          },
+          marksCsv: function () {
+            if (!P.marks.length) return notify('还没有任何批注')
+            var rows = [['序号', '材料', '标记类型', '位置', '原文', '批注内容', '颜色', '时间']]
+            P.docs.forEach(function (d) {
+              marksOfDoc(d.id)
+                .slice()
+                .sort(function (a, b) {
+                  return a.start - b.start
+                })
+                .forEach(function (m, i) {
+                  rows.push([
+                    i + 1,
+                    d.title,
+                    MKSTY[m.sty || 'hl'],
+                    markPageLabel(m) || '',
+                    m.quote,
+                    m.text || '',
+                    m.color || '',
+                    m.ts,
+                  ])
+                })
+            })
+            var csv = rows
+              .map(function (r) {
+                return r
+                  .map(function (v) {
+                    return '"' + String(v).replace(/"/g, '""') + '"'
+                  })
+                  .join(',')
+              })
+              .join('\r\n')
+            download('zenmark-notes.csv', '\ufeff' + csv, 'text/csv;charset=utf-8')
+            notify('已导出批注清单')
+          },
         }
 
         function importFiles(files) {
@@ -5276,8 +7337,11 @@
           arr.forEach(function (f) {
             if (/\.json$/i.test(f.name)) rest.push(f)
           })
+          var pdfs = arr.filter(function (f) {
+            return /\.pdf$/i.test(f.name) || f.type === 'application/pdf'
+          })
           var texts = arr.filter(function (f) {
-            return !/\.json$/i.test(f.name)
+            return !/\.json$/i.test(f.name) && pdfs.indexOf(f) < 0
           })
           var done = 0
           function finish() {
@@ -5296,6 +7360,7 @@
                 date: '',
                 note: '由文件导入：' + f.name,
                 text: String(fr.result || ''),
+                kind: 'text',
               })
               if (!S.docId) S.docId = P.docs[P.docs.length - 1].id
               done++
@@ -5320,6 +7385,7 @@
                     P.anns = pr.anns || []
                     P.rels = pr.rels || []
                     P.memos = pr.memos || []
+                    P.marks = pr.marks || []
                     S.docId = P.docs.length ? P.docs[0].id : null
                     Store.save()
                     renderAll()
@@ -5332,9 +7398,303 @@
               }
             }
             fr2.readAsText(rest[0], 'utf-8')
-          } else if (!texts.length) {
+          } else if (!texts.length && !pdfs.length) {
             notify('未选择可导入的文件')
           }
+          if (pdfs.length) importPdfs(pdfs)
+        }
+
+        // ---- PDF 导入 ----
+        // PDF 异常 → 用户能看懂的原因
+        function pdfErrMsg(e) {
+          var m = String((e && e.message) || e || '')
+          var n = String((e && e.name) || '')
+          if (n === 'PasswordException' || /password/i.test(m))
+            return 'PDF 已加密，需要密码才能打开'
+          if (n === 'InvalidPDFException' || /Invalid PDF|损坏|corrupt/i.test(m))
+            return '不是有效的 PDF，或文件已损坏'
+          if (n === 'MissingPDFException' || /Missing PDF/i.test(m)) return '缺少 PDF 数据'
+          if (/引擎加载失败|引擎|Failed to fetch|NetworkError|网络|net/i.test(m))
+            return 'PDF 解析引擎加载失败，请检查网络（首次导入需联网）'
+          if (/不在本机缓存/.test(m)) return '本机未缓存该文件，请重新导入'
+          if (/超时|timeout/i.test(m)) return '解析超时，文件可能过大'
+          if (/memory|内存/i.test(m)) return '文件过大，浏览器内存不足'
+          return m ? '导入失败：' + m : '导入失败：未知错误'
+        }
+
+        // ================================================================
+        // PDF 导入进度面板
+        // ================================================================
+        var PdfProg = {
+          cancelled: false,
+          timer: null,
+          curRow: null,
+          curName: '',
+          open: function (title, n) {
+            this.cancelled = false
+            this.curRow = null
+            this.curName = ''
+            clearTimeout(this.timer)
+            el('pg-title').textContent = n > 1 ? title + '（' + n + ' 份）' : title
+            el('pg-list').innerHTML = ''
+            el('pg-cancel').style.display = ''
+            el('pg-close').style.display = 'none'
+            el('pg-bar').classList.remove('err')
+            el('pg-file').textContent = '—'
+            el('pg-stage').textContent = '准备中…'
+            el('pg-sum').textContent = ''
+            this.setBar(0)
+            el('pdf-prog').classList.add('open')
+          },
+          hide: function () {
+            clearTimeout(this.timer)
+            el('pdf-prog').classList.remove('open')
+          },
+          cancel: function () {
+            if (this.cancelled) return
+            this.cancelled = true
+            el('pg-cancel').style.display = 'none'
+            el('pg-stage').textContent = '正在中止…'
+          },
+          setBar: function (pct) {
+            var p = clamp(pct, 0, 100)
+            el('pg-bar').firstElementChild.style.width = p + '%'
+            el('pg-pct').textContent = Math.round(p) + '%'
+          },
+          // 开始处理第 at 份（0 基），共 n 份
+          file: function (name, at, n) {
+            el('pg-file').textContent = (n > 1 ? '[' + (at + 1) + '/' + n + '] ' : '') + name
+            if (n > 1) el('pg-sum').textContent = '第 ' + (at + 1) + ' / ' + n + ' 份'
+            this.setBar((at / n) * 100)
+          },
+          // 第 at 份内部的进度（frac 0~1）
+          frac: function (at, n, frac, stage) {
+            this.setBar(((at + clamp(frac, 0, 1)) / n) * 100)
+            if (stage) el('pg-stage').textContent = stage
+          },
+          stage: function (t) {
+            el('pg-stage').textContent = t
+          },
+          // 构建一行结果（内部共用）
+          buildRow: function (st, name, note) {
+            var r = document.createElement('div')
+            r.className = 'pg-row ' + st
+            var ic = document.createElement('span')
+            ic.className = 'pg-ic'
+            ic.textContent = st === 'ok' ? '✓' : st === 'bad' ? '✕' : '·'
+            var nm = document.createElement('span')
+            nm.className = 'pg-name'
+            nm.appendChild(document.createTextNode(name))
+            if (note) {
+              nm.appendChild(document.createTextNode('　'))
+              var nt = document.createElement('span')
+              nt.className = 'pg-note'
+              nt.textContent = note
+              nm.appendChild(nt)
+            }
+            r.appendChild(ic)
+            r.appendChild(nm)
+            return r
+          },
+          row: function (st, name, note) {
+            var box = el('pg-list')
+            box.appendChild(this.buildRow(st, name, note))
+            box.scrollTop = box.scrollHeight
+          },
+          // 开始处理某份文件：列表里先放一条「进行中」
+          start: function (name, at, n) {
+            this.file(name, at, n)
+            this.curName = name
+            this.curRow = this.buildRow('run', name, '进行中…')
+            var box = el('pg-list')
+            box.appendChild(this.curRow)
+            box.scrollTop = box.scrollHeight
+          },
+          // 该文件有了结果，原地更新这一行
+          endRow: function (st, note) {
+            if (!this.curRow) return
+            var box = el('pg-list')
+            var fresh = this.buildRow(st, this.curName, note)
+            box.replaceChild(fresh, this.curRow)
+            this.curRow = null
+            box.scrollTop = box.scrollHeight
+          },
+          finish: function (okN, fails) {
+            var bad = (fails || []).length
+            el('pg-cancel').style.display = 'none'
+            el('pg-close').style.display = ''
+            if (!okN && bad) el('pg-bar').classList.add('err')
+            this.setBar(100)
+            el('pg-stage').textContent = this.cancelled
+              ? '已中止'
+              : bad && !okN
+                ? '导入未完成'
+                : '完成'
+            el('pg-sum').textContent = '成功 ' + okN + ' 份' + (bad ? ' · 失败 ' + bad + ' 份' : '')
+            if (!bad) {
+              var self = this
+              clearTimeout(this.timer)
+              this.timer = setTimeout(function () {
+                self.hide()
+              }, 2400)
+            }
+          },
+        }
+
+        function importPdfFile(f, onProg, cb) {
+          var id = uid('d')
+          if (onProg) onProg(0.04, '读取文件…')
+          IDB.put(id, f)
+            .catch(function () {
+              return true
+            })
+            .then(function () {
+              if (onProg) onProg(0.1, '载入解析引擎…')
+              return PDFV.info(id, function (cur, tot) {
+                if (onProg)
+                  onProg(
+                    0.1 + 0.9 * (cur / Math.max(1, tot)),
+                    '提取文本 ' + cur + ' / ' + tot + ' 页',
+                  )
+              })
+            })
+            .then(function (info) {
+              var noText = !String(info.text || '').trim().length
+              var d = {
+                id: id,
+                title: f.name.replace(/\.pdf$/i, '') || '未命名 PDF',
+                source: 'PDF · ' + info.numPages + ' 页',
+                type: '学术文献',
+                date: '',
+                note: '由 PDF 导入。可在版面上直接选择文本做高亮与批注。',
+                text: info.text,
+                kind: 'pdf',
+              }
+              P.docs.push(d)
+              cb(null, d, noText)
+            })
+            .catch(function (e) {
+              PDFV.drop(id)
+              IDB.del(id)
+              cb(e)
+            })
+        }
+
+        // 把丢失版面的材料恢复回来（不新建副本）
+        function restorePdf(f) {
+          var rid = S.pdfLostId
+          PdfProg.open('正在恢复 PDF 版面', 1)
+          PdfProg.start(f.name, 0, 1)
+          PDFV.drop(rid)
+          IDB.put(rid, f)
+            .catch(function () {
+              return true
+            })
+            .then(function () {
+              return PDFV.info(rid, function (cur, tot) {
+                PdfProg.frac(
+                  0,
+                  1,
+                  0.1 + 0.9 * (cur / Math.max(1, tot)),
+                  '提取文本 ' + cur + ' / ' + tot + ' 页',
+                )
+              })
+            })
+            .then(function (info) {
+              var dd = docById(rid)
+              if (dd && !String(dd.text || '').trim()) {
+                dd.text = info.text
+                dd.source = 'PDF · ' + info.numPages + ' 页'
+              }
+              S.pdfLostId = null
+              S.readerMode = 'layout'
+              Store.save()
+              setView('reader')
+              renderAll()
+              PdfProg.endRow('ok', '版面已恢复 · ' + info.numPages + ' 页')
+              PdfProg.finish(1, [])
+              notify('PDF 版面已恢复，' + info.numPages + ' 页')
+            })
+            .catch(function (e) {
+              var msg = pdfErrMsg(e)
+              PDFV.drop(rid)
+              IDB.del(rid)
+              PdfProg.endRow('bad', msg)
+              PdfProg.finish(0, [1])
+              notify('恢复失败：' + msg)
+            })
+        }
+
+        function importPdfs(list) {
+          list = (list || []).filter(function (f) {
+            return /\.pdf$/i.test(f.name || '')
+          })
+          if (!list.length) return notify('未选择 PDF 文件')
+          // 单文件 + 存在版面丢失的材料 → 视为恢复版面，而不是新建一份副本
+          if (list.length === 1 && S.pdfLostId && docById(S.pdfLostId)) return restorePdf(list[0])
+
+          var n = 0
+          var firstId = null
+          var fails = []
+          var noTexts = []
+          var idx = 0
+          PdfProg.open('正在导入 PDF', list.length)
+
+          function next() {
+            if (PdfProg.cancelled) {
+              var left = list.length - idx
+              if (left > 0) PdfProg.row('bad', '剩余 ' + left + ' 份文件', '已取消')
+              finishAll()
+              return
+            }
+            if (idx >= list.length) return finishAll()
+            var f = list[idx]
+            var at = idx
+            idx++
+            PdfProg.start(f.name, at, list.length)
+            importPdfFile(
+              f,
+              function (frac, stage) {
+                PdfProg.frac(at, list.length, frac, stage)
+              },
+              function (err, d, noText) {
+                if (err) {
+                  fails.push({ f: f, raw: err, msg: pdfErrMsg(err) })
+                  PdfProg.endRow('bad', pdfErrMsg(err))
+                } else {
+                  n++
+                  if (!firstId) firstId = d.id
+                  if (noText) noTexts.push(f.name)
+                  PdfProg.endRow(
+                    'ok',
+                    (d ? d.source : '') + (noText ? ' · 无文本层，可能无法选中文字批注' : ''),
+                  )
+                }
+                next()
+              },
+            )
+          }
+
+          function finishAll() {
+            // 首次导入 / 当前没有选中材料时，自动落到第一份新导入的 PDF，
+            // 否则阅读区会停在「尚无材料」的空状态。
+            if (firstId && (!S.docId || !docById(S.docId))) S.docId = firstId
+            Store.save()
+            renderAll()
+            PdfProg.finish(n, fails)
+            if (!n) {
+              notify(fails.length ? fails[0].msg : 'PDF 导入失败')
+              return
+            }
+            setView('reader')
+            if (fails.length)
+              notify('已导入 ' + n + ' 份，' + fails.length + ' 份失败 · 见右下角面板')
+            else if (noTexts.length)
+              notify('已导入 ' + n + ' 份，其中 ' + noTexts.length + ' 份没有文本层')
+            else notify('已导入 ' + n + ' 份 PDF，可开始批注')
+          }
+
+          next()
         }
 
         // ================================================================
@@ -5357,6 +7717,13 @@
               (c && (c.name.toLowerCase().indexOf(k) >= 0 || String(c.no).indexOf(k) >= 0))
             )
               hits.push({ type: 'ann', a: a, c: c })
+          })
+          P.marks.forEach(function (m) {
+            if (
+              (m.quote || '').toLowerCase().indexOf(k) >= 0 ||
+              (m.text || '').toLowerCase().indexOf(k) >= 0
+            )
+              hits.push({ type: 'mark', m: m })
           })
           P.docs.forEach(function (d) {
             if (
@@ -5383,6 +7750,15 @@
                 '</span><span class="sug-name">' +
                 esc(x.a.quote.slice(0, 40)) +
                 '</span><span class="hint">片段</span></div>'
+            } else if (x.type === 'mark') {
+              h +=
+                '<div class="sr-item' +
+                hl +
+                '" data-mark="' +
+                x.m.id +
+                '"><span class="sug-key">批注</span><span class="sug-name">' +
+                esc((x.m.text || x.m.quote).slice(0, 40)) +
+                '</span></div>'
             } else {
               h +=
                 '<div class="sr-item' +
@@ -5402,6 +7778,7 @@
           if (!a) return
           S.docId = a.doc
           S.selAnn = id
+          S.selMark = null
           setView('annotate')
           renderAll()
           setTimeout(function () {
@@ -5611,9 +7988,11 @@
             })
             document.body.classList.remove('submenu-open')
             document.querySelectorAll('.menu-btn.active').forEach(function (b) {
-              if (['btn-annotate', 'btn-codes', 'btn-matrix', 'btn-memo'].indexOf(b.id) < 0)
+              if (VIEWS.indexOf(String(b.id || '').replace(/^btn-/, '')) < 0)
                 b.classList.remove('active')
             })
+            // 视图按钮的选中态始终以当前视图为准，避免被误清
+            syncViewBtns()
           },
           showDropdown: function (id, btn) {
             var dd = el(id)
@@ -5647,6 +8026,7 @@
           el('sv-nums').textContent = S.showNums ? '开' : '关'
           el('sv-def').textContent = S.showDef ? '开' : '关'
           el('sv-statusbar').textContent = S.statusBar ? '开' : '关'
+          el('sv-codemark').textContent = S.codeMark ? '开' : '关'
           document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach(function (d) {
             d.classList.toggle('active', d.getAttribute('data-bg') === S.bg)
           })
@@ -5664,6 +8044,39 @@
           },
           viewAnnotate: function () {
             setView('annotate')
+          },
+          viewReader: function () {
+            setView('reader')
+          },
+          rvPrev: function () {
+            rvStep(-1)
+          },
+          rvNext: function () {
+            rvStep(1)
+          },
+          rvZoomIn: function () {
+            rvZoomBy(0.1)
+          },
+          rvZoomOut: function () {
+            rvZoomBy(-0.1)
+          },
+          rvFit: function () {
+            rvFitWidth()
+          },
+          importPdf: function () {
+            el('pdf-input').click()
+          },
+          exportMarks: function () {
+            Export.marksMd()
+          },
+          exportMarksCsv: function () {
+            Export.marksCsv()
+          },
+          settingsToggleCodeMark: function () {
+            S.codeMark = !S.codeMark
+            Settings.apply()
+            Settings.save()
+            if (S.view === 'reader') renderReader()
           },
           viewCodes: function () {
             setView('codes')
@@ -5740,13 +8153,19 @@
             showConfirm('清空将删除全部材料、码号、编码与备忘录，确定继续？', '清空').then(
               function (ok) {
                 if (!ok) return
+                P.docs.forEach(function (d) {
+                  PDFV.drop(d.id)
+                  IDB.del(d.id)
+                })
                 P.docs = []
                 P.codes = []
                 P.anns = []
                 P.rels = []
                 P.memos = []
+                P.marks = []
                 S.docId = null
                 S.selAnn = null
+                S.selMark = null
                 S.activeCode = null
                 Store.save()
                 renderAll()
@@ -5879,6 +8298,59 @@
           },
         }
 
+        // ---- 版面宽度：适应可用宽度 / 按比例缩放 ----
+        function rvZoomable() {
+          var d = curDoc()
+          if (!d) return (notify('没有正在阅读的材料'), false)
+          if (!readerIsPdf(d)) return (notify('仅 PDF 材料可调整版面宽度'), false)
+          if (!readerUseLayout(d))
+            return (notify('文本模式下无需调整版面宽度，请先切到「版式」'), false)
+          return true
+        }
+
+        function rvRerender(save) {
+          S.rvRestorePage = rvCurPageIdx()
+          if (save) Settings.save()
+          rvZoomLabel()
+          renderReader()
+        }
+
+        function rvZoomBy(delta) {
+          if (!rvZoomable()) return
+          var base = S.pdfFit ? 1 : S.pdfScale || 1
+          S.pdfFit = false
+          S.pdfScale = clamp(Math.round((base + delta) * 100) / 100, 0.5, 3)
+          rvRerender(true)
+        }
+
+        function rvFitWidth() {
+          if (!rvZoomable()) return
+          if (S.pdfFit) return notify('已经处于适应宽度')
+          S.pdfFit = true
+          rvRerender(true)
+          notify('版面宽度已适应可用宽度')
+        }
+
+        function rvStep(dir) {
+          var host = el('rv-scroll')
+          var paper = el('rv-paper')
+          if (!host) return
+          if (!paper || !paper.children.length) {
+            if (host.scrollBy)
+              host.scrollBy({ top: dir * (host.clientHeight - 60), behavior: 'smooth' })
+            else host.scrollTop += dir * (host.clientHeight - 60)
+            return
+          }
+          var kids = paper.children
+          var cur = 0
+          for (var i = 0; i < kids.length; i++) {
+            if (kids[i].offsetTop <= host.scrollTop + 40) cur = i
+          }
+          var t = clamp(cur + dir, 0, kids.length - 1)
+          if (kids[t].scrollIntoView) kids[t].scrollIntoView({ block: 'start', behavior: 'smooth' })
+          setPg(t + 1, kids.length)
+        }
+
         function stepDoc(dir) {
           if (!P.docs.length) return
           var i = 0
@@ -5886,7 +8358,9 @@
           i = (i + dir + P.docs.length) % P.docs.length
           S.docId = P.docs[i].id
           S.selAnn = null
+          S.selMark = null
           hideSelPop()
+          hideMarkPop()
           renderAll()
         }
 
@@ -5900,9 +8374,11 @@
             if (sr) {
               UIMgr.closeDropdowns()
               if (sr.getAttribute('data-ann')) gotoAnn(sr.getAttribute('data-ann'))
+              else if (sr.getAttribute('data-mark')) gotoMark(sr.getAttribute('data-mark'))
               else if (sr.getAttribute('data-doc')) {
                 S.docId = sr.getAttribute('data-doc')
-                setView('annotate')
+                S.selMark = null
+                setView(readerIsPdf(docById(sr.getAttribute('data-doc'))) ? 'reader' : 'annotate')
                 renderAll()
               }
               return
@@ -5911,13 +8387,22 @@
             if (di) {
               UIMgr.closeDropdowns()
               S.docId = di.getAttribute('data-doc')
+              S.selAnn = null
+              S.selMark = null
               renderAll()
+              return
+            }
+            var docDel = e.target.closest('#doc-list [data-docdel]')
+            if (docDel) {
+              e.stopPropagation()
+              deleteDocById(docDel.getAttribute('data-docdel'))
               return
             }
             var docItem = e.target.closest('#doc-list [data-doc]')
             if (docItem) {
               S.docId = docItem.getAttribute('data-doc')
               S.selAnn = null
+              S.selMark = null
               hideSelPop()
               document.body.classList.remove('rail-left')
               renderAll()
@@ -5970,6 +8455,35 @@
               if (S.view !== 'annotate' && S.view !== 'codes') setView('codes')
               return
             }
+            var ntAct = e.target.closest('.nt-act')
+            if (ntAct) {
+              e.stopPropagation()
+              var mid = ntAct.getAttribute('data-mk')
+              if (ntAct.getAttribute('data-act') === 'del') {
+                var mk = markById(mid)
+                P.marks = P.marks.filter(function (x) {
+                  return x.id !== mid
+                })
+                if (S.selMark === mid) S.selMark = null
+                if (mk) afterMarkChange(mk.start, mk.end)
+                else {
+                  Store.save()
+                  renderAll()
+                }
+                notify('批注已删除')
+              } else openMarkModal(mid)
+              return
+            }
+            var ntRow = e.target.closest('.nt-row')
+            if (ntRow) {
+              gotoMark(ntRow.getAttribute('data-mk'))
+              return
+            }
+            var mAct = e.target.closest('#dt-body [data-mact]')
+            if (mAct) {
+              handleMarkAct(mAct.getAttribute('data-mact'))
+              return
+            }
             var arow = e.target.closest('.a-row')
             if (arow) {
               gotoAnn(arow.getAttribute('data-ann'))
@@ -6011,6 +8525,7 @@
               var pick = ids[ids.length - 1]
               if (pick) {
                 S.selAnn = pick
+                S.selMark = null
                 renderPaper()
                 renderDetail()
               }
@@ -6025,7 +8540,7 @@
             }
 
             var inDD = e.target.closest('.dropdown')
-            var inPop = e.target.closest('#sel-pop')
+            var inPop = e.target.closest('#sel-pop,#mark-pop')
             var inMenu = e.target.closest('#top-menu')
             var inModal = e.target.closest('#modal')
             var inConfirm = e.target.closest('#custom-confirm')
@@ -6116,6 +8631,146 @@
           })
           el('paper-scroll').addEventListener('mousedown', function (e) {
             if (!e.target.closest('#sel-pop')) hideSelPop()
+          })
+
+          // ---- reader: 选中文本 → 批注面板 ----
+          el('rv-scroll').addEventListener('mouseup', function (e) {
+            setTimeout(function () {
+              if (e.target.closest('#mark-pop')) return
+              var o = selOffsets()
+              if (!o) return hideMarkPop()
+              var sel = window.getSelection()
+              if (!sel || sel.isCollapsed) return hideMarkPop()
+              var rect
+              try {
+                rect = sel.getRangeAt(0).getBoundingClientRect()
+              } catch (err) {
+                rect = null
+              }
+              if (!rect)
+                rect = { left: 24, right: 220, top: 120, bottom: 140, width: 196, height: 20 }
+              showMarkPop(rect, o.s, o.e)
+            }, 10)
+          })
+          el('rv-scroll').addEventListener('mousedown', function (e) {
+            if (!e.target.closest('#mark-pop')) hideMarkPop()
+          })
+          // ---- reader: 点击已有标记 ----
+          el('rv-scroll').addEventListener('click', function (e) {
+            var mk = e.target.closest('.mk[data-mk]')
+            if (!mk) return
+            var id = mk.getAttribute('data-mk')
+            document.querySelectorAll('.mk.mk-on').forEach(function (n) {
+              n.classList.remove('mk-on')
+            })
+            mk.classList.add('mk-on')
+            if (markById(id)) {
+              S.selMark = id
+              S.selAnn = null
+            } else if (annById(id)) {
+              S.selAnn = id
+              S.selMark = null
+            }
+            renderDetail()
+            renderNotes()
+          })
+          // ---- reader: hover 显示批注 ----
+          el('rv-scroll').addEventListener('mouseover', function (e) {
+            var mk = e.target.closest('.mk[data-mk]')
+            var tip = el('tip')
+            if (!mk) return tip.style.setProperty('display', 'none')
+            var m = markById(mk.getAttribute('data-mk'))
+            var a = m ? null : annById(mk.getAttribute('data-mk'))
+            var h = ''
+            if (m) {
+              h =
+                '<div><b>' +
+                MKSTY[m.sty || 'hl'] +
+                '</b>' +
+                (markPageLabel(m) ? ' · ' + markPageLabel(m) : '') +
+                '</div>'
+              if (m.text) h += '<div>' + esc(m.text) + '</div>'
+            } else if (a) {
+              var c = codeById(a.code)
+              h = '<div><b>' + esc(c ? c.no + ' ' + c.name : '—') + '</b> · 编码片段</div>'
+              if (c && c.def) h += '<div>' + esc(c.def) + '</div>'
+              if (a.memo) h += '<div style="margin-top:4px">备注：' + esc(a.memo) + '</div>'
+            }
+            if (!h) return tip.style.setProperty('display', 'none')
+            tip.innerHTML = h
+            tip.style.setProperty('display', 'block')
+            var r = mk.getBoundingClientRect()
+            tip.style.left = clamp(r.left, 8, Math.max(8, window.innerWidth - 280 - 8)) + 'px'
+            var top = r.bottom + 6
+            if (top + tip.offsetHeight > window.innerHeight - 8)
+              top = Math.max(8, r.top - tip.offsetHeight - 6)
+            tip.style.top = top + 'px'
+          })
+          el('rv-scroll').addEventListener('mouseout', function () {
+            el('tip').style.setProperty('display', 'none')
+          })
+          // ---- 批注面板交互 ----
+          el('mark-pop').addEventListener('click', function (e) {
+            var st = e.target.closest('.mp-sty')
+            if (st) return mpSetSty(st.getAttribute('data-sty'))
+            var cd = e.target.closest('.mp-cd')
+            if (cd) return mpSetColor(cd.getAttribute('data-c'))
+            var b = e.target.closest('.mp-btn')
+            if (!b) return
+            var a = b.getAttribute('data-act')
+            if (a === 'save') saveMark()
+            else if (a === 'del') clearMarksInRange()
+            else if (a === 'code') {
+              var pm = pendingMark
+              if (!pm) return hideMarkPop()
+              hideMarkPop(true)
+              var s2 = window.getSelection()
+              var rect2 = null
+              try {
+                rect2 = s2 && s2.rangeCount ? s2.getRangeAt(0).getBoundingClientRect() : null
+              } catch (err) {}
+              if (!rect2)
+                rect2 = { left: 24, right: 220, top: 120, bottom: 140, width: 196, height: 20 }
+              showSelPop(rect2, pm.s, pm.e)
+            } else hideMarkPop()
+          })
+          el('mp-note').addEventListener('keydown', function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault()
+              saveMark()
+            } else if (e.key === 'Escape') {
+              hideMarkPop()
+            }
+            e.stopPropagation()
+          })
+          // ---- PDF 导入进度面板 ----
+          document.querySelectorAll('#pdf-prog [data-pg]').forEach(function (b) {
+            b.addEventListener('click', function () {
+              if (b.getAttribute('data-pg') === 'cancel') PdfProg.cancel()
+              else PdfProg.hide()
+            })
+          })
+          // ---- PDF 文件选择 ----
+          el('pdf-input').addEventListener('change', function (e) {
+            var fl = Array.prototype.slice.call(e.target.files || [])
+            e.target.value = ''
+            if (fl.length) importPdfs(fl)
+          })
+          // ---- 阅读区滚动更新页码 ----
+          var rvScrollTimer = null
+          el('rv-scroll').addEventListener('scroll', function () {
+            clearTimeout(rvScrollTimer)
+            rvScrollTimer = setTimeout(function () {
+              var host = el('rv-scroll')
+              var paper = el('rv-paper')
+              if (!paper || !paper.children.length) return
+              var kids = paper.children
+              var cur = 0
+              for (var i = 0; i < kids.length; i++) {
+                if (kids[i].offsetTop <= host.scrollTop + 40) cur = i
+              }
+              setPg(cur + 1, kids.length)
+            }, 80)
           })
 
           // ---- hover tooltip ----
@@ -6306,6 +8961,7 @@
             }
             if (e.key === 'Escape') {
               if (el('modal').classList.contains('open')) return closeModal()
+              if (el('mark-pop').classList.contains('open')) return hideMarkPop()
               if (el('sel-pop').classList.contains('open')) return hideSelPop()
               UIMgr.closeDropdowns()
               return
@@ -6323,6 +8979,48 @@
               return
             }
             if (typing) return
+            // 阅读视图：选中文本后 H/U/S/N 快速标记
+            if (
+              S.view === 'reader' &&
+              !e.ctrlKey &&
+              !e.metaKey &&
+              !e.altKey &&
+              'husn'.indexOf(e.key.toLowerCase()) >= 0 &&
+              e.key.length === 1
+            ) {
+              var mo = selOffsets()
+              if (mo) {
+                e.preventDefault()
+                var key = e.key.toLowerCase()
+                if (key === 'n') {
+                  var ms = window.getSelection()
+                  showMarkPop(ms.getRangeAt(0).getBoundingClientRect(), mo.s, mo.e)
+                  return
+                }
+                var d0 = curDoc()
+                if (!d0) return
+                var nm = {
+                  id: uid('k'),
+                  doc: d0.id,
+                  start: mo.s,
+                  end: mo.e,
+                  quote: d0.text.slice(mo.s, mo.e),
+                  sty: key === 'h' ? 'hl' : key === 'u' ? 'ul' : 'st',
+                  color: mpColor,
+                  text: '',
+                  ts: nowStr(),
+                }
+                P.marks.push(nm)
+                S.selMark = nm.id
+                S.selAnn = null
+                try {
+                  window.getSelection().removeAllRanges()
+                } catch (err) {}
+                afterMarkChange(nm.start, nm.end)
+                notify('已标记 · ' + MKSTY[nm.sty])
+                return
+              }
+            }
             if (e.altKey && e.key === 'ArrowLeft') {
               e.preventDefault()
               stepDoc(-1)
@@ -6332,9 +9030,19 @@
             }
           })
 
+          var rzTimer = null
           window.addEventListener('resize', function () {
             hideSelPop()
+            hideMarkPop()
             sugClose()
+            clearTimeout(rzTimer)
+            rzTimer = setTimeout(function () {
+              if (S.view === 'reader' && readerUseLayout(curDoc())) {
+                // 保留当前页码再重排
+                S.rvRestorePage = rvCurPageIdx()
+                renderReader()
+              }
+            }, 400)
           })
         }
 
@@ -6417,6 +9125,8 @@
           if (!Store.load()) seed()
           if (!S.docId && P.docs.length) S.docId = P.docs[0].id
           Settings.apply()
+          buildMpColors()
+          if (S.view === 'reader' && !readerIsPdf(curDoc())) S.view = 'annotate'
           setView(S.view || 'annotate')
           renderAll()
           bindGlobal()
