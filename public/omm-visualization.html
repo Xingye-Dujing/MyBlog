@@ -816,10 +816,11 @@
         padding: 3px 5px;
         box-sizing: border-box;
         flex-wrap: nowrap;
-        overflow-x: auto;
-        overflow-y: hidden;
+        /* 图例的可用宽高由 balanceLegendLayout 计算并保证放得下，这里必须保持 visible：
+           一旦成为滚动容器，导出用的 html2canvas 会按容器裁剪，
+           起始侧的图例项会被整块切掉，表现为“图例左边空白、显示不完全”。 */
+        overflow: visible;
         white-space: nowrap;
-        scrollbar-width: thin;
       }
       .layout-legend.horizontal {
         flex-direction: row;
@@ -859,7 +860,7 @@
         flex-direction: column;
         align-items: flex-start;
         max-height: calc(100% - 24px - var(--layout-pad-top) - var(--layout-pad-bottom));
-        overflow-y: auto;
+        overflow: visible;
       }
       .layout-legend-item {
         font-family: var(--chart-legend-font-family, SimSun, 宋体, serif);
@@ -869,6 +870,11 @@
         flex: 0 0 auto;
         white-space: nowrap;
         border: 1px solid transparent;
+        /* 图例项是 <button>：不显式复位就会带上浏览器默认的灰色底与圆角，
+           屏幕上是灰块，导出图片里还会被 html2canvas 画成圆角灰块。 */
+        background: transparent;
+        appearance: none;
+        -webkit-appearance: none;
         padding: 2px 4px;
         color: rgba(21, 21, 21, 0.65);
         font-size: 10px;
@@ -8712,7 +8718,7 @@
         function createDataSelectionState(type = '') {
           // 网络关系图 / 桑基图的默认映射避开第一列“分类/类别”列，直接使用后面的三列
           // 作为 来源 → 去向 → 权重，这样示例数据加载后即可直接形成有效关系图。
-          if (type === 'network' || type === 'sankey' || type === "chord") {
+          if (type === 'network' || type === 'sankey' || type === 'chord') {
             return {
               xCol: 1,
               yCols: [3],
@@ -11059,12 +11065,21 @@
         // 图例项较多时的自动换行/换列：
         // - 横排：一行放不下时自动换成多行，每行数量尽可能均分；
         // - 竖排：一列放不下时自动换成多列，每列数量尽可能均分；
-        // 通过 CSS Grid 显式落位实现，行高/列宽取同组图例项的最大尺寸，整体居中，视觉均衡。
+        // 只固定“排列方向”上的轨道，另一方向交给 CSS Grid 自动落位，整体居中。
+        // 三条硬性要求：
+        // 1. 不再逐项写 grid-row / grid-column。手动落位一旦与分组不一致，
+        //    就会出现空轨道，图例左侧凭空留出一整块空白。
+        // 2. 算出的行数 / 列数必须能在可用宽高内放下；放不下时取最窄的一档，
+        //    而不是强行摊开，避免首列被挤出容器。
+        // 3. 落位后若仍然超出容器，立刻从居中改为从头对齐：居中 + 溢出时
+        //    起始侧无法滚到，图例左边会整块空白。
         function balanceLegendLayout(legend, items, isVertical) {
           if (!legend || !items.length || legend.classList.contains('stream')) return
           const host = legend.parentElement
           if (!host) return
           const gap = 7
+          const colGap = 14
+          const rowGap = 5
           const pad = (v) => Math.max(0, Math.min(180, Number(v) || 0))
           const pt = pad(state.paddingTop)
           const pr = pad(state.paddingRight)
@@ -11079,6 +11094,7 @@
           legend.style.display = ''
           legend.style.gridTemplateRows = ''
           legend.style.gridTemplateColumns = ''
+          legend.style.gridAutoFlow = ''
           legend.style.justifyContent = ''
           legend.style.alignContent = ''
           legend.style.rowGap = ''
@@ -11089,7 +11105,7 @@
             it.style.justifySelf = ''
           })
           const widths = items.map((it) => it.offsetWidth || 0)
-          const itemH = items[0].offsetHeight || 18
+          const itemH = items.reduce((max, it) => Math.max(max, it.offsetHeight || 0), 0) || 18
           const n = items.length
           // 把 n 个图例项均分成 g 组：前 (n % g) 组各多 1 个，返回每组的 [start, end)
           const groups = (g) => {
@@ -11129,16 +11145,16 @@
               }
             }
             if (!chosen) chosen = n
-            applyLegendGrid(legend, items, groups(chosen), 'row', gap)
+            // 横排：行数决定列数（自动落位后每行最多 chosen 项）
+            applyLegendGrid(legend, Math.ceil(n / chosen), 'row', gap)
           } else {
-            const rowsFit = Math.max(1, Math.floor((availH + gap) / (itemH + gap)))
+            const rowsFit = Math.max(1, Math.floor((availH + rowGap) / (itemH + rowGap)))
             if (n <= rowsFit) return // 单列放得下，保持原样
             // 从“每列最多 rowsFit 个”的最少列数开始，逐列增加直到总宽不超
             let chosen = 0
             for (let cols = Math.ceil(n / rowsFit); cols <= n; cols++) {
-              const segs = groups(cols)
-              let w = gap * (cols - 1)
-              for (const [a, b] of segs) {
+              let w = colGap * (cols - 1)
+              for (const [a, b] of groups(cols)) {
                 let cw = 0
                 for (let i = a; i < b; i++) cw = Math.max(cw, widths[i])
                 w += cw
@@ -11148,40 +11164,32 @@
                 break
               }
             }
-            if (!chosen) chosen = Math.ceil(n / rowsFit)
-            applyLegendGrid(legend, items, groups(chosen), 'column', gap)
+            // 宽度实在放不下时保留“最窄”的列数，宁可横向溢出也不要摊成超宽的一排
+            if (!chosen) chosen = Math.max(1, Math.ceil(n / rowsFit))
+            // 竖排：列数决定每列行数（自动落位后每列最多这么多项）
+            applyLegendGrid(legend, Math.ceil(n / chosen), 'column', colGap)
+          }
+          // 兜底：内容仍然超出容器时改为从头对齐，保证每一项都完整可见
+          if (
+            legend.scrollWidth > legend.clientWidth + 1 ||
+            legend.scrollHeight > legend.clientHeight + 1
+          ) {
+            legend.style.justifyContent = 'flex-start'
+            legend.style.alignContent = 'flex-start'
           }
         }
-        function applyLegendGrid(legend, items, segs, flow, gap) {
+        function applyLegendGrid(legend, tracks, flow, gap) {
+          const n = Math.max(1, Math.floor(Number(tracks)) || 1)
           legend.style.display = 'grid'
+          legend.style.gridTemplateColumns = ''
+          legend.style.gridTemplateRows = ''
+          legend.style.gridAutoFlow = flow === 'column' ? 'column' : 'row'
+          if (flow === 'column') legend.style.gridTemplateRows = `repeat(${n}, max-content)`
+          else legend.style.gridTemplateColumns = `repeat(${n}, max-content)`
           legend.style.justifyContent = 'center'
           legend.style.alignContent = 'center'
-          if (flow === 'row') {
-            // 横排换行：行数由分组决定，行距收紧，列距沿用原间距
-            legend.style.gridTemplateRows = `repeat(${segs.length}, max-content)`
-            legend.style.rowGap = '3px'
-            legend.style.columnGap = gap + 'px'
-          } else {
-            // 竖排换列：列数由分组决定，列距放宽一点更透气
-            legend.style.gridTemplateColumns = `repeat(${segs.length}, max-content)`
-            legend.style.rowGap = '5px'
-            legend.style.columnGap = '14px'
-          }
-          items.forEach((item, i) => {
-            let g = 0
-            while (g < segs.length && !(i >= segs[g][0] && i < segs[g][1])) g++
-            if (g >= segs.length) return
-            const mainIndex = i - segs[g][0]
-            if (flow === 'row') {
-              item.style.gridRow = String(g + 1)
-              item.style.gridColumn = String(mainIndex + 1)
-            } else {
-              item.style.gridColumn = String(g + 1)
-              item.style.gridRow = String(mainIndex + 1)
-            }
-            // 不拉伸到轨道宽度，保持每项紧凑，同时保证后续重新测量准确
-            item.style.justifySelf = 'start'
-          })
+          legend.style.rowGap = flow === 'column' ? '5px' : '3px'
+          legend.style.columnGap = gap + 'px'
         }
         function rebalanceOverlayLegend() {
           const legend = document.querySelector('#chart-overlay .layout-legend')
@@ -14596,25 +14604,65 @@
           }
         }
 
-        function dataURIFromSVG() {
-          const svg = $('#zen-svg')
-          const clone = svg.cloneNode(true)
-          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-          clone.setAttribute('width', 1000)
-          clone.setAttribute('height', 620)
-          return (
-            'data:image/svg+xml;charset=utf-8,' +
-            encodeURIComponent(new XMLSerializer().serializeToString(clone))
-          )
-        }
         async function getExportCanvas() {
           const frame = $('#chart-frame')
-          return await html2canvas(frame, {
-            backgroundColor: '#ffffff',
-            scale: Math.max(1, state.exportScale),
-            useCORS: true,
-            logging: false,
-          })
+          const mount = $('#chart-mount')
+          const host = mount?.querySelector('.chartjs-scale-host')
+          // 抓图前先摘掉工作区的 transform。
+          // html2canvas 不解析 CSS transform，chart-mount 上的 scale()/translate()
+          // 以及 Chart.js 缩放宿主上的 translate(-50%,-50%) 都会被忽略，
+          // 结果就是导出图整体错位、只剩一角（等同于“导出变形”）。
+          const saved = [
+            [mount, mount ? mount.getAttribute('style') : null],
+            [host, host ? host.getAttribute('style') : null],
+          ]
+          const redraw = () => {
+            try {
+              if (state.chart && typeof state.chart.resize === 'function') state.chart.resize()
+              else if (
+                state.chart &&
+                state.engine === 'apexcharts' &&
+                typeof state.chart.updateOptions === 'function'
+              )
+                state.chart.updateOptions(
+                  { chart: { width: '100%', height: '100%' } },
+                  false,
+                  false,
+                )
+            } catch (e) {
+              reportError('导出前图表重绘失败', e, false)
+            }
+          }
+          try {
+            if (mount) {
+              mount.style.transform = 'none'
+              mount.style.left = '0'
+              mount.style.top = '0'
+            }
+            if (host) {
+              host.style.transform = 'none'
+              host.style.left = '0'
+              host.style.top = '0'
+              host.style.width = '100%'
+              host.style.height = '100%'
+            }
+            redraw()
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+            return await html2canvas(frame, {
+              backgroundColor: exportPaperColor(),
+              scale: Math.max(1, state.exportScale),
+              useCORS: true,
+              logging: false,
+            })
+          } finally {
+            saved.forEach(([el, style]) => {
+              if (!el) return
+              if (style === null) el.removeAttribute('style')
+              else el.setAttribute('style', style)
+            })
+            applyChartMountLayout()
+            redraw()
+          }
         }
         async function exportPNG() {
           try {
@@ -14634,20 +14682,26 @@
             .slice(0, 60)
         }
         async function svgToCanvas() {
+          const svgString = getRenderedSVGString()
+          if (!svgString) throw Error('当前图表没有可栅格化的 SVG 画布')
+          const box = /viewBox="([^"]+)"/.exec(svgString)
+          const dims = box ? box[1].trim().split(/\s+/).map(Number) : []
+          const baseW = Math.max(1, Math.round(dims[2] || state.width || 1000))
+          const baseH = Math.max(1, Math.round(dims[3] || state.height || 620))
           return new Promise((resolve, reject) => {
             const img = new Image()
             img.onload = () => {
               const c = document.createElement('canvas')
-              c.width = 1000 * state.exportScale
-              c.height = 620 * state.exportScale
+              c.width = Math.max(1, Math.round(baseW * state.exportScale))
+              c.height = Math.max(1, Math.round(baseH * state.exportScale))
               const ctx = c.getContext('2d')
-              ctx.fillStyle = '#fff'
+              ctx.fillStyle = exportPaperColor()
               ctx.fillRect(0, 0, c.width, c.height)
               ctx.drawImage(img, 0, 0, c.width, c.height)
               resolve(c)
             }
             img.onerror = reject
-            img.src = dataURIFromSVG()
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString)
           })
         }
         /*
@@ -14656,43 +14710,72 @@
          * 2. PNG/PDF 的栅格化只发生在用户主动导出时。
          * 3. SVG 导出优先直接序列化当前引擎实际生成的 SVG；只有 Canvas 引擎
          *    （Chart.js）没有原生 SVG 时，才允许在导出文件中使用 PNG 作为后备。
+         *
+         * 导出文件必须与页面彻底解耦：不能把工作区写在 <svg> 上的行内样式
+         * （position / width:100% / transform:scale()）和 preserveAspectRatio="none"
+         * 一起写进文件，否则打开后整张图会被拉伸并偏移，也就是导出“变形”。
          */
+        function exportPaperColor() {
+          const paper = getComputedStyle(document.documentElement)
+            .getPropertyValue('--paper')
+            .trim()
+          return /^(#|rgb|hsl)/i.test(paper) ? paper : '#ffffff'
+        }
+        function svgNumber(value, fallback) {
+          const n = Number.parseFloat(String(value ?? '').replace(/px/i, ''))
+          return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback
+        }
+        function buildStandaloneSVGString(sourceSvg, width, height, viewBox) {
+          const clone = sourceSvg.cloneNode(true)
+          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+          clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+          // 这些属性只对页面里的摆放有意义，带进导出文件就会变形
+          ;['id', 'class', 'style', 'tabindex', 'role', 'transform', 'preserveAspectRatio'].forEach(
+            (attr) => clone.removeAttribute(attr),
+          )
+          const w = Math.max(1, Math.round(Number(width) || 0))
+          const h = Math.max(1, Math.round(Number(height) || 0))
+          // 固定 viewBox + 显式宽高：任何查看器里都等比缩放，不会被拉伸
+          clone.setAttribute('viewBox', viewBox || `0 0 ${w} ${h}`)
+          clone.setAttribute('width', w)
+          clone.setAttribute('height', h)
+          // 补一层底色：SVG 本身透明，很多查看器会显示成黑底
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+          bg.setAttribute('x', '0')
+          bg.setAttribute('y', '0')
+          bg.setAttribute('width', String(w))
+          bg.setAttribute('height', String(h))
+          bg.setAttribute('fill', exportPaperColor())
+          clone.insertBefore(bg, clone.firstChild)
+          return (
+            '<?xml version="1.0" encoding="UTF-8"?>\n' +
+            new XMLSerializer().serializeToString(clone)
+          )
+        }
         function getRenderedSVGString() {
           const zenSvg = $('#zen-svg')
           if (state.engine === 'zen' && zenSvg?.style.display !== 'none') {
-            const clone = zenSvg.cloneNode(true)
-            clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-            clone.setAttribute('width', 1000)
-            clone.setAttribute('height', 620)
-            return new XMLSerializer().serializeToString(clone)
+            // 自绘引擎固定画在 1000 × 620 的坐标系里，直接沿用它自己的 viewBox
+            const raw = String(zenSvg.getAttribute('viewBox') || '').trim()
+            const box = raw.split(/\s+/).map(Number)
+            const w = box.length === 4 && box[2] > 0 ? box[2] : Number(state.width) || 1000
+            const h = box.length === 4 && box[3] > 0 ? box[3] : Number(state.height) || 620
+            return buildStandaloneSVGString(zenSvg, w, h, raw || `0 0 ${w} ${h}`)
           }
 
-          if (state.engine === 'echarts') {
-            const svg = $('#chart-mount')?.querySelector('svg')
-            if (svg) {
-              const clone = svg.cloneNode(true)
-              clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-              const rect = svg.getBoundingClientRect()
-              const width = Math.max(1, Math.round(rect.width || state.width || 1000))
-              const height = Math.max(1, Math.round(rect.height || state.height || 620))
-              if (!clone.getAttribute('width')) clone.setAttribute('width', width)
-              if (!clone.getAttribute('height')) clone.setAttribute('height', height)
-              return new XMLSerializer().serializeToString(clone)
-            }
-          }
-
-          if (state.engine === 'apexcharts') {
-            const svg = $('#chart-mount')?.querySelector('svg')
-            if (svg) {
-              const clone = svg.cloneNode(true)
-              clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-              const rect = svg.getBoundingClientRect()
-              const width = Math.max(1, Math.round(rect.width || state.width || 1000))
-              const height = Math.max(1, Math.round(rect.height || state.height || 620))
-              if (!clone.getAttribute('width')) clone.setAttribute('width', width)
-              if (!clone.getAttribute('height')) clone.setAttribute('height', height)
-              return new XMLSerializer().serializeToString(clone)
-            }
+          const mountSvg = $('#chart-mount')?.querySelector('svg')
+          if (mountSvg && (state.engine === 'echarts' || state.engine === 'apexcharts')) {
+            // 用布局尺寸（offsetWidth 不含 CSS transform）而不是 getBoundingClientRect，
+            // 否则工作区的缩放与位移会被一起写进导出文件。
+            const w = svgNumber(
+              mountSvg.getAttribute('width'),
+              mountSvg.offsetWidth || Number(state.width) || 1000,
+            )
+            const h = svgNumber(
+              mountSvg.getAttribute('height'),
+              mountSvg.offsetHeight || Number(state.height) || 620,
+            )
+            return buildStandaloneSVGString(mountSvg, w, h)
           }
 
           return ''
@@ -14707,7 +14790,7 @@
             if (!svgString) {
               const canvas = await getExportCanvas()
               const png = canvas.toDataURL('image/png')
-              svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}"><image href="${png}" width="${canvas.width}" height="${canvas.height}"/></svg>`
+              svgString = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}"><rect width="${canvas.width}" height="${canvas.height}" fill="${exportPaperColor()}"/><image href="${png}" width="${canvas.width}" height="${canvas.height}"/></svg>`
             }
 
             const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
@@ -14746,12 +14829,10 @@
               (pageH - h) / 2,
               w,
               h,
-              'ZENVIZ',
+              'chart',
               'FAST',
             )
-            pdf.setFontSize(7)
-            pdf.setTextColor(110)
-            pdf.text('ZENVIZ · ' + state.title, margin, pageH - 5)
+            // 页面上只保留图表本身，不再叠加任何 ZENVIZ 标识或页脚文字
             pdf.save(safeName(state.title) + '.pdf')
             setStatus('PDF 已导出')
           } catch (e) {
