@@ -3618,7 +3618,8 @@
       <div class="menu-group">
         <span class="menu-label">DATA</span><button class="menu-btn" id="import-btn">导入</button
         ><button class="menu-btn" id="export-btn">导出</button
-        ><button class="menu-btn" id="reset-btn">重置</button>
+        ><button class="menu-btn" id="reset-btn">重置</button
+        ><button class="menu-btn" id="omm-x-btn">互通</button>
       </div>
       <div class="menu-group" id="omm-sync-group">
         <span class="menu-label">SYNC</span
@@ -4007,6 +4008,7 @@
                 </div>
                 <div class="cmd-row" data-cmd="ai"><b> AI 语料助手</b><span>AI</span></div>
                 <div class="cmd-row" data-cmd="export"><b> 导出 AI 语料包</b><span>JSON</span></div>
+                <div class="cmd-row" data-cmd="bridge"><b> OMM 互通</b><span>BRIDGE</span></div>
               </div>
               <div
                 style="margin-top: 14px; font-size: 11px; color: var(--text-dim); line-height: 1.8"
@@ -4466,6 +4468,48 @@
       </div>
     </div>
 
+    <div id="omm-x-modal" class="modal">
+      <div class="modal-head">
+        <span class="modal-title">OMM BRIDGE</span
+        ><button class="close-btn" id="omm-x-close" aria-label="关闭">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M5 5l14 14M19 5L5 19" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="ed-field">
+          <span class="ed-label">数据包 JSON（来自 Annotate / English）</span>
+          <textarea
+            id="omm-x-text"
+            class="ed-area"
+            style="min-height: 120px"
+            placeholder="粘贴互通包内容，或点下方按钮选择 .json 文件"
+          ></textarea>
+        </div>
+        <div class="drawer-actions">
+          <button class="ed-btn primary" id="omm-x-pick">选择文件</button>
+          <button class="ed-btn primary" id="omm-x-import">导 入</button>
+        </div>
+        <div class="info-line">
+          单词 → collocation；句子 → sentence；模板 → template；搭配 → collocation；文章 →
+          paragraph。按来源自动建分类，内容重复自动跳过。
+        </div>
+        <div class="drawer-actions" style="margin-top: 16px">
+          <button class="ed-btn primary" id="omm-x-export">导出互通包</button>
+          <button class="ed-btn" id="omm-x-to-annotate">发送 → Annotate</button>
+          <button class="ed-btn" id="omm-x-to-english">发送 → English</button>
+        </div>
+        <div class="info-line" id="omm-x-scope">导出范围：全部语料</div>
+      </div>
+    </div>
+
     <div id="data-modal" class="modal">
       <div class="modal-head">
         <span class="modal-title">IMPORT / EXPORT</span
@@ -4724,8 +4768,470 @@ notify pgrst, 'reload schema';</textarea
       </div>
     </div>
     <input id="file-input" type="file" accept=".json,application/json" hidden />
+    <input id="omm-x-file" type="file" accept=".json,application/json" multiple hidden />
     <div id="toast" class="toast"></div>
 
+    <!-- ===== OMM Bridge Core · 三端数据互通 (annotate / english / corpus) ===== -->
+    <script id="omm-bridge-core">
+      ;(function () {
+        'use strict'
+        /* OMM Bridge v1 —— 统一的数据包格式：
+           { omm:'bridge', v:1, app, kind, exportedAt, meta:{}, items:[
+               { t:'word',     w, ph, m, ex, exZh, note, tags[], src }
+               { t:'sentence', en, zh, note, tags[], src }
+               { t:'template', en, zh, note, tags[], src }
+               { t:'phrase',   en, zh, note, tags[], src }
+               { t:'doc',      title, text, lang, zh }
+           ] }
+           三个应用都认识这个包，互不认识的字段自动忽略。 */
+        var SELF = 'omm-corpus'
+        var INBOX = 'omm.bridge.inbox.v1'
+        var APPS = {
+          'omm-annotate': 'OMM Annotate',
+          'omm-english': 'OMM English',
+          'omm-corpus': 'OMM Corpus',
+        }
+        var FILES = {
+          'omm-annotate': 'omm-annotate.html',
+          'omm-english': 'omm-english.html',
+          'omm-corpus': 'omm-corpus.html',
+        }
+        var ch = null
+        try {
+          if (window.BroadcastChannel) ch = new BroadcastChannel('omm-bridge')
+        } catch (e) {}
+
+        function nz(v) {
+          return String(v == null ? '' : v).trim()
+        }
+        function low(v) {
+          return nz(v).toLowerCase()
+        }
+        function kz(v) {
+          return low(v).replace(/\s+/g, ' ')
+        }
+        function nowISO() {
+          return new Date().toISOString()
+        }
+        function fileStamp() {
+          var d = new Date()
+          function p(x) {
+            return (x < 10 ? '0' : '') + x
+          }
+          return (
+            d.getFullYear() +
+            p(d.getMonth() + 1) +
+            p(d.getDate()) +
+            '-' +
+            p(d.getHours()) +
+            p(d.getMinutes())
+          )
+        }
+        function tags(v) {
+          if (Array.isArray(v)) return v.map(nz).filter(Boolean)
+          if (typeof v === 'string')
+            return nz(v)
+              .split(/[,，;；、|]/)
+              .map(nz)
+              .filter(Boolean)
+          return []
+        }
+        function download(name, content, mime) {
+          try {
+            var blob = new Blob([content], { type: mime || 'application/json;charset=utf-8' })
+            var url = URL.createObjectURL(blob)
+            var a = document.createElement('a')
+            a.href = url
+            a.download = name
+            document.body.appendChild(a)
+            a.click()
+            setTimeout(function () {
+              try {
+                a.remove()
+              } catch (e) {}
+              try {
+                URL.revokeObjectURL(url)
+              } catch (e) {}
+            }, 400)
+            return true
+          } catch (e) {
+            return false
+          }
+        }
+        function saveJSON(name, obj) {
+          return download(name, JSON.stringify(obj, null, 2), 'application/json')
+        }
+
+        /* ---------- item 构造 ---------- */
+        function itWord(o) {
+          o = o || {}
+          return {
+            t: 'word',
+            w: nz(o.w),
+            ph: nz(o.ph),
+            m: nz(o.m),
+            ex: nz(o.ex),
+            exZh: nz(o.exZh),
+            note: nz(o.note),
+            tags: tags(o.tags),
+            src: nz(o.src),
+          }
+        }
+        function itSent(o, t) {
+          o = o || {}
+          return {
+            t: t || 'sentence',
+            en: nz(o.en),
+            zh: nz(o.zh),
+            note: nz(o.note),
+            tags: tags(o.tags),
+            src: nz(o.src),
+          }
+        }
+        function itDoc(o) {
+          o = o || {}
+          return {
+            t: 'doc',
+            title: nz(o.title),
+            text: nz(o.text),
+            lang: nz(o.lang) || 'en',
+            zh: nz(o.zh),
+          }
+        }
+        /* 清洗任意一件 item，保证字段齐备 */
+        function itOf(it) {
+          if (!it || typeof it !== 'object') return null
+          var t = nz(it.t || it.type) || 'sentence'
+          if (t === 'word') {
+            if (nz(it.w)) {
+              it.t = 'word'
+              it.ph = nz(it.ph)
+              it.m = nz(it.m)
+              it.ex = nz(it.ex)
+              it.exZh = nz(it.exZh)
+              it.note = nz(it.note)
+              it.tags = tags(it.tags)
+              it.src = nz(it.src)
+              return it
+            }
+            if (!nz(it.en)) return null
+            return itWord({
+              w: it.en,
+              ph: it.phon,
+              m: it.zh,
+              ex: it.ex,
+              exZh: it.exZh,
+              note: it.note,
+              tags: it.tags,
+              src: it.src,
+            })
+          }
+          if (t === 'doc') {
+            if (!nz(it.title) && !nz(it.text)) return null
+            it.t = 'doc'
+            it.title = nz(it.title) || nz(it.text).slice(0, 24)
+            it.text = nz(it.text)
+            it.lang = nz(it.lang) || 'en'
+            it.zh = nz(it.zh)
+            return it
+          }
+          var body = nz(it.en) || nz(it.text) || nz(it.sentence)
+          if (!body) return null
+          it.t = t === 'sentence' || t === 'template' || t === 'phrase' ? t : kindMap(t)
+          it.en = body
+          it.zh = nz(it.zh)
+          it.note = nz(it.note)
+          it.tags = tags(it.tags)
+          it.src = nz(it.src)
+          return it
+        }
+        function kindMap(k) {
+          k = low(k)
+          if (k === 'word' || k === 'vocab' || k === 'vocabulary') return 'word'
+          if (k === 'template' || k === 'pattern') return 'template'
+          if (k === 'phrase' || k === 'collocation' || k === 'collocations') return 'phrase'
+          return 'sentence'
+        }
+        function label(it) {
+          if (!it) return ''
+          if (it.t === 'word') return it.w
+          if (it.t === 'doc') return it.title
+          return it.en
+        }
+        function keyOf(it) {
+          if (!it) return ''
+          if (it.t === 'word') return 'word:' + low(it.w)
+          if (it.t === 'doc') return 'doc:' + kz(it.title)
+          return it.t + ':' + kz(it.en)
+        }
+
+        /* ---------- 外部格式 → bridge items ---------- */
+        function wordish(e) {
+          if (!e) return null
+          if (Array.isArray(e)) {
+            var w = nz(e[0])
+            if (!w) return null
+            return itWord({ w: w, ph: e[1], m: e[2], ex: e[3], exZh: e[4] })
+          }
+          if (typeof e === 'string') return nz(e) ? itSent({ en: e }) : null
+          if (typeof e !== 'object') return null
+          if (e.t === 'word' || nz(e.w) || nz(e.word))
+            return itWord({
+              w: e.w || e.word || e.en,
+              ph: e.ph || e.phonetic || e.phon,
+              m: e.m || e.meaning || e.trans || e.zh,
+              ex: e.ex || e.example,
+              exZh: e.exZh || e.exampleZh,
+              note: e.note || e.notes,
+              tags: e.tags,
+              src: e.src || e.source,
+            })
+          if (low(e.t) === 'doc') return itDoc(e)
+          return itSent(
+            {
+              en: e.en || e.text || e.sentence,
+              zh: e.zh || e.trans,
+              note: e.note || e.notes,
+              tags: e.tags,
+              src: e.src || e.source,
+            },
+            e.t || e.type || 'sentence',
+          )
+        }
+        /* OMM Annotate 的笔记记录 → item */
+        function noteToItem(n) {
+          if (!n) return null
+          var k = kindMap(n.kind || n.type || 'sentence')
+          if (k === 'word')
+            return itWord({
+              w: n.en || n.text || n.w,
+              ph: n.phon,
+              m: n.zh || n.trans,
+              ex: n.ex,
+              exZh: n.exZh,
+              note: n.note || n.notes,
+              tags: n.tags,
+              src: n.src || n.source,
+            })
+          return itSent(
+            {
+              en: n.en || n.text,
+              zh: n.zh || n.trans,
+              note: n.note || n.notes,
+              tags: n.tags,
+              src: n.src || n.source,
+            },
+            k,
+          )
+        }
+        /* OMM Corpus 的语料条目 → item */
+        function entryToItem(e) {
+          if (!e) return null
+          var k = kindMap(e.type)
+          if (k === 'word')
+            return itWord({
+              w: e.en,
+              ph: '',
+              m: e.zh,
+              ex: '',
+              exZh: '',
+              note: e.notes,
+              tags: e.tags,
+              src: e.source,
+            })
+          if (low(e.type) === 'paragraph')
+            return itDoc({ title: nz(e.en).slice(0, 24) || '段落', text: e.en, zh: e.zh })
+          return itSent({ en: e.en, zh: e.zh, note: e.notes, tags: e.tags, src: e.source }, k)
+        }
+        function normalize(raw) {
+          var o = raw
+          if (typeof o === 'string') {
+            try {
+              o = JSON.parse(o)
+            } catch (e) {
+              return []
+            }
+          }
+          if (!o || typeof o !== 'object') return []
+          /* 1. 标准 bridge 包 */
+          if (o.omm === 'bridge' && Array.isArray(o.items)) return o.items.map(itOf).filter(Boolean)
+          /* 2. OMM Annotate 项目备份 */
+          if (o.project) {
+            var pr = o.project
+            if (Array.isArray(pr.notes) && pr.notes.length)
+              return pr.notes.map(noteToItem).filter(Boolean)
+            return []
+          }
+          /* 3. 裸笔记数组 */
+          if (Array.isArray(o.notes) && o.notes.length && (o.notes[0].kind || o.notes[0].en))
+            return o.notes.map(noteToItem).filter(Boolean)
+          /* 4. OMM Corpus 导出 / 状态 */
+          if (Array.isArray(o.entries) && o.entries.length)
+            return o.entries.map(entryToItem).filter(Boolean)
+          /* 5. 词表数组 或 {words:[...]} */
+          if (Array.isArray(o.words) && o.words.length) return o.words.map(wordish).filter(Boolean)
+          if (Array.isArray(o)) return o.map(wordish).filter(Boolean)
+          /* 6. OMM English 全量备份 → 收集全部词书 */
+          if (o.books) {
+            var out = []
+            Object.keys(o.books).forEach(function (bk) {
+              var b = o.books[bk]
+              if (!b) return
+              ;(b.w || []).forEach(function (e) {
+                var w = wordish(e)
+                if (!w || w.t !== 'word') return
+                var nt = (o.notes && o.notes[low(w.w)]) || null
+                if (nt) {
+                  if (nt.ex) w.ex = w.ex || nt.ex
+                  if (nt.zh) w.note = w.note || nt.zh
+                  if (nt.story) w.note = w.note || nt.story
+                  if (nt.exZh) w.exZh = w.exZh || nt.exZh
+                }
+                w.src = w.src || b.name || ''
+                out.push(w)
+              })
+            })
+            if (out.length) return out
+          }
+          return []
+        }
+        function parse(text) {
+          return normalize(text)
+        }
+
+        /* ---------- 信封 ---------- */
+        function env(items, meta) {
+          return {
+            omm: 'bridge',
+            v: 1,
+            app: SELF,
+            kind: 'notes',
+            exportedAt: nowISO(),
+            meta: meta || {},
+            items: items || [],
+          }
+        }
+
+        /* ---------- 跨应用直传（同源 localStorage 收件箱 + BroadcastChannel） ---------- */
+        function readBox() {
+          try {
+            var a = JSON.parse(localStorage.getItem(INBOX) || '[]')
+            return Array.isArray(a) ? a : []
+          } catch (e) {
+            return []
+          }
+        }
+        function writeBox(a) {
+          try {
+            localStorage.setItem(INBOX, JSON.stringify(a))
+          } catch (e) {}
+        }
+        function take() {
+          var box = readBox()
+          if (!box.length) return []
+          var got = [],
+            keep = []
+          box.forEach(function (p) {
+            if (!p || !p.env) return
+            if (!p.to || p.to === SELF) got.push(p)
+            else keep.push(p)
+          })
+          writeBox(keep)
+          return got
+        }
+        function openApp(file) {
+          var a = document.createElement('a')
+          a.href = file
+          a.target = '_blank'
+          a.rel = 'noopener'
+          a.style.display = 'none'
+          document.body.appendChild(a)
+          a.click()
+          setTimeout(function () {
+            try {
+              a.remove()
+            } catch (e) {}
+          }, 600)
+        }
+        function deliver(appId, items, meta) {
+          if (!FILES[appId]) return false
+          var box = readBox()
+          box.push({
+            id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6),
+            to: appId,
+            from: SELF,
+            ts: nowISO(),
+            env: env(items, meta),
+          })
+          writeBox(box)
+          try {
+            if (ch) ch.postMessage({ t: 'inbox' })
+          } catch (e) {}
+          try {
+            localStorage.setItem('omm.bridge.ping.v1', nowISO())
+          } catch (e) {}
+          openApp(FILES[appId])
+          return true
+        }
+        function watch(apply) {
+          function run() {
+            var got = take()
+            got.forEach(function (p) {
+              try {
+                apply(p)
+              } catch (e) {
+                if (window.console) console.error(e)
+              }
+            })
+          }
+          setTimeout(run, 300)
+          window.addEventListener('storage', function (e) {
+            if (e.key === INBOX) run()
+          })
+          if (ch)
+            ch.onmessage = function () {
+              run()
+            }
+          document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) run()
+          })
+        }
+
+        window.OMMBridge = {
+          self: SELF,
+          apps: APPS,
+          files: FILES,
+          nameOf: function (id) {
+            return APPS[id] || id
+          },
+          nz: nz,
+          low: low,
+          kz: kz,
+          tags: tags,
+          fileStamp: fileStamp,
+          download: download,
+          saveJSON: saveJSON,
+          env: env,
+          normalize: normalize,
+          parse: parse,
+          word: itWord,
+          sent: itSent,
+          doc: itDoc,
+          itOf: itOf,
+          kindMap: kindMap,
+          noteToItem: noteToItem,
+          entryToItem: entryToItem,
+          wordish: wordish,
+          label: label,
+          keyOf: keyOf,
+          deliver: deliver,
+          openApp: openApp,
+          watch: watch,
+          take: take,
+          clearBox: writeBox,
+        }
+      })()
+    </script>
     <script>
       ;(function () {
         'use strict'
@@ -7954,6 +8460,148 @@ ${extra}`
           a.click()
           setTimeout(() => URL.revokeObjectURL(a.href), 500)
         }
+
+        // ---------- OMM Bridge · 与 Annotate / English 互通 ----------
+        const OMM = window.OMMBridge || null
+        /* 按名称取（或新建）一个分类 */
+        function ensureCat(name, desc) {
+          const nm = clean(name) || '笔记导入'
+          const hit = S.categories.find((c) => c.name === nm)
+          if (hit) return hit.id
+          const id = 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+          S.categories.push({ id, name: nm, desc: desc || '由 OMM 互通包导入' })
+          return id
+        }
+        /* 导出范围：语料库视图里选了某个分类就只导出该分类，否则全部 */
+        function xScopeEntries() {
+          if (
+            typeof selectedCategory === 'string' &&
+            selectedCategory &&
+            selectedCategory !== 'all'
+          )
+            return S.entries.filter((e) => e.categoryId === selectedCategory)
+          return S.entries.slice()
+        }
+        function xScopeLabel() {
+          const list = xScopeEntries()
+          let suffix = '全部语料'
+          if (
+            typeof selectedCategory === 'string' &&
+            selectedCategory &&
+            selectedCategory !== 'all'
+          ) {
+            const c = S.categories.find((x) => x.id === selectedCategory)
+            suffix = '分类「' + (c ? c.name : selectedCategory) + '」'
+          }
+          return '导出范围：' + suffix + ' · 共 ' + list.length + ' 条'
+        }
+        function zbItems() {
+          if (!OMM) return []
+          return xScopeEntries()
+            .map((e) => OMM.entryToItem(e))
+            .filter(Boolean)
+        }
+        function zbMeta() {
+          return { app: 'omm-corpus', sourceAppName: 'OMM Corpus' }
+        }
+        function zbDownload(items) {
+          if (!OMM) return toast('互通模块未加载')
+          if (!items || !items.length) return toast('没有可导出的内容')
+          OMM.saveJSON('omm-corpus-' + OMM.fileStamp() + '.json', OMM.env(items, zbMeta()))
+          toast('已导出 ' + items.length + ' 项')
+        }
+        function zbSend(toApp, items) {
+          if (!OMM) return toast('互通模块未加载')
+          if (!items || !items.length) return toast('没有可发送的内容')
+          OMM.deliver(toApp, items, zbMeta())
+          toast('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+        }
+        function zbApply(items, meta, from) {
+          if (!OMM || !items || !items.length) return 0
+          const seen = {}
+          S.entries.forEach((e) => {
+            seen[norm(e.en)] = 1
+          })
+          let added = 0
+          items.forEach((it) => {
+            if (!it) return
+            let en = '',
+              zh = '',
+              type = 'sentence',
+              note = '',
+              tags = []
+            if (it.t === 'word') {
+              en = OMM.nz(it.w)
+              const bits = []
+              if (it.ph) bits.push('/' + it.ph + '/')
+              if (it.m) bits.push(it.m)
+              zh = bits.join(' ')
+              type = 'collocation'
+              note = [it.ex, it.exZh, it.note].filter(Boolean).join('\n')
+              tags = ['单词']
+            } else if (it.t === 'doc') {
+              en = OMM.nz(it.text)
+              zh = OMM.nz(it.zh)
+              type = 'paragraph'
+              note = OMM.nz(it.note)
+            } else {
+              en = OMM.nz(it.en)
+              zh = OMM.nz(it.zh)
+              type =
+                it.t === 'template' ? 'template' : it.t === 'phrase' ? 'collocation' : 'sentence'
+              note = OMM.nz(it.note)
+              tags = it.tags || []
+            }
+            if (!en) return
+            if (seen[norm(en)]) return
+            seen[norm(en)] = 1
+            const catName = (meta && (meta.docTitle || meta.title)) || it.src || '笔记导入'
+            const ts = now()
+            S.entries.unshift({
+              id: uid(),
+              type,
+              categoryId: ensureCat(catName),
+              en,
+              zh,
+              tags: (tags || []).filter(Boolean).slice(0, 8),
+              source: it.src || (meta && meta.sourceAppName) || 'OMM 互通',
+              notes: note,
+              favorite: false,
+              createdAt: ts,
+              updatedAt: ts,
+            })
+            added++
+          })
+          if (!added) return 0
+          save()
+          populateCats()
+          renderAll()
+          return added
+        }
+        function zbReadFiles(files) {
+          const arr = Array.prototype.slice.call(files || [])
+          if (!arr.length) return
+          let total = 0,
+            pending = arr.length
+          arr.forEach((f) => {
+            const rd = new FileReader()
+            rd.onload = () => {
+              try {
+                total += zbApply(OMM.normalize(rd.result), null, null)
+              } catch (e) {}
+              if (--pending <= 0)
+                toast(total ? '已导入 ' + total + ' 条' : '没有识别到可导入的内容')
+            }
+            rd.readAsText(f)
+          })
+        }
+        function openBridge() {
+          closeDrops()
+          $('#modal-mask').classList.add('open')
+          $('#omm-x-modal').classList.add('open')
+          const sc = $('#omm-x-scope')
+          if (sc) sc.textContent = xScopeLabel()
+        }
         /* ---------- 清空 / 重置语料库 ---------- */
         const RESET_MARKER = 'reset-dynamic'
         let rsArmTimer = null
@@ -8194,6 +8842,9 @@ ${extra}`
                 export: () => {
                   openData('export')
                 },
+                bridge: () => {
+                  openBridge()
+                },
               })[x.dataset.cmd]()),
         )
         $('#drawer-close').onclick = closeEditor
@@ -8314,6 +8965,32 @@ ${extra}`
         $('#cat-close').onclick = closeModal
         $('#cat-create').onclick = createCategory
         $('#import-btn').onclick = () => openData('import')
+        $('#omm-x-btn').onclick = openBridge
+        $('#omm-x-close').onclick = closeModal
+        $('#omm-x-pick').onclick = () => $('#omm-x-file').click()
+        $('#omm-x-file').onchange = (e) => {
+          zbReadFiles(e.target.files)
+          e.target.value = ''
+        }
+        $('#omm-x-import').onclick = () => {
+          const txt = ($('#omm-x-text').value || '').trim()
+          if (!txt) return toast('请先粘贴内容或选择文件')
+          const n = zbApply(OMM.normalize(txt), null, null)
+          if (n) {
+            $('#omm-x-text').value = ''
+            closeModal()
+            toast('已导入 ' + n + ' 条语料')
+          } else toast('没有识别到新内容（可能与现有语料重复）')
+        }
+        $('#omm-x-export').onclick = () => zbDownload(zbItems())
+        $('#omm-x-to-annotate').onclick = () => zbSend('omm-annotate', zbItems())
+        $('#omm-x-to-english').onclick = () => zbSend('omm-english', zbItems())
+        if (OMM)
+          OMM.watch((p) => {
+            if (!p || !p.env) return
+            const n = zbApply(OMM.normalize(p.env), p.env.meta, p.from)
+            if (n) toast('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 条数据')
+          })
         $('#export-btn').onclick = () => openData('export')
         $('#data-close').onclick = closeModal
         $('#data-export').onclick = () => {
