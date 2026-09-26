@@ -2381,7 +2381,6 @@
       }
       .info-line {
         font-size: 10px;
-        color: var(--text-faint);
         line-height: 1.8;
         border-top: var(--border-width) var(--border-style) var(--border-faint);
         padding-top: 9px;
@@ -4468,6 +4467,30 @@
       </div>
     </div>
 
+    <div id="omm-cf-modal" class="modal">
+      <div class="modal-head">
+        <span class="modal-title">CONFIRM</span
+        ><button class="close-btn" id="omm-cf-x" aria-label="关闭"></button>
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M5 5l14 14M19 5L5 19" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="info-line" id="omm-cf-msg"></div>
+        <div class="drawer-actions" style="margin-top: 16px">
+          <button class="ed-btn" id="omm-cf-cancel">取消</button>
+          <button class="ed-btn primary" id="omm-cf-ok">继续</button>
+        </div>
+      </div>
+    </div>
+
     <div id="omm-x-modal" class="modal">
       <div class="modal-head">
         <span class="modal-title">OMM BRIDGE</span
@@ -5099,6 +5122,85 @@ notify pgrst, 'reload schema';</textarea
           return normalize(text)
         }
 
+        /* ---------- 写入前的确认（防止误改数据） ---------- */
+        function appName(id) {
+          return APPS[id] || id
+        }
+        var _confirmer = null
+        function setConfirmer(fn) {
+          _confirmer = fn
+        }
+        function summary(items) {
+          var c = { word: 0, sentence: 0, template: 0, phrase: 0, doc: 0 }
+          ;(items || []).forEach(function (it) {
+            if (it && c[it.t] != null) c[it.t]++
+          })
+          var NL = {
+            word: '个单词',
+            sentence: '个句子',
+            template: '个模板',
+            phrase: '个搭配',
+            doc: '篇文章',
+          }
+          var parts = []
+          ;['word', 'sentence', 'template', 'phrase', 'doc'].forEach(function (k) {
+            if (c[k]) parts.push(c[k] + NL[k])
+          })
+          return parts.length ? parts.join('、') : (items || []).length + ' 项'
+        }
+        /* ask(): 返回 Promise<boolean>。宿主应用可通过 setConfirmer 提供自带样式的弹窗，
+           未提供时退回 window.confirm。confirmer 签名 (msg, okText, done)，返回 Promise 亦可。 */
+        function ask(msg, okText) {
+          return new Promise(function (resolve) {
+            var done = false
+            function fin(v) {
+              if (done) return
+              done = true
+              resolve(!!v)
+            }
+            try {
+              if (_confirmer) {
+                var r = _confirmer(msg, okText || '继续', fin)
+                if (r && typeof r.then === 'function')
+                  r.then(
+                    function (v) {
+                      fin(v !== false)
+                    },
+                    function () {
+                      fin(false)
+                    },
+                  )
+              } else fin(window.confirm(msg))
+            } catch (e) {
+              try {
+                fin(window.confirm(msg))
+              } catch (e2) {
+                fin(false)
+              }
+            }
+          })
+        }
+        function sendMsg(toApp, items) {
+          return (
+            '即将向 ' +
+            appName(toApp) +
+            ' 发送 ' +
+            summary(items) +
+            '。发送后会在 ' +
+            appName(toApp) +
+            ' 中写入这些数据，操作不可撤销，是否继续？'
+          )
+        }
+        function recvMsg(fromApp, items) {
+          return (
+            '即将导入来自 ' +
+            appName(fromApp || 'omm-bridge') +
+            ' 的 ' +
+            summary(items) +
+            '。这会修改本页数据，且不可撤销，是否继续？'
+          )
+        }
+
         /* ---------- 信封 ---------- */
         function env(items, meta) {
           return {
@@ -5204,6 +5306,11 @@ notify pgrst, 'reload schema';</textarea
           nameOf: function (id) {
             return APPS[id] || id
           },
+          setConfirmer: setConfirmer,
+          summary: summary,
+          ask: ask,
+          sendMsg: sendMsg,
+          recvMsg: recvMsg,
           nz: nz,
           low: low,
           kz: kz,
@@ -8463,6 +8570,23 @@ ${extra}`
 
         // ---------- OMM Bridge · 与 Annotate / English 互通 ----------
         const OMM = window.OMMBridge || null
+        /* Corpus 没有通用确认弹窗，这里自建一个，风格与其它模态一致 */
+        let cfCb = null
+        function cfFinish(v) {
+          const f = cfCb
+          cfCb = null
+          closeModal()
+          if (f) f(v)
+        }
+        function xConfirm(msg, okText, fin) {
+          cfCb = fin
+          $('#omm-cf-msg').textContent = msg
+          $('#omm-cf-ok').textContent = okText || '继续'
+          closeModal()
+          $('#modal-mask').classList.add('open')
+          $('#omm-cf-modal').classList.add('open')
+        }
+        if (OMM) OMM.setConfirmer(xConfirm)
         /* 按名称取（或新建）一个分类 */
         function ensureCat(name, desc) {
           const nm = clean(name) || '笔记导入'
@@ -8513,8 +8637,11 @@ ${extra}`
         function zbSend(toApp, items) {
           if (!OMM) return toast('互通模块未加载')
           if (!items || !items.length) return toast('没有可发送的内容')
-          OMM.deliver(toApp, items, zbMeta())
-          toast('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+          OMM.ask(OMM.sendMsg(toApp, items), '发送').then((ok) => {
+            if (!ok) return toast('已取消发送')
+            OMM.deliver(toApp, items, zbMeta())
+            toast('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+          })
         }
         function zbApply(items, meta, from) {
           if (!OMM || !items || !items.length) return 0
@@ -8581,18 +8708,32 @@ ${extra}`
         function zbReadFiles(files) {
           const arr = Array.prototype.slice.call(files || [])
           if (!arr.length) return
-          let total = 0,
-            pending = arr.length
+          const texts = []
+          let pending = arr.length
           arr.forEach((f) => {
             const rd = new FileReader()
             rd.onload = () => {
-              try {
-                total += zbApply(OMM.normalize(rd.result), null, null)
-              } catch (e) {}
-              if (--pending <= 0)
-                toast(total ? '已导入 ' + total + ' 条' : '没有识别到可导入的内容')
+              texts.push(rd.result)
+              if (--pending <= 0) zbIngestTexts(texts)
             }
             rd.readAsText(f)
+          })
+        }
+        function zbIngestTexts(texts) {
+          let items = []
+          texts.forEach((t) => {
+            items = items.concat(OMM.normalize(t))
+          })
+          if (!items.length) return toast('没有识别到可导入的内容')
+          OMM.ask(OMM.recvMsg('omm-bridge', items), '导入').then((ok) => {
+            if (!ok) return toast('已取消导入')
+            let total = 0
+            texts.forEach((t) => {
+              try {
+                total += zbApply(OMM.normalize(t), null, null)
+              } catch (e) {}
+            })
+            toast(total ? '已导入 ' + total + ' 条' : '没有新增内容（可能重复）')
           })
         }
         function openBridge() {
@@ -8975,21 +9116,33 @@ ${extra}`
         $('#omm-x-import').onclick = () => {
           const txt = ($('#omm-x-text').value || '').trim()
           if (!txt) return toast('请先粘贴内容或选择文件')
-          const n = zbApply(OMM.normalize(txt), null, null)
-          if (n) {
-            $('#omm-x-text').value = ''
-            closeModal()
-            toast('已导入 ' + n + ' 条语料')
-          } else toast('没有识别到新内容（可能与现有语料重复）')
+          const items = OMM.normalize(txt)
+          if (!items.length) return toast('没有识别到可导入的内容')
+          OMM.ask(OMM.recvMsg('omm-bridge', items), '导入').then((ok) => {
+            if (!ok) return toast('已取消导入')
+            const n = zbApply(items, null, null)
+            if (n) {
+              $('#omm-x-text').value = ''
+              toast('已导入 ' + n + ' 条语料')
+            } else toast('没有新增内容（可能与现有语料重复）')
+          })
         }
+        $('#omm-cf-ok').onclick = () => cfFinish(true)
+        $('#omm-cf-cancel').onclick = () => cfFinish(false)
+        $('#omm-cf-x').onclick = () => cfFinish(false)
         $('#omm-x-export').onclick = () => zbDownload(zbItems())
         $('#omm-x-to-annotate').onclick = () => zbSend('omm-annotate', zbItems())
         $('#omm-x-to-english').onclick = () => zbSend('omm-english', zbItems())
         if (OMM)
           OMM.watch((p) => {
             if (!p || !p.env) return
-            const n = zbApply(OMM.normalize(p.env), p.env.meta, p.from)
-            if (n) toast('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 条数据')
+            const items = OMM.normalize(p.env)
+            if (!items.length) return
+            OMM.ask(OMM.recvMsg(p.from, items), '导入').then((ok) => {
+              if (!ok) return toast('已取消导入')
+              const n = zbApply(items, p.env.meta, p.from)
+              if (n) toast('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 条数据')
+            })
           })
         $('#export-btn').onclick = () => openData('export')
         $('#data-close').onclick = closeModal

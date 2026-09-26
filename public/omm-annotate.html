@@ -26,6 +26,8 @@
         --radius: 0px;
         --fscale: 1;
         --bfscale: 1;
+        /* 阅读区「文本视图」的阅读缩放：1 = 默认字号，随工具栏 ＋ / － 变化 */
+        --tscale: 1;
         --lh: 1.95;
         --rail-bg: rgba(26, 26, 26, 0.022);
       }
@@ -561,6 +563,8 @@
       .mx-wrap,
       .pg-list,
       .dt-body,
+      .nv-scroll,
+      .nv-side,
       #modal-body {
         scrollbar-width: thin;
         scrollbar-color: var(--border-dim) transparent;
@@ -573,6 +577,8 @@
       .mx-wrap::-webkit-scrollbar,
       .pg-list::-webkit-scrollbar,
       .dt-body::-webkit-scrollbar,
+      .nv-scroll::-webkit-scrollbar,
+      .nv-side::-webkit-scrollbar,
       #modal-body::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -585,6 +591,8 @@
       .mx-wrap::-webkit-scrollbar-track,
       .pg-list::-webkit-scrollbar-track,
       .dt-body::-webkit-scrollbar-track,
+      .nv-scroll::-webkit-scrollbar-track,
+      .nv-side::-webkit-scrollbar-track,
       #modal-body::-webkit-scrollbar-track {
         background: transparent;
         /* 轨道上下内缩，避免滑块滚到两端时溢出圆角容器 */
@@ -598,6 +606,8 @@
       .mx-wrap::-webkit-scrollbar-thumb,
       .pg-list::-webkit-scrollbar-thumb,
       .dt-body::-webkit-scrollbar-thumb,
+      .nv-scroll::-webkit-scrollbar-thumb,
+      .nv-side::-webkit-scrollbar-thumb,
       #modal-body::-webkit-scrollbar-thumb {
         background: var(--border-faint);
         border-radius: 99px;
@@ -613,6 +623,8 @@
       .mx-wrap::-webkit-scrollbar-thumb:hover,
       .pg-list::-webkit-scrollbar-thumb:hover,
       .dt-body::-webkit-scrollbar-thumb:hover,
+      .nv-scroll::-webkit-scrollbar-thumb:hover,
+      .nv-side::-webkit-scrollbar-thumb:hover,
       #modal-body::-webkit-scrollbar-thumb:hover {
         background: var(--border-dim);
         background-clip: content-box;
@@ -838,11 +850,6 @@
       .ph-btn:hover {
         color: var(--text);
         border-color: var(--border);
-        background: var(--hover);
-      }
-      .ph-btn.on {
-        color: var(--accent-green);
-        border-color: var(--accent-green);
         background: var(--hover);
       }
       .paper-scroll {
@@ -1110,10 +1117,13 @@
         font-size: calc(10px * var(--fscale));
         letter-spacing: 2px;
       }
+      /* 文本视图：缩放表现为「字号变化」，版心宽度同步缩放（每行字数不变）。
+         宽度上限取可用宽度，放大到超出视窗时也不产生横向滚动 —— 因此版心永远居中。 */
       .rv-text {
-        max-width: 780px;
+        width: min(calc(780px * var(--tscale)), 100%);
+        max-width: calc(780px * var(--tscale));
         margin: 0 auto;
-        font-size: calc(15px * var(--bfscale));
+        font-size: calc(15px * var(--bfscale) * var(--tscale));
         line-height: var(--lh);
         color: var(--text);
       }
@@ -1645,7 +1655,13 @@
         background: var(--hover);
       }
       .nv-card.on {
-        border-color: var(--accent, #4a86d4);
+        border-color: var(--border-dim);
+        background: var(--hover);
+      }
+      .nv-card.on .nv-en {
+        text-decoration: underline;
+        text-decoration-color: var(--border-dim);
+        text-underline-offset: 3px;
       }
       .nv-pick {
         width: 14px;
@@ -1656,11 +1672,15 @@
         flex-shrink: 0;
         position: relative;
       }
+      .nv-card.on .nv-pick {
+        border-color: var(--border-dim);
+      }
       .nv-card.on .nv-pick::after {
         content: '';
         position: absolute;
-        inset: 2px;
-        background: var(--accent, #4a86d4);
+        inset: 3px;
+        background: var(--text-dim);
+        border-radius: 1px;
       }
       .nv-main {
         flex: 1;
@@ -1789,6 +1809,60 @@
       .nv-btn.solid {
         color: var(--text);
         border-color: var(--border-dim);
+      }
+      /* ---- 阅读视图：正文编辑态 ---- */
+      .rv-edit {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 8px 0 40px;
+      }
+      .rv-edit-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 2px 10px;
+      }
+      .rv-edit-tip {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 0.5px;
+        color: var(--text-faint);
+        line-height: 1.8;
+      }
+      .rv-ta {
+        display: block;
+        width: 100%;
+        min-height: calc(100vh - 260px);
+        resize: vertical;
+        padding: 16px 18px;
+        font-family: inherit;
+        font-size: calc(13px * var(--fscale));
+        line-height: 1.95;
+        color: var(--text);
+        background: transparent;
+        border: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+        outline: none;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
+      .rv-ta:focus {
+        border-color: var(--border-dim);
+      }
+      .rv-ta::-webkit-scrollbar {
+        width: 8px;
+      }
+      .rv-ta::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .rv-ta::-webkit-scrollbar-thumb {
+        background: var(--border-faint);
+        border-radius: 99px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      .rv-ta::-webkit-scrollbar-thumb:hover {
+        background: var(--border-dim);
+        background-clip: content-box;
       }
       /* ---- mark popup · 快速加 ---- */
       .mp-nk-row {
@@ -2678,6 +2752,8 @@
         color: var(--text);
         margin-bottom: 28px;
         line-height: 1.6;
+        /* 长提示里的 \n 要真的换行 */
+        white-space: pre-line;
       }
       .confirm-box .actions {
         display: flex;
@@ -3701,8 +3777,18 @@
         <span class="menu-label">文件</span>
         <div class="menu-btn" data-action="showExport">导出</div>
         <div class="menu-btn" data-action="showBridge">互通</div>
-        <div class="menu-btn" data-action="importFile">导入文本</div>
-        <div class="menu-btn" data-action="importPdf" title="导入 PDF 论文用于阅读批注">
+        <div
+          class="menu-btn"
+          data-action="importFile"
+          title="导入 .txt / .md 文本，或从 PDF 只提取文字（无版面）"
+        >
+          导入文本
+        </div>
+        <div
+          class="menu-btn"
+          data-action="importPdf"
+          title="导入 PDF 论文，保留原始版面用于阅读批注"
+        >
           导入 PDF
         </div>
         <div class="menu-btn" data-action="printView">打印</div>
@@ -3978,7 +4064,18 @@
               <span class="ph-btn" id="rv-reload" data-action="importPdf" style="display: none"
                 >重载 PDF</span
               >
+              <span
+                class="ph-btn"
+                id="rv-totext"
+                data-action="pdfToText"
+                style="display: none"
+                title="丢弃原始版面，永久转为纯文本阅读（不可撤销）"
+                >转为纯文本</span
+              >
               <span class="spacer"></span>
+              <span class="ph-btn" id="rv-edit" data-action="rvEditToggle" title="直接编辑材料正文"
+                >编辑正文</span
+              >
               <span class="ph-btn" id="rv-fit" data-action="rvFit" title="页面宽度适应可用宽度"
                 >适应</span
               >
@@ -4322,7 +4419,13 @@
       multiple
       style="display: none"
     />
-    <input type="file" id="file-input" accept=".txt,.md,.json" multiple style="display: none" />
+    <input
+      type="file"
+      id="file-input"
+      accept=".txt,.md,.json,.pdf,application/pdf"
+      multiple
+      style="display: none"
+    />
     <input
       type="file"
       id="pdf-input"
@@ -4819,6 +4922,85 @@
           return normalize(text)
         }
 
+        /* ---------- 写入前的确认（防止误改数据） ---------- */
+        function appName(id) {
+          return APPS[id] || id
+        }
+        var _confirmer = null
+        function setConfirmer(fn) {
+          _confirmer = fn
+        }
+        function summary(items) {
+          var c = { word: 0, sentence: 0, template: 0, phrase: 0, doc: 0 }
+          ;(items || []).forEach(function (it) {
+            if (it && c[it.t] != null) c[it.t]++
+          })
+          var NL = {
+            word: '个单词',
+            sentence: '个句子',
+            template: '个模板',
+            phrase: '个搭配',
+            doc: '篇文章',
+          }
+          var parts = []
+          ;['word', 'sentence', 'template', 'phrase', 'doc'].forEach(function (k) {
+            if (c[k]) parts.push(c[k] + NL[k])
+          })
+          return parts.length ? parts.join('、') : (items || []).length + ' 项'
+        }
+        /* ask(): 返回 Promise<boolean>。宿主应用可通过 setConfirmer 提供自带样式的弹窗，
+           未提供时退回 window.confirm。confirmer 签名 (msg, okText, done)，返回 Promise 亦可。 */
+        function ask(msg, okText) {
+          return new Promise(function (resolve) {
+            var done = false
+            function fin(v) {
+              if (done) return
+              done = true
+              resolve(!!v)
+            }
+            try {
+              if (_confirmer) {
+                var r = _confirmer(msg, okText || '继续', fin)
+                if (r && typeof r.then === 'function')
+                  r.then(
+                    function (v) {
+                      fin(v !== false)
+                    },
+                    function () {
+                      fin(false)
+                    },
+                  )
+              } else fin(window.confirm(msg))
+            } catch (e) {
+              try {
+                fin(window.confirm(msg))
+              } catch (e2) {
+                fin(false)
+              }
+            }
+          })
+        }
+        function sendMsg(toApp, items) {
+          return (
+            '即将向 ' +
+            appName(toApp) +
+            ' 发送 ' +
+            summary(items) +
+            '。发送后会在 ' +
+            appName(toApp) +
+            ' 中写入这些数据，操作不可撤销，是否继续？'
+          )
+        }
+        function recvMsg(fromApp, items) {
+          return (
+            '即将导入来自 ' +
+            appName(fromApp || 'omm-bridge') +
+            ' 的 ' +
+            summary(items) +
+            '。这会修改本页数据，且不可撤销，是否继续？'
+          )
+        }
+
         /* ---------- 信封 ---------- */
         function env(items, meta) {
           return {
@@ -4924,6 +5106,11 @@
           nameOf: function (id) {
             return APPS[id] || id
           },
+          setConfirmer: setConfirmer,
+          summary: summary,
+          ask: ask,
+          sendMsg: sendMsg,
+          recvMsg: recvMsg,
           nz: nz,
           low: low,
           kz: kz,
@@ -5230,6 +5417,10 @@
           pdfScale: 1,
           /* true = 版面宽度适应可用宽度；false = 按 pdfScale 的百分比 */
           pdfFit: true,
+          /* 文本视图的阅读缩放：作用于正文字号（与版式模式的版面宽度分开记） */
+          textScale: 1,
+          /* true = 正文用默认字号（100%）；false = 按 textScale 的百分比 */
+          textFit: true,
           /* 重排后要回到的页码（内部使用） */
           rvRestorePage: null,
           pdfLostId: null,
@@ -5427,6 +5618,7 @@
               ((S.bodyFont / 15) * S.zoom).toFixed(3),
             )
             document.documentElement.style.setProperty('--lh', S.lh)
+            rvApplyTextScale()
             el('status-bar').classList.toggle('hidden', !S.statusBar)
             document.body.classList.toggle('no-statusbar', !S.statusBar)
             el('top-menu').classList.toggle('pinned', S.menuPinned)
@@ -6073,6 +6265,98 @@
           return readerIsPdf(d) && selVal(el('rv-mode')) !== 'text'
         }
 
+        /* ---------------- 正文编辑态（不经过弹窗，直接改材料内容） ---------------- */
+        var rvEditOn = false
+        var rvEditDocId = null
+        function rvEditing() {
+          var d = curDoc()
+          return !!(rvEditOn && d && d.id === rvEditDocId)
+        }
+        function rvEditExit() {
+          rvEditOn = false
+          rvEditDocId = null
+          var b = el('rv-edit')
+          if (b) b.classList.remove('on')
+        }
+        function rvCommitEdit() {
+          var d = curDoc()
+          if (!d) return rvEditExit()
+          var ta = el('rv-edit-ta')
+          if (!ta) return rvEditExit()
+          var next = String(ta.value || '')
+          if (next === String(d.text || '')) {
+            rvEditExit()
+            renderReader()
+            return notify('正文没有改动')
+          }
+          function commit() {
+            var na = annCountDoc(d.id)
+            var nm = markCountDoc(d.id)
+            d.text = next
+            Store.save()
+            rvEditExit()
+            renderAll()
+            notify('正文已更新' + (na || nm ? ' · 请检查已有编码与批注的位置' : ''))
+          }
+          if (annCountDoc(d.id) || markCountDoc(d.id))
+            showConfirm(
+              '这份材料已有 ' +
+                annCountDoc(d.id) +
+                ' 条编码片段、' +
+                markCountDoc(d.id) +
+                ' 条批注。修改正文会让它们的位置发生偏移，且不可撤销，确定保存？',
+              '保存',
+            ).then(function (ok) {
+              if (ok) commit()
+            })
+          else commit()
+        }
+        function renderReaderEditor(d, host) {
+          host.innerHTML =
+            '<div class="rv-edit">' +
+            '<div class="rv-edit-bar">' +
+            '<span class="mini-label">正在编辑正文</span>' +
+            '<span class="ph-btn on" data-action="rvEditSave">保存</span>' +
+            '<span class="ph-btn" data-action="rvEditCancel">取消</span>' +
+            '<span class="rv-edit-tip">空行会保留为段落分隔。材料标题等元信息仍在「标注」页的「编辑材料」里改。</span>' +
+            '</div>' +
+            '<textarea id="rv-edit-ta" class="rv-ta" spellcheck="false" autocomplete="off"></textarea>' +
+            '</div>'
+          var ta = el('rv-edit-ta')
+          ta.value = d.text || ''
+          setTimeout(function () {
+            try {
+              ta.focus()
+              ta.setSelectionRange(0, 0)
+            } catch (e) {}
+          }, 30)
+        }
+
+        /* 文本视图：缩放后重排会丢滚动位置，用「首个可见段落」的偏移把它找回来 */
+        var rvTextAnchorS = null
+
+        function rvTextAnchor() {
+          var host = el('rv-scroll')
+          if (!host) return null
+          var ps = host.querySelectorAll('.rv-text p[data-s]')
+          if (!ps.length) return null
+          var hr = host.getBoundingClientRect()
+          for (var i = 0; i < ps.length; i++) {
+            var r = ps[i].getBoundingClientRect()
+            if (r.bottom > hr.top + 8) return ps[i].getAttribute('data-s')
+          }
+          return ps[ps.length - 1].getAttribute('data-s')
+        }
+
+        function rvRestoreTextAnchor() {
+          if (rvTextAnchorS == null) return
+          var host = el('rv-scroll')
+          var p = host && host.querySelector('.rv-text p[data-s="' + rvTextAnchorS + '"]')
+          rvTextAnchorS = null
+          if (!p || !host) return
+          host.scrollTop += p.getBoundingClientRect().top - host.getBoundingClientRect().top - 8
+        }
+
         function renderReaderText(d, host) {
           var ps = paras(d.text)
           var html = ''
@@ -6087,7 +6371,10 @@
               markSpanHTML(p.text, p.start, d.id, true, pool) +
               '</p>'
           })
+          // 先把缩放系数写进 --tscale，再套版心：字号与宽度一起变，且始终居中
+          rvApplyTextScale()
           host.innerHTML = '<div class="rv-text">' + html + '</div>'
+          rvRestoreTextAnchor()
           var pg = el('rv-pager')
           if (pg) pg.style.display = 'none'
         }
@@ -6185,11 +6472,32 @@
           paper.style.width = outer > avail ? outer + 'px' : ''
         }
 
+        // 文本视图的阅读缩放 → 正文字号系数（--tscale）
+        function rvApplyTextScale() {
+          var v = rvIsTextMode() ? (S.textFit ? 1 : S.textScale || 1) : 1
+          v = clamp(v, 0.5, 3)
+          document.documentElement.style.setProperty('--tscale', v.toFixed(3))
+          return v
+        }
+
         function rvZoomLabel() {
+          var text = rvIsTextMode()
+          var fit = text ? !!S.textFit : !!S.pdfFit
+          var sc = text ? S.textScale || 1 : S.pdfScale || 1
           var b = el('rv-zoom')
-          if (b) b.textContent = S.pdfFit ? '适应' : Math.round((S.pdfScale || 1) * 100) + '%'
+          if (b) {
+            b.textContent = fit ? (text ? '100%' : '适应') : Math.round(sc * 100) + '%'
+            b.title = text ? '当前正文字号' : '当前版面宽度'
+          }
           var fb = el('rv-fit')
-          if (fb) fb.classList.toggle('on', !!S.pdfFit)
+          if (fb) {
+            fb.classList.toggle('on', !!fit)
+            fb.title = text ? '正文恢复默认字号' : '页面宽度适应可用宽度'
+          }
+          var zi = document.querySelector('[data-action="rvZoomIn"]')
+          var zo = document.querySelector('[data-action="rvZoomOut"]')
+          if (zi) zi.title = text ? '放大字号' : '放大版面'
+          if (zo) zo.title = text ? '缩小字号' : '缩小版面'
         }
 
         // 当前所处页码（用于缩放后恢复阅读位置）
@@ -7467,7 +7775,8 @@
             host.innerHTML =
               '<div class="rv-empty"><div class="pe-mark">No Source</div>' +
               '<div class="pe-title">尚 无 材 料</div>' +
-              '<div class="pe-note">可导入 .txt / .md 文本，或导入 PDF 论文开始批注阅读。</div></div>'
+              '<div class="pe-note">可导入 .txt / .md 文本；导入 PDF 论文可保留版面批注，' +
+              '只想读文字则用"导入文本"选 PDF（只提取文字、不保留版面）。</div></div>'
             el('rv-count').textContent = '0 条'
             setPg(0, 0)
             el('rv-pager').style.display = 'none'
@@ -7485,6 +7794,8 @@
             Settings.save()
             renderReader()
           })
+          // 模式可能刚变（缩放按钮的含义随之切换），重刷一次缩放标签与提示
+          rvZoomLabel()
           el('rv-reload').style.display = 'none'
           var fItems = [
             { v: 'all', label: '全部批注' },
@@ -7499,6 +7810,22 @@
           })
           var n = marksOfDoc(d.id).length
           el('rv-count').textContent = n + ' 条'
+          /* 版式材料才提供「转为纯文本」；编辑态则整块换成编辑器 */
+          var tt = el('rv-totext')
+          if (tt) tt.style.display = readerIsPdf(d) ? '' : 'none'
+          var eb = el('rv-edit')
+          if (eb) eb.classList.toggle('on', !!rvEditOn)
+          if (rvEditOn) {
+            rvEditDocId = d.id
+            /* 版式模式下无法直接编辑，先切到文本模式 */
+            if (readerUseLayout(d)) {
+              S.readerMode = 'text'
+              Settings.save()
+              selSet(el('rv-mode'), 'text')
+            }
+            renderReaderEditor(d, host)
+            return
+          }
           if (!d.text) {
             host.innerHTML =
               '<div class="rv-empty"><div class="pe-mark">Empty</div>' +
@@ -7917,6 +8244,7 @@
         }
 
         function setView(v) {
+          if (v !== 'reader' && rvEditOn) rvEditExit()
           S.view = v
           syncViewBtns()
           document.querySelectorAll('.mt-item[data-mview]').forEach(function (b) {
@@ -8480,6 +8808,12 @@
         }
 
         /* ---------------- 导出：笔记 → bridge 包 ---------------- */
+        /* 注册自带样式的确认弹窗；未注册时内核退回 window.confirm */
+        if (OMM)
+          OMM.setConfirmer(function (msg, okText) {
+            return showConfirm(msg, okText || '继续')
+          })
+
         function bridgeMeta(extra) {
           var m = {
             app: 'omm-annotate',
@@ -8568,15 +8902,22 @@
             items = items.concat(docsToItems(ks))
           }
           if (!items.length) return notify('没有可发送的内容')
-          OMM.deliver(toApp, items, bridgeMeta({ count: items.length }))
-          notify('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+          OMM.ask(OMM.sendMsg(toApp, items), '发送').then(function (ok) {
+            if (!ok) return notify('已取消发送')
+            OMM.deliver(toApp, items, bridgeMeta({ count: items.length }))
+            notify('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+          })
         }
         function sendDocAsListening() {
           if (!OMM) return notify('互通模块未加载')
           var d = curDoc()
           if (!d || !String(d.text || '').trim()) return notify('当前材料没有正文')
-          OMM.deliver('omm-english', docsToItems([d.id]), bridgeMeta({ kind2: 'listening' }))
-          notify('已发送到 ' + OMM.nameOf('omm-english') + ' · 听力材料')
+          var items = docsToItems([d.id])
+          OMM.ask(OMM.sendMsg('omm-english', items), '发送').then(function (ok) {
+            if (!ok) return notify('已取消发送')
+            OMM.deliver('omm-english', items, bridgeMeta({ kind2: 'listening' }))
+            notify('已发送到 ' + OMM.nameOf('omm-english') + ' · 听力材料')
+          })
         }
 
         /* ---------------- 导入：bridge 包 → 笔记 / 材料 ---------------- */
@@ -8663,18 +9004,33 @@
             return /\.json$/i.test(f.name) || /json/.test(f.type)
           })
           if (!arr.length) return notify('请选择 .json 文件')
-          var total = 0
+          var texts = []
           var pending = arr.length
           arr.forEach(function (f) {
             var fr = new FileReader()
             fr.onload = function () {
-              try {
-                total += ingestBridge(String(fr.result), true)
-              } catch (e) {}
-              if (--pending <= 0)
-                notify(total ? '互通包已导入 · ' + total + ' 项' : '没有识别到可导入的内容')
+              texts.push(String(fr.result))
+              if (--pending <= 0) bridgeIngestTexts(texts)
             }
             fr.readAsText(f, 'utf-8')
+          })
+        }
+        function bridgeIngestTexts(texts) {
+          if (!OMM) return
+          var items = []
+          texts.forEach(function (t) {
+            items = items.concat(OMM.normalize(t))
+          })
+          if (!items.length) return notify('没有识别到可导入的内容')
+          OMM.ask(OMM.recvMsg('omm-bridge', items), '导入').then(function (ok) {
+            if (!ok) return notify('已取消导入')
+            var total = 0
+            texts.forEach(function (t) {
+              try {
+                total += ingestBridge(t, true)
+              } catch (e) {}
+            })
+            notify(total ? '互通包已导入 · ' + total + ' 项' : '没有新增内容（可能重复）')
           })
         }
 
@@ -9666,6 +10022,8 @@
           h +=
             '<div class="help-h">阅读批注</div><div class="help-p">切到"阅读"视图即可像读 PDF 一样批注文献：导入 PDF 后按<b>版式</b>渲染原文，选中文字即可高亮、下划线、删除线或写旁注；<b>文本</b>模式则按纯文本重排，便于长文细读。右栏"批注"列表可按类型筛选并跳转，批注可一键存入备忘录，也可导出为 Markdown 笔记或 CSV 清单。批注与语义编码互不干扰：同一份材料既能做逐段编码，也能做阅读批注。</div>'
           h +=
+            '<div class="help-h">两种 PDF 导入</div><div class="help-p"><b>导入 PDF</b>：保留原始版面，可在版面上直接选中文字做高亮与批注，原始文件存在本机浏览器数据库（因此备份 JSON 里不含版面）。<b>导入文本</b>：同样可以选 PDF，但只把它里面的<b>文字</b>提取出来当纯文本材料，不占库、不可版式阅读 —— 只想读内容、不想保留版面时用这条。<br />已按"导入 PDF"进来的材料，可在阅读视图点<b>转为纯文本</b>永久丢弃版面（不可撤销，编码与批注按文字偏移定位，不受影响）。</div>'
+          h +=
             '<div class="help-h">PDF 说明</div><div class="help-p">PDF 在浏览器本地解析，原始文件存于本机浏览器数据库，不会上传；提取的文本随项目一起备份与同步。换设备或清理浏览器数据后若版面丢失，点"重载 PDF"重新导入同名文件即可恢复版式（批注位置按文本偏移保存，不受影响）。</div>'
           h +=
             '<div class="help-h">学习笔记 · 互通</div><div class="help-p">阅读视图选中文本后，浮动面板底部可一键收进笔记：<b>单词 / 句子 / 模板 / 搭配</b>（单词会自动抓取所在原句作例句）。切到"笔记"视图可筛选、检索、补充音标与释义，也可点"新建"手写录入。<br />勾选若干笔记后点顶部<b>互通</b>：<b>导出互通包</b>下载为 JSON；<b>发送到 English</b> 会把单词变成一本新词书、句子与文章变成听力材料；<b>发送到 Corpus</b> 会把句子与模板变成语料条目（单词归为 collocation）。反之，在 English / Corpus 里也可以把词书或语料一键回传成笔记。"一键送达"需在同源站点（同一服务器地址）打开三个页面。</div>'
@@ -9938,7 +10296,7 @@
                 var o = JSON.parse(String(fr2.result))
                 /* OMM 互通包优先：转成学习笔记 / 材料 */
                 if (o && o.omm === 'bridge') {
-                  ingestBridge(o)
+                  bridgeIngestTexts([String(fr2.result)])
                   return finish()
                 }
                 var pr = o && o.project ? o.project : o
@@ -9970,7 +10328,8 @@
           } else if (!texts.length && !pdfs.length) {
             notify('未选择可导入的文件')
           }
-          if (pdfs.length) importPdfs(pdfs)
+          /* 「导入文本」通道里的 PDF：只提取文字、不保留版面 */
+          if (pdfs.length) importPdfs(pdfs, true)
         }
 
         // ---- PDF 导入 ----
@@ -10110,16 +10469,20 @@
           },
         }
 
-        function importPdfFile(f, onProg, cb) {
+        /* asText=true：只取文字，不保留原始版面（=「导入文本」通道）；
+           asText=false：保留版面，原始文件存入 IndexedDB（=「导入 PDF」通道）。 */
+        function importPdfFile(f, onProg, cb, asText) {
           var id = uid('d')
+          /* 纯文本通道用临时 id 走解析流程，取完文字立刻丢弃原始文件 */
+          var binId = asText ? uid('t') : id
           if (onProg) onProg(0.04, '读取文件…')
-          IDB.put(id, f)
+          IDB.put(binId, f)
             .catch(function () {
               return true
             })
             .then(function () {
               if (onProg) onProg(0.1, '载入解析引擎…')
-              return PDFV.info(id, function (cur, tot) {
+              return PDFV.info(binId, function (cur, tot) {
                 if (onProg)
                   onProg(
                     0.1 + 0.9 * (cur / Math.max(1, tot)),
@@ -10135,16 +10498,22 @@
                 source: 'PDF · ' + info.numPages + ' 页',
                 type: '学术文献',
                 date: '',
-                note: '由 PDF 导入。可在版面上直接选择文本做高亮与批注。',
+                note: asText
+                  ? '由 PDF 提取文字导入（纯文本，无版面）。'
+                  : '由 PDF 导入。可在版面上直接选择文本做高亮与批注。',
                 text: info.text,
-                kind: 'pdf',
+                kind: asText ? 'text' : 'pdf',
               }
               P.docs.push(d)
+              if (asText) {
+                PDFV.drop(binId)
+                IDB.del(binId)
+              }
               cb(null, d, noText)
             })
             .catch(function (e) {
-              PDFV.drop(id)
-              IDB.del(id)
+              PDFV.drop(binId)
+              IDB.del(binId)
               cb(e)
             })
         }
@@ -10194,20 +10563,21 @@
             })
         }
 
-        function importPdfs(list) {
+        function importPdfs(list, asText) {
           list = (list || []).filter(function (f) {
             return /\.pdf$/i.test(f.name || '')
           })
           if (!list.length) return notify('未选择 PDF 文件')
           // 单文件 + 存在版面丢失的材料 → 视为恢复版面，而不是新建一份副本
-          if (list.length === 1 && S.pdfLostId && docById(S.pdfLostId)) return restorePdf(list[0])
+          if (!asText && list.length === 1 && S.pdfLostId && docById(S.pdfLostId))
+            return restorePdf(list[0])
 
           var n = 0
           var firstId = null
           var fails = []
           var noTexts = []
           var idx = 0
-          PdfProg.open('正在导入 PDF', list.length)
+          PdfProg.open(asText ? '正在提取 PDF 文字' : '正在导入 PDF', list.length)
 
           function next() {
             if (PdfProg.cancelled) {
@@ -10241,6 +10611,7 @@
                 }
                 next()
               },
+              asText,
             )
           }
 
@@ -10248,6 +10619,7 @@
             // 首次导入 / 当前没有选中材料时，自动落到第一份新导入的 PDF，
             // 否则阅读区会停在「尚无材料」的空状态。
             if (firstId && (!S.docId || !docById(S.docId))) S.docId = firstId
+            if (asText) S.readerMode = 'text'
             Store.save()
             renderAll()
             PdfProg.finish(n, fails)
@@ -10260,6 +10632,7 @@
               notify('已导入 ' + n + ' 份，' + fails.length + ' 份失败 · 见右下角面板')
             else if (noTexts.length)
               notify('已导入 ' + n + ' 份，其中 ' + noTexts.length + ' 份没有文本层')
+            else if (asText) notify('已提取 ' + n + ' 份 PDF 的文字，按纯文本阅读')
             else notify('已导入 ' + n + ' 份 PDF，可开始批注')
           }
 
@@ -10570,11 +10943,19 @@
             if (wasOpen) return
             dd.classList.add('open')
             dd._sh = null
-            var rect = btn.getBoundingClientRect()
+            var rect =
+              btn && btn.getBoundingClientRect
+                ? btn.getBoundingClientRect()
+                : { top: 40, bottom: 48, left: 24, width: 60 }
             var w = dd.offsetWidth || 300
-            dd.style.top = rect.bottom + 6 + 'px'
+            var h = dd.offsetHeight || 260
+            var top = rect.bottom + 6
+            // 下方空间不够时向上翻转，避免贴底或溢出视口
+            if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 6)
+            dd.style.top = Math.max(8, top) + 'px'
             dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 10)) + 'px'
-            if (btn.classList.contains('menu-btn')) btn.classList.add('active')
+            if (btn && btn.classList && btn.classList.contains('menu-btn'))
+              btn.classList.add('active')
             document.body.classList.add('submenu-open')
           },
           togglePin: function () {
@@ -10634,6 +11015,55 @@
           },
           importPdf: function () {
             el('pdf-input').click()
+          },
+          /* ---- 正文编辑态 ---- */
+          rvEditToggle: function () {
+            var d = curDoc()
+            if (!d) return notify('还没有选中材料')
+            if (rvEditOn) {
+              rvEditExit()
+              renderReader()
+              return
+            }
+            rvEditOn = true
+            rvEditDocId = d.id
+            renderReader()
+          },
+          rvEditSave: function () {
+            rvCommitEdit()
+          },
+          rvEditCancel: function () {
+            rvEditExit()
+            renderReader()
+            notify('已放弃修改')
+          },
+          /* ---- 版式材料 → 纯文本（不可逆） ---- */
+          pdfToText: function () {
+            var d = curDoc()
+            if (!d) return notify('还没有选中材料')
+            if (!readerIsPdf(d)) return notify('这份材料本来就是纯文本')
+            showConfirm(
+              '转为纯文本会丢弃「' +
+                d.title +
+                '」的原始版面（页码、版式定位），改为按提取出的文字重排阅读。\n' +
+                '该操作不可撤销：之后需要版面只能重新导入这份 PDF。\n' +
+                '已有的编码片段与批注会保留（它们按文字偏移定位，不受影响）。',
+              '转为纯文本',
+            ).then(function (ok) {
+              if (!ok) return
+              rvEditExit()
+              PDFV.drop(d.id)
+              IDB.del(d.id)
+              d.kind = 'text'
+              d.note = '由 PDF 提取文字导入（纯文本，无版面）。'
+              if (S.pdfLostId === d.id) S.pdfLostId = null
+              S.readerMode = 'text'
+              Settings.save()
+              Store.save()
+              renderAll()
+              setView('reader')
+              notify('已转为纯文本阅读')
+            })
           },
           exportMarks: function () {
             Export.marksMd()
@@ -10820,28 +11250,31 @@
             window.print()
           },
           clearAll: function () {
-            showConfirm('清空将删除全部材料、码号、编码与备忘录，确定继续？', '清空').then(
-              function (ok) {
-                if (!ok) return
-                P.docs.forEach(function (d) {
-                  PDFV.drop(d.id)
-                  IDB.del(d.id)
-                })
-                P.docs = []
-                P.codes = []
-                P.anns = []
-                P.rels = []
-                P.memos = []
-                P.marks = []
-                S.docId = null
-                S.selAnn = null
-                S.selMark = null
-                S.activeCode = null
-                Store.save()
-                renderAll()
-                notify('项目已清空')
-              },
-            )
+            showConfirm(
+              '清空将删除全部材料、码号、编码、批注、备忘录与学习笔记，且不可撤销，确定继续？',
+              '清空',
+            ).then(function (ok) {
+              if (!ok) return
+              P.docs.forEach(function (d) {
+                PDFV.drop(d.id)
+                IDB.del(d.id)
+              })
+              P.docs = []
+              P.codes = []
+              P.anns = []
+              P.rels = []
+              P.memos = []
+              P.marks = []
+              P.notes = []
+              nvPick = {}
+              S.docId = null
+              S.selAnn = null
+              S.selMark = null
+              S.activeCode = null
+              Store.save()
+              renderAll()
+              notify('项目已清空')
+            })
           },
           dtClose: function () {
             // 详情面板里既可能选中「编码片段」，也可能选中「阅读批注」，
@@ -10973,18 +11406,24 @@
           },
         }
 
-        // ---- 版面宽度：适应可用宽度 / 按比例缩放 ----
+        // ---- 阅读缩放 ----
+        // 版式模式：缩放 = 版面宽度；文本视图：缩放 = 正文字号（版心宽度同步，保证居中）
         function rvZoomable() {
           var d = curDoc()
           if (!d) return (notify('没有正在阅读的材料'), false)
-          if (!readerIsPdf(d)) return (notify('仅 PDF 材料可调整版面宽度'), false)
-          if (!readerUseLayout(d))
-            return (notify('文本模式下无需调整版面宽度，请先切到「版式」'), false)
           return true
         }
 
+        // 当前是否处于文本视图（纯文本材料，或 PDF 切到「文本」）
+        function rvIsTextMode() {
+          var d = curDoc()
+          return !!d && !readerUseLayout(d)
+        }
+
         function rvRerender(save) {
-          S.rvRestorePage = rvCurPageIdx()
+          // 文本视图没有页码，改用「当前首个可见段落」的偏移保住阅读位置
+          if (rvIsTextMode()) rvTextAnchorS = rvTextAnchor()
+          else S.rvRestorePage = rvCurPageIdx()
           if (save) Settings.save()
           rvZoomLabel()
           renderReader()
@@ -10992,14 +11431,28 @@
 
         function rvZoomBy(delta) {
           if (!rvZoomable()) return
-          var base = S.pdfFit ? 1 : S.pdfScale || 1
-          S.pdfFit = false
-          S.pdfScale = clamp(Math.round((base + delta) * 100) / 100, 0.5, 3)
+          if (rvIsTextMode()) {
+            var tb = S.textFit ? 1 : S.textScale || 1
+            S.textFit = false
+            S.textScale = clamp(Math.round((tb + delta) * 100) / 100, 0.5, 3)
+          } else {
+            var base = S.pdfFit ? 1 : S.pdfScale || 1
+            S.pdfFit = false
+            S.pdfScale = clamp(Math.round((base + delta) * 100) / 100, 0.5, 3)
+          }
           rvRerender(true)
         }
 
         function rvFitWidth() {
           if (!rvZoomable()) return
+          if (rvIsTextMode()) {
+            if (S.textFit) return notify('正文已是默认字号')
+            S.textFit = true
+            S.textScale = 1
+            rvRerender(true)
+            notify('正文字号已恢复默认')
+            return
+          }
           if (S.pdfFit) return notify('已经处于适应宽度')
           S.pdfFit = true
           rvRerender(true)
@@ -11220,7 +11673,7 @@
             var inModal = e.target.closest('#modal')
             var inConfirm = e.target.closest('#custom-confirm')
             var opener = e.target.closest(
-              '[data-action="showExport"],[data-action="showSettings"],[data-action="showSearch"],[data-action="showDocs"]',
+              '[data-action="showExport"],[data-action="showSettings"],[data-action="showSearch"],[data-action="showDocs"],[data-action="showBridge"]',
             )
             if (!inDD && !inPop && !inMenu && !inModal && !inConfirm && !opener)
               UIMgr.closeDropdowns()
@@ -11229,14 +11682,8 @@
             if (target) {
               var name = target.getAttribute('data-action')
               if (ACTIONS[name]) {
-                if (
-                  name === 'showExport' ||
-                  name === 'showSettings' ||
-                  name === 'showSearch' ||
-                  name === 'showDocs'
-                )
-                  ACTIONS[name](target)
-                else ACTIONS[name]()
+                // 统一把触发元素传进去：需要定位下拉框 / 读 data-id 的动作都依赖它
+                ACTIONS[name](target)
                 return
               }
             }
@@ -11645,12 +12092,17 @@
           if (OMM)
             OMM.watch(function (p) {
               if (!p || !p.env) return
-              var n = ingestBridge(p.env, true)
-              if (n) {
-                setView('notes')
-                renderNoteList()
-                notify('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 项数据')
-              }
+              var items = OMM.normalize(p.env)
+              if (!items.length) return
+              OMM.ask(OMM.recvMsg(p.from, items), '导入').then(function (ok) {
+                if (!ok) return notify('已取消导入')
+                var n = ingestBridge(p.env, true)
+                if (n) {
+                  setView('notes')
+                  renderNoteList()
+                  notify('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 项数据')
+                }
+              })
             })
 
           // ---- file ----
@@ -11661,6 +12113,12 @@
 
           // ---- keyboard ----
           document.addEventListener('keydown', function (e) {
+            // 正文编辑态里 Ctrl/⌘+S 保存的是正文，而不是导出项目备份
+            if (rvEditing() && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+              e.preventDefault()
+              rvCommitEdit()
+              return
+            }
             if (el('sug').classList.contains('open')) {
               if (e.key === 'ArrowDown') {
                 e.preventDefault()

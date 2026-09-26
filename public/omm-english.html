@@ -6465,6 +6465,85 @@ notify pgrst, 'reload schema';</textarea
           return normalize(text)
         }
 
+        /* ---------- 写入前的确认（防止误改数据） ---------- */
+        function appName(id) {
+          return APPS[id] || id
+        }
+        var _confirmer = null
+        function setConfirmer(fn) {
+          _confirmer = fn
+        }
+        function summary(items) {
+          var c = { word: 0, sentence: 0, template: 0, phrase: 0, doc: 0 }
+          ;(items || []).forEach(function (it) {
+            if (it && c[it.t] != null) c[it.t]++
+          })
+          var NL = {
+            word: '个单词',
+            sentence: '个句子',
+            template: '个模板',
+            phrase: '个搭配',
+            doc: '篇文章',
+          }
+          var parts = []
+          ;['word', 'sentence', 'template', 'phrase', 'doc'].forEach(function (k) {
+            if (c[k]) parts.push(c[k] + NL[k])
+          })
+          return parts.length ? parts.join('、') : (items || []).length + ' 项'
+        }
+        /* ask(): 返回 Promise<boolean>。宿主应用可通过 setConfirmer 提供自带样式的弹窗，
+           未提供时退回 window.confirm。confirmer 签名 (msg, okText, done)，返回 Promise 亦可。 */
+        function ask(msg, okText) {
+          return new Promise(function (resolve) {
+            var done = false
+            function fin(v) {
+              if (done) return
+              done = true
+              resolve(!!v)
+            }
+            try {
+              if (_confirmer) {
+                var r = _confirmer(msg, okText || '继续', fin)
+                if (r && typeof r.then === 'function')
+                  r.then(
+                    function (v) {
+                      fin(v !== false)
+                    },
+                    function () {
+                      fin(false)
+                    },
+                  )
+              } else fin(window.confirm(msg))
+            } catch (e) {
+              try {
+                fin(window.confirm(msg))
+              } catch (e2) {
+                fin(false)
+              }
+            }
+          })
+        }
+        function sendMsg(toApp, items) {
+          return (
+            '即将向 ' +
+            appName(toApp) +
+            ' 发送 ' +
+            summary(items) +
+            '。发送后会在 ' +
+            appName(toApp) +
+            ' 中写入这些数据，操作不可撤销，是否继续？'
+          )
+        }
+        function recvMsg(fromApp, items) {
+          return (
+            '即将导入来自 ' +
+            appName(fromApp || 'omm-bridge') +
+            ' 的 ' +
+            summary(items) +
+            '。这会修改本页数据，且不可撤销，是否继续？'
+          )
+        }
+
         /* ---------- 信封 ---------- */
         function env(items, meta) {
           return {
@@ -6570,6 +6649,11 @@ notify pgrst, 'reload schema';</textarea
           nameOf: function (id) {
             return APPS[id] || id
           },
+          setConfirmer: setConfirmer,
+          summary: summary,
+          ask: ask,
+          sendMsg: sendMsg,
+          recvMsg: recvMsg,
           nz: nz,
           low: low,
           kz: kz,
@@ -13836,6 +13920,19 @@ notify pgrst, 'reload schema';</textarea
 
         // ---------- OMM Bridge · 与 Annotate / Corpus 互通 ----------
         const OMM = window.OMMBridge || null
+        /* 复用页面自带确认弹窗；取消按钮在 init 里补一个 fin(false) */
+        let _zbFin = null
+        function zbAsk(msg, okText, fin) {
+          _zbFin = fin
+          confirmBox(msg, () => {
+            const f = _zbFin
+            _zbFin = null
+            if (f) f(true)
+          })
+          const okb = $('#confirm-ok')
+          if (okb) okb.textContent = okText || '确定'
+        }
+        if (OMM) OMM.setConfirmer(zbAsk)
 
         /* 当前词书 → bridge 单词条目 */
         function zbBookItems(bookId) {
@@ -13930,8 +14027,11 @@ notify pgrst, 'reload schema';</textarea
         function zbSend(toApp, items) {
           if (!OMM) return notify('互通模块未加载')
           if (!items || !items.length) return notify('没有可发送的内容')
-          OMM.deliver(toApp, items, zbMeta())
-          notify('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+          OMM.ask(OMM.sendMsg(toApp, items), '发送').then((ok) => {
+            if (!ok) return notify('已取消发送')
+            OMM.deliver(toApp, items, zbMeta())
+            notify('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
+          })
         }
         /* 把 bridge 包收进 English：单词→新词书，句子/模板→语料，文章→听力材料 */
         function zbApply(items, meta, from) {
@@ -14009,22 +14109,35 @@ notify pgrst, 'reload schema';</textarea
             .call(files || [])
             .filter((f) => /\.json$/i.test(f.name) || /json/.test(f.type))
           if (!arr.length) return notify('请选择 .json 文件')
-          let total = 0,
-            pending = arr.length
+          const texts = []
+          let pending = arr.length
           arr.forEach((f) => {
             const rd = new FileReader()
             rd.onload = () => {
-              try {
-                total += zbApply(OMM.normalize(rd.result), null, null)
-              } catch (e) {}
-              if (--pending <= 0) {
-                if (total) {
-                  notify('互通包已导入')
-                  switchView('words')
-                } else notify('没有识别到可导入的内容')
-              }
+              texts.push(rd.result)
+              if (--pending <= 0) zbIngestTexts(texts)
             }
             rd.readAsText(f)
+          })
+        }
+        function zbIngestTexts(texts) {
+          let items = []
+          texts.forEach((t) => {
+            items = items.concat(OMM.normalize(t))
+          })
+          if (!items.length) return notify('没有识别到可导入的内容')
+          OMM.ask(OMM.recvMsg('omm-bridge', items), '导入').then((ok) => {
+            if (!ok) return notify('已取消导入')
+            let total = 0
+            texts.forEach((t) => {
+              try {
+                total += zbApply(OMM.normalize(t), null, null)
+              } catch (e) {}
+            })
+            if (total) {
+              notify('互通包已导入')
+              switchView('words')
+            } else notify('没有新增内容（可能重复）')
           })
         }
 
@@ -17911,6 +18024,16 @@ notify pgrst, 'reload schema';</textarea
             _cfCb = null
             if (cb) cb()
           })
+          // 互通确认：点取消 / 点遮罩时也要把 Promise 结算为“否”
+          const zbNo = () => {
+            const f = _zbFin
+            _zbFin = null
+            if (f) f(false)
+          }
+          $('#confirm-cancel').addEventListener('click', zbNo)
+          $('#custom-confirm').addEventListener('click', (e) => {
+            if (e.target.id === 'custom-confirm') zbNo()
+          })
           $('#confirm-cancel').addEventListener('click', () => {
             $('#custom-confirm').classList.remove('active')
             _cfCb = null
@@ -17962,11 +18085,16 @@ notify pgrst, 'reload schema';</textarea
           if (OMM)
             OMM.watch((p) => {
               if (!p || !p.env) return
-              const n = zbApply(OMM.normalize(p.env), p.env.meta, p.from)
-              if (n) {
-                switchView('words')
-                notify('已收到来自 ' + OMM.nameOf(p.from) + ' 的数据')
-              }
+              const items = OMM.normalize(p.env)
+              if (!items.length) return
+              OMM.ask(OMM.recvMsg(p.from, items), '导入').then((ok) => {
+                if (!ok) return notify('已取消导入')
+                const n = zbApply(items, p.env.meta, p.from)
+                if (n) {
+                  switchView('words')
+                  notify('已收到来自 ' + OMM.nameOf(p.from) + ' 的数据')
+                }
+              })
             })
           $('#fi-ls-audio').addEventListener('change', (ev) => {
             const f = ev.target.files[0]
