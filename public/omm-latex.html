@@ -385,6 +385,53 @@
         font-size: 9px;
         letter-spacing: 0.6px;
       }
+      /* 快捷键说明面板 */
+      .hk-grid {
+        padding: 10px 20px 16px;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: 10px;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: var(--faint);
+        font-weight: 400;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 4px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 6px 0;
+        font-size: 11.5px;
+        line-height: 1.7;
+        color: var(--text);
+        border-bottom: 1px solid var(--line);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        background: rgba(26, 26, 26, 0.05);
+        border: 1px solid var(--line);
+        padding: 1px 8px;
+        color: var(--text);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: 11.5px;
+        line-height: 1.85;
+        color: var(--dim);
+      }
       .dd-divider {
         height: 1px;
         background: var(--line);
@@ -2325,15 +2372,21 @@
         /* ===================== 菜单 ===================== */
         let autoTimer = null
 
+        /* 修饰键字形跟随平台：处理器同时接受 Ctrl 与 ⌘，菜单标签不该只写 ⌘ */
+        const MOD_LABEL = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+          ? '⌘'
+          : 'Ctrl'
+
         function shortcutFor(id) {
           return (
             {
-              compile: '⌘↵',
-              download: '⌘S',
-              export: '⌘⇧S',
-              import: '⌘O',
-              swap: '⌘\\',
-              fit: '⌘0',
+              compile: MOD_LABEL + '↵',
+              download: MOD_LABEL + 'S',
+              export: MOD_LABEL + '⇧S',
+              import: MOD_LABEL + 'O',
+              swap: MOD_LABEL + '\\',
+              fit: MOD_LABEL + '0',
+              shortcuts: '?',
             }[id] || ''
           )
         }
@@ -2422,6 +2475,8 @@
               ['split-even', '左右各半', true, Math.abs(state.split - 0.5) < 0.02],
               ['split-editor', '编辑器加宽', true, Math.abs(state.split - 0.66) < 0.02],
               ['split-pdf', 'PDF 加宽', true, Math.abs(state.split - 0.34) < 0.02],
+              ['sep'],
+              ['shortcuts', '快捷键'],
             ],
             export: [
               ['download', '下载 PDF（矢量·无损）'],
@@ -2704,6 +2759,9 @@
             case 'fit':
               closeDropdowns()
               return setFit(true)
+            case 'shortcuts':
+              closeDropdowns()
+              return openModal('使用说明', HELP_HTML)
             case 'zoom-in':
               return zoomBy(0.12)
             case 'zoom-out':
@@ -4455,6 +4513,65 @@
         }
 
         /* ===================== 启动 ===================== */
+        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+           分组 = 生效范围；顺序与 keydown 处理器的判断顺序一致。 */
+        function hkRow(desc, key) {
+          return (
+            '<div class="hk-row"><span>' +
+            esc(desc) +
+            '</span><span class="hk-key">' +
+            esc(key) +
+            '</span></div>'
+          )
+        }
+        function hkSection(title, rows) {
+          return (
+            '<div class="hk-section"><div class="hk-section-title">' +
+            esc(title) +
+            '</div>' +
+            rows.join('') +
+            '</div>'
+          )
+        }
+        function hkTable() {
+          const m = MOD_LABEL
+          const out = [
+            hkSection('全局', [
+              hkRow('编译', m + ' ↵'),
+              hkRow('下载编译好的 PDF', m + ' S'),
+              hkRow('导出 .tex 源码', m + ' ⇧ S'),
+              hkRow('导入 .tex 文件', m + ' O'),
+              hkRow('编辑器与预览左右调换', m + ' \\'),
+              hkRow('PDF 适应宽度', m + ' 0'),
+              hkRow('打开 / 重新载入本说明', '?'),
+              hkRow('关闭下拉菜单或弹窗', 'Esc'),
+            ]),
+            hkSection('焦点在源码编辑框里时', [
+              hkRow('唤起命令自动补全', m + ' Space'),
+              hkRow('插入两个空格（不跳焦点）', 'Tab'),
+              hkRow('补全列表：下一条 / 上一条', '↓ / ↑'),
+              hkRow('补全列表：插入选中的命令', 'Enter 或 Tab'),
+              hkRow('补全列表：关闭', 'Esc'),
+            ]),
+            hkSection('适用范围', [
+              hkRow(
+                '带 ' +
+                  m +
+                  ' 的键位在输入框里同样生效；<b>Tab</b> 与 <b>Esc</b> 只在焦点位于源码编辑框时生效。',
+                '',
+              ),
+            ]),
+          ]
+          // 最后一段是整段说明，不需要键位框
+          out[2] =
+            '<div class="hk-section"><div class="hk-note">' +
+            '带 <b>' +
+            esc(m) +
+            '</b> 的键位在任意输入框里同样生效；<b>Tab</b>、<b>↑</b>、<b>↓</b> 与补全列表里的 <b>Enter</b> 只在焦点位于源码编辑框时生效。' +
+            '</div></div>'
+          return '<div class="hk-grid">' + out.join('') + '</div>'
+        }
+
         const HELP_HTML = [
           '<h4>这是什么</h4>',
           '<p>ZENTEX 把 LaTeX 编辑器与本地编译器放在同一个页面里：左边写源码，右边直接看到编译出来的 PDF。真正干活的是你本机安装的 <b>MiKTeX</b>，不依赖任何在线服务。</p>',
@@ -4484,7 +4601,7 @@
           '<h4>错误定位</h4>',
           '<p>编译失败时，右边会列出错误（带 <code>文件:行号</code>），点一下即可跳到源码对应行；左侧行号也会标红。</p>',
           '<h4>快捷键</h4>',
-          '<p><code>Ctrl/⌘ + Enter</code> 编译　<code>Ctrl/⌘ + S</code> 下载 PDF　<code>Ctrl/⌘ + ⇧ + S</code> 导出 .tex　<code>Ctrl/⌘ + O</code> 导入　<code>Ctrl/⌘ + \\</code> 左右调换　<code>Ctrl/⌘ + 0</code> 适应宽度　<code>Esc</code> 关闭弹层</p>',
+          hkTable(),
           '<h4>关于写法</h4>',
           '<p>源码就是标准的 LaTeX 文件，导言区、宏包、环境都按常规写。本页不做任何改写——你在别处能编译的文件，在这里同样能编译。</p>',
         ].join('')
@@ -4517,7 +4634,19 @@
               hideAutocomplete()
           })
           document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') return closeDropdowns()
+            if (e.key === 'Escape') {
+              // 弹窗开着时先关弹窗，否则 Esc 只关下拉菜单 —— 弹窗会关不掉
+              if ($id('modal').classList.contains('open')) return closeModal()
+              return closeDropdowns()
+            }
+            // ? 打开说明。可打印字符，必须避开正在输入的控件
+            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              const tag = (e.target && e.target.tagName) || ''
+              if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+                e.preventDefault()
+                return openModal('使用说明', HELP_HTML)
+              }
+            }
             const mod = e.ctrlKey || e.metaKey
             if (!mod) return
             const k = e.key.toLowerCase()

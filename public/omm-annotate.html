@@ -2606,6 +2606,51 @@
         color: var(--text);
         border-radius: var(--radius);
       }
+      /* 快捷键说明面板 */
+      .hk-grid {
+        padding: 4px 0 12px;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        font-weight: 500;
+        margin: 16px 0 6px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 5px 0;
+        font-size: calc(11.5px * var(--fscale));
+        line-height: 1.75;
+        color: var(--text-dim);
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        font-family: var(--font-mono);
+        border: 1px solid var(--border-dim);
+        padding: 0 6px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.95;
+        color: var(--text-faint);
+      }
 
       /* ================= STATUS / NOTIFY / MODAL ================= */
       #status-bar {
@@ -4127,6 +4172,9 @@
         <span>阅读显编码</span><span class="hint" id="sv-codemark">开</span>
       </div>
       <div class="dd-divider"></div>
+      <div class="dd-item" data-action="showShortcuts">
+        <span>快捷键</span><span class="hint">?</span>
+      </div>
       <div class="dd-item" data-action="settingsResetStyles" style="color: var(--text-dim)">
         <span>重置样式</span>
       </div>
@@ -10206,22 +10254,95 @@
           el('f-cancel').addEventListener('click', closeModal)
         }
 
+        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+           分组 = 生效范围；顺序与全局 keydown 处理器的判断顺序一致。 */
+        function hkRow(desc, key) {
+          return (
+            '<div class="hk-row"><span>' +
+            desc +
+            '</span><span class="hk-key">' +
+            key +
+            '</span></div>'
+          )
+        }
+        function hkSection(title, rows) {
+          return (
+            '<div class="hk-section"><div class="hk-section-title">' +
+            title +
+            '</div>' +
+            rows.join('') +
+            '</div>'
+          )
+        }
+        function hkTable() {
+          var m = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl'
+          var out = [
+            hkSection('全局', [
+              hkRow('全文检索', m + ' F'),
+              hkRow('导出项目备份 JSON', m + ' S'),
+              hkRow('折叠 / 展开左侧栏', m + ' ['),
+              hkRow('折叠 / 展开右侧栏', m + ' ]'),
+              hkRow('上一份 / 下一份材料', 'Alt + ← / →'),
+              hkRow('打开 / 重新载入本说明', '?'),
+              hkRow('依次关闭弹窗、面板与下拉菜单', 'Esc'),
+            ]),
+            hkSection('阅读视图内已选中文本时', [
+              hkRow('高亮', 'H'),
+              hkRow('下划线', 'U'),
+              hkRow('删除线', 'S'),
+              hkRow('写批注', 'N'),
+            ]),
+            hkSection('阅读视图正文编辑态里', [hkRow('保存正文改动', m + ' S')]),
+            hkSection('码号指派面板里', [
+              hkRow('指派高亮的那一个码号', 'Enter'),
+              hkRow('直接指派第 N 个码号', '1 – 9'),
+              hkRow('在结果里上下移动', '↓ / ↑'),
+              hkRow('关闭面板', 'Esc'),
+            ]),
+            hkSection('下拉候选框打开时（设置里的选择框）', [
+              hkRow('选中下一项 / 上一项', '↓ / ↑'),
+              hkRow('确认选中项', 'Enter'),
+              hkRow('关闭候选框', 'Tab 或 Esc'),
+            ]),
+            hkSection('顶部检索框里', [
+              hkRow('在结果里上下移动', '↓ / ↑'),
+              hkRow('跳到高亮的那条结果', 'Enter'),
+              hkRow('关闭全部下拉菜单', 'Esc'),
+            ]),
+            hkSection('批注输入框里', [
+              hkRow('保存这条批注', m + ' Enter'),
+              hkRow('放弃并关闭批注框', 'Esc'),
+            ]),
+            hkSection('笔记视图的筛选框里', [hkRow('清空筛选条件', 'Esc')]),
+            hkSection('焦点在顶栏云同步按钮上时', [
+              hkRow('打开云同步弹窗', 'Enter 或 Space'),
+              hkRow('在弹窗内登录', 'Enter'),
+              hkRow('关闭云同步弹窗', 'Esc'),
+            ]),
+          ]
+          out.push(
+            '<div class="hk-section"><div class="hk-note">' +
+              '带 <b>' +
+              m +
+              '</b> 的键位在输入框里同样生效；<b>H</b> <b>U</b> <b>S</b> <b>N</b>、<b>Alt + ← →</b>、<b>' +
+              m +
+              ' [ ]</b> 需要焦点不在输入框上。<br />' +
+              '在阅读视图里按 <b>' +
+              m +
+              ' S</b> 导出的是整个项目备份；只有当正文处于编辑态时，它才会改成保存正文。' +
+              '</div></div>',
+          )
+          return '<div class="hk-grid">' + out.join('') + '</div>'
+        }
+
         function openHelpModal() {
           var h = '<div class="st-block">'
           h +=
             '<div class="help-h">流程</div><div class="help-p">材料入库 → 开放式编码（逐段命名）→ 轴心式编码（范畴归并）→ 选择式编码（核心范畴）→ 备忘录 → 导出编码表。</div>'
           h +=
             '<div class="help-h">标注</div><div class="help-p">在阅读区选中一段文本，浮动面板出现后点击码号即可完成编码；也可直接输入名称并按 <kbd>Enter</kbd> 新建码号。同一段文本可被多个码号重叠编码。</div>'
-          h += '<div class="help-h">快捷键</div><div class="help-p">'
-          h += '<kbd>1</kbd>–<kbd>9</kbd> 指派面板中对应码号　<kbd>Enter</kbd> 指派首个码号<br />'
-          h += '<kbd>Esc</kbd> 关闭面板 / 弹窗　<kbd>Alt</kbd>+<kbd>← →</kbd> 切换材料<br />'
-          h +=
-            '<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>[</kbd> 折叠左栏　<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>]</kbd> 折叠右栏<br />'
-          h +=
-            '阅读视图内选中文本后：<kbd>H</kbd> 高亮　<kbd>U</kbd> 下划线　<kbd>S</kbd> 删除线　<kbd>N</kbd> 写批注<br />'
-          h +=
-            '<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd> 检索　<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd> 导出备份'
-          h += '</div>'
+          h += '<div class="help-h">快捷键</div>'
+          h += hkTable()
           h +=
             '<div class="help-h">侧边栏</div><div class="help-p">左右侧栏都可以收起，让正文占满屏幕：点侧栏标题栏右边的 <b>×</b>，或点侧栏内缘中间那个小箭头，即可折叠 / 展开（折叠后把手会贴到屏幕边缘，随时能再点开）；也可以用 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>[</kbd>（左侧栏）与 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>]</kbd>（右侧栏），或在「样式 → 显示」里开关。折叠状态会被记住，下次打开沿用。窄屏上侧栏是覆盖式面板，同一个 <b>×</b> 用来关掉它。</div>'
           h +=
@@ -11339,6 +11460,11 @@
           showHelp: function () {
             openHelpModal()
           },
+          /* 「样式 → 快捷键」与顶栏「说明」打开的是同一个面板 */
+          showShortcuts: function () {
+            UIMgr.closeDropdowns()
+            openHelpModal()
+          },
           exportJson: function () {
             Export.json()
           },
@@ -12383,6 +12509,13 @@
             }
             var tag = (e.target.tagName || '').toLowerCase()
             var typing = tag === 'input' || tag === 'textarea' || tag === 'select'
+            // ? 呼出本说明（与顶栏「说明」同一个面板）。可打印字符，要避开输入态
+            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing) {
+              e.preventDefault()
+              UIMgr.closeDropdowns()
+              openHelpModal()
+              return
+            }
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
               e.preventDefault()
               ACTIONS.showSearch(el('top-menu').querySelector('[data-action="showSearch"]'))

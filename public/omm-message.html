@@ -1462,6 +1462,80 @@
       .confirm-btn.danger:hover {
         background: color-mix(in srgb, var(--accent-red) 8%, transparent);
       }
+      /* 快捷键说明面板 */
+      #shortcuts-dialog {
+        position: fixed;
+        inset: 0;
+        z-index: 7600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+      }
+      #shortcuts-dialog.hidden {
+        display: none !important;
+      }
+      #shortcuts-dialog .sk-card {
+        width: min(560px, calc(100vw - 32px));
+        max-height: min(78vh, 720px);
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(16px) saturate(1.2);
+        -webkit-backdrop-filter: blur(16px) saturate(1.2);
+        padding: 18px;
+        animation: confirm-in 0.16s ease both;
+      }
+      .hk-grid {
+        padding: 2px 0 0;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: calc(8px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+        font-weight: 500;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 6px 0;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-dim);
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        border: 1px solid var(--border-dim);
+        padding: 1px 8px;
+        font-size: calc(9px * var(--fscale));
+        color: var(--text);
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
+        white-space: pre-line;
+      }
       @keyframes confirm-in {
         from {
           opacity: 0;
@@ -2127,10 +2201,33 @@
               <span data-i18n="settings.clear">清理本地消息缓存</span
               ><button class="mini" id="clear-cache-btn" data-i18n="settings.clearBtn">清理</button>
             </div>
+            <div class="setting-row" style="grid-column: 1/-1">
+              <span data-i18n="settings.shortcuts">快捷键</span
+              ><button class="mini" id="shortcuts-open-btn" data-i18n="settings.shortcutsBtn">
+                查看
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </section>
+    <div
+      id="shortcuts-dialog"
+      class="hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shortcuts-title"
+    >
+      <div class="sk-card">
+        <div class="confirm-kicker" id="shortcuts-title" data-i18n="hk.kicker">
+          KEYBOARD SHORTCUTS
+        </div>
+        <div class="hk-grid" id="shortcuts-body"></div>
+        <div class="confirm-actions">
+          <button class="confirm-btn" id="shortcuts-close" data-i18n="hk.close">关闭</button>
+        </div>
+      </div>
+    </div>
     <div id="toast"></div>
     <div
       id="confirm-dialog"
@@ -2229,6 +2326,14 @@
             'settings.language': '语言',
             'settings.clear': '清理本地消息缓存',
             'settings.clearBtn': '清理',
+            'settings.shortcuts': '快捷键',
+            'settings.shortcutsBtn': '查看',
+            'hk.kicker': 'KEYBOARD SHORTCUTS',
+            'hk.close': '关闭',
+            'hk.rows':
+              '消息输入框§发送这条消息|Enter|换行（不发送）|Shift + Enter~~全局§取消正在编辑的消息 / 返回上一层|Esc|打开 / 重新载入本说明|?|取消云同步的确认提示|Esc~~焦点在搜索框上时§清空搜索|Esc~~焦点在密码框上时§登录|Enter',
+            'hk.note':
+              '窄屏（≤720px）上 Enter 一律换行，发送必须点「发送」按钮。\nEsc 会先取消正在编辑的消息，没有在编辑时才返回上一层；它不会关闭确认框。',
             'settings.light': '浅色',
             'settings.dark': '深色',
             'settings.on': '开',
@@ -2380,6 +2485,14 @@
             'settings.language': 'LANGUAGE',
             'settings.clear': 'CLEAR LOCAL MESSAGE CACHE',
             'settings.clearBtn': 'CLEAR',
+            'settings.shortcuts': 'Keyboard shortcuts',
+            'settings.shortcutsBtn': 'VIEW',
+            'hk.kicker': 'KEYBOARD SHORTCUTS',
+            'hk.close': 'Close',
+            'hk.rows':
+              'Message box§Send this message|Enter|New line without sending|Shift + Enter~~General§Cancel the message being edited / go back one level|Esc|Open this panel|?|Dismiss the cloud-sync warning|Esc~~While focused in the search box§Clear the search|Esc~~While focused in the password box§Sign in|Enter',
+            'hk.note':
+              'On narrow screens (≤720px) Enter always inserts a new line — use the Send button to post.\nEsc cancels the message being edited first and only goes back a level when nothing is being edited; it does not close the confirm dialog.',
             'settings.light': 'LIGHT',
             'settings.dark': 'DARK',
             'settings.on': 'ON',
@@ -3949,6 +4062,38 @@
           applyI18n()
           applyUi()
         }
+        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+           文案在 I18N 的 hk.rows / hk.note 里，格式为
+           「标题§说明|键位|说明|键位」，段落之间用 ~~ 分隔。 */
+        function openShortcuts() {
+          let html = ''
+          String(t('hk.rows'))
+            .split('~~')
+            .forEach((sec) => {
+              const cut = sec.indexOf('§')
+              html +=
+                '<div class="hk-section"><div class="hk-section-title">' +
+                (cut < 0 ? sec : sec.slice(0, cut)) +
+                '</div>'
+              const pairs = (cut < 0 ? '' : sec.slice(cut + 1)).split('|')
+              for (let i = 0; i + 1 < pairs.length; i += 2) {
+                html +=
+                  '<div class="hk-row"><span>' +
+                  pairs[i] +
+                  '</span><span class="hk-key">' +
+                  pairs[i + 1] +
+                  '</span></div>'
+              }
+              html += '</div>'
+            })
+          html += '<div class="hk-section"><div class="hk-note">' + t('hk.note') + '</div></div>'
+          $('shortcuts-body').innerHTML = html
+          $('shortcuts-dialog').classList.remove('hidden')
+          $('shortcuts-close').focus()
+        }
+        function closeShortcuts() {
+          $('shortcuts-dialog').classList.add('hidden')
+        }
         function saveConfig() {
           const url = $('sb-url').value.trim().replace(/\/$/, ''),
             key = $('sb-key').value.trim(),
@@ -4176,10 +4321,33 @@
             renderMessages()
           }
           $('clear-cache-btn').onclick = clearLocal
+          $('shortcuts-open-btn').onclick = openShortcuts
+          $('shortcuts-close').onclick = closeShortcuts
+          $('shortcuts-dialog').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeShortcuts()
+          })
           $('password').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') signin()
           })
           document.addEventListener('keydown', (e) => {
+            // 快捷键说明面板自己先关，别被下面的 Esc 分支抢走
+            if (e.key === 'Escape' && !$('shortcuts-dialog').classList.contains('hidden')) {
+              closeShortcuts()
+              return
+            }
+            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              const tag = (e.target && e.target.tagName) || ''
+              if (
+                tag !== 'INPUT' &&
+                tag !== 'TEXTAREA' &&
+                tag !== 'SELECT' &&
+                !e.target.isContentEditable
+              ) {
+                e.preventDefault()
+                openShortcuts()
+                return
+              }
+            }
             if (e.key === 'Escape') {
               if (editingId) {
                 clearEditMode()

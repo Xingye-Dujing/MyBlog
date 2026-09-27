@@ -2225,6 +2225,9 @@
       .hk-section {
         margin-bottom: 16px;
       }
+      .hk-section:last-child {
+        margin-bottom: 0;
+      }
       .hk-section-title {
         font-size: calc(11px * var(--fscale));
         letter-spacing: 2px;
@@ -2238,6 +2241,8 @@
       .hk-row {
         display: flex;
         justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
         padding: 6px 0;
         font-size: calc(12px * var(--fscale));
         color: var(--text-dim);
@@ -2247,10 +2252,18 @@
         border-bottom: none;
       }
       .hk-key {
+        flex: none;
         border: 1px solid var(--border-dim);
         padding: 1px 8px;
         font-size: calc(10px * var(--fscale));
         color: var(--text);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
       }
 
       #export-overlay {
@@ -4985,7 +4998,9 @@ notify pgrst, 'reload schema';</textarea
             'focus.days': '{0} 天',
             'focus.range': '{0} – {1}',
             'hk.rows':
-              '移动选格（月/周）|← → ↑ ↓|上/下一期|A D 或滚轮|切换视图|W S|多选日期|Ctrl+点击 或 鼠标右键点击|范围多选|Shift+点击|聚焦多选|Enter|聚焦当前格 / 返回|F|今天|T|新建待办（月/周）|N|搜索|/|缩放|Ctrl+滚轮 或 + −|关闭 / 返回|Esc|列表视图|只读，滚动查看',
+              '全局§移动选格（月 / 周视图）|← → ↑ ↓|上 / 下一期|A D|切换视图（月 → 周 → 列表）|W S|回到今天|T|新建待办（月 / 周视图）|N|打开搜索|/|放大 / 缩小|+ = 与 −|打开 / 重新载入本说明|?|依次关闭：确认框 → 日期选择器 → 弹窗 → 条目编辑 → 聚焦模式 → 多选 → 下拉菜单|Esc~~多选之后§进入聚焦 / 时间线模式|Enter|聚焦当前格，再按一次返回|F~~列表视图§只读，方向键与新建待办均不生效|—~~焦点在搜索框上时§跳到第一条结果并打开它|Enter|关闭全部下拉菜单|Esc~~焦点在条目编辑面板里时§保存并关闭|{M} Enter 或标题框内 Enter|关闭面板不保存|Esc|在子任务标题框内回车：新增一条子任务|Enter~~双击计划本标签改名时§确认改名|Enter|放弃改名|Esc~~启动页上§进入应用|Enter~~焦点在顶栏云同步按钮上时§打开云同步弹窗|Enter 或 Space|在弹窗内登录|Enter',
+            'hk.note':
+              '焦点在任何输入框里时，除 Esc 外的键位都不响应；带 {M} / Ctrl / Alt 的组合一律交还给浏览器。\n下面这些是鼠标与滚轮操作，不算快捷键：{M} 滚轮缩放、滚轮翻上下期、{M}+点击 或 鼠标右键点击多选日期、Shift+点击范围多选、拖拽条目到其他日期、拖拽条目改上下顺序。列表视图是只读的，滚动查看即可。',
             'help.keys': '快捷键',
             'help.drag': '拖拽操作',
             'help.drag.move': '拖拽条目到其他日期',
@@ -5299,7 +5314,9 @@ notify pgrst, 'reload schema';</textarea
             'focus.days': '{0} days',
             'focus.range': '{0} – {1}',
             'hk.rows':
-              'Move selection (month/week)|Arrows|Prev / Next period|A D or Wheel|Cycle view|W S|Multi-select|Ctrl+Click|Range select|Shift+Click|Focus selection|Enter|Focus selected day / back|F|Today|T|New todo (month/week)|N|Search|/|Zoom|Ctrl+Wheel or + −|Close / Back|Esc|List view|Read-only, scroll to browse',
+              'General§Move the selection (month / week view)|← → ↑ ↓|Previous / next period|A D|Cycle the view (month → week → list)|W S|Jump to today|T|New todo (month / week view)|N|Open search|/|Zoom in / out|+ = and −|Open this panel|?|Close, in order: confirm box → date picker → modal → item editor → focus mode → multi-selection → dropdowns|Esc~~After a multi-selection§Enter focus / timeline mode|Enter|Focus the selected day, press again to leave|F~~List view§Read-only — arrows and new-todo do nothing|—~~While focused in the search box§Jump to the first result and open it|Enter|Close every dropdown|Esc~~While focused in the item editor panel§Save and close|{M} Enter, or Enter in the title field|Close without saving|Esc|In a subtask title field: add a subtask|Enter~~While renaming a planner tab§Confirm the new name|Enter|Discard the rename|Esc~~On the splash screen§Enter the app|Enter~~With a top-bar cloud button focused§Open the cloud-sync dialog|Enter or Space|Sign in inside the dialog|Enter',
+            'hk.note':
+              'While focus is in any text field, every key except Esc is ignored. Anything with {M} / Ctrl / Alt is always left to the browser.\nThese are mouse and wheel gestures, not shortcuts: {M}+wheel to zoom, wheel to page between periods, {M}+click or right-click to multi-select days, Shift+click for a range, drag an item to another date, drag an item to reorder it within a day. The list view is read-only — just scroll.',
             'help.keys': 'Shortcuts',
             'help.drag': 'Drag & Drop',
             'help.drag.move': 'Drag items to another date',
@@ -5537,6 +5554,11 @@ notify pgrst, 'reload schema';</textarea
           }
           return str
         }
+
+        /* 修饰键字形跟随平台：处理器同时接受 Ctrl 与 ⌘，标签不该只写 Ctrl */
+        const HK_MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+          ? '⌘'
+          : 'Ctrl'
 
         function esc(text) {
           const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
@@ -8330,12 +8352,25 @@ notify pgrst, 'reload schema';</textarea
             }
             let html = '<div class="hk-grid">'
 
-            const pairs = t('hk.rows').split('|')
-            html += section('help.keys')
-            for (let i = 0; i + 1 < pairs.length; i += 2) {
-              html += rowRaw(pairs[i], pairs[i + 1])
-            }
-            html += '</div>'
+            /* 快捷键表：段落之间用 ~~ 分隔，段落内「标题§说明|键位|说明|键位」。
+               分组 = 生效范围；顺序与全局 keydown 处理器的判断顺序一致。 */
+            const raw = t('hk.rows').split('{M}').join(HK_MOD)
+            raw.split('~~').forEach((sec) => {
+              const cut = sec.indexOf('§')
+              html +=
+                '<div class="hk-section"><div class="hk-section-title">' +
+                esc(cut < 0 ? sec : sec.slice(0, cut)) +
+                '</div>'
+              const pairs = (cut < 0 ? '' : sec.slice(cut + 1)).split('|')
+              for (let i = 0; i + 1 < pairs.length; i += 2) {
+                html += rowRaw(pairs[i], pairs[i + 1])
+              }
+              html += '</div>'
+            })
+            html +=
+              '<div class="hk-section"><div class="hk-note">' +
+              esc(t('hk.note').split('{M}').join(HK_MOD)) +
+              '</div></div>'
 
             html += section('help.drag')
             html += '<div class="hk-row"><span>' + esc(t('help.drag.move')) + '</span></div>'
@@ -9659,6 +9694,9 @@ notify pgrst, 'reload schema';</textarea
               e.target.isContentEditable
             )
               return
+            // 下面这些全是单键 / 方向键，必须放掉带 Ctrl、⌘、Alt 的组合：
+            // 否则 Ctrl+W 会变成"切换视图"而不是关闭标签页，Ctrl+A 也会吃掉全选。
+            if (e.ctrlKey || e.metaKey || e.altKey) return
             switch (e.key) {
               case 'ArrowLeft':
                 e.preventDefault()

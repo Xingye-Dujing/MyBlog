@@ -476,6 +476,51 @@
         line-height: 1.6;
         padding: 6px 10px;
       }
+      /* 快捷键说明面板 */
+      .hk-grid {
+        padding: 10px 20px 16px;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 6px 0;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        border: 1px solid var(--border-dim);
+        padding: 1px 8px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
+      }
       .settings-control {
         display: flex;
         align-items: center;
@@ -3835,6 +3880,9 @@
       <div class="dd-item" id="setting-sync">
         <span>Supabase 云同步</span><span class="dd-hint">CLOUD</span>
       </div>
+      <div class="dd-item" id="setting-shortcuts">
+        <span>快捷键</span><span class="dd-hint">?</span>
+      </div>
     </div>
     <div id="bottom-nav">
       <button class="bn-item active" data-view="home">
@@ -7106,6 +7154,63 @@ notify pgrst, 'reload schema';</textarea
           applySettings()
           if (anchor) openDrop(anchor, $('#dd-settings'))
         }
+        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+           分组 = 生效范围，顺序与页面里 keydown 处理器的判断顺序一致。 */
+        function hkRow(desc, keys) {
+          return `<div class="hk-row"><span>${esc(desc)}</span><span class="hk-key">${esc(keys)}</span></div>`
+        }
+        function hkSection(title, rows) {
+          return (
+            '<div class="hk-section"><div class="hk-section-title">' +
+            esc(title) +
+            '</div>' +
+            rows.join('') +
+            '</div>'
+          )
+        }
+        function openShortcuts() {
+          const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+          const mod = isMac ? '⌘' : 'Ctrl'
+          const rows = [
+            hkSection('全局', [
+              hkRow('切到资料库并把光标放进搜索框', mod + ' K'),
+              hkRow('新建词条', mod + ' N'),
+              hkRow('打开 / 重新载入本说明', '?'),
+              hkRow('关闭最上层的弹层', 'Esc'),
+            ]),
+            hkSection('焦点在顶栏按钮上时', [
+              hkRow('固定 / 取消固定菜单栏', 'Enter / Space'),
+              hkRow('打开 Supabase 云同步弹窗', 'Enter / Space'),
+            ]),
+            hkSection('焦点在 AI 面板分隔条上时', [
+              hkRow('收窄 / 放宽左侧主面板（每次 3%）', '← / →'),
+            ]),
+            hkSection('焦点在密码框上时', [hkRow('登录云同步账号', 'Enter')]),
+            hkSection('适用范围', []),
+          ]
+          rows[4] =
+            '<div class="hk-section"><div class="hk-note">' +
+            '<b>Esc</b> 依次关闭：AI 全屏 → 词条编辑抽屉 → 弹窗 → 样式下拉。<br />' +
+            mod +
+            ' K 与 ' +
+            mod +
+            ' N 在任何位置都会触发，包括正在输入框里打字时；其余键位需要焦点停在对应按钮上，按 <b>Tab</b> 可在顶栏按钮之间移动。' +
+            '</div></div>'
+          let m = document.querySelector('#shortcuts-dynamic')
+          if (!m) {
+            m = document.createElement('div')
+            m.id = 'shortcuts-dynamic'
+            m.className = 'modal'
+            m.innerHTML =
+              '<div class="modal-head"><span class="modal-title">KEYBOARD</span><button class="close-btn" id="shortcuts-close" aria-label="关闭"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5l14 14M19 5L5 19"/></svg></button></div><div class="modal-body"></div>'
+            document.body.appendChild(m)
+          }
+          m.querySelector('.modal-body').innerHTML =
+            '<div class="hk-grid">' + rows.join('') + '</div>'
+          $('#modal-mask').classList.add('open')
+          m.classList.add('open')
+          m.querySelector('#shortcuts-close').onclick = closeModal
+        }
         function openAISettings() {
           const s = S.settings
           const html = `<div class=\"ed-field\"><span class=\"ed-label\">AI Provider</span><div class=\"preset-row\"><button class=\"preset\" data-p=\"deepseek\">DEEPSEEK</button><button class=\"preset\" data-p=\"openai\">OPENAI</button><button class=\"preset\" data-p=\"openrouter\">OPENROUTER</button><button class=\"preset\" data-p=\"zhipu\">ZHIPU</button><button class=\"preset\" data-p=\"custom\">CUSTOM</button></div></div><div class=\"field-grid\"><div class=\"ed-field\"><span class=\"ed-label\">Base URL</span><input class=\"ed-input\" id=\"api-base\" value=\"${esc(s.apiBase || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">Model</span><input class=\"ed-input\" id=\"api-model\" value=\"${esc(s.apiModel || '')}\"><div class=\"ai-model-preset\" id=\"ai-model-preset\"></div></div></div><div class=\"ed-field\"><span class=\"ed-label\">API Key</span><input class=\"ed-input\" id=\"api-key\" type=\"password\" value=\"${esc(s.apiKey || '')}\"></div><div class=\"ed-field\"><span class=\"ed-label\">System Prompt</span><textarea class=\"ed-area\" id=\"api-system\" style=\"min-height:120px\">${esc(s.system || DEFAULT.settings.system)}</textarea></div><div class=\"drawer-actions\"><button class=\"ed-btn primary\" id=\"settings-save\">保存设置</button><button class=\"ed-btn\" id=\"api-test\">测试连接</button></div>`
@@ -9020,6 +9125,10 @@ ${extra}`
           closeDrops()
           openReset()
         }
+        $('#setting-shortcuts').onclick = () => {
+          closeDrops()
+          openShortcuts()
+        }
         if ($('#reset-btn')) $('#reset-btn').onclick = openReset
         $('#settings-close')?.addEventListener('click', closeModal)
         $('#modal-mask').onclick = closeModal
@@ -9473,6 +9582,15 @@ ${extra}`
           if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
             e.preventDefault()
             openEditor()
+          }
+          /* ? 呼出快捷键说明：可打印字符，必须避开正在输入的表单控件 */
+          if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            const tag = (e.target.tagName || '').toLowerCase()
+            if (tag !== 'input' && tag !== 'textarea' && tag !== 'select' && !e.target.isContentEditable) {
+              e.preventDefault()
+              closeDrops()
+              openShortcuts()
+            }
           }
         })
         window.CorpusBridge = {

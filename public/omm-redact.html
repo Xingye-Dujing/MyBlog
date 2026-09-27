@@ -1294,6 +1294,102 @@
         box-shadow: inset 0 -2px 0 var(--text);
       }
 
+      /* ===== SHORTCUTS OVERLAY ===== */
+      #shortcuts-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      #shortcuts-overlay.active {
+        display: flex;
+      }
+      #shortcuts-box {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        max-width: 560px;
+        width: 92%;
+        max-height: 84vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        border-radius: var(--radius);
+      }
+      #shortcuts-box .sc-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      #shortcuts-box .sc-title {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-dim);
+      }
+      #shortcuts-close {
+        background: none;
+        border: none;
+        color: var(--text-faint);
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 2px;
+      }
+      #shortcuts-close:hover {
+        color: var(--text);
+      }
+      /* 快捷键说明面板 */
+      .hk-grid {
+        padding: 10px 20px 16px;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 6px 0;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        border: 1px solid var(--border-dim);
+        padding: 1px 8px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
+      }
+
       /* ===== EXPORT OVERLAY ===== */
       #export-overlay {
         position: fixed;
@@ -1984,6 +2080,10 @@
       <div class="dd-item" data-bg="bg-diagonal" data-action="setBg">
         <span>斜线</span><span class="hint">条纹</span>
       </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-action="showShortcuts">
+        <span>快捷键</span><span class="hint">?</span>
+      </div>
     </div>
 
     <!-- APP -->
@@ -2345,6 +2445,17 @@
       </div>
     </div>
 
+    <!-- SHORTCUTS -->
+    <div id="shortcuts-overlay" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+      <div id="shortcuts-box">
+        <div class="sc-head">
+          <span class="sc-title" id="shortcuts-title">KEYBOARD</span>
+          <button id="shortcuts-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="hk-grid" id="shortcuts-body"></div>
+      </div>
+    </div>
+
     <!-- LOADING POPUP -->
     <div id="loading-popup">
       <div class="loading-box">
@@ -2664,6 +2775,16 @@
             DOM.confirmOverlay.classList.add('active')
             DOM.confirmOverlay._resolve = resolve
           })
+        }
+
+        /* 确认框的「取消」出口：按钮点击、Esc、点击遮罩都走这里，
+           保证 _resolve 一定会被调用一次，调用方不会永远挂在 await 上。 */
+        function dismissConfirm(result) {
+          if (!DOM.confirmOverlay.classList.contains('active')) return
+          DOM.confirmOverlay.classList.remove('active')
+          var r = DOM.confirmOverlay._resolve
+          DOM.confirmOverlay._resolve = null
+          if (r) r(result)
         }
 
         function setProgress(pct) {
@@ -8774,9 +8895,7 @@
 
           // 离线本地引擎：与 static_js_css/vendor/mupdf/1.28.1/ 同源
           // （mupdf.esm.js 内的 wasm 路径已改为相对路径，无需联网取 .wasm）
-          var urls = [
-            'static_js_css/vendor/mupdf/1.28.1/mupdf.esm.js',
-          ]
+          var urls = ['static_js_css/vendor/mupdf/1.28.1/mupdf.esm.js']
 
           async function loadFrom(url) {
             var mod = await import(/* webpackIgnore: true */ url)
@@ -9655,12 +9774,13 @@
 
           // Confirm
           $('#confirm-cancel').addEventListener('click', function () {
-            DOM.confirmOverlay.classList.remove('active')
-            if (DOM.confirmOverlay._resolve) DOM.confirmOverlay._resolve(false)
+            dismissConfirm(false)
           })
           $('#confirm-ok').addEventListener('click', function () {
-            DOM.confirmOverlay.classList.remove('active')
-            if (DOM.confirmOverlay._resolve) DOM.confirmOverlay._resolve(true)
+            dismissConfirm(true)
+          })
+          DOM.confirmOverlay.addEventListener('click', function (e) {
+            if (e.target === DOM.confirmOverlay) dismissConfirm(false)
           })
 
           var rightSidebarResizeEl = DOM.rightSidebarResize
@@ -9691,8 +9811,80 @@
             })
           }
 
+          /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+             分组 = 生效范围；顺序与下面 keydown 处理器的判断顺序一致。 */
+          var HK_MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+            ? '⌘'
+            : 'Ctrl'
+          function hkRow(desc, keys) {
+            return (
+              '<div class="hk-row"><span>' +
+              escapeHtml(desc) +
+              '</span><span class="hk-key">' +
+              escapeHtml(keys) +
+              '</span></div>'
+            )
+          }
+          function hkSection(title, rows) {
+            return (
+              '<div class="hk-section"><div class="hk-section-title">' +
+              escapeHtml(title) +
+              '</div>' +
+              rows.join('') +
+              '</div>'
+            )
+          }
+          function openShortcuts() {
+            var mod = HK_MOD
+            var body = [
+              hkSection('全局', [
+                hkRow('打开 / 收起全文检索', mod + ' F'),
+                hkRow('切换到矩形脱敏工具', 'R'),
+                hkRow('切换到橡皮擦工具', 'E'),
+                hkRow('撤销上一步脱敏', mod + ' Z'),
+                hkRow('重做', mod + ' Y'),
+                hkRow('打开 / 重新载入本说明', '?'),
+                hkRow('关闭确认框 / 下拉菜单', 'Esc'),
+              ]),
+              hkSection('检索栏打开时', [
+                hkRow('跳到下一个命中', 'Enter'),
+                hkRow('跳到上一个命中', 'Shift + Enter'),
+                hkRow('收起检索栏', 'Esc'),
+              ]),
+              hkSection('已开启「图片跳转」时', [hkRow('跳到下一张 / 上一张图片', 'Alt + ↓ / ↑')]),
+              hkSection('焦点在输入框上时', [
+                hkRow('应用颜色色值', 'Enter'),
+                hkRow('提交查询范围的起止页', 'Enter'),
+                hkRow('跳到页码 / 跳到图片编号', 'Enter'),
+              ]),
+              hkSection('适用范围', []),
+            ]
+            body[4] =
+              '<div class="hk-section"><div class="hk-note">' +
+              '带 <b>Ctrl / ⌘</b> 的键位在输入框里同样生效；<b>R</b>、<b>E</b>、<b>Esc</b> 在焦点位于输入框时不生效。<br />' +
+              '图片跳转可在「样式 → 图片跳转」里关闭，关闭后 <b>Alt + ↑ ↓</b> 不再响应。' +
+              '</div></div>'
+            $('#shortcuts-body').innerHTML = body.join('')
+            $('#shortcuts-overlay').classList.add('active')
+            $('#shortcuts-close').focus()
+          }
+          function closeShortcuts() {
+            $('#shortcuts-overlay').classList.remove('active')
+          }
+
           // Keyboard
           document.addEventListener('keydown', function (e) {
+            // Esc 关闭确认框 / 快捷键说明面板（放在最前，优先级最高）
+            if (e.key === 'Escape') {
+              if (DOM.confirmOverlay.classList.contains('active')) {
+                dismissConfirm(false)
+                return
+              }
+              if ($('#shortcuts-overlay').classList.contains('active')) {
+                closeShortcuts()
+                return
+              }
+            }
             // Search shortcuts — always active
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
               e.preventDefault()
@@ -9733,6 +9925,13 @@
             } else if ((e.ctrlKey || e.metaKey) && k === 'y') {
               e.preventDefault()
               redoRedact()
+            } else if (k === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault()
+              $$('.dropdown.open').forEach(function (d) {
+                d.classList.remove('open')
+              })
+              document.body.classList.remove('submenu-open')
+              openShortcuts()
             } else if (k === 'escape') {
               $$('.dropdown.open').forEach(function (d) {
                 d.classList.remove('open')
@@ -9740,6 +9939,12 @@
               document.body.classList.remove('submenu-open')
             }
           })
+
+          // 快捷键说明面板的关闭方式：× 按钮、点击遮罩
+          $('#shortcuts-close').onclick = closeShortcuts
+          $('#shortcuts-overlay').onclick = function (e) {
+            if (e.target === this) closeShortcuts()
+          }
 
           // Resize
           window.addEventListener('resize', function () {
@@ -9818,6 +10023,12 @@
               applyRadius()
               saveSettings()
               $('#sv-radius').textContent = S.radius + 'px'
+            } else if (a === 'showShortcuts') {
+              $$('.dropdown.open').forEach(function (d) {
+                d.classList.remove('open')
+              })
+              document.body.classList.remove('submenu-open')
+              openShortcuts()
             }
           })
 

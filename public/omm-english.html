@@ -2868,6 +2868,21 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
+      .modal-body::-webkit-scrollbar {
+        width: 5px;
+      }
+      .modal-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .modal-body::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+        border-radius: 2px;
+      }
+      .modal-body::-webkit-scrollbar-thumb:hover {
+        background: var(--text-dim);
       }
       .modal-foot {
         padding: 12px 16px 16px;
@@ -2909,9 +2924,27 @@
       .hk-grid {
         padding: 4px 0;
       }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section:last-child {
+        margin-bottom: 0;
+      }
+      .hk-section-title {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
       .hk-row {
         display: flex;
         justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
         padding: 6px 0;
         font-size: calc(12px * var(--fscale));
         color: var(--text-dim);
@@ -2921,11 +2954,19 @@
         border-bottom: none;
       }
       .hk-key {
+        flex: none;
         border: 1px solid var(--border-dim);
         padding: 1px 8px;
         font-size: calc(10px * var(--fscale));
         color: var(--text);
         border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
       }
       #custom-confirm {
         position: fixed;
@@ -3780,6 +3821,13 @@
       /* ===== Mobile polish: no scrollbars / no horizontal overflow ===== */
       @media (pointer: coarse), (max-width: 720px) {
         ::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
+        }
+        /* 上面的 ::-webkit-scrollbar 特异性低于按元素写的美化规则，
+           这里显式补回，否则 .modal-body 的滚动条在移动端会漏出来。 */
+        .modal-body::-webkit-scrollbar {
           width: 0;
           height: 0;
           display: none;
@@ -16958,29 +17006,73 @@ notify pgrst, 'reload schema';</textarea
             showGuideModal()
           },
           showHelp() {
+            const M = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+              ? '⌘'
+              : 'Ctrl'
+            const row = (desc, key) =>
+              '<div class="hk-row"><span>' +
+              desc +
+              '</span><span class="hk-key">' +
+              key +
+              '</span></div>'
+            const sect = (title, rows) =>
+              '<div class="hk-section"><div class="hk-section-title">' +
+              title +
+              '</div>' +
+              rows.map((r) => row(r[1], r[0])).join('') +
+              '</div>'
             modalOpen(
               '快捷键说明',
               '<div class="hk-grid">' +
-                [
-                  ['空格', '翻卡 / 播放暂停'],
-                  ['1 / 2 / 3', '不认识 / 模糊 / 认识'],
-                  ['← / →', '不认识 / 认识（翻卡后）'],
-                  ['S', '发音当前单词或句子'],
-                  ['A / B / C / D', '四选一快速选择'],
-                  ['← / →', '听力上一句 / 下一句（听力页）'],
-                  ['Ctrl+Enter', '听写提交'],
-                  ['Esc', '关闭弹窗 / 抽屉'],
-                  ['?', '本说明'],
-                ]
-                  .map(
-                    (r) =>
-                      '<div class="hk-row"><span>' +
-                      r[1] +
-                      '</span><span class="hk-key">' +
-                      r[0] +
-                      '</span></div>',
-                  )
-                  .join('') +
+                sect('全局', [
+                  ['Esc', '依次关闭：涂鸦查看 / 涂鸦编辑 / 确认框 / 弹窗 / 抽屉 / 浮层'],
+                  ['?', '打开 / 重新载入本说明'],
+                ]) +
+                sect('背卡复习中（记忆卡页）', [
+                  ['空格', '翻到正面 / 背面'],
+                  ['1', '不认识'],
+                  ['2', '模糊'],
+                  ['3', '认识'],
+                  ['←', '不认识'],
+                  ['→', '认识'],
+                  ['S', '朗读当前单词或句子'],
+                  ['D', '开关左右两侧的涂鸦草稿面板'],
+                ]) +
+                sect('听力页 · 播放中', [
+                  ['空格', '播放 / 暂停'],
+                  ['←', '上一句'],
+                  ['→', '下一句'],
+                ]) +
+                sect('听力页 · 听写模式', [
+                  [M + ' Enter', '提交这句听写'],
+                  ['S', '重放当前这句'],
+                ]) +
+                sect('测验页 · 四选一', [
+                  ['A / B / C / D', '选择第 1 / 2 / 3 / 4 个选项'],
+                  ['1 / 2 / 3 / 4', '同上（数字键）'],
+                ]) +
+                sect('测验页 · 拼写挑战', [
+                  ['Enter', '检查拼写；已判定时则重试或进入下一题'],
+                  ['Backspace', '撤销判定并删掉一个已输入的字母'],
+                ]) +
+                sect('打字练习中', [
+                  ['任意字符', '录入'],
+                  ['空格', '输入空格（单词模式下为跳过）'],
+                  ['Backspace', '删掉最后输入的字符'],
+                  ['Tab', '显示下一个正确字符（提示）'],
+                ]) +
+                sect('焦点在输入框上时', [
+                  ['Enter', '确认词书改名'],
+                  ['Enter', '确认涂鸦颜色色值（需 6 位十六进制）'],
+                  ['Enter 或 Space', '打开顶栏的云同步弹窗'],
+                  ['Enter', '在弹窗内登录'],
+                  ['Esc', '关闭弹窗 / 抽屉，并让当前输入框失焦'],
+                ]) +
+                '<div class="hk-section"><div class="hk-note">' +
+                '除 <b>Esc</b> 之外，其余键位在焦点位于任何输入框时都不响应；也不响应 <b>Ctrl</b> / <b>⌘</b> / <b>Alt</b> 组合。' +
+                '各页的键位只在对应页面（或对应模式）里生效，同一个键在不同页面含义不同。<br />' +
+                '打字练习进行中，<b>?</b> 会被当作练习字符录入，此时打不开本说明——先按 <b>Esc</b> 或等本轮结束。' +
+                '</div></div>' +
                 '</div>',
             )
           },

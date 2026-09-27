@@ -1627,6 +1627,51 @@
         padding: 12px;
         overflow: auto;
       }
+      /* 快捷键说明面板 */
+      .hk-grid {
+        padding: 10px 20px 16px;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 6px 0;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        border: 1px solid var(--border-dim);
+        padding: 1px 8px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
+      }
       .modal-foot {
         padding: 9px 12px;
         border-top: 1px solid var(--line2);
@@ -2040,6 +2085,17 @@
           <button class="modal-close" id="preview-close" type="button">×</button>
         </div>
         <div class="preview-body" id="preview-body"></div>
+      </div>
+    </div>
+    <div class="modal" id="shortcuts-modal" aria-label="快捷键说明">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>快捷键</h3>
+          <button class="modal-close" id="shortcuts-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="hk-grid" id="shortcuts-body"></div>
+        </div>
       </div>
     </div>
     <div class="modal" id="data-modal">
@@ -10136,6 +10192,8 @@
               ['toggle:legend', '显示图例'],
               ['toggle:points', '显示数据点'],
               ['toggle:values', '显示数值'],
+              ['sep'],
+              ['shortcuts', '快捷键'],
             ],
             export: [
               ['png', '导出 PNG'],
@@ -10168,13 +10226,17 @@
           const active = (state.bg || 'plain') === cls
           return `<button class="settings-bg-dot${active ? ' active' : ''}" type="button" title="${label}" data-dd="bg:${cls}" data-bg="${cls}" aria-pressed="${active ? 'true' : 'false'}"></button>`
         }
+        /* 修饰键字形跟随平台：处理器同时接受 Ctrl 与 ⌘，标签不该只写 ⌘ */
+        const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+        const MOD_LABEL = IS_MAC ? '⌘' : 'Ctrl'
         function shortcut(id) {
           return (
             {
-              png: '⌘P',
-              pdf: '⌘⇧P',
+              png: MOD_LABEL + ' P',
+              pdf: MOD_LABEL + ' ⇧ P',
               edit: 'D',
               import: 'I',
+              shortcuts: '?',
               'radius:down': '',
               'radius:show': '',
               'radius:up': '',
@@ -10184,6 +10246,53 @@
             }[id] || ''
           )
         }
+        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+           分组 = 生效范围；顺序与 keydown 处理器的判断顺序一致。 */
+        function esc(s) {
+          return String(s == null ? '' : s).replace(
+            /[&<>"']/g,
+            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m],
+          )
+        }
+        function hkRow(desc, keys) {
+          return `<div class="hk-row"><span>${esc(desc)}</span><span class="hk-key">${esc(keys)}</span></div>`
+        }
+        function hkSection(title, rows) {
+          return `<div class="hk-section"><div class="hk-section-title">${esc(title)}</div>${rows.join('')}</div>`
+        }
+        function hkNote(html) {
+          return `<div class="hk-section"><div class="hk-note">${html}</div></div>`
+        }
+        function openShortcuts() {
+          const mod = MOD_LABEL
+          const rows = [
+            hkSection('全局', [
+              hkRow('导出当前图表为 PNG', mod + ' P'),
+              hkRow('导出当前图表为 PDF', mod + ' ⇧ P'),
+              hkRow('打开数据文件（CSV / TSV / TXT / XLSX）', 'I'),
+              hkRow('编辑当前图表的数据表', 'D'),
+              hkRow('打开 / 重新载入本说明', '?'),
+              hkRow('关闭下拉菜单 / 数据表 / 图表放大查看', 'Esc'),
+            ]),
+            hkNote(
+              '焦点停在任意输入框里时，<b>I</b> 与 <b>D</b> 不会触发，可以正常打字；带 <b>' +
+                esc(mod) +
+                '</b> 的导出键位不受影响。<br />导出 SVG、打印、以及「样式 → 背景 / 圆角」目前只能点击操作，暂无键位。',
+            ),
+          ]
+          const grid = $('#shortcuts-body')
+          if (grid) grid.innerHTML = rows.join('')
+          const modal = $('#shortcuts-modal')
+          if (modal) modal.classList.add('open')
+        }
+        function closeShortcuts() {
+          const modal = $('#shortcuts-modal')
+          if (modal) modal.classList.remove('open')
+        }
+        $('#shortcuts-close').onclick = closeShortcuts
+        $('#shortcuts-modal').addEventListener('click', (e) => {
+          if (e.target === e.currentTarget) closeShortcuts()
+        })
         // 导出菜单里的“高清 / 透明背景”快捷项：改的是当前图表自己的输出设置
         function toggleExportTransparent() {
           const next = !exportTransparent()
@@ -10277,6 +10386,7 @@
         }
 
         function handleDropdown(id) {
+          if (id === 'shortcuts') return openShortcuts()
           if (id === 'import') return $('#file-input').click()
           if (id === 'import-properties') {
             const input = $('#property-import-input')
@@ -15029,19 +15139,36 @@
         }
         document.addEventListener('keydown', (e) => {
           const mod = e.metaKey || e.ctrlKey
-          if (mod && e.key.toLowerCase() === 'p') {
+          const k = (e.key || '').toLowerCase()
+          // 右侧属性栏与数据表里有不少输入框；I / D / ? 是可打印字符，
+          // 不挡住的话在这些框里打字就会误触发导入、编辑数据或说明面板。
+          const tag = (e.target && e.target.tagName) || ''
+          const typing =
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            !!e.target?.isContentEditable
+          if (mod && k === 'p' && !e.shiftKey) {
             e.preventDefault()
             exportPNG()
+            return
           }
-          if (mod && e.shiftKey && e.key.toLowerCase() === 'p') {
+          if (mod && e.shiftKey && k === 'p') {
             e.preventDefault()
             exportPDF()
+            return
           }
-          if (!mod && e.key.toLowerCase() === 'i') $('#file-input').click()
-          if (!mod && e.key.toLowerCase() === 'd') openDataModal()
+          if (!typing) {
+            if (!mod && !e.altKey && k === 'i') $('#file-input').click()
+            if (!mod && !e.altKey && k === 'd') openDataModal()
+            if (!mod && !e.altKey && e.key === '?') openShortcuts()
+          }
           if (e.key === 'Escape') {
             closeDropdowns()
             closeDataModal()
+            closeShortcuts()
+            // 图表放大查看也是弹层，Esc 必须能关掉，否则只能用鼠标点 ×
+            if ($('#preview-modal').classList.contains('open')) closePreview()
           }
         })
 

@@ -338,6 +338,52 @@
         font-weight: 500;
         font-family: var(--font-mono);
       }
+      /* 快捷键说明面板 */
+      .hk-grid {
+        padding: 10px 20px 16px;
+      }
+      .hk-section {
+        margin-bottom: 16px;
+      }
+      .hk-section-title {
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        padding: 8px 0 4px;
+        border-bottom: 1px solid var(--border-dim);
+        margin-bottom: 4px;
+      }
+      .hk-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 6px 0;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .hk-row:last-child {
+        border-bottom: none;
+      }
+      .hk-key {
+        flex: none;
+        border: 1px solid var(--border-dim);
+        padding: 1px 8px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        border-radius: var(--radius);
+        white-space: nowrap;
+        font-family: var(--font-mono);
+      }
+      .hk-note {
+        padding: 4px 0 0;
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-faint);
+      }
       .dd-item-row {
         display: flex;
         align-items: center;
@@ -1350,6 +1396,77 @@
         box-shadow: inset 0 -2px 0 var(--text);
       }
 
+      /* Shortcuts overlay */
+      #shortcuts-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      #shortcuts-overlay.active {
+        display: flex;
+      }
+      #shortcuts-box {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        max-width: 580px;
+        width: 92%;
+        max-height: 84vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        border-radius: var(--radius);
+      }
+      #shortcuts-box .sc-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      #shortcuts-box .sc-title {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-dim);
+      }
+      #shortcuts-close {
+        background: none;
+        border: none;
+        color: var(--text-faint);
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 2px;
+      }
+      #shortcuts-close:hover {
+        color: var(--text);
+      }
+      #shortcuts-box {
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-dim) transparent;
+      }
+      #shortcuts-box::-webkit-scrollbar {
+        width: 4px;
+      }
+      #shortcuts-box::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      #shortcuts-box::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+        border-radius: 2px;
+      }
+      #shortcuts-box::-webkit-scrollbar-thumb:hover {
+        background: var(--text-dim);
+      }
+      #shortcuts-box::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
       /* Export overlay */
       #export-overlay {
         position: fixed;
@@ -2238,6 +2355,9 @@
         <span data-i18n="dd.settings.lang">Language</span><span class="hint" id="sv-lang"></span>
       </div>
       <div class="dd-divider"></div>
+      <div class="dd-item" data-action="showShortcuts">
+        <span data-i18n="dd.settings.shortcuts">Shortcuts</span><span class="hint">?</span>
+      </div>
       <div class="dd-item" data-action="settingsResetStyles" style="color: var(--text-dim)">
         <span data-i18n="dd.settings.resetStyles">Reset Styles</span>
       </div>
@@ -2701,6 +2821,17 @@ notify pgrst, 'reload schema';</textarea
       <span data-i18n="export.exporting">Exporting…</span>
     </div>
 
+    <!-- ===== Shortcuts Modal ===== -->
+    <div id="shortcuts-overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div id="shortcuts-box">
+        <div class="sc-head">
+          <span class="sc-title" data-i18n="hk.title">Keyboard Shortcuts</span>
+          <button id="shortcuts-close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="hk-grid" id="shortcuts-body"></div>
+      </div>
+    </div>
+
     <!-- ===== File Input ===== -->
     <input type="file" id="file-input" accept=".zc,.txt,.json" style="display: none" />
 
@@ -2812,6 +2943,12 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.statusBar': 'Status Bar',
             'dd.settings.lang': 'Language',
             'dd.settings.resetStyles': 'Reset Styles',
+            'dd.settings.shortcuts': 'Shortcuts',
+            'hk.title': 'Keyboard Shortcuts',
+            'hk.rows':
+              'General§Save the workspace as a .zc file|{M} S|Open a .zc workspace file|{M} O|Open this panel|?|Close every dropdown, hide the floating toolbar, cancel a connection being drawn|Esc~~While the caret is in node body text§Indent the first line|Tab|Unindent the first line|Shift + Tab|Indent the first line|{M} ]|Unindent the first line|{M} [~~While a connection is selected§Delete the selected connection|Delete / Backspace~~While focused in a field§Commit the image URL|Enter|Discard the edit and keep the previous value|Esc|Commit the Markdown or formula source|{M} Enter|Discard the source edit|Esc|Confirm the node title|Enter~~While focused in the cloud-sync dialog§Sign in|Enter',
+            'hk.note':
+              '{M} S and {M} O fire anywhere, including while you are typing, so the browser default is always suppressed. Esc never closes the confirm dialog — use Cancel or click the backdrop. The first-line indent keys only apply to text, todo and group nodes.',
             'ft.style': 'Style',
             'ft.font': 'Font',
             'ft.font.literata': 'Literata',
@@ -2964,6 +3101,12 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.statusBar': '状态栏',
             'dd.settings.lang': '语言',
             'dd.settings.resetStyles': '重置样式',
+            'dd.settings.shortcuts': '快捷键',
+            'hk.title': '快捷键',
+            'hk.rows':
+              '全局§把工作区存为 .zc 文件|{M} S|打开 .zc 工作区文件|{M} O|打开 / 重新载入本说明|?|关闭所有下拉菜单、收起浮动工具条、取消正在拖的连线|Esc~~焦点在节点正文里时§首行缩进|Tab|取消首行缩进|Shift + Tab|首行缩进|{M} ]|取消首行缩进|{M} [~~已选中一条连线时§删除选中的连线|Delete / Backspace~~焦点在输入框上时§确认图片地址|Enter|放弃这次修改|Esc|提交 Markdown / 公式源码|{M} Enter|放弃源码修改|Esc|确认节点标题|Enter~~焦点在云同步弹窗里时§登录|Enter',
+            'hk.note':
+              '{M} S 与 {M} O 在任何位置都会触发，包括正在打字时，所以浏览器原本的「保存页面 / 打开文件」被完全接管。Esc 不会关闭确认框，请点「取消」或点击遮罩。首行缩进相关的键位只在文本、待办、分组这三类节点的正文里生效。',
             'ft.style': '样式',
             'ft.font': '字体',
             'ft.font.literata': 'Literata',
@@ -5634,6 +5777,10 @@ notify pgrst, 'reload schema';</textarea
                 showDropdown('dd-settings', target)
                 setTimeout(() => UIManager.updateSettingsUI(), 10)
                 break
+              case 'showShortcuts':
+                closeAllDropdowns()
+                openShortcuts()
+                break
               case 'settingsContentFsDown':
                 UIManager.changeContentFontSize(-1)
                 break
@@ -5993,8 +6140,83 @@ notify pgrst, 'reload schema';</textarea
             }
           })
 
+          /* --------------------------------------------------------
+             快捷键说明面板
+             文案放在 I18N_DATA 的 hk.rows / hk.note 里，中英文各一份。
+             格式：段落之间用 ~~ 分隔，段落内「标题§说明|键位|说明|键位」，
+             {M} 会被替换成当前平台的修饰键字形（Mac 为 ⌘，其余为 Ctrl）。
+             -------------------------------------------------------- */
+          const MOD_LABEL = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+            ? '⌘'
+            : 'Ctrl'
+          function hkExpand(str) {
+            return String(str).split('{M}').join(MOD_LABEL)
+          }
+          function hkRow(desc, key) {
+            return (
+              '<div class="hk-row"><span>' +
+              hkExpand(desc) +
+              '</span><span class="hk-key">' +
+              hkExpand(key) +
+              '</span></div>'
+            )
+          }
+          function openShortcuts() {
+            const raw = hkExpand(t('hk.rows'))
+            let html = ''
+            raw.split('~~').forEach((sec) => {
+              const cut = sec.indexOf('§')
+              const title = cut < 0 ? sec : sec.slice(0, cut)
+              const rest = cut < 0 ? '' : sec.slice(cut + 1)
+              html +=
+                '<div class="hk-section"><div class="hk-section-title">' +
+                hkExpand(title) +
+                '</div>'
+              const pairs = rest.split('|')
+              for (let i = 0; i + 1 < pairs.length; i += 2) {
+                html += hkRow(pairs[i], pairs[i + 1])
+              }
+              html += '</div>'
+            })
+            html +=
+              '<div class="hk-section"><div class="hk-note">' +
+              hkExpand(t('hk.note')) +
+              '</div></div>'
+            document.getElementById('shortcuts-body').innerHTML = html
+            document.getElementById('shortcuts-overlay').classList.add('active')
+            document.getElementById('shortcuts-close').focus()
+          }
+          function closeShortcuts() {
+            document.getElementById('shortcuts-overlay').classList.remove('active')
+          }
+          document.getElementById('shortcuts-close').onclick = closeShortcuts
+          document.getElementById('shortcuts-overlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeShortcuts()
+          })
+
           // ---- Keyboard shortcuts ----
           document.addEventListener('keydown', (e) => {
+            // Esc 关闭快捷键说明面板（优先级最高）
+            if (
+              e.key === 'Escape' &&
+              document.getElementById('shortcuts-overlay').classList.contains('active')
+            ) {
+              closeShortcuts()
+              return
+            }
+            if (e.key === '?') {
+              const tag = (e.target && e.target.tagName) || ''
+              const typing =
+                tag === 'INPUT' ||
+                tag === 'TEXTAREA' ||
+                tag === 'SELECT' ||
+                !!e.target?.closest?.('.node-content[contenteditable="true"]')
+              if (!typing) {
+                e.preventDefault()
+                openShortcuts()
+                return
+              }
+            }
             if (e.key === 'Escape') {
               closeAllDropdowns()
               DOM.floatingToolbar.classList.remove('visible')
