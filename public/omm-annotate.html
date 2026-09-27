@@ -30,6 +30,9 @@
         --tscale: 1;
         --lh: 1.95;
         --rail-bg: rgba(26, 26, 26, 0.022);
+        /* 左右侧栏的展开宽度：折叠把手靠它定位，改这里即可同时改两者 */
+        --lw: 216px;
+        --rw: 272px;
       }
       body.theme-dark {
         --bg: #1a1a1a;
@@ -469,6 +472,8 @@
         display: flex;
         flex: 1;
         min-height: 0;
+        /* 侧栏折叠把手以 #app 为定位基准（而非视窗），避免菜单/状态栏影响 */
+        position: relative;
       }
       .rail {
         display: flex;
@@ -476,15 +481,79 @@
         min-height: 0;
         flex-shrink: 0;
         position: relative;
+        overflow: hidden;
+        transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1);
       }
       /* 侧栏用极淡背景色与留白建立结构，不再使用竖向分隔线 */
       #left-rail {
-        width: 216px;
+        width: var(--lw);
         background: var(--rail-bg);
       }
       #right-rail {
-        width: 272px;
+        width: var(--rw);
         background: var(--rail-bg);
+      }
+      /* 折叠：宽度收到 0，内容由 overflow:hidden 裁掉，舞台随之铺满。
+         顺带 visibility:hidden —— 收起的栏不该再被 Tab 键选中（宽度过渡仍在跑） */
+      body.rail-hide-l #left-rail,
+      body.rail-hide-r #right-rail {
+        width: 0;
+        visibility: hidden;
+      }
+      /* ---- 侧栏折叠把手：贴在侧栏内缘，折叠后移到屏幕边缘，仍可点开 ---- */
+      .rail-tab {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 13px;
+        height: 46px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text-faint);
+        border: 1px solid var(--border-faint);
+        font-family: var(--font-mono);
+        font-size: calc(10px * var(--fscale));
+        line-height: 1;
+        cursor: pointer;
+        z-index: 40;
+        opacity: 0.45;
+        transition:
+          left 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+          right 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+          opacity 0.15s,
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .rail-tab:hover {
+        opacity: 1;
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      #tab-left {
+        /* 跨在侧栏内缘上：约一半压在侧栏里，一半露在舞台上，
+           既有「拉手」的实体感，又不挡住多少正文 */
+        left: calc(var(--lw) - 6px);
+        border-left: none;
+        border-radius: 0 var(--radius) var(--radius) 0;
+      }
+      #tab-right {
+        right: calc(var(--rw) - 6px);
+        border-right: none;
+        border-radius: var(--radius) 0 0 var(--radius);
+      }
+      body.rail-hide-l #tab-left,
+      body.rail-hide-r #tab-right {
+        /* 已折叠时把手移到屏幕边缘，略微提亮以提示这里能点开 */
+        opacity: 0.6;
+      }
+      body.rail-hide-l #tab-left {
+        left: 0;
+      }
+      body.rail-hide-r #tab-right {
+        right: 0;
       }
       .rail-head {
         height: 32px;
@@ -501,8 +570,11 @@
       .spacer {
         flex: 1;
       }
+      /* 侧栏头部的 × ：宽屏＝折叠本侧栏，窄屏＝关掉覆盖式面板 */
       .rail-x {
-        display: none;
+        display: inline-flex;
+        align-items: center;
+        margin-left: 8px;
       }
       .rail-head .rh-act {
         cursor: pointer;
@@ -3125,9 +3197,15 @@
           border: none;
           background: transparent;
         }
-        .rail-x {
-          display: inline;
-          margin-left: 8px;
+        /* 窄屏下侧栏是覆盖式面板，由 .rail-x 关闭，不做宽度折叠：
+           需要把折叠态的 width:0 / visibility:hidden 抵消掉，否则会盖掉面板 */
+        body.rail-hide-l #left-rail,
+        body.rail-hide-r #right-rail {
+          width: 100%;
+          visibility: visible;
+        }
+        .rail-tab {
+          display: none;
         }
         body.rail-left #left-rail,
         body.rail-right #right-rail {
@@ -3209,6 +3287,7 @@
         #status-bar,
         #left-rail,
         #right-rail,
+        .rail-tab,
         #notification,
         #pdf-prog,
         #splash,
@@ -4038,6 +4117,12 @@
       <div class="dd-item" data-action="settingsToggleStatusbar">
         <span>状态栏</span><span class="hint" id="sv-statusbar">开</span>
       </div>
+      <div class="dd-item" data-action="settingsToggleRailL">
+        <span>左侧栏</span><span class="hint" id="sv-raill">开</span>
+      </div>
+      <div class="dd-item" data-action="settingsToggleRailR">
+        <span>右侧栏</span><span class="hint" id="sv-railr">开</span>
+      </div>
       <div class="dd-item" data-action="settingsToggleCodeMark">
         <span>阅读显编码</span><span class="hint" id="sv-codemark">开</span>
       </div>
@@ -4050,13 +4135,36 @@
     <!-- ===== Main ===== -->
     <div id="main">
       <div id="app">
+        <!-- 侧栏折叠把手（贴在侧栏内缘，折叠后移到屏幕边缘） -->
+        <button
+          type="button"
+          class="rail-tab"
+          id="tab-left"
+          data-action="toggleRailLeft"
+          title="折叠左侧栏（Ctrl / ⌘ + [）"
+          aria-label="折叠或展开左侧栏"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          class="rail-tab"
+          id="tab-right"
+          data-action="toggleRailRight"
+          title="折叠右侧栏（Ctrl / ⌘ + ]）"
+          aria-label="折叠或展开右侧栏"
+        >
+          ›
+        </button>
         <!-- LEFT -->
         <aside class="rail" id="left-rail">
           <div class="rail-head">
             <span>材料 · Corpus</span
             ><span
               ><span class="rh-act" data-action="docNew">＋</span
-              ><span class="rh-act rail-x" data-action="railLeft">×</span></span
+              ><span class="rh-act rail-x" data-action="railLeft" title="折叠 / 展开左侧栏"
+                >×</span
+              ></span
             >
           </div>
           <div class="rail-body" id="doc-list"></div>
@@ -4202,7 +4310,9 @@
               <span>码表 · Codebook</span
               ><span
                 ><span class="rh-act" data-action="codeNew">＋</span
-                ><span class="rh-act rail-x" data-action="railRight">×</span></span
+                ><span class="rh-act rail-x" data-action="railRight" title="折叠 / 展开右侧栏"
+                  >×</span
+                ></span
               >
             </div>
             <div class="rail-body" id="code-list"></div>
@@ -4212,7 +4322,9 @@
               <span>批注 · Marks</span
               ><span
                 ><span class="rh-act" data-action="exportMarks">导出</span
-                ><span class="rh-act rail-x" data-action="railRight">×</span></span
+                ><span class="rh-act rail-x" data-action="railRight" title="折叠 / 展开右侧栏"
+                  >×</span
+                ></span
               >
             </div>
             <div class="rail-body" id="note-list"></div>
@@ -5444,6 +5556,9 @@
           statusBar: true,
           menuPinned: true,
           codeMark: true,
+          /* 左右侧栏是否展开（折叠把手 / 样式菜单 / 快捷键共用这份状态） */
+          railL: true,
+          railR: true,
           readerMode: 'layout',
           markFilter: 'all',
           selMark: null,
@@ -5657,6 +5772,10 @@
             el('top-menu').classList.toggle('pinned', S.menuPinned)
             el('pin-btn').classList.toggle('pinned', S.menuPinned)
             document.body.classList.toggle('menu-pinned', S.menuPinned)
+            /* 侧栏折叠：只切 body 类，宽度过渡交给 CSS */
+            document.body.classList.toggle('rail-hide-l', !S.railL)
+            document.body.classList.toggle('rail-hide-r', !S.railR)
+            syncRailTabs()
             updateSettingsUI()
           },
         }
@@ -5696,6 +5815,53 @@
               return false
             }
           },
+        }
+
+        // ================================================================
+        // 4.5 侧栏折叠
+        // ================================================================
+        var railReflow = null
+        // 窄屏阈值与 CSS 里的 @media (max-width: 720px) 保持一致
+        function isNarrow() {
+          try {
+            return window.matchMedia('(max-width: 720px)').matches
+          } catch (e) {
+            return false
+          }
+        }
+        // 折叠把手上的箭头方向跟着状态走：展开时指向侧栏外侧（点了收起），
+        // 折叠时指向内侧（点了展开）。
+        function syncRailTabs() {
+          var l = el('tab-left')
+          if (l) {
+            l.textContent = S.railL ? '‹' : '›'
+            l.title = (S.railL ? '折叠' : '展开') + '左侧栏（Ctrl / ⌘ + [）'
+          }
+          var r = el('tab-right')
+          if (r) {
+            r.textContent = S.railR ? '›' : '‹'
+            r.title = (S.railR ? '折叠' : '展开') + '右侧栏（Ctrl / ⌘ + ]）'
+          }
+        }
+        function setRail(side, on) {
+          var k = side === 'left' ? 'railL' : 'railR'
+          var v = on == null ? !S[k] : !!on
+          if (S[k] === v) return
+          S[k] = v
+          Settings.apply()
+          Settings.save()
+          // 侧栏宽度有 0.28s 过渡：等它走完再按最终可用宽度重排 PDF 页面，
+          // 否则会照着过渡中的中间宽度排版，停下来后尺寸就不对了
+          clearTimeout(railReflow)
+          railReflow = setTimeout(onStageWidthChange, 300)
+        }
+        // 舞台宽度变了（侧栏折叠 / 窗口缩放）：版式模式要按新宽度重排页面，
+        // 并尽量停在原来那一页；文本模式的版心由 min() 自动收缩，不用管。
+        function onStageWidthChange() {
+          if (S.view !== 'reader') return
+          if (!readerUseLayout(curDoc())) return
+          S.rvRestorePage = rvCurPageIdx()
+          renderReader()
         }
 
         function seed() {
@@ -10050,10 +10216,14 @@
           h += '<kbd>1</kbd>–<kbd>9</kbd> 指派面板中对应码号　<kbd>Enter</kbd> 指派首个码号<br />'
           h += '<kbd>Esc</kbd> 关闭面板 / 弹窗　<kbd>Alt</kbd>+<kbd>← →</kbd> 切换材料<br />'
           h +=
+            '<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>[</kbd> 折叠左栏　<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>]</kbd> 折叠右栏<br />'
+          h +=
             '阅读视图内选中文本后：<kbd>H</kbd> 高亮　<kbd>U</kbd> 下划线　<kbd>S</kbd> 删除线　<kbd>N</kbd> 写批注<br />'
           h +=
             '<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd> 检索　<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd> 导出备份'
           h += '</div>'
+          h +=
+            '<div class="help-h">侧边栏</div><div class="help-p">左右侧栏都可以收起，让正文占满屏幕：点侧栏标题栏右边的 <b>×</b>，或点侧栏内缘中间那个小箭头，即可折叠 / 展开（折叠后把手会贴到屏幕边缘，随时能再点开）；也可以用 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>[</kbd>（左侧栏）与 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>]</kbd>（右侧栏），或在「样式 → 显示」里开关。折叠状态会被记住，下次打开沿用。窄屏上侧栏是覆盖式面板，同一个 <b>×</b> 用来关掉它。</div>'
           h +=
             '<div class="help-h">码号定义</div><div class="help-p">每个码号应写清"操作性定义、纳入标准、排除标准、典型例证"，这是保证编码一致性与可复核性的前提。面板中悬停片段可查看定义。</div>'
           h +=
@@ -11013,6 +11183,8 @@
           el('sv-nums').textContent = S.showNums ? '开' : '关'
           el('sv-def').textContent = S.showDef ? '开' : '关'
           el('sv-statusbar').textContent = S.statusBar ? '开' : '关'
+          el('sv-raill').textContent = S.railL ? '开' : '关'
+          el('sv-railr').textContent = S.railR ? '开' : '关'
           el('sv-codemark').textContent = S.codeMark ? '开' : '关'
           document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach(function (d) {
             d.classList.toggle('active', d.getAttribute('data-bg') === S.bg)
@@ -11354,6 +11526,19 @@
             Settings.apply()
             Settings.save()
           },
+          /* ---- 侧栏折叠 ---- */
+          toggleRailLeft: function () {
+            setRail('left')
+          },
+          toggleRailRight: function () {
+            setRail('right')
+          },
+          settingsToggleRailL: function () {
+            setRail('left')
+          },
+          settingsToggleRailR: function () {
+            setRail('right')
+          },
           zoomUp: function () {
             S.zoom = clamp(Math.round((S.zoom + 0.05) * 100) / 100, 0.7, 1.6)
             Settings.apply()
@@ -11431,15 +11616,24 @@
           mToggleMenu: function () {
             document.body.classList.toggle('m-nav-open')
           },
+          /* 侧栏的一个「×」：宽屏＝折叠 / 展开该侧栏，窄屏＝开 / 关覆盖式面板 */
           railLeft: function () {
-            document.body.classList.remove('rail-right')
-            document.body.classList.toggle('rail-left')
             ACTIONS.mClose()
+            if (isNarrow()) {
+              document.body.classList.remove('rail-right')
+              document.body.classList.toggle('rail-left')
+              return
+            }
+            setRail('left')
           },
           railRight: function () {
-            document.body.classList.remove('rail-left')
-            document.body.classList.toggle('rail-right')
             ACTIONS.mClose()
+            if (isNarrow()) {
+              document.body.classList.remove('rail-left')
+              document.body.classList.toggle('rail-right')
+              return
+            }
+            setRail('right')
           },
         }
 
@@ -12200,6 +12394,19 @@
               return
             }
             if (typing) return
+            // 侧栏折叠：Ctrl/⌘ + [ / ]
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+              if (e.key === '[') {
+                e.preventDefault()
+                setRail('left')
+                return
+              }
+              if (e.key === ']') {
+                e.preventDefault()
+                setRail('right')
+                return
+              }
+            }
             // 阅读视图：选中文本后 H/U/S/N 快速标记
             if (
               S.view === 'reader' &&
@@ -12258,11 +12465,8 @@
             sugClose()
             clearTimeout(rzTimer)
             rzTimer = setTimeout(function () {
-              if (S.view === 'reader' && readerUseLayout(curDoc())) {
-                // 保留当前页码再重排
-                S.rvRestorePage = rvCurPageIdx()
-                renderReader()
-              }
+              // 保留当前页码再重排（与侧栏折叠共用同一套处理）
+              onStageWidthChange()
             }, 400)
           })
         }
