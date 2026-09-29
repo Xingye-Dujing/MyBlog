@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>LaTeX 编译工作台</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
+    <script src="cdn-mirrors.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&display=swap"
       rel="stylesheet"
+      onerror="CDNM.linkFallback(this,'fontLiterataFull')"
     />
-    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" onerror="CDNM.scriptFallback(this,'pdfjsLib')"></script>
     <style>
       :root {
         --bg: #fff;
@@ -4272,8 +4275,10 @@
         let activeRenderTasks = []
 
         if (window.pdfjsLib) {
-          pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+          // 先用主源顶上保证同步可用，再探活其它镜像；pdf.js 懒加载 worker，通常来得及
+          CDNM.pickUrl('pdfjsWorker', function (u) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = u
+          })
         }
 
         function showPdfStatus(html, visible = true) {
@@ -4407,7 +4412,15 @@
             pdfDocKey = ''
           }
           if (pdfLoadTask) return pdfLoadTask.promise
-          pdfLoadTask = pdfjsLib.getDocument({ url: pdfUrl(), disableAutoFetch: false })
+          pdfLoadTask = pdfjsLib.getDocument({
+            url: pdfUrl(),
+            disableAutoFetch: false,
+            // 中日韩 CID 字体需要 cmaps；未内嵌的标准字体需要 standard_fonts。
+            // 原先这两个都没给，离线/内网下会退化成乱码。
+            cMapUrl: CDNM.mirrors('pdfjsCmap')[0],
+            cMapPacked: true,
+            standardFontDataUrl: CDNM.mirrors('pdfjsStdFont')[0],
+          })
           try {
             pdfDoc = await pdfLoadTask.promise
             pdfDocKey = state.lastKey

@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>日程安排</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
+    <script src="cdn-mirrors.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,700;1,7..72,400&display=swap"
       rel="stylesheet"
+      onerror="CDNM.linkFallback(this,'fontLiterataAlt')"
     />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" onerror="CDNM.scriptFallback(this,'html2canvas')"></script>
     <style>
       :root {
         --bg: #ffffff;
@@ -10047,8 +10050,7 @@ notify pgrst, 'reload schema';</textarea
     <script id="zp-cloud-sync-script">
       ;(function () {
         'use strict'
-        var SUPABASE_CDN = 'https://cdn.jsdmirror.com/npm/@supabase/supabase-js@2',
-          CFG_KEY = 'zp-supabase-config-v2',
+        var CFG_KEY = 'zp-supabase-config-v2',
           META_KEY = 'zp-sync-meta-v2',
           DATA_KEY = 'zp-data-v2',
           TABLE = 'zenplan_sync'
@@ -10446,7 +10448,6 @@ notify pgrst, 'reload schema';</textarea
           if (libPromise) return libPromise
           libPromise = new Promise(function (ok, no) {
             var s = document.createElement('script')
-            s.src = SUPABASE_CDN
             s.crossOrigin = 'anonymous'
             s.async = true
             s.onload = function () {
@@ -10458,6 +10459,8 @@ notify pgrst, 'reload schema';</textarea
               libPromise = null
               no(new Error(tr('sync.sdkNetworkFailed')))
             }
+            }
+            CDNM.loadScriptInto(s, 'supabase')
             document.head.appendChild(s)
           })
           return libPromise

@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>消息同步</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
+    <script src="cdn-mirrors.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap"
+      onerror="CDNM.linkFallback(this,'fontLiterataSub')"
+    />
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap');
       :root {
         --bg: #fff;
         --text: #000;
@@ -2580,7 +2586,6 @@
         }
         const TABLE = 'zmessage_messages'
         const META_TABLE = 'zmessage_message_meta'
-        const CDN = 'https://cdn.jsdmirror.com/npm/@supabase/supabase-js@2'
         let sb = null,
           session = null,
           channel = null,
@@ -3020,10 +3025,10 @@
           if (window._msgSdk) return window._msgSdk
           window._msgSdk = new Promise((ok, no) => {
             const s = document.createElement('script')
-            s.src = CDN
             s.crossOrigin = 'anonymous'
             s.onload = () => (window.supabase ? ok() : no(new Error(t('sync.sdkFailed'))))
             s.onerror = () => no(new Error(t('sync.sdkFailed')))
+            CDNM.loadScriptInto(s, 'supabase')
             document.head.appendChild(s)
           })
           return window._msgSdk

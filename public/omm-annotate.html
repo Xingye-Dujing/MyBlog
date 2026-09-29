@@ -5,9 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>文本标注</title>
     <link rel="icon" href="icon.ico" type="image/x-icon" />
+    <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
+    <script src="cdn-mirrors.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,700;1,7..72,400&display=swap"
       rel="stylesheet"
+      onerror="CDNM.linkFallback(this,'fontLiterataAlt')"
     />
     <style>
       :root {
@@ -6187,23 +6190,8 @@
         // 5.5 PDF 引擎 · 阅读批注
         // ================================================================
         // 多 CDN 回退：优先 jsDelivr 镜像，失败时依次尝试官方源
-        var PDFJS_SOURCES = [
-          {
-            lib: 'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
-            worker: 'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
-            cmap: 'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/cmaps/',
-          },
-          {
-            lib: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
-            worker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
-            cmap: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-          },
-          {
-            lib: 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
-            worker: 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
-            cmap: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
-          },
-        ]
+        // 镜像表集中在 cdn-mirrors.js：jsdmirror / jsdelivr / fastly / unpkg / npmmirror
+        var PDFJS_SOURCES = CDNM.zip('pdfjsLib', 'pdfjsWorker', 'pdfjsCmap')
 
         // ---- 简易 IndexedDB：保存 PDF 原始文件，避免污染 localStorage ----
         var IDB = {
@@ -12708,8 +12696,7 @@
     <script id="zp-cloud-sync-script">
       ;(function () {
         'use strict'
-        var SUPABASE_CDN = 'https://cdn.jsdmirror.com/npm/@supabase/supabase-js@2',
-          CFG_KEY = 'zencode-sync-cfg-v1',
+        var CFG_KEY = 'zencode-sync-cfg-v1',
           META_KEY = 'zencode-sync-meta-v1',
           DATA_KEY = 'zencode.project.v1',
           SETTINGS_KEY = 'zencode.settings.v1',
@@ -13163,7 +13150,6 @@
           if (libPromise) return libPromise
           libPromise = new Promise(function (ok, no) {
             var s = document.createElement('script')
-            s.src = SUPABASE_CDN
             s.crossOrigin = 'anonymous'
             s.async = true
             s.onload = function () {
@@ -13200,6 +13186,8 @@
             ok = !!(c.url && c.key)
           syncPrefsUI()
           toggleCls('zp-config-panel', 'zp-cloud-hidden', ok)
+            }
+            CDNM.loadScriptInto(s, 'supabase')
           toggleCls('zp-auth-panel', 'zp-cloud-hidden', !ok)
           toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
           toggleCls('zp-sync-actions', 'zp-cloud-hidden', !session || !unlockPassword)

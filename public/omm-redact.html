@@ -32,16 +32,22 @@
         if (window.OffscreenCanvas) patchCanvasPrototype(window.OffscreenCanvas.prototype)
       })()
     </script>
-    <script src="https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/pptxviewjs@1.1.9/dist/PptxViewJS.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
+    <script src="cdn-mirrors.js"></script>
+    <script src="https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.min.js" onerror="CDNM.scriptFallback(this,'pdfjsLib')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" onerror="CDNM.scriptFallback(this,'pdfLib')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/jszip@3.10.1/dist/jszip.min.js" onerror="CDNM.scriptFallback(this,'jszip')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/chart.js@4.4.1/dist/chart.umd.min.js" onerror="CDNM.scriptFallback(this,'chart441')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/pptxviewjs@1.1.9/dist/PptxViewJS.min.js" onerror="CDNM.scriptFallback(this,'pptxviewjs')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" onerror="CDNM.scriptFallback(this,'jspdf251')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/mammoth@1.6.0/mammoth.browser.min.js" onerror="CDNM.scriptFallback(this,'mammoth')"></script>
+    <script src="https://cdn.jsdmirror.com/npm/html2canvas@1.4.1/dist/html2canvas.min.js" onerror="CDNM.scriptFallback(this,'html2canvas')"></script>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap"
+      onerror="CDNM.linkFallback(this,'fontLiterataSub')"
+    />
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap');
 
       /* ===== RESET & VARIABLES ===== */
       :root {
@@ -5362,8 +5368,9 @@
           var token = ++pdfLoadToken
           try {
             if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-              pdfjsLib.GlobalWorkerOptions.workerSrc =
-                'https://cdn.jsdmirror.com/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+              CDNM.pickUrl('pdfjsWorker', function (u) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = u
+              })
             }
             showProgress()
             setProgress(0)
@@ -5371,7 +5378,13 @@
             var ab = await loadFileReadAsArrayBuffer(file)
             if (token !== pdfLoadToken) return
             S.pdfBytes = ab.slice(0)
-            var pdfDoc = await pdfjsLib.getDocument({ data: ab.slice(0) }).promise
+            var pdfDoc = await pdfjsLib.getDocument({
+              data: ab.slice(0),
+              // 中日韩 CID 字体需要 cmaps；未内嵌的标准字体需要 standard_fonts。
+              cMapUrl: CDNM.mirrors('pdfjsCmap')[0],
+              cMapPacked: true,
+              standardFontDataUrl: CDNM.mirrors('pdfjsStdFont')[0],
+            }).promise
             if (token !== pdfLoadToken) return
 
             var numPages = pdfDoc.numPages
@@ -8893,11 +8906,13 @@
           if (S.mupdfModule) return S.mupdfModule
           if (S.mupdfPromise) return S.mupdfPromise
 
-          var urls = [
-            'https://cdn.jsdmirror.com/npm/mupdf@1.28.1/+esm',
-            'https://unpkg.com/mupdf@1.28.1/dist/mupdf.js',
-            'https://esm.sh/mupdf@1.28.1',
-          ]
+          // 优先用官方 dist/ 目录：mupdf.js 会 import 同目录的 mupdf-wasm.js，
+          // 后者再靠 import.meta.url 定位 mupdf-wasm.wasm，三个文件必须同源。
+          var urls = CDNM.mirrors('mupdf').map(function (base) {
+            return base + 'mupdf.js'
+          })
+          // jsDelivr 的 +esm 打包会把 wasm 路径写死回 CDN，仅作最后兜底。
+          urls = urls.concat(CDNM.mirrors('mupdfEsm'))
 
           async function loadFrom(url) {
             var mod = await import(/* webpackIgnore: true */ url)
