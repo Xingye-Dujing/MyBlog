@@ -10,7 +10,7 @@
     <link
       href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,700;1,7..72,400&display=swap"
       rel="stylesheet"
-      onerror="CDNM.linkFallback(this,'fontLiterataAlt')"
+      onerror="CDNM.linkFallback(this, 'fontLiterataAlt')"
     />
     <style>
       :root {
@@ -980,6 +980,19 @@
       .seg.review {
         border-bottom-style: dashed;
       }
+      /* 短片段（单词 / 短语级编码）加淡色底，判定见 SEG_TINT_MAX。
+         写在 .seg:hover / .seg.on 之后，用同样的特异性把底色接管过来：
+         底色是「有没有被编码」的第一眼信号，不能被 hover / 选中的灰底吃掉。
+         选中态仍由 .seg.on 那道 2px 内阴影表示，不靠底色区分。 */
+      .seg.tint {
+        background: color-mix(in srgb, var(--c, var(--text-dim)) 14%, transparent);
+      }
+      .seg.tint:hover {
+        background: color-mix(in srgb, var(--c, var(--text-dim)) 26%, transparent);
+      }
+      .seg.tint.on {
+        background: color-mix(in srgb, var(--c, var(--text-dim)) 20%, transparent);
+      }
       .seg sup {
         font-size: 0.58em;
         letter-spacing: 0.5px;
@@ -1150,6 +1163,10 @@
       .pf-tl .mk.ul,
       .pf-tl .mk.st,
       .pf-tl .mk.code,
+      .pf-tl .mk.n-word,
+      .pf-tl .mk.n-sentence,
+      .pf-tl .mk.n-template,
+      .pf-tl .mk.n-phrase,
       .pf-tl .mk.mk-on {
         background: none;
         border: 0;
@@ -1243,6 +1260,25 @@
       .mk.code {
         background: repeating-linear-gradient(to right, var(--mc-line) 0 3px, transparent 3px 6px)
           left bottom / 100% 2px no-repeat;
+      }
+      /* 笔记（单词 / 句子 / 模板 / 搭配）：一律「贴底细线」，靠线型 + 颜色区分，
+         既不遮原文，也不会和高亮 / 下划线 / 删除线 / 编码混淆。
+         线型与版式模式 HLFMT['n-*'] 的厚度一一对应，两种模式观感一致。 */
+      .mk.n-word {
+        background: radial-gradient(circle at 1.5px 1.5px, var(--mc-line) 1.1px, transparent 1.2px)
+          0 100% / 5px 3px repeat-x;
+      }
+      .mk.n-sentence {
+        background: linear-gradient(var(--mc-line), var(--mc-line)) left bottom / 100% 2px no-repeat;
+      }
+      .mk.n-template {
+        background: repeating-linear-gradient(to right, var(--mc-line) 0 4px, transparent 4px 8px)
+          left bottom / 100% 2px no-repeat;
+      }
+      .mk.n-phrase {
+        background:
+          linear-gradient(var(--mc-line), var(--mc-line)) left 3px bottom / 100% 1px no-repeat,
+          linear-gradient(var(--mc-line), var(--mc-line)) left bottom / 100% 1px no-repeat;
       }
       .mk.mk-on {
         box-shadow: inset 0 0 0 1px var(--text);
@@ -1746,6 +1782,18 @@
         text-decoration: underline;
         text-decoration-color: var(--border-dim);
         text-underline-offset: 3px;
+      }
+      /* 从阅读区点进来时的定位闪烁 */
+      @keyframes nvFlash {
+        0% {
+          box-shadow: inset 0 0 0 1px var(--text);
+        }
+        100% {
+          box-shadow: inset 0 0 0 1px transparent;
+        }
+      }
+      .nv-card.flash {
+        animation: nvFlash 1.2s ease-out;
       }
       .nv-pick {
         width: 14px;
@@ -4177,6 +4225,9 @@
       <div class="dd-item" data-action="settingsToggleCodeMark">
         <span>阅读显编码</span><span class="hint" id="sv-codemark">开</span>
       </div>
+      <div class="dd-item" data-action="settingsToggleNoteMark">
+        <span>阅读显笔记</span><span class="hint" id="sv-notemark">开</span>
+      </div>
       <div class="dd-divider"></div>
       <div class="dd-item" data-action="showShortcuts">
         <span>快捷键</span><span class="hint">?</span>
@@ -5369,6 +5420,13 @@
         var LVORDER = { open: 0, axial: 1, selective: 2 }
         var RELS = ['因果', '对立', '递进', '例证', '条件', '并列']
 
+        // 编码片段的视觉分档：长片段靠 1px 下边框就能看出边界，
+        // 而单词 / 短语级编码的下边框只有几个像素宽、码号角标又是极淡的，
+        // 视觉上几乎等于没标 —— 所以给「≤ 此字数」的片段额外加一层淡色底。
+        // 按「码号覆盖的原文长度」判定，而不是按切分后的显示片段长度：
+        // 整句编码被重叠的短编码切开时，那几小段不该跟着变色。
+        var SEG_TINT_MAX = 8
+
         // 阅读批注：柔和高亮色（仅用于标记，不承担评价含义）
         var MARKC = [
           '#f6dd8a',
@@ -5382,6 +5440,28 @@
         ]
         var MKSTY = { note: '批注', hl: '高亮', ul: '下划线', st: '删除线', code: '编码' }
         var MKORDER = { note: 0, hl: 1, ul: 2, st: 3, code: 4 }
+
+        // 笔记（单词 / 句子 / 模板 / 搭配）在阅读区的呈现。
+        // 颜色与「笔记」视图角标（.nv-badge.k-*）、批注浮层按钮（.mp-nk）完全同源，
+        // 三处改一处要一起改；优先级排在所有批注之后 —— 与批注重叠时让批注盖住笔记。
+        var NKL_NAME = { word: '单词', sentence: '句子', template: '模板', phrase: '搭配' }
+        var NOTE_C = {
+          word: '#c98a2a',
+          sentence: '#3f7fbf',
+          template: '#7a5bb5',
+          phrase: '#3f8f74',
+        }
+        var NOTE_STY = {
+          word: 'n-word',
+          sentence: 'n-sentence',
+          template: 'n-template',
+          phrase: 'n-phrase',
+        }
+        Object.keys(NOTE_STY).forEach(function (k, i) {
+          var s = NOTE_STY[k]
+          MKSTY[s] = '笔记·' + (NKL_NAME[k] || k)
+          MKORDER[s] = 5 + i
+        })
         // 注意：MKORDER.note 是 0，直接写 `MKORDER[sty] || 9` 会把「批注」当成最低优先级，
         // 重叠时反而被高亮盖住——必须用 hasOwnProperty 判断。
         function mkOrder(sty) {
@@ -5610,6 +5690,8 @@
           statusBar: true,
           menuPinned: true,
           codeMark: true,
+          /* 阅读区是否把「已收进笔记」的原文也画出来 */
+          noteMark: true,
           /* 左右侧栏是否展开（折叠把手 / 样式菜单 / 快捷键共用这份状态） */
           railL: true,
           railR: true,
@@ -5799,6 +5881,10 @@
                 for (var k in o) if (k in S) S[k] = o[k]
               }
             } catch (e) {}
+            // 旧存档里没有这些后加的开关，补上默认值；
+            // 否则 undefined 会被当成「关」，老用户看不到任何新显示项。
+            if (S.noteMark == null) S.noteMark = true
+            if (S.codeMark == null) S.codeMark = true
           },
           save: function () {
             try {
@@ -6027,9 +6113,14 @@
             }
             var top = cover[cover.length - 1]
             var c = codeById(top.code)
+            var ta = annById(top.id)
+            // 短片段加淡色底（SEG_TINT_MAX 字以内）。用码号本身的覆盖长度，
+            // 不用切分后的显示长度：整句编码被重叠编码切开时不该跟着变色。
+            var tint = !!ta && ta.end - ta.start > 0 && ta.end - ta.start <= SEG_TINT_MAX
             segs.push({
               raw: false,
               text: txt,
+              tint: tint,
               ids: cover.map(function (a) {
                 return a.id
               }),
@@ -6077,7 +6168,7 @@
                 inner += esc(sg.text)
                 continue
               }
-              var cls = 'seg' + (sg.review ? ' review' : '')
+              var cls = 'seg' + (sg.review ? ' review' : '') + (sg.tint ? ' tint' : '')
               if (sg.ids.indexOf(S.selAnn) >= 0) cls += ' on'
               if (S.activeCode) {
                 var hit = sg.ids.some(function (id) {
@@ -6443,6 +6534,29 @@
               })
             })
           }
+          return out.concat(notePool(docId, s, e))
+        }
+
+        // 已收进笔记的原文也要画出来：否则「收进单词」之后阅读区毫无变化，
+        // 既看不出哪些已经收过，也没法一眼扫完生词。
+        // 走同一条批注管线（文本 / 版式两种模式都吃 markPool），样式用 n-* 四型。
+        function notePool(docId, s, e) {
+          var out = []
+          if (S.noteMark === false) return out
+          P.notes.forEach(function (n) {
+            if (n.doc !== docId) return
+            if (!(n.start >= 0) || n.end <= n.start) return
+            if (n.end <= s || n.start >= e) return
+            out.push({
+              start: n.start,
+              end: n.end,
+              sty: NOTE_STY[n.kind] || 'n-word',
+              color: NOTE_C[n.kind] || NOTE_C.word,
+              id: n.id,
+              text: n.zh || '',
+              isNote: true,
+            })
+          })
           return out
         }
 
@@ -6487,7 +6601,8 @@
               continue
             }
             var cls = 'mk ' + top.sty + (S.selMark && S.selMark === top.id ? ' mk-on' : '')
-            var sup = showSup && top.text && top.sty !== 'code' ? '<sup>✎</sup>' : ''
+            // ✎ 是「写了批注文字」的角标；笔记有自己的一套线型，不要再叠这个角标
+            var sup = showSup && top.text && top.sty !== 'code' && !top.isNote ? '<sup>✎</sup>' : ''
             html +=
               '<span class="' +
               cls +
@@ -7303,6 +7418,11 @@
           ul: { off: -0.09, h: 0.13 },
           st: { off: 0.27, h: 0.13 },
           code: { off: -0.09, h: 0.12 },
+          // 笔记四型：都是贴底细线，靠粗细（与颜色）区分，厚度对应文本模式的线型
+          'n-word': { off: -0.09, h: 0.12 },
+          'n-sentence': { off: -0.09, h: 0.16 },
+          'n-template': { off: -0.09, h: 0.13 },
+          'n-phrase': { off: -0.09, h: 0.12 },
         }
         // 只有底部两角圆：与文本模式一致（那边是贴着行框底边画的背景，上沿天然是直角）
         var HL_ROUND_BOTTOM = { note: 1 }
@@ -7330,6 +7450,23 @@
             var th = Math.max(1, H * 0.08)
             return [b + H * 0.06, b + H * 0.06 + th]
           },
+        }
+        // 笔记四型沿用下划线的高度（贴着墨迹盒下沿），只是厚度不同
+        function hlInkNote(t, b, H, k) {
+          var th = Math.max(1, H * k)
+          return [b + H * 0.08, b + H * 0.08 + th]
+        }
+        HL_INK['n-word'] = function (t, b, H) {
+          return hlInkNote(t, b, H, 0.1)
+        }
+        HL_INK['n-sentence'] = function (t, b, H) {
+          return hlInkNote(t, b, H, 0.14)
+        }
+        HL_INK['n-template'] = function (t, b, H) {
+          return hlInkNote(t, b, H, 0.11)
+        }
+        HL_INK['n-phrase'] = function (t, b, H) {
+          return hlInkNote(t, b, H, 0.1)
         }
 
         // 量出 [x0,x1] × [yTop,yBot] 范围内的墨迹（页面 CSS 像素）
@@ -8712,6 +8849,39 @@
           for (var i = 0; i < P.notes.length; i++) if (P.notes[i].id === id) return P.notes[i]
           return null
         }
+        // 笔记改动后重画阅读区那一段（类型变了要换线型/颜色，删了要撤掉）
+        function nvSyncReader(n) {
+          if (!n) return
+          if (!(n.start >= 0) || n.end <= n.start) return
+          if (n.doc === S.docId) afterMarkChange(n.start, n.end)
+        }
+        // 阅读区点中一条笔记 → 跳到「笔记」视图并点亮该条。
+        // 该条可能被当前筛选挡住，所以先按 id 找，找不到再放开筛选重画一次。
+        function gotoNote(id) {
+          var n = noteOf(id)
+          if (!n) return
+          setView('notes')
+          renderNoteList()
+          var pick = function () {
+            var card = el('nv-scroll').querySelector('.nv-card[data-id="' + id + '"]')
+            if (!card) return null
+            card.scrollIntoView({ block: 'center', behavior: 'smooth' })
+            card.classList.add('flash')
+            setTimeout(function () {
+              card.classList.remove('flash')
+            }, 1200)
+            return card
+          }
+          if (!pick() && (nvKind !== 'all' || nvQ)) {
+            nvKind = 'all'
+            nvQ = ''
+            var q = el('nv-q')
+            if (q) q.value = ''
+            mountNoteFilters()
+            renderNoteList()
+            pick()
+          }
+        }
         function sentenceAt(text, s, e) {
           if (!text) return ''
           var L = text.length
@@ -8722,6 +8892,21 @@
           return String(text.slice(a, b)).replace(/\s+/g, ' ').trim().slice(0, 400)
         }
         /* 从选区快速添加一条笔记 */
+        // 「单词」从选区里抠出真正的那个词，覆盖范围也跟着收到词本身：
+        // 否则选中一整段再点「单词」，笔记里只剩一个词，原文里却把整段都画成
+        // 单词样式，看着像收了整句。登记（addNote）与起草稿（openNoteDraft）
+        // 必须用同一套判定，所以抽出来共用。
+        function narrowToWord(d, s, e, en) {
+          var raw = d && s != null && e != null ? String(d.text || '').slice(s, e) : ''
+          var mw = raw.match(/[A-Za-z][A-Za-z'’\-]*/)
+          if (mw) {
+            var a = s + mw.index
+            return { en: mw[0], start: a, end: a + mw[0].length }
+          }
+          var m2 = String(en || '').match(/[A-Za-z][A-Za-z'’\-]*/)
+          if (m2) return { en: m2[0], start: s, end: e }
+          return { en: en, start: s, end: e }
+        }
         function addNote(kind, opts) {
           opts = opts || {}
           var k = OMM ? OMM.kindMap(kind) : kind
@@ -8731,9 +8916,12 @@
           var en = opts.en
           if (en == null) en = d && s != null && e != null ? d.text.slice(s, e) : ''
           en = String(en).replace(/\s+/g, ' ').trim()
-          if (k === 'word') {
-            var mw = en.match(/[A-Za-z][A-Za-z'’\-]*/)
-            if (mw) en = mw[0]
+          // enFixed：en 是用户在弹窗里敲定的，别再拿选区去覆盖它
+          if (k === 'word' && opts.enFixed !== true) {
+            var w = narrowToWord(d, s, e, en)
+            en = w.en
+            s = w.start
+            e = w.end
           }
           if (!en) {
             notify('没有可记录的文本')
@@ -8780,6 +8968,94 @@
           if (S.view === 'notes') renderNoteList()
           if (opts.silent !== true) notify('已收进笔记 · ' + NKL[k] + '：' + en.slice(0, 16))
           return n
+        }
+        // 各字段的占位演示。格式与去向必须说清楚，否则用户不知道
+        // 「释义」是填词义还是整句翻译、「例句」导出后去哪了。
+        // 去向与 OMMBridge.noteToItem 的字段映射一致：
+        //   单词 → w / ph(音标) / m(释义) / ex / exZh / note / tags
+        //   句子·模板·搭配 → en / zh / note / tags（音标与例句不带走）
+        function notePh(k) {
+          var word = k === 'word'
+          return {
+            en: word
+              ? '例：abandon（只记这一个词，导出为 English 生词本的词条）'
+              : '例：He abandoned the plan after the meeting.（整句原文，导出为听力材料 / 语料）',
+            phon: word
+              ? '例：/əˈbændən/　IPA 音标，可留空'
+              : '例：/əˈbændən/　只有单词用得上，可留空',
+            zh: word
+              ? '例：抛弃；放弃；遗弃（多个义项用「；」分隔）'
+              : k === 'template'
+                ? '例：should have + 过去分词（表示本该做而未做）'
+                : k === 'phrase'
+                  ? '例：have an effect on（对……有影响）'
+                  : '例：那天晚上十一点多，算法连推了三条同一个事件的视频。（整句译文）',
+            ex: word
+              ? '例：They had to abandon the car and walk home.'
+              : '例：可留空。单词笔记会随词条导出到 English。',
+            exZh: word ? '例：他们只能弃车走回家。' : '例：单词笔记的例句译文，可留空。',
+            note: word
+              ? '例：语境 / 易混词辨析 / 记忆点（导出 Corpus 时作为 notes）'
+              : '例：语用说明 / 上下文补充（导出 Corpus 时作为 notes）',
+            tags: '逗号分隔，例：六级, 学术, 观点',
+          }
+        }
+        function applyNotePh(k) {
+          var ph = notePh(k)
+          ;[
+            ['en', 'en'],
+            ['phon', 'phon'],
+            ['zh', 'zh'],
+            ['ex', 'ex'],
+            ['exzh', 'exZh'],
+            ['note', 'note'],
+            ['tags', 'tags'],
+          ].forEach(function (p) {
+            var node = el('f-' + p[0])
+            if (node) node.setAttribute('placeholder', ph[p[1]])
+          })
+        }
+        // 阅读区划词 → 打开笔记编辑面板。
+        // 这里只「起草」：不碰 P.notes、不落盘。一定要用户在弹窗里点保存，
+        // 这条笔记才真正登记；点取消 / 按 Esc / 点 × 就当没点过这个按钮。
+        function openNoteDraft(kind, s, e) {
+          var d = curDoc()
+          if (!d) return
+          var k = OMM ? OMM.kindMap(kind) : kind
+          var en = String(d.text.slice(s, e) || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+          if (k === 'word') {
+            var w = narrowToWord(d, s, e, en)
+            en = w.en
+            s = w.start
+            e = w.end
+          }
+          if (!en) return notify('没有可记录的文本')
+          var draft = {
+            kind: k,
+            en: en,
+            ex: k === 'word' ? sentenceAt(d.text, s, e) : '',
+            doc: d.id,
+            src: d.title,
+            start: s,
+            end: e,
+          }
+          // 已经收过同一条：把那条的内容带进弹窗继续编辑。
+          // 不带的话表单是空的，保存回去会把之前填的释义、音标冲掉。
+          for (var i = 0; i < P.notes.length; i++) {
+            var x = P.notes[i]
+            if (x.kind !== k || String(x.en).toLowerCase() !== en.toLowerCase()) continue
+            draft.dupId = x.id
+            draft.zh = x.zh || ''
+            draft.phon = x.phon || ''
+            draft.ex = x.ex || draft.ex
+            draft.exZh = x.exZh || ''
+            draft.note = x.note || ''
+            draft.tags = x.tags || []
+            break
+          }
+          openNoteModal(null, { draft: draft, after: nvSyncReader })
         }
         function delNote(id) {
           P.notes = P.notes.filter(function (x) {
@@ -8955,10 +9231,21 @@
             '<div class="nv-btn solid" data-action="showBridge">导出 / 发送</div>'
           box.innerHTML = h
         }
-        function openNoteModal(id) {
+        // opts.fresh：从阅读区「收进笔记」后紧接着打开，标题换一种说法
+        // opts.after(notes, kind)：保存 / 删除之后回调，调用方用它重画阅读区
+        function openNoteModal(id, opts) {
+          opts = opts || {}
           var n = id ? noteOf(id) : null
           var isNew = !n
-          if (!n)
+          // 草稿：字段已由 openNoteDraft 填好，但还没进 P.notes，保存时才真正登记。
+          // 若已存在同一条，id 直接指向那条 —— 保存即「改这一条」，删除按钮也照常可用。
+          var dupDraft = !n && opts.draft && opts.draft.dupId ? noteOf(opts.draft.dupId) : null
+          if (!n && opts.draft)
+            n = Object.assign({ zh: '', phon: '', exZh: '', note: '', tags: [] }, opts.draft, {
+              id: dupDraft ? dupDraft.id : '',
+              ts: dupDraft ? dupDraft.ts : '',
+            })
+          else if (!n)
             n = {
               id: '',
               kind: 'word',
@@ -8978,46 +9265,96 @@
           var kItems = NKS.map(function (k) {
             return { v: k, label: NKL[k] }
           })
+          // 占位提示按「类型」给：单词的「释义」是词义，句子 / 模板的「释义」
+          // 其实是整句译文，同一个输入框不能共用一句话提示。
+          // 文案里的去向要跟 noteToItem 的字段映射对得上（见 OMMBridge）。
+          var ph = notePh(n.kind)
+          // 锚在原文里的笔记，把「出处 + 实际收下的那段」显示出来：
+          // 单词是从选区里正则抠出来的，不回显一下容易怀疑收错了范围
+          var anchorRow = ''
+          if (n.start >= 0 && n.end > n.start) {
+            var ad = docById(n.doc)
+            var cut = ad ? String(ad.text || '').slice(n.start, n.end) : ''
+            anchorRow =
+              '<div class="fm-row"><div class="fm-lb">出处</div><div class="fm-f">' +
+              '<div class="fm-hint" style="margin:0;line-height:1.9;color:var(--text-dim)">' +
+              esc(ad ? ad.title : n.src || '—') +
+              (cut ? '　<span style="color:var(--text-faint)">' + esc(cut) + '</span>' : '') +
+              '</div></div></div>'
+          }
           var h =
+            anchorRow +
             '<div class="fm-row"><div class="fm-lb">类型</div><div class="fm-f"><div class="se" id="f-nk">' +
             '<span class="se-v"></span><span class="se-a">▾</span></div></div></div>' +
             '<div class="fm-row"><div class="fm-lb">英文</div><div class="fm-f"><input class="fm-in" id="f-en" value="' +
             esc(n.en) +
-            '" placeholder="单词 或 句子 / 模板正文" /></div></div>' +
+            '" placeholder="' +
+            esc(ph.en) +
+            '" /></div></div>' +
             '<div class="fm-row"><div class="fm-lb">音标</div><div class="fm-f"><input class="fm-in" id="f-phon" value="' +
             esc(n.phon) +
-            '" placeholder="仅单词需要，例如 /əˈbændən/" /></div></div>' +
-            '<div class="fm-row"><div class="fm-lb">释义 / 译文</div><div class="fm-f"><textarea class="fm-ta" id="f-zh" style="min-height:64px" placeholder="中文释义，或整句的翻译">' +
+            '" placeholder="' +
+            esc(ph.phon) +
+            '" /></div></div>' +
+            '<div class="fm-row"><div class="fm-lb">释义 / 译文</div><div class="fm-f"><textarea class="fm-ta" id="f-zh" style="min-height:64px" placeholder="' +
+            esc(ph.zh) +
+            '">' +
             esc(n.zh) +
             '</textarea></div></div>' +
             '<div class="fm-row"><div class="fm-lb">例句</div><div class="fm-f"><input class="fm-in" id="f-ex" value="' +
             esc(n.ex) +
-            '" placeholder="所在原句（导出到 English 会作为例句）" /></div></div>' +
+            '" placeholder="' +
+            esc(ph.ex) +
+            '" /></div></div>' +
             '<div class="fm-row"><div class="fm-lb">例句译文</div><div class="fm-f"><input class="fm-in" id="f-exzh" value="' +
             esc(n.exZh) +
+            '" placeholder="' +
+            esc(ph.exZh) +
             '" /></div></div>' +
-            '<div class="fm-row"><div class="fm-lb">备注</div><div class="fm-f"><textarea class="fm-ta" id="f-note" style="min-height:64px" placeholder="用法说明 / 语境 / 记忆点（导入 Corpus 时成为 notes）">' +
+            '<div class="fm-row"><div class="fm-lb">备注</div><div class="fm-f"><textarea class="fm-ta" id="f-note" style="min-height:64px" placeholder="' +
+            esc(ph.note) +
+            '">' +
             esc(n.note) +
             '</textarea></div></div>' +
             '<div class="fm-row"><div class="fm-lb">标签</div><div class="fm-f"><input class="fm-in" id="f-tags" value="' +
             esc((n.tags || []).join(', ')) +
-            '" placeholder="逗号分隔，例如：六级, 观点" /></div></div>' +
+            '" placeholder="' +
+            esc(ph.tags) +
+            '" /></div></div>' +
             '<div class="fm-foot">' +
-            (isNew ? '' : '<button type="button" class="fm-sub del" id="f-n-del">删除</button>') +
+            (isNew && !dupDraft
+              ? ''
+              : '<button type="button" class="fm-sub del" id="f-n-del">删除</button>') +
             '<button type="button" class="fm-sub ghost" id="f-n-cancel">取消</button>' +
             '<button type="button" class="fm-sub" id="f-n-ok">保存</button>' +
             '</div>' +
             '<input type="hidden" id="f-nid" value="' +
             n.id +
             '" />'
-          openModal(isNew ? '新建笔记' : '编辑笔记 · ' + NKL[n.kind], h, null)
-          selMount(el('f-nk'), kItems, n.kind, null)
+          openModal(
+            dupDraft
+              ? '更新笔记 · ' + NKL[n.kind]
+              : opts.draft
+                ? '收进笔记 · ' + NKL[n.kind]
+                : isNew
+                  ? '新建笔记'
+                  : '编辑笔记 · ' + NKL[n.kind],
+            h,
+            null,
+          )
+          // 切换类型时把占位提示一起换掉：单词↔句子的「释义」含义完全不同
+          selMount(el('f-nk'), kItems, n.kind, function (v) {
+            applyNotePh(v)
+          })
           el('f-n-cancel').addEventListener('click', closeModal)
-          if (!isNew)
+          if (!isNew || dupDraft)
             el('f-n-del').addEventListener('click', function () {
-              delNote(el('f-nid').value)
+              var id2 = el('f-nid').value
+              delNote(id2)
               closeModal()
               renderNoteList()
+              // 传原对象：删除后 P.notes 里已经没有它，但 start/end 还得用来重画阅读区
+              if (opts.after) opts.after(n)
               notify('笔记已删除')
             })
           el('f-n-ok').addEventListener('click', function () {
@@ -9039,7 +9376,28 @@
                 .filter(Boolean),
             }
             var t = noteOf(el('f-nid').value)
-            if (t) {
+            if (opts.draft && !t) {
+              // 草稿：到这一刻才真正登记
+              var dr = opts.draft
+              t = addNote(payload.kind, {
+                doc: dr.doc,
+                start: dr.start,
+                end: dr.end,
+                en: payload.en,
+                // 用户在弹窗里改过英文就别再按选区回退
+                enFixed: payload.en !== dr.en,
+                zh: payload.zh,
+                phon: payload.phon,
+                ex: payload.ex,
+                exZh: payload.exZh,
+                note: payload.note,
+                tags: payload.tags,
+                silent: true,
+              })
+              if (!t) return notify('没有可记录的文本')
+              // addNote 可能按类型重新收窄过 en，最后统一以弹窗里的为准
+              for (var k2 in payload) t[k2] = payload[k2]
+            } else if (t) {
               for (var kk in payload) t[kk] = payload[kk]
             } else {
               payload.id = uid('n')
@@ -9050,10 +9408,13 @@
               payload.end = -1
               payload.ts = nowStr()
               P.notes.unshift(payload)
+              t = payload
             }
             Store.save()
             closeModal()
             renderNoteList()
+            // 类型可能改了（单词→句子），阅读区那段的线型/颜色要跟着重画
+            if (opts.after) opts.after(t)
             notify('笔记已保存')
           })
         }
@@ -11307,6 +11668,7 @@
           el('sv-raill').textContent = S.railL ? '开' : '关'
           el('sv-railr').textContent = S.railR ? '开' : '关'
           el('sv-codemark').textContent = S.codeMark ? '开' : '关'
+          el('sv-notemark').textContent = S.noteMark === false ? '关' : '开'
           document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach(function (d) {
             d.classList.toggle('active', d.getAttribute('data-bg') === S.bg)
           })
@@ -11403,6 +11765,12 @@
           },
           settingsToggleCodeMark: function () {
             S.codeMark = !S.codeMark
+            Settings.apply()
+            Settings.save()
+            if (S.view === 'reader') renderReader()
+          },
+          settingsToggleNoteMark: function () {
+            S.noteMark = !S.noteMark
             Settings.apply()
             Settings.save()
             if (S.view === 'reader') renderReader()
@@ -11726,6 +12094,8 @@
             S.showNums = true
             S.showDef = true
             S.statusBar = true
+            S.codeMark = true
+            S.noteMark = true
             Settings.apply()
             Settings.save()
             renderPaper()
@@ -12155,6 +12525,13 @@
             } else if (annById(id)) {
               S.selAnn = id
               S.selMark = null
+            } else if (noteOf(id)) {
+              // 笔记没有详情面板，直接跳到「笔记」视图并点亮这一条
+              S.selMark = null
+              S.selAnn = null
+              syncMarkOn()
+              gotoNote(id)
+              return
             }
             // 版式模式的高亮色块与文本模式的 .mk 都要跟上选中态
             syncMarkOn()
@@ -12182,6 +12559,14 @@
               h = '<div><b>' + esc(c ? c.no + ' ' + c.name : '—') + '</b> · 编码片段</div>'
               if (c && c.def) h += '<div>' + esc(c.def) + '</div>'
               if (a.memo) h += '<div style="margin-top:4px">备注：' + esc(a.memo) + '</div>'
+            } else {
+              var nt = noteOf(mk.getAttribute('data-mk'))
+              if (nt) {
+                h = '<div><b>' + esc(NKL_NAME[nt.kind] || '笔记') + '</b> · 已收进笔记</div>'
+                if (nt.zh) h += '<div>' + esc(nt.zh) + '</div>'
+                if (nt.ex) h += '<div style="margin-top:4px">' + esc(nt.ex) + '</div>'
+                h += '<div style="margin-top:4px;color:var(--text-faint)">点击查看笔记</div>'
+              }
             }
             if (!h) return tip.style.setProperty('display', 'none')
             tip.innerHTML = h
@@ -12204,11 +12589,11 @@
               if (!pm) return hideMarkPop()
               var kd = nk.getAttribute('data-nk')
               hideMarkPop()
-              var note = addNote(kd, { start: pm.s, end: pm.e })
               try {
                 window.getSelection().removeAllRanges()
               } catch (err) {}
-              if (note) afterMarkChange(pm.s, pm.e)
+              // 只起草、不登记：弹窗里点「保存」才算数
+              openNoteDraft(kd, pm.s, pm.e)
               return
             }
             var st = e.target.closest('.mp-sty')
@@ -13161,6 +13546,7 @@
               libPromise = null
               no(new Error('Supabase SDK 加载失败，请检查网络'))
             }
+            CDNM.loadScriptInto(s, 'supabase')
             document.head.appendChild(s)
           })
           return libPromise
@@ -13186,8 +13572,6 @@
             ok = !!(c.url && c.key)
           syncPrefsUI()
           toggleCls('zp-config-panel', 'zp-cloud-hidden', ok)
-            }
-            CDNM.loadScriptInto(s, 'supabase')
           toggleCls('zp-auth-panel', 'zp-cloud-hidden', !ok)
           toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
           toggleCls('zp-sync-actions', 'zp-cloud-hidden', !session || !unlockPassword)
