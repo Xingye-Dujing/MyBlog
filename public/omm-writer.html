@@ -7,9 +7,19 @@
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
     <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
     <script src="cdn-mirrors.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" onerror="CDNM.scriptFallback(this,'html2canvas')"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" onerror="CDNM.scriptFallback(this,'jspdf251')"></script>
-    <script async src="https://cdn.jsdmirror.com/npm/mathjax@3/es5/tex-svg.js" onerror="CDNM.scriptFallback(this,'mathjax')"></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+      onerror="CDNM.scriptFallback(this, 'html2canvas')"
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+      onerror="CDNM.scriptFallback(this, 'jspdf251')"
+    ></script>
+    <script
+      async
+      src="https://cdn.jsdmirror.com/npm/mathjax@3/es5/tex-svg.js"
+      onerror="CDNM.scriptFallback(this, 'mathjax')"
+    ></script>
     <script>
       MathJax = {
         tex: {
@@ -33,10 +43,9 @@
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap"
-      onerror="CDNM.linkFallback(this,'fontLiterataSub')"
+      onerror="CDNM.linkFallback(this, 'fontLiterataSub')"
     />
     <style>
-
       /* ===== CSS Variables ===== */
       :root {
         --bg: #ffffff;
@@ -400,6 +409,116 @@
         font-family: var(--font-mono);
         cursor: default;
         gap: 8px;
+        border-radius: var(--radius);
+      }
+      /* ===== 多画布：文件列表 ===== */
+      #dd-docs {
+        min-width: 288px;
+        max-width: 380px;
+      }
+      #doc-list:empty {
+        display: none;
+      }
+      .doc-list-scroll {
+        max-height: 46vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .doc-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px 6px 10px;
+        margin-bottom: 2px;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        transition: all 0.12s;
+      }
+      .doc-item:hover {
+        background: var(--hover);
+      }
+      .doc-item.active {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .doc-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        cursor: pointer;
+      }
+      .doc-name {
+        font-size: 12px;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        letter-spacing: 0.4px;
+      }
+      .doc-item:not(.active) .doc-name {
+        color: var(--text-dim);
+      }
+      .doc-meta {
+        margin-top: 2px;
+        font-size: 9.5px;
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .doc-ops {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex: 0 0 auto;
+        opacity: 0;
+        transition: opacity 0.12s;
+      }
+      .doc-item:hover .doc-ops,
+      .doc-item.active .doc-ops {
+        opacity: 1;
+      }
+      .doc-op {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        line-height: 1;
+        cursor: pointer;
+        color: var(--text-faint);
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+        background: transparent;
+        user-select: none;
+      }
+      .doc-op:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .doc-op.danger:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+      .doc-empty {
+        padding: 12px 10px;
+        font-size: 11px;
+        color: var(--text-faint);
+        letter-spacing: 1px;
+        text-align: center;
+      }
+      .doc-rename-input {
+        width: 100%;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.4px;
+        color: var(--text);
+        background: transparent;
+        border: 1px solid var(--border);
+        outline: none;
+        padding: 2px 4px;
         border-radius: var(--radius);
       }
       .dd-item-row:hover {
@@ -2085,6 +2204,7 @@
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.file">文件</span>
+        <div class="menu-btn" data-action="showDocs" data-i18n="menu.docs"></div>
         <div class="menu-btn" data-action="save" data-i18n="menu.save"></div>
         <div class="menu-btn" data-action="load" data-i18n="menu.open"></div>
         <div class="menu-btn" data-action="showExport" data-i18n="menu.export"></div>
@@ -2164,6 +2284,22 @@
       </div>
     </div>
 
+    <!-- ===== Canvases (multi-document manager) ===== -->
+    <div class="dropdown" id="dd-docs" data-docs-dropdown>
+      <div class="dd-label" data-i18n="docs.label">Canvases</div>
+      <div id="doc-list"></div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-action="docNew">
+        <span data-i18n="docs.new">New Canvas</span><span class="hint">+</span>
+      </div>
+      <div class="dd-item" data-action="docImport">
+        <span data-i18n="docs.import">Import File</span><span class="hint">.zc / .json</span>
+      </div>
+      <div class="dd-item" data-action="docExportAll">
+        <span data-i18n="docs.exportAll">Export All Canvases</span><span class="hint">.zwlib</span>
+      </div>
+    </div>
+
     <div class="dropdown" id="dd-export">
       <div class="dd-label" data-i18n="dd.export.label">Export Format</div>
       <div class="dd-item" data-action="exportTxt">
@@ -2178,7 +2314,13 @@
       <div class="dd-item" data-action="exportJson">
         <span data-i18n="dd.export.json">JSON</span> <span class="hint">.json</span>
       </div>
+      <div class="dd-item" data-action="exportZc">
+        <span data-i18n="dd.export.zc">Canvas (current)</span> <span class="hint">.zc</span>
+      </div>
       <div class="dd-divider"></div>
+      <div class="dd-item" data-action="exportPng">
+        <span data-i18n="dd.export.png">PNG</span> <span class="hint">.png</span>
+      </div>
       <div class="dd-item" data-action="exportPdf">
         <span data-i18n="dd.export.pdf">PDF</span> <span class="hint">.pdf</span>
       </div>
@@ -2804,7 +2946,10 @@ notify pgrst, 'reload schema';</textarea
     <!-- ===== Status Bar ===== -->
     <div id="status-bar">
       <span id="stat-left" data-i18n="status.ready">Ready</span>
-      <span id="stat-right">ZenWriter</span>
+      <span style="display: flex; align-items: center; gap: 10px">
+        <span id="stat-doc" title=""></span>
+        <span id="stat-right">ZenWriter</span>
+      </span>
     </div>
 
     <!-- ===== Notification ===== -->
@@ -2839,7 +2984,7 @@ notify pgrst, 'reload schema';</textarea
     </div>
 
     <!-- ===== File Input ===== -->
-    <input type="file" id="file-input" accept=".zc,.txt,.json" style="display: none" />
+    <input type="file" id="file-input" accept=".zc,.zwlib,.json,.txt" style="display: none" />
 
     <!-- ============================================================ -->
     <!-- JavaScript -->
@@ -2889,6 +3034,23 @@ notify pgrst, 'reload schema';</textarea
             'menu.todo': 'TODO',
             'menu.group': 'GROUP',
             'menu.save': 'SAVE',
+            'menu.docs': 'CANVASES',
+            'dd.export.zc': 'Canvas File',
+            'docs.label': 'Canvases',
+            'docs.new': 'New Canvas',
+            'docs.import': 'Import File',
+            'docs.exportAll': 'Export All Canvases',
+            'docs.empty': 'no canvas',
+            'docs.meta': '{0} node{1} · {2}',
+            'docs.defaultName': 'Untitled',
+            'docs.rename': 'Rename',
+            'docs.duplicate': 'Duplicate',
+            'docs.delete': 'Delete',
+            'notify.docCreated': 'Created: {0}',
+            'notify.docDuplicated': 'Canvas duplicated',
+            'notify.docDeleted': 'Deleted: {0}',
+            'notify.docDeleteConfirm': 'Delete canvas "{0}"? This cannot be undone.',
+            'notify.docKeepOne': 'At least one canvas must remain',
             'menu.open': 'OPEN',
             'menu.export': 'EXPORT',
             'menu.mode': 'MODE',
@@ -3047,6 +3209,23 @@ notify pgrst, 'reload schema';</textarea
             'menu.todo': '待办',
             'menu.group': '分组',
             'menu.save': '保存',
+            'menu.docs': '画布',
+            'dd.export.zc': '画布文件',
+            'docs.label': '画布列表',
+            'docs.new': '新建画布',
+            'docs.import': '导入文件',
+            'docs.exportAll': '导出全部画布',
+            'docs.empty': '暂无画布',
+            'docs.meta': '{0} 个节点 · {2}',
+            'docs.defaultName': '未命名',
+            'docs.rename': '重命名',
+            'docs.duplicate': '复制副本',
+            'docs.delete': '删除',
+            'notify.docCreated': '已新建：{0}',
+            'notify.docDuplicated': '已复制画布',
+            'notify.docDeleted': '已删除：{0}',
+            'notify.docDeleteConfirm': '确定删除画布「{0}」吗？此操作不可撤销。',
+            'notify.docKeepOne': '至少需要保留一个画布',
             'menu.open': '打开',
             'menu.export': '导出',
             'menu.mode': '模式',
@@ -3229,6 +3408,7 @@ notify pgrst, 'reload schema';</textarea
           portDrag: null,
           tempLine: null,
           autoSaveTimer: null,
+          wheelSaveTimer: null,
           notifyTimer: null,
           confirmResolve: null,
           isPanning: false,
@@ -3258,6 +3438,9 @@ notify pgrst, 'reload schema';</textarea
           },
           get statusRight() {
             return document.getElementById('stat-right')
+          },
+          get statDoc() {
+            return document.getElementById('stat-doc')
           },
           get notification() {
             return document.getElementById('notification')
@@ -3393,6 +3576,7 @@ notify pgrst, 'reload schema';</textarea
             UIManager.updateThemeBtn()
             NodeManager.refreshPlaceholders()
             UIManager.updateStats()
+            UIManager.renderDocList()
             if (window.ZWCloudSync && typeof window.ZWCloudSync.refreshI18n === 'function') {
               window.ZWCloudSync.refreshI18n()
             }
@@ -3548,6 +3732,39 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         // 7. UI MANAGER
         // ================================================================
+        function makeDocOp(action, docId, glyph, title, danger) {
+          const b = document.createElement('button')
+          b.type = 'button'
+          b.className = 'doc-op' + (danger ? ' danger' : '')
+          b.dataset.action = action
+          b.dataset.docId = docId
+          b.textContent = glyph
+          b.title = title
+          b.setAttribute('aria-label', title)
+          return b
+        }
+
+        function formatStamp(ts) {
+          if (!ts) return '--'
+          try {
+            const d = new Date(ts)
+            const p = (n) => String(n).padStart(2, '0')
+            return (
+              d.getFullYear() +
+              '-' +
+              p(d.getMonth() + 1) +
+              '-' +
+              p(d.getDate()) +
+              ' ' +
+              p(d.getHours()) +
+              ':' +
+              p(d.getMinutes())
+            )
+          } catch (_) {
+            return '--'
+          }
+        }
+
         const UIManager = {
           updateThemeBtn() {
             // theme now managed in settings panel
@@ -3643,6 +3860,61 @@ notify pgrst, 'reload schema';</textarea
               AppState.connections.length,
               AppState.connections.length === 1 ? '' : 's',
             )
+            if (DOM.statDoc) {
+              const name = DocManager.activeName()
+              DOM.statDoc.textContent = name
+              DOM.statDoc.title = name
+            }
+          },
+          renderDocList() {
+            const box = document.getElementById('doc-list')
+            if (!box) return
+            const items = DocManager.list()
+            if (!items.length) {
+              box.innerHTML = '<div class="doc-empty">' + escapeHtml(t('docs.empty')) + '</div>'
+              return
+            }
+            const frag = document.createDocumentFragment()
+            const scroll = document.createElement('div')
+            scroll.className = 'doc-list-scroll'
+            items.forEach((d) => {
+              const row = document.createElement('div')
+              row.className = 'doc-item' + (d.active ? ' active' : '')
+              row.dataset.docId = d.id
+
+              const main = document.createElement('div')
+              main.className = 'doc-main'
+              main.dataset.action = 'docOpen'
+              main.dataset.docId = d.id
+              main.title = d.name
+
+              const nameEl = document.createElement('div')
+              nameEl.className = 'doc-name'
+              nameEl.textContent = d.name
+              const metaEl = document.createElement('div')
+              metaEl.className = 'doc-meta'
+              metaEl.textContent = t(
+                'docs.meta',
+                d.nodes,
+                d.nodes === 1 ? '' : 's',
+                formatStamp(d.updatedAt),
+              )
+              main.appendChild(nameEl)
+              main.appendChild(metaEl)
+              row.appendChild(main)
+
+              const ops = document.createElement('div')
+              ops.className = 'doc-ops'
+              ops.appendChild(makeDocOp('docRename', d.id, '✎', t('docs.rename')))
+              ops.appendChild(makeDocOp('docDuplicate', d.id, '⧉', t('docs.duplicate')))
+              ops.appendChild(makeDocOp('docDelete', d.id, '×', t('docs.delete'), true))
+              row.appendChild(ops)
+
+              scroll.appendChild(row)
+            })
+            frag.appendChild(scroll)
+            box.innerHTML = ''
+            box.appendChild(frag)
           },
           notify(msg) {
             const n = DOM.notification
@@ -5006,21 +5278,35 @@ notify pgrst, 'reload schema';</textarea
                   return
                 }
                 e.preventDefault()
-                const delta = e.deltaY > 0 ? -0.08 : 0.08
-                const newScale = Math.min(
-                  CONFIG.MAX_SCALE,
-                  Math.max(CONFIG.MIN_SCALE, AppState.scale + delta),
-                )
-                const rect = workspace.getBoundingClientRect()
-                const mx = e.clientX - rect.left,
-                  my = e.clientY - rect.top
-                const cx = (mx - AppState.panX) / AppState.scale,
-                  cy = (my - AppState.panY) / AppState.scale
-                AppState.scale = newScale
-                AppState.panX = mx - cx * AppState.scale
-                AppState.panY = my - cy * AppState.scale
-                CanvasManager.applyTransform()
-                Settings.save()
+                // 触控板 / 鼠标手势分工：
+                //   ctrlKey = true  → 双指捏合（pinch）→ 以指针为中心缩放
+                //   ctrlKey = false → 双指滑动 / 滚轮      → 平移画布
+                const unitScale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1
+                if (e.ctrlKey) {
+                  const raw = e.deltaY * unitScale
+                  const factor = Math.exp(-raw * 0.0022)
+                  const newScale = Math.min(
+                    CONFIG.MAX_SCALE,
+                    Math.max(CONFIG.MIN_SCALE, AppState.scale * factor),
+                  )
+                  if (newScale !== AppState.scale) {
+                    const rect = workspace.getBoundingClientRect()
+                    const mx = e.clientX - rect.left,
+                      my = e.clientY - rect.top
+                    const cx = (mx - AppState.panX) / AppState.scale,
+                      cy = (my - AppState.panY) / AppState.scale
+                    AppState.scale = newScale
+                    AppState.panX = mx - cx * AppState.scale
+                    AppState.panY = my - cy * AppState.scale
+                    CanvasManager.applyTransform()
+                  }
+                } else {
+                  AppState.panX -= e.deltaX * unitScale
+                  AppState.panY -= e.deltaY * unitScale
+                  CanvasManager.applyTransform()
+                }
+                clearTimeout(AppState.wheelSaveTimer)
+                AppState.wheelSaveTimer = setTimeout(() => Settings.save(), 160)
               },
               { passive: false },
             )
@@ -5386,6 +5672,21 @@ notify pgrst, 'reload schema';</textarea
               content = JSON.stringify(data, null, 2)
               filename = 'zencanvas.json'
               mime = 'application/json'
+            } else if (fmt === 'zc') {
+              // 完整画布文件（含坐标/尺寸/连线），可再次导入
+              const canvas = buildCanvasData()
+              const name = DocManager.activeName()
+              const payload = {
+                format: 'zenwriter-canvas',
+                v: 2,
+                name: name,
+                exportedAt: Date.now(),
+                nodes: canvas.nodes,
+                connections: canvas.connections,
+              }
+              content = JSON.stringify(payload, null, 2)
+              filename = safeFileName(name) + '-' + Date.now() + '.zc'
+              mime = 'application/json'
             }
             const blob = new Blob([content], { type: mime })
             const a = document.createElement('a')
@@ -5541,6 +5842,18 @@ notify pgrst, 'reload schema';</textarea
         function persistCanvasData() {
           clearTimeout(AppState.autoSaveTimer)
           const data = buildCanvasData()
+          // 主存储：当前画布自己的槽位 + 索引
+          try {
+            if (DocManager.activeId()) {
+              DocManager.saveCurrent(data)
+            } else {
+              DocManager.createDoc()
+              DocManager.saveCurrent(data)
+            }
+          } catch (e) {
+            console.warn('[ZenWriter] canvas persist failed', e)
+          }
+          // 兼容镜像：旧键保留，云同步降级路径仍能读到
           try {
             localStorage.setItem('zc-autosave', JSON.stringify(data))
             localStorage.setItem('zc-connections', JSON.stringify(data.connections))
@@ -5597,50 +5910,15 @@ notify pgrst, 'reload schema';</textarea
         // 16. FILE OPERATIONS
         // ================================================================
         function saveDocument() {
-          const data = {
-            nodes: [],
-            connections: AppState.connections.map((c) => ({
-              from: c.from,
-              to: c.to,
-              fromPort: c.fromPort,
-              toPort: c.toPort,
-            })),
+          const data = buildCanvasData()
+          const name = DocManager.activeName()
+          const payload = {
+            name: name,
+            updatedAt: Date.now(),
+            nodes: data.nodes,
+            connections: data.connections,
           }
-          getNodes().forEach((node) => {
-            const type = node.dataset.type
-            const content = getNodeContent(node)
-            const title = getTitleText(node)
-            const obj = {
-              type,
-              x: node.style.left,
-              y: node.style.top,
-              w: node.style.width,
-              h: node.style.height,
-              title: title.trim(),
-              id: node.id,
-              locked: node.classList.contains('locked'),
-              minimized: node.classList.contains('minimized'),
-              collapsed: node.dataset.groupCollapsed === 'true' || undefined,
-              fontSize: content ? content.dataset.fontSize || '' : '',
-            }
-            if (type === 'text' || type === 'todo' || type === 'group') {
-              obj.content = content ? content.innerHTML : ''
-              obj.lh = content ? content.style.lineHeight : ''
-            } else if (type === 'image') {
-              const img = content ? content.querySelector('img') : null
-              obj.src = img ? img.src : ''
-            } else if (type === 'markdown') {
-              obj.source = content ? content.dataset.source : ''
-            } else if (type === 'math') {
-              obj.source = content ? content.dataset.source : ''
-            }
-            data.nodes.push(obj)
-          })
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(blob)
-          a.download = 'zencanvas-' + Date.now() + '.zc'
-          a.click()
+          downloadJSON(payload, safeFileName(name) + '.zc')
           notify(t('notify.saved'))
         }
 
@@ -5675,6 +5953,482 @@ notify pgrst, 'reload schema';</textarea
           ConnectionManager.renderAll()
         }
 
+        function startDocRename(docId) {
+          const row = document.querySelector('.doc-item[data-doc-id="' + cssEscape(docId) + '"]')
+          if (!row) return
+          const main = row.querySelector('.doc-main')
+          if (!main || row.querySelector('.doc-rename-input')) return
+          const idx = DocManager.readIndex()
+          const current =
+            (idx && idx.meta[docId] && idx.meta[docId].name) || DocManager.activeName()
+          main.innerHTML = ''
+          const input = document.createElement('input')
+          input.type = 'text'
+          input.className = 'doc-rename-input'
+          input.value = current
+          input.maxLength = 80
+          main.appendChild(input)
+          input.focus()
+          input.select()
+          let done = false
+          const commit = (save) => {
+            if (done) return
+            done = true
+            const v = save ? input.value.trim() : current
+            DocManager.rename(docId, v)
+            UIManager.renderDocList()
+            UIManager.updateStats()
+          }
+          input.addEventListener('click', (ev) => ev.stopPropagation())
+          input.addEventListener('keydown', (ev) => {
+            ev.stopPropagation()
+            if (ev.key === 'Enter') {
+              ev.preventDefault()
+              commit(true)
+            } else if (ev.key === 'Escape') {
+              ev.preventDefault()
+              commit(false)
+            }
+          })
+          input.addEventListener('blur', () => commit(true))
+        }
+
+        function cssEscape(s) {
+          return String(s).replace(/["\\\\]/g, '\\\\$&')
+        }
+
+        function downloadJSON(obj, filename) {
+          const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          a.click()
+          setTimeout(() => URL.revokeObjectURL(url), 1000)
+        }
+
+        function safeFileName(name) {
+          const s = String(name || 'canvas')
+            .replace(/[\\/:*?"<>|]+/g, '_')
+            .replace(/\s+/g, '-')
+            .slice(0, 60)
+          return s || 'canvas'
+        }
+
+        // ================================================================
+        // 16.1 DOC MANAGER — 多画布（文档）管理
+        //
+        // 存储结构：
+        //   zc-docs            -> { v, activeId, order:[id], meta:{id:{name,createdAt,updatedAt,nodes}} }
+        //   zc-doc:<id>        -> { name, updatedAt, view:{panX,panY,scale}, nodes:[], connections:[] }
+        //
+        // 兼容：升级后若发现旧键 zc-autosave，会自动迁移成一个默认画布。
+        // ================================================================
+        const DOCS_KEY = 'zc-docs'
+        const DOC_PREFIX = 'zc-doc:'
+
+        const DocManager = {
+          readIndex() {
+            try {
+              const raw = localStorage.getItem(DOCS_KEY)
+              if (!raw) return null
+              const p = JSON.parse(raw)
+              if (!p || !Array.isArray(p.order)) return null
+              if (!p.meta || typeof p.meta !== 'object') p.meta = {}
+              p.order = p.order.filter((id) => typeof id === 'string')
+              if (!p.order.length) return null
+              if (!p.activeId || p.order.indexOf(p.activeId) < 0) p.activeId = p.order[0]
+              return p
+            } catch (_) {
+              return null
+            }
+          },
+          writeIndex(p) {
+            try {
+              localStorage.setItem(DOCS_KEY, JSON.stringify(p))
+            } catch (_) {
+              try {
+                notify(t('notify.storageFull'))
+              } catch (__) {
+                console.warn('[ZenWriter] docs index write failed')
+              }
+            }
+          },
+          docKey(id) {
+            return DOC_PREFIX + id
+          },
+          readDoc(id) {
+            try {
+              const raw = localStorage.getItem(DOC_PREFIX + id)
+              if (!raw) return null
+              const d = JSON.parse(raw)
+              if (!d || !Array.isArray(d.nodes)) return null
+              if (!Array.isArray(d.connections)) d.connections = []
+              return d
+            } catch (_) {
+              return null
+            }
+          },
+          writeDoc(id, doc) {
+            try {
+              localStorage.setItem(DOC_PREFIX + id, JSON.stringify(doc))
+              return true
+            } catch (_) {
+              try {
+                notify(t('notify.storageFull'))
+              } catch (__) {
+                console.warn('[ZenWriter] doc write failed')
+              }
+              return false
+            }
+          },
+          newId() {
+            let n = 1
+            const idx = DocManager.readIndex()
+            if (idx) n = idx.order.length + 1
+            let id = 'doc-' + Date.now().toString(36)
+            let guard = 0
+            while (localStorage.getItem(DOC_PREFIX + id) && guard++ < 50) {
+              id = 'doc-' + Date.now().toString(36) + '-' + n++
+            }
+            return id
+          },
+          defaultName() {
+            return t('docs.defaultName')
+          },
+          uniqueName(base) {
+            const idx = DocManager.readIndex()
+            const names = new Set()
+            if (idx) idx.order.forEach((id) => names.add((idx.meta[id] || {}).name))
+            if (!names.has(base)) return base
+            let i = 2
+            while (names.has(base + ' ' + i)) i++
+            return base + ' ' + i
+          },
+          activeId() {
+            const idx = DocManager.readIndex()
+            return idx ? idx.activeId : null
+          },
+          activeName() {
+            const idx = DocManager.readIndex()
+            if (!idx) return DocManager.defaultName()
+            const m = idx.meta[idx.activeId]
+            return (m && m.name) || DocManager.defaultName()
+          },
+          list() {
+            const idx = DocManager.readIndex()
+            if (!idx) return []
+            return idx.order.map((id) => {
+              const m = idx.meta[id] || {}
+              return {
+                id: id,
+                name: m.name || DocManager.defaultName(),
+                updatedAt: m.updatedAt || 0,
+                createdAt: m.createdAt || m.updatedAt || 0,
+                nodes: m.nodes || 0,
+                active: id === idx.activeId,
+              }
+            })
+          },
+          // 保证索引里至少有一个画布，并完成旧数据迁移
+          bootstrap() {
+            let idx = DocManager.readIndex()
+            if (idx) return idx
+            idx = { v: 2, activeId: null, order: [], meta: {} }
+            const now = Date.now()
+            // 迁移旧的单画布数据
+            let legacy = null
+            try {
+              const raw = localStorage.getItem('zc-autosave')
+              if (raw) legacy = JSON.parse(raw)
+            } catch (_) {}
+            if (legacy && Array.isArray(legacy.nodes)) {
+              let conns = Array.isArray(legacy.connections) ? legacy.connections : []
+              try {
+                const c = localStorage.getItem('zc-connections')
+                if (c) {
+                  const parsed = JSON.parse(c)
+                  if (Array.isArray(parsed) && parsed.length) conns = parsed
+                }
+              } catch (_) {}
+              const id = 'doc-migrated'
+              DocManager.writeDoc(id, {
+                name: t('docs.defaultName'),
+                createdAt: now,
+                updatedAt: now,
+                view: null,
+                nodes: legacy.nodes,
+                connections: conns,
+              })
+              idx.order.push(id)
+              idx.activeId = id
+              idx.meta[id] = {
+                name: t('docs.defaultName'),
+                createdAt: now,
+                updatedAt: now,
+                nodes: legacy.nodes.length,
+              }
+            } else {
+              DocManager.createDoc()
+              return DocManager.readIndex()
+            }
+            DocManager.writeIndex(idx)
+            return idx
+          },
+          // 保存当前画布到它自己的存储槽（不切画布）
+          saveCurrent(data) {
+            const idx = DocManager.readIndex()
+            if (!idx) return
+            const id = idx.activeId
+            const prev = DocManager.readDoc(id)
+            const now = Date.now()
+            DocManager.writeDoc(id, {
+              name: (idx.meta[id] || {}).name || DocManager.defaultName(),
+              createdAt: (idx.meta[id] || {}).createdAt || prev?.createdAt || now,
+              updatedAt: now,
+              view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
+              nodes: data.nodes,
+              connections: data.connections,
+            })
+            idx.meta[id] = {
+              name: (idx.meta[id] || {}).name || DocManager.defaultName(),
+              createdAt: (idx.meta[id] || {}).createdAt || now,
+              updatedAt: now,
+              nodes: data.nodes.length,
+            }
+            DocManager.writeIndex(idx)
+          },
+          createDoc(rawData) {
+            const idx = DocManager.readIndex() || { v: 2, activeId: null, order: [], meta: {} }
+            const now = Date.now()
+            const id = DocManager.newId()
+            const data = rawData || { nodes: [], connections: [] }
+            const base = (data && data.name) || DocManager.defaultName()
+            const name = DocManager.uniqueName(base)
+            DocManager.writeDoc(id, {
+              name: name,
+              createdAt: now,
+              updatedAt: now,
+              view: null,
+              nodes: Array.isArray(data.nodes) ? data.nodes : [],
+              connections: Array.isArray(data.connections) ? data.connections : [],
+            })
+            if (idx.order.indexOf(id) < 0) idx.order.push(id)
+            idx.meta[id] = {
+              name: name,
+              createdAt: now,
+              updatedAt: now,
+              nodes: (data.nodes || []).length,
+            }
+            DocManager.writeIndex(idx)
+            return id
+          },
+          // 把某个画布渲染到 DOM，并设为当前画布
+          open(id) {
+            const idx = DocManager.readIndex()
+            if (!idx || idx.order.indexOf(id) < 0) return false
+            // 先把正在编辑的画布落盘，避免丢改动
+            if (idx.activeId !== id) {
+              try {
+                DocManager.saveCurrent(buildCanvasData())
+              } catch (_) {}
+            }
+            const doc = DocManager.readDoc(id)
+            if (!doc) {
+              notify(t('notify.invalidFile'))
+              return false
+            }
+            // 清场
+            getNodes().forEach((n) => n.remove())
+            AppState.connections = []
+            AppState.connIdCounter = 0
+            AppState.nodeCounter = 0
+            AppState.selectedConnId = null
+            ;(doc.nodes || []).forEach((n) => {
+              NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
+            })
+            AppState.connections = (doc.connections || []).map((c) => ({
+              ...c,
+              fromPort: c.fromPort || 'bottom',
+              toPort: c.toPort || 'top',
+              id: 'conn-' + ++AppState.connIdCounter,
+            }))
+
+            idx.activeId = id
+            DocManager.writeIndex(idx)
+
+            // 恢复该画布的视图
+            if (doc.view) {
+              AppState.panX = doc.view.panX || 0
+              AppState.panY = doc.view.panY || 0
+              AppState.scale = doc.view.scale || 1
+              CanvasManager.applyTransform()
+            } else {
+              CanvasManager.resetToInitialWorld()
+            }
+
+            setTimeout(() => {
+              ConnectionManager.renderAll()
+              restoreCollapsedStates()
+              UIManager.updateStats()
+              UIManager.applyNodeBg()
+            }, 220)
+
+            UIManager.renderDocList()
+            UIManager.updateStats()
+            Settings.save()
+            return true
+          },
+          rename(id, name) {
+            const idx = DocManager.readIndex()
+            if (!idx || idx.order.indexOf(id) < 0) return false
+            const clean = String(name || '').trim() || DocManager.defaultName()
+            idx.meta[id] = Object.assign({}, idx.meta[id], { name: clean })
+            DocManager.writeIndex(idx)
+            const doc = DocManager.readDoc(id)
+            if (doc) {
+              doc.name = clean
+              DocManager.writeDoc(id, doc)
+            }
+            UIManager.renderDocList()
+            return true
+          },
+          remove(id) {
+            const idx = DocManager.readIndex()
+            if (!idx || idx.order.indexOf(id) < 0) return false
+            const wasActive = idx.activeId === id
+            const pos = idx.order.indexOf(id)
+            idx.order = idx.order.filter((x) => x !== id)
+            delete idx.meta[id]
+            try {
+              localStorage.removeItem(DOC_PREFIX + id)
+            } catch (_) {}
+            if (!idx.order.length) {
+              DocManager.writeIndex(idx)
+              return DocManager.open(DocManager.createDoc())
+            }
+            if (wasActive) {
+              const nextId = idx.order[Math.min(pos, idx.order.length - 1)]
+              // 先把 activeId 切过去，避免 open() 又把已删除的画布存回来
+              idx.activeId = nextId
+              DocManager.writeIndex(idx)
+              return DocManager.open(nextId)
+            }
+            DocManager.writeIndex(idx)
+            UIManager.renderDocList()
+            return true
+          },
+          async deleteDocFlow(id) {
+            const list = DocManager.list()
+            const target = list.find((d) => d.id === id)
+            if (!target) return
+            if (list.length <= 1) {
+              notify(t('notify.docKeepOne'))
+              return
+            }
+            const ok = await showConfirm(t('notify.docDeleteConfirm', target.name))
+            if (!ok) {
+              closeAllDropdowns()
+              return
+            }
+            DocManager.remove(id)
+            closeAllDropdowns()
+            notify(t('notify.docDeleted', target.name))
+          },
+          duplicate(id) {
+            const idx = DocManager.readIndex()
+            if (!idx || idx.order.indexOf(id) < 0) return false
+            const doc = DocManager.readDoc(id)
+            if (!doc) return false
+            const name = DocManager.uniqueName(doc.name + ' copy')
+            const newId = DocManager.createDoc({
+              name: name,
+              nodes: doc.nodes,
+              connections: doc.connections,
+            })
+            DocManager.open(newId)
+            return true
+          },
+          // 导出全部画布成一个 .zwlib 包
+          exportAll() {
+            const idx = DocManager.readIndex()
+            if (!idx) return
+            try {
+              DocManager.saveCurrent(buildCanvasData())
+            } catch (_) {}
+            const fresh = DocManager.readIndex() || idx
+            const docs = {}
+            fresh.order.forEach((id) => {
+              const d = DocManager.readDoc(id)
+              if (d) docs[id] = d
+            })
+            const payload = {
+              format: 'zenwriter-library',
+              v: 2,
+              exportedAt: Date.now(),
+              activeId: fresh.activeId,
+              order: fresh.order,
+              meta: fresh.meta,
+              docs: docs,
+            }
+            downloadJSON(payload, 'zenwriter-' + Date.now() + '.zwlib')
+            notify(t('notify.exportedFormat', 'ZWLIB'))
+          },
+          // 从 JSON 对象导入：单画布 -> 新建画布；.zwlib -> 合并全部画布
+          importObject(obj, fileName) {
+            if (!obj || typeof obj !== 'object') return 0
+            // 整包
+            if (obj.format === 'zenwriter-library' && obj.docs && typeof obj.docs === 'object') {
+              let added = 0
+              let firstNewId = null
+              const idx = DocManager.readIndex() || { v: 2, activeId: null, order: [], meta: {} }
+              Object.keys(obj.docs).forEach((srcId) => {
+                const src = obj.docs[srcId]
+                if (!src || !Array.isArray(src.nodes)) return
+                const baseName = (src.name || (srcId || 'canvas') + '').trim() || 'canvas'
+                const name = DocManager.uniqueName(baseName)
+                const id = DocManager.newId()
+                const now = Date.now()
+                DocManager.writeDoc(id, {
+                  name: name,
+                  createdAt: now,
+                  updatedAt: now,
+                  view: null,
+                  nodes: src.nodes,
+                  connections: Array.isArray(src.connections) ? src.connections : [],
+                })
+                idx.order.push(id)
+                idx.meta[id] = {
+                  name: name,
+                  createdAt: now,
+                  updatedAt: now,
+                  nodes: src.nodes.length,
+                }
+                added++
+                if (!firstNewId) firstNewId = id
+              })
+              DocManager.writeIndex(idx)
+              if (firstNewId) DocManager.open(firstNewId)
+              return added
+            }
+            // 单画布（.zc / 旧导出）
+            if (Array.isArray(obj.nodes)) {
+              const baseName = (obj.name || fileName || '').replace(
+                /\.(zc|json|zwlib|txt|md)$/i,
+                '',
+              )
+              const id = DocManager.createDoc({
+                name: (baseName || '').trim() || DocManager.defaultName(),
+                nodes: obj.nodes,
+                connections: Array.isArray(obj.connections) ? obj.connections : [],
+              })
+              DocManager.open(id)
+              return 1
+            }
+            return 0
+          },
+        }
+
         function handleFileLoad(e) {
           const file = e.target.files[0]
           if (!file) return
@@ -5682,24 +6436,12 @@ notify pgrst, 'reload schema';</textarea
           reader.onload = (ev) => {
             try {
               const data = JSON.parse(ev.target.result)
-              if (data.nodes) {
-                getNodes().forEach((n) => n.remove())
-                AppState.connections = []
-                AppState.connIdCounter = 0
-                try {
-                  localStorage.setItem('zc-autosave', JSON.stringify(data))
-                  if (data.connections) {
-                    localStorage.setItem('zc-connections', JSON.stringify(data.connections))
-                  }
-                } catch (_) {
-                  try {
-                    notify(t('notify.storageFull'))
-                  } catch (__) {
-                    console.warn('[ZenWriter] import write failed')
-                  }
-                  return
-                }
-                location.reload()
+              const n = DocManager.importObject(data, file.name)
+              if (n > 0) {
+                notify(t('notify.loadedNodes', n))
+                closeAllDropdowns()
+              } else {
+                notify(t('notify.invalidFile'))
               }
             } catch (_) {
               notify(t('notify.invalidFile'))
@@ -5743,6 +6485,53 @@ notify pgrst, 'reload schema';</textarea
               case 'newGroup':
                 NodeManager.createCenteredNode('group')
                 break
+              case 'showDocs':
+                showDropdown('dd-docs', target)
+                UIManager.renderDocList()
+                break
+              case 'docNew':
+                closeAllDropdowns()
+                try {
+                  persistCanvasData()
+                } catch (_) {}
+                DocManager.open(DocManager.createDoc())
+                notify(t('notify.docCreated', DocManager.activeName()))
+                break
+              case 'docImport':
+                closeAllDropdowns()
+                loadDocument()
+                break
+              case 'docExportAll':
+                closeAllDropdowns()
+                DocManager.exportAll()
+                break
+              case 'docOpen': {
+                const openId = target.dataset.docId
+                if (openId) DocManager.open(openId)
+                closeAllDropdowns()
+                break
+              }
+              case 'docRename': {
+                e.stopPropagation()
+                const rid = target.dataset.docId
+                if (rid) startDocRename(rid)
+                break
+              }
+              case 'docDuplicate': {
+                e.stopPropagation()
+                const did = target.dataset.docId
+                if (did) {
+                  DocManager.duplicate(did)
+                  notify(t('notify.docDuplicated'))
+                }
+                break
+              }
+              case 'docDelete': {
+                e.stopPropagation()
+                const xid = target.dataset.docId
+                if (xid) DocManager.deleteDocFlow(xid)
+                break
+              }
               case 'save':
                 saveDocument()
                 break
@@ -5870,6 +6659,9 @@ notify pgrst, 'reload schema';</textarea
                 break
               case 'exportJson':
                 Exporter.exportAs('json')
+                break
+              case 'exportZc':
+                Exporter.exportAs('zc')
                 break
               case 'exportPdf':
                 Exporter.exportPDF()
@@ -6534,39 +7326,20 @@ notify pgrst, 'reload schema';</textarea
           Settings.load()
           Settings.apply()
 
-          // Restore connections
-          let savedConns = null
+          // 多画布：保证至少存在一个画布并完成旧数据迁移
           try {
-            savedConns = localStorage.getItem('zc-connections')
-          } catch (_) {
-            savedConns = null
-          }
-          if (savedConns) {
-            try {
-              const data = JSON.parse(savedConns)
-              if (Array.isArray(data)) {
-                AppState.connections = data.map((c) => ({
-                  ...c,
-                  fromPort: c.fromPort || 'bottom',
-                  toPort: c.toPort || 'top',
-                  id: 'conn-' + ++AppState.connIdCounter,
-                }))
-              }
-            } catch (_) {}
+            DocManager.bootstrap()
+          } catch (e) {
+            console.warn('[ZenWriter] docs bootstrap failed', e)
           }
 
-          // Restore autosave
-          let autosave = null
-          try {
-            autosave = localStorage.getItem('zc-autosave')
-          } catch (_) {
-            autosave = null
-          }
-          if (autosave) {
-            try {
-              const data = JSON.parse(autosave)
-              if (data.nodes && data.nodes.length) {
-                data.nodes.forEach((n) => {
+          // 打开当前画布
+          const activeId = DocManager.activeId()
+          if (activeId) {
+            const doc = DocManager.readDoc(activeId)
+            if (doc) {
+              try {
+                ;(doc.nodes || []).forEach((n) => {
                   NodeManager.createNodeAt(
                     parseFloat(n.x) || 100,
                     parseFloat(n.y) || 100,
@@ -6574,20 +7347,22 @@ notify pgrst, 'reload schema';</textarea
                     n,
                   )
                 })
-                if (data.connections) {
-                  AppState.connections = data.connections.map((c) => ({
-                    ...c,
-                    fromPort: c.fromPort || 'bottom',
-                    toPort: c.toPort || 'top',
-                    id: 'conn-' + ++AppState.connIdCounter,
-                  }))
+                AppState.connections = (doc.connections || []).map((c) => ({
+                  ...c,
+                  fromPort: c.fromPort || 'bottom',
+                  toPort: c.toPort || 'top',
+                  id: 'conn-' + ++AppState.connIdCounter,
+                }))
+                if (doc.view) {
+                  AppState.panX = doc.view.panX || 0
+                  AppState.panY = doc.view.panY || 0
+                  AppState.scale = doc.view.scale || 1
+                  CanvasManager.applyTransform()
                 }
-                setTimeout(() => {
-                  ConnectionManager.renderAll()
-                  restoreCollapsedStates()
-                }, 250)
+              } catch (e) {
+                console.warn('[ZenWriter] active doc load failed', e)
               }
-            } catch (_) {}
+            }
           }
 
           CanvasManager.initPanZoom()
@@ -6597,11 +7372,15 @@ notify pgrst, 'reload schema';</textarea
 
           setTimeout(() => {
             ConnectionManager.renderAll()
+            restoreCollapsedStates()
             UIManager.updateStats()
             UIManager.applyNodeBg()
+            UIManager.renderDocList()
           }, 200)
 
-          console.log('ZenWriter initialized (optimized).')
+          console.log('ZenWriter initialized (multi-document).')
+          console.log('Active canvas:', DocManager.activeName())
+          console.log('Canvas count:', DocManager.list().length)
           console.log('Connections:', AppState.connections.length)
           console.log('Nodes:', getNodes().length)
         }
@@ -6609,16 +7388,17 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         // 21. START
         // ================================================================
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', init)
-        } else {
+        let __zwInitDone = false
+        function bootOnce() {
+          if (__zwInitDone) return
+          __zwInitDone = true
           init()
         }
 
         if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', init)
+          document.addEventListener('DOMContentLoaded', bootOnce)
         } else {
-          init()
+          bootOnce()
         }
 
         window.ZCCloudStore = {
@@ -6649,11 +7429,44 @@ notify pgrst, 'reload schema';</textarea
             try {
               localStorage.setItem('zc-settings', JSON.stringify(settings))
             } catch (_) {}
+
+            // 云同步载荷：整库多画布
+            const idx = DocManager.readIndex() || { v: 2, activeId: null, order: [], meta: {} }
+            const docs = {}
+            idx.order.forEach((id) => {
+              const d = DocManager.readDoc(id)
+              if (d) docs[id] = d
+            })
+            if (!Object.keys(docs).length) {
+              // 极端兜底：至少带上当前 DOM
+              docs[idx.activeId || 'doc-live'] = {
+                name: DocManager.activeName(),
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
+                nodes: data.nodes || [],
+                connections: data.connections || [],
+              }
+              return {
+                nodes: data.nodes || [],
+                connections: data.connections || [],
+                settings: settings,
+              }
+            }
             return {
-              nodes: data.nodes || [],
-              connections: data.connections || [],
+              format: 'zenwriter-library',
+              v: 2,
+              activeId: idx.activeId,
+              order: idx.order,
+              meta: idx.meta,
+              docs: docs,
               settings: settings,
             }
+          },
+          // 云端数据落盘后，把当前画布重新载入 DOM（无 location.reload）
+          reload() {
+            const id = DocManager.activeId()
+            if (id) DocManager.open(id)
           },
         }
       })()
@@ -6830,10 +7643,20 @@ notify pgrst, 'reload schema';</textarea
               '|' +
               (lsGet('zc-connections') || '') +
               '|' +
-              (lsGet('zc-settings') || '')
+              (lsGet('zc-settings') || '') +
+              '|' +
+              (lsGet('zc-docs') || '')
+            // 多画布：把所有画布槽位也算进指纹，否则新建/删除/重命名画布不会被感知
+            var keys = []
+            for (var i = 0; i < localStorage.length; i++) {
+              var k = localStorage.key(i)
+              if (k && k.indexOf('zc-doc:') === 0) keys.push(k)
+            }
+            keys.sort()
+            for (var j = 0; j < keys.length; j++) s += '|' + lsGet(keys[j])
           } catch (_) {}
           var h = 5381
-          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+          for (var m = 0; m < s.length; m++) h = ((h << 5) + h + s.charCodeAt(m)) | 0
           return s.length + ':' + h
         }
         function stopWatcher() {
@@ -7215,12 +8038,13 @@ notify pgrst, 'reload schema';</textarea
               return window.ZCCloudStore.snapshot()
             } catch (_) {}
           }
-          var autosave = lsGet('zc-autosave'),
+          var legacy = lsGet('zc-autosave'),
             connections = lsGet('zc-connections'),
-            settings = lsGet('zc-settings')
+            settings = lsGet('zc-settings'),
+            docsIndex = lsGet('zc-docs')
           var d = { nodes: [], connections: [], settings: {} }
           try {
-            if (autosave) d = JSON.parse(autosave) || d
+            if (legacy) d = JSON.parse(legacy) || d
           } catch (_) {}
           if (!Array.isArray(d.nodes)) d.nodes = []
           try {
@@ -7231,6 +8055,34 @@ notify pgrst, 'reload schema';</textarea
             if (settings) d.settings = JSON.parse(settings) || {}
           } catch (_) {
             d.settings = {}
+          }
+          // 优先走多画布结构；缺省时回退为单画布，兼容旧版
+          if (docsIndex) {
+            try {
+              var idx = JSON.parse(docsIndex)
+              if (idx && Array.isArray(idx.order) && idx.order.length) {
+                var docs = {}
+                idx.order.forEach(function (id) {
+                  var raw = lsGet('zc-doc:' + id)
+                  if (!raw) return
+                  try {
+                    var one = JSON.parse(raw)
+                    if (one && Array.isArray(one.nodes)) docs[id] = one
+                  } catch (_) {}
+                })
+                if (Object.keys(docs).length) {
+                  return {
+                    format: 'zenwriter-library',
+                    v: 2,
+                    activeId: idx.activeId,
+                    order: idx.order,
+                    meta: idx.meta || {},
+                    docs: docs,
+                    settings: d.settings,
+                  }
+                }
+              }
+            } catch (_) {}
           }
           if (!d.nodes.length && !d.connections.length && !Object.keys(d.settings || {}).length)
             throw new Error(tr('sync.noLocalData'))
@@ -7391,16 +8243,73 @@ notify pgrst, 'reload schema';</textarea
         function writeLocal(d) {
           try {
             var copy = JSON.parse(JSON.stringify(d || {})),
-              settings = copy.settings && typeof copy.settings === 'object' ? copy.settings : {},
-              connections = Array.isArray(copy.connections) ? copy.connections : []
+              settings = copy.settings && typeof copy.settings === 'object' ? copy.settings : {}
             delete copy.settings
-            if (!lsSet('zc-autosave', JSON.stringify(copy)))
+
+            var fail = function () {
               throw new Error(tr('sync.localWriteFailed'))
-            if (!lsSet('zc-connections', JSON.stringify(connections)))
-              throw new Error(tr('sync.localWriteFailed'))
+            }
+
+            // ---- 多画布包 ----
+            if (copy.format === 'zenwriter-library' && copy.docs && typeof copy.docs === 'object') {
+              var order = Array.isArray(copy.order)
+                ? copy.order.filter(function (id) {
+                    return copy.docs[id]
+                  })
+                : []
+              if (!order.length) fail()
+
+              // 清理本机已不存在于云端的画布，避免残留孤儿数据
+              try {
+                var oldIdx = JSON.parse(lsGet('zc-docs') || 'null')
+                if (oldIdx && Array.isArray(oldIdx.order)) {
+                  oldIdx.order.forEach(function (id) {
+                    if (order.indexOf(id) < 0) lsDel('zc-doc:' + id)
+                  })
+                }
+              } catch (_) {}
+
+              order.forEach(function (id) {
+                if (!lsSet('zc-doc:' + id, JSON.stringify(copy.docs[id]))) fail()
+              })
+              if (
+                !lsSet(
+                  'zc-docs',
+                  JSON.stringify({
+                    v: 2,
+                    activeId:
+                      copy.activeId && order.indexOf(copy.activeId) >= 0 ? copy.activeId : order[0],
+                    order: order,
+                    meta: copy.meta && typeof copy.meta === 'object' ? copy.meta : {},
+                  }),
+                )
+              )
+                fail()
+
+              // 兼容镜像：当前画布同时写回旧键
+              var active = copy.activeId && copy.docs[copy.activeId] ? copy.activeId : order[0]
+              var activeDoc = copy.docs[active] || { nodes: [], connections: [] }
+              var mirror = {
+                nodes: activeDoc.nodes || [],
+                connections: activeDoc.connections || [],
+              }
+              lsSet('zc-autosave', JSON.stringify(mirror))
+              lsSet('zc-connections', JSON.stringify(mirror.connections || []))
+
+              if (Object.keys(settings).length && !lsSet('zc-settings', JSON.stringify(settings)))
+                fail()
+              mark(now())
+              return
+            }
+
+            // ---- 旧版单画布结构（保持兼容） ----
+            var connections = Array.isArray(copy.connections) ? copy.connections : []
+            if (!Array.isArray(copy.nodes)) copy.nodes = []
+            if (!lsSet('zc-autosave', JSON.stringify(copy))) fail()
+            if (!lsSet('zc-connections', JSON.stringify(connections))) fail()
 
             if (Object.keys(settings).length && !lsSet('zc-settings', JSON.stringify(settings)))
-              throw new Error(tr('sync.localWriteFailed'))
+              fail()
             mark(now())
           } catch (e) {
             if (e && e.message === tr('sync.localWriteFailed')) throw e
