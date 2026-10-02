@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>临时记录</title>
-    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <title>所思所想</title>
+    <link rel="icon" href="/icon-writer.ico" type="image/x-icon" />
     <!-- 第三方 CDN 多源回退：主源失败自动换源，镜像表见 cdn-mirrors.js -->
     <script src="cdn-mirrors.js"></script>
     <script
@@ -617,7 +617,192 @@
         border-radius: var(--radius);
       }
 
-      /* ===== 搜索（大纲顶部） ===== */
+      /* ===== 图片节点编辑器 =====
+         两种图片来源：
+           url   —— 远程地址（原来的行为）
+           link  —— 链接本机文件：图片字节存在 IndexedDB 资产库里，
+                    节点只留一个短引用。画布文件保持很小，
+                    本机磁盘上的原图应用既不会改也不会删。
+           embed —— 嵌入源图片内容：把字节转成 data URL 直接存进节点，
+                    跟着 .zc 导出 / 导入 / 云同步一起走，自包含。
+                    代价是体积（base64 再 +33%），所以有上限。 */
+      .img-editor {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        width: 100%;
+        height: 100%;
+        padding: 12px 14px;
+        overflow-y: auto;
+        cursor: default;
+        text-align: left;
+        box-sizing: border-box;
+      }
+      .ie-tabs {
+        display: flex;
+        gap: 2px;
+        flex: 0 0 auto;
+      }
+      .ie-tab {
+        padding: 3px 9px;
+        font-size: 9px;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        background: transparent;
+        border-radius: var(--radius);
+      }
+      .ie-tab:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .ie-tab.active {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .ie-label {
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        font-family: var(--font-mono);
+        flex: 0 0 auto;
+      }
+      .ie-input,
+      .ie-file {
+        width: 100%;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 5px 7px;
+        outline: none;
+        box-sizing: border-box;
+        border-radius: var(--radius);
+      }
+      .ie-input:focus,
+      .ie-file:focus {
+        border-color: var(--text);
+      }
+      .ie-input::placeholder {
+        color: var(--text-faint);
+      }
+      .ie-input[type='file'] {
+        padding: 4px;
+        font-size: 10px;
+        cursor: pointer;
+      }
+      .ie-input[type='file']::file-selector-button {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        padding: 3px 8px;
+        margin-right: 7px;
+        cursor: pointer;
+        border-radius: var(--radius);
+      }
+      .ie-input[type='file']::file-selector-button:hover {
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .ie-modes {
+        display: flex;
+        gap: 4px;
+        flex: 0 0 auto;
+      }
+      .ie-mode {
+        flex: 1 1 0;
+        min-width: 0;
+        border: 1px solid var(--border-dim);
+        padding: 6px 8px;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        background: transparent;
+        text-align: left;
+        border-radius: var(--radius);
+      }
+      .ie-mode:hover {
+        border-color: var(--border);
+      }
+      .ie-mode.active {
+        border-color: var(--text);
+        background: var(--hover);
+      }
+      .ie-mode-name {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 0.8px;
+        color: var(--text);
+      }
+      .ie-mode-note {
+        display: block;
+        margin-top: 2px;
+        font-size: 8.5px;
+        line-height: 1.5;
+        color: var(--text-faint);
+        letter-spacing: 0.3px;
+      }
+      .ie-hint {
+        font-size: 9.5px;
+        line-height: 1.6;
+        color: var(--text-faint);
+        flex: 0 0 auto;
+        overflow-wrap: anywhere;
+      }
+      .ie-hint.warn {
+        color: var(--accent-red);
+      }
+      .ie-actions {
+        display: flex;
+        gap: 6px;
+        flex: 0 0 auto;
+        margin-top: auto;
+      }
+      .ie-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 5px 8px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: var(--radius);
+      }
+      .ie-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .ie-btn.primary {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .ie-btn.danger:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+      .img-meta {
+        display: block;
+        font-size: 9px;
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        padding-top: 5px;
+        word-break: break-all;
+      }
+
+      /* ===== Search (outline top) ===== */
       .ol-search {
         display: flex;
         align-items: center;
@@ -2016,6 +2201,80 @@
         background: transparent;
       }
 
+      /* Guard dialog（是否保存 / 二次确认） */
+      #guard-dialog {
+        position: fixed;
+        inset: 0;
+        z-index: 10050;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      #guard-dialog.active {
+        display: flex;
+      }
+      .guard-box {
+        max-width: 440px;
+      }
+      .guard-title {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        letter-spacing: 1px;
+        color: var(--text);
+        margin-bottom: 14px;
+        text-align: center;
+      }
+      .guard-box .msg {
+        margin-bottom: 22px;
+      }
+      .guard-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .guard-actions button {
+        flex: 1 1 auto;
+        min-width: 96px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        padding: 8px 16px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        cursor: pointer;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+      }
+      .guard-actions button:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .guard-actions button.primary {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .guard-actions button.primary:hover {
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .guard-actions button.danger:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+        background: transparent;
+      }
+      .guard-actions button.gbtn-hidden {
+        display: none;
+      }
+      /* 第二段：强调这一步不可逆 */
+      #guard-dialog.step2 .guard-title {
+        color: var(--accent-red);
+      }
+
       /* Export overlay */
       #export-overlay {
         position: fixed;
@@ -2950,6 +3209,10 @@
         <span data-i18n="dd.settings.statusBar">Status Bar</span
         ><span class="hint" id="sv-status-bar"></span>
       </div>
+      <div class="dd-item" data-action="settingsToggleExitGuard">
+        <span data-i18n="dd.settings.exitGuard">Ask Before Leaving</span
+        ><span class="hint" id="sv-exit-guard"></span>
+      </div>
       <div class="dd-item" data-action="settingsToggleLang">
         <span data-i18n="dd.settings.lang">Language</span><span class="hint" id="sv-lang"></span>
       </div>
@@ -3464,6 +3727,26 @@ notify pgrst, 'reload schema';</textarea
       </div>
     </div>
 
+    <!-- ===== Guard: 是否保存 / 二次确认 =====
+         应用内「离开当前画布」的统一拦截。
+         第一段问是否保存；点「否」再弹第二段确认是否真的要放弃改动。 -->
+    <div id="guard-dialog" aria-hidden="true" inert>
+      <div
+        class="confirm-box guard-box"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guard-title"
+      >
+        <div class="guard-title" id="guard-title">Save before leaving?</div>
+        <div class="msg" id="guard-msg"></div>
+        <div class="guard-actions">
+          <button id="guard-primary" class="primary">Save</button>
+          <button id="guard-no" class="danger">No</button>
+          <button id="guard-cancel" class="guard-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== Export Overlay ===== -->
     <div id="export-overlay">
       <div class="spinner"></div>
@@ -3501,8 +3784,12 @@ notify pgrst, 'reload schema';</textarea
           PAN_THRESHOLD: 5,
           MIN_SCALE: 0.2,
           MAX_SCALE: 3.0,
-          AUTO_SAVE_DELAY: 800,
+          AUTO_SAVE_DELAY: 300,
           NOTIFY_DURATION: 1600,
+          // 图片：嵌入模式会把 base64 塞进节点，跟着画布进 localStorage /
+          // .zc 文件 / 云同步载荷。超出这个体积就明确拦下来，别把存储撑爆。
+          IMAGE_EMBED_MAX: 1024 * 1024,
+          IMAGE_EMBED_WARN: 300 * 1024,
           PORT_HIT_RADIUS: 400,
           INITIAL_WORLD_X: 0,
           INITIAL_WORLD_Y: 0,
@@ -3633,6 +3920,7 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.layout': 'Layout',
             'dd.settings.menuPinned': 'Pin Menu',
             'dd.settings.statusBar': 'Status Bar',
+            'dd.settings.exitGuard': 'Ask Before Leaving',
             'dd.settings.lang': 'Language',
             'dd.settings.resetStyles': 'Reset Styles',
             'dd.settings.shortcuts': 'Shortcuts',
@@ -3678,9 +3966,46 @@ notify pgrst, 'reload schema';</textarea
             'confirm.purgeAll': 'Purge all nodes and connections?',
             'confirm.cancel': 'Cancel',
             'confirm.purge': 'Purge',
+            'guard.title': 'Save before leaving?',
+            'guard.message':
+              'Save the current changes to local storage before leaving this canvas?',
+            'guard.save': 'Save',
+            'guard.no': 'No',
+            'guard.cancel': 'Cancel',
+            'guard.discardTitle': 'Leave without saving?',
+            'guard.discardMessage': 'Anything not written yet will be lost. This cannot be undone.',
+            'guard.discardConfirm': 'Discard and leave',
             'placeholder.startTyping': 'start typing…',
             'placeholder.imageUrl': 'double-click to set image URL',
             'placeholder.imageUrlInput': 'image URL…',
+            'placeholder.imageMissing': 'local image not found',
+            'img.tabUrl': 'URL',
+            'img.tabLocal': 'Local',
+            'img.urlLabel': 'Image URL',
+            'img.modeLabel': 'Source',
+            'img.fileLabel': 'Pick a local image',
+            'img.modeLink': 'Link local',
+            'img.modeLinkNote':
+              'Kept in this browser. The file on disk is never touched or deleted.',
+            'img.modeEmbed': 'Embed source',
+            'img.modeEmbedNote': 'Copied into the canvas. Travels with .zc and sync.',
+            'img.linkHint':
+              'The image is copied into this browser and referenced by id. The file on disk is left untouched, so nothing gets deleted. It will not travel with a .zc export.',
+            'img.embedHint':
+              'The image content is copied into the canvas, so it travels with .zc export, import and cloud sync. Base64 adds about 33% to the size.',
+            'img.linkUnavailable': 'local storage unavailable in this browser',
+            'img.tooBig': 'too large to embed',
+            'img.bigWarn': 'large, the canvas file will grow',
+            'img.apply': 'Apply',
+            'img.clear': 'Remove image',
+            'img.cancel': 'Cancel',
+            'img.tagLink': 'LINKED LOCAL',
+            'img.tagEmbed': 'EMBEDDED',
+            'notify.imageTooBig': 'Image is {0}; embedding is capped at {1}',
+            'notify.imageEmbedBig': 'Embedded {0}. The canvas file and sync payload will grow',
+            'notify.imageReadFailed': 'Could not read that file',
+            'notify.assetStoreUnavailable':
+              'Local asset storage is unavailable here; use Embed instead',
             'placeholder.markdownEdit': 'double-click to edit Markdown',
             'placeholder.mathEdit': 'double-click to edit LaTeX',
             'notify.nodeBgOn': 'Node background: ON',
@@ -3704,6 +4029,8 @@ notify pgrst, 'reload schema';</textarea
             'notify.saved': 'Saved',
             'notify.loadedNodes': 'Loaded {0} nodes',
             'notify.invalidFile': 'Invalid file',
+            'notify.nodeBuildFailed': 'Could not build a {0} node ({1}); it was skipped',
+            'notify.danglingConns': '{0} connection(s) pointed at missing nodes and were skipped',
             'notify.exportedFormat': 'Exported {0}',
             'notify.pdfExported': 'PDF exported',
             'notify.pdfExportFailed': 'PDF export failed: {0}',
@@ -3712,6 +4039,8 @@ notify pgrst, 'reload schema';</textarea
             'notify.allCleared': 'All cleared',
             'notify.stylesReset': 'Styles reset',
             'notify.storageFull': 'Browser storage is full. Changes were not saved',
+            'notify.storageWriteFailed': 'Could not write to local storage',
+            'notify.storageMigrated': 'Migrated {0} canvas(es) to IndexedDB. No size limit now',
             'stats.text': '{0} node{1} · {2} conn{3}',
             on: 'ON',
             off: 'OFF',
@@ -3829,6 +4158,7 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.layout': '布局',
             'dd.settings.menuPinned': '固定菜单',
             'dd.settings.statusBar': '状态栏',
+            'dd.settings.exitGuard': '退出前确认',
             'dd.settings.lang': '语言',
             'dd.settings.resetStyles': '重置样式',
             'dd.settings.shortcuts': '快捷键',
@@ -3874,9 +4204,43 @@ notify pgrst, 'reload schema';</textarea
             'confirm.purgeAll': '确定要清空所有节点和连线吗？',
             'confirm.cancel': '取消',
             'confirm.purge': '清空',
+            'guard.title': '是否保存？',
+            'guard.message': '离开这张画布前，要把当前改动保存到本地吗？',
+            'guard.save': '保存',
+            'guard.no': '否',
+            'guard.cancel': '取消',
+            'guard.discardTitle': '不保存就离开？',
+            'guard.discardMessage': '还没写入的内容会丢失，且无法恢复。',
+            'guard.discardConfirm': '放弃并离开',
             'placeholder.startTyping': '开始输入…',
             'placeholder.imageUrl': '双击设置图片链接',
             'placeholder.imageUrlInput': '图片链接…',
+            'placeholder.imageMissing': '本地图片已找不到',
+            'img.tabUrl': '链接地址',
+            'img.tabLocal': '本机文件',
+            'img.urlLabel': '图片地址',
+            'img.modeLabel': '图片来源',
+            'img.fileLabel': '选择本地图片',
+            'img.modeLink': '链接本机',
+            'img.modeLinkNote': '只在本浏览器保存。磁盘上的原图不会被改动或删除。',
+            'img.modeEmbed': '嵌入源图片内容',
+            'img.modeEmbedNote': '把图片内容复制进画布，跟着 .zc 和同步一起走。',
+            'img.linkHint':
+              '图片会复制一份到本浏览器，节点里只留一个引用。磁盘上的原图保持不动，应用不会删它。这个引用不会跟着 .zc 导出走。',
+            'img.embedHint':
+              '把图片内容直接存进画布，所以 .zc 导出/导入、云同步都会带上它。base64 会让体积大约增加 33%。',
+            'img.linkUnavailable': '此浏览器无法使用本地存储',
+            'img.tooBig': '超出可嵌入上限',
+            'img.bigWarn': '偏大，画布文件会明显变大',
+            'img.apply': '确定',
+            'img.clear': '清除图片',
+            'img.cancel': '取消',
+            'img.tagLink': '链接本机',
+            'img.tagEmbed': '已嵌入',
+            'notify.imageTooBig': '图片 {0}，超出可嵌入上限 {1}',
+            'notify.imageEmbedBig': '已嵌入 {0}，画布文件和同步数据会变大',
+            'notify.imageReadFailed': '无法读取该文件',
+            'notify.assetStoreUnavailable': '此环境无法使用本地存储，请改用「嵌入」模式',
             'placeholder.markdownEdit': '双击编辑 Markdown',
             'placeholder.mathEdit': '双击编辑 LaTeX 公式',
             'notify.nodeBgOn': '节点背景：开',
@@ -3904,6 +4268,8 @@ notify pgrst, 'reload schema';</textarea
             'notify.saved': '已保存',
             'notify.loadedNodes': '已加载 {0} 个节点',
             'notify.invalidFile': '文件无效',
+            'notify.nodeBuildFailed': '有个 {0} 节点（{1}）无法创建，已跳过',
+            'notify.danglingConns': '{0} 条连线指向不存在的节点，已跳过',
             'notify.exportedFormat': '已导出 {0}',
             'notify.pdfExported': 'PDF 已导出',
             'notify.pdfExportFailed': 'PDF 导出失败：{0}',
@@ -3912,6 +4278,8 @@ notify pgrst, 'reload schema';</textarea
             'notify.allCleared': '已全部清空',
             'notify.stylesReset': '样式已重置',
             'notify.storageFull': '浏览器存储空间已满，改动未能保存',
+            'notify.storageWriteFailed': '写入本地存储失败',
+            'notify.storageMigrated': '已把 {0} 张画布迁移到 IndexedDB，不再有体积上限',
             'stats.text': '{0} 个节点 · {2} 条连接',
           },
         }
@@ -3937,6 +4305,7 @@ notify pgrst, 'reload schema';</textarea
           connWidth: 2,
           statusBarVisible: true,
           outlineOpen: false,
+          exitGuard: true,
           zCounter: 10,
           nodeCounter: 0,
           scale: 1,
@@ -3967,6 +4336,8 @@ notify pgrst, 'reload schema';</textarea
           currentSelectionContainer: null,
           renderPending: false,
           portDragPending: false,
+          switchingCanvas: false,
+          switchPromise: null,
         }
 
         const DOM = {
@@ -4152,8 +4523,11 @@ notify pgrst, 'reload schema';</textarea
         // 6. SETTINGS
         // ================================================================
         const Settings = {
-          save() {
-            const data = {
+          _writeTimer: null,
+          _writing: false,
+
+          collect() {
+            return {
               theme: AppState.theme,
               bg: AppState.bg,
               titleFontSize: AppState.titleFontSize,
@@ -4171,62 +4545,86 @@ notify pgrst, 'reload schema';</textarea
               connWidth: AppState.connWidth,
               statusBarVisible: AppState.statusBarVisible,
               outlineOpen: AppState.outlineOpen,
+              exitGuard: AppState.exitGuard,
               panX: AppState.panX,
               panY: AppState.panY,
               scale: AppState.scale,
               lang: AppState.lang,
             }
+          },
+
+          // 主存储写 IndexedDB。同时把 zc-settings 这个几百字节的镜像
+          // 留在 LocalStorage —— 云同步模块要靠它读语言，
+          // 体量小到不占配额，纯当跨模块的读取通道用。
+          async _write() {
+            const data = Settings.collect()
+            try {
+              await ZWStore.writeSettings(data)
+            } catch (e) {
+              console.warn('[ZenWriter] settings write to IndexedDB failed', e)
+              notify(t('notify.storageWriteFailed'))
+            }
             try {
               localStorage.setItem('zc-settings', JSON.stringify(data))
             } catch (_) {
-              try {
-                notify(t('notify.storageFull'))
-              } catch (__) {
-                console.warn('[ZenWriter] settings write failed')
-              }
+              // 只是镜像，失败无所谓
             }
           },
-          load() {
-            let saved = null
+
+          // 拖动画布/滚轮缩放会高频触发，合并成一次写
+          save(immediate) {
+            clearTimeout(Settings._writeTimer)
+            if (immediate) return Settings._write()
+            Settings._writeTimer = setTimeout(() => {
+              Settings._write()
+            }, 400)
+            return Promise.resolve()
+          },
+
+          async load() {
+            let parsed = null
             try {
-              saved = localStorage.getItem('zc-settings')
-            } catch (_) {
-              saved = null
+              parsed = await ZWStore.readSettings()
+            } catch (e) {
+              console.warn('[ZenWriter] settings read from IndexedDB failed', e)
             }
-            if (!saved) {
+            if (!parsed) {
+              // IndexedDB 里还没有 -> 退回 LocalStorage（首次迁移前的那一瞬）
+              try {
+                const raw = localStorage.getItem('zc-settings')
+                if (raw) parsed = JSON.parse(raw)
+              } catch (_) {}
+            }
+            if (!parsed) {
               requestAnimationFrame(() => CanvasManager.resetToInitialWorld())
               return
             }
-            try {
-              const parsed = JSON.parse(saved)
-              const keys = [
-                'theme',
-                'bg',
-                'menuPinned',
-                'focusMode',
-                'readingMode',
-                'fullDisplay',
-                'nodeBgVisible',
-                'titleFontSize',
-                'contentFontSize',
-                'contentLineHeight',
-                'nodeBorderRadius',
-                'portSize',
-                'portColor',
-                'connColor',
-                'connWidth',
-                'statusBarVisible',
-                'outlineOpen',
-                'panX',
-                'panY',
-                'scale',
-                'lang',
-              ]
-              for (const k of keys) {
-                if (parsed[k] !== undefined) AppState[k] = parsed[k]
-              }
-            } catch (_) {
-              /* ignore */
+            const keys = [
+              'theme',
+              'bg',
+              'menuPinned',
+              'focusMode',
+              'readingMode',
+              'fullDisplay',
+              'nodeBgVisible',
+              'titleFontSize',
+              'contentFontSize',
+              'contentLineHeight',
+              'nodeBorderRadius',
+              'portSize',
+              'portColor',
+              'connColor',
+              'connWidth',
+              'statusBarVisible',
+              'outlineOpen',
+              'exitGuard',
+              'panX',
+              'panY',
+              'scale',
+              'lang',
+            ]
+            for (const k of keys) {
+              if (parsed[k] !== undefined) AppState[k] = parsed[k]
             }
           },
           apply() {
@@ -4518,6 +4916,9 @@ notify pgrst, 'reload schema';</textarea
             document.getElementById('sv-status-bar').textContent = AppState.statusBarVisible
               ? t('on')
               : t('off')
+            document.getElementById('sv-exit-guard').textContent = AppState.exitGuard
+              ? t('on')
+              : t('off')
             document.getElementById('sv-node-bg').textContent = AppState.nodeBgVisible
               ? t('on')
               : t('off')
@@ -4587,7 +4988,12 @@ notify pgrst, 'reload schema';</textarea
           toggleSettingsStatusBar() {
             AppState.statusBarVisible = !AppState.statusBarVisible
             UIManager.applyStatusBar()
-            Settings.save()
+            Settings.save(true)
+            UIManager.updateSettingsUI()
+          },
+          toggleSettingsExitGuard() {
+            AppState.exitGuard = !AppState.exitGuard
+            Settings.save(true)
             UIManager.updateSettingsUI()
           },
           toggleSettingsNodeBg() {
@@ -4682,6 +5088,1030 @@ notify pgrst, 'reload schema';</textarea
         const showConfirm = UIManager.showConfirm
 
         // ================================================================
+        // 8.4 ZW STORE — 主存储（IndexedDB）
+        //
+        // 为什么换掉 LocalStorage：
+        //   LocalStorage 每个源只有 5MB（Safari 甚至约 1MB），而且写满了
+        //   直接抛 QuotaExceededError，不是覆盖旧值而是整次写入失败。
+        //   画布内容是长期累积的，5MB 很快就到，那时连节点位置、连线都存不住。
+        //   IndexedDB 是二进制存储，Chrome/Firefox 给到磁盘的 60%（几百 GB），
+        //   实际上等于没有上限。
+        //
+        // 分工：
+        //   IndexedDB（主）   画布正文、画布索引、样式设置
+        //   localStorage      只剩两样极小的：zc-settings 镜像（给云同步模块
+        //                     读语言用）+ 云同步自己的 Supabase 配置。
+        //   zc-docs / zc-doc:* / zc-autosave / zc-connections
+        //                     迁移后只读不写，原样留着当一次性备份。
+        //
+        // 注意 assets 表没有并进这个库，而是留在 zc-assets（AssetStore）。
+        // 上一轮已经写进去的图片资产不做搬迁，避免任何损坏风险。
+        // ================================================================
+        const ZWStore = {
+          DB: 'zenwriter',
+          VER: 1,
+          S: { settings: 'settings', index: 'index', docs: 'docs' },
+          _db: null,
+          _failed: false,
+          _ready: null,
+          _index: null, // 索引的小副本放在内存，让 activeName()/list() 保持同步
+
+          available() {
+            return !this._failed && typeof indexedDB !== 'undefined'
+          },
+
+          open() {
+            if (this._db) return Promise.resolve(this._db)
+            if (!this.available()) return Promise.reject(new Error('indexedDB unavailable'))
+            if (this._ready) return this._ready
+            this._ready = new Promise((resolve, reject) => {
+              let req
+              try {
+                req = indexedDB.open(this.DB, this.VER)
+              } catch (e) {
+                this._failed = true
+                this._ready = null
+                reject(e)
+                return
+              }
+              req.onupgradeneeded = () => {
+                const db = req.result
+                if (!db.objectStoreNames.contains(this.S.settings)) {
+                  db.createObjectStore(this.S.settings)
+                }
+                if (!db.objectStoreNames.contains(this.S.index)) {
+                  db.createObjectStore(this.S.index)
+                }
+                if (!db.objectStoreNames.contains(this.S.docs)) {
+                  db.createObjectStore(this.S.docs)
+                }
+              }
+              req.onsuccess = () => {
+                this._db = req.result
+                resolve(req.result)
+              }
+              req.onerror = () => {
+                this._failed = true
+                this._ready = null
+                reject(req.error || new Error('indexedDB open failed'))
+              }
+              req.onblocked = () => {
+                console.warn('[ZenWriter] another tab is holding an older DB version')
+              }
+            })
+            return this._ready
+          },
+
+          _run(storeName, mode, fn) {
+            return this.open().then(
+              (db) =>
+                new Promise((resolve, reject) => {
+                  let tx
+                  try {
+                    tx = db.transaction(storeName, mode)
+                  } catch (e) {
+                    reject(e)
+                    return
+                  }
+                  let out
+                  tx.oncomplete = () => resolve(out)
+                  tx.onerror = () => reject(tx.error || new Error('tx failed'))
+                  tx.onabort = () => reject(tx.error || new Error('tx aborted'))
+                  try {
+                    out = fn(tx.objectStore(storeName), tx)
+                  } catch (e) {
+                    try {
+                      tx.abort()
+                    } catch (_) {}
+                    reject(e)
+                  }
+                }),
+            )
+          },
+
+          // ---- 设置 ----
+          async readSettings() {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.settings, 'readonly')
+              const r = tx.objectStore(this.S.settings).get('settings')
+              r.onsuccess = () => resolve(r.result || null)
+              r.onerror = () => reject(r.error)
+            })
+          },
+          async writeSettings(obj) {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.settings, 'readwrite')
+              tx.objectStore(this.S.settings).put(obj, 'settings')
+              tx.oncomplete = () => resolve(true)
+              tx.onerror = () => reject(tx.error)
+              tx.onabort = () => reject(tx.error || new Error('aborted'))
+            })
+          },
+
+          // ---- 索引 ----
+          async readIndex() {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.index, 'readonly')
+              const r = tx.objectStore(this.S.index).get('index')
+              r.onsuccess = () => resolve(r.result || null)
+              r.onerror = () => reject(r.error)
+            })
+          },
+          async writeIndex(idx) {
+            if (idx) this._index = idx
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.index, 'readwrite')
+              tx.objectStore(this.S.index).put(idx, 'index')
+              tx.oncomplete = () => resolve(true)
+              tx.onerror = () => reject(tx.error)
+              tx.onabort = () => reject(tx.error || new Error('aborted'))
+            })
+          },
+
+          // ---- 画布正文 ----
+          async readDoc(id) {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.docs, 'readonly')
+              const r = tx.objectStore(this.S.docs).get(id)
+              r.onsuccess = () => resolve(r.result || null)
+              r.onerror = () => reject(r.error)
+            })
+          },
+          async writeDoc(id, doc) {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.docs, 'readwrite')
+              tx.objectStore(this.S.docs).put(doc, id)
+              tx.oncomplete = () => resolve(true)
+              tx.onerror = () => reject(tx.error)
+              tx.onabort = () => reject(tx.error || new Error('aborted'))
+            })
+          },
+          async deleteDoc(id) {
+            const db = await this.open()
+            return new Promise((resolve) => {
+              const tx = db.transaction(this.S.docs, 'readwrite')
+              tx.objectStore(this.S.docs).delete(id)
+              tx.oncomplete = () => resolve(true)
+              tx.onerror = () => resolve(false)
+              tx.onabort = () => resolve(false)
+            })
+          },
+          async docIds() {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.S.docs, 'readonly')
+              const r = tx.objectStore(this.S.docs).getAllKeys()
+              r.onsuccess = () => resolve(r.result || [])
+              r.onerror = () => reject(r.error)
+            })
+          },
+
+          // ---- 整库（云同步 / 导入导出用）----
+          async library() {
+            const idx = await this.readIndex()
+            const settings = await this.readSettings()
+            const ids = idx && Array.isArray(idx.order) ? idx.order : []
+            const docs = {}
+            for (const id of ids) {
+              const d = await this.readDoc(id)
+              if (d) docs[id] = d
+            }
+            const order = ids.filter((id) => docs[id])
+            return {
+              format: 'zenwriter-library',
+              v: 2,
+              activeId: idx && order.indexOf(idx.activeId) >= 0 ? idx.activeId : order[0] || null,
+              order: order,
+              meta: (idx && idx.meta) || {},
+              docs: docs,
+              settings: settings || {},
+            }
+          },
+
+          // 用云端/导入的数据整体覆盖本地。index 也一并写入，
+          // 这样 activeId / order / meta 和正文永远是一致的。
+          async writeLibrary(payload) {
+            if (!payload || typeof payload !== 'object') return false
+            const docs = payload.docs && typeof payload.docs === 'object' ? payload.docs : null
+            if (!docs) return false
+            const order = (Array.isArray(payload.order) ? payload.order : []).filter(
+              (id) => docs[id],
+            )
+            if (!order.length) return false
+            const db = await this.open()
+            await new Promise((resolve, reject) => {
+              const tx = db.transaction([this.S.docs, this.S.index, this.S.settings], 'readwrite')
+              const ds = tx.objectStore(this.S.docs)
+              order.forEach((id) => ds.put(docs[id], id))
+              tx.objectStore(this.S.index).put(
+                {
+                  v: 2,
+                  activeId:
+                    payload.activeId && order.indexOf(payload.activeId) >= 0
+                      ? payload.activeId
+                      : order[0],
+                  order: order,
+                  meta: payload.meta && typeof payload.meta === 'object' ? payload.meta : {},
+                },
+                'index',
+              )
+              if (payload.settings && typeof payload.settings === 'object') {
+                tx.objectStore(this.S.settings).put(payload.settings, 'settings')
+              }
+              tx.oncomplete = () => resolve(true)
+              tx.onerror = () => reject(tx.error)
+              tx.onabort = () => reject(tx.error || new Error('aborted'))
+            })
+            this._index = null
+            return true
+          },
+
+          // 给云同步的变更指纹用：只要内容变了指纹就得变
+          async fingerprint() {
+            const lib = await this.library()
+            const s = JSON.stringify(lib)
+            let h = 5381
+            for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+            return s.length + ':' + h
+          },
+
+          async estimate() {
+            try {
+              if (navigator.storage && navigator.storage.estimate) {
+                return await navigator.storage.estimate()
+              }
+            } catch (_) {}
+            return null
+          },
+        }
+
+        // ================================================================
+        // 8.4.1 旧数据迁移 —— 一次性，绝不删任何东西
+        //
+        // 策略：IndexedDB 为空时，从 LocalStorage 把 zc-docs / zc-doc:* /
+        // zc-settings / zc-autosave / zc-connections 原样搬过去。
+        //   - LocalStorage 的旧键一律保留不删，作为一次性备份。
+        //   - 写一个 zw-storage-migrated 标记，避免重复迁移。
+        //   - IndexedDB 已有数据时以它为准，绝不用旧数据覆盖。
+        // ================================================================
+        async function migrateLegacyStorage() {
+          const result = { migrated: false, docs: 0, from: '', reason: '' }
+          if (!ZWStore.available()) {
+            result.reason = 'indexedDB unavailable'
+            return result
+          }
+          let existing = null
+          try {
+            existing = await ZWStore.readIndex()
+          } catch (e) {
+            result.reason = 'index read failed: ' + (e && e.message)
+            return result
+          }
+          if (existing && Array.isArray(existing.order) && existing.order.length) {
+            result.from = 'indexeddb'
+            return result
+          }
+
+          const lsGet = (k) => {
+            try {
+              return localStorage.getItem(k)
+            } catch (_) {
+              return null
+            }
+          }
+          let legacyIndex = null
+          try {
+            const raw = lsGet('zc-docs')
+            if (raw) legacyIndex = JSON.parse(raw)
+          } catch (_) {}
+          if (!legacyIndex || !Array.isArray(legacyIndex.order) || !legacyIndex.order.length) {
+            // 没有多画布索引，但可能有最老的单画布数据
+            const legacyAuto = lsGet('zc-autosave')
+            let auto = null
+            try {
+              auto = legacyAuto ? JSON.parse(legacyAuto) : null
+            } catch (_) {}
+            if (auto && Array.isArray(auto.nodes)) {
+              const id = 'doc-migrated'
+              const now = Date.now()
+              let conns = Array.isArray(auto.connections) ? auto.connections : []
+              const cRaw = lsGet('zc-connections')
+              if (cRaw) {
+                try {
+                  const parsed = JSON.parse(cRaw)
+                  if (Array.isArray(parsed) && parsed.length) conns = parsed
+                } catch (_) {}
+              }
+              await ZWStore.writeDoc(id, {
+                name: 'Untitled',
+                createdAt: now,
+                updatedAt: now,
+                view: null,
+                nodes: auto.nodes,
+                connections: conns,
+              })
+              await ZWStore.writeIndex({
+                v: 2,
+                activeId: id,
+                order: [id],
+                meta: {
+                  [id]: {
+                    name: 'Untitled',
+                    createdAt: now,
+                    updatedAt: now,
+                    nodes: auto.nodes.length,
+                  },
+                },
+              })
+              result.migrated = true
+              result.docs = 1
+              result.from = 'zc-autosave'
+            } else {
+              result.from = 'empty'
+            }
+            return result
+          }
+
+          // 多画布：逐个搬
+          let count = 0
+          const order = []
+          const meta = Object.assign({}, legacyIndex.meta || {})
+          for (const id of legacyIndex.order) {
+            const raw = lsGet('zc-doc:' + id)
+            if (!raw) continue
+            let doc = null
+            try {
+              doc = JSON.parse(raw)
+            } catch (_) {}
+            if (!doc || !Array.isArray(doc.nodes)) continue
+            try {
+              await ZWStore.writeDoc(id, doc)
+              order.push(id)
+              count++
+            } catch (e) {
+              console.warn('[ZenWriter] migration failed for', id, e)
+            }
+          }
+          if (!order.length) {
+            result.from = 'legacy index had no readable canvases'
+            return result
+          }
+          const activeId =
+            legacyIndex.activeId && order.indexOf(legacyIndex.activeId) >= 0
+              ? legacyIndex.activeId
+              : order[0]
+          await ZWStore.writeIndex({
+            v: 2,
+            activeId: activeId,
+            order: order,
+            meta: meta,
+          })
+
+          // 样式设置一起搬
+          const sRaw = lsGet('zc-settings')
+          if (sRaw) {
+            try {
+              const s = JSON.parse(sRaw)
+              if (s && typeof s === 'object') await ZWStore.writeSettings(s)
+            } catch (_) {}
+          }
+
+          result.migrated = true
+          result.docs = count
+          result.from = 'zc-docs'
+          try {
+            localStorage.setItem(
+              'zw-storage-migrated',
+              JSON.stringify({ at: Date.now(), docs: count }),
+            )
+          } catch (_) {}
+          return result
+        }
+
+        // ================================================================
+        // 8.5 ASSET STORE — 本机图片资产库（IndexedDB）
+        //
+        // 「链接本机」模式下图片字节存这里，节点里只留一个 id。
+        // 为什么不用 localStorage：画布本身就存在 localStorage 里，
+        // 一张手机照片 base64 后轻松几 MB，塞进去会直接撑爆配额，
+        // 连带整个画布都保存不了。IndexedDB 是二进制存储，
+        // 容量大得多，也不参与 zc-* 的同步指纹。
+        //
+        // 浏览器出于安全不会暴露文件的绝对路径，所以「链接」只能是
+        // 应用内的一份拷贝引用，不是磁盘路径引用 —— 换设备后
+        // 需要重新绑定。这一点在界面上明确写出来，不含糊。
+        // ================================================================
+        const AssetStore = {
+          DB: 'zc-assets',
+          STORE: 'assets',
+          _db: null,
+          _failed: false,
+
+          available() {
+            return !this._failed && typeof indexedDB !== 'undefined'
+          },
+
+          open() {
+            if (this._db) return Promise.resolve(this._db)
+            if (!this.available()) return Promise.reject(new Error('indexedDB unavailable'))
+            return new Promise((resolve, reject) => {
+              let req
+              try {
+                req = indexedDB.open(this.DB, 1)
+              } catch (e) {
+                this._failed = true
+                reject(e)
+                return
+              }
+              req.onupgradeneeded = () => {
+                const db = req.result
+                if (!db.objectStoreNames.contains(this.STORE)) {
+                  db.createObjectStore(this.STORE, { keyPath: 'id' })
+                }
+              }
+              req.onsuccess = () => {
+                this._db = req.result
+                resolve(req.result)
+              }
+              req.onerror = () => {
+                // 无痕模式等场景下 IndexedDB 可能直接不可用
+                this._failed = true
+                reject(req.error || new Error('indexedDB open failed'))
+              }
+            })
+          },
+
+          newId() {
+            return 'asset-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+          },
+
+          async put(rec) {
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.STORE, 'readwrite')
+              tx.objectStore(this.STORE).put(rec)
+              tx.oncomplete = () => resolve(rec)
+              tx.onerror = () => reject(tx.error)
+              tx.onabort = () => reject(tx.error || new Error('aborted'))
+            })
+          },
+
+          async get(id) {
+            if (!id) return null
+            const db = await this.open()
+            return new Promise((resolve, reject) => {
+              const tx = db.transaction(this.STORE, 'readonly')
+              const r = tx.objectStore(this.STORE).get(id)
+              r.onsuccess = () => resolve(r.result || null)
+              r.onerror = () => reject(r.error)
+            })
+          },
+
+          async del(id) {
+            if (!id) return false
+            try {
+              const db = await this.open()
+              return await new Promise((resolve, reject) => {
+                const tx = db.transaction(this.STORE, 'readwrite')
+                tx.objectStore(this.STORE).delete(id)
+                tx.oncomplete = () => resolve(true)
+                tx.onerror = () => reject(tx.error)
+              })
+            } catch (_) {
+              return false
+            }
+          },
+
+          // 清掉没有被任何节点引用的资产，避免删节点后字节一直堆积
+          async gc(referencedIds) {
+            try {
+              const db = await this.open()
+              const keep = referencedIds instanceof Set ? referencedIds : new Set(referencedIds)
+              await new Promise((resolve, reject) => {
+                const tx = db.transaction(this.STORE, 'readwrite')
+                const store = tx.objectStore(this.STORE)
+                const req = store.openCursor()
+                req.onsuccess = () => {
+                  const cur = req.result
+                  if (!cur) return
+                  if (!keep.has(cur.value.id)) cur.delete()
+                  cur.continue()
+                }
+                tx.oncomplete = () => resolve()
+                tx.onerror = () => reject(tx.error)
+              })
+              return true
+            } catch (_) {
+              return false
+            }
+          },
+        }
+
+        // ================================================================
+        // 8.6 IMAGE MANAGER — 图片节点的来源
+        //
+        //   url   远程地址
+        //   link  链接本机文件   -> 字节进 IndexedDB，节点只留引用。
+        //                         应用不碰磁盘上的原图，也不删它。
+        //   embed 嵌入源图片内容 -> 字节转 data URL 存进节点，
+        //                         自包含、跟着 .zc / 云同步走；
+        //                         原图已被复制，之后可以放心删除。
+        // ================================================================
+        const ImageManager = {
+          // Blob URL 是会话级的，刷新就失效，所以必须缓存并及时回收
+          _urlCache: new Map(), // assetId -> objectURL
+          _editingNode: null,
+
+          normalize(data) {
+            let src = (data && data.src) || ''
+            const assetId = (data && data.assetId) || ''
+            let mode = (data && data.srcMode) || ''
+            // blob: 地址是会话级的，刷新后必然失效。
+            // 绝不能让它被当成可持久化的来源存进画布数据，否则就是永久死链
+            // （link 模式的字节不走 src，所以清掉 src 不影响它）。
+            if (src.indexOf('blob:') === 0) {
+              src = ''
+              if (mode !== 'link') mode = 'url'
+            }
+            if (!mode) {
+              // 老节点兼容：data: 开头视为已嵌入，其余当远程地址
+              mode = src.indexOf('data:') === 0 ? 'embed' : 'url'
+            }
+            if (mode === 'embed' && src.indexOf('data:') !== 0) mode = 'url'
+            if (mode === 'url' && src.indexOf('data:') === 0) mode = 'embed'
+            // link 模式全靠 assetId，缺了就退回普通地址
+            if (mode === 'link' && !assetId) mode = 'url'
+            return {
+              mode: mode,
+              src: mode === 'link' ? '' : src,
+              assetId: assetId,
+              fileName: (data && data.fileName) || '',
+              mime: (data && data.mime) || '',
+              size: (data && data.size) || 0,
+            }
+          },
+
+          // 拿到节点当前该显示的地址（link 模式要从 IndexedDB 取 blob）
+          async resolve(node) {
+            const info = this.normalize(node.dataset)
+            if (info.mode !== 'link') return { url: info.src, info: info }
+            const id = info.assetId || node.dataset.assetId
+            if (!id) return { url: '', info: info }
+            if (this._urlCache.has(id)) return { url: this._urlCache.get(id), info: info }
+            const rec = await AssetStore.get(id)
+            if (!rec || !rec.blob) return { url: '', info: info, missing: true }
+            const url = URL.createObjectURL(rec.blob)
+            this._urlCache.set(id, url)
+            return { url: url, info: info }
+          },
+
+          async release(id) {
+            if (!id) return
+            const url = this._urlCache.get(id)
+            if (url) {
+              URL.revokeObjectURL(url)
+              this._urlCache.delete(id)
+            }
+          },
+
+          // 从一个 File 建资产（link 模式）
+          async storeFile(file) {
+            const id = AssetStore.newId()
+            const rec = {
+              id: id,
+              name: file.name || '',
+              type: file.type || 'application/octet-stream',
+              size: file.size,
+              blob: file,
+              createdAt: Date.now(),
+            }
+            await AssetStore.put(rec)
+            return rec
+          },
+
+          fileToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+              const fr = new FileReader()
+              fr.onload = () => resolve(String(fr.result || ''))
+              fr.onerror = () => reject(fr.error)
+              fr.readAsDataURL(file)
+            })
+          },
+
+          formatSize(bytes) {
+            const b = Number(bytes) || 0
+            if (b < 1024) return b + ' B'
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB'
+            return (b / (1024 * 1024)).toFixed(2) + ' MB'
+          },
+
+          // 把选好的文件写进节点
+          async applyFile(node, file, mode) {
+            if (!file) return false
+            const oldId = node.dataset.assetId
+            if (mode === 'embed') {
+              if (file.size > CONFIG.IMAGE_EMBED_MAX) {
+                notify(
+                  t(
+                    'notify.imageTooBig',
+                    ImageManager.formatSize(file.size),
+                    ImageManager.formatSize(CONFIG.IMAGE_EMBED_MAX),
+                  ),
+                )
+                return false
+              }
+              let dataUrl = ''
+              try {
+                dataUrl = await ImageManager.fileToDataUrl(file)
+              } catch (e) {
+                notify(t('notify.imageReadFailed'))
+                return false
+              }
+              node.dataset.srcMode = 'embed'
+              node.dataset.src = dataUrl
+              node.dataset.fileName = file.name || ''
+              node.dataset.mime = file.type || ''
+              node.dataset.size = String(file.size || 0)
+              node.dataset.assetId = ''
+              await ImageManager.release(oldId)
+              ImageManager.render(node)
+              if (file.size > CONFIG.IMAGE_EMBED_WARN) {
+                notify(t('notify.imageEmbedBig', ImageManager.formatSize(file.size)))
+              }
+            } else {
+              if (!AssetStore.available()) {
+                notify(t('notify.assetStoreUnavailable'))
+                return false
+              }
+              let rec = null
+              try {
+                rec = await ImageManager.storeFile(file)
+              } catch (e) {
+                notify(t('notify.imageReadFailed'))
+                return false
+              }
+              await ImageManager.release(oldId)
+              node.dataset.srcMode = 'link'
+              node.dataset.src = ''
+              node.dataset.assetId = rec.id
+              node.dataset.fileName = rec.name
+              node.dataset.mime = rec.type
+              node.dataset.size = String(rec.size || 0)
+              ImageManager.render(node)
+            }
+            debouncedAutoSave()
+            ConnectionManager.renderAll()
+            return true
+          },
+
+          applyUrl(node, url) {
+            const val = String(url || '').trim()
+            const oldId = node.dataset.assetId
+            node.dataset.srcMode = 'url'
+            node.dataset.src = val
+            node.dataset.assetId = ''
+            node.dataset.fileName = ''
+            node.dataset.mime = ''
+            node.dataset.size = '0'
+            if (oldId) ImageManager.release(oldId)
+            ImageManager.render(node)
+            debouncedAutoSave()
+            ConnectionManager.renderAll()
+          },
+
+          // 清除图片：link 模式顺手把资产库里的字节也删掉
+          clear(node) {
+            const oldId = node.dataset.assetId
+            node.dataset.srcMode = 'url'
+            node.dataset.src = ''
+            node.dataset.assetId = ''
+            node.dataset.fileName = ''
+            node.dataset.mime = ''
+            node.dataset.size = '0'
+            if (oldId) {
+              ImageManager.release(oldId)
+              AssetStore.del(oldId)
+            }
+            ImageManager.render(node)
+            debouncedAutoSave()
+            ConnectionManager.renderAll()
+          },
+
+          // 把图片画进节点（link 模式要异步从 IndexedDB 取 blob）。
+          // 调用前提：content 必须已经挂到 node 上，而且编辑器没打开。
+          // 两条都违反了都会静默不画 —— 所以调用点要挑对时机。
+          render(node) {
+            const content = getNodeContent(node)
+            if (!content) return false
+            if (content.querySelector('.img-editor')) return false // 编辑中别动
+            const wantId = node.dataset.assetId || ''
+            const wantMode = node.dataset.srcMode || 'url'
+            const wantSrc = node.dataset.src || ''
+            // 已经画出来且来源没变就不用重画。
+            // 必须连 src 一起比：否则改了图片地址也不会刷新。
+            const prev = content.querySelector('img')
+            if (
+              prev &&
+              prev.dataset.appliedId === wantId &&
+              prev.dataset.appliedMode === wantMode &&
+              prev.dataset.appliedSrc === wantSrc
+            ) {
+              return true
+            }
+            ImageManager.resolve(node).then((r) => {
+              if (!content.isConnected || !node.isConnected) return
+              // 期间用户可能又打开了编辑器，或者已经换了别的图
+              if (content.querySelector('.img-editor')) return
+              const id2 = node.dataset.assetId || ''
+              const mode2 = node.dataset.srcMode || 'url'
+              const src2 = node.dataset.src || ''
+              if (id2 !== wantId || mode2 !== wantMode || src2 !== wantSrc) return
+              content.innerHTML = ''
+              if (r.url) {
+                const img = document.createElement('img')
+                img.src = r.url
+                img.alt = node.dataset.fileName || 'image'
+                img.dataset.appliedId = wantId
+                img.dataset.appliedMode = wantMode
+                img.dataset.appliedSrc = wantSrc
+                content.appendChild(img)
+                if (node.dataset.fileName) {
+                  const meta = document.createElement('span')
+                  meta.className = 'img-meta'
+                  const tag = wantMode === 'embed' ? t('img.tagEmbed') : t('img.tagLink')
+                  meta.textContent =
+                    tag +
+                    ' · ' +
+                    node.dataset.fileName +
+                    (node.dataset.size ? ' · ' + ImageManager.formatSize(node.dataset.size) : '')
+                  content.appendChild(meta)
+                }
+              } else {
+                const ph = document.createElement('span')
+                ph.className = 'img-placeholder'
+                ph.textContent = r.missing
+                  ? t('placeholder.imageMissing')
+                  : t('placeholder.imageUrl')
+                content.appendChild(ph)
+              }
+            })
+            return true
+          },
+
+          // ---- 编辑面板 ----
+          _gcTimer: null,
+
+          // 删除节点后回收没人引用的资产字节。
+          // 必须在 setTimeout 之后调用：同一批删除只要跑一次。
+          gc() {
+            clearTimeout(ImageManager._gcTimer)
+            ImageManager._gcTimer = setTimeout(() => {
+              ImageManager._gcNow()
+            }, 1200)
+          },
+          async _gcNow() {
+            if (!AssetStore.available()) return
+            const ids = new Set()
+            getNodes().forEach((n) => {
+              if (n.dataset && n.dataset.assetId) ids.add(n.dataset.assetId)
+            })
+            // 关键：别的画布可能也引用着同一个 assetId。
+            // 只看当前 DOM 会把那些资产删掉，那边就变成死链了。
+            try {
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i)
+                if (!k || k.indexOf('zc-doc:') !== 0) continue
+                try {
+                  const d = JSON.parse(localStorage.getItem(k))
+                  ;(d.nodes || []).forEach((n) => {
+                    if (n && n.assetId) ids.add(n.assetId)
+                  })
+                } catch (_) {}
+              }
+            } catch (_) {}
+            await AssetStore.gc(ids)
+          },
+
+          openEditor(node) {
+            const content = getNodeContent(node)
+            if (!content || content.querySelector('.img-editor')) return
+            ImageManager._editingNode = node
+            const cur = ImageManager.normalize(node.dataset)
+            content.innerHTML = ''
+
+            let tab = cur.mode === 'link' || cur.mode === 'embed' ? 'local' : 'url'
+            let localMode = cur.mode === 'link' ? 'link' : 'embed'
+            let picked = null
+
+            const wrap = document.createElement('div')
+            wrap.className = 'img-editor'
+
+            const tabs = document.createElement('div')
+            tabs.className = 'ie-tabs'
+            const tabUrl = document.createElement('button')
+            tabUrl.type = 'button'
+            tabUrl.className = 'ie-tab'
+            tabUrl.textContent = t('img.tabUrl')
+            const tabLocal = document.createElement('button')
+            tabLocal.type = 'button'
+            tabLocal.className = 'ie-tab'
+            tabLocal.textContent = t('img.tabLocal')
+            tabs.appendChild(tabUrl)
+            tabs.appendChild(tabLocal)
+            wrap.appendChild(tabs)
+
+            const panelUrl = document.createElement('div')
+            panelUrl.style.display = 'flex'
+            panelUrl.style.flexDirection = 'column'
+            panelUrl.style.gap = '9px'
+            const urlLabel = document.createElement('div')
+            urlLabel.className = 'ie-label'
+            urlLabel.textContent = t('img.urlLabel')
+            const urlInput = document.createElement('input')
+            urlInput.type = 'text'
+            urlInput.className = 'ie-input'
+            urlInput.placeholder = t('placeholder.imageUrlInput')
+            urlInput.value = cur.mode === 'url' ? cur.src : ''
+            urlInput.autocomplete = 'off'
+            urlInput.spellcheck = false
+            panelUrl.appendChild(urlLabel)
+            panelUrl.appendChild(urlInput)
+            wrap.appendChild(panelUrl)
+
+            const panelLocal = document.createElement('div')
+            panelLocal.style.display = 'flex'
+            panelLocal.style.flexDirection = 'column'
+            panelLocal.style.gap = '9px'
+
+            const modeLabel = document.createElement('div')
+            modeLabel.className = 'ie-label'
+            modeLabel.textContent = t('img.modeLabel')
+            const modes = document.createElement('div')
+            modes.className = 'ie-modes'
+            const mkMode = (key, nameKey, noteKey) => {
+              const b = document.createElement('button')
+              b.type = 'button'
+              b.className = 'ie-mode' + (localMode === key ? ' active' : '')
+              b.dataset.mode = key
+              const n = document.createElement('span')
+              n.className = 'ie-mode-name'
+              n.textContent = t(nameKey)
+              const note = document.createElement('span')
+              note.className = 'ie-mode-note'
+              note.textContent = t(noteKey)
+              b.appendChild(n)
+              b.appendChild(note)
+              return b
+            }
+            const bLink = mkMode('link', 'img.modeLink', 'img.modeLinkNote')
+            const bEmbed = mkMode('embed', 'img.modeEmbed', 'img.modeEmbedNote')
+            modes.appendChild(bLink)
+            modes.appendChild(bEmbed)
+            panelLocal.appendChild(modeLabel)
+            panelLocal.appendChild(modes)
+
+            const fileLabel = document.createElement('div')
+            fileLabel.className = 'ie-label'
+            fileLabel.textContent = t('img.fileLabel')
+            const fileInput = document.createElement('input')
+            fileInput.type = 'file'
+            fileInput.className = 'ie-input ie-file'
+            fileInput.accept = 'image/*'
+            panelLocal.appendChild(fileLabel)
+            panelLocal.appendChild(fileInput)
+
+            const hint = document.createElement('div')
+            hint.className = 'ie-hint'
+            panelLocal.appendChild(hint)
+            wrap.appendChild(panelLocal)
+
+            const actions = document.createElement('div')
+            actions.className = 'ie-actions'
+            const btnOk = document.createElement('button')
+            btnOk.type = 'button'
+            btnOk.className = 'ie-btn primary'
+            btnOk.textContent = t('img.apply')
+            const btnClear = document.createElement('button')
+            btnClear.type = 'button'
+            btnClear.className = 'ie-btn danger'
+            btnClear.textContent = t('img.clear')
+            const btnCancel = document.createElement('button')
+            btnCancel.type = 'button'
+            btnCancel.className = 'ie-btn'
+            btnCancel.textContent = t('img.cancel')
+            actions.appendChild(btnOk)
+            actions.appendChild(btnClear)
+            actions.appendChild(btnCancel)
+            wrap.appendChild(actions)
+            content.appendChild(wrap)
+
+            const syncTabs = () => {
+              tabUrl.classList.toggle('active', tab === 'url')
+              tabLocal.classList.toggle('active', tab === 'local')
+              panelUrl.style.display = tab === 'url' ? 'flex' : 'none'
+              panelLocal.style.display = tab === 'local' ? 'flex' : 'none'
+            }
+            const syncModes = () => {
+              bLink.classList.toggle('active', localMode === 'link')
+              bEmbed.classList.toggle('active', localMode === 'embed')
+              hint.classList.remove('warn')
+              if (picked) {
+                const size = picked.size || 0
+                hint.textContent = picked.name + ' · ' + ImageManager.formatSize(size)
+                if (localMode === 'embed') {
+                  if (size > CONFIG.IMAGE_EMBED_MAX) {
+                    hint.classList.add('warn')
+                    hint.textContent += ' · ' + t('img.tooBig')
+                  } else if (size > CONFIG.IMAGE_EMBED_WARN) {
+                    hint.classList.add('warn')
+                    hint.textContent += ' · ' + t('img.bigWarn')
+                  }
+                } else if (!AssetStore.available()) {
+                  hint.classList.add('warn')
+                  hint.textContent += ' · ' + t('img.linkUnavailable')
+                }
+              } else {
+                hint.textContent = localMode === 'link' ? t('img.linkHint') : t('img.embedHint')
+              }
+            }
+            // 先把编辑器关掉，再谈保存。
+            // 顺序很关键：render() 里有「编辑器打开时不要覆盖」的守卫，
+            // 如果先 apply 再关面板，render 会被守卫挡掉，图片就永远画不出来。
+            const close = () => {
+              ImageManager._editingNode = null
+              content.innerHTML = ''
+            }
+            const finish = async () => {
+              if (tab === 'url') {
+                const v = urlInput.value
+                close()
+                ImageManager.applyUrl(node, v)
+                return
+              }
+              if (picked) {
+                const file = picked
+                const mode = localMode
+                close()
+                await ImageManager.applyFile(node, file, mode)
+                return
+              }
+              // 没选文件就只是切了面板，按取消处理
+              cancel()
+            }
+            // 取消：拆掉编辑器后要把原来的图片画回去
+            const cancel = () => {
+              close()
+              ImageManager.render(node)
+            }
+
+            tabUrl.addEventListener('click', () => {
+              tab = 'url'
+              syncTabs()
+            })
+            tabLocal.addEventListener('click', () => {
+              tab = 'local'
+              syncTabs()
+            })
+            modes.addEventListener('click', (e) => {
+              const b = e.target.closest('.ie-mode')
+              if (!b) return
+              localMode = b.dataset.mode
+              syncModes()
+            })
+            fileInput.addEventListener('change', () => {
+              picked = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null
+              syncModes()
+            })
+            btnOk.addEventListener('click', finish)
+            btnClear.addEventListener('click', () => {
+              ImageManager._editingNode = null
+              content.innerHTML = ''
+              ImageManager.clear(node)
+            })
+            btnCancel.addEventListener('click', cancel)
+            wrap.addEventListener('keydown', (e) => {
+              e.stopPropagation()
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                cancel()
+              } else if (e.key === 'Enter' && e.target === urlInput) {
+                e.preventDefault()
+                finish()
+              }
+            })
+            syncTabs()
+            syncModes()
+            if (tab === 'url') urlInput.focus()
+          },
+        }
+
+        // ================================================================
         // 9. NODE MANAGER
         // ================================================================
         const NodeManager = {
@@ -4699,6 +6129,47 @@ notify pgrst, 'reload schema';</textarea
             closeAllDropdowns()
           },
           createNodeAt(x, y, type, data) {
+            // 建节点是载入画布时的关键路径。只要有一个节点抛异常，
+            // 整张画布就会半途失败 —— 那等于用户的整份内容都没了。
+            // 所以这里整段兜住：坏节点退化成空壳并记日志，绝不让它
+            // 拖垮同一张画布里的其它节点。
+            try {
+              return NodeManager._createNodeInner(x, y, type, data)
+            } catch (e) {
+              console.error('[ZenWriter] failed to build node', type, data && data.id, e)
+              try {
+                notify(t('notify.nodeBuildFailed', type, (data && data.id) || ''))
+              } catch (_) {}
+              return null
+            }
+          },
+
+          // 过滤掉指向不存在节点的连线。旧版导出的文件里会残留这种
+          // 「孤儿连线」（节点删了连线没清），它们既画不出来，
+          // 又会在每次保存时继续写回去，越攒越多。
+          _saneConnections(conns) {
+            const list = Array.isArray(conns) ? conns : []
+            const kept = []
+            let dropped = 0
+            list.forEach((c) => {
+              if (!c || typeof c.from !== 'string' || typeof c.to !== 'string') {
+                dropped++
+                return
+              }
+              if (!getNodeById(c.from) || !getNodeById(c.to)) {
+                dropped++
+                return
+              }
+              if (c.from === c.to) {
+                dropped++
+                return
+              }
+              kept.push(c)
+            })
+            return { kept: kept, dropped: dropped }
+          },
+
+          _createNodeInner(x, y, type, data) {
             let id
             if (data && data.id) {
               id = data.id
@@ -4787,7 +6258,9 @@ notify pgrst, 'reload schema';</textarea
             content.className = 'node-content'
             content.setAttribute('contenteditable', 'false')
             content.spellcheck = false
-            NodeManager._buildContent(content, type, data)
+            // 注意顺序：_buildContent 需要 node，所以必须传进去，
+            // 不能指望 content.parentNode（此时 content 还是游离的）
+            NodeManager._buildContent(content, type, data, node)
             node.appendChild(content)
 
             // Resize
@@ -4800,6 +6273,13 @@ notify pgrst, 'reload schema';</textarea
             // MathJax must run only after the node has entered the live DOM.
             if (type === 'markdown' || type === 'math') {
               NodeManager._scheduleMathTypeset(content)
+            }
+
+            // 图片同理：必须等 content 已挂到 node、且 node 已进入文档，
+            // render() 才拿得到容器、异步回调里的 isConnected 检查也才过得去。
+            // 放早了会静默不画（content 还没挂上），放晚了只是延迟一帧。
+            if (type === 'image') {
+              ImageManager.render(node)
             }
 
             // Initialize TODO checkbox state from content strikethrough
@@ -4855,7 +6335,7 @@ notify pgrst, 'reload schema';</textarea
               setTimeout(() => node.querySelector('.node-content').focus(), 50)
 
             UIManager.updateStats()
-            debouncedAutoSave()
+            debouncedAutoSave(true)
             ConnectionManager.renderAll()
 
             if (window._ro) window._ro.observe(node)
@@ -4869,7 +6349,7 @@ notify pgrst, 'reload schema';</textarea
             if (!AppState.nodeBgVisible) port.style.borderColor = 'transparent'
             return port
           },
-          _buildContent(content, type, data) {
+          _buildContent(content, type, data, node) {
             if (data && data.fontSize) {
               const fs = String(data.fontSize).replace('px', '')
               content.style.fontSize = fs + 'px'
@@ -4901,71 +6381,27 @@ notify pgrst, 'reload schema';</textarea
               content.style.justifyContent = 'center'
               content.style.cursor = 'pointer'
               content.dataset.placeholder = t('placeholder.imageUrl')
-              const src = data && data.src ? data.src : ''
-              if (src) {
-                const img = document.createElement('img')
-                img.src = src
-                img.alt = 'image'
-                content.appendChild(img)
-              } else {
-                const ph = document.createElement('span')
-                ph.className = 'img-placeholder'
-                ph.textContent = t('placeholder.imageUrl')
-                content.appendChild(ph)
+              // 图片来源信息挂在**节点**上（url / link / embed + assetId 等），
+              // render() 负责把图片画出来，openEditor() 负责编辑。
+              // 放 dataset 是因为 buildCanvasData 可以直接读走去做保存/导出。
+              // 注意：这里必须用传进来的 node —— 此刻 content 还没挂到
+              // node 上（appendChild 在 _buildContent 之后才执行），
+              // 用 content.parentNode 会拿到 null，进而让整个画布加载失败。
+              if (node) {
+                const info = ImageManager.normalize(data)
+                node.dataset.srcMode = info.mode
+                node.dataset.src = info.src
+                node.dataset.assetId = info.assetId
+                node.dataset.fileName = info.fileName
+                node.dataset.mime = info.mime
+                node.dataset.size = String(info.size || 0)
+                // 这里**不能**调 render()：此刻 content 还没 append 到 node 上，
+                // getNodeContent(node) 会拿到 null，渲染会被静默跳过。
+                // 真正的绘制在 createNodeAt 里 appendChild 之后做。
               }
               content.addEventListener('dblclick', function (e) {
                 e.stopPropagation()
-                if (this.querySelector('input')) return
-                const currentSrc = this.querySelector('img') ? this.querySelector('img').src : ''
-                const input = document.createElement('input')
-                input.type = 'text'
-                input.value = currentSrc
-                Object.assign(input.style, {
-                  width: '80%',
-                  padding: '4px 8px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '12px',
-                  background: 'transparent',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  color: 'var(--text)',
-                  outline: 'none',
-                })
-                input.placeholder = t('placeholder.imageUrlInput')
-                this.innerHTML = ''
-                this.appendChild(input)
-                input.focus()
-                input.select()
-                const finish = (save) => {
-                  if (!input.parentNode) return
-                  const val = save ? input.value.trim() : ''
-                  this.innerHTML = ''
-                  if (val) {
-                    const img = document.createElement('img')
-                    img.src = val
-                    img.alt = 'image'
-                    this.appendChild(img)
-                  } else {
-                    const ph = document.createElement('span')
-                    ph.className = 'img-placeholder'
-                    ph.textContent = t('placeholder.imageUrl')
-                    this.appendChild(ph)
-                  }
-                  debouncedAutoSave()
-                  ConnectionManager.renderAll()
-                }
-                input.addEventListener('keydown', (ev) => {
-                  ev.stopPropagation()
-                  if (ev.key === 'Enter') {
-                    ev.preventDefault()
-                    finish(true)
-                  }
-                  if (ev.key === 'Escape') {
-                    ev.preventDefault()
-                    finish(false)
-                  }
-                })
-                input.addEventListener('blur', () => finish(true))
+                ImageManager.openEditor(node)
               })
               content.addEventListener('selectstart', (e) => e.preventDefault())
             } else if (type === 'markdown') {
@@ -5315,7 +6751,7 @@ notify pgrst, 'reload schema';</textarea
             document.addEventListener('mouseup', () => {
               if (dragging) {
                 dragging = false
-                debouncedAutoSave()
+                debouncedAutoSave(true)
                 ConnectionManager.renderAll()
               }
             })
@@ -5347,7 +6783,7 @@ notify pgrst, 'reload schema';</textarea
             document.addEventListener('mouseup', () => {
               if (resizing) {
                 resizing = false
-                debouncedAutoSave()
+                debouncedAutoSave(true)
                 ConnectionManager.renderAll()
               }
             })
@@ -5367,7 +6803,8 @@ notify pgrst, 'reload schema';</textarea
               node.remove()
               ConnectionManager.renderAll()
               UIManager.updateStats()
-              debouncedAutoSave()
+              ImageManager.gc()
+              debouncedAutoSave(true)
               notify(t('notify.nodeRemoved'))
             })
 
@@ -5467,7 +6904,7 @@ notify pgrst, 'reload schema';</textarea
                 input.replaceWith(span)
                 // Rebind event to new span
                 NodeManager._initTitleEdit(node)
-                debouncedAutoSave()
+                debouncedAutoSave(true)
               }
               const cancel = () => {
                 if (done) return
@@ -5554,8 +6991,13 @@ notify pgrst, 'reload schema';</textarea
               obj.content = content ? content.innerHTML : ''
               obj.lh = content ? content.style.lineHeight : ''
             } else if (type === 'image') {
-              const img = content ? content.querySelector('img') : null
-              obj.src = img ? img.src : ''
+              const info = ImageManager.normalize(AppState.ctxNode.dataset)
+              obj.srcMode = info.mode
+              obj.src = info.src
+              obj.assetId = info.assetId
+              obj.fileName = info.fileName
+              obj.mime = info.mime
+              obj.size = info.size
             } else if (type === 'markdown') {
               obj.source = content ? content.dataset.source : ''
             } else if (type === 'math') {
@@ -5584,10 +7026,11 @@ notify pgrst, 'reload schema';</textarea
             showConfirm(t('confirm.purgeAll')).then((confirmed) => {
               if (!confirmed) return
               getNodes().forEach((n) => n.remove())
+              ImageManager.gc()
               AppState.connections = []
               ConnectionManager.renderAll()
               UIManager.updateStats()
-              debouncedAutoSave()
+              debouncedAutoSave(true)
               notify(t('notify.allCleared'))
             })
           },
@@ -5736,7 +7179,7 @@ notify pgrst, 'reload schema';</textarea
           clearAll() {
             AppState.connections = []
             ConnectionManager.renderAll()
-            debouncedAutoSave()
+            debouncedAutoSave(true)
             notify(t('notify.allConnectionsCleared'))
             DOM.contextMenu.classList.remove('open')
           },
@@ -7462,8 +8905,17 @@ notify pgrst, 'reload schema';</textarea
               obj.content = contentEl ? contentEl.innerHTML : ''
               obj.lh = contentEl ? contentEl.style.lineHeight : ''
             } else if (type === 'image') {
-              const img = contentEl ? contentEl.querySelector('img') : null
-              obj.src = img ? img.src : ''
+              // 关键：不能从 <img>.src 取。
+              // link 模式渲染的是 blob: URL，那是会话级的，
+              // 存下来刷新后就是一条死链。必须存 assetId。
+              // embed 模式的 data URL 则要原样带走。
+              const info = ImageManager.normalize(node.dataset)
+              obj.srcMode = info.mode
+              obj.src = info.src
+              obj.assetId = info.assetId
+              obj.fileName = info.fileName
+              obj.mime = info.mime
+              obj.size = info.size
             } else if (type === 'markdown' || type === 'math') {
               obj.source = contentEl ? contentEl.dataset.source : ''
             }
@@ -7472,46 +8924,76 @@ notify pgrst, 'reload schema';</textarea
           return data
         }
 
-        function persistCanvasData() {
+        // 立即落盘：把当前 DOM 写进 IndexedDB。
+        // 结构性的改动（新建/删除/连线/拖完/撤销…）都走这里，不等防抖。
+        async function persistCanvasData() {
+          // 切换画布期间 DOM 正在重建，绝不能落盘。
+          // 否则那个「半张画布」会被写进 outgoing 画布的槽位 ——
+          // 这正是多张画布内容互相污染、连线消失的根源。
+          if (AppState.switchingCanvas) {
+            try {
+              if (AppState.switchPromise) await AppState.switchPromise
+            } catch (_) {}
+            // 切换完成后也不补写：刚读进来的内容本来就是对的
+            return buildCanvasData()
+          }
           clearTimeout(AppState.autoSaveTimer)
           const data = buildCanvasData()
-          // 主存储：当前画布自己的槽位 + 索引
           try {
-            if (DocManager.activeId()) {
-              DocManager.saveCurrent(data)
-            } else {
-              DocManager.createDoc()
-              DocManager.saveCurrent(data)
+            if (!DocManager.activeId()) {
+              // 还没有任何画布（比如首次打开就是空的）-> 先建一个
+              await DocManager.createDoc()
             }
+            await DocManager.saveCurrent(data)
           } catch (e) {
             console.warn('[ZenWriter] canvas persist failed', e)
+            notify(t('notify.storageWriteFailed'))
           }
-          // 兼容镜像：旧键保留，云同步降级路径仍能读到
-          try {
-            localStorage.setItem('zc-autosave', JSON.stringify(data))
-            localStorage.setItem('zc-connections', JSON.stringify(data.connections))
-          } catch (_) {
-            try {
-              notify(t('notify.storageFull'))
-            } catch (__) {
-              console.warn('[ZenWriter] autosave write failed')
-            }
-          }
+          // 注意：不再写 zc-autosave / zc-connections / zc-doc:*。
+          // 它们是迁移前的一次性备份，留着不动；继续写只会
+          // 在画布变大后重新撞上 LocalStorage 的 5MB 上限。
           return data
         }
 
-        function debouncedAutoSave() {
+        // immediate = true 时不等待，立即落盘。
+        // 打字这种高频场景走防抖（几百毫秒，人感知不到）；
+        // 结构改动传 true，保证「操作完就已经存好了」。
+        function debouncedAutoSave(immediate) {
           // 每次改动都会走到这里，所以撤销栈的提交点就挂在这里
           History.record()
           clearTimeout(AppState.autoSaveTimer)
+          // 切换画布时不排落盘任务。重建过程里每个 createNodeAt 都会走到这里，
+          // 排了定时器就等于给「半张画布」发了一张写错槽位的通行证。
+          if (AppState.switchingCanvas) return
+          if (immediate) {
+            AppState.persistPromise = persistCanvasData()
+              .then(() => OutlineManager.render())
+              .catch((e) => console.warn('[ZenWriter] persist failed', e))
+            return
+          }
           AppState.autoSaveTimer = setTimeout(() => {
-            try {
-              persistCanvasData()
-            } catch (_) {}
-            // 复用这个已经防抖过的「有改动」节拍刷新大纲
-            OutlineManager.render()
+            AppState.persistPromise = persistCanvasData()
+              .then(() => OutlineManager.render())
+              .catch((e) => console.warn('[ZenWriter] persist failed', e))
           }, CONFIG.AUTO_SAVE_DELAY)
         }
+
+        // 关页面 / 切后台前强制冲刷，保证最后一次改动一定写进去
+        function flushPendingSave() {
+          if (!AppState.autoSaveTimer) return
+          clearTimeout(AppState.autoSaveTimer)
+          AppState.autoSaveTimer = null
+          AppState.persistPromise = persistCanvasData().catch(() => {})
+        }
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') flushPendingSave()
+        })
+        window.addEventListener('pagehide', flushPendingSave)
+        window.addEventListener('beforeunload', () => {
+          clearTimeout(AppState.autoSaveTimer)
+          clearTimeout(Settings._writeTimer)
+          Settings._write()
+        })
 
         // ================================================================
         // 14.1 HISTORY — 撤销 / 重做
@@ -7698,6 +9180,8 @@ notify pgrst, 'reload schema';</textarea
               document.body.style.cursor = 'default'
 
               getNodes().forEach((n) => n.remove())
+              // 撤销可能把带图的节点删掉，回收没人引用的资产字节
+              ImageManager.gc()
               AppState.connections = []
               AppState.connIdCounter = 0
               AppState.nodeCounter = 0
@@ -7706,7 +9190,9 @@ notify pgrst, 'reload schema';</textarea
                 NodeManager.createNodeAt(parseFloat(n.x) || 0, parseFloat(n.y) || 0, n.type, n)
               })
               AppState.nodeCounter = Math.max(AppState.nodeCounter, snap.nodeCounter || 0)
-              AppState.connections = (snap.connections || []).map((c) => ({
+              // 撤销快照里也可能带孤儿连线，同样过滤
+              const saneR = NodeManager._saneConnections(snap.connections)
+              AppState.connections = saneR.kept.map((c) => ({
                 from: c.from,
                 to: c.to,
                 fromPort: c.fromPort || 'bottom',
@@ -7719,10 +9205,13 @@ notify pgrst, 'reload schema';</textarea
               restoreCollapsedStates()
               UIManager.updateStats()
               UIManager.applyNodeBg()
-              persistCanvasData()
               // 回放会重建整个 DOM，大纲必须跟着重画
               OutlineManager.currentId = null
               SearchManager.refresh()
+              // 落盘放最后：等 DOM 和大纲都就位再写
+              persistCanvasData().catch((e) =>
+                console.warn('[ZenWriter] post-replay persist failed', e),
+              )
 
               // 回放过程中可能被聚焦到某个节点上，退回后别留一个野生光标
               const a = document.activeElement
@@ -7764,6 +9253,165 @@ notify pgrst, 'reload schema';</textarea
           const r = document.getElementById('btn-redo')
           if (u) u.classList.toggle('disabled', !History.canUndo())
           if (r) r.classList.toggle('disabled', !History.canRedo())
+        }
+
+        // ================================================================
+        // 14.9 GUARD MANAGER — 「是否保存」+ 二次确认
+        //
+        // 重要平台限制：关闭标签页/刷新/跳外链这条路，网页**无法**显示
+        // 自定义弹窗。beforeunload 里浏览器会强制弹出它自己的原生框
+        // （文案不可定制），页面那一刻是冻结的。所以：
+        //   · 关标签页  -> 原生提示（见 installUnloadGuard）
+        //   · 应用内离开当前画布 -> 这里的两段式自定义弹窗
+        //
+        // 两段式：第一段问「是否保存」；点「否」再弹第二段确认
+        // 「真的不保存、就要放弃改动吗」。任一段都可以取消留在原地。
+        // ================================================================
+        const GuardManager = {
+          _resolve: null,
+          _lastFocus: null,
+
+          init() {
+            const dlg = document.getElementById('guard-dialog')
+            if (!dlg) return
+            const close = (choice) => {
+              if (!GuardManager._resolve) return
+              const r = GuardManager._resolve
+              GuardManager._resolve = null
+              dlg.classList.remove('active', 'step2')
+              dlg.setAttribute('aria-hidden', 'true')
+              dlg.inert = true
+              r(choice)
+            }
+            const primary = document.getElementById('guard-primary')
+            const no = document.getElementById('guard-no')
+            const cancel = document.getElementById('guard-cancel')
+            if (primary) primary.onclick = () => close('primary')
+            if (no) no.onclick = () => close('no')
+            if (cancel) cancel.onclick = () => close('cancel')
+            // 点遮罩 = 取消（和现有确认框行为一致）
+            dlg.onclick = (e) => {
+              if (e.target === dlg) close('cancel')
+            }
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && dlg.classList.contains('active')) {
+                e.preventDefault()
+                e.stopPropagation()
+                close('cancel')
+              }
+            })
+          },
+
+          // 弹一段。返回 'primary' | 'no' | 'cancel'
+          ask(spec) {
+            const dlg = document.getElementById('guard-dialog')
+            if (!dlg) return Promise.resolve('primary')
+            const titleEl = document.getElementById('guard-title')
+            const msgEl = document.getElementById('guard-msg')
+            const primary = document.getElementById('guard-primary')
+            const no = document.getElementById('guard-no')
+            const cancel = document.getElementById('guard-cancel')
+            if (titleEl) titleEl.textContent = spec.title || ''
+            if (msgEl) msgEl.textContent = spec.message || ''
+            if (primary) {
+              primary.textContent = spec.primary || t('guard.save')
+              primary.classList.toggle('gbtn-hidden', !spec.primary)
+            }
+            if (no) {
+              no.textContent = spec.no || t('guard.no')
+              no.classList.toggle('gbtn-hidden', !spec.no)
+            }
+            if (cancel) {
+              cancel.textContent = spec.cancel || t('guard.cancel')
+              cancel.classList.toggle('gbtn-hidden', !spec.cancel)
+            }
+            dlg.classList.toggle('step2', !!spec.step2)
+            closeAllDropdowns()
+            GuardManager._lastFocus = document.activeElement
+            dlg.classList.add('active')
+            dlg.setAttribute('aria-hidden', 'false')
+            dlg.inert = false
+            setTimeout(() => {
+              if (primary && !primary.classList.contains('gbtn-hidden') && primary.focus) {
+                primary.focus()
+              } else if (cancel && cancel.focus) {
+                cancel.focus()
+              }
+            }, 0)
+            return new Promise((resolve) => {
+              GuardManager._resolve = resolve
+            })
+          },
+
+          // 把所有还在防抖队列里的改动真正写进 IndexedDB
+          async flushAll() {
+            try {
+              flushPendingSave()
+            } catch (e) {
+              console.warn('[ZenWriter] flush failed', e)
+            }
+            try {
+              if (AppState.persistPromise) await AppState.persistPromise
+            } catch (_) {}
+            try {
+              await Settings.save(true)
+            } catch (_) {}
+          },
+
+          // 两段式离开确认。
+          // 返回 'saved'（已保存，可继续）| 'discard'（用户确认放弃，可继续）| 'stay'（留在原地）
+          async confirmLeave(opts) {
+            if (!AppState.exitGuard) return 'saved'
+            const o = opts || {}
+            const r1 = await GuardManager.ask({
+              title: o.title || t('guard.title'),
+              message: o.message || t('guard.message'),
+              primary: t('guard.save'),
+              no: t('guard.no'),
+              cancel: t('guard.cancel'),
+            })
+            if (r1 === 'primary') {
+              await GuardManager.flushAll()
+              return 'saved'
+            }
+            if (r1 === 'cancel') return 'stay'
+            // r1 === 'no' -> 第二段：再确认一次真的要放弃
+            const r2 = await GuardManager.ask({
+              step2: true,
+              title: o.discardTitle || t('guard.discardTitle'),
+              message: o.discardMessage || t('guard.discardMessage'),
+              primary: t('guard.discardConfirm'),
+              no: '',
+              cancel: t('guard.cancel'),
+            })
+            return r2 === 'primary' ? 'discard' : 'stay'
+          },
+        }
+
+        // ------------------------------------------------------------
+        // 关标签页 / 刷新 / 跳外链：只能走浏览器原生提示。
+        // 这里能做的最有价值的事是「尽量把数据写下去」——
+        // 但异步的 IndexedDB 写在卸载期间通常完不成，
+        // 真正的保障是 visibilitychange -> hidden 时那次同步触发点上的冲刷。
+        // ------------------------------------------------------------
+        let __zwAllowLeave = false
+        function installUnloadGuard() {
+          window.addEventListener('beforeunload', (e) => {
+            if (__zwAllowLeave) return
+            // 尽力而为：把防抖队列里没落盘的改动冲出去
+            try {
+              flushPendingSave()
+              Settings.save(true)
+            } catch (_) {}
+            if (!AppState.exitGuard) return
+            e.preventDefault()
+            // 部分浏览器（老 Chrome）要求必须给 returnValue 赋值才弹框
+            e.returnValue = ''
+            return ''
+          })
+          window.addEventListener('pagehide', (e) => {
+            if (!e.persisted && __zwAllowLeave) __zwAllowLeave = false
+          })
         }
 
         // ================================================================
@@ -7863,7 +9511,7 @@ notify pgrst, 'reload schema';</textarea
           if (!row) return
           const main = row.querySelector('.doc-main')
           if (!main || row.querySelector('.doc-rename-input')) return
-          const idx = DocManager.readIndex()
+          const idx = DocManager.index()
           const current =
             (idx && idx.meta[docId] && idx.meta[docId].name) || DocManager.activeName()
           main.innerHTML = ''
@@ -7880,9 +9528,9 @@ notify pgrst, 'reload schema';</textarea
             if (done) return
             done = true
             const v = save ? input.value.trim() : current
-            DocManager.rename(docId, v)
-            UIManager.renderDocList()
-            UIManager.updateStats()
+            DocManager.rename(docId, v).then(() => {
+              UIManager.updateStats()
+            })
           }
           input.addEventListener('click', (ev) => ev.stopPropagation())
           input.addEventListener('keydown', (ev) => {
@@ -7929,80 +9577,135 @@ notify pgrst, 'reload schema';</textarea
         //
         // 兼容：升级后若发现旧键 zc-autosave，会自动迁移成一个默认画布。
         // ================================================================
-        const DOCS_KEY = 'zc-docs'
         const DOC_PREFIX = 'zc-doc:'
 
+        // ================================================================
+        // 16.1 DOC MANAGER — 多画布（文档）管理
+        //
+        // 主存储已换成 IndexedDB（见 ZWStore）。这里的设计要点：
+        //
+        //  1. 索引（order / meta / activeId）体量很小 —— 每个画布只存
+        //     名字、时间戳、节点数。所以整份索引在内存里留一份副本，
+        //     activeId() / activeName() / list() 因此保持同步返回，
+        //     界面上十几处调用点一行都不用改。
+        //     真正重的东西（nodes + connections）只在需要时从 IndexedDB 异步读。
+        //
+        //  2. 所有写操作都是异步的。老代码 zc-doc:<id> 的 LocalStorage
+        //     键迁移后只读不写，原样保留当一次性备份，绝不删。
+        // ================================================================
         const DocManager = {
-          readIndex() {
-            try {
-              const raw = localStorage.getItem(DOCS_KEY)
-              if (!raw) return null
-              const p = JSON.parse(raw)
-              if (!p || !Array.isArray(p.order)) return null
-              if (!p.meta || typeof p.meta !== 'object') p.meta = {}
-              p.order = p.order.filter((id) => typeof id === 'string')
-              if (!p.order.length) return null
-              if (!p.activeId || p.order.indexOf(p.activeId) < 0) p.activeId = p.order[0]
-              return p
-            } catch (_) {
-              return null
-            }
+          _idx: null, // 内存里的索引副本
+          _writeQueue: Promise.resolve(),
+
+          normalizeIndex(p) {
+            if (!p || !Array.isArray(p.order)) return null
+            if (!p.meta || typeof p.meta !== 'object') p.meta = {}
+            p.order = p.order.filter((id) => typeof id === 'string' && id)
+            if (!p.order.length) return null
+            if (!p.activeId || p.order.indexOf(p.activeId) < 0) p.activeId = p.order[0]
+            return p
           },
+
+          // 同步读内存副本
+          index() {
+            return DocManager._idx
+          },
+          _setIndex(idx) {
+            DocManager._idx = idx ? DocManager.normalizeIndex(idx) : null
+            return DocManager._idx
+          },
+
+          // 异步：从 IndexedDB 载入索引到内存
+          async loadIndex() {
+            let p = null
+            try {
+              p = await ZWStore.readIndex()
+            } catch (e) {
+              console.warn('[ZenWriter] index read failed', e)
+            }
+            if (!p) {
+              // IndexedDB 里还没有 -> 迁移前的瞬间退回 LocalStorage
+              try {
+                const raw = localStorage.getItem('zc-docs')
+                if (raw) p = JSON.parse(raw)
+              } catch (_) {}
+            }
+            return DocManager._setIndex(p)
+          },
+
           writeIndex(p) {
+            const clean = DocManager._setIndex(p)
+            if (!clean) return Promise.resolve()
+            return ZWStore.writeIndex(clean).catch((e) => {
+              console.warn('[ZenWriter] index write failed', e)
+              notify(t('notify.storageWriteFailed'))
+            })
+          },
+
+          // 串行化写，避免两次连续写互相覆盖
+          _enqueue(fn) {
+            DocManager._writeQueue = DocManager._writeQueue.then(fn, fn)
+            return DocManager._writeQueue
+          },
+
+          async readDoc(id) {
+            if (!id) return null
+            let d = null
             try {
-              localStorage.setItem(DOCS_KEY, JSON.stringify(p))
-            } catch (_) {
+              d = await ZWStore.readDoc(id)
+            } catch (e) {
+              console.warn('[ZenWriter] doc read failed', id, e)
+            }
+            // 只有 IndexedDB 整个不可用时才退回 LocalStorage。
+            // 绝不能在「IndexedDB 里没这张画布」时也去读旧键 ——
+            // 那是迁移时的一次性备份，内容早已过期，
+            // 拿它兜底会让已删除/损坏的画布凭空复活成旧内容。
+            if (!d && !ZWStore.available()) {
               try {
-                notify(t('notify.storageFull'))
-              } catch (__) {
-                console.warn('[ZenWriter] docs index write failed')
-              }
+                const raw = localStorage.getItem(DOC_PREFIX + id)
+                if (raw) d = JSON.parse(raw)
+              } catch (_) {}
             }
+            if (!d || !Array.isArray(d.nodes)) return null
+            if (!Array.isArray(d.connections)) d.connections = []
+            return d
           },
-          docKey(id) {
-            return DOC_PREFIX + id
-          },
-          readDoc(id) {
-            try {
-              const raw = localStorage.getItem(DOC_PREFIX + id)
-              if (!raw) return null
-              const d = JSON.parse(raw)
-              if (!d || !Array.isArray(d.nodes)) return null
-              if (!Array.isArray(d.connections)) d.connections = []
-              return d
-            } catch (_) {
-              return null
-            }
-          },
+
           writeDoc(id, doc) {
-            try {
-              localStorage.setItem(DOC_PREFIX + id, JSON.stringify(doc))
-              return true
-            } catch (_) {
-              try {
-                notify(t('notify.storageFull'))
-              } catch (__) {
-                console.warn('[ZenWriter] doc write failed')
-              }
+            return ZWStore.writeDoc(id, doc).catch((e) => {
+              console.warn('[ZenWriter] doc write failed', id, e)
+              notify(t('notify.storageWriteFailed'))
               return false
-            }
+            })
           },
+
+          deleteDoc(id) {
+            return ZWStore.deleteDoc(id).catch(() => false)
+          },
+
           newId() {
-            let n = 1
-            const idx = DocManager.readIndex()
-            if (idx) n = idx.order.length + 1
             let id = 'doc-' + Date.now().toString(36)
-            let guard = 0
-            while (localStorage.getItem(DOC_PREFIX + id) && guard++ < 50) {
+            let n = 1
+            // 撞 id 就加后缀；IndexedDB 里查一遍代价很小
+            while (DocManager._taken(id) && n < 200) {
               id = 'doc-' + Date.now().toString(36) + '-' + n++
             }
             return id
           },
+          _taken(id) {
+            const idx = DocManager._idx
+            if (idx && idx.order.indexOf(id) >= 0) return true
+            try {
+              if (localStorage.getItem(DOC_PREFIX + id)) return true
+            } catch (_) {}
+            return false
+          },
+
           defaultName() {
             return t('docs.defaultName')
           },
           uniqueName(base) {
-            const idx = DocManager.readIndex()
+            const idx = DocManager._idx
             const names = new Set()
             if (idx) idx.order.forEach((id) => names.add((idx.meta[id] || {}).name))
             if (!names.has(base)) return base
@@ -8010,18 +9713,20 @@ notify pgrst, 'reload schema';</textarea
             while (names.has(base + ' ' + i)) i++
             return base + ' ' + i
           },
+
+          // 这三个是同步的：读内存里的索引副本
           activeId() {
-            const idx = DocManager.readIndex()
+            const idx = DocManager._idx
             return idx ? idx.activeId : null
           },
           activeName() {
-            const idx = DocManager.readIndex()
+            const idx = DocManager._idx
             if (!idx) return DocManager.defaultName()
             const m = idx.meta[idx.activeId]
             return (m && m.name) || DocManager.defaultName()
           },
           list() {
-            const idx = DocManager.readIndex()
+            const idx = DocManager._idx
             if (!idx) return []
             return idx.order.map((id) => {
               const m = idx.meta[id] || {}
@@ -8035,82 +9740,55 @@ notify pgrst, 'reload schema';</textarea
               }
             })
           },
-          // 保证索引里至少有一个画布，并完成旧数据迁移
-          bootstrap() {
-            let idx = DocManager.readIndex()
+
+          // 保证至少有一个画布。旧数据迁移由 migrateLegacyStorage 负责，
+          // 这里只负责「什么都没有时建第一个」。
+          async bootstrap() {
+            let idx = await DocManager.loadIndex()
             if (idx) return idx
-            idx = { v: 2, activeId: null, order: [], meta: {} }
-            const now = Date.now()
-            // 迁移旧的单画布数据
-            let legacy = null
-            try {
-              const raw = localStorage.getItem('zc-autosave')
-              if (raw) legacy = JSON.parse(raw)
-            } catch (_) {}
-            if (legacy && Array.isArray(legacy.nodes)) {
-              let conns = Array.isArray(legacy.connections) ? legacy.connections : []
-              try {
-                const c = localStorage.getItem('zc-connections')
-                if (c) {
-                  const parsed = JSON.parse(c)
-                  if (Array.isArray(parsed) && parsed.length) conns = parsed
-                }
-              } catch (_) {}
-              const id = 'doc-migrated'
-              DocManager.writeDoc(id, {
-                name: t('docs.defaultName'),
-                createdAt: now,
-                updatedAt: now,
-                view: null,
-                nodes: legacy.nodes,
-                connections: conns,
-              })
-              idx.order.push(id)
-              idx.activeId = id
-              idx.meta[id] = {
-                name: t('docs.defaultName'),
-                createdAt: now,
-                updatedAt: now,
-                nodes: legacy.nodes.length,
-              }
-            } else {
-              DocManager.createDoc()
-              return DocManager.readIndex()
-            }
-            DocManager.writeIndex(idx)
-            return idx
+            await migrateLegacyStorage()
+            idx = await DocManager.loadIndex()
+            if (idx) return idx
+            await DocManager.createDoc()
+            return DocManager._idx
           },
+
           // 保存当前画布到它自己的存储槽（不切画布）
           saveCurrent(data) {
-            const idx = DocManager.readIndex()
-            if (!idx) return
+            const idx = DocManager._idx
+            if (!idx) return Promise.resolve()
             const id = idx.activeId
-            const prev = DocManager.readDoc(id)
+            if (!id) return Promise.resolve()
+            const prevMeta = idx.meta[id] || {}
             const now = Date.now()
-            DocManager.writeDoc(id, {
-              name: (idx.meta[id] || {}).name || DocManager.defaultName(),
-              createdAt: (idx.meta[id] || {}).createdAt || prev?.createdAt || now,
+            const payload = {
+              name: prevMeta.name || DocManager.defaultName(),
+              createdAt: prevMeta.createdAt || now,
               updatedAt: now,
               view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
               nodes: data.nodes,
               connections: data.connections,
-            })
+            }
             idx.meta[id] = {
-              name: (idx.meta[id] || {}).name || DocManager.defaultName(),
-              createdAt: (idx.meta[id] || {}).createdAt || now,
+              name: prevMeta.name || DocManager.defaultName(),
+              createdAt: prevMeta.createdAt || now,
               updatedAt: now,
               nodes: data.nodes.length,
             }
-            DocManager.writeIndex(idx)
+            return DocManager._enqueue(async () => {
+              await ZWStore.writeDoc(id, payload)
+              await ZWStore.writeIndex(idx)
+            })
           },
-          createDoc(rawData) {
-            const idx = DocManager.readIndex() || { v: 2, activeId: null, order: [], meta: {} }
+
+          async createDoc(rawData) {
+            const idx = DocManager._idx || { v: 2, activeId: null, order: [], meta: {} }
             const now = Date.now()
             const id = DocManager.newId()
             const data = rawData || { nodes: [], connections: [] }
             const base = (data && data.name) || DocManager.defaultName()
             const name = DocManager.uniqueName(base)
-            DocManager.writeDoc(id, {
+            await ZWStore.writeDoc(id, {
               name: name,
               createdAt: now,
               updatedAt: now,
@@ -8125,27 +9803,56 @@ notify pgrst, 'reload schema';</textarea
               updatedAt: now,
               nodes: (data.nodes || []).length,
             }
-            DocManager.writeIndex(idx)
+            await DocManager.writeIndex(idx)
             return id
           },
+
           // 把某个画布渲染到 DOM，并设为当前画布
+          // 切换画布必须串行执行。
+          // 两个 open() 并发时，第二个会在第一个重建 DOM 的过程中
+          // 把「半张画布」存进错误的槽位，画布内容就会互相污染。
+          _lock: Promise.resolve(),
+          _withLock(fn) {
+            const run = DocManager._lock.then(fn, fn)
+            // 锁本身不能被 reject 拖死，后面的切换还得能进
+            DocManager._lock = run.then(
+              () => {},
+              () => {},
+            )
+            return run
+          },
+
           open(id) {
-            const idx = DocManager.readIndex()
-            if (!idx || idx.order.indexOf(id) < 0) return false
-            // 先把正在编辑的画布落盘，避免丢改动
-            if (idx.activeId !== id) {
-              try {
-                DocManager.saveCurrent(buildCanvasData())
-              } catch (_) {}
-            }
-            const doc = DocManager.readDoc(id)
-            if (!doc) {
-              notify(t('notify.invalidFile'))
-              return false
-            }
-            // 清场。整段包在 try/finally 里：History.applying 必须复位，
-            // 否则一次异常就会让撤销功能永久哑掉。
+            const p = DocManager._withLock(() => DocManager._openInner(id))
+            AppState.switchPromise = p
+            return p
+          },
+
+          async _openInner(id) {
+            // 从这里开始，任何落盘都会写错槽位（DOM 要被清空重建，
+            // 而 activeId 在重建结束前还指向 outgoing 画布）。
+            // 所以第一件事就是上锁，落盘闸门同步关闭。
+            AppState.switchingCanvas = true
             try {
+              let idx = await DocManager.loadIndex()
+              if (!idx || idx.order.indexOf(id) < 0) return false
+              // 先把正在编辑的画布落盘，避免丢改动。
+              // 这里直接调 DocManager.saveCurrent（不受落盘闸门影响），
+              // 因为此刻 DOM 还是完整的 outgoing 画布。
+              if (idx.activeId !== id) {
+                try {
+                  await DocManager.saveCurrent(buildCanvasData())
+                  idx = DocManager._idx || idx
+                } catch (e) {
+                  console.warn('[ZenWriter] pre-open save failed', e)
+                }
+              }
+              const doc = await DocManager.readDoc(id)
+              if (!doc) {
+                notify(t('notify.invalidFile'))
+                return false
+              }
+              // 清场
               History.applying = true
               clearTimeout(AppState.autoSaveTimer)
               getNodes().forEach((n) => n.remove())
@@ -8156,15 +9863,25 @@ notify pgrst, 'reload schema';</textarea
               ;(doc.nodes || []).forEach((n) => {
                 NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
               })
-              AppState.connections = (doc.connections || []).map((c) => ({
-                ...c,
+              // 旧数据里可能残留指向已删除节点的连线（导出时没清干净）。
+              // 这些连线画不出来，留着只会越积越多，得明确丢掉并告知用户。
+              const sane = NodeManager._saneConnections(doc.connections)
+              AppState.connections = sane.kept.map((c) => ({
+                from: c.from,
+                to: c.to,
                 fromPort: c.fromPort || 'bottom',
                 toPort: c.toPort || 'top',
                 id: 'conn-' + ++AppState.connIdCounter,
               }))
 
               idx.activeId = id
-              DocManager.writeIndex(idx)
+              await DocManager.writeIndex(idx)
+              // 先刷画布列表：选中态只跟索引有关，
+              // 必须保证就算后面出问题也一定更新到
+              UIManager.renderDocList()
+              if (sane.dropped) {
+                notify(t('notify.danglingConns', sane.dropped))
+              }
 
               // 恢复该画布的视图
               if (doc.view) {
@@ -8176,9 +9893,8 @@ notify pgrst, 'reload schema';</textarea
                 CanvasManager.resetToInitialWorld()
               }
 
-              UIManager.renderDocList()
               UIManager.updateStats()
-              Settings.save()
+              Settings.save(true)
               // 撤销栈按画布独立：换画布就清空，避免跨文档撤销
               History.reset()
               // 换画布后大纲要重建（节点 id 集合变了）
@@ -8187,6 +9903,9 @@ notify pgrst, 'reload schema';</textarea
               SearchManager.refresh()
             } finally {
               History.applying = false
+              // 必须复位，否则之后所有落盘都会被跳过 = 改动全丢
+              AppState.switchingCanvas = false
+              AppState.switchPromise = null
             }
 
             setTimeout(() => {
@@ -8198,45 +9917,47 @@ notify pgrst, 'reload schema';</textarea
 
             return true
           },
-          rename(id, name) {
-            const idx = DocManager.readIndex()
+
+          async rename(id, name) {
+            const idx = await DocManager.loadIndex()
             if (!idx || idx.order.indexOf(id) < 0) return false
             const clean = String(name || '').trim() || DocManager.defaultName()
             idx.meta[id] = Object.assign({}, idx.meta[id], { name: clean })
-            DocManager.writeIndex(idx)
-            const doc = DocManager.readDoc(id)
+            await DocManager.writeIndex(idx)
+            const doc = await DocManager.readDoc(id)
             if (doc) {
               doc.name = clean
-              DocManager.writeDoc(id, doc)
+              await DocManager.writeDoc(id, doc)
             }
             UIManager.renderDocList()
             return true
           },
-          remove(id) {
-            const idx = DocManager.readIndex()
+
+          async remove(id) {
+            let idx = await DocManager.loadIndex()
             if (!idx || idx.order.indexOf(id) < 0) return false
             const wasActive = idx.activeId === id
             const pos = idx.order.indexOf(id)
             idx.order = idx.order.filter((x) => x !== id)
             delete idx.meta[id]
-            try {
-              localStorage.removeItem(DOC_PREFIX + id)
-            } catch (_) {}
+            await DocManager.deleteDoc(id)
             if (!idx.order.length) {
-              DocManager.writeIndex(idx)
-              return DocManager.open(DocManager.createDoc())
+              await DocManager.writeIndex(idx)
+              const fresh = await DocManager.createDoc()
+              return DocManager.open(fresh)
             }
             if (wasActive) {
               const nextId = idx.order[Math.min(pos, idx.order.length - 1)]
               // 先把 activeId 切过去，避免 open() 又把已删除的画布存回来
               idx.activeId = nextId
-              DocManager.writeIndex(idx)
+              await DocManager.writeIndex(idx)
               return DocManager.open(nextId)
             }
-            DocManager.writeIndex(idx)
+            await DocManager.writeIndex(idx)
             UIManager.renderDocList()
             return true
           },
+
           async deleteDocFlow(id) {
             const list = DocManager.list()
             const target = list.find((d) => d.id === id)
@@ -8250,65 +9971,69 @@ notify pgrst, 'reload schema';</textarea
               closeAllDropdowns()
               return
             }
-            DocManager.remove(id)
+            await DocManager.remove(id)
             closeAllDropdowns()
             notify(t('notify.docDeleted', target.name))
           },
-          duplicate(id) {
-            const idx = DocManager.readIndex()
+
+          async duplicate(id) {
+            let idx = await DocManager.loadIndex()
             if (!idx || idx.order.indexOf(id) < 0) return false
-            const doc = DocManager.readDoc(id)
+            const doc = await DocManager.readDoc(id)
             if (!doc) return false
-            const name = DocManager.uniqueName(doc.name + ' copy')
-            const newId = DocManager.createDoc({
+            const name = DocManager.uniqueName((doc.name || '') + ' copy')
+            const newId = await DocManager.createDoc({
               name: name,
               nodes: doc.nodes,
               connections: doc.connections,
             })
-            DocManager.open(newId)
+            await DocManager.open(newId)
             return true
           },
+
           // 导出全部画布成一个 .zwlib 包
-          exportAll() {
-            const idx = DocManager.readIndex()
+          async exportAll() {
+            let idx = await DocManager.loadIndex()
             if (!idx) return
             try {
-              DocManager.saveCurrent(buildCanvasData())
+              await DocManager.saveCurrent(buildCanvasData())
+              idx = DocManager._idx || idx
             } catch (_) {}
-            const fresh = DocManager.readIndex() || idx
-            const docs = {}
-            fresh.order.forEach((id) => {
-              const d = DocManager.readDoc(id)
-              if (d) docs[id] = d
-            })
+            const lib = await ZWStore.library()
             const payload = {
               format: 'zenwriter-library',
               v: 2,
               exportedAt: Date.now(),
-              activeId: fresh.activeId,
-              order: fresh.order,
-              meta: fresh.meta,
-              docs: docs,
+              activeId: lib.activeId,
+              order: lib.order,
+              meta: lib.meta,
+              docs: lib.docs,
             }
             downloadJSON(payload, 'zenwriter-' + Date.now() + '.zwlib')
             notify(t('notify.exportedFormat', 'ZWLIB'))
           },
+
           // 从 JSON 对象导入：单画布 -> 新建画布；.zwlib -> 合并全部画布
-          importObject(obj, fileName) {
+          async importObject(obj, fileName) {
             if (!obj || typeof obj !== 'object') return 0
             // 整包
             if (obj.format === 'zenwriter-library' && obj.docs && typeof obj.docs === 'object') {
               let added = 0
               let firstNewId = null
-              const idx = DocManager.readIndex() || { v: 2, activeId: null, order: [], meta: {} }
-              Object.keys(obj.docs).forEach((srcId) => {
+              const idx = (await DocManager.loadIndex()) || {
+                v: 2,
+                activeId: null,
+                order: [],
+                meta: {},
+              }
+              for (const srcId of Object.keys(obj.docs)) {
                 const src = obj.docs[srcId]
-                if (!src || !Array.isArray(src.nodes)) return
+                if (!src || !Array.isArray(src.nodes)) continue
                 const baseName = (src.name || (srcId || 'canvas') + '').trim() || 'canvas'
                 const name = DocManager.uniqueName(baseName)
                 const id = DocManager.newId()
                 const now = Date.now()
-                DocManager.writeDoc(id, {
+                await ZWStore.writeDoc(id, {
                   name: name,
                   createdAt: now,
                   updatedAt: now,
@@ -8325,9 +10050,9 @@ notify pgrst, 'reload schema';</textarea
                 }
                 added++
                 if (!firstNewId) firstNewId = id
-              })
-              DocManager.writeIndex(idx)
-              if (firstNewId) DocManager.open(firstNewId)
+              }
+              await DocManager.writeIndex(idx)
+              if (firstNewId) await DocManager.open(firstNewId)
               return added
             }
             // 单画布（.zc / 旧导出）
@@ -8336,12 +10061,12 @@ notify pgrst, 'reload schema';</textarea
                 /\.(zc|json|zwlib|txt|md)$/i,
                 '',
               )
-              const id = DocManager.createDoc({
+              const id = await DocManager.createDoc({
                 name: (baseName || '').trim() || DocManager.defaultName(),
                 nodes: obj.nodes,
                 connections: Array.isArray(obj.connections) ? obj.connections : [],
               })
-              DocManager.open(id)
+              await DocManager.open(id)
               return 1
             }
             return 0
@@ -8352,10 +10077,10 @@ notify pgrst, 'reload schema';</textarea
           const file = e.target.files[0]
           if (!file) return
           const reader = new FileReader()
-          reader.onload = (ev) => {
+          reader.onload = async (ev) => {
             try {
               const data = JSON.parse(ev.target.result)
-              const n = DocManager.importObject(data, file.name)
+              const n = await DocManager.importObject(data, file.name)
               if (n > 0) {
                 notify(t('notify.loadedNodes', n))
                 closeAllDropdowns()
@@ -8375,7 +10100,8 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         function bindGlobalEvents() {
           // ---- Click delegation for data-action ----
-          document.addEventListener('click', (e) => {
+          // async：画布相关的操作要等 IndexedDB 读写完成
+          document.addEventListener('click', async (e) => {
             const target = e.target.closest('[data-action]')
             if (!target) return
             const action = target.dataset.action
@@ -8426,9 +10152,10 @@ notify pgrst, 'reload schema';</textarea
               case 'docNew':
                 closeAllDropdowns()
                 try {
-                  persistCanvasData()
+                  await persistCanvasData()
                 } catch (_) {}
-                DocManager.open(DocManager.createDoc())
+                const newId = await DocManager.createDoc()
+                await DocManager.open(newId)
                 notify(t('notify.docCreated', DocManager.activeName()))
                 break
               case 'docImport':
@@ -8437,11 +10164,13 @@ notify pgrst, 'reload schema';</textarea
                 break
               case 'docExportAll':
                 closeAllDropdowns()
-                DocManager.exportAll()
+                DocManager.exportAll().catch((err) =>
+                  console.warn('[ZenWriter] exportAll failed', err),
+                )
                 break
               case 'docOpen': {
                 const openId = target.dataset.docId
-                if (openId) DocManager.open(openId)
+                if (openId) await DocManager.open(openId)
                 closeAllDropdowns()
                 break
               }
@@ -8455,8 +10184,12 @@ notify pgrst, 'reload schema';</textarea
                 e.stopPropagation()
                 const did = target.dataset.docId
                 if (did) {
-                  DocManager.duplicate(did)
-                  notify(t('notify.docDuplicated'))
+                  DocManager.duplicate(did).then(
+                    (ok) => {
+                      if (ok) notify(t('notify.docDuplicated'))
+                    },
+                    (err) => console.warn('[ZenWriter] duplicate failed', err),
+                  )
                 }
                 break
               }
@@ -8552,6 +10285,9 @@ notify pgrst, 'reload schema';</textarea
                 break
               case 'settingsToggleStatusBar':
                 UIManager.toggleSettingsStatusBar()
+                break
+              case 'settingsToggleExitGuard':
+                UIManager.toggleSettingsExitGuard()
                 break
               case 'settingsToggleNodeBg':
                 UIManager.toggleSettingsNodeBg()
@@ -8715,7 +10451,8 @@ notify pgrst, 'reload schema';</textarea
                   node.remove()
                   ConnectionManager.renderAll()
                   UIManager.updateStats()
-                  debouncedAutoSave()
+                  ImageManager.gc()
+                  debouncedAutoSave(true)
                   notify(t('notify.nodeRemoved'))
                 }
                 break
@@ -9015,7 +10752,7 @@ notify pgrst, 'reload schema';</textarea
                 )
                 AppState.selectedConnId = null
                 ConnectionManager.renderAll()
-                debouncedAutoSave()
+                debouncedAutoSave(true)
                 notify(t('notify.connectionDeleted'))
               }
             }
@@ -9291,21 +11028,40 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         // 20. INITIALIZATION
         // ================================================================
-        function init() {
-          Settings.load()
+        async function init() {
+          // 1) 先把旧 LocalStorage 数据搬进 IndexedDB。
+          //    只在 IndexedDB 还是空的时候搬，旧键一律不删。
+          let migration = { migrated: false, docs: 0, from: '', reason: '' }
+          try {
+            migration = await migrateLegacyStorage()
+          } catch (e) {
+            console.warn('[ZenWriter] legacy migration failed', e)
+            migration.reason = (e && e.message) || 'error'
+          }
+          if (migration.migrated) {
+            console.log(
+              '[ZenWriter] migrated ' + migration.docs + ' canvas(es) from ' + migration.from,
+            )
+            notify(t('notify.storageMigrated', migration.docs))
+          } else if (migration.reason && migration.reason !== 'empty') {
+            console.warn('[ZenWriter] migration skipped:', migration.reason)
+          }
+
+          // 2) 设置与画布内容现在都在 IndexedDB 里，读取是异步的
+          await Settings.load()
           Settings.apply()
 
-          // 多画布：保证至少存在一个画布并完成旧数据迁移
+          // 3) 保证至少有一个画布
           try {
-            DocManager.bootstrap()
+            await DocManager.bootstrap()
           } catch (e) {
             console.warn('[ZenWriter] docs bootstrap failed', e)
           }
 
-          // 打开当前画布
+          // 4) 打开当前画布
           const activeId = DocManager.activeId()
           if (activeId) {
-            const doc = DocManager.readDoc(activeId)
+            const doc = await DocManager.readDoc(activeId)
             if (doc) {
               try {
                 History.applying = true // 载入历史数据不进撤销栈
@@ -9318,12 +11074,17 @@ notify pgrst, 'reload schema';</textarea
                     n,
                   )
                 })
-                AppState.connections = (doc.connections || []).map((c) => ({
-                  ...c,
+                const sane = NodeManager._saneConnections(doc.connections)
+                AppState.connections = sane.kept.map((c) => ({
+                  from: c.from,
+                  to: c.to,
                   fromPort: c.fromPort || 'bottom',
                   toPort: c.toPort || 'top',
                   id: 'conn-' + ++AppState.connIdCounter,
                 }))
+                if (sane.dropped) {
+                  console.warn('[ZenWriter] dropped ' + sane.dropped + ' dangling connections')
+                }
                 if (doc.view) {
                   AppState.panX = doc.view.panX || 0
                   AppState.panY = doc.view.panY || 0
@@ -9342,6 +11103,8 @@ notify pgrst, 'reload schema';</textarea
 
           CanvasManager.initPanZoom()
           TouchManager.init()
+          GuardManager.init()
+          installUnloadGuard()
           bindGlobalEvents()
           bindPortDragEvents()
           initObservers()
@@ -9371,7 +11134,20 @@ notify pgrst, 'reload schema';</textarea
         function bootOnce() {
           if (__zwInitDone) return
           __zwInitDone = true
-          init()
+          // init() 现在是异步的（要先迁移 + 读 IndexedDB）。
+          // 一定要兜住 rejection，否则会出现「界面半初始化且没有报错」。
+          init().catch((e) => {
+            console.error('[ZenWriter] init failed', e)
+            try {
+              notify(t('notify.storageWriteFailed'))
+            } catch (_) {}
+            // 兜底：至少把界面接起来，让用户还能导出数据
+            try {
+              CanvasManager.initPanZoom()
+              bindGlobalEvents()
+              bindPortDragEvents()
+            } catch (__) {}
+          })
         }
 
         if (document.readyState === 'loading') {
@@ -9380,74 +11156,73 @@ notify pgrst, 'reload schema';</textarea
           bootOnce()
         }
 
+        // 主存储 API。给云同步模块（另一个 IIFE，没法直接摸到这里的闭包变量）
+        // 用。现在数据都在 IndexedDB，它只能通过这个接口读写。
+        window.ZWStore = ZWStore
+
         window.ZCCloudStore = {
-          snapshot() {
-            const data = persistCanvasData()
-            const settings = {
-              theme: AppState.theme,
-              bg: AppState.bg,
-              titleFontSize: AppState.titleFontSize,
-              contentFontSize: AppState.contentFontSize,
-              contentLineHeight: AppState.contentLineHeight,
-              nodeBorderRadius: AppState.nodeBorderRadius,
-              menuPinned: AppState.menuPinned,
-              focusMode: AppState.focusMode,
-              readingMode: AppState.readingMode,
-              fullDisplay: AppState.fullDisplay,
-              nodeBgVisible: AppState.nodeBgVisible,
-              portSize: AppState.portSize,
-              portColor: AppState.portColor,
-              connColor: AppState.connColor,
-              connWidth: AppState.connWidth,
-              statusBarVisible: AppState.statusBarVisible,
-              outlineOpen: AppState.outlineOpen,
-              panX: AppState.panX,
-              panY: AppState.panY,
-              scale: AppState.scale,
-              lang: AppState.lang,
+          // 先把当前 DOM 冲进 IndexedDB，再返回整库。
+          // 顺序很重要：不冲的话云端拿到的可能是 300ms 之前的旧状态。
+          async snapshot() {
+            let data = null
+            try {
+              data = await persistCanvasData()
+            } catch (e) {
+              console.warn('[ZenWriter] snapshot flush failed', e)
             }
+            const settings = Settings.collect()
             try {
               localStorage.setItem('zc-settings', JSON.stringify(settings))
             } catch (_) {}
 
-            // 云同步载荷：整库多画布
-            const idx = DocManager.readIndex() || { v: 2, activeId: null, order: [], meta: {} }
-            const docs = {}
-            idx.order.forEach((id) => {
-              const d = DocManager.readDoc(id)
-              if (d) docs[id] = d
-            })
-            if (!Object.keys(docs).length) {
-              // 极端兜底：至少带上当前 DOM
-              docs[idx.activeId || 'doc-live'] = {
+            let lib = null
+            try {
+              lib = await ZWStore.library()
+            } catch (e) {
+              console.warn('[ZenWriter] library read failed', e)
+            }
+            lib = lib || {
+              format: 'zenwriter-library',
+              v: 2,
+              activeId: DocManager.activeId(),
+              order: [],
+              meta: {},
+              docs: {},
+            }
+            lib.settings = settings
+
+            // 极端兜底：库里一张画布都没有，至少把当前 DOM 带上
+            if (!lib.order.length) {
+              const id = lib.activeId || DocManager.activeId() || 'doc-live'
+              lib.docs[id] = {
                 name: DocManager.activeName(),
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
                 view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
-                nodes: data.nodes || [],
-                connections: data.connections || [],
+                nodes: (data && data.nodes) || [],
+                connections: (data && data.connections) || [],
               }
-              return {
-                nodes: data.nodes || [],
-                connections: data.connections || [],
-                settings: settings,
+              lib.order = [id]
+              lib.meta[id] = {
+                name: DocManager.activeName(),
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                nodes: ((data && data.nodes) || []).length,
               }
             }
-            return {
-              format: 'zenwriter-library',
-              v: 2,
-              activeId: idx.activeId,
-              order: idx.order,
-              meta: idx.meta,
-              docs: docs,
-              settings: settings,
-            }
+            return lib
           },
-          // 云端数据落盘后，把当前画布重新载入 DOM（无 location.reload）
+          // 云端数据落盘后，把当前画布重新载入 DOM
           reload() {
             const id = DocManager.activeId()
-            if (id) DocManager.open(id)
+            if (!id) return
+            DocManager.open(id).catch((err) => console.warn('[ZenWriter] reload failed', err))
           },
+          // 云同步把索引覆盖掉之后，作废内存副本，让下一次读取走 IndexedDB
+          invalidateIndex() {
+            DocManager._idx = null
+          },
+          usage: () => ZWStore.estimate(),
         }
       })()
     </script>
@@ -9467,6 +11242,7 @@ notify pgrst, 'reload schema';</textarea
           syncing = false,
           authing = false,
           lastHash = '',
+          hashBusy = false,
           pollTimer = null,
           pushTimer = null,
           state = { statusKey: 'sync.unconfiguredLabel', busy: false, lastCloudTs: 0 }
@@ -9615,29 +11391,14 @@ notify pgrst, 'reload schema';</textarea
           var lbl = E('zw-sync-label')
           if (lbl) lbl.textContent = v
         }
+        // 数据指纹。主存储已经换成 IndexedDB，所以直接用 ZWStore.fingerprint()
+        // 对整库做哈希：画布正文 + 索引 + 设置全都在里面。
+        // 不能只依赖 localStorage —— 那些键迁移后已经不再更新了。
         function dataHash() {
-          var s = ''
-          try {
-            s =
-              (lsGet(DATA_KEY) || '') +
-              '|' +
-              (lsGet('zc-connections') || '') +
-              '|' +
-              (lsGet('zc-settings') || '') +
-              '|' +
-              (lsGet('zc-docs') || '')
-            // 多画布：把所有画布槽位也算进指纹，否则新建/删除/重命名画布不会被感知
-            var keys = []
-            for (var i = 0; i < localStorage.length; i++) {
-              var k = localStorage.key(i)
-              if (k && k.indexOf('zc-doc:') === 0) keys.push(k)
-            }
-            keys.sort()
-            for (var j = 0; j < keys.length; j++) s += '|' + lsGet(keys[j])
-          } catch (_) {}
-          var h = 5381
-          for (var m = 0; m < s.length; m++) h = ((h << 5) + h + s.charCodeAt(m)) | 0
-          return s.length + ':' + h
+          if (!window.ZWStore) return 'nostore'
+          return window.ZWStore.fingerprint().catch(function () {
+            return 'err'
+          })
         }
         function stopWatcher() {
           if (pollTimer) clearInterval(pollTimer)
@@ -9647,17 +11408,26 @@ notify pgrst, 'reload schema';</textarea
         }
         function startWatcher() {
           stopWatcher()
-          lastHash = dataHash()
+          lastHash = ''
+          dataHash().then(function (h) {
+            lastHash = h
+          })
           pollTimer = setInterval(function () {
             if (!autoSyncOn || !session || !unlockPassword || syncing) return
-            var h = dataHash()
-            if (h === lastHash) return
-            lastHash = h
-            if (pushTimer) clearTimeout(pushTimer)
-            pushTimer = setTimeout(function () {
-              pushTimer = null
-              if (autoSyncOn && session && unlockPassword && !syncing) autoPush()
-            }, PUSH_DEBOUNCE)
+            // 指纹是异步的（要读 IndexedDB），串一个 promise 进去，
+            // 用 running 标志防止上一轮还没算完就叠下一轮
+            if (hashBusy) return
+            hashBusy = true
+            dataHash().then(function (h) {
+              hashBusy = false
+              if (h === lastHash) return
+              lastHash = h
+              if (pushTimer) clearTimeout(pushTimer)
+              pushTimer = setTimeout(function () {
+                pushTimer = null
+                if (autoSyncOn && session && unlockPassword && !syncing) autoPush()
+              }, PUSH_DEBOUNCE)
+            })
           }, POLL_MS)
         }
         async function autoPush() {
@@ -9670,12 +11440,14 @@ notify pgrst, 'reload schema';</textarea
             setMsg(friendly(e))
           } finally {
             syncing = false
-            lastHash = dataHash()
+            dataHash().then(function (h) {
+              lastHash = h
+            })
           }
         }
         async function pullQuiet(r) {
           var d = await dec(r.payload, unlockPassword)
-          writeLocal(d)
+          await writeLocal(d)
           state.lastCloudTs = Number(r.client_updated_at || 0)
           reloadOnce()
         }
@@ -9716,7 +11488,7 @@ notify pgrst, 'reload schema';</textarea
           } finally {
             syncing = false
             busy(false)
-            lastHash = dataHash()
+            lastHash = await dataHash()
           }
         }
         var SYNC_I18N = {
@@ -10012,10 +11784,19 @@ notify pgrst, 'reload schema';</textarea
             lsSet(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
           } catch (_) {}
         }
-        function localData() {
+        // 取要上传的本地数据。
+        // 主存储是 IndexedDB，只能走 window.ZWStore / ZCCloudStore 这两个接口。
+        // 下面的 LocalStorage 分支保留作为最后兜底（比如 IndexedDB 整个不可用），
+        // 那条路还能把迁移前的老数据同步上去。
+        async function localData() {
           if (window.ZCCloudStore && typeof window.ZCCloudStore.snapshot === 'function') {
             try {
-              return window.ZCCloudStore.snapshot()
+              return await window.ZCCloudStore.snapshot()
+            } catch (_) {}
+          }
+          if (window.ZWStore && window.ZWStore.available()) {
+            try {
+              return await window.ZWStore.library()
             } catch (_) {}
           }
           var legacy = lsGet('zc-autosave'),
@@ -10220,81 +12001,79 @@ notify pgrst, 'reload schema';</textarea
           if (r.error) throw r.error
           return r.data || null
         }
-        function writeLocal(d) {
-          try {
-            var copy = JSON.parse(JSON.stringify(d || {})),
-              settings = copy.settings && typeof copy.settings === 'object' ? copy.settings : {}
-            delete copy.settings
+        // 把云端数据落到本地。主存储是 IndexedDB。
+        // 关键点：只覆盖 order 里列出来的画布，绝不「整库清空再写」，
+        // 免得云端漏发一张画布就把本机的删了。索引/设置一起写，
+        // 保证 activeId、meta 和正文始终一致。
+        async function writeLocal(d) {
+          var copy = JSON.parse(JSON.stringify(d || {}))
+          var settings = copy.settings && typeof copy.settings === 'object' ? copy.settings : {}
+          delete copy.settings
 
-            var fail = function () {
-              throw new Error(tr('sync.localWriteFailed'))
-            }
+          // ---- 多画布包（走 IndexedDB）----
+          if (copy.format === 'zenwriter-library' && copy.docs && typeof copy.docs === 'object') {
+            var order = Array.isArray(copy.order)
+              ? copy.order.filter(function (id) {
+                  return copy.docs[id]
+                })
+              : []
+            if (!order.length) throw new Error(tr('sync.localWriteFailed'))
 
-            // ---- 多画布包 ----
-            if (copy.format === 'zenwriter-library' && copy.docs && typeof copy.docs === 'object') {
-              var order = Array.isArray(copy.order)
-                ? copy.order.filter(function (id) {
-                    return copy.docs[id]
-                  })
-                : []
-              if (!order.length) fail()
-
-              // 清理本机已不存在于云端的画布，避免残留孤儿数据
+            if (window.ZWStore && window.ZWStore.available()) {
+              var ok = await window.ZWStore.writeLibrary({
+                docs: copy.docs,
+                order: order,
+                activeId: copy.activeId,
+                meta: copy.meta,
+                settings: settings,
+              })
+              if (!ok) throw new Error(tr('sync.localWriteFailed'))
+              // 内存里的索引副本要作废，让 DocManager 下次重新读
               try {
-                var oldIdx = JSON.parse(lsGet('zc-docs') || 'null')
-                if (oldIdx && Array.isArray(oldIdx.order)) {
-                  oldIdx.order.forEach(function (id) {
-                    if (order.indexOf(id) < 0) lsDel('zc-doc:' + id)
-                  })
+                if (window.ZCCloudStore && window.ZCCloudStore.invalidateIndex) {
+                  window.ZCCloudStore.invalidateIndex()
                 }
               } catch (_) {}
-
-              order.forEach(function (id) {
-                if (!lsSet('zc-doc:' + id, JSON.stringify(copy.docs[id]))) fail()
-              })
-              if (
-                !lsSet(
-                  'zc-docs',
-                  JSON.stringify({
-                    v: 2,
-                    activeId:
-                      copy.activeId && order.indexOf(copy.activeId) >= 0 ? copy.activeId : order[0],
-                    order: order,
-                    meta: copy.meta && typeof copy.meta === 'object' ? copy.meta : {},
-                  }),
-                )
-              )
-                fail()
-
-              // 兼容镜像：当前画布同时写回旧键
-              var active = copy.activeId && copy.docs[copy.activeId] ? copy.activeId : order[0]
-              var activeDoc = copy.docs[active] || { nodes: [], connections: [] }
-              var mirror = {
-                nodes: activeDoc.nodes || [],
-                connections: activeDoc.connections || [],
+              // zc-settings 镜像继续维护（几百字节，纯给 tr() 读语言）
+              if (Object.keys(settings).length) {
+                lsSet('zc-settings', JSON.stringify(settings))
               }
-              lsSet('zc-autosave', JSON.stringify(mirror))
-              lsSet('zc-connections', JSON.stringify(mirror.connections || []))
-
-              if (Object.keys(settings).length && !lsSet('zc-settings', JSON.stringify(settings)))
-                fail()
               mark(now())
               return
             }
-
-            // ---- 旧版单画布结构（保持兼容） ----
-            var connections = Array.isArray(copy.connections) ? copy.connections : []
-            if (!Array.isArray(copy.nodes)) copy.nodes = []
-            if (!lsSet('zc-autosave', JSON.stringify(copy))) fail()
-            if (!lsSet('zc-connections', JSON.stringify(connections))) fail()
-
-            if (Object.keys(settings).length && !lsSet('zc-settings', JSON.stringify(settings)))
-              fail()
+            // IndexedDB 不可用：退回写 LocalStorage
+            order.forEach(function (id) {
+              if (!lsSet('zc-doc:' + id, JSON.stringify(copy.docs[id]))) {
+                throw new Error(tr('sync.localWriteFailed'))
+              }
+            })
+            if (
+              !lsSet(
+                'zc-docs',
+                JSON.stringify({
+                  v: 2,
+                  activeId:
+                    copy.activeId && order.indexOf(copy.activeId) >= 0 ? copy.activeId : order[0],
+                  order: order,
+                  meta: copy.meta && typeof copy.meta === 'object' ? copy.meta : {},
+                }),
+              )
+            )
+              throw new Error(tr('sync.localWriteFailed'))
+            if (Object.keys(settings).length) lsSet('zc-settings', JSON.stringify(settings))
             mark(now())
-          } catch (e) {
-            if (e && e.message === tr('sync.localWriteFailed')) throw e
-            throw new Error(tr('sync.localWriteFailed'))
+            return
           }
+
+          // ---- 旧版单画布结构（保持兼容）----
+          var connections = Array.isArray(copy.connections) ? copy.connections : []
+          if (!Array.isArray(copy.nodes)) copy.nodes = []
+          if (!lsSet('zc-autosave', JSON.stringify(copy)))
+            throw new Error(tr('sync.localWriteFailed'))
+          if (!lsSet('zc-connections', JSON.stringify(connections)))
+            throw new Error(tr('sync.localWriteFailed'))
+          if (Object.keys(settings).length) lsSet('zc-settings', JSON.stringify(settings))
+          mark(now())
         }
         async function push() {
           if (!session || !unlockPassword) throw new Error(tr('sync.unlockRequired'))
@@ -10302,7 +12081,7 @@ notify pgrst, 'reload schema';</textarea
           statusKey('sync.syncing')
           try {
             var ts = now()
-            var payload = await enc(localData(), unlockPassword),
+            var payload = await enc(await localData(), unlockPassword),
               r = await sb
                 .from(TABLE)
                 .upsert(
@@ -10327,7 +12106,7 @@ notify pgrst, 'reload schema';</textarea
         }
         async function pull(r) {
           var d = await dec(r.payload, unlockPassword)
-          writeLocal(d)
+          await writeLocal(d)
           state.lastCloudTs = Number(r.client_updated_at || 0)
         }
         function refresh() {
@@ -10441,7 +12220,7 @@ notify pgrst, 'reload schema';</textarea
           } finally {
             syncing = false
             busy(false)
-            lastHash = dataHash()
+            lastHash = await dataHash()
           }
         }
         async function uploadLocal() {
@@ -10459,7 +12238,7 @@ notify pgrst, 'reload schema';</textarea
           } finally {
             syncing = false
             busy(false)
-            lastHash = dataHash()
+            lastHash = await dataHash()
           }
         }
         async function syncNow() {
