@@ -617,6 +617,101 @@
         border-radius: var(--radius);
       }
 
+      /* ===== 搜索（大纲顶部） ===== */
+      .ol-search {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px;
+        border-bottom: 1px solid var(--border-dim);
+        flex: 0 0 auto;
+      }
+      .ol-search input {
+        flex: 1 1 auto;
+        min-width: 0;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        padding: 4px 6px;
+        outline: none;
+        border-radius: var(--radius);
+      }
+      .ol-search input:focus {
+        border-color: var(--text);
+      }
+      .ol-search input::placeholder {
+        color: var(--text-faint);
+      }
+      .ol-hits {
+        flex: 0 0 auto;
+        font-size: 9px;
+        color: var(--text-faint);
+        font-family: var(--font-mono);
+      }
+      .ol-search-clear {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-faint);
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        padding: 0;
+        font-family: var(--font-mono);
+        border-radius: var(--radius);
+      }
+      .ol-search-clear:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .ol-snippet {
+        display: block;
+        font-size: 9.5px;
+        line-height: 1.5;
+        color: var(--text-faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+      }
+      .ol-snippet mark {
+        background: var(--accent-yellow-soft);
+        color: var(--text);
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+      .ol-result.active {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      /* 节点正文里的命中高亮：画一条下划线，不动 innerHTML ——
+         那个 innerHTML 会被存进 localStorage、进云同步载荷、进撤销快照，
+         塞一层 <mark> 进去等于把高亮永久写进数据了。
+         覆盖层挂在节点内部，所以画布平移/缩放时它自己会跟着走。 */
+      .search-layer {
+        position: absolute;
+        pointer-events: none;
+        overflow: hidden;
+        z-index: 1;
+      }
+      .search-hit {
+        position: absolute;
+        background: var(--accent-yellow);
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .search-hit.current {
+        opacity: 1;
+      }
+
       /* ===== Outline sidebar =====
          左侧大纲：列出每个节点的标题，点一下把画布跳到该节点。
          展开 / 折叠两层：
@@ -2887,8 +2982,31 @@
         <span class="ol-title" data-i18n="outline.title">大纲</span>
         <span class="ol-count" id="ol-count">0</span>
       </div>
+      <div class="ol-search">
+        <input
+          type="text"
+          id="ol-search-input"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          data-i18n-placeholder="outline.searchPlaceholder"
+          data-i18n-title="outline.searchHintTitle"
+          placeholder="搜索节点…"
+        />
+        <span class="ol-hits" id="ol-search-hits"></span>
+        <button
+          type="button"
+          class="ol-search-clear"
+          id="ol-search-clear"
+          data-i18n-title="outline.searchClear"
+          aria-label="清除"
+        >
+          &times;
+        </button>
+      </div>
       <div class="ol-list" id="ol-list"></div>
-      <div class="ol-empty hidden" id="ol-empty" data-i18n="outline.empty">暂无节点</div>
+      <div class="ol-empty hidden" id="ol-empty">暂无节点</div>
     </aside>
 
     <!-- ===== Floating Toolbar ===== -->
@@ -3466,6 +3584,11 @@ notify pgrst, 'reload schema';</textarea
             'outline.collapse': 'Collapse outline',
             'outline.expand': 'Expand outline',
             'outline.empty': 'No nodes yet',
+            'outline.searchPlaceholder': 'Search nodes…',
+            'outline.searchHintTitle': 'Search · {0} F',
+            'outline.searchClear': 'Clear search',
+            'outline.searchNone': 'No matches',
+            'outline.searchCount': '{0}/{1}',
             'notify.outlineHidden': 'Node is hidden inside a collapsed group',
             'notify.nodeMissing': 'That node no longer exists',
             'menu.sync': 'SYNC',
@@ -3657,6 +3780,11 @@ notify pgrst, 'reload schema';</textarea
             'outline.collapse': '折叠大纲',
             'outline.expand': '展开大纲',
             'outline.empty': '暂无节点',
+            'outline.searchPlaceholder': '搜索节点…',
+            'outline.searchHintTitle': '搜索 · {0} F',
+            'outline.searchClear': '清除搜索',
+            'outline.searchNone': '没有匹配',
+            'outline.searchCount': '{0}/{1}',
             'notify.outlineHidden': '该节点在已折叠的分组里，已自动展开',
             'notify.nodeMissing': '该节点已不存在',
             'menu.sync': '同步',
@@ -6174,7 +6302,15 @@ notify pgrst, 'reload schema';</textarea
                 return
               }
               const item = e.target.closest('.ol-item')
-              if (item) this.jump(item.dataset.nodeId)
+              if (item) {
+                // 搜索结果行：跳到该结果并在节点里高亮命中
+                const ri = item.dataset.resultIndex
+                if (ri !== undefined) {
+                  SearchManager.go(Number(ri))
+                  return
+                }
+                this.jump(item.dataset.nodeId)
+              }
             })
             this.setOpen(AppState.outlineOpen, true)
             this.render()
@@ -6239,11 +6375,22 @@ notify pgrst, 'reload schema';</textarea
             const empty = document.getElementById('ol-empty')
             const countEl = document.getElementById('ol-count')
             const railCount = document.getElementById('ol-rail-count')
+            const hits = document.getElementById('ol-search-hits')
+
+            // 搜索中：大纲树让位给结果列表
+            if (SearchManager.isActive()) {
+              SearchManager.renderInto(list, empty, countEl, railCount)
+              return
+            }
+            if (hits) hits.textContent = ''
 
             const nodes = [...getNodes()]
             if (countEl) countEl.textContent = String(nodes.length)
             if (railCount) railCount.textContent = String(nodes.length)
-            if (empty) empty.classList.toggle('hidden', nodes.length > 0)
+            if (empty) {
+              empty.classList.toggle('hidden', nodes.length > 0)
+              empty.textContent = t('outline.empty')
+            }
 
             if (!nodes.length) {
               list.innerHTML = ''
@@ -6380,6 +6527,431 @@ notify pgrst, 'reload schema';</textarea
             node.classList.add('jump-flash')
             clearTimeout(this._flashTimer)
             this._flashTimer = setTimeout(() => node.classList.remove('jump-flash'), 1400)
+          },
+        }
+
+        // ================================================================
+        // 11.7 SEARCH MANAGER — 搜索节点并跳转
+        //
+        // 搜索范围：节点标题 + 正文（文本/待办/分组取 innerText，
+        // Markdown / 公式取源码，图片取链接）。
+        //
+        // 关键约束：绝不能为了高亮去改节点正文的 innerHTML。
+        // 那个 innerHTML 会被存进 localStorage、进云同步载荷、
+        // 进撤销快照，塞一层 <mark> 进去就等于把高亮永久写进数据了。
+        // 所以命中高亮用一个挂在节点内部的覆盖层（.search-layer）：
+        //   1. 绝对定位 -> 脱离 flex 流，不会挤动节点内部布局
+        //   2. 挂在 .node 里面 -> 画布平移/缩放自动跟随，不用重算
+        //   3. 用 Range.getClientRects() 拿真实排版矩形，换行、
+        //      行内样式、中文标点都精确
+        // ================================================================
+        const SearchManager = {
+          query: '',
+          terms: [],
+          results: [], // [{ id, count, snippet, ranges }]
+          active: -1,
+          layer: null, // 当前覆盖层元素
+          paintedId: null,
+          SCROLL_SLACK: 6, // 命中露出这么多像素就算「可见」
+
+          init() {
+            const input = document.getElementById('ol-search-input')
+            if (!input) return
+            input.addEventListener('input', () => this.setQuery(input.value))
+            input.addEventListener('keydown', (e) => {
+              // 拦在全局快捷键前面，否则 Enter/Escape 会被应用抢走
+              e.stopPropagation()
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                if (e.shiftKey) this.prev()
+                else this.next()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                this.clear()
+              }
+            })
+            const clearBtn = document.getElementById('ol-search-clear')
+            if (clearBtn) {
+              clearBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                this.clear()
+                if (input) input.focus()
+              })
+            }
+            // 正文滚动后命中位置就变了，capture 阶段能收到 .node-content 的滚动
+            document.addEventListener('scroll', () => this._repaint(), true)
+            window.addEventListener('resize', () => this._repaint())
+          },
+
+          input() {
+            return document.getElementById('ol-search-input')
+          },
+
+          isActive() {
+            return this.terms.length > 0
+          },
+
+          setQuery(raw) {
+            const q = String(raw || '')
+            this.query = q
+            // 空格分词，全部命中才算（AND）
+            this.terms = q.toLowerCase().split(/\s+/).filter(Boolean)
+            this.active = -1
+            this._clearPaint()
+            if (!this.terms.length) {
+              OutlineManager.render()
+              return
+            }
+            this._build()
+            if (this.results.length) this.active = 0
+            // 注意这里不画高亮：用户还没导航过去，
+            // 先把一个可能还在屏幕外的节点标黄会很莫名其妙。
+            // 等 go()/next()/prev() 真正跳过去再画。
+            OutlineManager.render()
+          },
+
+          clear() {
+            const input = this.input()
+            if (input) input.value = ''
+            this.query = ''
+            this.terms = []
+            this.results = []
+            this.active = -1
+            this._clearPaint()
+            OutlineManager.render()
+          },
+
+          // 换画布 / 撤销回放后节点集合变了，重新检索而不是把查询丢掉
+          refresh() {
+            if (!this.isActive()) return
+            const keep = this.active
+            this.active = -1
+            this._clearPaint()
+            this._build()
+            this.active = this.results.length ? Math.min(keep, this.results.length - 1) : -1
+            if (this.active >= 0) this._paintActive()
+            OutlineManager.render()
+          },
+
+          // Ctrl/Cmd+F 唤起
+          focusInput() {
+            if (!AppState.outlineOpen) OutlineManager.setOpen(true)
+            const input = this.input()
+            if (!input) return false
+            input.focus()
+            input.select()
+            return true
+          },
+
+          // ---- 取节点的可搜索文本 ----
+          _bodyOf(node) {
+            const type = node.dataset.type
+            const content = getNodeContent(node)
+            if (type === 'markdown' || type === 'math') {
+              // 源码不是渲染出来的文本，交给片段显示用，不做节点内定位
+              return { text: (content && content.dataset.source) || '', renderable: false }
+            }
+            if (type === 'image') {
+              const img = content ? content.querySelector('img') : null
+              return { text: img ? img.src : '', renderable: false }
+            }
+            return { text: content ? content.innerText || '' : '', renderable: !!content }
+          },
+
+          _titleOf(node) {
+            return getTitleText(node) || ''
+          },
+
+          // ---- 建立结果 ----
+          _build() {
+            const out = []
+            // 自己再归一化一次：匹配、片段、定位全都依赖小写词，
+            // 不能指望调用方一定记得先 lowerCase
+            const terms = this.terms.map((x) => String(x).toLowerCase()).filter(Boolean)
+            getNodes().forEach((node) => {
+              const title = this._titleOf(node)
+              const body = this._bodyOf(node)
+              const hay = (title + '\n' + body.text).toLowerCase()
+              // 每个词都必须在（标题或正文里任意一处命中即可）
+              const ok = terms.every((term) => hay.indexOf(term) !== -1)
+              if (!ok) return
+              const ranges = body.renderable
+                ? this._findRanges(node, terms)
+                : this._findRanges(node, terms, true)
+              out.push({
+                id: node.id,
+                count: ranges.length,
+                snippet: this._snippet(
+                  title + ' — ' + body.text.replace(/\s+/g, ' ').trim(),
+                  terms,
+                ),
+                ranges: ranges,
+              })
+            })
+            this.results = out
+          },
+
+          // 在节点里定位所有命中（返回 DOM Range 列表）
+          _findRanges(node, terms, sourceOnly) {
+            const found = []
+            const push = (el, term) => {
+              if (!el) return
+              const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+              let tn
+              while ((tn = walker.nextNode())) {
+                const text = tn.nodeValue || ''
+                const lower = text.toLowerCase()
+                let from = 0
+                let at
+                while ((at = lower.indexOf(term, from)) !== -1) {
+                  try {
+                    const r = document.createRange()
+                    r.setStart(tn, at)
+                    r.setEnd(tn, at + term.length)
+                    found.push(r)
+                  } catch (_) {}
+                  from = at + term.length
+                }
+              }
+            }
+            const titleEl = getNodeTitle(node)
+            const titleSpan = titleEl ? titleEl.querySelector('.title-text') : null
+            terms.forEach((term) => {
+              push(titleSpan, term)
+              if (sourceOnly) return
+              const content = getNodeContent(node)
+              // 公式 / Markdown 的渲染结果里文字被标签打散，尽力而为
+              if (content && node.dataset.type !== 'markdown' && node.dataset.type !== 'math') {
+                push(content, term)
+              }
+            })
+            return found
+          },
+
+          _snippet(text, terms) {
+            // 先合并所有命中区间（多词搜索可能重叠），再按区间切片转义，
+            // 这样既能处理重叠，又不用往已转义的 HTML 里插标签
+            const lower = text.toLowerCase()
+            const spans = []
+            terms.forEach((term) => {
+              if (!term) return
+              let from = 0
+              let at
+              while ((at = lower.indexOf(term, from)) !== -1) {
+                spans.push([at, at + term.length])
+                from = at + term.length
+              }
+            })
+            spans.sort((a, b) => a[0] - b[0])
+            const merged = []
+            spans.forEach((s) => {
+              const last = merged[merged.length - 1]
+              if (last && s[0] <= last[1]) last[1] = Math.max(last[1], s[1])
+              else merged.push([s[0], s[1]])
+            })
+
+            const first = merged.length ? merged[0][0] : 0
+            const lastEnd = merged.length ? merged[merged.length - 1][1] : 100
+            const start = first > 30 ? first - 30 : 0
+            const end = Math.min(text.length, lastEnd + 70)
+            const slice = text.slice(start, end)
+
+            let html = start > 0 ? '\u2026' : ''
+            let cursor = 0
+            merged.forEach((sp) => {
+              if (sp[1] <= start || sp[0] >= end) return
+              const ra = Math.max(sp[0], start) - start
+              const rb = Math.min(sp[1], end) - start
+              if (ra > cursor) html += escapeHtml(slice.slice(cursor, ra))
+              html += '<mark>' + escapeHtml(slice.slice(ra, rb)) + '</mark>'
+              cursor = rb
+            })
+            html += escapeHtml(slice.slice(cursor))
+            if (end < text.length) html += '\u2026'
+            return html
+          },
+
+          // ---- 渲染结果列表 ----
+          renderInto(list, empty, countEl, railCount) {
+            const total = this.results.length
+            if (countEl) countEl.textContent = String(total)
+            if (railCount) railCount.textContent = String(total)
+            list.innerHTML = ''
+            if (!total) {
+              if (empty) {
+                empty.classList.remove('hidden')
+                empty.textContent = t('outline.searchNone')
+              }
+              return
+            }
+            if (empty) {
+              empty.classList.add('hidden')
+              empty.textContent = t('outline.empty')
+            }
+            const frag = document.createDocumentFragment()
+            this.results.forEach((r, i) => {
+              const node = document.getElementById(r.id)
+              const row = document.createElement('div')
+              row.className =
+                'ol-item ol-result' +
+                (i === this.active ? ' active' : '') +
+                (node && node.classList.contains('hidden-by-group-conn') ? ' hidden-node' : '')
+              row.dataset.nodeId = r.id
+              row.dataset.resultIndex = String(i)
+              const sp = document.createElement('span')
+              sp.className = 'ol-chevron-spacer'
+              row.appendChild(sp)
+              const tag = document.createElement('span')
+              tag.className = 'ol-type'
+              tag.textContent =
+                (OutlineManager.TYPE_TAG[node && node.dataset.type] || 'TXT') +
+                (r.count > 1 ? ' ' + r.count : '')
+              row.appendChild(tag)
+              const body = document.createElement('span')
+              body.style.minWidth = '0'
+              const name = document.createElement('span')
+              name.className = 'ol-name'
+              name.textContent = this._titleOf(node) || t('docs.defaultName')
+              const snip = document.createElement('span')
+              snip.className = 'ol-snippet'
+              snip.innerHTML = r.snippet
+              body.appendChild(name)
+              body.appendChild(snip)
+              row.appendChild(body)
+              frag.appendChild(row)
+            })
+            list.appendChild(frag)
+            const hits = document.getElementById('ol-search-hits')
+            if (hits) {
+              hits.textContent = this.results.length
+                ? t('outline.searchCount', this.active + 1, this.results.length)
+                : ''
+            }
+          },
+
+          // ---- 跳转 ----
+          go(index) {
+            if (!this.results.length) return false
+            const i = Math.max(0, Math.min(index, this.results.length - 1))
+            this.active = i
+            const r = this.results[i]
+            const node = document.getElementById(r.id)
+            if (!node) return false
+            OutlineManager.jump(r.id)
+            // 先把命中滚进正文可视区，再据此算高亮覆盖层的位置
+            this.scrollHitIntoView(node)
+            this._paintActive()
+            // 高亮行滚进视野
+            const list = document.getElementById('ol-list')
+            if (list) {
+              const row = list.querySelector('[data-result-index="' + i + '"]')
+              if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' })
+            }
+            return true
+          },
+          next() {
+            if (!this.results.length) return false
+            return this.go((this.active + 1) % this.results.length)
+          },
+          prev() {
+            if (!this.results.length) return false
+            return this.go((this.active - 1 + this.results.length) % this.results.length)
+          },
+
+          // ---- 节点内命中高亮 ----
+          _clearPaint() {
+            if (this.layer) {
+              this.layer.remove()
+              this.layer = null
+            }
+            this.paintedId = null
+          },
+
+          _paintActive() {
+            this._clearPaint()
+            if (this.active < 0) return
+            const r = this.results[this.active]
+            if (!r || !r.ranges.length) return
+            const node = document.getElementById(r.id)
+            if (!node) return
+            const content = getNodeContent(node)
+            const nRect = node.getBoundingClientRect()
+            const scale = AppState.scale > 0 ? AppState.scale : 1
+            // 覆盖层的坐标系原点取「正文可视区」（没有正文就退回节点本身），
+            // 顺带把覆盖层裁到这个范围内，滚出视野的命中自然被裁掉。
+            const base = content ? content.getBoundingClientRect() : nRect
+            const layer = document.createElement('div')
+            layer.className = 'search-layer'
+            layer.style.left = (base.left - nRect.left) / scale + 'px'
+            layer.style.top = (base.top - nRect.top) / scale + 'px'
+            layer.style.width = base.width / scale + 'px'
+            layer.style.height = base.height / scale + 'px'
+            // 下划线粗细固定为屏幕上的 2px。若跟着画布缩放，
+            // 缩到 0.2 倍时就只剩 0.4px，基本看不见了
+            const bar = 2 / scale
+            r.ranges.forEach((range, i) => {
+              let rects = []
+              try {
+                rects = range.getClientRects()
+              } catch (_) {}
+              for (const cr of rects) {
+                if (cr.width <= 0 || cr.height <= 0) continue
+                const b = document.createElement('div')
+                // 第一个命中就是要滚过去的那一个，画得更实
+                b.className = 'search-hit' + (i === 0 ? ' current' : '')
+                // 关键：必须相对 base 换算。覆盖层本身已经按 base 定位过了，
+                // 这里再用 nRect 就算重复了一次偏移，高亮会整体下沉
+                // 一个「正文顶部距节点顶部」的高度（节点头 + 内边距）。
+                b.style.left = (cr.left - base.left) / scale + 'px'
+                b.style.width = cr.width / scale + 'px'
+                b.style.top = (cr.bottom - base.top) / scale + 1 / scale - bar + 'px'
+                b.style.height = bar + 'px'
+                b.style.borderRadius = bar / 2 + 'px'
+                layer.appendChild(b)
+              }
+            })
+            node.appendChild(layer)
+            this.layer = layer
+            this.paintedId = node.id
+          },
+
+          // 正文滚动 / 窗口变化后重算命中位置。
+          // 平移/缩放时不用重算 —— 覆盖层挂在节点内部，会自己跟着走；
+          // renderPending 期间跳过，避免拖动画布时反复重排
+          _repaint() {
+            if (!this.layer || this.active < 0) return
+            if (AppState.renderPending) return
+            this._paintActive()
+          },
+
+          // 跳过去之后把命中滚到可视区
+          scrollHitIntoView(node) {
+            const content = getNodeContent(node)
+            if (!content) return
+            if (content.scrollHeight <= content.clientHeight) return
+            const range = this.currentRange()
+            if (!range) return
+            let rect
+            try {
+              rect = range.getBoundingClientRect()
+            } catch (_) {
+              return
+            }
+            const cRect = content.getBoundingClientRect()
+            if (
+              rect.top >= cRect.top + this.SCROLL_SLACK &&
+              rect.bottom <= cRect.bottom - this.SCROLL_SLACK
+            ) {
+              return // 已经可见
+            }
+            content.scrollTop += rect.top - cRect.top - (cRect.height - rect.height) / 2
+          },
+
+          currentRange() {
+            if (this.active < 0) return null
+            const r = this.results[this.active]
+            if (!r || !r.ranges.length) return null
+            return r.ranges[0]
           },
         }
 
@@ -7150,7 +7722,7 @@ notify pgrst, 'reload schema';</textarea
               persistCanvasData()
               // 回放会重建整个 DOM，大纲必须跟着重画
               OutlineManager.currentId = null
-              OutlineManager.render()
+              SearchManager.refresh()
 
               // 回放过程中可能被聚焦到某个节点上，退回后别留一个野生光标
               const a = document.activeElement
@@ -7612,7 +8184,7 @@ notify pgrst, 'reload schema';</textarea
               // 换画布后大纲要重建（节点 id 集合变了）
               OutlineManager.currentId = null
               OutlineManager.collapsed.clear()
-              OutlineManager.render()
+              SearchManager.refresh()
             } finally {
               History.applying = false
             }
@@ -8373,6 +8945,12 @@ notify pgrst, 'reload schema';</textarea
                 else History.undo()
                 return
               }
+              // 接管浏览器原生查找，改为聚焦大纲里的搜索框
+              if (k === 'f') {
+                e.preventDefault()
+                SearchManager.focusInput()
+                return
+              }
             }
             if (e.key === '?') {
               const tag = (e.target && e.target.tagName) || ''
@@ -8769,6 +9347,7 @@ notify pgrst, 'reload schema';</textarea
           initObservers()
           // 大纲要读节点，所以放在画布内容建好之后再初始化
           OutlineManager.init()
+          SearchManager.init()
 
           setTimeout(() => {
             ConnectionManager.renderAll()
