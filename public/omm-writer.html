@@ -60,6 +60,8 @@
         --active-text: #ffffff;
         --accent-red: #cc3333;
         --accent-green: #339933;
+        --accent-yellow: #f0b400;
+        --accent-yellow-soft: rgba(240, 180, 0, 0.16);
         --fscale: 1;
         --font-mono: 'Literata', 'Georgia', 'Times New Roman', serif;
         --port-size: 10px;
@@ -86,6 +88,8 @@
         --active-text: #000000;
         --accent-red: #ff5555;
         --accent-green: #44cc44;
+        --accent-yellow: #ffd54a;
+        --accent-yellow-soft: rgba(255, 213, 74, 0.18);
         --port-color: #aaa;
         --conn-color: #aaa;
         --node-bg: #000000;
@@ -163,22 +167,32 @@
         z-index: 1000;
         border-radius: var(--radius);
       }
+      /* 菜单已固定可见时，顶部那条触发带不再拦截点击，
+         否则菜单最上面 8px 变成了点不到的死区（桌面和触屏都受影响） */
+      body.menu-pinned #menu-trigger {
+        pointer-events: none;
+      }
+      /* --menu-h 由 JS 按菜单实际高度写入：窄窗口换行时收起偏移/下拉位置都跟着变 */
       #top-menu {
         position: fixed;
-        top: -48px;
+        top: calc(var(--menu-h, 48px) * -1);
         left: 0;
         width: 100%;
-        height: 48px;
+        min-height: 48px;
+        max-height: 62vh;
         background: var(--bg);
         border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
+        align-content: center;
         justify-content: center;
         gap: 2px;
+        row-gap: 3px;
         z-index: 999;
         transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        padding: 0 12px;
-        flex-wrap: nowrap;
+        padding: 4px 12px;
+        flex-wrap: wrap;
+        overflow-y: auto;
         overflow-x: auto;
         border-radius: var(--radius);
       }
@@ -250,6 +264,11 @@
         border-color: transparent;
         background: transparent;
       }
+      /* 撤销/重做在栈空时置灰 */
+      .menu-btn.disabled {
+        opacity: 0.28;
+        pointer-events: none;
+      }
       .pin-btn {
         width: 28px;
         height: 28px;
@@ -283,7 +302,7 @@
       /* Dropdowns */
       .dropdown {
         position: fixed;
-        top: 52px;
+        top: calc(var(--menu-h, 48px) + 4px);
         background: var(--bg);
         border: 1px solid var(--border);
         padding: 4px;
@@ -596,6 +615,240 @@
       .settings-bg-dot.active {
         border-color: var(--text);
         border-radius: var(--radius);
+      }
+
+      /* ===== Outline sidebar =====
+         左侧大纲：列出每个节点的标题，点一下把画布跳到该节点。
+         展开 / 折叠两层：
+           1) 整块侧边栏收起成左边一条竖排标签（#outline-rail）
+           2) 大纲内部的分组节点可单独折叠子树（.ol-chevron） */
+      #outline {
+        position: fixed;
+        left: 0;
+        top: calc(var(--menu-h, 48px) + 4px);
+        bottom: 32px;
+        width: clamp(180px, 22vw, 250px);
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-left: none;
+        z-index: 998;
+        font-family: var(--font-mono);
+        border-radius: 0 var(--radius) var(--radius) 0;
+      }
+      #outline.hidden,
+      #outline-rail.hidden {
+        display: none;
+      }
+      /* 收起后的竖排标签 */
+      #outline-rail {
+        position: fixed;
+        left: 0;
+        top: calc(var(--menu-h, 48px) + 4px);
+        z-index: 998;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 5px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-left: none;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        color: var(--text-dim);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #outline-rail:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      #outline-rail .rail-text {
+        writing-mode: vertical-rl;
+        letter-spacing: 2px;
+        font-size: 9px;
+        text-transform: uppercase;
+      }
+      #outline-rail .rail-count {
+        font-size: 9px;
+        color: var(--text-faint);
+      }
+      .ol-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 8px 6px;
+        border-bottom: 1px solid var(--border-dim);
+        flex: 0 0 auto;
+      }
+      .ol-collapse {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-faint);
+        cursor: pointer;
+        font-size: 9px;
+        line-height: 1;
+        padding: 0;
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+      }
+      .ol-collapse:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .ol-title {
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ol-count {
+        font-size: 9px;
+        color: var(--text-faint);
+        flex: 0 0 auto;
+      }
+      .ol-list {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 4px 4px 8px;
+        overscroll-behavior: contain;
+        min-height: 0;
+      }
+      .ol-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      .ol-list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .ol-list::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+        border-radius: 2px;
+      }
+      .ol-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 6px;
+        /* 缩进由 JS 按层级写入 --ol-depth */
+        padding-left: calc(6px + var(--ol-depth, 0) * 12px);
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        transition: background 0.1s;
+        min-height: 26px;
+      }
+      .ol-item:hover {
+        background: var(--hover);
+      }
+      .ol-item.current {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .ol-item.hidden-node {
+        opacity: 0.4;
+      }
+      .ol-item.hidden-node .ol-name {
+        text-decoration: line-through;
+      }
+      .ol-chevron {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 7px;
+        line-height: 1;
+        color: var(--text-faint);
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        padding: 0;
+        font-family: var(--font-mono);
+      }
+      .ol-chevron:hover {
+        color: var(--text);
+      }
+      .ol-chevron.collapsed {
+        transform: rotate(-90deg);
+      }
+      .ol-chevron-spacer {
+        width: 12px;
+        flex: 0 0 12px;
+      }
+      .ol-type {
+        flex: 0 0 auto;
+        font-size: 8px;
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        border: 1px solid var(--border-faint);
+        padding: 1px 3px;
+        line-height: 1.2;
+        border-radius: var(--radius);
+      }
+      .ol-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        color: var(--text-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ol-item:hover .ol-name {
+        color: var(--text);
+      }
+      .ol-empty {
+        padding: 14px 10px;
+        font-size: 10px;
+        letter-spacing: 1px;
+        color: var(--text-faint);
+        text-align: center;
+      }
+      /* 跳转后短暂高亮目标节点（黄色）。
+         这里刻意用 outline 而不是 box-shadow：.node.no-bg 会写
+         box-shadow:none !important（优先级高于动画），关掉节点背景时
+         用 box-shadow 就完全看不到高亮了。outline 没人覆盖。 */
+      @keyframes zwJumpFlash {
+        0%,
+        100% {
+          outline-color: transparent;
+        }
+        30%,
+        70% {
+          outline-color: var(--accent-yellow);
+        }
+      }
+      .node.jump-flash {
+        outline: 2px solid transparent;
+        outline-offset: 3px;
+        animation: zwJumpFlash 0.6s ease-in-out 2;
+      }
+      /* 触屏上大纲项更好按 */
+      @media (hover: none), (pointer: coarse) {
+        .ol-item {
+          min-height: 34px;
+        }
+        #outline-rail {
+          padding: 12px 8px;
+        }
       }
 
       /* Workspace */
@@ -1434,6 +1687,82 @@
         border-radius: var(--radius);
       }
 
+      /* ===== Touch (tablet / phone) =====
+         没有 hover，所以依赖 :hover 才显形的控件（节点头、端口、缩放手柄、
+         画布列表操作键）在触屏上必须常驻，否则根本没有可抓的地方。
+         触摸目标再补一点尺寸，手指才好按。 */
+      @media (hover: none), (pointer: coarse) {
+        /* 节点头常驻：触屏上这是唯一能拖动节点的地方 */
+        .node-header,
+        .node:hover .node-header,
+        .node:focus-within .node-header {
+          opacity: 1;
+        }
+        /* 端口/缩放手柄只给「当前触摸的节点」，避免满屏都是圆点 */
+        .node.touch-active .node-port,
+        .node:focus-within .node-port,
+        .node.port-active .node-port {
+          opacity: 0.85;
+        }
+        .node.touch-active .node-resize {
+          opacity: 1;
+        }
+        .doc-item .doc-ops {
+          opacity: 1;
+        }
+        .menu-btn,
+        .dd-item,
+        .node-action-btn {
+          /* 手指命中区域不小于 32px */
+          min-height: 32px;
+          display: flex;
+          align-items: center;
+        }
+        .node-actions {
+          gap: 4px;
+        }
+        #menu-trigger {
+          height: 16px;
+        }
+        /* 触屏没有 hover，拖动时给个按下反馈 */
+        .node.touch-active {
+          border-width: 2px;
+        }
+        .menu-group {
+          padding: 0 8px;
+        }
+      }
+      /* 触屏上禁用系统的长按菜单/选中气泡，交给应用自己的右键菜单 */
+      #workspace,
+      .node,
+      .node-header,
+      .node-port,
+      .node-resize,
+      #top-menu {
+        -webkit-touch-callout: none;
+      }
+      /* 手势全部自己处理：交给浏览器就会变成页面滚动/缩放 */
+      #workspace,
+      .node,
+      .node-header,
+      .node-port,
+      .node-resize {
+        touch-action: none;
+      }
+      /* 节点正文要能上下滚动，所以单独放行纵向平移 */
+      .node-content {
+        touch-action: pan-y;
+      }
+      /* 双击缩放会误触发双击打开编辑器，统一关掉 */
+      .node-content,
+      .menu-btn,
+      .node-header {
+        touch-action: manipulation;
+      }
+      .node-header {
+        touch-action: none;
+      }
+
       /* Context menu */
       #context-menu {
         position: fixed;
@@ -2210,6 +2539,25 @@
         <div class="menu-btn" data-action="showExport" data-i18n="menu.export"></div>
       </div>
       <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.editLabel">编辑</span>
+        <div
+          class="menu-btn disabled"
+          id="btn-undo"
+          data-action="undo"
+          data-i18n="menu.undo"
+          data-i18n-title="menu.undoTitle"
+          title="撤销"
+        ></div>
+        <div
+          class="menu-btn disabled"
+          id="btn-redo"
+          data-action="redo"
+          data-i18n="menu.redo"
+          data-i18n-title="menu.redoTitle"
+          title="重做"
+        ></div>
+      </div>
+      <div class="menu-group">
         <span class="menu-label" data-i18n="menu.mode">模式</span>
         <div class="menu-btn" id="btn-focus" data-action="toggleFocus" data-i18n="menu.focus"></div>
         <div class="menu-btn" id="btn-read" data-action="toggleRead" data-i18n="menu.read"></div>
@@ -2222,6 +2570,14 @@
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.tools">工具</span>
         <div class="menu-btn" data-action="resetView" data-i18n="menu.resetView"></div>
+        <div
+          class="menu-btn"
+          id="btn-outline"
+          data-action="toggleOutline"
+          data-i18n="menu.outline"
+          data-i18n-title="menu.outlineTitle"
+          title="大纲"
+        ></div>
         <div class="menu-btn" data-action="purge" data-i18n="menu.purge"></div>
       </div>
       <div class="menu-group" id="zw-sync-group">
@@ -2510,6 +2866,30 @@
         <span data-i18n="dd.settings.resetStyles">Reset Styles</span>
       </div>
     </div>
+
+    <!-- ===== Outline Sidebar（左侧大纲，可折叠） ===== -->
+    <div id="outline-rail" class="hidden" data-action="expandOutline" role="button" tabindex="0">
+      <span class="rail-text" data-i18n="outline.title">大纲</span>
+      <span class="rail-count" id="ol-rail-count">0</span>
+    </div>
+    <aside id="outline" class="hidden" aria-hidden="true">
+      <div class="ol-head">
+        <button
+          type="button"
+          class="ol-collapse"
+          id="ol-collapse"
+          data-action="collapseOutline"
+          data-i18n-title="outline.collapse"
+          aria-label="折叠"
+        >
+          &#9666;
+        </button>
+        <span class="ol-title" data-i18n="outline.title">大纲</span>
+        <span class="ol-count" id="ol-count">0</span>
+      </div>
+      <div class="ol-list" id="ol-list"></div>
+      <div class="ol-empty hidden" id="ol-empty" data-i18n="outline.empty">暂无节点</div>
+    </aside>
 
     <!-- ===== Floating Toolbar ===== -->
     <div id="floating-toolbar">
@@ -3014,6 +3394,11 @@ notify pgrst, 'reload schema';</textarea
           sans: 'system-ui, -apple-system, sans-serif',
           serif: "Georgia, 'Times New Roman', serif",
         }
+        // 当前平台的修饰键字形：Mac ⌘，其余 Ctrl。
+        // 快捷键说明里的 {M}、撤销按钮 title 里的 {0} 都用它。
+        const MOD_LABEL = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+          ? '⌘'
+          : 'Ctrl'
 
         // ================================================================
         // 2. I18N
@@ -3053,6 +3438,14 @@ notify pgrst, 'reload schema';</textarea
             'notify.docKeepOne': 'At least one canvas must remain',
             'menu.open': 'OPEN',
             'menu.export': 'EXPORT',
+            'menu.editLabel': 'EDIT',
+            'menu.undo': 'UNDO',
+            'menu.redo': 'REDO',
+            'menu.undoTitle': 'Undo · {0} Z',
+            'menu.redoTitle': 'Redo · {0} Shift + Z',
+            'notify.nothingToUndo': 'Nothing to undo',
+            'notify.nothingToRedo': 'Nothing to redo',
+            'notify.historyRestored': 'Restored {0} nodes · {1} connections',
             'menu.mode': 'MODE',
             'menu.bg': 'BG',
             'menu.themeLight': 'LIGHT',
@@ -3067,6 +3460,14 @@ notify pgrst, 'reload schema';</textarea
             'menu.lang': '中文',
             'menu.styleSettings': 'STYLE',
             'menu.tools': 'TOOLS',
+            'menu.outline': 'OUTLINE',
+            'menu.outlineTitle': 'Outline sidebar · jump to a node',
+            'outline.title': 'Outline',
+            'outline.collapse': 'Collapse outline',
+            'outline.expand': 'Expand outline',
+            'outline.empty': 'No nodes yet',
+            'notify.outlineHidden': 'Node is hidden inside a collapsed group',
+            'notify.nodeMissing': 'That node no longer exists',
             'menu.sync': 'SYNC',
             'menu.purge': 'PURGE',
             'pin.title': 'Pin menu bar',
@@ -3114,9 +3515,9 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.shortcuts': 'Shortcuts',
             'hk.title': 'Keyboard Shortcuts',
             'hk.rows':
-              'General§Save the workspace as a .zc file|{M} S|Open a .zc workspace file|{M} O|Open this panel|?|Close every dropdown, hide the floating toolbar, cancel a connection being drawn|Esc~~While the caret is in node body text§Indent the first line|Tab|Unindent the first line|Shift + Tab|Indent the first line|{M} ]|Unindent the first line|{M} [~~While a connection is selected§Delete the selected connection|Delete / Backspace~~While focused in a field§Commit the image URL|Enter|Discard the edit and keep the previous value|Esc|Commit the Markdown or formula source|{M} Enter|Discard the source edit|Esc|Confirm the node title|Enter~~While focused in the cloud-sync dialog§Sign in|Enter',
+              'General§Undo the last change|{M} Z|Redo it again|{M} Shift + Z|Redo it again|{M} Y|Save the workspace as a .zc file|{M} S|Open a .zc workspace file|{M} O|Open this panel|?|Close every dropdown, hide the floating toolbar, cancel a connection being drawn|Esc~~While the caret is in node body text§Indent the first line|Tab|Unindent the first line|Shift + Tab|Indent the first line|{M} ]|Unindent the first line|{M} [~~While a connection is selected§Delete the selected connection|Delete / Backspace~~While focused in a field§Commit the image URL|Enter|Discard the edit and keep the previous value|Esc|Commit the Markdown or formula source|{M} Enter|Discard the source edit|Esc|Confirm the node title|Enter~~While focused in the cloud-sync dialog§Sign in|Enter',
             'hk.note':
-              '{M} S and {M} O fire anywhere, including while you are typing, so the browser default is always suppressed. Esc never closes the confirm dialog — use Cancel or click the backdrop. The first-line indent keys only apply to text, todo and group nodes.',
+              '{M} Z / {M} Shift + Z undo and redo the canvas itself — node creation, drag, resize, delete, connections and text edits. Continuous typing is grouped into one step. The history stack is per canvas: switching canvases resets it. {M} S and {M} O fire anywhere, including while you are typing, so the browser default is always suppressed. Esc never closes the confirm dialog — use Cancel or click the backdrop. The first-line indent keys only apply to text, todo and group nodes.',
             'ft.style': 'Style',
             'ft.font': 'Font',
             'ft.font.literata': 'Literata',
@@ -3228,6 +3629,14 @@ notify pgrst, 'reload schema';</textarea
             'notify.docKeepOne': '至少需要保留一个画布',
             'menu.open': '打开',
             'menu.export': '导出',
+            'menu.editLabel': '编辑',
+            'menu.undo': '撤销',
+            'menu.redo': '重做',
+            'menu.undoTitle': '撤销 · {0} Z',
+            'menu.redoTitle': '重做 · {0} Shift + Z',
+            'notify.nothingToUndo': '没有可撤销的操作',
+            'notify.nothingToRedo': '没有可重做的操作',
+            'notify.historyRestored': '已恢复 {0} 个节点 · {1} 条连接',
             'menu.mode': '模式',
             'menu.bg': '背景',
             'menu.themeLight': '浅色',
@@ -3242,6 +3651,14 @@ notify pgrst, 'reload schema';</textarea
             'menu.lang': 'EN',
             'menu.styleSettings': '样式',
             'menu.tools': '工具',
+            'menu.outline': '大纲',
+            'menu.outlineTitle': '左侧大纲 · 点击跳转到节点',
+            'outline.title': '大纲',
+            'outline.collapse': '折叠大纲',
+            'outline.expand': '展开大纲',
+            'outline.empty': '暂无节点',
+            'notify.outlineHidden': '该节点在已折叠的分组里，已自动展开',
+            'notify.nodeMissing': '该节点已不存在',
             'menu.sync': '同步',
             'menu.purge': '清空',
             'pin.title': '固定菜单栏',
@@ -3291,7 +3708,7 @@ notify pgrst, 'reload schema';</textarea
             'hk.rows':
               '全局§把工作区存为 .zc 文件|{M} S|打开 .zc 工作区文件|{M} O|打开 / 重新载入本说明|?|关闭所有下拉菜单、收起浮动工具条、取消正在拖的连线|Esc~~焦点在节点正文里时§首行缩进|Tab|取消首行缩进|Shift + Tab|首行缩进|{M} ]|取消首行缩进|{M} [~~已选中一条连线时§删除选中的连线|Delete / Backspace~~焦点在输入框上时§确认图片地址|Enter|放弃这次修改|Esc|提交 Markdown / 公式源码|{M} Enter|放弃源码修改|Esc|确认节点标题|Enter~~焦点在云同步弹窗里时§登录|Enter',
             'hk.note':
-              '{M} S 与 {M} O 在任何位置都会触发，包括正在打字时，所以浏览器原本的「保存页面 / 打开文件」被完全接管。Esc 不会关闭确认框，请点「取消」或点击遮罩。首行缩进相关的键位只在文本、待办、分组这三类节点的正文里生效。',
+              '{M} Z 与 {M} Shift + Z 撤销/重做的是画布本身：新建、拖动、改尺寸、删除、连线以及正文输入都算，连续打字会合并成一步。历史记录按画布独立保存，切换画布会重置。{M} S 与 {M} O 在任何位置都会触发，包括正在打字时，所以浏览器原本的「保存页面 / 打开文件」被完全接管。Esc 不会关闭确认框，请点「取消」或点击遮罩。首行缩进相关的键位只在文本、待办、分组这三类节点的正文里生效。',
             'ft.style': '样式',
             'ft.font': '字体',
             'ft.font.literata': 'Literata',
@@ -3391,6 +3808,7 @@ notify pgrst, 'reload schema';</textarea
           connColor: '#555555',
           connWidth: 2,
           statusBarVisible: true,
+          outlineOpen: false,
           zCounter: 10,
           nodeCounter: 0,
           scale: 1,
@@ -3465,6 +3883,9 @@ notify pgrst, 'reload schema';</textarea
           },
           get pinBtn() {
             return document.getElementById('pin-btn')
+          },
+          get menuTrigger() {
+            return document.getElementById('menu-trigger')
           },
           get topMenu() {
             return document.getElementById('top-menu')
@@ -3569,7 +3990,7 @@ notify pgrst, 'reload schema';</textarea
               el.textContent = t(el.dataset.i18n)
             })
             document.querySelectorAll('[data-i18n-title]').forEach((el) => {
-              el.title = t(el.dataset.i18nTitle)
+              el.title = t(el.dataset.i18nTitle, MOD_LABEL)
             })
             if (DOM.pinBtn) DOM.pinBtn.title = t('pin.title')
             UIManager.updateSettingsUI()
@@ -3577,9 +3998,13 @@ notify pgrst, 'reload schema';</textarea
             NodeManager.refreshPlaceholders()
             UIManager.updateStats()
             UIManager.renderDocList()
+            updateUndoRedoUI()
+            OutlineManager.render()
             if (window.ZWCloudSync && typeof window.ZWCloudSync.refreshI18n === 'function') {
               window.ZWCloudSync.refreshI18n()
             }
+            // 中英文按钮宽度不同，菜单栏可能重新折行
+            requestAnimationFrame(() => updateMenuHeight())
           },
           toggle() {
             AppState.lang = AppState.lang === 'en' ? 'zh' : 'en'
@@ -3617,6 +4042,7 @@ notify pgrst, 'reload schema';</textarea
               connColor: AppState.connColor,
               connWidth: AppState.connWidth,
               statusBarVisible: AppState.statusBarVisible,
+              outlineOpen: AppState.outlineOpen,
               panX: AppState.panX,
               panY: AppState.panY,
               scale: AppState.scale,
@@ -3662,6 +4088,7 @@ notify pgrst, 'reload schema';</textarea
                 'connColor',
                 'connWidth',
                 'statusBarVisible',
+                'outlineOpen',
                 'panX',
                 'panY',
                 'scale',
@@ -3686,6 +4113,7 @@ notify pgrst, 'reload schema';</textarea
             // Menu pin
             DOM.pinBtn.classList.toggle('pinned', AppState.menuPinned)
             DOM.topMenu.classList.toggle('pinned', AppState.menuPinned)
+            document.body.classList.toggle('menu-pinned', AppState.menuPinned)
             // Focus / Reading / Full
             document.body.classList.toggle('focus-mode', AppState.focusMode)
             if (DOM.btnFocus) DOM.btnFocus.classList.toggle('active', AppState.focusMode)
@@ -3945,6 +4373,7 @@ notify pgrst, 'reload schema';</textarea
             AppState.menuPinned = !AppState.menuPinned
             DOM.topMenu.classList.toggle('pinned', AppState.menuPinned)
             DOM.pinBtn.classList.toggle('pinned', AppState.menuPinned)
+            document.body.classList.toggle('menu-pinned', AppState.menuPinned)
             Settings.save()
           },
           updateSettingsUI() {
@@ -5215,56 +5644,144 @@ notify pgrst, 'reload schema';</textarea
             inner.style.transform = `translate3d(${AppState.panX}px, ${AppState.panY}px, 0) scale(${AppState.scale})`
             ConnectionManager.renderAll()
           },
+
+          // ---- 平移 / 缩放的原子操作 ----
+          // 鼠标右键拖、触控单指拖、触控双指拖都走这几个方法，
+          // 保证三种输入的行为完全一致。
+          beginPan(x, y) {
+            DOM.contextMenu.classList.remove('open')
+            AppState.isPanning = true
+            AppState.panStartX = x
+            AppState.panStartY = y
+            AppState.panStartPX = AppState.panX
+            AppState.panStartPY = AppState.panY
+            AppState.panWasDragging = false
+            DOM.workspace.style.cursor = 'grabbing'
+          },
+          movePan(x, y) {
+            if (!AppState.isPanning) return
+            const dx = x - AppState.panStartX
+            const dy = y - AppState.panStartY
+            if (!AppState.panWasDragging && Math.hypot(dx, dy) > CONFIG.PAN_THRESHOLD) {
+              AppState.panWasDragging = true
+            }
+            if (!AppState.panWasDragging) return
+            AppState.panX = AppState.panStartPX + dx
+            AppState.panY = AppState.panStartPY + dy
+            CanvasManager.applyTransform()
+            // 平移的同时如果正在拉连线，临时线要跟着走
+            if (AppState.portDrag && AppState.tempLine) {
+              const world = CanvasManager.screenToWorld(x, y)
+              const sx = AppState.portDrag.startX,
+                sy = AppState.portDrag.startY
+              const dx2 = world.x - sx,
+                dy2 = world.y - sy
+              AppState.tempLine.setAttribute(
+                'd',
+                `M ${sx} ${sy} C ${sx + dx2 * 0.5} ${sy}, ${sx + dx2 * 0.5} ${world.y}, ${world.x} ${world.y}`,
+              )
+            }
+          },
+          endPan() {
+            if (!AppState.isPanning) return
+            AppState.isPanning = false
+            DOM.workspace.style.cursor = 'default'
+            if (AppState.panWasDragging) Settings.save()
+          },
+          // 重新设定平移基准（多指变单指时用，避免画面跳一下）
+          rebasePan(x, y) {
+            if (!AppState.isPanning) return
+            AppState.panStartX = x
+            AppState.panStartY = y
+            AppState.panStartPX = AppState.panX
+            AppState.panStartPY = AppState.panY
+          },
+          // 以 (clientX, clientY) 为锚点做 factor 倍缩放
+          zoomAt(clientX, clientY, factor) {
+            const newScale = Math.min(
+              CONFIG.MAX_SCALE,
+              Math.max(CONFIG.MIN_SCALE, AppState.scale * factor),
+            )
+            if (newScale === AppState.scale) return
+            const rect = DOM.workspace.getBoundingClientRect()
+            const mx = clientX - rect.left,
+              my = clientY - rect.top
+            const cx = (mx - AppState.panX) / AppState.scale
+            const cy = (my - AppState.panY) / AppState.scale
+            AppState.scale = newScale
+            AppState.panX = mx - cx * AppState.scale
+            AppState.panY = my - cy * AppState.scale
+            CanvasManager.applyTransform()
+            CanvasManager.scheduleViewSave()
+          },
+          // 双指同时移动：直接按增量平移（不再走 PAN_THRESHOLD 判定）
+          panBy(dx, dy) {
+            AppState.panX += dx
+            AppState.panY += dy
+            CanvasManager.applyTransform()
+            CanvasManager.scheduleViewSave()
+          },
+          scheduleViewSave() {
+            clearTimeout(AppState.wheelSaveTimer)
+            AppState.wheelSaveTimer = setTimeout(() => Settings.save(), 160)
+          },
+
+          // 把某个节点摆到视野中央（大纲跳转用）。
+          // 顺带照顾两种情况：节点现在小到看不清就放大一点，
+          // 大到装不下就缩小到刚好装下。
+          focusNode(node) {
+            if (!node) return
+            const rect = DOM.workspace.getBoundingClientRect()
+            // 顶部被菜单栏压着，可用高度要减掉它
+            const menuH =
+              parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--menu-h')) ||
+              0
+            const vw = rect.width
+            const vh = Math.max(120, rect.height - menuH)
+
+            const nw = node.offsetWidth || parseFloat(node.style.width) || 400
+            const nh = node.offsetHeight || parseFloat(node.style.height) || 300
+            const left = parseFloat(node.style.left) || node.offsetLeft || 0
+            const top = parseFloat(node.style.top) || node.offsetTop || 0
+
+            let scale = AppState.scale
+            const screenW = nw * scale
+            const screenH = nh * scale
+            // 太小 -> 提到至少看得清
+            if (screenW < 140 || screenH < 80) {
+              scale = Math.max(scale, 180 / Math.max(nw, 1))
+            }
+            // 太大 -> 缩到装得下（留出边距）
+            if (screenW > vw * 0.85 || screenH > vh * 0.8) {
+              scale = Math.min(scale, (vw * 0.8) / Math.max(nw, 1), (vh * 0.7) / Math.max(nh, 1))
+            }
+            scale = Math.min(CONFIG.MAX_SCALE, Math.max(CONFIG.MIN_SCALE, scale))
+
+            AppState.scale = scale
+            // 在「菜单栏以下」这条可用带里居中，而不是整个视口，
+            // 否则节点会往菜单栏底下钻
+            AppState.panX = vw / 2 - (left + nw / 2) * scale
+            AppState.panY = menuH + vh / 2 - (top + nh / 2) * scale
+            CanvasManager.applyTransform()
+            CanvasManager.scheduleViewSave()
+            Settings.save()
+          },
+
           initPanZoom() {
             const workspace = DOM.workspace
             workspace.addEventListener('mousedown', (e) => {
               if (e.button === 2) {
-                DOM.contextMenu.classList.remove('open')
-                AppState.isPanning = true
-                AppState.panStartX = e.clientX
-                AppState.panStartY = e.clientY
-                AppState.panStartPX = AppState.panX
-                AppState.panStartPY = AppState.panY
-                AppState.panWasDragging = false
-                workspace.style.cursor = 'grabbing'
+                CanvasManager.beginPan(e.clientX, e.clientY)
                 e.preventDefault()
               }
             })
 
             document.addEventListener('mousemove', (e) => {
-              if (AppState.isPanning) {
-                const dx = e.clientX - AppState.panStartX
-                const dy = e.clientY - AppState.panStartY
-                if (Math.sqrt(dx * dx + dy * dy) > CONFIG.PAN_THRESHOLD) {
-                  AppState.panWasDragging = true
-                }
-                if (AppState.panWasDragging) {
-                  AppState.panX = AppState.panStartPX + dx
-                  AppState.panY = AppState.panStartPY + dy
-                  CanvasManager.applyTransform()
-                  if (AppState.portDrag && AppState.tempLine) {
-                    const world = CanvasManager.screenToWorld(e.clientX, e.clientY)
-                    const x = world.x
-                    const y = world.y
-                    const sx = AppState.portDrag.startX,
-                      sy = AppState.portDrag.startY
-                    const dx2 = x - sx,
-                      dy2 = y - sy
-                    AppState.tempLine.setAttribute(
-                      'd',
-                      `M ${sx} ${sy} C ${sx + dx2 * 0.5} ${sy}, ${sx + dx2 * 0.5} ${y}, ${x} ${y}`,
-                    )
-                  }
-                }
-              }
+              CanvasManager.movePan(e.clientX, e.clientY)
             })
 
             document.addEventListener('mouseup', () => {
-              if (AppState.isPanning) {
-                AppState.isPanning = false
-                workspace.style.cursor = 'default'
-                if (AppState.panWasDragging) Settings.save()
-              }
+              CanvasManager.endPan()
             })
 
             workspace.addEventListener(
@@ -5284,29 +5801,10 @@ notify pgrst, 'reload schema';</textarea
                 const unitScale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1
                 if (e.ctrlKey) {
                   const raw = e.deltaY * unitScale
-                  const factor = Math.exp(-raw * 0.0022)
-                  const newScale = Math.min(
-                    CONFIG.MAX_SCALE,
-                    Math.max(CONFIG.MIN_SCALE, AppState.scale * factor),
-                  )
-                  if (newScale !== AppState.scale) {
-                    const rect = workspace.getBoundingClientRect()
-                    const mx = e.clientX - rect.left,
-                      my = e.clientY - rect.top
-                    const cx = (mx - AppState.panX) / AppState.scale,
-                      cy = (my - AppState.panY) / AppState.scale
-                    AppState.scale = newScale
-                    AppState.panX = mx - cx * AppState.scale
-                    AppState.panY = my - cy * AppState.scale
-                    CanvasManager.applyTransform()
-                  }
+                  CanvasManager.zoomAt(e.clientX, e.clientY, Math.exp(-raw * 0.0022))
                 } else {
-                  AppState.panX -= e.deltaX * unitScale
-                  AppState.panY -= e.deltaY * unitScale
-                  CanvasManager.applyTransform()
+                  CanvasManager.panBy(-e.deltaX * unitScale, -e.deltaY * unitScale)
                 }
-                clearTimeout(AppState.wheelSaveTimer)
-                AppState.wheelSaveTimer = setTimeout(() => Settings.save(), 160)
               },
               { passive: false },
             )
@@ -5319,6 +5817,569 @@ notify pgrst, 'reload schema';</textarea
                 return
               }
             })
+          },
+        }
+
+        // ================================================================
+        // 11.5 TOUCH MANAGER — 平板 / 手机触控适配
+        //
+        // 问题：拖节点、拉连线、缩放、右键菜单全都是 mousedown /
+        // mousemove / mouseup 实现的，触屏在拖动过程中根本不会补发
+        // 这一串鼠标事件，所以手指按下去什么都不会发生。
+        //
+        // 做法：不改动上面任何一套鼠标逻辑（桌面行为零风险），而是把触摸
+        // 翻译成对应的鼠标事件再喂回去 —— 节点头 / 缩放手柄 / 端口都走
+        // 这一条路，复用原有的全部处理函数。
+        //   单指拖节点头 -> 合成 mousedown/mousemove/mouseup（移动节点）
+        //   单指拖缩放角 -> 同上（改尺寸）
+        //   单指拖端口   -> 同上（连线）
+        //   单指拖空白   -> CanvasManager 平移
+        //   双指         -> 捏合缩放 + 跟着平移
+        //   长按         -> 合成 contextmenu（应用自己的右键菜单）
+        //   双击         -> 合成 dblclick（Markdown / 公式 / 图片编辑器、
+        //                            节点改名都靠它）
+        // ================================================================
+        function fireMouse(target, type, x, y, button) {
+          const btn = button || 0
+          let ev
+          try {
+            ev = new MouseEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: x || 0,
+              clientY: y || 0,
+              button: btn,
+              buttons: type === 'mouseup' ? 0 : btn === 2 ? 2 : 1,
+            })
+          } catch (_) {
+            // 极老浏览器没有 MouseEvent 构造器，退回 document.createEvent
+            ev = document.createEvent('MouseEvents')
+            ev.initMouseEvent(
+              type,
+              true,
+              true,
+              window,
+              0,
+              x || 0,
+              y || 0,
+              btn,
+              false,
+              false,
+              false,
+              false,
+              btn === 2 ? 2 : 1,
+              null,
+            )
+          }
+          target.dispatchEvent(ev)
+          return ev
+        }
+
+        const TouchManager = {
+          drag: null, // 'node' | 'resize' | 'port'
+          lastX: 0,
+          lastY: 0,
+          panStart: null,
+          pinch: null,
+          longPressTimer: null,
+          longPressFired: false,
+          lastTap: { t: 0, target: null },
+          LONG_PRESS_MS: 500,
+          LONG_PRESS_SLOP: 10,
+          DOUBLE_TAP_MS: 320,
+
+          // 只在「主输入是触摸」的设备上接管。装了触控板的笔记本
+          // (hover:hover) 仍走原生鼠标，避免同一手势被处理两遍。
+          isTouchDevice() {
+            return (
+              (window.matchMedia &&
+                window.matchMedia('(hover: none), (pointer: coarse)').matches) ||
+              'ontouchstart' in window
+            )
+          },
+
+          init() {
+            if (!this.isTouchDevice()) return
+            const ws = DOM.workspace
+            // 必须 passive:false，否则 preventDefault 不生效、手势会被浏览器抢走
+            ws.addEventListener('touchstart', (e) => this._onStart(e), { passive: false })
+            ws.addEventListener('touchmove', (e) => this._onMove(e), { passive: false })
+            ws.addEventListener('touchend', (e) => this._onEnd(e), { passive: false })
+            ws.addEventListener('touchcancel', (e) => this._onEnd(e), { passive: false })
+
+            // iOS Safari 的页面级捏合缩放/双击缩放要单独掐掉，
+            // 光靠 touch-action 在老版本上不够。
+            document.addEventListener(
+              'gesturestart',
+              (e) => {
+                e.preventDefault()
+              },
+              { passive: false },
+            )
+          },
+
+          _clearLongPress() {
+            if (this.longPressTimer) {
+              clearTimeout(this.longPressTimer)
+              this.longPressTimer = null
+            }
+          },
+
+          _armLongPress(target, x, y) {
+            this._clearLongPress()
+            this.longPressFired = false
+            this.longPressTimer = setTimeout(() => {
+              this.longPressTimer = null
+              // 已经拖起来了 / 已经平移了，就不算长按
+              if (this.drag || AppState.panWasDragging || this.pinch) return
+              // 节点正文里交给系统选词，长按不弹菜单（否则没法选中文字）
+              if (target.closest && target.closest('.node-content')) return
+              const node = target.closest && target.closest('.node')
+              if (node && node.classList.contains('locked')) return
+              this.longPressFired = true
+              fireMouse(target, 'contextmenu', x, y, 2)
+            }, this.LONG_PRESS_MS)
+          },
+
+          _onStart(e) {
+            if (e.touches.length > 1) {
+              // 第二根手指落下：结束单指手势，转双指
+              this._clearLongPress()
+              this._abortDrag()
+              this.panStart = null
+              AppState.isPanning = false
+              this._startPinch(e.touches)
+              e.preventDefault()
+              return
+            }
+
+            const t = e.touches[0]
+            const target = t.target
+            const x = t.clientX,
+              y = t.clientY
+            this.lastX = x
+            this.lastY = y
+
+            // --- 双击 -> dblclick ---
+            const now = Date.now()
+            if (this.lastTap.target === target && now - this.lastTap.t < this.DOUBLE_TAP_MS) {
+              this.lastTap.t = 0
+              this.lastTap.target = null
+              this._clearLongPress()
+              e.preventDefault()
+              fireMouse(target, 'dblclick', x, y)
+              return
+            }
+            this.lastTap = { t: now, target: target }
+
+            const node = target.closest ? target.closest('.node') : null
+            const port = target.closest ? target.closest('.node-port') : null
+            const resize = target.closest ? target.closest('.node-resize') : null
+            const header = target.closest ? target.closest('.node-header') : null
+            const content = target.closest ? target.closest('.node-content') : null
+            const locked = !!(node && node.classList.contains('locked'))
+
+            if (node) node.classList.add('touch-active')
+
+            // --- 端口：拉连线 ---
+            if (port && !locked) {
+              this._clearLongPress()
+              this.drag = 'port'
+              fireMouse(port, 'mousedown', x, y)
+              e.preventDefault()
+              return
+            }
+
+            // --- 缩放手柄 ---
+            if (resize && !locked) {
+              this._clearLongPress()
+              this.drag = 'resize'
+              fireMouse(resize, 'mousedown', x, y)
+              e.preventDefault()
+              return
+            }
+
+            // --- 节点头：移动节点 ---
+            // 标题上的按钮/改名输入框要留给点击自己处理
+            const headerBtn = target.closest
+              ? target.closest('.node-action-btn, .node-title-edit, .todo-checkbox, .node-port')
+              : null
+            if (header && !content && !headerBtn && !locked) {
+              this._clearLongPress()
+              this.drag = 'node'
+              fireMouse(header, 'mousedown', x, y)
+              e.preventDefault()
+              return
+            }
+
+            // --- 节点正文：让浏览器自己滚，不参与画布平移 ---
+            if (content) {
+              this._clearLongPress()
+              return
+            }
+
+            // --- 其余（空白画布 / 节点边框）：单指平移 + 长按菜单 ---
+            this._armLongPress(target, x, y)
+            this.panStart = { x: x, y: y }
+            CanvasManager.beginPan(x, y)
+          },
+
+          _onMove(e) {
+            if (e.touches.length > 1) {
+              if (this.pinch) this._movePinch(e.touches)
+              e.preventDefault()
+              return
+            }
+            if (this.longPressTimer && this.panStart) {
+              // 手指抖动超过阈值就取消长按
+              const t = e.touches[0]
+              if (
+                Math.hypot(t.clientX - this.panStart.x, t.clientY - this.panStart.y) >
+                this.LONG_PRESS_SLOP
+              ) {
+                this._clearLongPress()
+              }
+            }
+            const t = e.touches[0]
+            this.lastX = t.clientX
+            this.lastY = t.clientY
+            if (this.drag) {
+              // 走原有那套拖动/缩放/连线逻辑
+              fireMouse(document, 'mousemove', t.clientX, t.clientY)
+              e.preventDefault()
+              return
+            }
+            if (this.panStart) {
+              CanvasManager.movePan(t.clientX, t.clientY)
+              e.preventDefault()
+            }
+          },
+
+          _onEnd(e) {
+            this._clearLongPress()
+
+            // 还有手指留在屏幕上
+            if (e.touches.length > 0) {
+              const t = e.touches[0]
+              if (this.pinch) {
+                // 捏合 -> 单指：剩下的那根接管平移，并以它当前位置为基准，
+                // 否则画面会突然跳一下
+                this.pinch = null
+                this.panStart = { x: t.clientX, y: t.clientY }
+                CanvasManager.beginPan(t.clientX, t.clientY)
+              } else if (this.panStart) {
+                this.panStart = { x: t.clientX, y: t.clientY }
+                CanvasManager.rebasePan(t.clientX, t.clientY)
+              }
+              return
+            }
+
+            if (this.drag) {
+              const t = e.changedTouches[0]
+              fireMouse(document, 'mouseup', t ? t.clientX : this.lastX, t ? t.clientY : this.lastY)
+              this.drag = null
+            }
+            if (this.panStart) {
+              CanvasManager.endPan()
+              this.panStart = null
+            }
+            this.pinch = null
+            this._clearTouchActive()
+          },
+
+          // 第二根手指落下时中止单指手势。
+          // 端口拖动要特殊处理：不能发 mouseup，否则会在 (0,0) 附近
+          // 被 getPortAt 的 400px 命中半径误判成「连上了别的节点」。
+          _abortDrag() {
+            if (this.drag === 'port') {
+              if (AppState.tempLine) {
+                AppState.tempLine.remove()
+                AppState.tempLine = null
+              }
+              document
+                .querySelectorAll('.node-port')
+                .forEach((p) => p.classList.remove('dragging', 'port-highlight'))
+              document.body.style.cursor = 'default'
+              AppState.portDrag = null
+            } else if (this.drag) {
+              fireMouse(document, 'mouseup', this.lastX, this.lastY)
+            }
+            this.drag = null
+          },
+
+          _startPinch(touches) {
+            const a = touches[0],
+              b = touches[1]
+            this.pinch = {
+              dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
+              cx: (a.clientX + b.clientX) / 2,
+              cy: (a.clientY + b.clientY) / 2,
+            }
+          },
+          _movePinch(touches) {
+            const a = touches[0],
+              b = touches[1]
+            const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1
+            const cx = (a.clientX + b.clientX) / 2
+            const cy = (a.clientY + b.clientY) / 2
+            const p = this.pinch
+            // 先按中点位移平移，再以中点为锚缩放，手指顺序才不会打架
+            CanvasManager.panBy(cx - p.cx, cy - p.cy)
+            CanvasManager.zoomAt(cx, cy, dist / p.dist)
+            this.pinch = { dist: dist, cx: cx, cy: cy }
+          },
+          _clearTouchActive() {
+            document
+              .querySelectorAll('.node.touch-active')
+              .forEach((n) => n.classList.remove('touch-active'))
+          },
+        }
+
+        // ================================================================
+        // 11.6 OUTLINE MANAGER — 左侧大纲侧边栏
+        //
+        // 两层折叠：
+        //   整块收起  -> setOpen(false)，面板变回左边一条竖排标签
+        //   分组子树  -> 分组行前面的 ▾ / ▸，只影响大纲，不动画布上的分组
+        //
+        // 树结构直接沿用应用自己的分组语义：分组节点与某节点有连线，
+        // 就认为那个节点是它的子节点（和 restoreCollapsedStates 一致）。
+        // ================================================================
+        const OutlineManager = {
+          collapsed: new Set(), // 大纲里被折叠的分组 id（与画布状态相互独立）
+          currentId: null, // 最近跳转到的节点，用于高亮
+          TYPE_TAG: {
+            text: 'TXT',
+            image: 'IMG',
+            markdown: 'MD',
+            math: 'MATH',
+            todo: 'TODO',
+            group: 'GRP',
+          },
+
+          init() {
+            const list = document.getElementById('ol-list')
+            if (!list) return
+            // 事件委托：整块列表只挂两个监听
+            list.addEventListener('click', (e) => {
+              const chev = e.target.closest('.ol-chevron')
+              if (chev) {
+                e.stopPropagation()
+                const gid = chev.dataset.groupId
+                if (!gid) return
+                if (this.collapsed.has(gid)) this.collapsed.delete(gid)
+                else this.collapsed.add(gid)
+                this.render()
+                return
+              }
+              const item = e.target.closest('.ol-item')
+              if (item) this.jump(item.dataset.nodeId)
+            })
+            this.setOpen(AppState.outlineOpen, true)
+            this.render()
+          },
+
+          setOpen(open, silent) {
+            AppState.outlineOpen = !!open
+            const panel = document.getElementById('outline')
+            const rail = document.getElementById('outline-rail')
+            if (panel) {
+              panel.classList.toggle('hidden', !AppState.outlineOpen)
+              panel.setAttribute('aria-hidden', AppState.outlineOpen ? 'false' : 'true')
+            }
+            if (rail) rail.classList.toggle('hidden', AppState.outlineOpen)
+            const btn = document.getElementById('btn-outline')
+            if (btn) btn.classList.toggle('active', AppState.outlineOpen)
+            if (AppState.outlineOpen) this.render()
+            if (!silent) Settings.save()
+          },
+
+          toggle() {
+            this.setOpen(!AppState.outlineOpen)
+          },
+
+          // 折叠的分组随画布状态初始化，但两边不互相联动，
+          // 免得在大纲里点一下把画布上的节点也藏起来。
+          _seedCollapsed(nodes) {
+            nodes.forEach((n) => {
+              if (n.dataset.type === 'group' && n.dataset.groupCollapsed === 'true') {
+                this.collapsed.add(n.id)
+              }
+            })
+          },
+
+          // ---- 几何信息 ----
+          // display:none 的节点（收在折叠分组里）offsetWidth 恒为 0，
+          // 所以一律从 inline style 上读，隐藏与否都能拿到正确位置。
+          _geom(node) {
+            const left = parseFloat(node.style.left) || node.offsetLeft || 0
+            const top = parseFloat(node.style.top) || node.offsetTop || 0
+            let w = node.offsetWidth || parseFloat(node.style.width) || 400
+            let h = node.offsetHeight || parseFloat(node.style.height) || 300
+            if (h < 1) h = 32 // 最小化
+            return { left: left, top: top, w: w, h: h }
+          },
+
+          _sortByPosition(nodes) {
+            return nodes.slice().sort((a, b) => {
+              const ga = this._geom(a)
+              const gb = this._geom(b)
+              if (Math.abs(ga.top - gb.top) > 8) return ga.top - gb.top
+              if (Math.abs(ga.left - gb.left) > 8) return ga.left - gb.left
+              // 位置几乎相同时按 id 排，保证列表稳定不跳动
+              return String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
+            })
+          },
+
+          // ---- 渲染 ----
+          render() {
+            const list = document.getElementById('ol-list')
+            if (!list) return
+            const empty = document.getElementById('ol-empty')
+            const countEl = document.getElementById('ol-count')
+            const railCount = document.getElementById('ol-rail-count')
+
+            const nodes = [...getNodes()]
+            if (countEl) countEl.textContent = String(nodes.length)
+            if (railCount) railCount.textContent = String(nodes.length)
+            if (empty) empty.classList.toggle('hidden', nodes.length > 0)
+
+            if (!nodes.length) {
+              list.innerHTML = ''
+              return
+            }
+
+            // 分组 -> 子节点。用连线关系判断，和 restoreCollapsedStates 同源。
+            const parentOf = new Map()
+            const childrenOf = new Map()
+            nodes.forEach((g) => {
+              if (g.dataset.type !== 'group') return
+              childrenOf.set(g.id, [])
+            })
+            AppState.connections.forEach((c) => {
+              const gIsFrom = childrenOf.has(c.from)
+              const gIsTo = childrenOf.has(c.to)
+              if (gIsFrom === gIsTo) return // 两端都是分组 / 两端都不是分组，都不构成父子
+              const gid = gIsFrom ? c.from : c.to
+              const cid = gIsFrom ? c.to : c.from
+              const child = document.getElementById(cid)
+              if (!child || child.id === gid) return
+              if (parentOf.has(cid)) return // 只挂到一个父级下，避免重复出现
+              parentOf.set(cid, gid)
+              childrenOf.get(gid).push(child)
+            })
+            // 没被任何分组收下的节点就是根；分组自己若被别人收下就成了子节点
+            const roots = nodes.filter((n) => !parentOf.has(n.id))
+            this._seedCollapsed(nodes)
+
+            const frag = document.createDocumentFragment()
+            const seen = new Set()
+            const walk = (node, depth) => {
+              if (seen.has(node.id)) return // 分组互相连线时防止死循环
+              seen.add(node.id)
+              frag.appendChild(this._row(node, depth))
+              if (node.dataset.type === 'group' && !this.collapsed.has(node.id)) {
+                const kids = this._sortByPosition(childrenOf.get(node.id) || [])
+                kids.forEach((k) => walk(k, depth + 1))
+              }
+            }
+            this._sortByPosition(roots).forEach((n) => walk(n, 0))
+
+            list.innerHTML = ''
+            list.appendChild(frag)
+          },
+
+          _row(node, depth) {
+            const type = node.dataset.type || 'text'
+            const isGroup = type === 'group'
+            const hiddenByGroup = node.classList.contains('hidden-by-group-conn')
+            const row = document.createElement('div')
+            row.className =
+              'ol-item' +
+              (this.currentId === node.id ? ' current' : '') +
+              (hiddenByGroup ? ' hidden-node' : '')
+            row.dataset.nodeId = node.id
+            row.style.setProperty('--ol-depth', String(depth))
+            row.title = getTitleText(node) || type
+
+            if (isGroup) {
+              const chev = document.createElement('button')
+              chev.type = 'button'
+              chev.className = 'ol-chevron' + (this.collapsed.has(node.id) ? ' collapsed' : '')
+              chev.dataset.groupId = node.id
+              chev.textContent = '▼'
+              chev.setAttribute('aria-label', t('outline.collapse'))
+              row.appendChild(chev)
+            } else {
+              const sp = document.createElement('span')
+              sp.className = 'ol-chevron-spacer'
+              row.appendChild(sp)
+            }
+
+            const tag = document.createElement('span')
+            tag.className = 'ol-type'
+            tag.textContent = this.TYPE_TAG[type] || 'TXT'
+            row.appendChild(tag)
+
+            const name = document.createElement('span')
+            name.className = 'ol-name'
+            name.textContent = getTitleText(node) || t('docs.defaultName')
+            row.appendChild(name)
+
+            return row
+          },
+
+          // ---- 跳转 ----
+          jump(nodeId) {
+            const node = document.getElementById(nodeId)
+            if (!node) {
+              this.currentId = null
+              this.render()
+              notify(t('notify.nodeMissing'))
+              return false
+            }
+            this.currentId = nodeId
+            // 目标可能正收在某个折叠分组里，先把分组展开，否则位置全是 0
+            this._ensureVisible(node)
+            CanvasManager.focusNode(node)
+            this._flash(node)
+            this.render()
+            return true
+          },
+
+          _ensureVisible(node) {
+            if (!node.classList.contains('hidden-by-group-conn')) return
+            let expanded = false
+            getNodes().forEach((g) => {
+              if (g.dataset.type !== 'group') return
+              if (g.dataset.groupCollapsed !== 'true') return
+              const gid = g.id
+              let isParent = false
+              AppState.connections.forEach((c) => {
+                if ((c.from === gid && c.to === node.id) || (c.to === gid && c.from === node.id)) {
+                  isParent = true
+                }
+              })
+              if (!isParent) return
+              delete g.dataset.groupCollapsed
+              const ci = g.querySelector('.collapse-indicator')
+              if (ci) ci.classList.remove('collapsed')
+              expanded = true
+            })
+            if (!expanded) return
+            restoreCollapsedStates()
+            ConnectionManager.renderAll()
+            notify(t('notify.outlineHidden'))
+          },
+
+          _flash(node) {
+            node.classList.remove('jump-flash')
+            // 强制重排，让连续跳同一个节点也能重新播放动画
+            void node.offsetWidth
+            node.classList.add('jump-flash')
+            clearTimeout(this._flashTimer)
+            this._flashTimer = setTimeout(() => node.classList.remove('jump-flash'), 1400)
           },
         }
 
@@ -5868,12 +6929,269 @@ notify pgrst, 'reload schema';</textarea
         }
 
         function debouncedAutoSave() {
+          // 每次改动都会走到这里，所以撤销栈的提交点就挂在这里
+          History.record()
           clearTimeout(AppState.autoSaveTimer)
           AppState.autoSaveTimer = setTimeout(() => {
             try {
               persistCanvasData()
             } catch (_) {}
+            // 复用这个已经防抖过的「有改动」节拍刷新大纲
+            OutlineManager.render()
           }, CONFIG.AUTO_SAVE_DELAY)
+        }
+
+        // ================================================================
+        // 14.1 HISTORY — 撤销 / 重做
+        //
+        // 快照式：把「节点 + 连线」序列化成一个字符串，栈里存字符串。
+        // 提交点唯一（debouncedAutoSave），所以新增/删除/拖动/改尺寸/
+        // 连线/输入 全都会自动进栈，不用逐个改动点埋钩子。
+        //
+        // 连续打字不能一步一记录，所以做「合并」：
+        //   只有当结构指纹（id/位置/尺寸/标题/连线…，不含正文）和
+        //   正在编辑的节点都没变、且间隔 < COALESCE_MS 时，
+        //   才认为还是同一段连续输入，直接覆盖当前态而不是压栈。
+        // ================================================================
+        const History = {
+          past: [],
+          future: [],
+          present: null,
+          lastStruct: '',
+          lastTs: 0,
+          applying: false,
+          LIMIT: 80,
+          COALESCE_MS: 1200,
+
+          snapshot() {
+            const data = buildCanvasData()
+            return {
+              nodes: data.nodes,
+              connections: data.connections,
+              nodeCounter: AppState.nodeCounter,
+              connIdCounter: AppState.connIdCounter,
+            }
+          },
+
+          // 结构指纹：刻意不含正文 content / source，避免连续输入被拆成一堆步骤
+          structureKey(snap) {
+            const nodes = (snap.nodes || [])
+              .map((n) =>
+                [
+                  n.id,
+                  n.type,
+                  n.x,
+                  n.y,
+                  n.w,
+                  n.h,
+                  n.title,
+                  n.locked ? 1 : 0,
+                  n.minimized ? 1 : 0,
+                  n.collapsed ? 1 : 0,
+                  n.fontSize || '',
+                  n.lh || '',
+                  n.src || '',
+                ].join('~'),
+              )
+              .join('|')
+            const conns = (snap.connections || [])
+              .map(
+                (c) =>
+                  c.from + '>' + c.to + ':' + (c.fromPort || 'bottom') + ':' + (c.toPort || 'top'),
+              )
+              .join('|')
+            let active = ''
+            const a = document.activeElement
+            const node = a && a.closest ? a.closest('.node') : null
+            if (node) active = node.id
+            return nodes + '##' + conns + '##' + active
+          },
+
+          canUndo() {
+            return this.past.length > 0
+          },
+          canRedo() {
+            return this.future.length > 0
+          },
+
+          // 提交当前画布状态；applying 期间（撤销/重做/切换画布）忽略，
+          // 否则回放自己刚写进去的状态会把栈搅乱。
+          record() {
+            if (this.applying) return
+            let snap
+            try {
+              snap = this.snapshot()
+            } catch (_) {
+              return
+            }
+            const json = JSON.stringify(snap)
+            if (this.present === null) {
+              this.present = json
+              this.lastStruct = this.structureKey(snap)
+              updateUndoRedoUI()
+              return
+            }
+            if (json === this.present) return
+            const st = this.structureKey(snap)
+            const now = Date.now()
+            if (st === this.lastStruct && now - this.lastTs < this.COALESCE_MS) {
+              // 同一段连续输入：只滚动当前态，历史深度不变
+              this.present = json
+              this.lastTs = now
+              updateUndoRedoUI()
+              return
+            }
+            this.past.push(this.present)
+            if (this.past.length > this.LIMIT) this.past.shift()
+            this.present = json
+            this.lastStruct = st
+            this.lastTs = now
+            this.future.length = 0
+            updateUndoRedoUI()
+          },
+
+          // 切画布 / 载入文件：历史重置，不留下跨画布的撤销
+          reset() {
+            this.applying = true
+            try {
+              this.past.length = 0
+              this.future.length = 0
+              let snap = null
+              try {
+                snap = this.snapshot()
+              } catch (_) {}
+              this.present = snap ? JSON.stringify(snap) : null
+              this.lastStruct = snap ? this.structureKey(snap) : ''
+              this.lastTs = 0
+            } finally {
+              this.applying = false
+            }
+            updateUndoRedoUI()
+          },
+
+          undo() {
+            if (!this.past.length) {
+              notify(t('notify.nothingToUndo'))
+              return false
+            }
+            this.future.push(this.present)
+            this.present = this.past.pop()
+            const ok = History._replay(this.present)
+            if (!ok) {
+              // 回放失败就把栈原样退回去，避免历史被破坏
+              this.past.push(this.present)
+              this.future.pop()
+            }
+            return ok
+          },
+
+          redo() {
+            if (!this.future.length) {
+              notify(t('notify.nothingToRedo'))
+              return false
+            }
+            this.past.push(this.present)
+            this.present = this.future.pop()
+            const ok = History._replay(this.present)
+            if (!ok) {
+              this.future.push(this.present)
+              this.past.pop()
+            }
+            return ok
+          },
+
+          // 用一份快照重建整个 DOM（不经过 DocManager，只改内存 + 落盘）
+          _replay(json) {
+            let snap
+            try {
+              snap = JSON.parse(json)
+            } catch (_) {
+              return false
+            }
+            const prevNodes = getNodes().length
+            const prevConns = AppState.connections.length
+            this.applying = true
+            try {
+              clearTimeout(AppState.autoSaveTimer)
+              // 撤一半时可能正拖着端口，先把临时状态收干净
+              if (AppState.tempLine) {
+                AppState.tempLine.remove()
+                AppState.tempLine = null
+              }
+              AppState.portDrag = null
+              AppState.portDragPending = false
+              document
+                .querySelectorAll('.node-port')
+                .forEach((p) => p.classList.remove('dragging', 'port-highlight'))
+              document.body.style.cursor = 'default'
+
+              getNodes().forEach((n) => n.remove())
+              AppState.connections = []
+              AppState.connIdCounter = 0
+              AppState.nodeCounter = 0
+              AppState.selectedConnId = null
+              ;(snap.nodes || []).forEach((n) => {
+                NodeManager.createNodeAt(parseFloat(n.x) || 0, parseFloat(n.y) || 0, n.type, n)
+              })
+              AppState.nodeCounter = Math.max(AppState.nodeCounter, snap.nodeCounter || 0)
+              AppState.connections = (snap.connections || []).map((c) => ({
+                from: c.from,
+                to: c.to,
+                fromPort: c.fromPort || 'bottom',
+                toPort: c.toPort || 'top',
+                id: 'conn-' + ++AppState.connIdCounter,
+              }))
+              AppState.connIdCounter = Math.max(AppState.connIdCounter, snap.connIdCounter || 0)
+
+              ConnectionManager.renderAll()
+              restoreCollapsedStates()
+              UIManager.updateStats()
+              UIManager.applyNodeBg()
+              persistCanvasData()
+              // 回放会重建整个 DOM，大纲必须跟着重画
+              OutlineManager.currentId = null
+              OutlineManager.render()
+
+              // 回放过程中可能被聚焦到某个节点上，退回后别留一个野生光标
+              const a = document.activeElement
+              if (a && typeof a.blur === 'function') a.blur()
+
+              this.lastStruct = this.structureKey(snap)
+              this.lastTs = 0
+            } catch (e) {
+              console.warn('[ZenWriter] history replay failed', e)
+              return false
+            } finally {
+              this.applying = false
+            }
+            // 公式/Markdown 排版完高度会变，连线要再画一次
+            setTimeout(() => {
+              ConnectionManager.renderAll()
+              restoreCollapsedStates()
+            }, 260)
+            updateUndoRedoUI()
+            // 只有节点/连线数量变了才提示：撤销一个字符不该一直弹 toast
+            if (
+              (snap.nodes || []).length !== prevNodes ||
+              (snap.connections || []).length !== prevConns
+            ) {
+              notify(
+                t(
+                  'notify.historyRestored',
+                  (snap.nodes || []).length,
+                  (snap.connections || []).length,
+                ),
+              )
+            }
+            return true
+          },
+        }
+
+        function updateUndoRedoUI() {
+          const u = document.getElementById('btn-undo')
+          const r = document.getElementById('btn-redo')
+          if (u) u.classList.toggle('disabled', !History.canUndo())
+          if (r) r.classList.toggle('disabled', !History.canRedo())
         }
 
         // ================================================================
@@ -5891,14 +7209,29 @@ notify pgrst, 'reload schema';</textarea
           document.getElementById('status-bar').classList.remove('force-visible')
         }
 
+        // 窄窗口下菜单栏会换行，高度不再是固定 48px，
+        // 把实测高度写进 --menu-h：收起偏移 + 下拉菜单定位都读这个变量。
+        function updateMenuHeight() {
+          const menu = DOM.topMenu
+          if (!menu) return
+          const h = Math.round(menu.getBoundingClientRect().height)
+          if (h > 0) document.documentElement.style.setProperty('--menu-h', h + 'px')
+        }
+
         function showDropdown(id, btn) {
           const dd = document.getElementById(id)
           const wasOpen = dd.classList.contains('open')
           closeAllDropdowns()
           if (!wasOpen) {
+            updateMenuHeight()
             const rect = btn.getBoundingClientRect()
-            dd.style.left = rect.left + 'px'
-            dd.style.top = '52px'
+            // 换行后按钮可能落在靠右的行上，下拉面板要夹在视口内
+            const w = dd.getBoundingClientRect().width
+            let left = rect.left
+            if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8
+            if (left < 8) left = 8
+            dd.style.left = left + 'px'
+            dd.style.top = 'calc(var(--menu-h, 48px) + 4px)'
             dd.classList.add('open')
             btn.classList.add('active')
             document.getElementById('status-bar').classList.add('force-visible')
@@ -6238,33 +7571,50 @@ notify pgrst, 'reload schema';</textarea
               notify(t('notify.invalidFile'))
               return false
             }
-            // 清场
-            getNodes().forEach((n) => n.remove())
-            AppState.connections = []
-            AppState.connIdCounter = 0
-            AppState.nodeCounter = 0
-            AppState.selectedConnId = null
-            ;(doc.nodes || []).forEach((n) => {
-              NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
-            })
-            AppState.connections = (doc.connections || []).map((c) => ({
-              ...c,
-              fromPort: c.fromPort || 'bottom',
-              toPort: c.toPort || 'top',
-              id: 'conn-' + ++AppState.connIdCounter,
-            }))
+            // 清场。整段包在 try/finally 里：History.applying 必须复位，
+            // 否则一次异常就会让撤销功能永久哑掉。
+            try {
+              History.applying = true
+              clearTimeout(AppState.autoSaveTimer)
+              getNodes().forEach((n) => n.remove())
+              AppState.connections = []
+              AppState.connIdCounter = 0
+              AppState.nodeCounter = 0
+              AppState.selectedConnId = null
+              ;(doc.nodes || []).forEach((n) => {
+                NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
+              })
+              AppState.connections = (doc.connections || []).map((c) => ({
+                ...c,
+                fromPort: c.fromPort || 'bottom',
+                toPort: c.toPort || 'top',
+                id: 'conn-' + ++AppState.connIdCounter,
+              }))
 
-            idx.activeId = id
-            DocManager.writeIndex(idx)
+              idx.activeId = id
+              DocManager.writeIndex(idx)
 
-            // 恢复该画布的视图
-            if (doc.view) {
-              AppState.panX = doc.view.panX || 0
-              AppState.panY = doc.view.panY || 0
-              AppState.scale = doc.view.scale || 1
-              CanvasManager.applyTransform()
-            } else {
-              CanvasManager.resetToInitialWorld()
+              // 恢复该画布的视图
+              if (doc.view) {
+                AppState.panX = doc.view.panX || 0
+                AppState.panY = doc.view.panY || 0
+                AppState.scale = doc.view.scale || 1
+                CanvasManager.applyTransform()
+              } else {
+                CanvasManager.resetToInitialWorld()
+              }
+
+              UIManager.renderDocList()
+              UIManager.updateStats()
+              Settings.save()
+              // 撤销栈按画布独立：换画布就清空，避免跨文档撤销
+              History.reset()
+              // 换画布后大纲要重建（节点 id 集合变了）
+              OutlineManager.currentId = null
+              OutlineManager.collapsed.clear()
+              OutlineManager.render()
+            } finally {
+              History.applying = false
             }
 
             setTimeout(() => {
@@ -6274,9 +7624,6 @@ notify pgrst, 'reload schema';</textarea
               UIManager.applyNodeBg()
             }, 220)
 
-            UIManager.renderDocList()
-            UIManager.updateStats()
-            Settings.save()
             return true
           },
           rename(id, name) {
@@ -6484,6 +7831,21 @@ notify pgrst, 'reload schema';</textarea
                 break
               case 'newGroup':
                 NodeManager.createCenteredNode('group')
+                break
+              case 'undo':
+                History.undo()
+                break
+              case 'toggleOutline':
+                OutlineManager.toggle()
+                break
+              case 'expandOutline':
+                OutlineManager.setOpen(true)
+                break
+              case 'collapseOutline':
+                OutlineManager.setOpen(false)
+                break
+              case 'redo':
+                History.redo()
                 break
               case 'showDocs':
                 showDropdown('dd-docs', target)
@@ -6943,10 +8305,8 @@ notify pgrst, 'reload schema';</textarea
              文案放在 I18N_DATA 的 hk.rows / hk.note 里，中英文各一份。
              格式：段落之间用 ~~ 分隔，段落内「标题§说明|键位|说明|键位」，
              {M} 会被替换成当前平台的修饰键字形（Mac 为 ⌘，其余为 Ctrl）。
+             MOD_LABEL 定义在文件顶部，这里直接复用。
              -------------------------------------------------------- */
-          const MOD_LABEL = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
-            ? '⌘'
-            : 'Ctrl'
           function hkExpand(str) {
             return String(str).split('{M}').join(MOD_LABEL)
           }
@@ -7001,6 +8361,18 @@ notify pgrst, 'reload schema';</textarea
             ) {
               closeShortcuts()
               return
+            }
+            // 撤销 / 重做：接管浏览器的原生 undo（否则和画布历史打架），
+            // 输入框里的文本编辑也一起走画布历史，所以任何位置都触发。
+            if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+              const k = (e.key || '').toLowerCase()
+              if (k === 'z' || k === 'y') {
+                e.preventDefault()
+                if (k === 'y') History.redo()
+                else if (e.shiftKey) History.redo()
+                else History.undo()
+                return
+              }
             }
             if (e.key === '?') {
               const tag = (e.target && e.target.tagName) || ''
@@ -7073,6 +8445,17 @@ notify pgrst, 'reload schema';</textarea
 
           // ---- File input ----
           DOM.fileInput.addEventListener('change', handleFileLoad)
+
+          // ---- 触屏：顶部触发带改成点一下固定菜单 ----
+          // 没有 hover 的话，菜单收起后就再也唤不回来了
+          if (DOM.menuTrigger) {
+            DOM.menuTrigger.addEventListener('click', () => {
+              if (!TouchManager.isTouchDevice()) return
+              if (AppState.menuPinned) return // 已固定时不抢菜单自己的点击
+              UIManager.togglePin()
+              updateMenuHeight()
+            })
+          }
 
           // ---- Floating toolbar ----
           const ftBar = DOM.floatingToolbar
@@ -7317,6 +8700,14 @@ notify pgrst, 'reload schema';</textarea
           mo.observe(DOM.canvasInner, { childList: true })
           // Also observe existing nodes
           getNodes().forEach((n) => ro.observe(n))
+
+          // 菜单栏换行 -> 高度可变：窗口缩放 / 中英文切换后重新量一次
+          updateMenuHeight()
+          const menu = DOM.topMenu
+          if (menu && window.ResizeObserver) {
+            new ResizeObserver(() => updateMenuHeight()).observe(menu)
+          }
+          window.addEventListener('resize', updateMenuHeight)
         }
 
         // ================================================================
@@ -7339,6 +8730,8 @@ notify pgrst, 'reload schema';</textarea
             const doc = DocManager.readDoc(activeId)
             if (doc) {
               try {
+                History.applying = true // 载入历史数据不进撤销栈
+                clearTimeout(AppState.autoSaveTimer)
                 ;(doc.nodes || []).forEach((n) => {
                   NodeManager.createNodeAt(
                     parseFloat(n.x) || 100,
@@ -7361,14 +8754,21 @@ notify pgrst, 'reload schema';</textarea
                 }
               } catch (e) {
                 console.warn('[ZenWriter] active doc load failed', e)
+              } finally {
+                History.applying = false
               }
             }
           }
+          // 以当前画布为撤销栈的起点
+          History.reset()
 
           CanvasManager.initPanZoom()
+          TouchManager.init()
           bindGlobalEvents()
           bindPortDragEvents()
           initObservers()
+          // 大纲要读节点，所以放在画布内容建好之后再初始化
+          OutlineManager.init()
 
           setTimeout(() => {
             ConnectionManager.renderAll()
@@ -7421,6 +8821,7 @@ notify pgrst, 'reload schema';</textarea
               connColor: AppState.connColor,
               connWidth: AppState.connWidth,
               statusBarVisible: AppState.statusBarVisible,
+              outlineOpen: AppState.outlineOpen,
               panX: AppState.panX,
               panY: AppState.panY,
               scale: AppState.scale,
