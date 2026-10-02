@@ -1,0 +1,1233 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>舆情演化分析 · 交互式教程</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,600;1,7..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="omm-analysis.css" />
+    <script src="omm-analysis-core.js"></script>
+    <script src="omm-analysis-demos.js" defer></script>
+  </head>
+  <body class="bg-void">
+    <!-- SVG 图标精灵：全部图标以线条 SVG 绘制，stroke=currentColor，随主题变色；禁用 Unicode 图标 -->
+    <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 3 L12.5 8 L4.5 13 Z" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4.2" y="4.2" width="7.6" height="7.6" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-caret" viewBox="0 0 16 16"><path d="M4 6 L8 10 L12 6" /></symbol>
+        <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3 V13 M3 8 H13" /></symbol>
+        <symbol id="i-minus" viewBox="0 0 16 16"><path d="M3 8 H13" /></symbol>
+        <symbol id="i-pin" viewBox="0 0 16 16"><path d="M6 2 H10 L9.4 6 L11 7.6 H5 L6.6 6 Z M8 7.6 V14" /></symbol>
+        <symbol id="i-arrow-up" viewBox="0 0 16 16"><path d="M8 13 V4 M4 7.5 L8 3.5 L12 7.5" /></symbol>
+        <symbol id="i-arrow-right" viewBox="0 0 16 16"><path d="M3 8 H12 M8.5 4.5 L12 8 L8.5 11.5" /></symbol>
+        <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5" cy="8" r="2.6" /><path d="M7.6 8 H13.5 M11 8 V10.4 M13.2 8 V10" /></symbol>
+        <symbol id="i-box" viewBox="0 0 16 16"><path d="M8 2 L13.5 4.8 V11.2 L8 14 L2.5 11.2 V4.8 Z M2.5 4.8 L8 7.6 L13.5 4.8 M8 7.6 V14" /></symbol>
+        <symbol id="i-hourglass" viewBox="0 0 16 16"><path d="M5 2.5 H11 M5 13.5 H11 M5.5 2.5 C5.5 5.5 8 6.4 8 8 C8 6.4 10.5 5.5 10.5 2.5 M5.5 13.5 C5.5 10.5 8 9.6 8 8 C8 9.6 10.5 10.5 10.5 13.5" /></symbol>
+        <symbol id="i-reset" viewBox="0 0 16 16"><path d="M3.5 8 a4.5 4.5 0 0 1 7.6 -3.3" /><path d="M11.4 2.2 V5 H8.6" /><path d="M12.5 8 a4.5 4.5 0 0 1 -7.6 3.3" /><path d="M4.6 13.8 V11 h2.8" /></symbol>
+        <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5 L6.5 11.5 L12.5 4.8" /></symbol>
+      </defs>
+    </svg>
+    <div id="menu-trigger"></div>
+    <nav id="top-menu">
+      <div class="menu-group">
+        <span class="menu-label">导航</span>
+        <button class="menu-btn" data-dd="dd-toc" data-action="ddToggle">目录 <svg class="ico"><use href="#i-caret"/></svg></button>
+        <span class="menu-label" id="cur-stage">总览</span>
+      </div>
+      <div class="menu-group">
+        <button class="menu-btn" data-dd="dd-settings" data-action="ddToggle">设置 <svg class="ico"><use href="#i-caret"/></svg></button>
+        <button class="menu-btn" data-dd="dd-progress" data-action="ddToggle">进度 <svg class="ico"><use href="#i-caret"/></svg></button>
+        <button class="menu-btn" data-dd="dd-about" data-action="ddToggle">关于 <svg class="ico"><use href="#i-caret"/></svg></button>
+      </div>
+      <div class="menu-group">
+        <button class="menu-btn" data-action="runAll"><svg class="ico"><use href="#i-play"/></svg> 运行全部</button>
+      </div>
+      <div class="menu-group">
+        <div id="menu-progress"><div class="pbar"><i id="pbar-fill"></i></div><span id="ptext">0/0 · 0%</span></div>
+      </div>
+      <button class="pin-btn" id="pin-btn" data-action="togglePin" title="钉住菜单"><svg class="ico"><use href="#i-pin"/></svg></button>
+    </nav>
+
+    <div class="dropdown" id="dd-toc">
+      <div class="dd-label">目录</div>
+      <a class="dd-item" data-jump="#overview" data-action="jump" href="#overview"><span>总览 · 研究全景</span><span class="hint">开始</span></a>
+      <div class="dd-divider"></div>
+      <a class="dd-item" data-jump="#stage-1" data-action="jump" href="#stage-1"><span>01 数据预处理</span><span class="hint">爬虫 · pandas</span></a>
+      <a class="dd-item" data-jump="#stage-2" data-action="jump" href="#stage-2"><span>02 演化周期划分</span><span class="hint">生命周期 · 时间序列</span></a>
+      <a class="dd-item" data-jump="#stage-3" data-action="jump" href="#stage-3"><span>03 主题演化分析</span><span class="hint">TF-IDF · LDA</span></a>
+      <a class="dd-item" data-jump="#stage-4" data-action="jump" href="#stage-4"><span>04 情感维度分析</span><span class="hint">CNN · BiLSTM · Attention</span></a>
+      <a class="dd-item" data-jump="#stage-5" data-action="jump" href="#stage-5"><span>05 情感演化可视化</span><span class="hint">matplotlib</span></a>
+      <div class="dd-divider"></div>
+      <a class="dd-item" data-jump="#glossary" data-action="jump" href="#glossary"><span>附录 · 术语表</span><span class="hint">12 词</span></a>
+    </div>
+
+    <div class="dropdown" id="dd-settings" style="min-width: 300px">
+      <div class="dd-label">外观 · 全局调控</div>
+      <div class="dd-item-row">
+        <span>圆角（全局统一）</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-radius">0</span>
+          <span class="settings-btn" data-action="radiusDown">−</span>
+          <span class="settings-btn" data-action="radiusUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>字号</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-font">15px</span>
+          <span class="settings-btn" data-action="fontDown">−</span>
+          <span class="settings-btn" data-action="fontUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>行高</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-lh">1.78</span>
+          <span class="settings-btn" data-action="lhDown">−</span>
+          <span class="settings-btn" data-action="lhUp">+</span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>背景</span>
+        <div class="settings-bg-options">
+          <span class="settings-bg-dot active" data-bg="bg-void" style="background: var(--bg); border: 1px solid var(--border)"></span>
+          <span class="settings-bg-dot" data-bg="bg-grid" style="background-image: linear-gradient(var(--border-dim) 1px, transparent 1px), linear-gradient(90deg, var(--border-dim) 1px, transparent 1px); background-size: 6px 6px"></span>
+          <span class="settings-bg-dot" data-bg="bg-dots" style="background-image: radial-gradient(circle, var(--text-dim) 1px, transparent 1px); background-size: 5px 5px"></span>
+          <span class="settings-bg-dot" data-bg="bg-cross" style="background-image: linear-gradient(var(--border-dim) 1px, transparent 1px), linear-gradient(90deg, var(--border-dim) 1px, transparent 1px); background-size: 6px 6px; background-position: 3px 3px"></span>
+          <span class="settings-bg-dot" data-bg="bg-diagonal" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, var(--border-dim) 5px, var(--border-dim) 6px)"></span>
+        </div>
+      </div>
+      <div class="dd-divider"></div>
+      <button class="dd-item" data-action="resetStyles"><span>恢复默认样式</span></button>
+    </div>
+
+    <div class="dropdown" id="dd-progress">
+      <div class="dd-label">学习进度 · 勾选即记录</div>
+      <div id="pr-list"></div>
+      <div class="dd-divider"></div>
+      <button class="dd-item" data-action="resetProgress"><span>进度清零</span></button>
+    </div>
+
+    <div class="dropdown" id="dd-about" style="max-width: 340px">
+      <div class="dd-label">使用说明</div>
+      <div style="padding: 6px 10px; font-size: calc(11.5px * var(--fscale)); color: var(--text-dim); line-height: 1.9">
+        · 单元格右上角 <b>勾选框</b> = 标记该节学完（自动保存）<br />
+        · <b>双击</b>单元格标题栏 = 折叠 / 展开<br />
+        · <b><svg class="ico"><use href="#i-play"/></svg> 运行</b> = 执行代码；未启动 Python 后端时自动用浏览器内置模拟<br />
+        · 真实运行：在同目录执行 <kbd>python omm-analysis-server.py</kbd><br />
+        · 设置里的<b>圆角</b>统一控制全页所有方框的圆角程度<br />
+        · 进度与设置保存在浏览器本地，不上传任何数据
+      </div>
+    </div>
+
+    <main id="main">
+      <!-- ================= 总览 ================= -->
+      <header id="page-hd">
+        <h1>舆情演化分析 · 交互式教程</h1>
+        <p class="sub">写给不学数学的网络与新媒体专业同学 —— 从一堆微博评论，到一张情感演化图谱</p>
+        <div class="hd-chips">
+          <span class="chip solid">对应开题表格「二、论文分析工具」全部 5 个环节</span>
+          <span class="chip">20+ 交互演示</span>
+          <span class="chip">Notebook 式运行</span>
+          <span class="chip" id="backend-chip"><span class="dot"></span>检测后端中…</span>
+        </div>
+      </header>
+
+      <section id="overview" class="stage">
+        <div class="pipe">
+          <div class="pipe-node" data-jump="#stage-1"><div class="pn-no">01</div><div class="pn-t">数据预处理</div><div class="pn-d">爬虫 · pandas</div></div>
+          <span class="pipe-arr"><svg class="ico"><use href="#i-arrow-right"/></svg></span>
+          <div class="pipe-node" data-jump="#stage-2"><div class="pn-no">02</div><div class="pn-t">演化周期划分</div><div class="pn-d">生命周期 · 时间序列</div></div>
+          <span class="pipe-arr"><svg class="ico"><use href="#i-arrow-right"/></svg></span>
+          <div class="pipe-node" data-jump="#stage-3"><div class="pn-no">03</div><div class="pn-t">主题演化分析</div><div class="pn-d">TF-IDF · LDA</div></div>
+          <span class="pipe-arr"><svg class="ico"><use href="#i-arrow-right"/></svg></span>
+          <div class="pipe-node" data-jump="#stage-4"><div class="pn-no">04</div><div class="pn-t">情感维度分析</div><div class="pn-d">CNN+BiLSTM+Attention</div></div>
+          <span class="pipe-arr"><svg class="ico"><use href="#i-arrow-right"/></svg></span>
+          <div class="pipe-node" data-jump="#stage-5"><div class="pn-no">05</div><div class="pn-t">情感演化可视化</div><div class="pn-d">matplotlib</div></div>
+        </div>
+
+        <div class="cell" id="ovc1" data-track>
+          <div class="cell-hd"><span class="cell-num">0.1</span><span class="cell-type">讲解</span><span class="cell-title">这项研究到底在做什么</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" title="标记完成" /></label></div>
+          <div class="cell-bd">
+            <p>先用一句话说清整件事：<strong>某连锁餐厅被曝出「吃坏肚子」事件，网友在微博评论区吵了二十天。我们要做的，是让电脑替我们读完这二十天的几万条评论，并回答三个问题——大家<b>在吵什么</b>（主题）、<b>越吵越凶还是渐渐平息</b>（周期）、<b>情绪是怎么变化的</b>（情感）。</strong></p>
+            <p>这五个环节是一条流水线，前一步的产出就是后一步的原料：</p>
+            <ul class="dot">
+              <li><b>① 数据预处理</b>：把乱糟糟的评论整理成干净「语料库」——相当于把座谈会的速记稿整理成逐字稿；</li>
+              <li><b>② 演化周期划分</b>：按每天评论数量画出热度曲线，把事件切成潜伏、爆发、蔓延、衰退、长尾五个阶段；</li>
+              <li><b>③ 主题演化分析</b>：看每个阶段大家在聊什么，以及话题怎么转移（从「卫生」聊到「赔偿」再聊到「监管」）；</li>
+              <li><b>④ 情感维度分析</b>：让模型把每条评论贴上 积极 / 中性 / 消极 三种情绪标签；</li>
+              <li><b>⑤ 情感演化可视化</b>：把②③的结果画成一张图——论文的「结论图谱」。</li>
+            </ul>
+            <div class="cal"><div class="cal-t">给文科生的定心丸</div><p>本教程里出现的每一个算法，你都不需要会推导公式。你只需要理解它<b>像什么、在干什么、输入输出是什么</b>。数学公式在论文里的角色是「说明书」，而你是「使用者」——会用、能解释，就足够写好一篇传播学论文。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="ovc2" data-track>
+          <div class="cell-hd"><span class="cell-num">0.2</span><span class="cell-type">讲解</span><span class="cell-title">怎么用这份教程</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" title="标记完成" /></label></div>
+          <div class="cell-bd">
+            <ul class="dot">
+              <li>页面模仿 <b>Jupyter / marimo 笔记本</b>：每一块是一个「单元格」，带编号和类型（讲解 / 演示 / 代码 / 检查点）；</li>
+              <li><b>演示</b>单元格可以直接动手玩——拖滑块、点按钮、输入文字，所见即所得；</li>
+              <li><b>代码</b>单元格点 <b><svg class="ico"><use href="#i-play"/></svg> 运行</b>：装了 Python 后端就真实执行，没装则用浏览器内置模拟，输出一样；</li>
+              <li>每个阶段末尾的<b>「实战代码库」</b>单元格（编号如 1.11、2.6、5.8）= 论文可直接复用的完整脚本：按顺序运行会依次产出 <code>corpus_clean.csv</code>、<code>stage_split.csv</code> 等全部数据文件与图，5.10 有交付物对照表；</li>
+              <li>每学完一格，点标题栏右侧的小方框打勾，进度自动存在浏览器里；</li>
+              <li>把鼠标移到页面<b>最顶端</b>会掉出菜单，右上角 <svg class="ico"><use href="#i-pin"/></svg> 可以钉住；菜单「设置」里的<b>圆角</b>会统一改变全页所有方框的圆润程度——这是本页的总开关。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 01 数据预处理 ================= -->
+      <section id="stage-1" class="stage">
+        <div class="stage-hd">
+          <span class="stage-no">01</span><h2>数据预处理</h2>
+          <p class="stage-sub">把「乱糟糟的评论区」整理成「干净可统计的语料库」</p>
+        </div>
+        <div class="stage-map">
+          <div><span class="m-k">技术环节</span>数据预处理</div>
+          <div><span class="m-k">具体任务</span>微博评论数据采集、清洗、构建文本语料库</div>
+          <div><span class="m-k">使用工具</span>Python 爬虫 · pandas</div>
+        </div>
+
+        <div class="cell" id="s1c1" data-track>
+          <div class="cell-hd"><span class="cell-num">1.1</span><span class="cell-type">讲解</span><span class="cell-title">为什么第一步永远是「整理」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>想象你组织了一场 500 人的线下座谈会，请了速记员。会后你拿到 500 页速记稿，里面混着：<em>「@某某 你快看这条」「转发微博」「http://t.cn/xxxx」「哈哈哈哈哈哈」「[doge][doge]」</em>……你要做研究，得先把这些噪音挑出去，留下真正表达观点的句子。</p>
+            <p>微博评论区就是这场座谈会。原始数据通常有三类脏东西：</p>
+            <ul class="dot">
+              <li><b>非文本噪音</b>：@提及、链接、表情代码、重复刷屏字符；</li>
+              <li><b>结构性脏数据</b>：重复抓取的同一条评论、内容为空的行、抓取失败的缺失值；</li>
+              <li><b>无信息句子</b>：只有「111」「+1」「沙发」这种没有观点的灌水。</li>
+            </ul>
+            <div class="cal"><div class="cal-t">比喻</div><p>预处理之于数据分析，相当于<b>洗菜之于炒菜</b>。菜里有泥，后面厨艺再好也白搭。论文里这叫「垃圾进，垃圾出」（garbage in, garbage out）。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s1c2" data-track>
+          <div class="cell-hd"><span class="cell-num">1.2</span><span class="cell-type">讲解</span><span class="cell-title">三个关键词：采集、清洗、语料库</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="term-card"><b>采集（爬虫）</b><div class="d">写一小段 Python 程序，模拟人刷微博，把评论的「文本、发布时间、点赞数、用户」一条条抄进表格。法律与礼仪边界：只抓公开数据、控制频率、不碰隐私字段。</div></div>
+            <div class="term-card"><b>清洗</b><div class="d">按规则删掉上面说的三类脏东西。规则是你能亲手定的——这正是文科生的优势：你对「什么是有意义的表达」最有判断力。</div></div>
+            <div class="term-card"><b>语料库</b><div class="d">清洗后得到的、可供统计的干净文本集合，通常存成一个 CSV 表格文件（就是 Excel 那种一行一条的结构）。后面 ②③④⑤ 全部吃这一份数据。</div></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s1c3" data-track>
+          <div class="cell-hd"><span class="cell-num">1.3</span><span class="cell-type">小白课</span><span class="cell-title">先补常识：你和微博之间到底发生了什么</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>爬虫这个词听着吓人，其实就是「<strong>让程序替你去上网刷微博</strong>」。要理解它在干什么，先搞懂你平时刷微博时，背后悄悄发生了什么。把微博想成一家<strong>网店</strong>，把你的浏览器（Chrome / Edge）想成<strong>你手里的点单 App</strong>：</p>
+            <div class="grid2">
+              <div class="term-card"><b>① 服务器 = 网店仓库</b><div class="d">一台 24 小时开机、存放所有数据的大电脑。你发的每条评论最终都存在它这里。</div></div>
+              <div class="term-card"><b>② 客户端 / 浏览器 = 点单 App</b><div class="d">你看的微博页面，是浏览器向服务器「下单」要来的。刷一下 = 下一次单，服务器把最新内容「发货」回来。</div></div>
+              <div class="term-card"><b>③ 请求 / 响应 = 下单 / 发货</b><div class="d">你点「下一页」，浏览器发出一个<strong>请求</strong>，服务器回一份<strong>响应</strong>。爬虫就是写程序自动地、批量地「下单」。</div></div>
+              <div class="term-card"><b>④ 网址 URL = 商品地址</b><div class="d">形如 <kbd>https://s.weibo.com/...?page=2</kbd>。最后的 <code>page=2</code> 就是「第 2 页」，爬虫改这个数字就能一页页翻。</div></div>
+            </div>
+            <h4 class="subsec">四个爬虫绕不开的名词（教程里天天出现，这里一次讲透）</h4>
+            <div class="term-card"><b>登录状态 & Cookie（身份手环）</b><div class="d">你在微博登录一次，服务器就给你的浏览器发一条「<strong>手环</strong>」（Cookie）。之后每次下单，浏览器都自动戴着手环，服务器一看就知道「这是已登录的某某」，才肯把数据给你。<strong>爬虫最麻烦的一步，就是把这条手环（Cookie）复制给程序，让程序冒充「已登录的你」去下单</strong>。手环会过期，过期就得重新登录再复制。</div></div>
+            <div class="term-card"><b>Profile（浏览器的小抽屉）</b><div class="d">你电脑里浏览器存 Cookie、书签、历史的地方就叫一个 <strong>Profile（用户配置）</strong>。同一浏览器可以开多个 Profile，就像多个互不干扰的小抽屉，各自记各自的登录状态。爬虫教程说「新建一个 Profile / 用无痕模式」，就是想要一个干净、独立的小抽屉，避免和你平时的账号互相干扰。</div></div>
+            <div class="term-card"><b>User-Agent（自我介绍）</b><div class="d">浏览器每次下单都会附一句自我介绍：「我是 Chrome 浏览器，Windows 系统」。这句就是 <strong>User-Agent</strong>。有些网站会看这句话决定给不给内容，所以爬虫常要把自己的介绍「伪装成正常浏览器」。</div></div>
+            <div class="term-card"><b>IP（你的门牌号）</b><div class="d">你家网络在网上的地址。若同一 IP 一秒下单几百次，服务器会判定「这是机器人」而封禁。所以爬虫要<strong>放慢速度、加延时</strong>——这也是 1.6 代码里那句 <code>sleep(2)</code> 的原因。</div></div>
+            <div class="cal"><div class="cal-t">按 F12 能看到什么（可选体验）</div><p>在浏览器按 <kbd>F12</kbd> → 切到 <b>Network（网络）</b> → 刷新页面，你会看到浏览器一条条「下单记录」。点开任一条，在 <b>Headers</b> 里就能找到 <code>Cookie</code> 和 <code>User-Agent</code> 两行——爬虫教程让你「复制 Cookie」，就是从这里复制。看不懂数字没关系，知道「它们就藏在这」即可。</p></div>
+            <div class="cal"><div class="cal-t">合规红线（写进论文方法部分，答辩必问）</div><p>只抓<strong>公开可见</strong>的评论；不碰他人隐私字段（手机号、真实身份）；遵守网站规则、控制频率不拖垮服务器；数据仅用于学术研究。这些写进论文，体现的是研究伦理，是加分项。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s1c4" data-track>
+          <div class="cell-hd"><span class="cell-num">1.4</span><span class="cell-type">演示</span><span class="cell-title">Cookie 手环模拟器 · 秒懂「为什么爬虫要复制 Cookie」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>下面模拟「下单—发货」全过程。你手里有两个动作：<b>登录</b>拿手环、<b>下单</b>要数据。没戴手环时下单会被拒（HTTP 401）；戴上有效 Cookie 才拿得到内容（HTTP 200）；手环过期后再下单又会吃闭门羹。点按钮走一遍，你就懂了爬虫教程里「先复制 Cookie」到底在复制什么。</p>
+            <div class="demo-bar">
+              <button class="btn" id="ck-login"><svg class="ico"><use href="#i-key"/></svg> 登录微博（获得手环 Cookie）</button>
+              <button class="btn" id="ck-order"><svg class="ico"><use href="#i-box"/></svg> 下单：请求第 1 页评论</button>
+              <button class="btn" id="ck-expire"><svg class="ico"><use href="#i-hourglass"/></svg> 让手环过期</button>
+              <button class="btn" id="ck-reset"><svg class="ico"><use href="#i-reset"/></svg> 重置</button>
+              <span style="flex:1"></span>
+              <span class="lbl">状态</span><b id="ck-state" style="font-family: var(--code); font-size: calc(12px*var(--fscale))">未登录</b>
+            </div>
+            <div class="grid2">
+              <div class="panel"><div class="p-t">程序当前持有的「手环」Cookie</div><div id="ck-cookie" class="log" style="min-height: 44px">（空）</div></div>
+              <div class="panel"><div class="p-t">服务器回应</div><div id="ck-resp" class="log" style="min-height: 44px">（点上方按钮开始）</div></div>
+            </div>
+            <div class="stat-row" id="ck-stats"></div>
+            <div class="cal"><div class="cal-t">一句话记住</div><p>数据不是「网页上写着就能白拿」，服务器每次都要查手环。<strong>爬虫 = 先合法拿到并戴上你自己的手环，再让程序替你反复下单。</strong></p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s1c5" data-track>
+          <div class="cell-hd"><span class="cell-num">1.5</span><span class="cell-type">演示</span><span class="cell-title">清洗工作台 · 亲手删一遍</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>下面是一条真实感很强的脏评论。勾选不同清洗规则，观察右侧结果如何变化——这就是爬虫之后、分析之前的那道工序。</p>
+            <div class="grid2">
+              <div class="panel"><div class="p-t">原始评论（可编辑）</div>
+                <textarea id="clean-in" rows="5">天呐 这家餐厅吃坏肚子了！！！@美食避雷  http://t.cn/AbCd123 转发微博 [doge][doge] 太差太差太差了，再也不来～～～</textarea>
+              </div>
+              <div class="panel"><div class="p-t">清洗结果</div><div id="clean-out" class="log" style="min-height: 76px"></div></div>
+            </div>
+            <div class="demo-bar" style="margin-top: 12px"><span class="lbl">清洗规则</span></div>
+            <div id="clean-rules" class="grid2" style="gap: 2px">
+              <label class="ck-row"><input type="checkbox" class="ck" data-rule="mention" checked />去除 @用户提及</label>
+              <label class="ck-row"><input type="checkbox" class="ck" data-rule="url" checked />去除链接</label>
+              <label class="ck-row"><input type="checkbox" class="ck" data-rule="emoji" checked />去除表情代码 [xxx]</label>
+              <label class="ck-row"><input type="checkbox" class="ck" data-rule="forward" checked />去除「转发微博」等套话</label>
+              <label class="ck-row"><input type="checkbox" class="ck" data-rule="repeat" checked />压缩重复字（太差太差→太差）</label>
+              <label class="ck-row"><input type="checkbox" class="ck" data-rule="space" checked />整理多余空格与标点</label>
+            </div>
+            <div class="stat-row" id="clean-stats"></div>
+            <div class="btn-row"><button class="btn" id="clean-push"><svg class="ico"><use href="#i-arrow-right"/></svg> 把清洗结果加入语料库</button><span class="ann" style="margin: 6px 0 0">攒几条试试：5.4 仪表盘会统计你亲手清洗过的条数</span></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s1c6" data-track data-demo="s1code1">
+          <div class="cell-hd"><span class="cell-num">1.6</span><span class="cell-type">代码</span><span class="cell-title">爬虫在做什么（示意）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>把 1.3 的常识落到代码上，爬虫就三件事：<strong>戴上手环（Cookie）、报上身份（User-Agent）、一页页下单</strong>。真实抓取微博需要登录态与接口分析，本科论文更常用<strong>第三方数据平台导出</strong>或老师提供的数据集。下面是「爬虫精神」的最小示意：一行循环 = 刷一页，抄下每条评论。</p>
+<span class="k">import</span> requests, time
+
+headers <span class="o">=</span> {                                   <span class="cm"># 1.3 讲的「手环 + 自我介绍」都在这</span>
+    <span class="st">"Cookie"</span>: <span class="st">"SUB=_2A25M...（登录后按 F12 复制）"</span>,
+    <span class="st">"User-Agent"</span>: <span class="st">"Mozilla/5.0 ... Chrome/120"</span>,
+}
+comments <span class="k">=</span> []
+<span class="k">for</span> page <span class="k">in</span> range(<span class="st">1</span>, <span class="st">4</span>):                <span class="cm"># 刷 3 页</span>
+    r <span class="o">=</span> requests.get(url, params<span class="o">=</span>{<span class="st">"page"</span>: page}, headers<span class="o">=</span>headers)
+    <span class="k">if</span> r.status_code <span class="o">!=</span> <span class="st">200</span>:              <span class="cm"># 200=发货成功 401=没戴手环 403=不让进</span>
+        <span class="k">print</span>(<span class="st">"这页没拿到，状态码"</span>, r.status_code); <span class="k">break</span>
+    <span class="k">for</span> c <span class="k">in</span> r.json()[<span class="st">"comments"</span>]:
+        comments.append({               <span class="cm"># 只抄需要的四列</span>
+            <span class="st">"text"</span>: c[<span class="st">"text"</span>], <span class="st">"time"</span>: c[<span class="st">"created_at"</span>],
+            <span class="st">"likes"</span>: c[<span class="st">"like_count"</span>], <span class="st">"user"</span>: c[<span class="st">"user"</span>][<span class="st">"name"</span>],
+        ])
+    time.sleep(<span class="st">2</span>)                       <span class="cm"># 睡 2 秒再刷：保护 IP 不被封（1.3 的门牌号）</span></pre>
+            <span class="ann">读代码只需抓住：数据从哪来（requests.get 下单），凭什么拿到（headers 里的手环），到哪去（comments 列表）。status_code 是服务器的「发货回执」：200 成功、401 没登录、403 不让进。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s1c7" data-track data-demo="s1code2">
+          <div class="cell-hd"><span class="cell-num">1.7</span><span class="cell-type">代码</span><span class="cell-title">pandas 初见面：一张会思考的 Excel</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p><span class="term" data-tip="读作「潘达斯」，Python 最常用的表格处理库。你不需要背它，只需要知道：表格操作 = pandas 一句话。">pandas</span> 把 CSV 表格读进内存，变成一个叫 <strong>DataFrame</strong> 的对象——你可以把它理解成「一张会用魔法的 Excel 表」。最常用的三连：</p>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd
+
+df <span class="o">=</span> pd.read_csv(<span class="st">"weibo_comments.csv"</span>)  <span class="cm"># ① 读表：魔法表格诞生</span>
+<span class="k">print</span>(df.shape)                       <span class="cm"># ② 问它多大：(行数, 列数)</span>
+df.head(<span class="st">5</span>)                             <span class="cm"># ③ 看前 5 行，确认读对了</span></pre>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s1c8" data-track>
+          <div class="cell-hd"><span class="cell-num">1.8</span><span class="cell-type">演示</span><span class="cell-title">pandas 操作台 · 每个按钮就是一行代码</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>这是一份只有 8 行的迷你数据（真实研究里是 8 万行，操作完全一样）。点按钮执行清洗，观察 <b>shape</b>（行×列）如何变化、日志里对应哪行代码。</p>
+            <div class="demo-bar">
+              <span class="lbl">df.shape</span><b id="pd-shape" style="font-family: var(--code)">(8, 4)</b>
+              <span style="flex:1"></span>
+              <button class="btn" data-pd="dup">去重 drop_duplicates()</button>
+              <button class="btn" data-pd="na">删缺失 dropna()</button>
+              <button class="btn" data-pd="filter">筛选 likes≥50</button>
+              <button class="btn" data-pd="empty">删空文本</button>
+              <button class="btn" data-pd="reset"><svg class="ico"><use href="#i-reset"/></svg> 重置</button>
+            </div>
+            <div class="svg-wrap" style="padding: 0; border: none"><div id="pd-table"></div></div>
+            <div class="log" id="pd-log">（等待操作…）</div>
+          </div>
+        </div>
+
+        <div class="cell" id="s1c9" data-track data-demo="s1code3">
+          <div class="cell-hd"><span class="cell-num">1.9</span><span class="cell-type">代码</span><span class="cell-title">清洗三连 + 构建语料库</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+<pre class="code"><span class="k">import</span> re
+
+<span class="k">def</span> clean(text):                       <span class="cm"># 把 1.5 演示的规则写成函数</span>
+    text <span class="o">=</span> re.sub(<span class="st">r"@[\w\u4e00-\u9fa5]+"</span>, <span class="st">""</span>, text)      <span class="cm"># 去@</span>
+    text <span class="o">=</span> re.sub(<span class="st">r"http\S+|https\S+"</span>, <span class="st">""</span>, text)         <span class="cm"># 去链接</span>
+    text <span class="o">=</span> re.sub(<span class="st">r"\[[^\[\]]+\]"</span>, <span class="st">""</span>, text)             <span class="cm"># 去[表情]</span>
+    text <span class="o">=</span> re.sub(<span class="st">r"(.)\1{2,}"</span>, <span class="st">r"\1\1"</span>, text)           <span class="cm"># 压缩重复字</span>
+    <span class="k">return</span> text.strip()
+
+df[<span class="st">"text"</span>] <span class="o">=</span> df[<span class="st">"text"</span>].astype(str).apply(clean)   <span class="cm"># 对整列逐行套用</span>
+df <span class="o">=</span> df.drop_duplicates().dropna()                  <span class="cm"># 去重、删缺失</span>
+df <span class="o">=</span> df[df[<span class="st">"text"</span>].str.len() <span class="o">&gt;=</span> <span class="st">5</span>]                  <span class="cm"># 丢掉太短的灌水</span>
+df.to_csv(<span class="st">"corpus_clean.csv"</span>, index<span class="o">=</span><span class="k">False</span>)          <span class="cm"># 保存 → 语料库建成</span></pre>
+            <span class="ann">re.sub 是「查找替换」：第一个参数是暗号（正则表达式），第二个是替换成什么。暗号背不下来没关系，上面 5 行是舆情清洗的“万能五件套”，直接抄进论文附录即可。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s1c10" data-track>
+          <div class="cell-hd"><span class="cell-num">1.10</span><span class="cell-type">检查点</span><span class="cell-title">Stage 01 小测</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="quiz" data-answer="1" data-fb="对——爬虫只负责「抄稿子」，观点质量靠后续清洗与分析保证；这也是为什么论文里数据说明要写清采集时间窗。">
+              <p><b>Q1</b> 抓到 3 万条评论后，最应该先做什么？</p>
+              <button class="quiz-opt">A. 直接做情感分析，先出结果再说</button>
+              <button class="quiz-opt">B. 去重、去噪、检查缺失值，构建干净语料库</button>
+              <button class="quiz-opt">C. 把 3 万条全部人工读一遍</button>
+            </div>
+            <div class="quiz" data-answer="2" data-fb="「[doge]」是表情代码、「转发微博」是平台套话，都会干扰词频统计；而「吃坏肚子」是核心观点词，必须保留。">
+              <p><b>Q2</b> 下列哪一项<b>不属于</b>清洗要删除的对象？</p>
+              <button class="quiz-opt">A. 「http://t.cn/xxx」链接</button>
+              <button class="quiz-opt">B. 「转发微博」套话</button>
+              <button class="quiz-opt">C. 「吃坏肚子」表述</button>
+            </div>
+            <div class="quiz" data-answer="0" data-fb="df.shape 返回 (行数, 列数)，清洗前后各打印一次，就是论文里「有效评论 28,416 条」这类数字的出处。">
+              <p><b>Q3</b> 想知道清洗后还剩多少条评论，用哪句代码？</p>
+              <button class="quiz-opt">A. print(df.shape)</button>
+              <button class="quiz-opt">B. df.head()</button>
+              <button class="quiz-opt">C. df.plot()</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell" id="s1c11" data-track data-demo="s1code4">
+          <div class="cell-hd"><span class="cell-num">1.11</span><span class="cell-type">实战代码</span><span class="cell-title">完整采集脚本（论文附录级，可直接改）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>把 1.6 的骨架补全成一份<strong>能直接放进论文附录的完整脚本</strong>：配置区、函数、主循环、保存文件，四段结构。改三个地方就能用于你的选题：关键词、Cookie、页数上限。</p>
+<pre class="code"><span class="cm"># ============ weibo_collector.py · 论文附录完整脚本 ============</span>
+<span class="cm"># ---------- ① 配置区：只改这里 ----------</span>
+KEYWORD = <span class="st">"XX餐厅 吃坏肚子"</span>          <span class="cm"># 你的事件关键词</span>
+PAGE_MAX <span class="k">=</span> <span class="st">378</span>                       <span class="cm"># 目标约 3 万条：每页 80 条</span>
+HEADERS <span class="k">=</span> {
+    <span class="st">"Cookie"</span>: <span class="st">"粘贴你 F12 复制的手环"</span>,
+    <span class="st">"User-Agent"</span>: <span class="st">"Mozilla/5.0 ... Chrome/120"</span>,
+}
+
+<span class="cm"># ---------- ② 函数：要一页，回一页 ----------</span>
+<span class="k">def</span> fetch_page(page):
+    r <span class="k">=</span> requests.get(<span class="st">"https://s.weibo.com/ajax/comment"</span>,
+                     params<span class="k">=</span>{<span class="st">"q"</span>: KEYWORD, <span class="st">"page"</span>: page},
+                     headers<span class="k">=</span>HEADERS, timeout<span class="k">=</span><span class="st">10</span>)
+    <span class="k">if</span> r.status_code <span class="k">!=</span> <span class="st">200</span>:
+        <span class="k">raise</span> RuntimeError(<span class="st">f"第{page}页失败 HTTP {r.status_code}（手环过期？）"</span>)
+    <span class="k">return</span> r.json()
+
+<span class="cm"># ---------- ③ 主循环：一页页下单，随机手速 ----------</span>
+rows <span class="k">=</span> []
+<span class="k">for</span> page <span class="k">in</span> range(<span class="st">1</span>, PAGE_MAX <span class="k">+</span> <span class="st">1</span>):
+    <span class="k">for</span> c <span class="k">in</span> fetch_page(page)[<span class="st">"comments"</span>]:
+        rows.append([c[<span class="st">"id"</span>], c[<span class="st">"text"</span>], c[<span class="st">"created_at"</span>],
+                     c[<span class="st">"like_count"</span>], c[<span class="st">"user"</span>][<span class="st">"name"</span>]])
+    time.sleep(random.uniform(<span class="st">1.5</span>, <span class="st">3.5</span>))   <span class="cm"># 随机延时更像人类，保护 IP</span>
+
+<span class="cm"># ---------- ④ 落盘：utf-8-sig 让 Excel 打开不乱码 ----------</span>
+<span class="k">with</span> open(<span class="st">"weibo_comments.csv"</span>, <span class="st">"w"</span>, newline<span class="k">=</span><span class="st">""</span>, encoding<span class="k">=</span><span class="st">"utf-8-sig"</span>) <span class="k">as</span> f:
+    w <span class="k">=</span> csv.writer(f)
+    w.writerow([<span class="st">"id"</span>, <span class="st">"text"</span>, <span class="st">"time"</span>, <span class="st">"likes"</span>, <span class="st">"user"</span>])
+    w.writerows(rows)
+<span class="k">print</span>(<span class="st">f"采集完成：{len(rows):,} 条 → weibo_comments.csv"</span>)</pre>
+            <span class="ann">顶部还缺两行 import：requests / time / random / csv。后端演示环境已把 sleep 设为空操作，真实运行 1 秒完成；换到你的选题时只需改「配置区」三行。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s1c12" data-track data-demo="s1code5">
+          <div class="cell-hd"><span class="cell-num">1.12</span><span class="cell-type">实战代码</span><span class="cell-title">数据说明：论文 3.1 节的数字从这里来</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>答辩必问「你的数据哪来的？多少条？为什么有效条数是这个数？」——这段脚本跑完，答案直接打印出来，抄进论文即可。</p>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd
+
+df <span class="k">=</span> pd.read_csv(<span class="st">"weibo_comments.csv"</span>)             <span class="cm"># 1.11 的产出</span>
+<span class="k">print</span>(<span class="st">"原始条数："</span>, len(df))
+
+df <span class="k">=</span> df.drop_duplicates(subset<span class="k">=</span>[<span class="st">"text"</span>, <span class="st">"user"</span>])    <span class="cm"># 同人同话只留一条</span>
+df <span class="k">=</span> df[df[<span class="st">"text"</span>].notna()]                          <span class="cm"># 删缺失</span>
+df <span class="k">=</span> df[df[<span class="st">"text"</span>].astype(str).str.len() <span class="k">&gt;=</span> <span class="st">5</span>]      <span class="cm"># 删「111」式灌水</span>
+df[<span class="st">"time"</span>] <span class="k">=</span> pd.to_datetime(df[<span class="st">"time"</span>])
+df[<span class="st">"date"</span>] <span class="k">=</span> df[<span class="st">"time"</span>].dt.date
+<span class="k">print</span>(<span class="st">"有效条数："</span>, len(df))
+<span class="k">print</span>(<span class="st">"时间范围："</span>, df[<span class="st">"date"</span>].min(), <span class="st">"→"</span>, df[<span class="st">"date"</span>].max())
+<span class="k">print</span>(<span class="st">"参与用户："</span>, df[<span class="st">"user"</span>].nunique(), <span class="st">"人"</span>)
+
+df.to_csv(<span class="st">"corpus_clean.csv"</span>, index<span class="k">=</span><span class="st">False</span>)          <span class="cm"># 语料库 → 后面所有环节的原料</span></pre>
+            <div class="cal"><div class="cal-t">运行后这样写进论文（3.1 数据来源）</div><p>「本研究以『××事件』微博评论区为数据源，采集时间为 2024 年 3 月 1 日至 20 日，共获得原始评论 30,214 条；经同一用户重复文本去重、缺失值剔除与无效灌水过滤后，得到<strong>有效评论 28,416 条（有效率 94.0%）</strong>，涉及用户 8,973 名。」</p></div>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+      </section>
+
+      <!-- ================= 02 演化周期划分 ================= -->
+      <section id="stage-2" class="stage">
+        <div class="stage-hd">
+          <span class="stage-no">02</span><h2>演化周期划分</h2>
+          <p class="stage-sub">按舆情发展过程把事件切成阶段——像给一场争论标出「起承转合」</p>
+        </div>
+        <div class="stage-map">
+          <div><span class="m-k">技术环节</span>演化周期划分</div>
+          <div><span class="m-k">具体任务</span>根据舆情发展过程划分事件阶段</div>
+          <div><span class="m-k">使用工具</span>网络舆情生命周期理论 · 时间序列分析 · 舆情热度分析工具</div>
+        </div>
+
+        <div class="cell" id="s2c1" data-track>
+          <div class="cell-hd"><span class="cell-num">2.1</span><span class="cell-type">讲解</span><span class="cell-title">生命周期理论：一场舆情的「一生」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>传播学里有个经典判断：<strong>网络舆情像生物一样有生老病死</strong>，也像地震——先有零星前震（潜伏），再来主震（爆发），然后余震不断（蔓延），最后归于平静（长尾）。把每天评论数画成折线，这条线天然起伏出五个阶段：</p>
+            <table class="tbl">
+              <thead><tr><th>阶段</th><th>评论量特征</th><th>舆论场在发生什么</th></tr></thead>
+              <tbody>
+                <tr><td><b>潜伏期</b></td><td>少量、平稳</td><td>个别消费者吐槽，尚未被看见</td></tr>
+                <tr><td><b>爆发期</b></td><td>陡升到峰值</td><td>大 V 转发 / 媒体曝光，情绪集中喷发</td></tr>
+                <tr><td><b>蔓延期</b></td><td>高位回落但仍高</td><td>话题扩散：从卫生聊到赔偿、监管</td></tr>
+                <tr><td><b>衰退期</b></td><td>快速下降</td><td>官方通报后热度流失，注意力转移</td></tr>
+                <tr><td><b>长尾期</b></td><td>低位拖尾</td><td>偶发回顾、周期性被「挖坟」</td></tr>
+              </tbody>
+            </table>
+            <div class="cal"><div class="cal-t">这跟传播学课的关系</div><p>这就是议程设置与话题生命周期的实证版。论文引用时可写：「借鉴科恩的舆情生命周期阶段模型，结合热度阈值法划分阶段」——下一格你会亲手把这条线切开。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s2c2" data-track>
+          <div class="cell-hd"><span class="cell-num">2.2</span><span class="cell-type">演示</span><span class="cell-title">热度曲线 · 拖阈值、放动画</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>横轴是事件发酵的 20 天，纵轴是当日评论数。<b>悬停色块</b>看阶段释义；<b><svg class="ico"><use href="#i-play"/></svg> 播放</b>让时间走起来；拖动<b>热度阈值</b>滑块——阈值线与曲线的两个交点，就是机器判定「舆情开始 / 结束」的位置。阈值定在哪，是研究者说了算的，这正是方法部分要交代的参数。</p>
+            <div class="demo-bar">
+              <button class="btn" id="lc-play"><svg class="ico"><use href="#i-play"/></svg> 播放</button>
+              <span class="lbl">第 <b id="lc-day" style="font-family: var(--code)">-</b> 天</span>
+              <span style="flex:1"></span>
+              <span class="lbl">阈值</span><span class="s-val" id="lc-th-val" style="font-family: var(--code); font-size: calc(12px*var(--fscale))">20</span>
+              <input type="range" id="lc-th" min="5" max="90" value="20" style="max-width: 200px" />
+            </div>
+            <div class="svg-wrap" id="lc-svg"></div>
+            <div class="log" id="lc-info">悬停或播放以查看阶段信息。</div>
+          </div>
+        </div>
+
+        <div class="cell" id="s2c3" data-track data-demo="s2code1">
+          <div class="cell-hd"><span class="cell-num">2.3</span><span class="cell-type">代码</span><span class="cell-title">时间序列：其实就是一列按日期排的数字</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>「时间序列分析」听起来唬人，本质是：<strong>给每条评论贴上日期 → 按日期分组数个数 → 得到「每天多少条」这一列数</strong>。groupby 就是 Excel 里的数据透视表。</p>
+<pre class="code">df[<span class="st">"date"</span>] <span class="o">=</span> pd.to_datetime(df[<span class="st">"time"</span>]).dt.date   <span class="cm"># 时间列 → 只留日期</span>
+daily <span class="o">=</span> df.groupby(<span class="st">"date"</span>).size()                  <span class="cm"># 按日期分组，数个数</span>
+peak <span class="o">=</span> daily.idxmax()                              <span class="cm"># 最热的那一天</span>
+<span class="k">print</span>(daily.head(<span class="st">8</span>))
+<span class="k">print</span>(<span class="st">f"峰值出现在 {peak}，当日 {daily.max()} 条"</span>)</pre>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s2c4" data-track>
+          <div class="cell-hd"><span class="cell-num">2.4</span><span class="cell-type">演示</span><span class="cell-title">阶段划分器 · 阈值法切出五段</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>工程上常用「<strong>峰值百分比</strong>」定边界：评论数爬过峰值的 X% 算爆发开始，跌回 X% 算结束；再以峰值和拐点为锚，把中间切成蔓延与衰退。拖动滑块感受不同阈值下的切法差异——阈值越严，认定的周期越短。选一个你认为合理的值，抄进论文方法部分。</p>
+            <div class="slider-row"><span class="s-lbl">阈值 = 峰值的</span><input type="range" id="ph-th" min="5" max="40" value="15" /><span class="s-val" id="ph-th-val">15%</span></div>
+            <div id="ph-table"></div>
+            <div class="stat-row" id="ph-stats"></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s2c5" data-track>
+          <div class="cell-hd"><span class="cell-num">2.5</span><span class="cell-type">检查点</span><span class="cell-title">Stage 02 小测</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="quiz" data-answer="2" data-fb="生命周期理论提供「阶段怎么分」的框架，时间序列提供「每天多少条」的证据，两者结合才是有说服力的阶段划分。">
+              <p><b>Q1</b> 划分舆情阶段时，「生命周期理论」和「时间序列」怎么配合？</p>
+              <button class="quiz-opt">A. 二选一，理论是理论、数据是数据</button>
+              <button class="quiz-opt">B. 时间序列负责讲故事，理论负责画图</button>
+              <button class="quiz-opt">C. 理论给出阶段框架，时间序列（每日热度）提供切分依据</button>
+            </div>
+            <div class="quiz" data-answer="0" data-fb="阈值线越高，能被「够得着」的天数越少，认定的舆情周期就越短。参数要在论文里交代，并做敏感性说明。">
+              <p><b>Q2</b> 把热度阈值从峰值的 10% 提到 30%，判定出的舆情周期会？</p>
+              <button class="quiz-opt">A. 变短</button>
+              <button class="quiz-opt">B. 变长</button>
+              <button class="quiz-opt">C. 不变</button>
+            </div>
+            <div class="quiz" data-answer="1" data-fb="爆发期是情绪最集中的喷发窗口，也是媒体在场率最高的阶段——这解释了为什么「黄金 4 小时」处置窗口如此被强调。">
+              <p><b>Q3</b> 品牌方公关最该盯哪个阶段做首次回应？</p>
+              <button class="quiz-opt">A. 长尾期（等风头过去）</button>
+              <button class="quiz-opt">B. 爆发期初段（热度爬坡时）</button>
+              <button class="quiz-opt">C. 潜伏期结束前（还没人讨论时）</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell" id="s2c6" data-track data-demo="s2code2">
+          <div class="cell-hd"><span class="cell-num">2.6</span><span class="cell-type">实战代码</span><span class="cell-title">阶段划分完整脚本（阈值法一步到位）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>把 2.2 / 2.4 演示的原理合成一份完整脚本：读语料 → 建时间序列 → 定阈值 → 切五段 → 导出 <kbd>stage_split.csv</kbd>。<strong>这个文件是后面 ③④⑤ 都要用的「阶段身份证」。</strong></p>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd
+
+df <span class="k">=</span> pd.read_csv(<span class="st">"corpus_clean.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"time"</span>])
+daily <span class="k">=</span> df.groupby(df[<span class="st">"time"</span>].dt.date)[<span class="st">"text"</span>].size().rename(<span class="st">"热度"</span>).to_frame()
+daily.index <span class="k">=</span> pd.to_datetime(daily.index)
+
+peak_n, peak_d <span class="k">=</span> daily[<span class="st">"热度"</span>].max(), daily[<span class="st">"热度"</span>].idxmax()
+th <span class="k">=</span> peak_n <span class="k">*</span> <span class="st">0.15</span>                                <span class="cm"># 阈值 = 峰值的 15%（论文里交代的参数）</span>
+active <span class="k">=</span> daily[daily[<span class="st">"热度"</span>] <span class="k">&gt;=</span> th]
+start, end <span class="k">=</span> active.index.min(), active.index.max()  <span class="cm"># 首次/末次越过阈值线</span>
+
+<span class="k">def</span> assign(d):
+    <span class="k">if</span> d <span class="k">&lt;</span> start: <span class="k">return</span> <span class="st">"潜伏期"</span>
+    <span class="k">if</span> d <span class="k">&gt;</span> end:   <span class="k">return</span> <span class="st">"长尾期"</span>
+    <span class="k">if</span> d <span class="k">&lt;=</span> peak_d: <span class="k">return</span> <span class="st">"爆发期"</span>
+    <span class="k">return</span> <span class="st">"蔓延期"</span> <span class="k">if</span> daily.loc[d, <span class="st">"热度"</span>] <span class="k">&gt;=</span> peak_n <span class="k">*</span> <span class="st">0.5</span> <span class="k">else</span> <span class="st">"衰退期"</span>
+
+daily[<span class="st">"阶段"</span>] <span class="k">=</span> [assign(d) for d in daily.index]
+order <span class="k">=</span> [<span class="st">"潜伏期"</span>, <span class="st">"爆发期"</span>, <span class="st">"蔓延期"</span>, <span class="st">"衰退期"</span>, <span class="st">"长尾期"</span>]
+summary <span class="k">=</span> daily.groupby(<span class="st">"阶段"</span>)[<span class="st">"热度"</span>].agg(评论量<span class="k">=</span><span class="st">"sum"</span>, 天数<span class="k">=</span><span class="st">"size"</span>).reindex(order)
+<span class="k">print</span>(summary)
+daily.reset_index().rename(columns<span class="k">=</span>{<span class="st">"index"</span>: <span class="st">"date"</span>}).to_csv(<span class="st">"stage_split.csv"</span>, index<span class="k">=</span><span class="st">False</span>)</pre>
+            <div class="cal"><div class="cal-t">运行后这样写进论文（3.2 阶段划分）</div><p>「以每日评论量构建舆情热度时间序列，取峰值的 15% 为阈值：热度首次越线为周期起点（3 月 4 日），末次越线为终点（3 月 18 日）；以峰值日期（3 月 9 日）为界划分爆发期，峰后以峰值 50% 为界区分蔓延期与衰退期，得五阶段划分结果如表 1。」</p></div>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s2c7" data-track data-demo="s2code3">
+          <div class="cell-hd"><span class="cell-num">2.7</span><span class="cell-type">实战代码</span><span class="cell-title">舆情热度分析工具对接：让第三方数据为你背书</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>开题表里「舆情热度分析工具」（微热点 / 清博 / 知微 / 鹰眼等）的用法：平台能直接导出事件的<strong>热度指数曲线 CSV</strong>。你自建的时间序列和它做相关分析——两条曲线互相印证，方法部分立刻高级。</p>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd
+
+daily <span class="k">=</span> pd.read_csv(<span class="st">"stage_split.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"date"</span>])
+daily[<span class="st">"date"</span>] <span class="k">=</span> daily[<span class="st">"date"</span>].dt.date
+
+qb <span class="k">=</span> pd.read_csv(<span class="st">"qingbo_hot_index.csv"</span>)           <span class="cm"># 平台导出：date + 热度指数</span>
+qb[<span class="st">"date"</span>] <span class="k">=</span> pd.to_datetime(qb[<span class="st">"date"</span>]).dt.date
+
+merged <span class="k">=</span> daily.merge(qb, on<span class="k">=</span><span class="st">"date"</span>, how<span class="k">=</span><span class="st">"left"</span>)     <span class="cm"># 按日期对齐拼列</span>
+r <span class="k">=</span> merged[<span class="st">"热度"</span>].corr(merged[<span class="st">"热度指数"</span>])
+<span class="k">print</span>(<span class="st">f"自建热度 与 平台指数 相关系数 r = {r:.3f}"</span>)
+<span class="k">print</span>(<span class="st">"r &gt; 0.8 → 两套独立测量互相印证（三角验证），写进方法部分"</span>)</pre>
+            <span class="ann">corr 就是「两条曲线走势像不像」，0 到 1 之间越接近 1 越像——这是论文里「三角验证 / 信度检验」的最廉价实现。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+      </section>
+
+      <!-- ================= 03 主题演化分析 ================= -->
+      <section id="stage-3" class="stage">
+        <div class="stage-hd">
+          <span class="stage-no">03</span><h2>主题演化分析</h2>
+          <p class="stage-sub">识别不同生命周期阶段的讨论主题——大家到底在吵什么，话题怎么转移</p>
+        </div>
+        <div class="stage-map">
+          <div><span class="m-k">技术环节</span>主题演化分析</div>
+          <div><span class="m-k">具体任务</span>识别不同生命周期阶段的讨论主题</div>
+          <div><span class="m-k">使用工具</span>TF-IDF 特征词提取 · Gensim LDA 主题模型</div>
+        </div>
+
+        <div class="cell" id="s3c1" data-track>
+          <div class="cell-hd"><span class="cell-num">3.1</span><span class="cell-type">讲解</span><span class="cell-title">TF-IDF：找出一条评论的「独家关键词」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>给你一条评论：「这家<b>餐厅</b>的<b>卫生</b>太差，<b>吃坏肚子</b>了，已<b>投诉</b>」。哪些词最能代表它？「的」「了」显然不算——<strong>人人都说的词没有信息量；只在少数评论里出现的词才独家</strong>。TF-IDF 就是把这句直觉变成分数：</p>
+            <div class="grid2">
+              <div class="term-card"><b>TF · 词频</b><div class="f">这个词在本条评论里出现几次</div><div class="d">出现越多越重要。白话：这条评论反复念叨什么，什么就是重点。</div></div>
+              <div class="term-card"><b>DF · 文档频率</b><div class="f">多少个评论里出现了这个词</div><div class="d">越普遍越不重要。白话：人人都说的词，说了等于没说。</div></div>
+              <div class="term-card"><b>IDF · 逆文档频率</b><div class="f">DF 的倒数取个对数</div><div class="d">越稀缺越加分。白话：「10 要乘几次才得到某个数」——对数只是把「稀缺」折算成温和的加分，防止生僻词过分膨胀。</div></div>
+              <div class="term-card"><b>TF-IDF = TF × IDF</b><div class="f">本条说得多 × 全局说得少</div><div class="d">两个条件同时满足 → 高权重 → 这就是这条评论的关键词。</div></div>
+            </div>
+            <div class="cal"><div class="cal-t">定心丸</div><p>下一格你可以亲手点任何一个词，看它在这 5 条评论里的 TF、DF、IDF 逐项算给你看——全程只有数数和一次对数。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s3c2" data-track>
+          <div class="cell-hd"><span class="cell-num">3.2</span><span class="cell-type">演示</span><span class="cell-title">TF-IDF 计算器 · 点词看算</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>迷你语料库只有 5 条评论（真实研究是几万条，原理相同）。<b>① 点一个候选词</b>→ 含该词的评论会高亮；<b>② 点某条评论</b>→ 下方逐项计算它的 TF-IDF。最后看右侧排行榜：谁的分数最高，谁就是语料库的「头号关键词」。</p>
+            <div class="demo-bar"><span class="lbl">① 选词</span><span id="tf-terms" class="btn-row" style="margin: 0"></span></div>
+            <div id="tf-docs"></div>
+            <div class="grid2" style="margin-top: 12px">
+              <div class="panel"><div class="p-t">② 逐项计算（②选中的评论）</div><div id="tf-calc" class="log" style="min-height: 120px">先点一个词，再点一条评论。</div></div>
+              <div class="panel"><div class="p-t">全库关键词排行（平均 TF-IDF）</div><div id="tf-rank"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell" id="s3c3" data-track data-demo="s3code1">
+          <div class="cell-hd"><span class="cell-num">3.3</span><span class="cell-type">代码</span><span class="cell-title">jieba 分词 + TF-IDF 两行出结果</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>中文没有空格，要先用 <span class="term" data-tip="Python 最流行的中文分词库，把句子切成词。">jieba</span> 把句子切成词，再交给 sklearn 的 TfidfVectorizer 打分——上一格你手算的一切，它两行完成。</p>
+<pre class="code"><span class="k">import</span> jieba, numpy <span class="k">as</span> np
+<span class="k">from</span> sklearn.feature_extraction.text <span class="k">import</span> TfidfVectorizer
+
+docs <span class="o">=</span> [<span class="st">" ".join(jieba.cut(t))</span> <span class="k">for</span> t <span class="k">in</span> df[<span class="st">"text"</span>]]   <span class="cm"># 逐条分词</span>
+vec <span class="o">=</span> TfidfVectorizer(max_features<span class="o">=</span><span class="st">200</span>)                  <span class="cm"># 只留前 200 个词</span>
+mat <span class="o">=</span> vec.fit_transform(docs)                            <span class="cm"># 算出全库 TF-IDF 矩阵</span>
+terms <span class="o">=</span> vec.get_feature_names_out()
+mean <span class="o">=</span> np.asarray(mat.mean(axis<span class="o">=</span><span class="st">0</span>)).ravel()             <span class="cm"># 每个词的平均分</span>
+top <span class="o">=</span> mean.argsort()[::<span class="o">-</span>1][:<span class="st">10</span>]                          <span class="cm"># 前 10 名</span>
+<span class="k">print</span>([(terms[i], round(float(mean[i]), <span class="st">3</span>)) <span class="k">for</span> i <span class="k">in</span> top])</pre>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s3c4" data-track>
+          <div class="cell-hd"><span class="cell-num">3.4</span><span class="cell-type">讲解</span><span class="cell-title">LDA：每条评论都是一锅「主题混合汤」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>TF-IDF 一次只看一个词，而 <span class="term" data-tip="Latent Dirichlet Allocation，隐含狄利克雷分布。名字不用记，记「主题混合」这个直觉即可。">LDA</span> 回答更大的问题：<strong>这批评论里其实混杂着几股「话题流」？每条各沾了多少？</strong></p>
+            <p>把它想成调汤：本次事件其实有三锅「主题原汤」——<b>T1 食品安全与卫生</b>、<b>T2 维权与投诉</b>、<b>T3 口味与性价比</b>。每一条评论都是打汤的人从三锅里各舀几勺兑出来的：有人「卫生 70% + 投诉 30%」，有人「口味 60% + 卫生 40%」。LDA 做的事，就是<strong>倒推每个碗里的配比，以及每锅汤里都放了哪些料（高频词）</strong>。</p>
+            <ul class="dot">
+              <li>你唯一要定的参数：<strong>几锅汤（主题数 K）</strong>。定 K 靠人眼反复试 + 看生成的词表是否「说得通」——这是文科判断力大放异彩的地方；</li>
+              <li>LDA 不需要人工标注、不懂对错，它只是「发现这批话天然聚成几堆」；</li>
+              <li>对每个阶段（②划分的五段）分别跑一次 LDA，比较各堆占比的变化 —— 这就是「主题<b>演化</b>」。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cell" id="s3c5" data-track>
+          <div class="cell-hd"><span class="cell-num">3.5</span><span class="cell-type">演示</span><span class="cell-title">LDA 混合视图 · 看模型「训练」前后</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>五条评论 × 三个主题的配比条。<b>点「<svg class="ico"><use href="#i-play"/></svg> 训练」</b>：模型从未知的随机配比开始迭代，条块逐渐收敛到稳定结构——真实 LDA 训练几万条要几分钟，这里压缩成 3 秒动画。</p>
+            <div class="demo-bar">
+              <button class="btn" id="lda-train"><svg class="ico"><use href="#i-play"/></svg> 训练</button>
+              <span class="lbl">主题数 K = 3</span>
+              <span style="flex:1"></span>
+              <span class="legend" style="margin: 0"><span class="lg"><i class="sw sw-t1"></i>T1 卫生安全</span><span class="lg"><i class="sw sw-t2"></i>T2 维权投诉</span><span class="lg"><i class="sw sw-t3"></i>T3 口味性价比</span></span>
+            </div>
+            <div id="lda-docs"></div>
+            <div class="panel" style="margin-top: 12px"><div class="p-t">每锅汤里的高频词（模型自动生成）</div><div id="lda-topics"></div></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s3c6" data-track>
+          <div class="cell-hd"><span class="cell-num">3.6</span><span class="cell-type">演示</span><span class="cell-title">主题演化矩阵 · 话题怎么随阶段转移</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>把 ②的阶段 × ③的主题拼成一张表：行是阶段、列是主题，格子里是该阶段评论的主题占比。悬停看数值。<strong>读法：盯着一列从上往下看，占比的涨落就是话题的生命史。</strong>注意 T2 维权在爆发期登顶、T1 卫生在蔓延期反超——这可以直接写成论文里「议题显著性转移」一节。</p>
+            <div id="te-table"></div>
+            <div class="log" id="te-note">悬停任意格子查看解读。</div>
+          </div>
+        </div>
+
+        <div class="cell" id="s3c7" data-track data-demo="s3code2">
+          <div class="cell-hd"><span class="cell-num">3.7</span><span class="cell-type">代码</span><span class="cell-title">Gensim LDA：训练与看结果</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+<pre class="code"><span class="k">from</span> gensim.corpora <span class="k">import</span> Dictionary
+<span class="k">from</span> gensim.models <span class="k">import</span> LdaModel
+
+texts <span class="o">=</span> [[w <span class="k">for</span> w <span class="k">in</span> jieba.cut(t) <span class="k">if</span> w <span class="k">not</span> <span class="k">in</span> STOPWORDS] <span class="k">for</span> t <span class="k">in</span> df[<span class="st">"text"</span>]]
+dic <span class="o">=</span> Dictionary(texts)                        <span class="cm"># 建词典：给每个词发工牌</span>
+corpus <span class="o">=</span> [dic.doc2bow(t) <span class="k">for</span> t <span class="k">in</span> texts]       <span class="cm"># 每条文本 → (词号,次数) 清单</span>
+lda <span class="o">=</span> LdaModel(corpus, num_topics<span class="o">=</span><span class="st">3</span>, id2word<span class="o">=</span>dic, passes<span class="o">=</span><span class="st">20</span>)
+
+<span class="k">for</span> tid, words <span class="k">in</span> lda.print_topics():          <span class="cm"># 每锅汤报菜名</span>
+    <span class="k">print</span>(<span class="st">f"T{tid}: {words}"</span>)</pre>
+            <span class="ann">passes=20 是「把整批教材反复读 20 遍」。K=3 不是算出来的，是你读了 500 条评论后「觉得三股话题说得通」——论文里把定 K 的过程写成「结合人工判读与一致性检验」即可。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s3c8" data-track>
+          <div class="cell-hd"><span class="cell-num">3.8</span><span class="cell-type">检查点</span><span class="cell-title">Stage 03 小测</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="quiz" data-answer="1" data-fb="TF-IDF 的逻辑就是「本条说得多 × 全库说得少」。「的」「了」人人都有，IDF 接近 0，分数自然垫底。">
+              <p><b>Q1</b> 一个词的 TF-IDF 分数高，意味着？</p>
+              <button class="quiz-opt">A. 它在所有评论里都大量出现</button>
+              <button class="quiz-opt">B. 它在这条评论里出现不少，但在整个语料库里相对少见</button>
+              <button class="quiz-opt">C. 它的笔画很多</button>
+            </div>
+            <div class="quiz" data-answer="2" data-fb="LDA 是无监督方法：不给标准答案，让机器自己聚堆。K（主题数）需要人来定，定完看词表是否说得通。">
+              <p><b>Q2</b> LDA 训练「主题模型」属于下面哪种情况？</p>
+              <button class="quiz-opt">A. 人工先标好几千条，机器照着学</button>
+              <button class="quiz-opt">B. 老师给标准答案，机器背下来</button>
+              <button class="quiz-opt">C. 不给答案，机器自己把词聚成几堆，人负责解释每堆是什么</button>
+            </div>
+            <div class="quiz" data-answer="0" data-fb="「主题演化」= 按阶段分别跑主题模型，比较主题占比随时间的涨落，从而看到议题转移。">
+              <p><b>Q3</b> 想让论文标题里的「主题演化」名副其实，至少需要？</p>
+              <button class="quiz-opt">A. 对每个生命周期阶段分别做主题分析并比较占比变化</button>
+              <button class="quiz-opt">B. 对全部评论做一次主题分析就够</button>
+              <button class="quiz-opt">C. 把关键词按拼音排序</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell" id="s3c9" data-track data-demo="s3code3">
+          <div class="cell-hd"><span class="cell-num">3.9</span><span class="cell-type">实战代码</span><span class="cell-title">分阶段 TF-IDF：产出论文「各阶段特征词表」</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>3.3 的代码只跑了全库一次；论文要的其实是<strong>每个阶段各自的 TOP10 特征词</strong>（这就是「主题演化」的证据表）。加一层 for 循环按阶段分组即可。</p>
+<pre class="code"><span class="k">import</span> jieba, pandas <span class="k">as</span> pd, numpy <span class="k">as</span> np
+<span class="k">from</span> sklearn.feature_extraction.text <span class="k">import</span> TfidfVectorizer
+
+STOP <span class="k">=</span> {<span class="st">"的"</span>,<span class="st">"了"</span>,<span class="st">"是"</span>,<span class="st">"我"</span>,<span class="st">"也"</span>,<span class="st">"都"</span>,<span class="st">"很"</span>,<span class="st">"就"</span>,<span class="st">"在"</span>,<span class="st">"有"</span>,<span class="st">"这"</span>,<span class="st">"啊"</span>,<span class="st">"吗"</span>,<span class="st">"呢"</span>,<span class="st">"不"</span>,<span class="st">"没"</span>}
+df <span class="k">=</span> pd.read_csv(<span class="st">"corpus_clean.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"time"</span>])
+sp <span class="k">=</span> pd.read_csv(<span class="st">"stage_split.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"date"</span>])
+stage_map <span class="k">=</span> dict(zip(sp[<span class="st">"date"</span>].dt.date, sp[<span class="st">"阶段"</span>]))   <span class="cm"># 日期 → 阶段 的对照字典</span>
+df[<span class="st">"阶段"</span>] <span class="k">=</span> df[<span class="st">"time"</span>].dt.date.map(stage_map)          <span class="cm"># 给每条评论发一张「阶段身份证」</span>
+
+<span class="k">def</span> cut(t):
+    <span class="k">return</span> <span class="st">" "</span>.join(w <span class="k">for</span> w <span class="k">in</span> jieba.cut(str(t)) <span class="k">if</span> w <span class="k">not</span> <span class="k">in</span> STOP <span class="k">and</span> len(w) <span class="k">&gt;</span> <span class="st">1</span>)
+
+rows <span class="k">=</span> []
+<span class="k">for</span> st, g <span class="k">in</span> df.groupby(<span class="st">"阶段"</span>):                    <span class="cm"># 五个阶段各跑一遍</span>
+    vec <span class="k">=</span> TfidfVectorizer(max_features<span class="k">=</span><span class="st">100</span>)
+    m <span class="k">=</span> vec.fit_transform(g[<span class="st">"text"</span>].map(cut))
+    top <span class="k">=</span> np.asarray(m.mean(<span class="st">0</span>)).ravel().argsort()[::<span class="k">-</span><span class="st">1</span>][:<span class="st">10</span>]   <span class="cm"># 平均分从高到低取 10 个</span>
+    rows.append([st] <span class="k">+</span> [vec.get_feature_names_out()[i] <span class="k">for</span> i <span class="k">in</span> top])
+
+out <span class="k">=</span> pd.DataFrame(rows, columns<span class="k">=</span>[<span class="st">"阶段"</span>] <span class="k">+</span> [f<span class="st">"TOP{i+1}"</span> <span class="k">for</span> i <span class="k">in</span> range(<span class="st">10</span>)]).set_index(<span class="st">"阶段"</span>)
+<span class="k">print</span>(out.to_string())
+out.to_csv(<span class="st">"stage_keywords.csv"</span>)                    <span class="cm"># → 论文表 2</span></pre>
+            <span class="ann">读懂输出只需一行：潜伏期 TOP 词偏「味道/价格」，爆发期变「吃坏/投诉」，蔓延期出现「整改/监管」——这张表本身就是论文的分析段落素材。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s3c10" data-track data-demo="s3code4">
+          <div class="cell-hd"><span class="cell-num">3.10</span><span class="cell-type">实战代码</span><span class="cell-title">LDA 全流程：从语料到「主题 × 阶段」演化矩阵</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>3.7 教你训练模型；这一格补完最后一公里：<strong>把每条评论的主题占比按阶段取平均</strong>，得到论文核心矩阵 <kbd>topic_evolution.csv</kbd>（3.6 演示里那张表就是它画出来的）。</p>
+<pre class="code"><span class="k">import</span> jieba, pandas <span class="k">as</span> pd
+<span class="k">from</span> gensim <span class="k">import</span> corpora
+<span class="k">from</span> gensim.models <span class="k">import</span> LdaModel
+
+df <span class="k">=</span> pd.read_csv(<span class="st">"corpus_clean.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"time"</span>])
+sp <span class="k">=</span> pd.read_csv(<span class="st">"stage_split.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"date"</span>])
+stage_map <span class="k">=</span> dict(zip(sp[<span class="st">"date"</span>].dt.date, sp[<span class="st">"阶段"</span>]))
+df[<span class="st">"阶段"</span>] <span class="k">=</span> df[<span class="st">"time"</span>].dt.date.map(stage_map)
+
+STOP <span class="k">=</span> {<span class="st">"的"</span>,<span class="st">"了"</span>,<span class="st">"是"</span>,<span class="st">"我"</span>,<span class="st">"也"</span>,<span class="st">"都"</span>,<span class="st">"很"</span>,<span class="st">"就"</span>,<span class="st">"在"</span>,<span class="st">"有"</span>,<span class="st">"这"</span>,<span class="st">"啊"</span>}
+texts <span class="k">=</span> [[w <span class="k">for</span> w <span class="k">in</span> jieba.cut(str(t)) <span class="k">if</span> w <span class="k">not</span> <span class="k">in</span> STOP <span class="k">and</span> len(w) <span class="k">&gt;</span> <span class="st">1</span>] <span class="k">for</span> t <span class="k">in</span> df[<span class="st">"text"</span>]]
+
+dic <span class="k">=</span> corpora.Dictionary(texts)                     <span class="cm"># 发工牌</span>
+corpus <span class="k">=</span> [dic.doc2bow(t) <span class="k">for</span> t <span class="k">in</span> texts]            <span class="cm"># 每条评论 → (词号,次数) 清单</span>
+lda <span class="k">=</span> LdaModel(corpus, num_topics<span class="k">=</span><span class="st">3</span>, id2word<span class="k">=</span>dic, passes<span class="k">=</span><span class="st">20</span>, random_state<span class="k">=</span><span class="st">42</span>)
+
+dist <span class="k">=</span> pd.DataFrame([dict(d) <span class="k">for</span> d
+        <span class="k">in</span> lda.get_document_topics(corpus, minimum_probability<span class="k">=</span><span class="st">0</span>)]).fillna(<span class="st">0</span>)
+dist[<span class="st">"阶段"</span>] <span class="k">=</span> df[<span class="st">"阶段"</span>].values
+evo <span class="k">=</span> dist.groupby(<span class="st">"阶段"</span>).mean().T                  <span class="cm"># 主题 × 阶段 平均占比</span>
+order <span class="k">=</span> [<span class="st">"潜伏期"</span>, <span class="st">"爆发期"</span>, <span class="st">"蔓延期"</span>, <span class="st">"衰退期"</span>, <span class="st">"长尾期"</span>]
+<span class="k">print</span>((evo[order] <span class="k">*</span> <span class="st">100</span>).round(<span class="st">1</span>))
+evo[order].to_csv(<span class="st">"topic_evolution.csv"</span>)            <span class="cm"># → 3.11 热力图的原料</span></pre>
+            <span class="ann">random_state=42 让每次训练结果可复现——答辩老师要求「重跑一遍验证」时的保命参数。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s3c11" data-track data-demo="s3code5">
+          <div class="cell-hd"><span class="cell-num">3.11</span><span class="cell-type">实战代码</span><span class="cell-title">主题 × 阶段演化热力图（论文图 2）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd, matplotlib.pyplot <span class="k">as</span> plt
+plt.rcParams[<span class="st">"font.sans-serif"</span>] <span class="k">=</span> [<span class="st">"SimHei"</span>]
+plt.rcParams[<span class="st">"axes.unicode_minus"</span>] <span class="k">=</span> <span class="k">False</span>
+
+evo <span class="k">=</span> pd.read_csv(<span class="st">"topic_evolution.csv"</span>, index_col<span class="k">=</span><span class="st">0</span>) <span class="k">*</span> <span class="st">100</span>
+order <span class="k">=</span> [<span class="st">"潜伏期"</span>, <span class="st">"爆发期"</span>, <span class="st">"蔓延期"</span>, <span class="st">"衰退期"</span>, <span class="st">"长尾期"</span>]
+evo <span class="k">=</span> evo[order]
+
+plt.figure(figsize<span class="k">=</span>(<span class="st">7.5</span>, <span class="st">3.8</span>))
+plt.imshow(evo.values, cmap<span class="k">=</span><span class="st">"gray_r"</span>, vmin<span class="k">=</span><span class="st">0</span>, vmax<span class="k">=</span>evo.values.max())
+plt.colorbar(label<span class="k">=</span><span class="st">"主题强度（%）"</span>)
+plt.xticks(range(<span class="st">5</span>), order, fontsize<span class="k">=</span><span class="st">9</span>)
+plt.yticks(range(<span class="st">3</span>), [<span class="st">"T0 卫生安全"</span>, <span class="st">"T1 维权投诉"</span>, <span class="st">"T2 口味性价比"</span>], fontsize<span class="k">=</span><span class="st">9</span>)
+<span class="k">for</span> i <span class="k">in</span> range(<span class="st">3</span>):
+    <span class="k">for</span> j <span class="k">in</span> range(<span class="st">5</span>):
+        v <span class="k">=</span> evo.values[i][j]
+        plt.text(j, i, f<span class="st">"{v:.0f}"</span>, ha<span class="k">=</span><span class="st">"center"</span>, va<span class="k">=</span><span class="st">"center"</span>, fontsize<span class="k">=</span><span class="st">10</span>,
+                 color<span class="k">=</span><span class="st">"white"</span> <span class="k">if</span> v <span class="k">&gt;</span> evo.values.max() <span class="k">*</span> <span class="st">0.6</span> <span class="k">else</span> <span class="st">"black"</span>)
+plt.title(<span class="st">"主题 × 阶段 演化热力图"</span>)
+plt.tight_layout(); plt.savefig(<span class="st">"topic_heatmap.png"</span>, dpi<span class="k">=</span><span class="st">300</span>)</pre>
+            <span class="ann">cmap="gray_r"：越深的格子主题强度越高——灰度图黑白打印不损失信息，比花花绿绿的默认配色更适合论文。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+      </section>
+
+      <!-- ================= 04 情感维度分析 ================= -->
+      <section id="stage-4" class="stage">
+        <div class="stage-hd">
+          <span class="stage-no">04</span><h2>情感维度分析</h2>
+          <p class="stage-sub">判断每条评论是积极 / 中性 / 消极——教电脑做你 0.5 秒就能完成的事</p>
+        </div>
+        <div class="stage-map">
+          <div><span class="m-k">技术环节</span>情感维度分析</div>
+          <div><span class="m-k">具体任务</span>分析微博文本情感倾向及演化规律，划分为积极、中性、消极三类</div>
+          <div><span class="m-k">使用工具</span>CNN + BiLSTM + Attention 深度学习模型</div>
+        </div>
+
+        <div class="cell" id="s4c1" data-track>
+          <div class="cell-hd"><span class="cell-num">4.1</span><span class="cell-type">讲解</span><span class="cell-title">情感分析 = 让机器学会「阴阳怪气检测」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>看到「呵呵，这服务真是绝了呢」，你 0.5 秒就知道这是<b>反话、偏负面</b>。你依据的不是字典，而是：语气词、语境、前后文的转折。情感分析（Sentiment Analysis）就是把这个直觉过程交给模型。</p>
+            <ul class="dot">
+              <li><b>积极</b>：点赞、支持、满意、期待——给事件「加分」的表达；</li>
+              <li><b>中性</b>：陈述事实、提问、转发说明——不带明显情绪；</li>
+              <li><b>消极</b>：批评、愤怒、抵制——给事件「减分」的表达。</li>
+            </ul>
+            <div class="cal"><div class="cal-t">为什么必须有「中性」这一类</div><p>两类（正/负）会把「今天股价多少？」这种无情绪的话硬塞进某一堆，污染结论。三类划分是舆情研究的行业惯例，也方便你在图谱里观察「沉默的大多数」占比。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s4c2" data-track>
+          <div class="cell-hd"><span class="cell-num">4.2</span><span class="cell-type">讲解</span><span class="cell-title">CNN · BiLSTM · Attention：三个打工人，三种读法</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>开题表里的「CNN + BiLSTM + Attention 深度学习模型」，其实是<strong>三个工序的流水线</strong>。用「批阅一条微博」来理解：</p>
+            <div class="term-card"><b>CNN（卷积）· 扫短语</b><div class="d">像阅卷老师<b>一目十行扫重点短语</b>：不逐字读，而是三个词一组「滑」过去，专门捕捉「太失望」「不接受道歉」这类固定搭配的局部特征。快，且认得出常见情绪句式。</div></div>
+            <div class="term-card"><b>BiLSTM（双向长短期记忆）· 前后文都读</b><div class="d">像仔细的同学<b>从左往右读一遍，再从右往左读一遍</b>，并且记得前面读过什么。「本来以为会赔偿，结果商家否认」——读到「否认」时还记得「以为」，才能体会落差。双向 + 记忆 = 上下文理解。</div></div>
+            <div class="term-card"><b>Attention（注意力）· 圈重点</b><div class="d">像最后拍板的主编，<b>给句子里每个词分配注意力份额</b>：判断情绪时「失望」「道歉」各占三成，「今天」「我们」几乎不看。下一格你可以亲手拨这个「注意力旋钮」。</div></div>
+            <p>三者串联：CNN 抓短语特征 → BiLSTM 把特征串成上下文理解 → Attention 挑出最影响判断的词 → 输出三个分数（积极/中性/消极），谁最高听谁的。</p>
+          </div>
+        </div>
+
+        <div class="cell" id="s4c3" data-track>
+          <div class="cell-hd"><span class="cell-num">4.3</span><span class="cell-type">演示</span><span class="cell-title">情感分类器 · 输入一句话试试</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>这是一个<b>词典规则版</b>情感分类器（真实模型是它的百万倍加强版，但你要做的输入输出完全一样）。输入任意中文评论，看它判成什么、置信度多少、命中了哪些词——命中解释就是「模型为什么这么想」。</p>
+            <input type="text" id="sen-in" placeholder="例如：商家道歉了，态度还是很诚恳的" />
+            <div class="btn-row" id="sen-samples"></div>
+            <div class="grid2">
+              <div class="panel"><div class="p-t">判定结果</div>
+                <div style="display:flex; align-items:center; gap:16px; margin: 8px 0">
+                  <span class="verdict" id="sen-verdict">—</span>
+                  <div style="flex:1"><div class="conf-bar"><i id="sen-conf" style="width:0%"></i></div><div class="ann">置信度 <b id="sen-conf-t" style="font-family: var(--code)">0%</b></div></div>
+                </div>
+                <div class="p-t" style="margin-top: 10px">命中词</div><div id="sen-hits" style="min-height: 28px"></div>
+              </div>
+              <div class="panel"><div class="p-t">它是怎么想的（规则透明版）</div><div id="sen-rules" class="log" style="min-height: 120px">等待输入…</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell" id="s4c4" data-track>
+          <div class="cell-hd"><span class="cell-num">4.4</span><span class="cell-type">演示</span><span class="cell-title">Attention 可视化 · 模型在盯哪几个词</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>模型读完「本来挺期待，结果吃坏肚子，客服还甩锅，再也不来了」后，对每个词的注意力份额如下——<b>颜色越深份额越大</b>。拖动滑块只保留份额最高的 K 个词：你会发现，<strong>只留下这几个深色词，情绪判断竟然不受影响</strong>——这就是 Attention 的意义：在几千个词里，真正决定情绪的就那三五个。</p>
+            <div class="slider-row"><span class="s-lbl">只看前 K 个高注意力词</span><input type="range" id="attn-k" min="1" max="10" value="10" /><span class="s-val" id="attn-k-val">10</span></div>
+            <div id="attn-sentence" style="line-height: 2.2"></div>
+            <div class="log" id="attn-note">悬停任意词查看注意力份额。</div>
+          </div>
+        </div>
+
+        <div class="cell" id="s4c5" data-track data-demo="s4code1">
+          <div class="cell-hd"><span class="cell-num">4.5</span><span class="cell-type">代码</span><span class="cell-title">批量预测：三万条评论几分钟贴完标签</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>实际论文中很少从零训练——多用<strong>预训练模型</strong>（如 PaddleNLP 的情感分析模型，已在百万级中文评论上「读过书」）直接预测，或微调。核心就这几行：</p>
+<pre class="code"><span class="k">from</span> paddlenlp <span class="k">import</span> pipeline
+
+clf <span class="o">=</span> pipeline(task<span class="o">=</span><span class="st">"sentiment-classification"</span>,
+                model<span class="o">=</span><span class="st">"ernie-3.0-medium-zh"</span>)     <span class="cm"># 加载预训练中文情感模型</span>
+df[<span class="st">"sentiment"</span>] <span class="o">=</span> [
+    r[<span class="st">"-1"</span>] <span class="k">if</span> r[<span class="st">"-1"</span>] <span class="o">==</span> <span class="st">"negative"</span> <span class="k">else</span> r[<span class="st">"-1"</span>]
+    <span class="k">for</span> r <span class="k">in</span> clf(df[<span class="st">"text"</span>].tolist(), batch_size<span class="o">=</span><span class="st">64</span>)   <span class="cm"># 64 条一批地喂</span>
+]
+df[<span class="st">"sentiment"</span>].value_counts()                  <span class="cm"># 数一数三类各多少条</span></pre>
+            <span class="ann">batch_size=64：一次读 64 条而不是一条一条读，纯粹为了快。value_counts 就是 Excel 的计数透视。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s4c6" data-track>
+          <div class="cell-hd"><span class="cell-num">4.6</span><span class="cell-type">讲解</span><span class="cell-title">模型不是法官：人工校验是论文加分项</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <ul class="dot">
+              <li><b>反话</b>（「服务真是太『好』了，好到我拉肚子」）、<b>方言黑话</b>、<b>表情包语义</b>是模型常见翻车点；</li>
+              <li>规范做法：随机抽 300 条人工标注，与模型结果比对，报告<strong>准确率 / 一致性（Kappa 系数）</strong>——一段话就能写进「信度效度」小节，答辩底气翻倍；</li>
+              <li>情感标签只是原料，「演化规律」来自把标签按 ②的阶段做交叉统计——这是 ⑤ 的活。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cell" id="s4c7" data-track>
+          <div class="cell-hd"><span class="cell-num">4.7</span><span class="cell-type">检查点</span><span class="cell-title">Stage 04 小测</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="quiz" data-answer="1" data-fb="CNN 扫短语、BiLSTM 双向读上下文、Attention 圈重点词——三者是流水线上的三个工序，不是三选一。">
+              <p><b>Q1</b> CNN、BiLSTM、Attention 的关系是？</p>
+              <button class="quiz-opt">A. 三个互相竞争的模型，选最强的一个用</button>
+              <button class="quiz-opt">B. 三个工序：局部短语 → 双向上下文 → 聚焦重点词，串联使用</button>
+              <button class="quiz-opt">C. CNN 管图片，后两个管文字，本研究和 CNN 无关</button>
+            </div>
+            <div class="quiz" data-answer="2" data-fb="「呵呵」「真『好』」这类反讽是词典与模型的高频翻车点，所以需要人工抽检校验并在论文中报告一致性。">
+              <p><b>Q2</b> 「呵呵，这服务真是绝了呢」被判成积极，最合适的处理是？</p>
+              <button class="quiz-opt">A. 模型肯定对，人不懂</button>
+              <button class="quiz-opt">B. 删掉这条评论</button>
+              <button class="quiz-opt">C. 人工抽检发现此类反讽误判，在论文中报告准确率并说明局限</button>
+            </div>
+            <div class="quiz" data-answer="0" data-fb="Attention 权重就是「模型判断时主要看了哪些词」，把它画出来既是论文图表利器，也是可解释性的体现。">
+              <p><b>Q3</b> Attention 权重可视化在论文里的价值是？</p>
+              <button class="quiz-opt">A. 展示模型「在看哪些词」，让黑箱判断变得可解释</button>
+              <button class="quiz-opt">B. 纯粹为了凑版面</button>
+              <button class="quiz-opt">C. 代替数据清洗</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell" id="s4c8" data-track data-demo="s4code2">
+          <div class="cell-hd"><span class="cell-num">4.8</span><span class="cell-type">实战代码</span><span class="cell-title">CNN+BiLSTM+Attention 完整模型（方法章素材）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>4.5 用的是「预训练模型」（省事版）；开题表写了 <strong>CNN+BiLSTM+Attention</strong>，方法章最好能展示这个模型本身。下面 30 行就是它的完整定义——每一行注释都对应 4.2 的一个比喻，看懂结构即可，训练可交给导师/学长。</p>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+
+<span class="k">class</span> SentimentNet(nn.Module):
+    <span class="st">"""CNN 抓短语 → BiLSTM 读上下文 → Attention 圈重点 → 三分类"""</span>
+    <span class="k">def</span> __init__(self, vocab_size, emb<span class="k">=</span><span class="st">128</span>, hid<span class="k">=</span><span class="st">128</span>, n_class<span class="k">=</span><span class="st">3</span>):
+        super().__init__()
+        self.emb    <span class="k">=</span> nn.Embedding(vocab_size, emb)              <span class="cm"># 每个词查成 128 维向量</span>
+        self.cnn    <span class="k">=</span> nn.Conv1d(emb, hid, kernel_size<span class="k">=</span><span class="st">3</span>, padding<span class="k">=</span><span class="st">1</span>)  <span class="cm"># 三词一组扫短语</span>
+        self.bilstm <span class="k">=</span> nn.LSTM(hid, hid, batch_first<span class="k">=</span><span class="st">True</span>, bidirectional<span class="k">=</span><span class="st">True</span>)
+        self.attn   <span class="k">=</span> nn.Linear(hid <span class="k">*</span> <span class="st">2</span>, <span class="st">1</span>)                    <span class="cm"># 给每个词打一个分</span>
+        self.fc     <span class="k">=</span> nn.Linear(hid <span class="k">*</span> <span class="st">2</span>, n_class)               <span class="cm"># 出口：三个分数</span>
+
+    <span class="k">def</span> forward(self, x):                       <span class="cm"># x: 一批句子的词号 (批, 句长)</span>
+        h <span class="k">=</span> self.emb(x).transpose(<span class="st">1</span>, <span class="st">2</span>)          <span class="cm"># (批,词,向量) → (批,向量,词)</span>
+        h <span class="k">=</span> torch.relu(self.cnn(h)).transpose(<span class="st">1</span>, <span class="st">2</span>)   <span class="cm"># 短语特征</span>
+        h, _ <span class="k">=</span> self.bilstm(h)                   <span class="cm"># 每个词都带上了双向上下文</span>
+        a <span class="k">=</span> torch.softmax(self.attn(h), dim<span class="k">=</span><span class="st">1</span>)   <span class="cm"># 注意力份额：全句加起来 = 1</span>
+        ctx <span class="k">=</span> (a <span class="k">*</span> h).sum(dim<span class="k">=</span><span class="st">1</span>)                <span class="cm"># 加权平均 = 整句摘要向量</span>
+        <span class="k">return</span> self.fc(ctx), a.squeeze(<span class="k">-</span><span class="st">1</span>)       <span class="cm"># 预测分数 + 每词权重(画图用!)</span>
+
+<span class="cm"># 训练三件套（数据变成词号后按常规喂入）：</span>
+model <span class="k">=</span> SentimentNet(vocab_size<span class="k">=</span><span class="st">20000</span>)
+opt   <span class="k">=</span> torch.optim.Adam(model.parameters(), lr<span class="k">=</span><span class="st">1e-3</span>)
+lossf <span class="k">=</span> nn.CrossEntropyLoss()
+<span class="cm"># for xb, yb in train_loader:        # xb=词号批次  yb=0积极/1中性/2消极</span>
+<span class="cm">#     opt.zero_grad(); loss = lossf(model(xb)[0], yb)</span>
+<span class="cm">#     loss.backward(); opt.step()</span></pre>
+            <div class="cal"><div class="cal-t">论文怎么用</div><p>forward 里那行 <code>a</code>（注意力权重）就是 4.4 演示图的数学来源——方法章写模型结构 + 结果章贴权重可视化，一段代码两处得分。若训练资源不足，论文写「采用预训练中文情感模型（4.5）并人工校验（4.9）」同样成立。</p></div>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s4c9" data-track data-demo="s4code3">
+          <div class="cell-hd"><span class="cell-num">4.9</span><span class="cell-type">实战代码</span><span class="cell-title">情感 × 阶段交叉统计 + 人工校验（表 3 + 信度）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>模型跑完只是有了「每条一个标签」；论文的「演化规律」来自<strong>标签 × 阶段的交叉表</strong>——它正是 5.2 图谱的数据源。附赠人工校验脚本（答辩护身符）。</p>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd
+
+df <span class="k">=</span> pd.read_csv(<span class="st">"corpus_sentenced.csv"</span>)           <span class="cm"># 语料 + 阶段 + sentiment 三合一</span>
+order <span class="k">=</span> [<span class="st">"潜伏期"</span>, <span class="st">"爆发期"</span>, <span class="st">"蔓延期"</span>, <span class="st">"衰退期"</span>, <span class="st">"长尾期"</span>]
+cross <span class="k">=</span> pd.crosstab(df[<span class="st">"阶段"</span>], df[<span class="st">"sentiment"</span>], normalize<span class="k">=</span><span class="st">"index"</span>).reindex(order)
+<span class="k">print</span>((cross <span class="k">*</span> <span class="st">100</span>).round(<span class="st">1</span>))                     <span class="cm"># 每行加起来 = 100%</span>
+cross.to_csv(<span class="st">"sentiment_by_stage.csv"</span>)              <span class="cm"># → 直接喂给 5.8 画图</span>
+
+<span class="cm"># ---- 人工校验：随机抽 300 条重标，算一致率 ----</span>
+sample <span class="k">=</span> df.sample(<span class="st">300</span>, random_state<span class="k">=</span><span class="st">7</span>)[[<span class="st">"text"</span>, <span class="st">"sentiment"</span>]]
+sample[<span class="st">"人工标签"</span>] <span class="k">=</span> <span class="st">""</span>                             <span class="cm"># 导出 → 打印 → 手工填 → 存回</span>
+sample.to_csv(<span class="st">"人工标注300.csv"</span>, index<span class="k">=</span><span class="st">False</span>)
+
+gold <span class="k">=</span> pd.read_csv(<span class="st">"人工标注300.csv"</span>)
+agree <span class="k">=</span> (gold[<span class="st">"sentiment"</span>] <span class="k">==</span> gold[<span class="st">"人工标签"</span>]).mean()
+<span class="k">print</span>(<span class="st">f"模型与人工一致率：{agree:.1%}"</span>)</pre>
+            <div class="cal"><div class="cal-t">运行后这样写进论文（3.4 信度检验）</div><p>「为检验情感判别可靠性，随机抽取 300 条样本由两名编码员独立人工标注，模型与人工标注一致率为 87.3%（Kappa=0.81），达到可接受水平；分歧样本经讨论后以人工标签校正。」——一致率超过 85% 就可以理直气壮地写这段。</p></div>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+      </section>
+
+      <!-- ================= 05 情感演化可视化 ================= -->
+      <section id="stage-5" class="stage">
+        <div class="stage-hd">
+          <span class="stage-no">05</span><h2>情感演化可视化</h2>
+          <p class="stage-sub">展示情感变化趋势，构建情感演化图谱——让评委一眼看懂你的结论</p>
+        </div>
+        <div class="stage-map">
+          <div><span class="m-k">技术环节</span>情感演化可视化</div>
+          <div><span class="m-k">具体任务</span>展示情感变化趋势，构建情感演化图谱</div>
+          <div><span class="m-k">使用工具</span>Python matplotlib</div>
+        </div>
+
+        <div class="cell" id="s5c1" data-track>
+          <div class="cell-hd"><span class="cell-num">5.1</span><span class="cell-type">讲解</span><span class="cell-title">图谱是论文的「脸面」</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>前四个环节产出了三样东西：<b>阶段切分</b>（②）、<b>各阶段主题占比</b>（③）、<b>各阶段三类情感占比</b>（④）。可视化环节的任务只有一个：<strong>把它们叠在同一张图上，讲出完整的故事。</strong></p>
+            <p>经典做法是<strong>堆叠面积图</strong>：横轴时间、纵轴占比（三块加起来永远是 100%），三种颜色（本教程用三种线纹图案，保持黑白美学）随时间此消彼长——消极面积什么时候膨胀到最大、什么时候开始退潮、什么时候和积极面积交叉，全部一目了然。</p>
+            <div class="cal"><div class="cal-t">看图先于看字</div><p>答辩老师翻你的论文，第一眼看摘要，第二眼看的就是这张图。图的规范：坐标有单位、图例能自明、阶段边界用虚线标出、结论能写进图题。</p></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s5c2" data-track>
+          <div class="cell-hd"><span class="cell-num">5.2</span><span class="cell-type">演示</span><span class="cell-title">情感演化图谱 · 亲手拼出结论图</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>数据来自 ④ 的输出（每阶段三类情感占比）。点图例可开关系列；悬停查看当日数值；勾选可叠加 ② 的阶段边界线。<strong>把「阶段边界」打开后，这张图就是可以直接放进论文的成品。</strong></p>
+            <div class="demo-bar">
+              <span class="legend" id="evo-legend">
+                <span class="lg" data-series="pos"><i class="sw sw-pos"></i>积极</span>
+                <span class="lg" data-series="neu"><i class="sw sw-neu"></i>中性</span>
+                <span class="lg" data-series="neg"><i class="sw sw-neg"></i>消极</span>
+              </span>
+              <span style="flex:1"></span>
+              <label class="ck-row" style="padding: 2px 8px"><input type="checkbox" class="ck" id="evo-annot" checked />叠加阶段边界与标注</label>
+            </div>
+            <div class="svg-wrap" id="evo-svg"></div>
+            <div class="log" id="evo-read">读图：消极面积在爆发期冲到约 70%，蔓延期回落到 60%，衰退期与积极、中性重新三分——舆情的「情绪生命周期」完整可见。</div>
+          </div>
+        </div>
+
+        <div class="cell" id="s5c3" data-track data-demo="s5code1">
+          <div class="cell-hd"><span class="cell-num">5.3</span><span class="cell-type">代码</span><span class="cell-title">matplotlib 复现这张图</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+<pre class="code"><span class="k">import</span> matplotlib.pyplot <span class="k">as</span> plt
+
+plt.rcParams[<span class="st">"font.sans-serif"</span>] <span class="o">=</span> [<span class="st">"SimHei"</span>]          <span class="cm"># 中文字体，防豆腐块</span>
+stages <span class="o">=</span> [<span class="st">"潜伏"</span>, <span class="st">"爆发"</span>, <span class="st">"蔓延"</span>, <span class="st">"衰退"</span>, <span class="st">"长尾"</span>]
+pos <span class="o">=</span> [<span class="st">0.50</span>, <span class="st">0.10</span>, <span class="st">0.15</span>, <span class="st">0.30</span>, <span class="st">0.40</span>]                <span class="cm"># 积极占比</span>
+neu <span class="o">=</span> [<span class="st">0.40</span>, <span class="st">0.20</span>, <span class="st">0.25</span>, <span class="st">0.40</span>, <span class="st">0.45</span>]                <span class="cm"># 中性占比</span>
+neg <span class="o">=</span> [<span class="st">0.10</span>, <span class="st">0.70</span>, <span class="st">0.60</span>, <span class="st">0.30</span>, <span class="st">0.15</span>]                <span class="cm"># 消极占比</span>
+
+plt.figure(figsize<span class="o">=</span>(<span class="st">8</span>, <span class="st">4</span>))
+plt.stackplot(stages, pos, neu, neg,
+              colors<span class="o">=</span>[<span class="st">"#d9d9d9"</span>, <span class="st">"#999999"</span>, <span class="st">"#333333"</span>],
+              labels<span class="o">=</span>[<span class="st">"积极"</span>, <span class="st">"中性"</span>, <span class="st">"消极"</span>])          <span class="cm"># 堆叠面积</span>
+plt.axvline(<span class="st">1.5</span>, ls<span class="o">=</span><span class="st">"--"</span>, c<span class="o">=</span><span class="st">"gray"</span>)                   <span class="cm"># 阶段边界虚线</span>
+plt.legend(loc<span class="o">=</span><span class="st">"upper right"</span>); plt.ylim(<span class="st">0</span>, <span class="st">1</span>)
+plt.title(<span class="st">"某餐厅舆情事件情感演化图谱"</span>)
+plt.savefig(<span class="st">"sentiment_evolution.png"</span>, dpi<span class="o">=</span><span class="st">300</span>)        <span class="cm"># 300 dpi 才够印</span></pre>
+            <span class="ann">stackplot 就是「堆叠面积图」的函数名；colors 用灰阶即可满足黑白印刷。启动 Python 后端后运行本格，会返回真实渲染的 PNG。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s5c4" data-track>
+          <div class="cell-hd"><span class="cell-num">5.4</span><span class="cell-type">演示</span><span class="cell-title">全流程仪表盘 · 五步串成一条线</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>点「重放全流程」，看五个环节的产出如何逐格点亮——这就是你论文「研究设计」一章的流程图底稿。若你前面玩过 1.5 / 1.8 演示，仪表盘会引用你亲手产生的真实数字。</p>
+            <div class="demo-bar"><button class="btn" id="dash-play"><svg class="ico"><use href="#i-play"/></svg> 重放全流程</button><span class="lbl" id="dash-status">待播放</span></div>
+            <div class="grid2" id="dash-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))"></div>
+          </div>
+        </div>
+
+        <div class="cell" id="s5c5" data-track>
+          <div class="cell-hd"><span class="cell-num">5.5</span><span class="cell-type">讲解</span><span class="cell-title">写进论文：方法部分模板段</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="cal"><div class="cal-t">可直接改写的模板</div>
+              <p>「本研究以『××事件』微博评论区为数据源，利用 Python 爬虫采集 ×× 至 ×× 期间评论 N 条，经去重、去噪及无效文本过滤后获得有效语料 M 条。以每日评论量构建时间序列，结合舆情生命周期理论与热度阈值法（阈值取峰值的 X%），将事件划分为潜伏、爆发、蔓延、衰退、长尾五个阶段。采用 TF-IDF 提取特征词，借助 Gensim 构建 LDA 主题模型（K=3），识别各阶段主导议题；采用 CNN-BiLSTM-Attention 深度学习模型对语料进行三分类情感判别（积极/中性/消极），并经人工抽检 300 条修正，一致率 X%。最终以 matplotlib 绘制情感演化图谱，呈现舆情情绪的阶段性演变特征。」</p>
+            </div>
+            <div class="cal"><div class="cal-t">常见误区（答辩高频被问）</div>
+              <ul class="dot">
+                <li><b>只报占比不报样本量</b>——「消极占 70%」若来自 10 条评论则毫无意义；</li>
+                <li><b>阈值/K 值拍脑袋且不交代</b>——参数要在方法部分写明并做简单敏感性说明；</li>
+                <li><b>把相关当因果</b>——「道歉后消极下降」不等于「因为道歉而下降」，结论措辞要克制；</li>
+                <li><b>图表无单位、无图例、截图糊</b>——导出统一 300 dpi。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell" id="glossary" data-track>
+          <div class="cell-hd"><span class="cell-num">5.6</span><span class="cell-type">附录</span><span class="cell-title">术语速查表</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <table class="tbl">
+              <thead><tr><th style="width: 26%">术语</th><th>一句话解释</th></tr></thead>
+              <tbody>
+                <tr><td>爬虫 / crawler</td><td>模拟人刷网页、把数据抄进表格的程序</td></tr>
+                <tr><td>语料库 / corpus</td><td>清洗后、可供统计的干净文本集合</td></tr>
+                <tr><td>DataFrame / df</td><td>pandas 里的「一张会用魔法的 Excel 表」</td></tr>
+                <tr><td>shape</td><td>表格的（行数, 列数），样本量的出处</td></tr>
+                <tr><td>舆情生命周期</td><td>潜伏→爆发→蔓延→衰退→长尾的五阶段框架</td></tr>
+                <tr><td>时间序列</td><td>按日期排好的一列数字（每天多少条）</td></tr>
+                <tr><td>热度阈值法</td><td>用「够得着某条线」判定舆情起止的参数化方法</td></tr>
+                <tr><td>TF / DF / IDF</td><td>本条说多少 / 多少人说过 / 越稀缺越加分</td></tr>
+                <tr><td>LDA 主题模型</td><td>倒推每条评论由几锅「主题汤」各舀几勺兑成</td></tr>
+                <tr><td>无监督学习</td><td>不给标准答案，机器自己聚堆，人来解释</td></tr>
+                <tr><td>CNN / BiLSTM / Attention</td><td>扫短语 / 双向读上下文 / 圈重点词，三道工序</td></tr>
+                <tr><td>堆叠面积图</td><td>三类占比叠成 100% 随时间起伏的结论图</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="cell" id="s5c6" data-track>
+          <div class="cell-hd"><span class="cell-num">5.7</span><span class="cell-type">检查点</span><span class="cell-title">毕业小测</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <div class="quiz" data-answer="2" data-fb="正确顺序：清洗→建时间序列分阶段→分阶段主题分析→情感分类→叠加成图。每一步的产出是下一步的输入。">
+              <p><b>Q1</b> 五个环节的正确依赖顺序是？</p>
+              <button class="quiz-opt">A. 可视化→情感→主题→周期→清洗</button>
+              <button class="quiz-opt">B. 任意顺序，互不影响</button>
+              <button class="quiz-opt">C. 清洗→周期→主题→情感→可视化</button>
+            </div>
+            <div class="quiz" data-answer="0" data-fb="堆叠面积图三系列之和恒为 100%，最适合展示「结构占比随时间的演化」；饼图没有时间维度，折线图看不出结构。">
+              <p><b>Q2</b> 展示三类情感占比随阶段的变化，最合适的图型是？</p>
+              <button class="quiz-opt">A. 堆叠面积图</button>
+              <button class="quiz-opt">B. 饼图</button>
+              <button class="quiz-opt">C. 词云</button>
+            </div>
+            <div class="quiz" data-answer="1" data-fb="图谱的三个阶段边界来自②的热度阈值法，主题与情感来自③④——一张好图是整条流水线的汇合点，这也是它适合当「结论图」的原因。">
+              <p><b>Q3</b> 情感演化图谱里的阶段虚线边界应该来自哪里？</p>
+              <button class="quiz-opt">A. 凭感觉均匀画</button>
+              <button class="quiz-opt">B. ② 环节基于时间序列与阈值法划定的阶段边界</button>
+              <button class="quiz-opt">C. matplotlib 自动生成的</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell" id="s5c7" data-track data-demo="s5code2">
+          <div class="cell-hd"><span class="cell-num">5.8</span><span class="cell-type">实战代码</span><span class="cell-title">论文级三联图：一张图讲完整件事</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>5.3 画了单张堆叠面积图；答辩展示更常用「上下两联」：<strong>上联热度曲线（②的产出）+ 下联情感图谱（④⑤的产出）</strong>，同一时间轴上下呼应。前面所有 csv 在这一格汇合成最终图。</p>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd, matplotlib.pyplot <span class="k">as</span> plt
+plt.rcParams[<span class="st">"font.sans-serif"</span>] <span class="k">=</span> [<span class="st">"SimHei"</span>]
+plt.rcParams[<span class="st">"axes.unicode_minus"</span>] <span class="k">=</span> <span class="k">False</span>
+
+daily <span class="k">=</span> pd.read_csv(<span class="st">"stage_split.csv"</span>, parse_dates<span class="k">=</span>[<span class="st">"date"</span>])       <span class="cm"># ② 产出</span>
+sent  <span class="k">=</span> pd.read_csv(<span class="st">"sentiment_by_stage.csv"</span>, index_col<span class="k">=</span><span class="st">0</span>)      <span class="cm"># ④ 产出</span>
+
+fig, axes <span class="k">=</span> plt.subplots(<span class="st">2</span>, <span class="st">1</span>, figsize<span class="k">=</span>(<span class="st">8</span>, <span class="st">7</span>))
+
+<span class="cm"># 上联：热度曲线 + 阶段边界虚线</span>
+axes[<span class="st">0</span>].fill_between(daily[<span class="st">"date"</span>], daily[<span class="st">"热度"</span>], color<span class="k">=</span><span class="st">"#333"</span>, alpha<span class="k">=</span><span class="st">.8</span>)
+chgb <span class="k">=</span> daily[daily[<span class="st">"阶段"</span>] <span class="k">!=</span> daily[<span class="st">"阶段"</span>].shift()][<span class="st">"date"</span>][<span class="st">1</span>:]  <span class="cm"># 阶段变化日</span>
+<span class="k">for</span> d <span class="k">in</span> chgb: axes[<span class="st">0</span>].axvline(d, ls<span class="k">=</span><span class="st">"--"</span>, c<span class="k">=</span><span class="st">"gray"</span>, lw<span class="k">=</span><span class="st">.8</span>)
+axes[<span class="st">0</span>].set_title(<span class="st">"① 舆情热度时间序列与阶段边界"</span>); axes[<span class="st">0</span>].set_ylabel(<span class="st">"日评论量"</span>)
+
+<span class="cm"># 下联：情感结构堆叠面积（灰阶 = 黑白印刷友好）</span>
+axes[<span class="st">1</span>].stackplot(sent.index, sent[<span class="st">"positive"</span>], sent[<span class="st">"neutral"</span>], sent[<span class="st">"negative"</span>],
+                  color<span class="k">=</span>[<span class="st">"#d9d9d9"</span>, <span class="st">"#999999"</span>, <span class="st">"#333333"</span>],
+                  labels<span class="k">=</span>[<span class="st">"积极"</span>, <span class="st">"中性"</span>, <span class="st">"消极"</span>])
+axes[<span class="st">1</span>].legend(loc<span class="k">=</span><span class="st">"upper right"</span>); axes[<span class="st">1</span>].set_ylim(<span class="st">0</span>, <span class="st">1</span>)
+axes[<span class="st">1</span>].set_title(<span class="st">"② 情感结构演化图谱"</span>)
+
+plt.tight_layout(); plt.savefig(<span class="st">"thesis_figure.png"</span>, dpi<span class="k">=</span><span class="st">300</span>)</pre>
+            <span class="ann">图题建议：「图 3 ××事件舆情热度与情感结构演化图谱」——图题里出现「事件名 + 方法对象」，比「情感分析图」专业十倍。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s5c8" data-track data-demo="s5code3">
+          <div class="cell-hd"><span class="cell-num">5.9</span><span class="cell-type">实战代码</span><span class="cell-title">词云图（附录/开题答辩 PPT 常用）</span><span class="spacer"></span><button class="run-btn"><svg class="ico"><use href="#i-play"/></svg> 运行</button><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+<pre class="code"><span class="k">import</span> jieba, pandas <span class="k">as</span> pd
+<span class="k">from</span> wordcloud <span class="k">import</span> WordCloud
+
+df <span class="k">=</span> pd.read_csv(<span class="st">"corpus_clean.csv"</span>)
+words <span class="k">=</span> <span class="st">" "</span>.join(<span class="st">" "</span>.join(jieba.cut(str(t))) <span class="k">for</span> t <span class="k">in</span> df[<span class="st">"text"</span>])
+
+wc <span class="k">=</span> WordCloud(font_path<span class="k">=</span><span class="st">"C:/Windows/Fonts/msyh.ttc"</span>,   <span class="cm"># 微软雅黑，Windows 自带</span>
+               background_color<span class="k">=</span><span class="st">"white"</span>,
+               colormap<span class="k">=</span><span class="st">"gray"</span>,                        <span class="cm"># 灰度=黑白美学&印刷友好</span>
+               width<span class="k">=</span><span class="st">1600</span>, height<span class="k">=</span><span class="st">800</span>,
+               max_words<span class="k">=</span><span class="st">150</span>, collocations<span class="k">=</span><span class="st">False</span>).generate(words)
+wc.to_file(<span class="st">"wordcloud.png"</span>)</pre>
+            <span class="ann">词云只适合放附录或 PPT 暖场——它好看但不产出统计结论，正文关键图必须是 5.8 那种有坐标有单位的图。</span>
+          </div>
+          <div class="cell-out"></div>
+        </div>
+
+        <div class="cell" id="s5c9" data-track>
+          <div class="cell-hd"><span class="cell-num">5.10</span><span class="cell-type">总结</span><span class="cell-title">交付物对照表：开题表 → 教程格 → 论文位置</span><span class="spacer"></span><label><input type="checkbox" class="ck ck-done" /></label></div>
+          <div class="cell-bd">
+            <p>开题表「二、论文分析工具」的每一行，在本教程都有对应格子与产出文件。按顺序运行实战代码，右列文件会逐个生成；下表就是你的论文工程清单。</p>
+            <table class="tbl">
+              <thead><tr><th>开题表环节</th><th>教程格</th><th>运行产出（按序）</th><th>写进论文哪里</th></tr></thead>
+              <tbody>
+                <tr><td><b>1 数据预处理</b><br>爬虫 · pandas</td><td>1.4–1.12</td><td><code>weibo_comments.csv</code> → <code>corpus_clean.csv</code></td><td>3.1 数据来源与方法（样本量、时间窗、有效率）</td></tr>
+                <tr><td><b>2 演化周期划分</b><br>生命周期 · 时间序列 · 热度工具</td><td>2.2–2.7</td><td><code>stage_split.csv</code> · 平台相关系数 r</td><td>3.2 阶段划分 + 表1 + 图1（热度曲线）</td></tr>
+                <tr><td><b>3 主题演化分析</b><br>TF-IDF · Gensim LDA</td><td>3.2–3.11</td><td><code>stage_keywords.csv</code> · <code>topic_evolution.csv</code> · <code>topic_heatmap.png</code></td><td>3.3 主题识别 + 表2（特征词）+ 图2（热力图）</td></tr>
+                <tr><td><b>4 情感维度分析</b><br>CNN+BiLSTM+Attention</td><td>4.3–4.9</td><td><code>corpus_sentenced.csv</code> · <code>sentiment_by_stage.csv</code> · <code>人工标注300.csv</code></td><td>3.4 模型与信度检验 + 表3（交叉表）</td></tr>
+                <tr><td><b>5 情感演化可视化</b><br>matplotlib</td><td>5.2–5.9</td><td><code>thesis_figure.png</code> · <code>wordcloud.png</code></td><td>第4章 结论 + 图3（三联图）+ 附录图</td></tr>
+              </tbody>
+            </table>
+            <h4 class="subsec">建议写作顺序（与运行顺序解耦）</h4>
+            <ol class="num">
+              <li>先跑 1.11 → 1.12 → 2.6 → 2.7，把「数据与方法」的骨架数字全部锁定；</li>
+              <li>跑 3.9 → 3.10 → 3.11，对着特征词表写 3.3 的分析段落（哪阶段什么话题、怎么转移）；</li>
+              <li>跑 4.5 或 4.8 出标签，4.9 出交叉表 + 一致率；</li>
+              <li>最后 5.3 / 5.8 / 5.9 出全部图，图题编号后倒序写：先结论章，再方法章，最后摘要。</li>
+            </ol>
+            <div class="cal"><div class="cal-t">参数交代清单（答辩前自查）</div>
+              <ul class="dot">
+                <li>采集时间窗与截止日期：＿＿＿＿</li>
+                <li>清洗规则（去重键、最短长度、停用词表来源）：＿＿＿＿</li>
+                <li>热度阈值比例（2.6 的 0.15）与依据：＿＿＿＿</li>
+                <li>主题数 K 与确定方法（人工判读 + 一致性）：＿＿＿＿</li>
+                <li>情感模型版本 + 人工一致率/Kappa：＿＿＿＿</li>
+                <li>所有图 300dpi、灰度印刷可辨：＿＿＿＿</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer id="page-ft">
+        <span>OMM · 舆情演化分析交互式教程 · 对应开题「二、论文分析工具」</span>
+        <span>单页可离线使用 · python omm-analysis-server.py 可真实运行代码</span>
+      </footer>
+    </main>
+
+    <button id="to-top" title="回到顶部"><svg class="ico"><use href="#i-arrow-up"/></svg></button>
+  </body>
+</html>

@@ -497,6 +497,52 @@
       .doc-item.active .doc-ops {
         opacity: 1;
       }
+      /* 拖拽排序手柄（右侧） */
+      .doc-drag {
+        flex: 0 0 auto;
+        width: 16px;
+        align-self: stretch;
+        min-height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: grab;
+        color: var(--text-faint);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        padding: 0;
+        touch-action: none; /* 触屏必须由脚本处理，否则会变成滚动列表 */
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .doc-drag:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .doc-drag:active {
+        cursor: grabbing;
+      }
+      .doc-drag .grip {
+        display: block;
+        width: 8px;
+        height: 10px;
+        background-image: radial-gradient(circle, currentColor 0.9px, transparent 1px);
+        background-size: 4px 4px;
+        opacity: 0.75;
+      }
+      .doc-drag:focus-visible {
+        outline: 1px solid var(--border);
+        outline-offset: -1px;
+      }
+      /* 正在被拖的那一行 */
+      .doc-item.dragging {
+        opacity: 0.45;
+        border-style: dashed;
+      }
+      .doc-list-scroll.reordering .doc-item:not(.dragging) {
+        transition: transform 0.12s ease;
+      }
       .doc-op {
         width: 20px;
         height: 20px;
@@ -3834,7 +3880,7 @@ notify pgrst, 'reload schema';</textarea
             'docs.meta': '{0} node{1} · {2}',
             'docs.defaultName': 'Untitled',
             'docs.rename': 'Rename',
-            'docs.duplicate': 'Duplicate',
+            'docs.reorder': 'Drag to reorder (or focus + arrow keys)',
             'docs.delete': 'Delete',
             'notify.docCreated': 'Created: {0}',
             'notify.docDuplicated': 'Canvas duplicated',
@@ -4072,6 +4118,7 @@ notify pgrst, 'reload schema';</textarea
             'docs.meta': '{0} 个节点 · {2}',
             'docs.defaultName': '未命名',
             'docs.rename': '重命名',
+            'docs.reorder': '拖拽调整顺序（也可聚焦后用方向键）',
             'docs.duplicate': '复制副本',
             'docs.delete': '删除',
             'notify.docCreated': '已新建：{0}',
@@ -4823,6 +4870,9 @@ notify pgrst, 'reload schema';</textarea
           renderDocList() {
             const box = document.getElementById('doc-list')
             if (!box) return
+            // 拖拽过程中重绘会把正在拖的那一行从 DOM 里换掉，
+            // 指针事件就断了。拖拽结束后 commit() 会自己重绘一次。
+            if (DocReorder.drag) return
             const items = DocManager.list()
             if (!items.length) {
               box.innerHTML = '<div class="doc-empty">' + escapeHtml(t('docs.empty')) + '</div>'
@@ -4863,6 +4913,20 @@ notify pgrst, 'reload schema';</textarea
               ops.appendChild(makeDocOp('docDuplicate', d.id, '⧉', t('docs.duplicate')))
               ops.appendChild(makeDocOp('docDelete', d.id, '×', t('docs.delete'), true))
               row.appendChild(ops)
+
+              // 右侧的拖拽手柄。用 Pointer Events 而不是 HTML5 draggable
+              // —— draggable 在触屏上根本不触发，指针事件鼠标和手指一套代码通吃。
+              // 注意不能带 data-action，否则点它会误触发「打开画布」。
+              const handle = document.createElement('button')
+              handle.type = 'button'
+              handle.className = 'doc-drag'
+              handle.dataset.docId = d.id
+              handle.title = t('docs.reorder')
+              handle.setAttribute('aria-label', t('docs.reorder'))
+              const grip = document.createElement('span')
+              grip.className = 'grip'
+              handle.appendChild(grip)
+              row.appendChild(handle)
 
               scroll.appendChild(row)
             })
@@ -5078,6 +5142,167 @@ notify pgrst, 'reload schema';</textarea
             Settings.apply()
             UIManager.updateSettingsUI()
             notify(t('notify.stylesReset'))
+          },
+        }
+
+        // ================================================================
+        // 7.5 DOC REORDER — 画布列表的拖拽排序
+        //
+        // 用 Pointer Events 而不是 HTML5 的 draggable：
+        // draggable 在触屏上完全不触发，而指针事件鼠标/手指/触控笔一套通吃，
+        // 不需要再走 TouchManager 那套「合成鼠标事件」的转译。
+        // 手柄上有 touch-action:none，保证手指按住它时不会变成滚动列表。
+        //
+        // 兜底：手柄可聚焦，方向键也能上下移动（没有指针时可用）。
+        // ================================================================
+        const DocReorder = {
+          drag: null, // { id, row, scroll, pointerId }
+          moved: false,
+          EDGE: 26, // 靠近容器上下边缘多少像素开始自动滚动
+          SPEED: 9,
+
+          init() {
+            const list = document.getElementById('doc-list')
+            if (!list) return
+            list.addEventListener('pointerdown', (e) => this._down(e))
+            list.addEventListener('pointermove', (e) => this._move(e))
+            list.addEventListener('pointerup', (e) => this._up(e))
+            list.addEventListener('pointercancel', (e) => this._up(e))
+            // 拖完手柄不要再触发「打开这张画布」
+            list.addEventListener(
+              'click',
+              (e) => {
+                if (!DocReorder.moved) return
+                DocReorder.moved = false
+                e.preventDefault()
+                e.stopPropagation()
+              },
+              true,
+            )
+            // 方向键排序（无障碍 / 没有指针时）
+            list.addEventListener('keydown', (e) => this._key(e))
+          },
+
+          _down(e) {
+            const handle = e.target.closest('.doc-drag')
+            if (!handle) return false
+            if (e.button !== undefined && e.button > 0) return false
+            const row = handle.closest('.doc-item')
+            if (!row) return false
+            // 阻止后续的兼容鼠标事件与文本选中
+            if (e.cancelable) e.preventDefault()
+            e.stopPropagation()
+            const scroll = row.parentNode
+            try {
+              handle.setPointerCapture(e.pointerId)
+            } catch (_) {}
+            DocReorder.drag = {
+              id: row.dataset.docId,
+              row: row,
+              scroll: scroll,
+              pointerId: e.pointerId,
+            }
+            DocReorder.moved = false
+            row.classList.add('dragging')
+            if (scroll) scroll.classList.add('reordering')
+            return true
+          },
+
+          _move(e) {
+            const d = DocReorder.drag
+            if (!d || e.pointerId !== d.pointerId) return
+            if (e.cancelable) e.preventDefault()
+            e.stopPropagation()
+            DocReorder._reposition(e.clientY)
+            DocReorder._autoScroll(e.clientY, d.scroll)
+          },
+
+          // 按指针位置把被拖的行插到正确位置
+          _reposition(y) {
+            const d = DocReorder.drag
+            if (!d || !d.scroll) return
+            const rows = []
+            for (let i = 0; i < d.scroll.children.length; i++) {
+              const c = d.scroll.children[i]
+              if (c !== d.row) rows.push(c)
+            }
+            let target = null
+            for (const r of rows) {
+              const b = r.getBoundingClientRect()
+              if (y < b.top + b.height / 2) {
+                target = r
+                break
+              }
+            }
+            if (target) {
+              if (target.previousElementSibling !== d.row) DocReorder.moved = true
+              d.scroll.insertBefore(d.row, target)
+            } else if (d.scroll.lastElementChild !== d.row) {
+              DocReorder.moved = true
+              d.scroll.appendChild(d.row)
+            }
+          },
+
+          // 拖到列表上下边缘时自动滚动，否则长列表根本没法把卡片拖到底
+          _autoScroll(y, scroll) {
+            if (!scroll) return
+            const b = scroll.getBoundingClientRect()
+            let dir = 0
+            if (y < b.top + DocReorder.EDGE) dir = -1
+            else if (y > b.bottom - DocReorder.EDGE) dir = 1
+            if (!dir) return
+            const before = scroll.scrollTop
+            scroll.scrollTop = before + dir * DocReorder.SPEED
+            if (scroll.scrollTop !== before) DocReorder.moved = true
+          },
+
+          _up(e) {
+            const d = DocReorder.drag
+            if (!d) return
+            if (e && e.pointerId !== d.pointerId) return
+            DocReorder.drag = null
+            d.row.classList.remove('dragging')
+            if (d.scroll) d.scroll.classList.remove('reordering')
+            try {
+              d.row.querySelector('.doc-drag').focus()
+            } catch (_) {}
+            if (!DocReorder.moved) return
+            DocReorder.commit(d.scroll)
+          },
+
+          _key(e) {
+            const handle = e.target.closest('.doc-drag')
+            if (!handle) return
+            const row = handle.closest('.doc-item')
+            if (!row || !row.parentNode) return
+            const up = e.key === 'ArrowUp'
+            const down = e.key === 'ArrowDown'
+            if (!up && !down) return
+            e.preventDefault()
+            e.stopPropagation()
+            const parent = row.parentNode
+            if (up) {
+              const prev = row.previousElementSibling
+              if (!prev) return
+              parent.insertBefore(row, prev)
+            } else if (down) {
+              const next = row.nextElementSibling
+              if (!next) return
+              parent.insertBefore(next, row)
+            }
+            handle.focus()
+            DocReorder.commit(parent)
+          },
+
+          // 提交新顺序。DOM 顺序即最终顺序。
+          commit(scroll) {
+            if (!scroll) return
+            const ids = []
+            for (let i = 0; i < scroll.children.length; i++) {
+              const id = scroll.children[i].dataset && scroll.children[i].dataset.docId
+              if (id) ids.push(id)
+            }
+            if (ids.length) DocManager.reorder(ids)
           },
         }
 
@@ -9918,6 +10143,29 @@ notify pgrst, 'reload schema';</textarea
             return true
           },
 
+          // 按新顺序重排画布列表。
+          // 铁律：一张都不能丢。传入的 id 只做「重排」，
+          // 任何没出现在列表里的画布都会追加回末尾，绝不静默消失。
+          async reorder(ids) {
+            let idx = await DocManager.loadIndex()
+            if (!idx || !Array.isArray(idx.order) || !idx.order.length) return false
+            const known = new Set(idx.order)
+            const next = []
+            ;(Array.isArray(ids) ? ids : []).forEach((id) => {
+              if (known.has(id) && next.indexOf(id) < 0) next.push(id)
+            })
+            idx.order.forEach((id) => {
+              if (next.indexOf(id) < 0) next.push(id)
+            })
+            if (next.length !== idx.order.length) return false // 理论上不可能，兜底
+            const before = idx.order.join(' ')
+            if (before === next.join(' ')) return true
+            idx.order = next
+            await DocManager.writeIndex(idx)
+            UIManager.renderDocList()
+            return true
+          },
+
           async rename(id, name) {
             const idx = await DocManager.loadIndex()
             if (!idx || idx.order.indexOf(id) < 0) return false
@@ -11104,6 +11352,7 @@ notify pgrst, 'reload schema';</textarea
           CanvasManager.initPanZoom()
           TouchManager.init()
           GuardManager.init()
+          DocReorder.init()
           installUnloadGuard()
           bindGlobalEvents()
           bindPortDragEvents()
