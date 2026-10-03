@@ -1441,6 +1441,181 @@
         }
       }
 
+      /* 涂鸦模式打开时的画布观感：
+         光标换成十字（这是「可以落笔」的信号），
+         节点边框稍微压暗一点，让笔迹更跳。
+
+         光标规则必须带 !important：CanvasManager.beginPan/endPan 是用
+         **行内样式**写 workspace 的 cursor（grabbing / default），
+         行内样式优先级高于样式表，不加 important 会被它盖掉，
+         拖动画布时就会又闪出抓手光标。
+         beginPan/endPan 里也加了 doodleMode 判断，涂鸦模式下干脆不写
+         行内光标 —— 两头都堵住。 */
+      body.doodle-mode #workspace,
+      body.doodle-mode .node-header,
+      body.doodle-mode .node-header:active {
+        cursor: crosshair !important;
+      }
+      body.doodle-mode .node {
+        border-color: var(--border-dim);
+      }
+      body.doodle-mode .node:hover,
+      body.doodle-mode .node:focus-within {
+        border-color: var(--border);
+      }
+
+      /* ===== 涂鸦层 =====
+         pointer-events:none 是关键：这层永远不吃事件，
+         手指和鼠标的画布操作照常穿过它落到下面的节点上。
+         笔的事件是在 window 捕获阶段截走的（见 DoodleManager）。
+
+         width/height 必须显式给成 100%。<canvas> 是替换元素，
+         不写 CSS 尺寸时它的布局尺寸等于 width/height **属性**
+         （单位是 CSS 像素）。而属性被设成了 rect*dpr，
+         于是元素比画布大 dpr 倍，backing store 到屏幕变成 1:1，
+         绘制变换里却还乘着 dpr —— 笔迹因此整体偏移 (dpr-1)×偏移量：
+         既表现为「一画就偏右」，也表现为「平移越多偏得越狠」。
+         显式 100% 才能让「设备像素 / CSS 像素」真正等于 dpr。 */
+      #doodle-layer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      /* ===== 涂鸦工具条 ===== */
+      #doodle-bar {
+        position: fixed;
+        left: 50%;
+        bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
+        z-index: 2900;
+        display: none;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        font-family: var(--font-mono);
+        max-width: calc(100vw - 16px);
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      #doodle-bar.active {
+        display: flex;
+      }
+      .db-sec {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .db-label {
+        font-size: 8px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        padding: 0 2px;
+      }
+      .db-dot {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 1px solid var(--border-dim);
+        cursor: pointer;
+        padding: 0;
+        transition: all 0.1s;
+      }
+      .db-dot.active {
+        border: 2px dashed var(--text);
+      }
+      .db-w {
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        cursor: pointer;
+        padding: 0;
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+      }
+      .db-w i {
+        display: block;
+        background: currentColor;
+        border-radius: 50%;
+      }
+      .db-w.active {
+        color: var(--text);
+        border-color: var(--text);
+      }
+      .db-btn {
+        min-height: 26px;
+        padding: 4px 9px;
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .db-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .db-btn.active {
+        color: var(--text);
+        border-color: var(--text);
+        background: var(--hover);
+      }
+      .db-btn.danger:hover {
+        color: var(--accent-red);
+        border-color: var(--accent-red);
+      }
+      .db-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+      .db-div {
+        width: 1px;
+        align-self: stretch;
+        background: var(--border-dim);
+      }
+      /* 涂鸦开着时的说明条 */
+      #doodle-hint {
+        position: fixed;
+        left: 50%;
+        top: calc(var(--menu-h, 48px) + 8px);
+        transform: translateX(-50%);
+        z-index: 2900;
+        display: none;
+        padding: 5px 12px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.8px;
+        color: var(--text-dim);
+        background: var(--bg);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        pointer-events: none;
+        max-width: calc(100vw - 16px);
+        text-align: center;
+      }
+      #doodle-hint.active {
+        display: block;
+      }
+
       /* Workspace */
       #workspace {
         position: absolute;
@@ -2398,6 +2573,35 @@
         .menu-group {
           padding: 0 8px;
         }
+        /* 涂鸦工具条：手指命中区域一律放大到 40px 以上 */
+        #doodle-bar {
+          gap: 12px;
+          padding: 10px 12px;
+          bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        }
+        .db-sec {
+          gap: 8px;
+        }
+        .db-dot {
+          width: 38px;
+          height: 38px;
+        }
+        .db-w {
+          width: 40px;
+          height: 40px;
+        }
+        .db-btn {
+          min-height: 40px;
+          padding: 8px 12px;
+          font-size: 11px;
+        }
+        .db-div {
+          display: none;
+        }
+        #doodle-hint {
+          font-size: 11px;
+          padding: 7px 12px;
+        }
         /* 边框取色浮层：手指目标放大，浮层本身不参与手势 */
         #node-border-pop {
           width: 250px;
@@ -3342,9 +3546,31 @@
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.mode">模式</span>
-        <div class="menu-btn" id="btn-focus" data-action="toggleFocus" data-i18n="menu.focus"></div>
-        <div class="menu-btn" id="btn-read" data-action="toggleRead" data-i18n="menu.read"></div>
-        <div class="menu-btn" id="btn-full" data-action="toggleFull" data-i18n="menu.full"></div>
+        <div
+          class="menu-btn mode-btn"
+          id="btn-focus"
+          data-action="toggleFocus"
+          data-i18n="menu.focus"
+        ></div>
+        <div
+          class="menu-btn mode-btn"
+          id="btn-read"
+          data-action="toggleRead"
+          data-i18n="menu.read"
+        ></div>
+        <div
+          class="menu-btn mode-btn"
+          id="btn-doodle"
+          data-action="toggleDoodle"
+          data-i18n="menu.doodle"
+          data-i18n-title="menu.doodleTitle"
+        ></div>
+        <div
+          class="menu-btn mode-btn"
+          id="btn-full"
+          data-action="toggleFull"
+          data-i18n="menu.full"
+        ></div>
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.settings">设置</span>
@@ -3581,6 +3807,10 @@
       </div>
       <div class="dd-item" data-action="settingsToggleRead">
         <span data-i18n="dd.settings.read">Reading</span><span class="hint" id="sv-read"></span>
+      </div>
+      <div class="dd-item" data-action="toggleDoodle">
+        <span data-i18n="dd.settings.doodle">Doodle (stylus)</span
+        ><span class="hint" id="sv-doodle"></span>
       </div>
       <div class="dd-item" data-action="settingsToggleFull">
         <span data-i18n="dd.settings.full">Full Display</span
@@ -4167,7 +4397,25 @@ notify pgrst, 'reload schema';</textarea
       <div id="canvas-inner">
         <svg id="svg-layer"></svg>
       </div>
+      <!-- 涂鸦层：永远不吃事件（pointer-events:none），
+           笔的事件在 window 捕获阶段被 DoodleManager 截走 -->
+      <canvas id="doodle-layer"></canvas>
     </div>
+
+    <!-- ===== 涂鸦工具条（只在涂鸦模式下显示） ===== -->
+    <div id="doodle-bar">
+      <div class="db-sec" id="db-colors"></div>
+      <div class="db-div"></div>
+      <div class="db-sec" id="db-widths"></div>
+      <div class="db-div"></div>
+      <button type="button" class="db-btn" id="db-eraser" data-i18n="doodle.eraser">Eraser</button>
+      <button type="button" class="db-btn" id="db-undo" data-i18n="doodle.undo">Undo</button>
+      <div class="db-div"></div>
+      <button type="button" class="db-btn danger" id="db-clear" data-i18n="doodle.clear">
+        Clear
+      </button>
+    </div>
+    <div id="doodle-hint" data-i18n="doodle.hint"></div>
 
     <!-- ===== Status Bar ===== -->
     <div id="status-bar">
@@ -4275,6 +4523,31 @@ notify pgrst, 'reload schema';</textarea
           PORT_HIT_RADIUS: 400,
           INITIAL_WORLD_X: 0,
           INITIAL_WORLD_Y: 0,
+          // ---- 涂鸦 ----
+          // 笔迹存在**世界坐标**里，所以跟节点一样随画布平移缩放。
+          DOODLE_COLORS: ['#cc3333', '#cc6600', '#339933', '#3366cc', '#333333'],
+          DOODLE_WIDTHS: [1.5, 3, 6],
+          DOODLE_DEFAULT_COLOR: '#cc3333',
+          DOODLE_DEFAULT_WIDTH_INDEX: 1,
+          // 笔迹点的最小间隔（世界坐标）。笔尖会报出大量几乎重合的点，
+          // 全存下来会让画布数据膨胀好几个数量级。
+          DOODLE_MIN_STEP: 0.6,
+          // 橡皮擦命中半径（世界坐标）
+          DOODLE_ERASER_RADIUS: 7,
+          // 安全上限：这是给人手写用的，不是矢量绘图软件。
+          // 超了就不再接受新笔迹并提示一次，绝不静默丢弃已有笔迹。
+          DOODLE_MAX_STROKES: 4000,
+          DOODLE_MAX_POINTS_PER_STROKE: 4000,
+          // 没有压感的笔会报 pressure=0 或 0.5，这时退化成等宽线条，
+          // 否则整条线会细成一条发丝。
+          DOODLE_MIN_PRESSURE: 0.02,
+          // 涂鸦模式下是否允许鼠标绘制。桌面端没有笔，
+          // 不开的话这个功能在桌面上完全没法用。
+          DOODLE_ALLOW_MOUSE: true,
+          // 判定「这个 touch 事件是笔发出来的」的坐标容差。
+          // 同一根笔的 pointerdown 和 touchstart 报的是同一个接触点，
+          // 给几像素足够；手指恰好落在笔尖旁的概率极低。
+          DOODLE_PEN_MATCH_TOLERANCE: 8,
         }
         const FONT_MAP = {
           mono: "'Literata', 'Georgia', 'Times New Roman', serif",
@@ -4496,6 +4769,17 @@ notify pgrst, 'reload schema';</textarea
             'type.changed': 'Type changed to {0}',
             'type.sameType': 'Already this type',
             'type.lockedBlocked': 'Unlock the node first',
+            'menu.doodle': 'Doodle',
+            'menu.doodleTitle': 'Doodle: a stylus draws, your finger still moves the canvas',
+            'dd.settings.doodle': 'Doodle (stylus)',
+            'doodle.hint': 'Stylus draws · finger still pans, zooms and drags',
+            'doodle.eraser': 'Eraser',
+            'doodle.undo': 'Undo',
+            'doodle.clear': 'Clear',
+            'confirm.clearDoodle': 'Erase all doodles on this canvas?',
+            'notify.doodleOn': 'Doodle mode on — draw with a stylus',
+            'notify.doodleCleared': 'Doodles cleared',
+            'notify.doodleFull': 'Doodle limit reached ({0} strokes); clear some to keep drawing',
             'border.preset': 'Preset',
             'border.hex': '#hex',
             'border.reset': 'Default',
@@ -4759,6 +5043,17 @@ notify pgrst, 'reload schema';</textarea
             'type.changed': '类型已改为 {0}',
             'type.sameType': '已经是这个类型了',
             'type.lockedBlocked': '请先解锁节点',
+            'menu.doodle': '涂鸦',
+            'menu.doodleTitle': '涂鸦：电容笔画画，手指照常操作画布',
+            'dd.settings.doodle': '涂鸦（电容笔）',
+            'doodle.hint': '电容笔画画 · 手指照常平移、缩放、拖拽',
+            'doodle.eraser': '橡皮',
+            'doodle.undo': '撤销一笔',
+            'doodle.clear': '清空',
+            'confirm.clearDoodle': '清空这张画布上的全部涂鸦？',
+            'notify.doodleOn': '涂鸦模式已开——用电容笔书写',
+            'notify.doodleCleared': '涂鸦已清空',
+            'notify.doodleFull': '涂鸦已达上限（{0} 笔），清掉一些再继续',
             'border.preset': '预设',
             'border.hex': '#色值',
             'border.reset': '恢复默认',
@@ -4828,6 +5123,9 @@ notify pgrst, 'reload schema';</textarea
           bg: 'bg-void',
           focusMode: false,
           readingMode: false,
+          // 涂鸦模式：只有它开着的时候电容笔才会画画。
+          // 与 readingMode 互斥（见 UIManager.toggleDoodle）。
+          doodleMode: false,
           fullDisplay: false,
           menuPinned: true,
           nodeBgVisible: true,
@@ -4930,6 +5228,9 @@ notify pgrst, 'reload schema';</textarea
           },
           get btnRead() {
             return document.getElementById('btn-read')
+          },
+          get btnDoodle() {
+            return document.getElementById('btn-doodle')
           },
           get btnFull() {
             return document.getElementById('btn-full')
@@ -5073,6 +5374,7 @@ notify pgrst, 'reload schema';</textarea
               menuPinned: AppState.menuPinned,
               focusMode: AppState.focusMode,
               readingMode: AppState.readingMode,
+              doodleMode: AppState.doodleMode,
               fullDisplay: AppState.fullDisplay,
               nodeBgVisible: AppState.nodeBgVisible,
               portSize: AppState.portSize,
@@ -5141,6 +5443,8 @@ notify pgrst, 'reload schema';</textarea
               'menuPinned',
               'focusMode',
               'readingMode',
+              // 涂鸦模式：和阅读模式互斥，读回来时按互斥规则再裁一次
+              'doodleMode',
               'fullDisplay',
               'nodeBgVisible',
               'titleFontSize',
@@ -5182,6 +5486,11 @@ notify pgrst, 'reload schema';</textarea
             document.body.classList.toggle('reading-mode', AppState.readingMode)
             if (DOM.btnRead) DOM.btnRead.classList.toggle('active', AppState.readingMode)
             if (NodeBorder) NodeBorder.refreshAll()
+            // 涂鸦模式与阅读模式互斥：两者对笔的含义正好相反，
+            // 同时开着会让「笔到底是画画还是操作画布」变得没法预测。
+            document.body.classList.toggle('doodle-mode', AppState.doodleMode)
+            if (DOM.btnDoodle) DOM.btnDoodle.classList.toggle('active', AppState.doodleMode)
+            DoodleManager.setVisible(AppState.doodleMode)
             document.body.classList.toggle('full-display', AppState.fullDisplay)
             if (DOM.btnFull) DOM.btnFull.classList.toggle('active', AppState.fullDisplay)
             // Node background
@@ -5275,6 +5584,14 @@ notify pgrst, 'reload schema';</textarea
             UIManager.updateSettingsUI()
           },
           toggleRead() {
+            // 笔的含义在阅读/涂鸦之间是反的，所以两者不能同时开。
+            // 进阅读模式先把涂鸦关掉，并把它已经画到一半的那笔收尾。
+            if (!AppState.readingMode && AppState.doodleMode) {
+              DoodleManager.abort()
+              AppState.doodleMode = false
+              DoodleManager.setVisible(false)
+              if (DOM.btnDoodle) DOM.btnDoodle.classList.remove('active')
+            }
             AppState.readingMode = !AppState.readingMode
             document.body.classList.toggle('reading-mode', AppState.readingMode)
             if (DOM.btnRead) DOM.btnRead.classList.toggle('active', AppState.readingMode)
@@ -5288,6 +5605,37 @@ notify pgrst, 'reload schema';</textarea
             UIManager.updateSettingsUI()
             ConnectionManager.renderAll()
           },
+          // 涂鸦模式：只有它开着的时候电容笔才会画画，
+          // 手指始终是画布操作。
+          toggleDoodle() {
+            const on = !AppState.doodleMode
+            if (on) {
+              // 进涂鸦先把阅读模式关掉（理由同 toggleRead）
+              if (AppState.readingMode) {
+                AppState.readingMode = false
+                document.body.classList.remove('reading-mode')
+                if (DOM.btnRead) DOM.btnRead.classList.remove('active')
+                NodeBorder.refreshAll()
+              }
+              // 阅读模式之外的两个视觉开关会挡住笔迹，先收掉
+              if (AppState.fullDisplay) {
+                AppState.fullDisplay = false
+                document.body.classList.remove('full-display')
+                if (DOM.btnFull) DOM.btnFull.classList.remove('active')
+              }
+              AppState.doodleMode = true
+              DoodleManager.setVisible(true)
+              if (DOM.btnDoodle) DOM.btnDoodle.classList.add('active')
+              notify(t('notify.doodleOn'))
+            } else {
+              DoodleManager.abort()
+              AppState.doodleMode = false
+              DoodleManager.setVisible(false)
+              if (DOM.btnDoodle) DOM.btnDoodle.classList.remove('active')
+            }
+            Settings.save()
+            UIManager.updateSettingsUI()
+          },
           toggleFull() {
             AppState.fullDisplay = !AppState.fullDisplay
             document.body.classList.toggle('full-display', AppState.fullDisplay)
@@ -5297,6 +5645,13 @@ notify pgrst, 'reload schema';</textarea
               document.body.classList.remove('reading-mode')
               if (DOM.btnRead) DOM.btnRead.classList.remove('active')
               NodeBorder.refreshAll()
+            }
+            // 全屏展示和涂鸦都要求画布尽量干净，互相排斥
+            if (AppState.fullDisplay && AppState.doodleMode) {
+              DoodleManager.abort()
+              AppState.doodleMode = false
+              DoodleManager.setVisible(false)
+              if (DOM.btnDoodle) DOM.btnDoodle.classList.remove('active')
             }
             Settings.save()
             UIManager.updateSettingsUI()
@@ -5486,6 +5841,8 @@ notify pgrst, 'reload schema';</textarea
             document.getElementById('sv-read').textContent = AppState.readingMode
               ? t('on')
               : t('off')
+            const svDoodle = document.getElementById('sv-doodle')
+            if (svDoodle) svDoodle.textContent = AppState.doodleMode ? t('on') : t('off')
             document.getElementById('sv-full').textContent = AppState.fullDisplay
               ? t('on')
               : t('off')
@@ -8877,6 +9234,8 @@ notify pgrst, 'reload schema';</textarea
             const inner = DOM.canvasInner
             inner.style.transform = `translate3d(${AppState.panX}px, ${AppState.panY}px, 0) scale(${AppState.scale})`
             ConnectionManager.renderAll()
+            // 笔迹用的是同一套世界坐标，节点动了它也得跟着重画
+            DoodleManager.render()
           },
 
           // ---- 平移 / 缩放的原子操作 ----
@@ -8890,7 +9249,9 @@ notify pgrst, 'reload schema';</textarea
             AppState.panStartPX = AppState.panX
             AppState.panStartPY = AppState.panY
             AppState.panWasDragging = false
-            DOM.workspace.style.cursor = 'grabbing'
+            // 涂鸦模式不写行内光标：行内样式会盖掉 doodle-mode 的
+            // crosshair，拖动时又冒出抓手光标。
+            if (!AppState.doodleMode) DOM.workspace.style.cursor = 'grabbing'
           },
           movePan(x, y) {
             if (!AppState.isPanning) return
@@ -8919,7 +9280,9 @@ notify pgrst, 'reload schema';</textarea
           endPan() {
             if (!AppState.isPanning) return
             AppState.isPanning = false
-            DOM.workspace.style.cursor = 'default'
+            // 同 beginPan：涂鸦模式下不碰行内光标，
+            // 否则会把 crosshair 换成 default。
+            if (!AppState.doodleMode) DOM.workspace.style.cursor = 'default'
             if (AppState.panWasDragging) Settings.save()
           },
           // 重新设定平移基准（多指变单指时用，避免画面跳一下）
@@ -9055,6 +9418,620 @@ notify pgrst, 'reload schema';</textarea
         }
 
         // ================================================================
+        // 11.4 DOODLE MANAGER — 涂鸦
+        // ------------------------------------------------------------
+        // 输入判定（整个功能的核心）：
+        //   pointerType 'pen' / 'eraser'  -> 电容笔
+        //   pointerType 'touch'           -> 手指
+        //   pointerType 'mouse'           -> 鼠标
+        //
+        // 只有「涂鸦模式开着」且输入是笔时才画，其余一律放行，
+        // 所以手指/鼠标的平移、拖节点、拉连线完全不受影响。
+        //
+        // 事件在 window **捕获阶段**截走并 stopPropagation，节点拖动、
+        // TouchManager、浏览器默认手势都碰不到。
+        // 但 preventDefault 挡不住同一接触点的 touch 事件（pointer 事件
+        // 是 touch 事件的派生物，不是反过来），所以还要单独拦一层 touch，
+        // 否则笔一落下去画布就跟着平移。见 init() 里的 blockTouch。
+        //
+        // 笔迹存在**世界坐标**里，跟节点共用 panX/panY/scale，
+        // 所以涂鸦会跟着画布一起平移缩放，不会「贴在屏幕上」。
+        // ================================================================
+        const DoodleManager = {
+          strokes: [],
+          live: null, // 正在画、还没进 strokes 的那一笔
+          activePointerId: null,
+          erasing: false,
+          color: CONFIG.DOODLE_DEFAULT_COLOR,
+          widthIndex: CONFIG.DOODLE_DEFAULT_WIDTH_INDEX,
+          _canvas: null,
+          _ctx: null,
+          // 设备像素 / CSS 像素 的真实比值，由 _resize 实测填入。
+          // 不能直接用 devicePixelRatio：backing store 是取整过的。
+          _px: 1,
+          _py: 1,
+          _raf: 0,
+          _built: false,
+          _warnedFull: false,
+          // 当前按下的笔：pointerId -> 最近坐标。
+          // 用来判断随后到达的 touch 是不是同一根笔发出来的。
+          _pens: new Map(),
+
+          // ---- 输入分类 ----
+          isPen(e) {
+            return e.pointerType === 'pen' || e.pointerType === 'eraser'
+          },
+          // 笔的橡皮擦头。三种表示都要认：
+          //   pointerType 'eraser'（标准）
+          //   buttons 的 32 位（WebKit 把 Apple Pencil 翻过来就是这个）
+          //   button === 5（部分 Android 设备）
+          isEraser(e) {
+            if (e.pointerType === 'eraser') return true
+            if (e.pointerType === 'pen' && (e.buttons & 32) !== 0) return true
+            if (e.button === 5) return true
+            return false
+          },
+          shouldClaim(e) {
+            if (!AppState.doodleMode) return false
+            if (DoodleManager.isPen(e)) return true
+            return CONFIG.DOODLE_ALLOW_MOUSE && e.pointerType === 'mouse'
+          },
+
+          // TouchManager 用它判断「这个 touch 是不是笔的那一下」。
+          // pointerdown 先于 touchstart 触发，所以这时候 _pens 里已经有
+          // 笔的位置了；坐标对得上就是同一根笔的兼容 touch 事件。
+          ownsTouch(t) {
+            if (!AppState.doodleMode) return false
+            const tol = CONFIG.DOODLE_PEN_MATCH_TOLERANCE
+            let hit = false
+            DoodleManager._pens.forEach((pos) => {
+              if (Math.abs(pos.x - t.clientX) <= tol && Math.abs(pos.y - t.clientY) <= tol)
+                hit = true
+            })
+            return hit
+          },
+
+          // 压感：没传感器的笔会上报 0 或恒定的 0.5，这里只做「有效数字」
+          // 的兜底，真正的力度映射在 _normRange 里按笔内相对值做。
+          _pressure(e) {
+            const p = typeof e.pressure === 'number' ? e.pressure : 0
+            return p > CONFIG.DOODLE_MIN_PRESSURE ? Math.min(1, p) : 1
+          },
+
+          _width() {
+            const list = CONFIG.DOODLE_WIDTHS
+            const i = Math.min(list.length - 1, Math.max(0, DoodleManager.widthIndex | 0))
+            return list[i]
+          },
+
+          // ---- 绘制 ----
+          // 压感归一化。
+          // 很多笔没有压感传感器，会**恒定**上报 0.5（还有 0 的）。
+          // 直接拿它当宽度因子的话，选了 6px 实际只画出 3px，而且用户
+          // 完全看不出为什么。所以按「这一笔内部的相对力度」来归一：
+          // 最轻的那点给 0.35，最重的给 1.0，整条线都用配置里的宽度。
+          // 力度几乎没有变化时（max-min 太小）直接当等宽处理。
+          _normRange(stroke) {
+            const pts = stroke.p
+            let min = Infinity
+            let max = -Infinity
+            for (let i = 0; i < pts.length; i++) {
+              const v = pts[i][2]
+              if (v < min) min = v
+              if (v > max) max = v
+            }
+            if (!Number.isFinite(min) || max - min < 0.08) return null
+            return { min: min, span: max - min }
+          },
+
+          // 抽成「往任意 2D 上下文画」，这样屏幕上的涂鸦层
+          // 和导出 PNG/PDF 用的离屏画布能共用同一段绘制代码，
+          // 不会出现「屏幕上好看、导出就变了样」。
+          _strokeTo(ctx, stroke) {
+            if (!ctx || !stroke) return
+            const pts = stroke.p
+            if (!pts || !pts.length) return
+            ctx.strokeStyle = stroke.c
+            ctx.fillStyle = stroke.c
+            ctx.lineCap = 'round'
+            ctx.lineJoin = 'round'
+            if (pts.length === 1) {
+              // 就点了一下：画个圆点，否则什么都看不见
+              ctx.beginPath()
+              ctx.arc(pts[0][0], pts[0][1], stroke.w / 2, 0, Math.PI * 2)
+              ctx.fill()
+              return
+            }
+            const range = DoodleManager._normRange(stroke)
+            const factor = (pr) => (range ? 0.35 + (0.65 * (pr - range.min)) / range.span : 1)
+            // 逐段画，每段用自己的宽度 —— 这样压感才有意义。
+            // 相邻段的圆头接缝会被 round lineCap 盖住，看不出断点。
+            for (let i = 1; i < pts.length; i++) {
+              const a = pts[i - 1]
+              const b = pts[i]
+              ctx.beginPath()
+              ctx.lineWidth = Math.max(0.4, stroke.w * ((factor(a[2]) + factor(b[2])) / 2))
+              ctx.moveTo(a[0], a[1])
+              if (i < pts.length - 1) {
+                // 用中点做二次曲线，比直线段平滑
+                const c = pts[i + 1]
+                ctx.quadraticCurveTo(b[0], b[1], (b[0] + c[0]) / 2, (b[1] + c[1]) / 2)
+              } else {
+                ctx.lineTo(b[0], b[1])
+              }
+              ctx.stroke()
+            }
+          },
+
+          _renderNow() {
+            const ctx = DoodleManager._ctx
+            const cv = DoodleManager._canvas
+            if (!ctx || !cv) return
+            const px = DoodleManager._px
+            const py = DoodleManager._py
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.clearRect(0, 0, cv.width, cv.height)
+            if (!DoodleManager.strokes.length && !DoodleManager.live) return
+            // 世界坐标 -> 屏幕。必须和节点的变换严格一致：
+            // 节点是 translate3d(pan) scale(s) 作用在 #canvas-inner 上，
+            // 所以这里用同样的 scale 和同样的 pan，并且乘上实测的
+            // 设备像素/CSS 像素比值（因为 backing store 是按它开的）。
+            ctx.setTransform(
+              AppState.scale * px,
+              0,
+              0,
+              AppState.scale * py,
+              AppState.panX * px,
+              AppState.panY * py,
+            )
+            for (let i = 0; i < DoodleManager.strokes.length; i++) {
+              DoodleManager._strokeTo(ctx, DoodleManager.strokes[i])
+            }
+            if (DoodleManager.live) DoodleManager._strokeTo(ctx, DoodleManager.live)
+          },
+
+          // 把笔迹合成到任意画布上（导出 PNG/PDF 用）。
+          // offset 是导出裁剪框左上角的世界坐标。
+          composite(ctx, scale, offsetX, offsetY) {
+            if (!ctx || !DoodleManager.strokes.length) return
+            ctx.save()
+            ctx.setTransform(scale, 0, 0, scale, -offsetX * scale, -offsetY * scale)
+            for (let i = 0; i < DoodleManager.strokes.length; i++) {
+              DoodleManager._strokeTo(ctx, DoodleManager.strokes[i])
+            }
+            ctx.restore()
+          },
+
+          // 笔迹的世界坐标包围盒，导出时用来把裁剪框撑大，
+          // 否则画在节点外面的涂鸦会被裁掉。
+          bounds() {
+            if (!DoodleManager.strokes.length) return null
+            let minX = Infinity,
+              minY = Infinity,
+              maxX = -Infinity,
+              maxY = -Infinity
+            for (let i = 0; i < DoodleManager.strokes.length; i++) {
+              const pts = DoodleManager.strokes[i].p
+              const w = DoodleManager.strokes[i].w
+              for (let j = 0; j < pts.length; j++) {
+                if (pts[j][0] - w < minX) minX = pts[j][0] - w
+                if (pts[j][1] - w < minY) minY = pts[j][1] - w
+                if (pts[j][0] + w > maxX) maxX = pts[j][0] + w
+                if (pts[j][1] + w > maxY) maxY = pts[j][1] + w
+              }
+            }
+            if (minX === Infinity) return null
+            return { minX: minX, minY: minY, maxX: maxX, maxY: maxY }
+          },
+
+          // 平移/缩放每帧都会调，合并到下一帧再画，避免重复重绘
+          render() {
+            if (DoodleManager._raf) return
+            const run = () => {
+              DoodleManager._raf = 0
+              DoodleManager._renderNow()
+            }
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+            else run()
+          },
+
+          _resize() {
+            const cv = DoodleManager._canvas
+            if (!cv) return
+            // 用**元素自己**的 CSS 尺寸，而不是 workspace 的 rect。
+            // 两者相等，但取自己的更稳：万一将来 CSS 被改过，
+            // 至少 backing store 不会和实际显示尺寸脱节。
+            const rect = DOM.workspace.getBoundingClientRect()
+            const cssW = cv.clientWidth || rect.width || 1
+            const cssH = cv.clientHeight || rect.height || 1
+            // 上限 2：iPad 上按 3x 开满会明显掉帧，笔迹又不靠像素吃饭
+            const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
+            const w = Math.max(1, Math.round(cssW * dpr))
+            const h = Math.max(1, Math.round(cssH * dpr))
+            if (cv.width === w && cv.height === h) return
+            cv.width = w
+            cv.height = h
+            // 记下**实际**的「设备像素 / CSS 像素」比值，而不是标称 dpr。
+            // 取整之后两者可能差不到一个像素；绘制变换用真值才能保证
+            // 笔迹和节点严格重合（0.1px 本身看不出来，但乘上 panX
+            // 之后就是几百像素的偏移）。
+            DoodleManager._px = w / cssW
+            DoodleManager._py = h / cssH
+            DoodleManager._renderNow()
+          },
+
+          // ---- 指针事件 ----
+          _onDown(e) {
+            if (!DoodleManager.shouldClaim(e)) return
+            // 已经在画另一笔（多笔同时）-> 忽略，别把两笔连成一条
+            if (DoodleManager.activePointerId !== null) return
+            DoodleManager.activePointerId = e.pointerId
+            DoodleManager._pens.set(e.pointerId, { x: e.clientX, y: e.clientY })
+            // 截在这里，下面的节点拖动/TouchManager/浏览器都收不到
+            e.preventDefault()
+            e.stopPropagation()
+
+            if (DoodleManager.isEraser(e) || DoodleManager.erasing) {
+              DoodleManager.live = null
+              DoodleManager._eraseAt(e.clientX, e.clientY)
+              return
+            }
+            if (DoodleManager.strokes.length >= CONFIG.DOODLE_MAX_STROKES) {
+              DoodleManager._warnFull()
+              DoodleManager.live = null
+              return
+            }
+            const world = CanvasManager.screenToWorld(e.clientX, e.clientY)
+            DoodleManager.live = {
+              c: DoodleManager.color,
+              w: DoodleManager._width(),
+              p: [[round1(world.x), round1(world.y), DoodleManager._pressure(e)]],
+            }
+            DoodleManager.render()
+          },
+
+          _onMove(e) {
+            const pen = DoodleManager._pens.get(e.pointerId)
+            if (pen) {
+              pen.x = e.clientX
+              pen.y = e.clientY
+            }
+            if (DoodleManager.activePointerId !== e.pointerId) return
+            e.preventDefault()
+            e.stopPropagation()
+            if (!DoodleManager.live) {
+              DoodleManager._eraseAt(e.clientX, e.clientY)
+              return
+            }
+            const world = CanvasManager.screenToWorld(e.clientX, e.clientY)
+            const pts = DoodleManager.live.p
+            const last = pts[pts.length - 1]
+            // 抽稀：笔尖会报出大量几乎重合的点，全存下来
+            // 会让画布数据膨胀好几个数量级。阈值按缩放换算，
+            // 放大后同样的屏幕距离对应更小的世界距离。
+            const minStep = CONFIG.DOODLE_MIN_STEP / Math.max(0.2, AppState.scale)
+            if (last && Math.hypot(world.x - last[0], world.y - last[1]) < minStep) return
+            if (pts.length >= CONFIG.DOODLE_MAX_POINTS_PER_STROKE) return
+            pts.push([round1(world.x), round1(world.y), DoodleManager._pressure(e)])
+            DoodleManager.render()
+          },
+
+          _onUp(e) {
+            const pen = DoodleManager._pens.get(e.pointerId)
+            if (pen) {
+              pen.x = e.clientX
+              pen.y = e.clientY
+            }
+            if (DoodleManager.activePointerId !== e.pointerId) return
+            e.preventDefault()
+            e.stopPropagation()
+            DoodleManager._pens.delete(e.pointerId)
+            DoodleManager.activePointerId = null
+            const live = DoodleManager.live
+            DoodleManager.live = null
+            if (live) {
+              // 补上抬笔那一点：快速划线时最后一个 move 和 pointerup
+              // 之间能差很远（甚至一个 move 都没有），不补的话笔迹会
+              // 在抬笔前就断掉，看着像短了一截。
+              const world = CanvasManager.screenToWorld(e.clientX, e.clientY)
+              const last = live.p[live.p.length - 1]
+              const minStep = CONFIG.DOODLE_MIN_STEP / Math.max(0.2, AppState.scale)
+              if (
+                live.p.length < CONFIG.DOODLE_MAX_POINTS_PER_STROKE &&
+                (!last || Math.hypot(world.x - last[0], world.y - last[1]) >= minStep)
+              ) {
+                live.p.push([round1(world.x), round1(world.y), DoodleManager._pressure(e)])
+              }
+              DoodleManager.strokes.push(live)
+              DoodleManager.syncBar()
+              // 走防抖而不是立即落盘：一笔能产生几百个点，
+              // 每个点写一次 IndexedDB 根本受不了。
+              debouncedAutoSave()
+            }
+            DoodleManager.render()
+          },
+
+          _warnFull() {
+            if (DoodleManager._warnedFull) return
+            DoodleManager._warnedFull = true
+            notify(t('notify.doodleFull', CONFIG.DOODLE_MAX_STROKES))
+          },
+
+          // ---- 橡皮擦 ----
+          _eraseAt(clientX, clientY) {
+            const w = CanvasManager.screenToWorld(clientX, clientY)
+            const r = CONFIG.DOODLE_ERASER_RADIUS / Math.max(0.2, AppState.scale)
+            const before = DoodleManager.strokes.length
+            const keep = []
+            for (let i = 0; i < DoodleManager.strokes.length; i++) {
+              const s = DoodleManager.strokes[i]
+              // 半径要加上笔宽：粗笔迹擦边缘时才不会被留下残根
+              if (distToPolyline(w.x, w.y, s.p) > r + s.w) keep.push(s)
+            }
+            if (keep.length === before) return
+            DoodleManager.strokes = keep
+            DoodleManager.render()
+            DoodleManager.syncBar()
+            debouncedAutoSave()
+          },
+
+          // ---- 工具条 ----
+          _build() {
+            if (DoodleManager._built) return
+            DoodleManager._built = true
+            const colors = document.getElementById('db-colors')
+            if (colors) {
+              colors.innerHTML = ''
+              CONFIG.DOODLE_COLORS.forEach((c) => {
+                const b = document.createElement('button')
+                b.type = 'button'
+                b.className = 'db-dot'
+                b.dataset.color = c
+                b.style.background = c
+                b.title = c
+                b.setAttribute('aria-label', c)
+                colors.appendChild(b)
+              })
+              colors.addEventListener('click', (e) => {
+                const b = e.target.closest('.db-dot')
+                if (!b) return
+                DoodleManager.color = b.dataset.color
+                DoodleManager.erasing = false // 选颜色意味着放弃橡皮
+                DoodleManager.syncBar()
+              })
+            }
+            const widths = document.getElementById('db-widths')
+            if (widths) {
+              widths.innerHTML = ''
+              CONFIG.DOODLE_WIDTHS.forEach((w, i) => {
+                const b = document.createElement('button')
+                b.type = 'button'
+                b.className = 'db-w'
+                b.dataset.width = String(i)
+                b.title = String(w)
+                b.setAttribute('aria-label', String(w))
+                // 圆点直径直接映射线宽，所见即所得
+                const d = Math.max(4, Math.min(18, w * 3))
+                b.innerHTML = '<i style="width:' + d + 'px;height:' + d + 'px"></i>'
+                widths.appendChild(b)
+              })
+              widths.addEventListener('click', (e) => {
+                const b = e.target.closest('.db-w')
+                if (!b) return
+                DoodleManager.widthIndex = parseInt(b.dataset.width, 10) || 0
+                DoodleManager.erasing = false
+                DoodleManager.syncBar()
+              })
+            }
+            const eraser = document.getElementById('db-eraser')
+            if (eraser) {
+              eraser.addEventListener('click', () => {
+                DoodleManager.erasing = !DoodleManager.erasing
+                DoodleManager.syncBar()
+              })
+            }
+            const undo = document.getElementById('db-undo')
+            if (undo) undo.addEventListener('click', () => DoodleManager.undoStroke())
+            const clear = document.getElementById('db-clear')
+            if (clear) {
+              clear.addEventListener('click', () => {
+                if (!DoodleManager.strokes.length) return
+                showConfirm(t('confirm.clearDoodle')).then((yes) => {
+                  if (!yes) return
+                  DoodleManager.strokes = []
+                  DoodleManager.live = null
+                  DoodleManager.render()
+                  DoodleManager.syncBar()
+                  debouncedAutoSave(true)
+                  notify(t('notify.doodleCleared'))
+                })
+              })
+            }
+          },
+
+          syncBar() {
+            const erasing = DoodleManager.erasing
+            const colors = document.getElementById('db-colors')
+            if (colors) {
+              colors.querySelectorAll('.db-dot').forEach((b) => {
+                b.classList.toggle('active', !erasing && b.dataset.color === DoodleManager.color)
+              })
+            }
+            const widths = document.getElementById('db-widths')
+            if (widths) {
+              widths.querySelectorAll('.db-w').forEach((b) => {
+                b.classList.toggle(
+                  'active',
+                  !erasing && parseInt(b.dataset.width, 10) === DoodleManager.widthIndex,
+                )
+              })
+            }
+            const eraser = document.getElementById('db-eraser')
+            if (eraser) eraser.classList.toggle('active', erasing)
+            const undo = document.getElementById('db-undo')
+            if (undo) undo.disabled = !DoodleManager.strokes.length
+          },
+
+          setVisible(on) {
+            const bar = document.getElementById('doodle-bar')
+            const hint = document.getElementById('doodle-hint')
+            if (bar) bar.classList.toggle('active', !!on)
+            if (hint) hint.classList.toggle('active', !!on)
+            document.body.classList.toggle('doodle-mode', !!on)
+            if (on) {
+              // 清掉可能残留的行内光标（拖到一半切进来的情况），
+              // 否则 crosshair 会被行内的 grabbing 盖掉。
+              DOM.workspace.style.cursor = ''
+              DoodleManager.syncBar()
+            }
+            DoodleManager._resize()
+            DoodleManager.render()
+          },
+
+          undoStroke() {
+            if (!DoodleManager.strokes.length) return
+            DoodleManager.strokes.pop()
+            DoodleManager.render()
+            DoodleManager.syncBar()
+            debouncedAutoSave(true)
+          },
+
+          // ---- 存取 ----
+          // 坐标只留一位小数：肉眼分辨不出来，但能明显压小存档。
+          serialize() {
+            return DoodleManager.strokes.map((s) => ({
+              c: s.c,
+              w: s.w,
+              p: s.p.map((pt) => [pt[0], pt[1], Math.round(pt[2] * 100) / 100]),
+            }))
+          },
+
+          load(list) {
+            DoodleManager.strokes = []
+            DoodleManager.live = null
+            DoodleManager._pens.clear()
+            DoodleManager.activePointerId = null
+            if (Array.isArray(list)) {
+              for (let i = 0; i < list.length; i++) {
+                const s = list[i]
+                if (!s || !Array.isArray(s.p) || !s.p.length) continue
+                const pts = []
+                for (let j = 0; j < s.p.length; j++) {
+                  const pt = s.p[j]
+                  if (!Array.isArray(pt) || pt.length < 2) continue
+                  const x = Number(pt[0])
+                  const y = Number(pt[1])
+                  if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+                  const pr = Number(pt[2])
+                  pts.push([x, y, Number.isFinite(pr) && pr > 0 ? Math.min(1, pr) : 1])
+                }
+                if (!pts.length) continue
+                const w = Number(s.w)
+                DoodleManager.strokes.push({
+                  c:
+                    typeof s.c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(s.c)
+                      ? s.c
+                      : CONFIG.DOODLE_DEFAULT_COLOR,
+                  w: Number.isFinite(w) && w > 0 ? w : 3,
+                  p: pts,
+                })
+              }
+            }
+            DoodleManager._warnedFull = false
+            DoodleManager._resize()
+            DoodleManager.render()
+            DoodleManager.syncBar()
+          },
+
+          count() {
+            return DoodleManager.strokes.length
+          },
+
+          // 切走/重载时把手收干净：否则半截笔迹会留在屏幕上，
+          // 而且 _pens 里的幽灵坐标会让之后手指的 touch 也被误判成笔。
+          abort() {
+            DoodleManager._pens.clear()
+            DoodleManager.activePointerId = null
+            if (DoodleManager.live) {
+              DoodleManager.strokes.push(DoodleManager.live)
+              DoodleManager.live = null
+              DoodleManager.render()
+              debouncedAutoSave()
+            }
+          },
+
+          init() {
+            const cv = document.getElementById('doodle-layer')
+            if (!cv) return
+            DoodleManager._canvas = cv
+            DoodleManager._ctx = cv.getContext('2d')
+            DoodleManager._build()
+            DoodleManager._resize()
+            DoodleManager.render()
+
+            // 捕获阶段：保证比节点拖动/TouchManager 先拿到事件。
+            // passive:false：不然 preventDefault 不生效。
+            const opt = { capture: true, passive: false }
+            window.addEventListener('pointerdown', (e) => DoodleManager._onDown(e), opt)
+            window.addEventListener('pointermove', (e) => DoodleManager._onMove(e), opt)
+            window.addEventListener('pointerup', (e) => DoodleManager._onUp(e), opt)
+            window.addEventListener('pointercancel', (e) => DoodleManager._onUp(e), opt)
+
+            // 支持 Pointer Events 的浏览器上，笔**同时**还会发一组兼容
+            // touch 事件。preventDefault 挡不住它们（pointer 是 touch 的
+            // 派生物），所以必须单独拦，否则笔一落下去画布就跟着平移。
+            const touchOpt = { capture: true, passive: false }
+            const blockTouch = (e) => {
+              if (!AppState.doodleMode) return
+              for (let i = 0; i < e.touches.length; i++) {
+                if (DoodleManager.ownsTouch(e.touches[i])) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  return
+                }
+              }
+            }
+            window.addEventListener('touchstart', blockTouch, touchOpt)
+            window.addEventListener('touchmove', blockTouch, touchOpt)
+
+            window.addEventListener('resize', () => {
+              DoodleManager._resize()
+              DoodleManager.render()
+            })
+            window.addEventListener('blur', () => DoodleManager.abort())
+          },
+        }
+
+        function round1(v) {
+          return Math.round(v * 10) / 10
+        }
+
+        // 点到折线的最短距离（橡皮擦命中判定）
+        function distToPolyline(px, py, pts) {
+          if (!pts.length) return Infinity
+          if (pts.length === 1) return Math.hypot(px - pts[0][0], py - pts[0][1])
+          let best = Infinity
+          for (let i = 1; i < pts.length; i++) {
+            const ax = pts[i - 1][0]
+            const ay = pts[i - 1][1]
+            const bx = pts[i][0]
+            const by = pts[i][1]
+            const dx = bx - ax
+            const dy = by - ay
+            const len2 = dx * dx + dy * dy
+            let u = 0
+            if (len2 > 0) {
+              u = ((px - ax) * dx + (py - ay) * dy) / len2
+              if (u < 0) u = 0
+              else if (u > 1) u = 1
+            }
+            const d = Math.hypot(px - (ax + u * dx), py - (ay + u * dy))
+            if (d < best) best = d
+          }
+          return best
+        }
+
+        // ================================================================
         // 11.5 TOUCH MANAGER — 平板 / 手机触控适配
         //
         // 问题：拖节点、拉连线、缩放、右键菜单全都是 mousedown /
@@ -9177,6 +10154,22 @@ notify pgrst, 'reload schema';</textarea
           },
 
           _onStart(e) {
+            // 涂鸦模式下，笔发出来的那一下 touch 不是画布操作。
+            // DoodleManager 已经在 window 捕获阶段拦过一层，
+            // 这里再挡一次是保险：万一坐标匹配失灵（某些设备的
+            // pointer/touch 坐标有偏差），最坏结果也不该是
+            // 「画一笔的同时画布跟着平移」。
+            if (AppState.doodleMode) {
+              for (let i = 0; i < e.touches.length; i++) {
+                if (DoodleManager.ownsTouch(e.touches[i])) {
+                  this._clearLongPress()
+                  this.panStart = null
+                  CanvasManager.endPan()
+                  e.preventDefault()
+                  return
+                }
+              }
+            }
             if (e.touches.length > 1) {
               // 第二根手指落下：结束单指手势，转双指
               this._clearLongPress()
@@ -9260,6 +10253,14 @@ notify pgrst, 'reload schema';</textarea
           },
 
           _onMove(e) {
+            if (AppState.doodleMode) {
+              for (let i = 0; i < e.touches.length; i++) {
+                if (DoodleManager.ownsTouch(e.touches[i])) {
+                  e.preventDefault()
+                  return
+                }
+              }
+            }
             if (e.touches.length > 1) {
               if (this.pinch) this._movePinch(e.touches)
               e.preventDefault()
@@ -10422,6 +11423,7 @@ notify pgrst, 'reload schema';</textarea
                 exportedAt: Date.now(),
                 nodes: canvas.nodes,
                 connections: canvas.connections,
+                doodles: canvas.doodles,
               }
               content = JSON.stringify(payload, null, 2)
               filename = safeFileName(name) + '-' + Date.now() + '.zc'
@@ -10514,6 +11516,15 @@ notify pgrst, 'reload schema';</textarea
             minY -= padY
             maxX += padX
             maxY += padY
+            // 笔迹也要算进裁剪框：画在节点外面的涂鸦
+            // 不然会被这个框裁掉，导出后就「消失」了。
+            const db = DoodleManager.bounds()
+            if (db) {
+              minX = Math.min(minX, db.minX)
+              minY = Math.min(minY, db.minY)
+              maxX = Math.max(maxX, db.maxX)
+              maxY = Math.max(maxY, db.maxY)
+            }
             const finalWidth = Math.max(200, maxX - minX)
             const finalHeight = Math.max(200, maxY - minY)
 
@@ -10529,6 +11540,9 @@ notify pgrst, 'reload schema';</textarea
               windowWidth: inner.scrollWidth,
               windowHeight: inner.scrollHeight,
             })
+            // html2canvas 只处理 inner，而涂鸦层是它的兄弟节点，
+            // 所以笔迹得自己合成上去。
+            DoodleManager.composite(canvas.getContext('2d'), 2, minX, minY)
             return canvas
           },
         }
@@ -10545,6 +11559,9 @@ notify pgrst, 'reload schema';</textarea
               fromPort: c.fromPort,
               toPort: c.toPort,
             })),
+            // 涂鸦跟节点一样是**每张画布自己的内容**，所以跟 nodes 一起存。
+            // 导出/导入/复制画布/撤销都会带上它。
+            doodles: DoodleManager.serialize(),
           }
           getNodes().forEach((node) => {
             const type = node.dataset.type
@@ -10690,6 +11707,8 @@ notify pgrst, 'reload schema';</textarea
             return {
               nodes: data.nodes,
               connections: data.connections,
+              // 撤销要能连涂鸦一起回滚
+              doodles: data.doodles,
               nodeCounter: AppState.nodeCounter,
               connIdCounter: AppState.connIdCounter,
             }
@@ -10861,6 +11880,9 @@ notify pgrst, 'reload schema';</textarea
               ;(snap.nodes || []).forEach((n) => {
                 NodeManager.createNodeAt(parseFloat(n.x) || 0, parseFloat(n.y) || 0, n.type, n)
               })
+              // 涂鸦也一起回滚（replay 期间 applying=true，所以不会
+              // 因为 load 里的落盘把撤销栈搅乱 —— load 根本不落盘）
+              DoodleManager.load(snap.doodles)
               AppState.nodeCounter = Math.max(AppState.nodeCounter, snap.nodeCounter || 0)
               // 撤销快照里也可能带孤儿连线，同样过滤
               const saneR = NodeManager._saneConnections(snap.connections)
@@ -11093,7 +12115,11 @@ notify pgrst, 'reload schema';</textarea
           document.querySelectorAll('.dropdown').forEach((d) => d.classList.remove('open'))
           document.body.classList.remove('submenu-open')
           document.querySelectorAll('.menu-btn').forEach((b) => {
-            if (b.id !== 'btn-focus' && b.id !== 'btn-read' && b.id !== 'btn-full') {
+            // 模式类按钮（聚焦/阅读/涂鸦/全屏）的 active 表示「模式开着」，
+            // 不是「菜单展开着」，所以点一下画布不该清掉它们。
+            // 用 .mode-btn 标记而不是硬编码 id 列表：
+            // 否则每加一个模式按钮就会重现「选中样式一点就没」的 bug。
+            if (!b.classList.contains('mode-btn')) {
               b.classList.remove('active')
             }
           })
@@ -11142,6 +12168,7 @@ notify pgrst, 'reload schema';</textarea
             updatedAt: Date.now(),
             nodes: data.nodes,
             connections: data.connections,
+            doodles: data.doodles,
           }
           downloadJSON(payload, safeFileName(name) + '.zc')
           notify(t('notify.saved'))
@@ -11440,6 +12467,7 @@ notify pgrst, 'reload schema';</textarea
               view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
               nodes: data.nodes,
               connections: data.connections,
+              doodles: Array.isArray(data.doodles) ? data.doodles : [],
             }
             idx.meta[id] = {
               name: prevMeta.name || DocManager.defaultName(),
@@ -11467,6 +12495,7 @@ notify pgrst, 'reload schema';</textarea
               view: null,
               nodes: Array.isArray(data.nodes) ? data.nodes : [],
               connections: Array.isArray(data.connections) ? data.connections : [],
+              doodles: Array.isArray(data.doodles) ? data.doodles : [],
             })
             if (idx.order.indexOf(id) < 0) idx.order.push(id)
             idx.meta[id] = {
@@ -11536,9 +12565,12 @@ notify pgrst, 'reload schema';</textarea
               AppState.connIdCounter = 0
               AppState.nodeCounter = 0
               AppState.selectedConnId = null
+              // 收笔：切画布时笔可能还按着，否则这半截笔迹会被算到新画布头上
+              DoodleManager.abort()
               ;(doc.nodes || []).forEach((n) => {
                 NodeManager.createNodeAt(parseFloat(n.x) || 100, parseFloat(n.y) || 100, n.type, n)
               })
+              DoodleManager.load(doc.doodles)
               // 旧数据里可能残留指向已删除节点的连线（导出时没清干净）。
               // 这些连线画不出来，留着只会越积越多，得明确丢掉并告知用户。
               const sane = NodeManager._saneConnections(doc.connections)
@@ -11685,6 +12717,7 @@ notify pgrst, 'reload schema';</textarea
               name: name,
               nodes: doc.nodes,
               connections: doc.connections,
+              doodles: doc.doodles,
             })
             await DocManager.open(newId)
             return true
@@ -11739,6 +12772,7 @@ notify pgrst, 'reload schema';</textarea
                   view: null,
                   nodes: src.nodes,
                   connections: Array.isArray(src.connections) ? src.connections : [],
+                  doodles: Array.isArray(src.doodles) ? src.doodles : [],
                 })
                 idx.order.push(id)
                 idx.meta[id] = {
@@ -11764,6 +12798,7 @@ notify pgrst, 'reload schema';</textarea
                 name: (baseName || '').trim() || DocManager.defaultName(),
                 nodes: obj.nodes,
                 connections: Array.isArray(obj.connections) ? obj.connections : [],
+                doodles: Array.isArray(obj.doodles) ? obj.doodles : [],
               })
               await DocManager.open(id)
               return 1
@@ -11996,6 +13031,9 @@ notify pgrst, 'reload schema';</textarea
                 break
               case 'settingsToggleFocus':
                 UIManager.settingsToggleFocus()
+                break
+              case 'toggleDoodle':
+                UIManager.toggleDoodle()
                 break
               case 'settingsToggleRead':
                 UIManager.settingsToggleRead()
@@ -12739,6 +13777,14 @@ notify pgrst, 'reload schema';</textarea
             new ResizeObserver(() => updateMenuHeight()).observe(menu)
           }
           window.addEventListener('resize', updateMenuHeight)
+          // 画布尺寸变了，涂鸦层的画布也要跟着改尺寸并重画，
+          // 否则笔迹会被拉伸变形。
+          if (DOM.workspace && window.ResizeObserver) {
+            new ResizeObserver(() => {
+              DoodleManager._resize()
+              DoodleManager.render()
+            }).observe(DOM.workspace)
+          }
         }
 
         // ================================================================
@@ -12790,6 +13836,7 @@ notify pgrst, 'reload schema';</textarea
                     n,
                   )
                 })
+                DoodleManager.load(doc.doodles)
                 const sane = NodeManager._saneConnections(doc.connections)
                 AppState.connections = sane.kept.map((c) => ({
                   from: c.from,
@@ -12819,6 +13866,13 @@ notify pgrst, 'reload schema';</textarea
 
           CanvasManager.initPanZoom()
           TouchManager.init()
+          // 顺序其实不重要：涂鸦的监听器挂在 window 的**捕获**阶段，
+          // 捕获一定先于 TouchManager 在 workspace 上的冒泡阶段跑。
+          // 放在这里只是因为它依赖 DOM 已就绪。
+          DoodleManager.init()
+          // 存档是在 init() 之前 load 的（那时画布元素还没建），
+          // 这里补一次同步：工具条状态 + 画布尺寸 + 重画。
+          DoodleManager.setVisible(AppState.doodleMode)
           GuardManager.init()
           DocReorder.init()
           installUnloadGuard()
