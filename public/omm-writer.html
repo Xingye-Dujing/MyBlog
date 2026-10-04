@@ -1505,6 +1505,9 @@
         max-width: calc(100vw - 16px);
         flex-wrap: wrap;
         justify-content: center;
+        /* 用电容笔点工具条时，浏览器会先等一下判断是不是双击缩放。
+           明确声明「这里只处理点击」可以省掉这段延迟，点起来更跟手。 */
+        touch-action: manipulation;
       }
       #doodle-bar.active {
         display: flex;
@@ -1530,8 +1533,29 @@
         padding: 0;
         transition: all 0.1s;
       }
+      /* 选中色要一眼看得出来。原来只是 2px 虚线边，在一排小圆点里
+         很容易看漏，而且虚线在深色背景下几乎糊掉。
+         改成：外圈实心加粗 + 轻微放大 + 底部一个小圆点指示。 */
+      .db-dot {
+        position: relative;
+      }
       .db-dot.active {
-        border: 2px dashed var(--text);
+        border: 2px solid var(--text);
+        transform: scale(1.15);
+        box-shadow:
+          0 0 0 2px var(--bg),
+          0 0 0 3px var(--text);
+      }
+      .db-dot.active::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--text);
+        transform: translateX(-50%);
       }
       .db-w {
         width: 26px;
@@ -1555,6 +1579,7 @@
       .db-w.active {
         color: var(--text);
         border-color: var(--text);
+        background: var(--hover);
       }
       .db-btn {
         min-height: 26px;
@@ -1578,6 +1603,37 @@
         color: var(--text);
         border-color: var(--text);
         background: var(--hover);
+      }
+      /* 三个工具（笔 / 高亮 / 橡皮）互斥。选中态做成「反白」，
+         和颜色/粗细那种「描边+底色」的选中态明显不同，
+         一眼能看出「现在是哪个工具在生效」。 */
+      .db-tools {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .db-tool {
+        min-height: 26px;
+        padding: 4px 9px;
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .db-tool:hover {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .db-tool.active {
+        color: var(--bg);
+        background: var(--text);
+        border-color: var(--text);
       }
       .db-btn.danger:hover {
         color: var(--accent-red);
@@ -1847,8 +1903,13 @@
         padding: 20px 24px;
         outline: none;
         overflow-y: auto;
-        border-bottom-left-radius: var(--radius);
-        border-bottom-right-radius: var(--radius);
+        /* 这里**不能**再给底角加圆角。
+           .node 自己带 border-radius + overflow:hidden，已经把内容按
+           圆角裁好了；子元素再转一次角就是「双重圆角」，滚动条正好落在
+           那个圆弧里，会被切出一道缺口，看起来就像溢出了边框。
+           而且子元素的圆角是从它自己的角量的，跟 .node 内缩了 1px 边框
+           的那个圆角根本不是同一条弧，永远对不齐。
+           只留父级裁剪，滚动条才会沿着节点真正的轮廓收尾。 */
         font-family: var(--font-mono);
         font-size: 14px;
         line-height: 1.8;
@@ -2586,9 +2647,19 @@
           width: 38px;
           height: 38px;
         }
+        .db-dot.active::after {
+          bottom: -7px;
+          width: 4px;
+          height: 4px;
+        }
         .db-w {
           width: 40px;
           height: 40px;
+        }
+        .db-tool {
+          min-height: 40px;
+          padding: 8px 14px;
+          font-size: 11px;
         }
         .db-btn {
           min-height: 40px;
@@ -4404,11 +4475,12 @@ notify pgrst, 'reload schema';</textarea
 
     <!-- ===== 涂鸦工具条（只在涂鸦模式下显示） ===== -->
     <div id="doodle-bar">
+      <div class="db-sec db-tools" id="db-tools"></div>
+      <div class="db-div"></div>
       <div class="db-sec" id="db-colors"></div>
       <div class="db-div"></div>
       <div class="db-sec" id="db-widths"></div>
       <div class="db-div"></div>
-      <button type="button" class="db-btn" id="db-eraser" data-i18n="doodle.eraser">Eraser</button>
       <button type="button" class="db-btn" id="db-undo" data-i18n="doodle.undo">Undo</button>
       <div class="db-div"></div>
       <button type="button" class="db-btn danger" id="db-clear" data-i18n="doodle.clear">
@@ -4529,6 +4601,11 @@ notify pgrst, 'reload schema';</textarea
           DOODLE_WIDTHS: [1.5, 3, 6],
           DOODLE_DEFAULT_COLOR: '#cc3333',
           DOODLE_DEFAULT_WIDTH_INDEX: 1,
+          // 三个工具互斥：画笔 / 高亮 / 橡皮。
+          // 高亮笔是「宽 + 半透明」，用来在文字上划重点。
+          DOODLE_TOOLS: ['pen', 'highlight', 'eraser'],
+          DOODLE_HIGHLIGHT_ALPHA: 0.32,
+          DOODLE_HIGHLIGHT_WIDTH_SCALE: 4,
           // 笔迹点的最小间隔（世界坐标）。笔尖会报出大量几乎重合的点，
           // 全存下来会让画布数据膨胀好几个数量级。
           DOODLE_MIN_STEP: 0.6,
@@ -4756,6 +4833,7 @@ notify pgrst, 'reload schema';</textarea
             'img.clear': 'Remove image',
             'img.cancel': 'Cancel',
             'img.tagLink': 'LINKED LOCAL',
+            'img.tagUrl': 'REMOTE URL',
             'img.tagEmbed': 'EMBEDDED',
             'border.title': 'Border colour',
             'type.text': 'Text',
@@ -4773,7 +4851,12 @@ notify pgrst, 'reload schema';</textarea
             'menu.doodleTitle': 'Doodle: a stylus draws, your finger still moves the canvas',
             'dd.settings.doodle': 'Doodle (stylus)',
             'doodle.hint': 'Stylus draws · finger still pans, zooms and drags',
+            'doodle.pen': 'Pen',
+            'doodle.penTitle': 'Draw with the stylus',
+            'doodle.highlight': 'Highlight',
+            'doodle.highlightTitle': 'Wide translucent marker, for emphasising text',
             'doodle.eraser': 'Eraser',
+            'doodle.eraserTitle': 'Erase strokes',
             'doodle.undo': 'Undo',
             'doodle.clear': 'Clear',
             'confirm.clearDoodle': 'Erase all doodles on this canvas?',
@@ -5030,6 +5113,7 @@ notify pgrst, 'reload schema';</textarea
             'img.clear': '清除图片',
             'img.cancel': '取消',
             'img.tagLink': '链接本机',
+            'img.tagUrl': '链接地址',
             'img.tagEmbed': '已嵌入',
             'border.title': '边框颜色',
             'type.text': '文本',
@@ -5047,7 +5131,12 @@ notify pgrst, 'reload schema';</textarea
             'menu.doodleTitle': '涂鸦：电容笔画画，手指照常操作画布',
             'dd.settings.doodle': '涂鸦（电容笔）',
             'doodle.hint': '电容笔画画 · 手指照常平移、缩放、拖拽',
+            'doodle.pen': '画笔',
+            'doodle.penTitle': '用电容笔书写',
+            'doodle.highlight': '高亮',
+            'doodle.highlightTitle': '宽而半透明的马克笔，用来在文字上划重点',
             'doodle.eraser': '橡皮',
+            'doodle.eraserTitle': '擦掉笔迹',
             'doodle.undo': '撤销一笔',
             'doodle.clear': '清空',
             'confirm.clearDoodle': '清空这张画布上的全部涂鸦？',
@@ -6992,10 +7081,23 @@ notify pgrst, 'reload schema';</textarea
                   if (node.dataset.fileName || sz.w > 0) {
                     const meta = document.createElement('span')
                     meta.className = 'img-meta'
-                    const tag = wantMode === 'embed' ? t('img.tagEmbed') : t('img.tagLink')
+                    // 三种来源要分开说。以前只分「内嵌 / 其余」，
+                    // 结果选了「链接地址」的图也显示成「链接本机」，
+                    // 用户一看就以为没生效。
+                    // 另外远程地址的体积是未知的（applyUrl 写的是 0），
+                    // 显示出「0 B」纯属噪音，不如不显示。
+                    const tag =
+                      wantMode === 'embed'
+                        ? t('img.tagEmbed')
+                        : wantMode === 'link'
+                          ? t('img.tagLink')
+                          : t('img.tagUrl')
                     const bits = [tag]
                     if (node.dataset.fileName) bits.push(node.dataset.fileName)
-                    if (node.dataset.size) bits.push(ImageManager.formatSize(node.dataset.size))
+                    const bytes = parseInt(node.dataset.size, 10)
+                    if (Number.isFinite(bytes) && bytes > 0) {
+                      bits.push(ImageManager.formatSize(node.dataset.size))
+                    }
                     bits.push(
                       sz.w > 0
                         ? sz.ratio
@@ -7284,7 +7386,26 @@ notify pgrst, 'reload schema';</textarea
             const repaint = () => {
               const content2 = getNodeContent(node)
               const img = content2 ? content2.querySelector('img') : null
-              if (img) ImageManager._applySize(img, node)
+              if (img) {
+                ImageManager._applySize(img, node)
+                return
+              }
+              // 图还没画出来（远程地址要等网络、link 模式要等 IndexedDB，
+              // 都比一次点击慢）。这时原来直接什么都不做，用户就会看到
+              // 「按了没反应」—— 那正是「没有及时响应」的那种手感。
+              // 改成整块重画，render() 会带上刚写进 dataset 的尺寸，
+              // 顺便也把下面那行 meta 刷新成新的尺寸。
+              ImageManager.render(node)
+              // 图是异步画出来的。画好之后高度栏要按真实宽高比重算一次，
+              // 否则它会一直停在「图还没加载」时猜的那个值上。
+              if (content2 && window.MutationObserver) {
+                const mo = new MutationObserver(() => {
+                  if (!content2.querySelector('img')) return
+                  mo.disconnect()
+                  syncSize()
+                })
+                mo.observe(content2, { childList: true })
+              }
             }
             const syncSize = () => {
               const s = readSize()
@@ -9441,7 +9562,10 @@ notify pgrst, 'reload schema';</textarea
           strokes: [],
           live: null, // 正在画、还没进 strokes 的那一笔
           activePointerId: null,
-          erasing: false,
+          // 当前工具：'pen' | 'highlight' | 'eraser'。
+          // 原来是单个 erasing 布尔值，结果「橡皮」和「粗细」
+          // 两边的选中样式会同时亮着，用户分不清当前生效的是哪个。
+          tool: 'pen',
           color: CONFIG.DOODLE_DEFAULT_COLOR,
           widthIndex: CONFIG.DOODLE_DEFAULT_WIDTH_INDEX,
           _canvas: null,
@@ -9471,8 +9595,20 @@ notify pgrst, 'reload schema';</textarea
             if (e.button === 5) return true
             return false
           },
+
+          isErasing() {
+            return DoodleManager.tool === 'eraser'
+          },
+          isHighlighting() {
+            return DoodleManager.tool === 'highlight'
+          },
           shouldClaim(e) {
             if (!AppState.doodleMode) return false
+            // 只接管落在画布上的笔。工具条、菜单、右键菜单这些 UI
+            // 必须放行，否则用笔去点工具条按钮会被当成落笔：
+            // 按钮点不动，反而在按钮位置画出一笔。
+            const el = e.target
+            if (el && el.closest && !el.closest('#workspace')) return false
             if (DoodleManager.isPen(e)) return true
             return CONFIG.DOODLE_ALLOW_MOUSE && e.pointerType === 'mouse'
           },
@@ -9531,6 +9667,9 @@ notify pgrst, 'reload schema';</textarea
             if (!ctx || !stroke) return
             const pts = stroke.p
             if (!pts || !pts.length) return
+            // 高亮笔是半透明的。多笔叠在同一行字上也不会糊成一坨，
+            // 前提是每一笔画完都要把 globalAlpha 复位。
+            ctx.globalAlpha = stroke.a === undefined ? 1 : stroke.a
             ctx.strokeStyle = stroke.c
             ctx.fillStyle = stroke.c
             ctx.lineCap = 'round'
@@ -9671,7 +9810,7 @@ notify pgrst, 'reload schema';</textarea
             e.preventDefault()
             e.stopPropagation()
 
-            if (DoodleManager.isEraser(e) || DoodleManager.erasing) {
+            if (DoodleManager.isEraser(e) || DoodleManager.isErasing()) {
               DoodleManager.live = null
               DoodleManager._eraseAt(e.clientX, e.clientY)
               return
@@ -9682,9 +9821,13 @@ notify pgrst, 'reload schema';</textarea
               return
             }
             const world = CanvasManager.screenToWorld(e.clientX, e.clientY)
+            // 高亮笔：更宽 + 半透明。宽度在落笔时就定死成具体值存进
+            // 这一笔，这样换工具/换颜色都不会影响已经画好的高亮。
+            const hl = DoodleManager.isHighlighting()
             DoodleManager.live = {
               c: DoodleManager.color,
-              w: DoodleManager._width(),
+              w: DoodleManager._width() * (hl ? CONFIG.DOODLE_HIGHLIGHT_WIDTH_SCALE : 1),
+              a: hl ? CONFIG.DOODLE_HIGHLIGHT_ALPHA : 1,
               p: [[round1(world.x), round1(world.y), DoodleManager._pressure(e)]],
             }
             DoodleManager.render()
@@ -9779,6 +9922,29 @@ notify pgrst, 'reload schema';</textarea
           _build() {
             if (DoodleManager._built) return
             DoodleManager._built = true
+            // 三个工具互斥，用同一个 tool 状态驱动。
+            const tools = document.getElementById('db-tools')
+            if (tools) {
+              tools.innerHTML = ''
+              const mk = (id, labelKey, titleKey) => {
+                const b = document.createElement('button')
+                b.type = 'button'
+                b.className = 'db-tool'
+                b.dataset.tool = id
+                b.textContent = t(labelKey)
+                b.title = t(titleKey)
+                tools.appendChild(b)
+              }
+              mk('pen', 'doodle.pen', 'doodle.penTitle')
+              mk('highlight', 'doodle.highlight', 'doodle.highlightTitle')
+              mk('eraser', 'doodle.eraser', 'doodle.eraserTitle')
+              tools.addEventListener('click', (ev) => {
+                const b = ev.target.closest('.db-tool')
+                if (!b) return
+                DoodleManager.tool = b.dataset.tool
+                DoodleManager.syncBar()
+              })
+            }
             const colors = document.getElementById('db-colors')
             if (colors) {
               colors.innerHTML = ''
@@ -9796,7 +9962,6 @@ notify pgrst, 'reload schema';</textarea
                 const b = e.target.closest('.db-dot')
                 if (!b) return
                 DoodleManager.color = b.dataset.color
-                DoodleManager.erasing = false // 选颜色意味着放弃橡皮
                 DoodleManager.syncBar()
               })
             }
@@ -9819,14 +9984,6 @@ notify pgrst, 'reload schema';</textarea
                 const b = e.target.closest('.db-w')
                 if (!b) return
                 DoodleManager.widthIndex = parseInt(b.dataset.width, 10) || 0
-                DoodleManager.erasing = false
-                DoodleManager.syncBar()
-              })
-            }
-            const eraser = document.getElementById('db-eraser')
-            if (eraser) {
-              eraser.addEventListener('click', () => {
-                DoodleManager.erasing = !DoodleManager.erasing
                 DoodleManager.syncBar()
               })
             }
@@ -9850,24 +10007,33 @@ notify pgrst, 'reload schema';</textarea
           },
 
           syncBar() {
-            const erasing = DoodleManager.erasing
+            const tool = DoodleManager.tool
+            // 橡皮时把颜色/粗细整体淡掉：它们此刻根本不参与渲染，
+            // 还亮着选中样式只会让人以为「橡皮 + 粗细」是一起生效的。
+            const drawing = tool !== 'eraser'
+            const tools = document.getElementById('db-tools')
+            if (tools) {
+              tools.querySelectorAll('.db-tool').forEach((b) => {
+                b.classList.toggle('active', b.dataset.tool === tool)
+              })
+            }
             const colors = document.getElementById('db-colors')
             if (colors) {
+              colors.style.opacity = drawing ? '1' : '0.4'
               colors.querySelectorAll('.db-dot').forEach((b) => {
-                b.classList.toggle('active', !erasing && b.dataset.color === DoodleManager.color)
+                b.classList.toggle('active', drawing && b.dataset.color === DoodleManager.color)
               })
             }
             const widths = document.getElementById('db-widths')
             if (widths) {
+              widths.style.opacity = drawing ? '1' : '0.4'
               widths.querySelectorAll('.db-w').forEach((b) => {
                 b.classList.toggle(
                   'active',
-                  !erasing && parseInt(b.dataset.width, 10) === DoodleManager.widthIndex,
+                  drawing && parseInt(b.dataset.width, 10) === DoodleManager.widthIndex,
                 )
               })
             }
-            const eraser = document.getElementById('db-eraser')
-            if (eraser) eraser.classList.toggle('active', erasing)
             const undo = document.getElementById('db-undo')
             if (undo) undo.disabled = !DoodleManager.strokes.length
           },
@@ -9902,6 +10068,7 @@ notify pgrst, 'reload schema';</textarea
             return DoodleManager.strokes.map((s) => ({
               c: s.c,
               w: s.w,
+              a: s.a === undefined ? 1 : s.a,
               p: s.p.map((pt) => [pt[0], pt[1], Math.round(pt[2] * 100) / 100]),
             }))
           },
@@ -9927,12 +10094,14 @@ notify pgrst, 'reload schema';</textarea
                 }
                 if (!pts.length) continue
                 const w = Number(s.w)
+                const al = Number(s.a)
                 DoodleManager.strokes.push({
                   c:
                     typeof s.c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(s.c)
                       ? s.c
                       : CONFIG.DOODLE_DEFAULT_COLOR,
                   w: Number.isFinite(w) && w > 0 ? w : 3,
+                  a: Number.isFinite(al) && al > 0 ? Math.min(1, al) : 1,
                   p: pts,
                 })
               }
@@ -10187,6 +10356,19 @@ notify pgrst, 'reload schema';</textarea
               y = t.clientY
             this.lastX = x
             this.lastY = y
+
+            // --- 涂鸦模式：画布就是纸，节点不拦截触摸 ---
+            // 落笔时经常就是压在节点上写的，如果这时手指去拖节点、
+            // 拉连线、滚正文，画布就完全没反应，用户会以为卡住了。
+            // 所以涂鸦模式下单指一律平移，双指仍然是缩放（上面已处理）。
+            // 长按菜单也一并关掉：涂鸦时误触弹出右键菜单很烦人。
+            if (AppState.doodleMode) {
+              this._clearLongPress()
+              this.panStart = { x: x, y: y }
+              CanvasManager.beginPan(x, y)
+              e.preventDefault()
+              return
+            }
 
             // --- 双击 -> dblclick ---
             const now = Date.now()
