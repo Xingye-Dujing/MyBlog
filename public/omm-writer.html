@@ -1026,15 +1026,51 @@
         align-items: center;
         gap: 8px;
       }
-      .nbp-color {
-        width: 34px;
+      .nbp-swatch {
+        position: relative;
+        width: 32px;
         height: 28px;
-        flex: 0 0 34px;
-        padding: 0;
+        flex: 0 0 32px;
         border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+      }
+      .nbp-swatch:hover {
+        border-color: var(--border);
+      }
+      .nbp-swatch:focus-within {
+        border-color: var(--text);
+      }
+      .nbp-color {
+        position: absolute;
+        /* 视觉上留 3px 内边距，色块比外框小一圈，看起来才不顶边。
+           热区仍然等于整个外框，手指按哪都是准的。 */
+        left: 3px;
+        top: 3px;
+        width: calc(100% - 6px);
+        height: calc(100% - 6px);
+        padding: 0;
+        border: 0;
         background: transparent;
         cursor: pointer;
-        border-radius: var(--radius);
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      /* UA 画的色块：去掉它自带的边框和圆角，不然会溢出 .nbp-swatch */
+      .nbp-color::-webkit-color-swatch-wrapper {
+        padding: 0;
+        border: 0;
+      }
+      .nbp-color::-webkit-color-swatch {
+        border: 0;
+        border-radius: 1px;
+      }
+      .nbp-color::-moz-color-swatch {
+        border: 0;
+        border-radius: 1px;
+      }
+      .nbp-color:focus {
+        outline: none;
       }
       .nbp-hex {
         flex: 1 1 auto;
@@ -1642,6 +1678,67 @@
       .db-btn:disabled {
         opacity: 0.35;
         cursor: not-allowed;
+      }
+      /* 透明度滑块：默认的 range 在这套线框风格里非常突兀，
+         这里把轨道和滑块都改成 1px 细线 + 方块手柄。
+         appearance:none 之后必须自己画轨道，否则 Firefox 上完全不见。 */
+      .db-alpha {
+        gap: 7px;
+      }
+      .db-range {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 92px;
+        height: 18px;
+        background: transparent;
+        cursor: pointer;
+        margin: 0;
+      }
+      .db-range::-webkit-slider-runnable-track {
+        height: 1px;
+        background: var(--border-dim);
+      }
+      .db-range::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 9px;
+        height: 14px;
+        margin-top: -6.5px;
+        background: var(--text-dim);
+        border: 0;
+        border-radius: 1px;
+      }
+      .db-range:hover::-webkit-slider-thumb {
+        background: var(--text);
+      }
+      .db-range::-moz-range-track {
+        height: 1px;
+        background: var(--border-dim);
+        border: 0;
+      }
+      .db-range::-moz-range-thumb {
+        width: 9px;
+        height: 14px;
+        background: var(--text-dim);
+        border: 0;
+        border-radius: 1px;
+      }
+      .db-range:hover::-moz-range-thumb {
+        background: var(--text);
+      }
+      .db-range:focus {
+        outline: none;
+      }
+      .db-range:focus::-webkit-slider-thumb {
+        background: var(--text);
+      }
+      .db-alpha-val {
+        font-size: 9.5px;
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        min-width: 30px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
       }
       .db-div {
         width: 1px;
@@ -2661,6 +2758,24 @@
           padding: 8px 14px;
           font-size: 11px;
         }
+        /* 滑块要够高才好按拇指拖 */
+        .db-range {
+          width: 120px;
+          height: 40px;
+        }
+        .db-range::-webkit-slider-thumb {
+          width: 14px;
+          height: 22px;
+          margin-top: -10.5px;
+        }
+        .db-range::-moz-range-thumb {
+          width: 14px;
+          height: 22px;
+        }
+        .db-alpha-val {
+          font-size: 11px;
+          min-width: 38px;
+        }
         .db-btn {
           min-height: 40px;
           padding: 8px 12px;
@@ -2686,10 +2801,12 @@
         .nbp-sw {
           min-height: 34px;
         }
-        .nbp-color {
-          width: 46px;
+        /* 框略大一点保证手指好按，但里面的色块仍然只占 60%，
+           视觉上还是那个「小色标」 */
+        .nbp-swatch {
+          width: 42px;
           height: 40px;
-          flex: 0 0 46px;
+          flex: 0 0 42px;
         }
         .nbp-hex {
           font-size: 16px;
@@ -3959,8 +4076,15 @@
     <div id="node-border-pop">
       <div class="nbp-label" data-i18n="border.preset">Preset</div>
       <div class="nbp-swatches" id="nbp-swatches"></div>
+      <div class="nbp-label" data-i18n="border.custom">Custom</div>
       <div class="nbp-row">
-        <input type="color" class="nbp-color" id="nbp-color" aria-label="border color" />
+        <!-- 原生 color 控件没法直接改样式：它内部那个色块是 UA 画的，
+             尺寸/padding 都由浏览器决定，会顶出边框。
+             所以外面套一个自己画的框（.nbp-swatch）负责视觉，
+             input 只作为一块透明的热区叠在上面。 -->
+        <span class="nbp-swatch">
+          <input type="color" class="nbp-color" id="nbp-color" aria-label="border color" />
+        </span>
         <input
           type="text"
           class="nbp-hex"
@@ -4481,6 +4605,20 @@ notify pgrst, 'reload schema';</textarea
       <div class="db-div"></div>
       <div class="db-sec" id="db-widths"></div>
       <div class="db-div"></div>
+      <div class="db-sec db-alpha">
+        <span class="db-label" data-i18n="doodle.alpha">Opacity</span>
+        <input
+          type="range"
+          class="db-range"
+          id="db-alpha"
+          min="5"
+          max="100"
+          step="5"
+          aria-label="opacity"
+        />
+        <span class="db-alpha-val" id="db-alpha-val">32%</span>
+      </div>
+      <div class="db-div"></div>
       <button type="button" class="db-btn" id="db-undo" data-i18n="doodle.undo">Undo</button>
       <div class="db-div"></div>
       <button type="button" class="db-btn danger" id="db-clear" data-i18n="doodle.clear">
@@ -4602,10 +4740,14 @@ notify pgrst, 'reload schema';</textarea
           DOODLE_DEFAULT_COLOR: '#cc3333',
           DOODLE_DEFAULT_WIDTH_INDEX: 1,
           // 三个工具互斥：画笔 / 高亮 / 橡皮。
-          // 高亮笔是「宽 + 半透明」，用来在文字上划重点。
+          // 高亮笔 = 画笔的宽度倍率 + 同一个透明度值。
           DOODLE_TOOLS: ['pen', 'highlight', 'eraser'],
-          DOODLE_HIGHLIGHT_ALPHA: 0.32,
           DOODLE_HIGHLIGHT_WIDTH_SCALE: 4,
+          // 笔迹透明度由用户自己拉，画笔和高亮共用这一个值：
+          // 「半透明的普通笔」和「很淡的高亮」都用得上。
+          DOODLE_ALPHA_DEFAULT: 0.32,
+          DOODLE_ALPHA_MIN: 0.05,
+          DOODLE_ALPHA_MAX: 1,
           // 笔迹点的最小间隔（世界坐标）。笔尖会报出大量几乎重合的点，
           // 全存下来会让画布数据膨胀好几个数量级。
           DOODLE_MIN_STEP: 0.6,
@@ -4855,6 +4997,7 @@ notify pgrst, 'reload schema';</textarea
             'doodle.penTitle': 'Draw with the stylus',
             'doodle.highlight': 'Highlight',
             'doodle.highlightTitle': 'Wide translucent marker, for emphasising text',
+            'doodle.alpha': 'Opacity',
             'doodle.eraser': 'Eraser',
             'doodle.eraserTitle': 'Erase strokes',
             'doodle.undo': 'Undo',
@@ -4865,6 +5008,7 @@ notify pgrst, 'reload schema';</textarea
             'notify.doodleFull': 'Doodle limit reached ({0} strokes); clear some to keep drawing',
             'border.preset': 'Preset',
             'border.hex': '#hex',
+            'border.custom': 'Custom',
             'border.reset': 'Default',
             'img.sizeLabel': 'Display size',
             'img.sizeSmall': 'Small',
@@ -5135,6 +5279,7 @@ notify pgrst, 'reload schema';</textarea
             'doodle.penTitle': '用电容笔书写',
             'doodle.highlight': '高亮',
             'doodle.highlightTitle': '宽而半透明的马克笔，用来在文字上划重点',
+            'doodle.alpha': '透明度',
             'doodle.eraser': '橡皮',
             'doodle.eraserTitle': '擦掉笔迹',
             'doodle.undo': '撤销一笔',
@@ -5145,6 +5290,7 @@ notify pgrst, 'reload schema';</textarea
             'notify.doodleFull': '涂鸦已达上限（{0} 笔），清掉一些再继续',
             'border.preset': '预设',
             'border.hex': '#色值',
+            'border.custom': '自定义',
             'border.reset': '恢复默认',
             'img.sizeLabel': '显示尺寸',
             'img.sizeSmall': '小',
@@ -9566,6 +9712,9 @@ notify pgrst, 'reload schema';</textarea
           // 原来是单个 erasing 布尔值，结果「橡皮」和「粗细」
           // 两边的选中样式会同时亮着，用户分不清当前生效的是哪个。
           tool: 'pen',
+          // 落笔那一刻就把当时的 alpha 定死进这一笔，
+          // 所以事后再拉滑块不会改动已经画好的笔迹。
+          alpha: CONFIG.DOODLE_ALPHA_DEFAULT,
           color: CONFIG.DOODLE_DEFAULT_COLOR,
           widthIndex: CONFIG.DOODLE_DEFAULT_WIDTH_INDEX,
           _canvas: null,
@@ -9632,6 +9781,13 @@ notify pgrst, 'reload schema';</textarea
           _pressure(e) {
             const p = typeof e.pressure === 'number' ? e.pressure : 0
             return p > CONFIG.DOODLE_MIN_PRESSURE ? Math.min(1, p) : 1
+          },
+
+          // 当前透明度，夹在配置允许的区间内。
+          _alpha() {
+            const a = Number(DoodleManager.alpha)
+            if (!Number.isFinite(a)) return CONFIG.DOODLE_ALPHA_DEFAULT
+            return Math.min(CONFIG.DOODLE_ALPHA_MAX, Math.max(CONFIG.DOODLE_ALPHA_MIN, a))
           },
 
           _width() {
@@ -9827,7 +9983,7 @@ notify pgrst, 'reload schema';</textarea
             DoodleManager.live = {
               c: DoodleManager.color,
               w: DoodleManager._width() * (hl ? CONFIG.DOODLE_HIGHLIGHT_WIDTH_SCALE : 1),
-              a: hl ? CONFIG.DOODLE_HIGHLIGHT_ALPHA : 1,
+              a: DoodleManager._alpha(),
               p: [[round1(world.x), round1(world.y), DoodleManager._pressure(e)]],
             }
             DoodleManager.render()
@@ -9988,6 +10144,19 @@ notify pgrst, 'reload schema';</textarea
               })
             }
             const undo = document.getElementById('db-undo')
+            // 透明度滑块。只在「画笔 / 高亮」下有意义，
+            // 橡皮时会被 syncBar 整段淡掉并禁用。
+            const alphaInput = document.getElementById('db-alpha')
+            const alphaVal = document.getElementById('db-alpha-val')
+            if (alphaInput) {
+              const onAlpha = () => {
+                const v = parseInt(alphaInput.value, 10)
+                DoodleManager.alpha = Number.isFinite(v) ? v / 100 : CONFIG.DOODLE_ALPHA_DEFAULT
+                if (alphaVal) alphaVal.textContent = Math.round(DoodleManager._alpha() * 100) + '%'
+              }
+              alphaInput.addEventListener('input', onAlpha)
+              alphaInput.addEventListener('change', onAlpha)
+            }
             if (undo) undo.addEventListener('click', () => DoodleManager.undoStroke())
             const clear = document.getElementById('db-clear')
             if (clear) {
@@ -10034,6 +10203,15 @@ notify pgrst, 'reload schema';</textarea
                 )
               })
             }
+            const alphaSec = document.querySelector('.db-alpha')
+            const alphaInput = document.getElementById('db-alpha')
+            const alphaVal = document.getElementById('db-alpha-val')
+            if (alphaSec) alphaSec.style.opacity = drawing ? '1' : '0.4'
+            if (alphaInput) {
+              alphaInput.disabled = !drawing
+              alphaInput.value = String(Math.round(DoodleManager._alpha() * 100))
+            }
+            if (alphaVal) alphaVal.textContent = Math.round(DoodleManager._alpha() * 100) + '%'
             const undo = document.getElementById('db-undo')
             if (undo) undo.disabled = !DoodleManager.strokes.length
           },
@@ -10361,9 +10539,12 @@ notify pgrst, 'reload schema';</textarea
             // 落笔时经常就是压在节点上写的，如果这时手指去拖节点、
             // 拉连线、滚正文，画布就完全没反应，用户会以为卡住了。
             // 所以涂鸦模式下单指一律平移，双指仍然是缩放（上面已处理）。
-            // 长按菜单也一并关掉：涂鸦时误触弹出右键菜单很烦人。
             if (AppState.doodleMode) {
-              this._clearLongPress()
+              // 长按依然要能弹右键菜单 —— 平板上没有别的右键入口，
+              // 关掉它等于在平板上完全没法用右键菜单。
+              // _armLongPress 内部会在手指抖动超过阈值时自我取消，
+              // 而且只在「按住不动」时才触发，所以不会误弹。
+              this._armLongPress(target, x, y)
               this.panStart = { x: x, y: y }
               CanvasManager.beginPan(x, y)
               e.preventDefault()
@@ -13830,9 +14011,24 @@ notify pgrst, 'reload schema';</textarea
               lockItem.querySelector('span').textContent = t(isLocked ? 'ctx.unlock' : 'ctx.lock')
             }
             const ctxMenu = DOM.contextMenu
-            ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px'
-            ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px'
+            // 量真实尺寸再摆位。菜单有七八项，实际高度三百多像素，
+            // 原来那个写死的 200 在平板横屏（可视高度只有 ~400）上
+            // 会把菜单顶出屏幕底边，下半截就永远点不到。
+            // 现在：贴不到右边就左移，贴不到下边就翻到手指上方。
             ctxMenu.classList.add('open')
+            const mw = ctxMenu.offsetWidth || 200
+            const mh = ctxMenu.offsetHeight || 200
+            const margin = 8
+            let left = e.clientX
+            if (left + mw > window.innerWidth - margin) left = window.innerWidth - mw - margin
+            if (left < margin) left = margin
+            let top = e.clientY
+            if (top + mh > window.innerHeight - margin) {
+              top = e.clientY - mh - margin
+              if (top < margin) top = Math.max(margin, window.innerHeight - mh - margin)
+            }
+            ctxMenu.style.left = Math.round(left) + 'px'
+            ctxMenu.style.top = Math.round(top) + 'px'
             e.preventDefault()
           })
           document.addEventListener('click', (e) => {
