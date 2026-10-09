@@ -1034,43 +1034,87 @@
         border: 1px solid var(--border-dim);
         border-radius: var(--radius);
         background: transparent;
+        cursor: pointer;
+        padding: 0;
+      }
+      /* 没选自定义色时用对角线提示这是「取色入口」，选了色则纯色填充 */
+      .nbp-swatch::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: repeating-linear-gradient(
+          45deg,
+          var(--border-dim),
+          var(--border-dim) 3px,
+          transparent 3px,
+          transparent 6px
+        );
+        pointer-events: none;
+      }
+      .nbp-swatch.has-color::before {
+        content: none;
       }
       .nbp-swatch:hover {
         border-color: var(--border);
       }
-      .nbp-swatch:focus-within {
+      .nbp-swatch.active {
         border-color: var(--text);
       }
-      .nbp-color {
-        position: absolute;
-        /* 视觉上留 3px 内边距，色块比外框小一圈，看起来才不顶边。
-           热区仍然等于整个外框，手指按哪都是准的。 */
-        left: 3px;
-        top: 3px;
-        width: calc(100% - 6px);
-        height: calc(100% - 6px);
-        padding: 0;
-        border: 0;
-        background: transparent;
+      /* ===== 自绘 HSV 取色面板 ===== */
+      .nbp-picker {
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .nbp-picker.active {
+        display: flex;
+      }
+      .nbp-sv {
+        position: relative;
+        height: 132px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        cursor: crosshair;
+        touch-action: none;
+        /* 底色 backgroundColor 由 JS 按当前色相写入 */
+        background-image:
+          linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+          linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+      }
+      .nbp-hue {
+        position: relative;
+        height: 12px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
         cursor: pointer;
-        -webkit-appearance: none;
-        appearance: none;
+        touch-action: none;
+        background-image: linear-gradient(
+          to right,
+          #f00 0%,
+          #ff0 17%,
+          #0f0 33%,
+          #0ff 50%,
+          #00f 67%,
+          #f0f 83%,
+          #f00 100%
+        );
       }
-      /* UA 画的色块：去掉它自带的边框和圆角，不然会溢出 .nbp-swatch */
-      .nbp-color::-webkit-color-swatch-wrapper {
-        padding: 0;
-        border: 0;
+      .nbp-marker {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
       }
-      .nbp-color::-webkit-color-swatch {
-        border: 0;
-        border-radius: 1px;
-      }
-      .nbp-color::-moz-color-swatch {
-        border: 0;
-        border-radius: 1px;
-      }
-      .nbp-color:focus {
-        outline: none;
+      .nbp-hue .nbp-marker {
+        width: 4px;
+        height: 16px;
+        border-radius: 2px;
+        top: 50%;
       }
       .nbp-hex {
         flex: 1 1 auto;
@@ -2808,6 +2852,12 @@
           height: 40px;
           flex: 0 0 42px;
         }
+        .nbp-sv {
+          height: 168px;
+        }
+        .nbp-hue {
+          height: 16px;
+        }
         .nbp-hex {
           font-size: 16px;
           padding: 9px 10px;
@@ -3766,6 +3816,18 @@
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.tools">工具</span>
+        <div
+          class="menu-btn"
+          data-action="autoLayout"
+          data-i18n="menu.autoLayout"
+          data-i18n-title="menu.autoLayoutTitle"
+        ></div>
+        <div
+          class="menu-btn"
+          data-action="fitView"
+          data-i18n="menu.fitView"
+          data-i18n-title="menu.fitViewTitle"
+        ></div>
         <div class="menu-btn" data-action="resetView" data-i18n="menu.resetView"></div>
         <div
           class="menu-btn"
@@ -4078,13 +4140,17 @@
       <div class="nbp-swatches" id="nbp-swatches"></div>
       <div class="nbp-label" data-i18n="border.custom">Custom</div>
       <div class="nbp-row">
-        <!-- 原生 color 控件没法直接改样式：它内部那个色块是 UA 画的，
-             尺寸/padding 都由浏览器决定，会顶出边框。
-             所以外面套一个自己画的框（.nbp-swatch）负责视觉，
-             input 只作为一块透明的热区叠在上面。 -->
-        <span class="nbp-swatch">
-          <input type="color" class="nbp-color" id="nbp-color" aria-label="border color" />
-        </span>
+        <!-- 自定义取色：点击色块展开自绘的 HSV 面板。
+             浏览器原生 color 控件是 UA 画的，和本页的 mono 极简风太割裂，
+             已弃用，改由下面的 .nbp-picker 接管取色。 -->
+        <button
+          type="button"
+          class="nbp-swatch"
+          id="nbp-swatch"
+          data-i18n-title="border.custom"
+          aria-label="Custom colour"
+          aria-expanded="false"
+        ></button>
         <input
           type="text"
           class="nbp-hex"
@@ -4095,6 +4161,28 @@
           data-i18n-placeholder="border.hex"
           placeholder="#000000"
         />
+      </div>
+      <div class="nbp-picker" id="nbp-picker">
+        <div
+          class="nbp-sv"
+          id="nbp-sv"
+          role="application"
+          aria-label="Saturation / Brightness"
+          tabindex="-1"
+        >
+          <span class="nbp-marker" id="nbp-sv-marker"></span>
+        </div>
+        <div
+          class="nbp-hue"
+          id="nbp-hue"
+          role="slider"
+          aria-label="Hue"
+          aria-valuemin="0"
+          aria-valuemax="360"
+          tabindex="-1"
+        >
+          <span class="nbp-marker" id="nbp-hue-marker"></span>
+        </div>
       </div>
       <div class="nbp-row2">
         <button type="button" class="nbp-clear" id="nbp-clear" data-i18n="border.reset">
@@ -4835,6 +4923,10 @@ notify pgrst, 'reload schema';</textarea
             'menu.full': 'FULL',
             'menu.reset': 'RESET',
             'menu.resetView': 'RESET ZOOM',
+            'menu.autoLayout': 'LAYOUT',
+            'menu.autoLayoutTitle': 'Auto-arrange every node into a tidy top-down tree',
+            'menu.fitView': 'FIT',
+            'menu.fitViewTitle': 'Fit the whole canvas into the window',
             'menu.settings': 'SETTINGS',
             'menu.nodebg': 'NODE BG',
             'menu.lang': '中文',
@@ -4901,7 +4993,7 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.shortcuts': 'Shortcuts',
             'hk.title': 'Keyboard Shortcuts',
             'hk.rows':
-              'General§Undo the last change|{M} Z|Redo it again|{M} Shift + Z|Redo it again|{M} Y|Save the workspace as a .zc file|{M} S|Open a .zc workspace file|{M} O|Open this panel|?|Close every dropdown, hide the floating toolbar, cancel a connection being drawn|Esc~~While the caret is in node body text§Indent the first line|Tab|Unindent the first line|Shift + Tab|Indent the first line|{M} ]|Unindent the first line|{M} [~~While a connection is selected§Delete the selected connection|Delete / Backspace~~While focused in a field§Commit the image URL|Enter|Discard the edit and keep the previous value|Esc|Commit the Markdown or formula source|{M} Enter|Discard the source edit|Esc|Confirm the node title|Enter~~While focused in the cloud-sync dialog§Sign in|Enter',
+              'General§Undo the last change|{M} Z|Redo it again|{M} Shift + Z|Redo it again|{M} Y|Save the workspace as a .zc file|{M} S|Open a .zc workspace file|{M} O|Open this panel|?|Close every dropdown, hide the floating toolbar, cancel a connection being drawn|Esc|Auto-arrange every node into a tidy top-down tree|{M} Shift + L|Fit the whole canvas into the window|{M} Shift + F~~While the caret is in node body text§Indent the first line|Tab|Unindent the first line|Shift + Tab|Indent the first line|{M} ]|Unindent the first line|{M} [~~While a connection is selected§Delete the selected connection|Delete / Backspace~~While focused in a field§Commit the image URL|Enter|Discard the edit and keep the previous value|Esc|Commit the Markdown or formula source|{M} Enter|Discard the source edit|Esc|Confirm the node title|Enter~~While focused in the cloud-sync dialog§Sign in|Enter',
             'hk.note':
               '{M} Z / {M} Shift + Z undo and redo the canvas itself — node creation, drag, resize, delete, connections and text edits. Continuous typing is grouped into one step. The history stack is per canvas: switching canvases resets it. {M} S and {M} O fire anywhere, including while you are typing, so the browser default is always suppressed. Esc never closes the confirm dialog — use Cancel or click the backdrop. The first-line indent keys only apply to text, todo and group nodes.',
             'ft.style': 'Style',
@@ -5031,6 +5123,8 @@ notify pgrst, 'reload schema';</textarea
             'notify.nodeBgOn': 'Node background: ON',
             'notify.nodeBgOff': 'Node background: OFF',
             'notify.viewReset': 'View reset',
+            'notify.layoutApplied': 'Auto layout applied',
+            'notify.fitApplied': 'Zoomed to fit',
             'notify.nodeRemoved': 'Node removed',
             'notify.dragToConnect': "Drag to another node's port to connect",
             'notify.connected': 'Connected!',
@@ -5119,6 +5213,10 @@ notify pgrst, 'reload schema';</textarea
             'menu.full': '全部',
             'menu.reset': '重置',
             'menu.resetView': '重置缩放',
+            'menu.autoLayout': '自动布局',
+            'menu.autoLayoutTitle': '把所有节点自动排成整齐的下行树',
+            'menu.fitView': '适应',
+            'menu.fitViewTitle': '让整张画布适应窗口显示',
             'menu.settings': '设置',
             'menu.nodebg': '节点背景',
             'menu.lang': 'EN',
@@ -5185,7 +5283,7 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.shortcuts': '快捷键',
             'hk.title': '快捷键',
             'hk.rows':
-              '全局§把工作区存为 .zc 文件|{M} S|打开 .zc 工作区文件|{M} O|打开 / 重新载入本说明|?|关闭所有下拉菜单、收起浮动工具条、取消正在拖的连线|Esc~~焦点在节点正文里时§首行缩进|Tab|取消首行缩进|Shift + Tab|首行缩进|{M} ]|取消首行缩进|{M} [~~已选中一条连线时§删除选中的连线|Delete / Backspace~~焦点在输入框上时§确认图片地址|Enter|放弃这次修改|Esc|提交 Markdown / 公式源码|{M} Enter|放弃源码修改|Esc|确认节点标题|Enter~~焦点在云同步弹窗里时§登录|Enter',
+              '全局§把工作区存为 .zc 文件|{M} S|打开 .zc 工作区文件|{M} O|打开 / 重新载入本说明|?|关闭所有下拉菜单、收起浮动工具条、取消正在拖的连线|Esc|自动布局：把所有节点排成整齐的下行树|{M} Shift + L|适应：让整张画布铺满窗口|{M} Shift + F~~焦点在节点正文里时§首行缩进|Tab|取消首行缩进|Shift + Tab|首行缩进|{M} ]|取消首行缩进|{M} [~~已选中一条连线时§删除选中的连线|Delete / Backspace~~焦点在输入框上时§确认图片地址|Enter|放弃这次修改|Esc|提交 Markdown / 公式源码|{M} Enter|放弃源码修改|Esc|确认节点标题|Enter~~焦点在云同步弹窗里时§登录|Enter',
             'hk.note':
               '{M} Z 与 {M} Shift + Z 撤销/重做的是画布本身：新建、拖动、改尺寸、删除、连线以及正文输入都算，连续打字会合并成一步。历史记录按画布独立保存，切换画布会重置。{M} S 与 {M} O 在任何位置都会触发，包括正在打字时，所以浏览器原本的「保存页面 / 打开文件」被完全接管。Esc 不会关闭确认框，请点「取消」或点击遮罩。首行缩进相关的键位只在文本、待办、分组这三类节点的正文里生效。',
             'ft.style': '样式',
@@ -5316,6 +5414,8 @@ notify pgrst, 'reload schema';</textarea
             'theme.light': '浅色',
             'theme.dark': '深色',
             'notify.viewReset': '视图已重置',
+            'notify.layoutApplied': '已应用自动布局',
+            'notify.fitApplied': '已缩放至适应窗口',
             'notify.nodeRemoved': '节点已删除',
             'notify.dragToConnect': '拖动到另一个节点的端口以连接',
             'notify.connected': '已连接！',
@@ -7807,6 +7907,126 @@ notify pgrst, 'reload schema';</textarea
             CONFIG.BORDER_PRESETS.forEach((c) => wrap.appendChild(mk(c, c)))
           },
 
+          // ===== 自绘 HSV 取色面板 =====
+          _hsv: { h: 0, s: 0, v: 0 },
+
+          _hsvToHex(h, s, v) {
+            const c = v * s
+            const seg = ((((h % 360) + 360) % 360) / 60)
+            const x = c * (1 - Math.abs((seg % 2) - 1))
+            let r = 0
+            let g = 0
+            let b = 0
+            if (seg < 1) {
+              r = c
+              g = x
+            } else if (seg < 2) {
+              r = x
+              g = c
+            } else if (seg < 3) {
+              g = c
+              b = x
+            } else if (seg < 4) {
+              g = x
+              b = c
+            } else if (seg < 5) {
+              r = x
+              b = c
+            } else {
+              r = c
+              b = x
+            }
+            const m = v - c
+            const to = (n) => Math.round((n + m) * 255).toString(16).padStart(2, '0')
+            return '#' + to(r) + to(g) + to(b)
+          },
+
+          _hexToHsv(hex) {
+            const h = NodeBorder.normalize(hex) || '#000000'
+            const r = parseInt(h.slice(1, 3), 16) / 255
+            const g = parseInt(h.slice(3, 5), 16) / 255
+            const b = parseInt(h.slice(5, 7), 16) / 255
+            const max = Math.max(r, g, b)
+            const min = Math.min(r, g, b)
+            const d = max - min
+            let hue = 0
+            if (d) {
+              if (max === r) hue = ((g - b) / d) % 6
+              else if (max === g) hue = (b - r) / d + 2
+              else hue = (r - g) / d + 4
+              hue *= 60
+              if (hue < 0) hue += 360
+            }
+            return { h: hue, s: max ? d / max : 0, v: max }
+          },
+
+          // 依据当前 _hsv 重绘 SV 底色、两个游标位置
+          _renderPicker() {
+            const h = NodeBorder._hsv.h
+            const s = NodeBorder._hsv.s
+            const v = NodeBorder._hsv.v
+            const sv = document.getElementById('nbp-sv')
+            const svM = document.getElementById('nbp-sv-marker')
+            const hueM = document.getElementById('nbp-hue-marker')
+            const hueBar = document.getElementById('nbp-hue')
+            if (sv) sv.style.backgroundColor = `hsl(${h}, 100%, 50%)`
+            if (svM) {
+              svM.style.left = s * 100 + '%'
+              svM.style.top = (1 - v) * 100 + '%'
+            }
+            if (hueM) hueM.style.left = (h / 360) * 100 + '%'
+            if (hueBar) hueBar.setAttribute('aria-valuenow', Math.round(h))
+          },
+
+          // 颜色从面板外部（预设/hex/清除）改变时，若面板正打开就同步游标
+          _syncPickerFromHex(hex) {
+            const picker = document.getElementById('nbp-picker')
+            if (!picker || !picker.classList.contains('active')) return
+            const c = NodeBorder.normalize(hex)
+            if (!c) return
+            NodeBorder._hsv = NodeBorder._hexToHsv(c)
+            NodeBorder._renderPicker()
+          },
+
+          _openPicker() {
+            const picker = document.getElementById('nbp-picker')
+            const swatchEl = document.getElementById('nbp-swatch')
+            const hexInput = document.getElementById('nbp-hex')
+            if (picker) picker.classList.add('active')
+            if (swatchEl) {
+              swatchEl.classList.add('active')
+              swatchEl.setAttribute('aria-expanded', 'true')
+            }
+            const hex = hexInput ? NodeBorder.normalize(hexInput.value) : ''
+            NodeBorder._hsv = NodeBorder._hexToHsv(hex || '#888888')
+            NodeBorder._renderPicker()
+          },
+
+          _closePicker() {
+            const picker = document.getElementById('nbp-picker')
+            const swatchEl = document.getElementById('nbp-swatch')
+            if (picker) picker.classList.remove('active')
+            if (swatchEl) {
+              swatchEl.classList.remove('active')
+              swatchEl.setAttribute('aria-expanded', 'false')
+            }
+          },
+
+          // 入口色块预览：有自定义色则纯色填充，否则显示斜纹提示
+          _syncSwatch() {
+            const swatchEl = document.getElementById('nbp-swatch')
+            if (!swatchEl) return
+            const node = NodeBorder._node
+            const c = node && node.dataset.borderColor ? node.dataset.borderColor : ''
+            if (c) {
+              swatchEl.style.background = c
+              swatchEl.classList.add('has-color')
+            } else {
+              swatchEl.style.background = ''
+              swatchEl.classList.remove('has-color')
+            }
+          },
+
           open(node, btn) {
             if (!node || !btn) return
             NodeBorder.close()
@@ -7815,11 +8035,11 @@ notify pgrst, 'reload schema';</textarea
             NodeBorder._node = node
             NodeBorder._buildSwatches()
             const cur = node.dataset.borderColor || ''
-            const colorInput = document.getElementById('nbp-color')
             const hexInput = document.getElementById('nbp-hex')
-            if (colorInput) colorInput.value = cur || '#888888'
             if (hexInput) hexInput.value = cur
             NodeBorder._markActive(document.getElementById('nbp-swatches'), cur)
+            NodeBorder._closePicker()
+            NodeBorder._syncSwatch()
             pop.classList.add('active')
             // 定位：默认贴在按钮下方，靠近视口边缘时翻转
             const r = btn.getBoundingClientRect()
@@ -7837,6 +8057,7 @@ notify pgrst, 'reload schema';</textarea
             const pop = document.getElementById('node-border-pop')
             if (pop) pop.classList.remove('active')
             NodeBorder._node = null
+            NodeBorder._closePicker()
           },
 
           isOpen() {
@@ -7850,8 +8071,10 @@ notify pgrst, 'reload schema';</textarea
             // 节点可能已经被删掉 / 画布已经切走，这时写样式毫无意义
             if (!node || !node.isConnected) return
             NodeBorder.apply(node, color)
-            // 系统取色器拖动时会连续触发 input，每次都立刻落盘会把
-            // IndexedDB 写爆。所以拖动过程走防抖，松手（change）才立即写。
+            // 入口色块实时反映当前自定义色
+            NodeBorder._syncSwatch()
+            // 取色面板拖动会连续触发，每次立刻落盘会写爆 IndexedDB；
+            // 拖拽过程走防抖，松手（immediate）才立即写。
             debouncedAutoSave(immediate !== false)
           },
 
@@ -7868,40 +8091,90 @@ notify pgrst, 'reload schema';</textarea
             const pop = document.getElementById('node-border-pop')
             if (!pop) return
             const swatches = document.getElementById('nbp-swatches')
-            const colorInput = document.getElementById('nbp-color')
             const hexInput = document.getElementById('nbp-hex')
             const clear = document.getElementById('nbp-clear')
+            const swatchEl = document.getElementById('nbp-swatch')
+            const svBox = document.getElementById('nbp-sv')
+            const hueBar = document.getElementById('nbp-hue')
             if (swatches) {
               swatches.addEventListener('click', (e) => {
                 const b = e.target.closest('.nbp-sw')
                 if (!b) return
                 const c = b.dataset.color || ''
                 if (hexInput) hexInput.value = c
-                if (colorInput) colorInput.value = c || '#888888'
                 NodeBorder._markActive(swatches, c)
                 NodeBorder._commit(c)
+                NodeBorder._syncPickerFromHex(c)
               })
             }
-            if (colorInput) {
-              // 拖动取色器时 input 会连续触发 -> 走防抖；
-              // change（松手）才立刻落盘，避免把 IndexedDB 写爆。
-              colorInput.addEventListener('input', () => {
-                if (hexInput) hexInput.value = colorInput.value
-                NodeBorder._markActive(swatches, colorInput.value)
-                NodeBorder._commit(colorInput.value, false)
-              })
-              colorInput.addEventListener('change', () => {
-                NodeBorder._commit(colorInput.value, true)
+            // 点击入口色块：展开 / 收起自绘 HSV 面板
+            if (swatchEl) {
+              swatchEl.addEventListener('click', () => {
+                const picker = document.getElementById('nbp-picker')
+                if (picker && picker.classList.contains('active')) NodeBorder._closePicker()
+                else NodeBorder._openPicker()
               })
             }
+            // SV 方块 + 色相条的指针拖拽（Pointer Events 兼容鼠标/触屏）
+            const clamp01 = (n) => Math.max(0, Math.min(1, n))
+            const setFromPointer = (el, e) => {
+              const r = el.getBoundingClientRect()
+              const nx = clamp01((e.clientX - r.left) / r.width)
+              const ny = clamp01((e.clientY - r.top) / r.height)
+              if (el === svBox) {
+                NodeBorder._hsv.s = nx
+                NodeBorder._hsv.v = 1 - ny
+              } else {
+                NodeBorder._hsv.h = nx * 360
+              }
+              NodeBorder._renderPicker()
+              const hex = NodeBorder._hsvToHex(
+                NodeBorder._hsv.h,
+                NodeBorder._hsv.s,
+                NodeBorder._hsv.v,
+              )
+              if (hexInput) hexInput.value = hex
+              NodeBorder._markActive(swatches, hex)
+              NodeBorder._commit(hex, false)
+            }
+            const bindDrag = (el) => {
+              if (!el) return
+              let dragging = false
+              el.addEventListener('pointerdown', (e) => {
+                e.preventDefault()
+                dragging = true
+                try {
+                  el.setPointerCapture(e.pointerId)
+                } catch (_) {}
+                setFromPointer(el, e)
+              })
+              el.addEventListener('pointermove', (e) => {
+                if (dragging) setFromPointer(el, e)
+              })
+              const finish = (e) => {
+                if (!dragging) return
+                dragging = false
+                try {
+                  el.releasePointerCapture(e.pointerId)
+                } catch (_) {}
+                NodeBorder._commit(
+                  NodeBorder._hsvToHex(NodeBorder._hsv.h, NodeBorder._hsv.s, NodeBorder._hsv.v),
+                  true,
+                )
+              }
+              el.addEventListener('pointerup', finish)
+              el.addEventListener('pointercancel', finish)
+            }
+            bindDrag(svBox)
+            bindDrag(hueBar)
             if (hexInput) {
               hexInput.addEventListener('change', () => {
                 const c = NodeBorder.normalize(hexInput.value)
                 if (c) {
                   hexInput.value = c
-                  if (colorInput) colorInput.value = c
                   NodeBorder._markActive(swatches, c)
                   NodeBorder._commit(c)
+                  NodeBorder._syncPickerFromHex(c)
                 } else {
                   // 无效输入不落盘，回填成当前真实值
                   hexInput.value = NodeBorder._node
@@ -9496,6 +9769,396 @@ notify pgrst, 'reload schema';</textarea
             AppState.panX = rect.width / 2 - CONFIG.INITIAL_WORLD_X
             AppState.panY = rect.height / 2 - CONFIG.INITIAL_WORLD_Y
             CanvasManager.applyTransform()
+          },
+
+          // 适应：把全部可见节点整体缩放、居中，一次装进窗口。
+          fitView() {
+            const rect = DOM.workspace.getBoundingClientRect()
+            const menuH =
+              parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--menu-h')) ||
+              0
+            const MARGIN = 40
+            const boxes = []
+            getNodes().forEach((n) => {
+              // 折叠分组里的子节点是 display:none，宽高量到 0；
+              // 计入包围盒会把画面往错误方向撑，直接跳过。
+              const w = n.offsetWidth || parseFloat(n.style.width) || 0
+              const h = n.offsetHeight || parseFloat(n.style.height) || 0
+              if (!w && !h) return
+              const l = parseFloat(n.style.left)
+              const t = parseFloat(n.style.top)
+              boxes.push({
+                x: isNaN(l) ? n.offsetLeft || 0 : l,
+                y: isNaN(t) ? n.offsetTop || 0 : t,
+                w,
+                h,
+              })
+            })
+            if (boxes.length === 0) {
+              CanvasManager.resetToInitialWorld()
+              Settings.save()
+              return
+            }
+            let minX = Infinity,
+              minY = Infinity,
+              maxX = -Infinity,
+              maxY = -Infinity
+            boxes.forEach((b) => {
+              minX = Math.min(minX, b.x)
+              minY = Math.min(minY, b.y)
+              maxX = Math.max(maxX, b.x + b.w)
+              maxY = Math.max(maxY, b.y + b.h)
+            })
+            const contentW = Math.max(1, maxX - minX)
+            const contentH = Math.max(1, maxY - minY)
+            const availW = Math.max(1, rect.width - 2 * MARGIN)
+            const availH = Math.max(1, rect.height - menuH - 2 * MARGIN)
+            const fit = Math.min(availW / contentW, availH / contentH)
+            // 只缩不放：已经装得下就保持 100%，不会突然逼近；
+            // 下限跟缩放按钮一致，免得小到看不清。
+            const scale = Math.min(1, Math.max(CONFIG.MIN_SCALE, fit))
+            const cx = (minX + maxX) / 2
+            const cy = (minY + maxY) / 2
+            // 在「菜单栏以下」这条可用带里居中，而不是整个视口。
+            const bandCentreY = (menuH + MARGIN + (rect.height - MARGIN)) / 2
+            AppState.scale = scale
+            AppState.panX = rect.width / 2 - cx * scale
+            AppState.panY = bandCentreY - cy * scale
+            CanvasManager.applyTransform()
+            CanvasManager.scheduleViewSave()
+          },
+
+          // 自动布局：Sugiyama 式分层排布，自上而下。
+          // 步骤：破环 → 最长路径分层 → 跨层长线插虚拟节点占住通道 →
+          // 中位数扫描 + 相邻交换消交叉 → 整层带高定 y、按「自身实测尺寸」
+          // 做横向松弛居中定 x。保证：
+          //   1) 节点两两不重叠：同层按各自宽度留距，跨层按整层统一带高留距，
+          //      所以一排里高低不一的节点也不会纵向互压；
+          //   2) 连线只在层与层之间的空隙里走（竖直端口的贝塞尔曲线 x 被两端
+          //      夹住、y 落在空隙内），既不压节点，长线也靠虚拟通道尽量走直；
+          //   3) 交叉数被排序扫描尽量压低。互不相连的几块子图再横向并排。
+          autoLayout() {
+            const nodes = Array.from(getNodes())
+            if (nodes.length === 0) {
+              CanvasManager.fitView()
+              return
+            }
+            const COL_GAP = 52 // 同层相邻节点水平净间距
+            const ROW_GAP = 72 // 相邻层之间垂直净间距（给连线留空隙）
+            const DUMMY_W = 16 // 跨层连线在中间层占用的通道宽度
+            const DUMMY_H = 8
+            const COMP_GAP = 120 // 互不相连子图之间的水平间距
+            const SWEEPS = 8 // 排序扫描轮数
+
+            // 每个节点读取自身真实尺寸用于排布：minimized 高 32；
+            // display:none（折叠分组里的子节点）量到 0 时回退中间尺寸，
+            // 绝不把某层塌成 0 挤到相邻层。
+            const size = {}
+            nodes.forEach((n) => {
+              size[n.id] = {
+                w: n.offsetWidth || parseFloat(n.style.width) || 240,
+                h: n.offsetHeight || parseFloat(n.style.height) || 120,
+              }
+            })
+
+            // 有向边：去掉自环、去掉重复，只保留两端都存在的
+            const idSet = new Set(nodes.map((n) => n.id))
+            const edgeSeen = new Set()
+            const edges = []
+            AppState.connections.forEach((c) => {
+              if (!idSet.has(c.from) || !idSet.has(c.to) || c.from === c.to) return
+              const k = c.from + '>' + c.to
+              if (edgeSeen.has(k)) return
+              edgeSeen.add(k)
+              edges.push({ from: c.from, to: c.to })
+            })
+
+            // 无向连通块，逐块独立排布
+            const uadj = {}
+            nodes.forEach((n) => (uadj[n.id] = []))
+            edges.forEach((e) => {
+              uadj[e.from].push(e.to)
+              uadj[e.to].push(e.from)
+            })
+            const seen = new Set()
+            const comps = []
+            nodes.forEach((n) => {
+              if (seen.has(n.id)) return
+              const q = [n.id]
+              seen.add(n.id)
+              const comp = []
+              while (q.length) {
+                const cur = q.shift()
+                comp.push(cur)
+                uadj[cur].forEach((nb) => {
+                  if (!seen.has(nb)) {
+                    seen.add(nb)
+                    q.push(nb)
+                  }
+                })
+              }
+              comps.push(comp)
+            })
+
+            const median = (arr) => {
+              if (!arr.length) return null
+              const s = arr.slice().sort((a, b) => a - b)
+              const m = s.length >> 1
+              return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+            }
+
+            function layoutComponent(comp) {
+              const compSet = new Set(comp)
+              const ce = edges.filter((e) => compSet.has(e.from) && compSet.has(e.to))
+
+              // 1) 破环：DFS 把回边反向（仅用于排布，不改真实连线数据）
+              const succ = {}
+              comp.forEach((id) => (succ[id] = []))
+              ce.forEach((e) => succ[e.from].push(e.to))
+              const color = {}
+              comp.forEach((id) => (color[id] = 0))
+              const back = new Set()
+              function dfs(u) {
+                color[u] = 1
+                for (const v of succ[u]) {
+                  if (color[v] === 1) back.add(u + '>' + v)
+                  else if (color[v] === 0) dfs(v)
+                }
+                color[u] = 2
+              }
+              const hasIn = new Set(ce.map((e) => e.to))
+              comp.forEach((id) => {
+                if (!hasIn.has(id)) dfs(id)
+              })
+              comp.forEach((id) => {
+                if (color[id] === 0) dfs(id)
+              })
+              const orient = ce.map((e) =>
+                back.has(e.from + '>' + e.to)
+                  ? { from: e.to, to: e.from }
+                  : { from: e.from, to: e.to },
+              )
+
+              // 2) 最长路径分层（源=0）
+              const rPred = {}
+              const rSucc = {}
+              comp.forEach((id) => {
+                rPred[id] = []
+                rSucc[id] = []
+              })
+              orient.forEach((e) => {
+                rSucc[e.from].push(e.to)
+                rPred[e.to].push(e.from)
+              })
+              const layer = {}
+              const indeg = {}
+              comp.forEach((id) => (indeg[id] = rPred[id].length))
+              const q0 = comp.filter((id) => indeg[id] === 0)
+              q0.forEach((id) => (layer[id] = 0))
+              const qq = q0.slice()
+              while (qq.length) {
+                const u = qq.shift()
+                rSucc[u].forEach((v) => {
+                  layer[v] = Math.max(layer[v] == null ? 0 : layer[v], layer[u] + 1)
+                  if (--indeg[v] === 0) qq.push(v)
+                })
+              }
+              let maxLayer = 0
+              comp.forEach((id) => {
+                if (layer[id] == null) layer[id] = 0
+                maxLayer = Math.max(maxLayer, layer[id])
+              })
+
+              // 3) 建节点表 + 跨层长线插虚拟节点（通道）
+              const all = {}
+              comp.forEach((id) => {
+                all[id] = {
+                  id,
+                  real: true,
+                  layer: layer[id],
+                  w: size[id].w,
+                  h: size[id].h,
+                  preds: [],
+                  succs: [],
+                }
+              })
+              const layerArr = []
+              for (let i = 0; i <= maxLayer; i++) layerArr.push([])
+              comp.forEach((id) => layerArr[layer[id]].push(all[id]))
+              let dc = 0
+              orient.forEach((e) => {
+                const a = all[e.from]
+                const b = all[e.to]
+                if (b.layer - a.layer === 1) {
+                  a.succs.push(b)
+                  b.preds.push(a)
+                  return
+                }
+                if (b.layer <= a.layer) return
+                let prev = a
+                for (let l = a.layer + 1; l < b.layer; l++) {
+                  const d = {
+                    id: '__d' + dc++,
+                    real: false,
+                    layer: l,
+                    w: DUMMY_W,
+                    h: DUMMY_H,
+                    preds: [],
+                    succs: [],
+                  }
+                  layerArr[l].push(d)
+                  all[d.id] = d
+                  prev.succs.push(d)
+                  d.preds.push(prev)
+                  prev = d
+                }
+                prev.succs.push(b)
+                b.preds.push(prev)
+              })
+
+              // 4) 排序消交叉：中位数扫描 + 相邻交换，保留最优的一版
+              layerArr.forEach((L) => L.forEach((v, i) => (v.pos = i)))
+              function crossings() {
+                let total = 0
+                for (let l = 0; l + 1 < layerArr.length; l++) {
+                  const B = layerArr[l + 1]
+                  const pairs = []
+                  B.forEach((v) => v.preds.forEach((p) => pairs.push([p.pos, v.pos])))
+                  pairs.sort((x, y) => x[0] - y[0] || x[1] - y[1])
+                  for (let i = 0; i < pairs.length; i++)
+                    for (let j = i + 1; j < pairs.length; j++)
+                      if (pairs[i][1] > pairs[j][1]) total++
+                }
+                return total
+              }
+              function sweep(l, usePred) {
+                const L = layerArr[l]
+                L.forEach((v) => {
+                  const nb = usePred ? v.preds : v.succs
+                  v._m = nb.length ? median(nb.map((p) => p.pos)) : null
+                  v._fixed = v.real
+                })
+                L.sort((a, b) => {
+                  const am = a._m == null ? -1 : a._m
+                  const bm = b._m == null ? -1 : b._m
+                  if (a._fixed && b._fixed) return am - bm || a.pos - b.pos
+                  if (a._fixed) return -1
+                  if (b._fixed) return 1
+                  return am - bm || a.pos - b.pos
+                })
+                L.forEach((v, i) => (v.pos = i))
+                let swapped = true
+                let guard = 0
+                while (swapped && guard++ <= L.length) {
+                  swapped = false
+                  for (let i = 0; i + 1 < L.length; i++) {
+                    if (L[i]._m != null && L[i + 1]._m != null && L[i]._m > L[i + 1]._m) {
+                      const t = L[i]
+                      L[i] = L[i + 1]
+                      L[i + 1] = t
+                      L[i].pos = i
+                      L[i + 1].pos = i + 1
+                      swapped = true
+                    }
+                  }
+                }
+              }
+              let best = layerArr.map((L) => L.slice())
+              let bestX = crossings()
+              for (let it = 0; it < SWEEPS && bestX > 0; it++) {
+                if (it % 2 === 0) for (let l = 1; l < layerArr.length; l++) sweep(l, true)
+                else for (let l = layerArr.length - 2; l >= 0; l--) sweep(l, false)
+                const x = crossings()
+                if (x < bestX) {
+                  bestX = x
+                  best = layerArr.map((L) => L.slice())
+                }
+              }
+              layerArr.forEach((L, l) => {
+                layerArr[l] = best[l]
+                layerArr[l].forEach((v, i) => (v.pos = i))
+              })
+
+              // 5) 纵向：整层统一带高 + 间隙，矮节点在带内居中
+              const layerMaxH = layerArr.map((L) => L.reduce((m, v) => Math.max(m, v.h), 0))
+              const bandTop = []
+              let y = 0
+              layerArr.forEach((L, l) => {
+                bandTop[l] = y
+                y += layerMaxH[l] + ROW_GAP
+              })
+              layerArr.forEach((L, l) => {
+                L.forEach((v) => {
+                  v.y = bandTop[l] + (layerMaxH[l] - v.h) / 2
+                })
+              })
+
+              // 6) 横向：先左锚定铺满，再按邻居中心做受约束松弛居中。
+              //    每个移动都被夹在左右邻之间，天然保证同层不重叠。
+              layerArr.forEach((L) => {
+                let x = 0
+                L.forEach((v) => {
+                  v.x = x
+                  x += v.w + COL_GAP
+                })
+              })
+              for (let it = 0; it < 8; it++) {
+                const lr = it % 2 === 0
+                layerArr.forEach((L) => {
+                  for (let s = 0; s < L.length; s++) {
+                    const i = lr ? s : L.length - 1 - s
+                    const v = L[i]
+                    const nb = v.preds.concat(v.succs)
+                    if (!nb.length) continue
+                    const target =
+                      nb.reduce((sum, p) => sum + p.x + p.w / 2, 0) / nb.length - v.w / 2
+                    const lo = i > 0 ? L[i - 1].x + L[i - 1].w + COL_GAP : -Infinity
+                    const hi = i < L.length - 1 ? L[i + 1].x - v.w - COL_GAP : Infinity
+                    v.x = Math.max(lo, Math.min(hi, target))
+                  }
+                })
+              }
+
+              const out = []
+              let minX = Infinity
+              let maxX = -Infinity
+              layerArr.forEach((L) =>
+                L.forEach((v) => {
+                  if (!v.real) return
+                  minX = Math.min(minX, v.x)
+                  maxX = Math.max(maxX, v.x + v.w)
+                }),
+              )
+              if (!isFinite(minX)) minX = 0
+              layerArr.forEach((L) =>
+                L.forEach((v) => {
+                  if (v.real) out.push({ id: v.id, x: v.x - minX, y: v.y })
+                }),
+              )
+              return { out, width: isFinite(maxX) ? maxX - minX : 0 }
+            }
+
+            const placements = []
+            let cursorX = 0
+            comps.forEach((comp) => {
+              const res = layoutComponent(comp)
+              res.out.forEach((p) => placements.push({ id: p.id, x: p.x + cursorX, y: p.y }))
+              cursorX += res.width + COMP_GAP
+            })
+
+            placements.forEach((p) => {
+              const el = getNodeById(p.id)
+              if (el) {
+                el.style.left = Math.round(p.x) + 'px'
+                el.style.top = Math.round(p.y) + 'px'
+              }
+            })
+            CanvasManager.applyTransform()
+            debouncedAutoSave(true)
+            // 排完把镜头交给 fitView，和「适应」按钮同一套规则，
+            // 不会出现重排后仍有节点跑出视野。
+            CanvasManager.fitView()
+            notify(t('notify.layoutApplied'))
           },
           applyTransform() {
             const inner = DOM.canvasInner
@@ -13323,6 +13986,13 @@ notify pgrst, 'reload schema';</textarea
               case 'resetView':
                 UIManager.resetView()
                 break
+              case 'autoLayout':
+                CanvasManager.autoLayout()
+                break
+              case 'fitView':
+                CanvasManager.fitView()
+                notify(t('notify.fitApplied'))
+                break
               case 'toggleNodeBg':
                 UIManager.toggleNodeBg()
                 break
@@ -13800,9 +14470,20 @@ notify pgrst, 'reload schema';</textarea
                 return
               }
               // 接管浏览器原生查找，改为聚焦大纲里的搜索框
-              if (k === 'f') {
+              if (k === 'f' && !e.shiftKey) {
                 e.preventDefault()
                 SearchManager.focusInput()
+                return
+              }
+              // 自动布局 / 适应：走 Ctrl/⌘+Shift，避开 ⌘L 聚焦地址栏、
+              // ⌘F 原生查找、以及 Ctrl/Cmd 方向缩放。
+              if (e.shiftKey && (k === 'l' || k === 'f')) {
+                e.preventDefault()
+                if (k === 'l') CanvasManager.autoLayout()
+                else {
+                  CanvasManager.fitView()
+                  notify(t('notify.fitApplied'))
+                }
                 return
               }
             }
