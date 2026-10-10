@@ -7912,7 +7912,7 @@ notify pgrst, 'reload schema';</textarea
 
           _hsvToHex(h, s, v) {
             const c = v * s
-            const seg = ((((h % 360) + 360) % 360) / 60)
+            const seg = (((h % 360) + 360) % 360) / 60
             const x = c * (1 - Math.abs((seg % 2) - 1))
             let r = 0
             let g = 0
@@ -7937,7 +7937,10 @@ notify pgrst, 'reload schema';</textarea
               b = x
             }
             const m = v - c
-            const to = (n) => Math.round((n + m) * 255).toString(16).padStart(2, '0')
+            const to = (n) =>
+              Math.round((n + m) * 255)
+                .toString(16)
+                .padStart(2, '0')
             return '#' + to(r) + to(g) + to(b)
           },
 
@@ -9796,7 +9799,7 @@ notify pgrst, 'reload schema';</textarea
             })
             if (boxes.length === 0) {
               CanvasManager.resetToInitialWorld()
-              Settings.save()
+              CanvasManager.scheduleViewSave()
               return
             }
             let minX = Infinity,
@@ -10154,10 +10157,14 @@ notify pgrst, 'reload schema';</textarea
               }
             })
             CanvasManager.applyTransform()
-            debouncedAutoSave(true)
+            // 顺序要紧：先 fitView 定好镜头，再落盘。
+            // 反过来的话 saveCurrent 会把「排版前」的 pan/scale 写进 doc.view，
+            // 而 fitView 只改内存 —— 刷新后镜头退回旧位置，
+            // 看起来就像「自动排布没保存」。
             // 排完把镜头交给 fitView，和「适应」按钮同一套规则，
             // 不会出现重排后仍有节点跑出视野。
             CanvasManager.fitView()
+            debouncedAutoSave(true)
             notify(t('notify.layoutApplied'))
           },
           applyTransform() {
@@ -10213,7 +10220,10 @@ notify pgrst, 'reload schema';</textarea
             // 同 beginPan：涂鸦模式下不碰行内光标，
             // 否则会把 crosshair 换成 default。
             if (!AppState.doodleMode) DOM.workspace.style.cursor = 'default'
-            if (AppState.panWasDragging) Settings.save()
+            // 拖完平移也要存镜头。原来这里只写 Settings，
+            // 而 Settings.panX/panY/scale 在载入时会被 doc.view 覆盖，
+            // 等于拖了半天、松手一刷新就弹回去。
+            if (AppState.panWasDragging) CanvasManager.scheduleViewSave()
           },
           // 重新设定平移基准（多指变单指时用，避免画面跳一下）
           rebasePan(x, y) {
@@ -10248,9 +10258,18 @@ notify pgrst, 'reload schema';</textarea
             CanvasManager.applyTransform()
             CanvasManager.scheduleViewSave()
           },
+          // 所有会动镜头的操作（滚轮/双指缩放、适应、自动排布、大纲跳转）都走这里。
+          // 两件事都要做：
+          //   Settings.save()        -> 全局设置里的 panX/panY/scale（云同步读它）
+          //   DocManager.saveView()  -> 这张画布自己的镜头（**刷新后真正生效的那个**）
+          // 只做前者的话，刷新时会被 doc.view 里更旧的镜头覆盖掉，
+          // 表现为「适应 / 自动排布之后一刷新就弹回原处」。
           scheduleViewSave() {
             clearTimeout(AppState.wheelSaveTimer)
-            AppState.wheelSaveTimer = setTimeout(() => Settings.save(), 160)
+            AppState.wheelSaveTimer = setTimeout(() => {
+              Settings.save()
+              DocManager.saveView()
+            }, 160)
           },
 
           // 把某个节点摆到视野中央（大纲跳转用）。
@@ -10291,7 +10310,6 @@ notify pgrst, 'reload schema';</textarea
             AppState.panY = menuH + vh / 2 - (top + nh / 2) * scale
             CanvasManager.applyTransform()
             CanvasManager.scheduleViewSave()
-            Settings.save()
           },
 
           initPanZoom() {
@@ -13478,6 +13496,54 @@ notify pgrst, 'reload schema';</textarea
             return DocManager._idx
           },
 
+          // 取这张画布该恢复的镜头。
+          // 优先用 idx.meta[id].view（跟着每次平移/缩放即时更新），
+          // 没有才回退到 doc.view —— 那是老数据里的位置，
+          // 也就是修复前「最后一次内容编辑时」的镜头。
+          readView(id, doc) {
+            const idx = DocManager._idx
+            const meta = idx && idx.meta ? idx.meta[id] : null
+            const v = (meta && meta.view) || (doc && doc.view) || null
+            if (!v) return null
+            const panX = Number(v.panX)
+            const panY = Number(v.panY)
+            const scale = Number(v.scale)
+            if (!Number.isFinite(panX) || !Number.isFinite(panY) || !Number.isFinite(scale)) {
+              return null
+            }
+            // scale 必须 > 0：0 或负数会把整个画布压成一条线，之后再也救不回来
+            if (scale <= 0) return null
+            return { panX: panX, panY: panY, scale: scale }
+          },
+
+          // 只写镜头，不碰画布内容。走 _enqueue 和 saveCurrent 串行化，
+          // 免得两路写索引互相覆盖。切画布期间直接跳过：
+          // 那时 idx.activeId 已经指向新画布了，写进去会串到别的画布上。
+          saveView() {
+            const idx = DocManager._idx
+            if (!idx || !idx.activeId) return Promise.resolve()
+            if (AppState.switchingCanvas) return Promise.resolve()
+            const id = idx.activeId
+            const meta = idx.meta[id] || (idx.meta[id] = {})
+            const view = {
+              panX: AppState.panX,
+              panY: AppState.panY,
+              scale: AppState.scale,
+            }
+            if (
+              meta.view &&
+              meta.view.panX === view.panX &&
+              meta.view.panY === view.panY &&
+              meta.view.scale === view.scale
+            ) {
+              return Promise.resolve()
+            }
+            meta.view = view
+            return DocManager._enqueue(() => ZWStore.writeIndex(idx)).catch((e) => {
+              console.warn('[ZenWriter] view save failed', e)
+            })
+          },
+
           // 保存当前画布到它自己的存储槽（不切画布）
           saveCurrent(data) {
             const idx = DocManager._idx
@@ -13495,11 +13561,16 @@ notify pgrst, 'reload schema';</textarea
               connections: data.connections,
               doodles: Array.isArray(data.doodles) ? data.doodles : [],
             }
+            // 注意：这里是**整个替换** meta[id]，不是合并。
+            // 所以 prevMeta 上的每个字段都必须显式搬过来，
+            // 漏一个（比如下面的 view）就会在下一次内容编辑时被抹掉 ——
+            // 那正是「适应 / 自动排布后一刷新就跳回去」的成因之一。
             idx.meta[id] = {
               name: prevMeta.name || DocManager.defaultName(),
               createdAt: prevMeta.createdAt || now,
               updatedAt: now,
               nodes: data.nodes.length,
+              view: prevMeta.view,
             }
             return DocManager._enqueue(async () => {
               await ZWStore.writeDoc(id, payload)
@@ -13618,10 +13689,14 @@ notify pgrst, 'reload schema';</textarea
               }
 
               // 恢复该画布的视图
-              if (doc.view) {
-                AppState.panX = doc.view.panX || 0
-                AppState.panY = doc.view.panY || 0
-                AppState.scale = doc.view.scale || 1
+              // 恢复该画布的镜头。readView 优先用 idx.meta[id].view
+              //（跟着每次平移/缩放/适应即时更新），
+              // 没有才回退 doc.view —— 那是内容编辑时顺带写下的旧位置。
+              const savedView = DocManager.readView(id, doc)
+              if (savedView) {
+                AppState.panX = savedView.panX
+                AppState.panY = savedView.panY
+                AppState.scale = savedView.scale
                 CanvasManager.applyTransform()
               } else {
                 CanvasManager.resetToInitialWorld()
@@ -13801,11 +13876,16 @@ notify pgrst, 'reload schema';</textarea
                   doodles: Array.isArray(src.doodles) ? src.doodles : [],
                 })
                 idx.order.push(id)
+                // 把源 meta 里的镜头带过来：.zwlib / 云同步往返之后，
+                // 每张画布应该还停在自己上次被看到的位置，
+                // 而不是全部弹回原点。
+                const srcMeta = (obj.meta && obj.meta[srcId]) || src.meta || {}
                 idx.meta[id] = {
                   name: name,
                   createdAt: now,
                   updatedAt: now,
                   nodes: src.nodes.length,
+                  view: srcMeta.view,
                 }
                 added++
                 if (!firstNewId) firstNewId = id
@@ -14907,10 +14987,11 @@ notify pgrst, 'reload schema';</textarea
                 if (sane.dropped) {
                   console.warn('[ZenWriter] dropped ' + sane.dropped + ' dangling connections')
                 }
-                if (doc.view) {
-                  AppState.panX = doc.view.panX || 0
-                  AppState.panY = doc.view.panY || 0
-                  AppState.scale = doc.view.scale || 1
+                const savedView = DocManager.readView(activeId, doc)
+                if (savedView) {
+                  AppState.panX = savedView.panX
+                  AppState.panY = savedView.panY
+                  AppState.scale = savedView.scale
                   CanvasManager.applyTransform()
                 }
               } catch (e) {
@@ -15035,11 +15116,15 @@ notify pgrst, 'reload schema';</textarea
                 connections: (data && data.connections) || [],
               }
               lib.order = [id]
+              // 镜头两处都要写：docs[id].view 是画布记录里的那份（老格式兼容），
+              // meta[id].view 才是载入时优先读的那个。漏掉后者的话，
+              // 这条兜底路径生成的画布一打开就会回到默认视角。
               lib.meta[id] = {
                 name: DocManager.activeName(),
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
                 nodes: ((data && data.nodes) || []).length,
+                view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
               }
             }
             return lib

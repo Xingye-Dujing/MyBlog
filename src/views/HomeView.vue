@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import ChatList from '@/components/ChatList.vue'
 import ChatView from '@/components/ChatView.vue'
+import PortalView from './PortalView.vue'
 
 const route = useRoute()
 
@@ -110,16 +111,8 @@ onUnmounted(() => {
 
     <ChatView v-if="hasActiveChat" class="chat-panel" />
 
-    <div v-else class="empty-state">
-      <div class="empty-content">
-        <div class="empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <p class="empty-title">选择一个对话</p>
-        <p class="empty-sub">或创建新的对话开始写作</p>
-      </div>
+    <div v-else class="portal-panel">
+      <PortalView />
     </div>
   </div>
 </template>
@@ -137,44 +130,14 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.empty-state {
+.portal-panel {
   flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #fafafa;
-}
-
-.empty-content {
-  text-align: center;
-  padding: 20px;
-}
-
-.empty-icon {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  color: #ddd;
-}
-
-.empty-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.empty-title {
-  font-size: 1.1rem;
-  color: #999;
-  margin: 0 0 6px;
-  letter-spacing: 1.5px;
-  font-weight: 200;
-}
-
-.empty-sub {
-  font-size: 0.85rem;
-  color: #ccc;
-  margin: 0;
-  letter-spacing: 0.5px;
+  padding: 64px 48px;
 }
 
 /* Resize handle */
@@ -206,10 +169,9 @@ onUnmounted(() => {
     display: none !important;
   }
 
-  .empty-state {
+  .portal-panel {
     display: none;
   }
-
   .chat-panel {
     width: 100%;
     height: 100dvh;

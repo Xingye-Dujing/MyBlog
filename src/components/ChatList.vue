@@ -99,7 +99,10 @@ function isExpanded(tag) {
 <template>
   <div class="chat-list">
     <div class="list-header">
-      <h1 class="list-title">对话</h1>
+      <div class="title-row">
+        <h1 class="list-title">对话</h1>
+        <a class="portal-link" href="/" @click.prevent="router.push('/')" title="打开单文件网页门户">工具门户 →</a>
+      </div>
     </div>
 
     <div class="search-box">
@@ -284,6 +287,26 @@ function isExpanded(tag) {
   color: #000;
   margin: 0;
   letter-spacing: 2px;
+}
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portal-link {
+  font-size: 0.78rem;
+  color: #bbb;
+  text-decoration: none;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.portal-link:hover {
+  color: #c9372e;
 }
 
 .search-box {
@@ -532,6 +555,14 @@ function isExpanded(tag) {
 
   .list-title {
     font-size: 1.2rem;
+  }
+
+  .title-row {
+    align-items: center;
+  }
+
+  .portal-link {
+    font-size: 0.7rem;
   }
 
   .search-box {
