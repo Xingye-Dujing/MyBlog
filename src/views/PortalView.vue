@@ -1,7 +1,6 @@
 <script setup>
 // 单文件网页门户：条目与 public/ 下的静态页一一对应
 const pages = [
-  { href: '/omm-analysis.html', title: '舆情演化分析', desc: '交互式教程，逐段拆解《刘学州事件》论文' },
   { href: '/omm-annotate.html', title: '文本标注', desc: '逐句标记与批注的阅读标注工具' },
   { href: '/omm-corpus.html', title: '英语语料库', desc: '语料检索、统计与词频浏览' },
   { href: '/omm-data.html', title: '数据工作台', desc: '数据清洗、统计与报表输出' },
