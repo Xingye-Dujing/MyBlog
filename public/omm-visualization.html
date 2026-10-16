@@ -10,14 +10,32 @@
     <link
       href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&display=swap"
       rel="stylesheet"
-      onerror="CDNM.linkFallback(this,'fontLiterataFull')"
+      onerror="CDNM.linkFallback(this, 'fontLiterataFull')"
     />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" onerror="CDNM.scriptFallback(this,'chart451')"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts@7.4.0/dist/apexcharts.min.js" onerror="CDNM.scriptFallback(this,'apexcharts')"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" onerror="CDNM.scriptFallback(this,'echarts')"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" onerror="CDNM.scriptFallback(this,'xlsx0203')"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" onerror="CDNM.scriptFallback(this,'html2canvas')"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" onerror="CDNM.scriptFallback(this,'jspdf421')"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+      onerror="CDNM.scriptFallback(this, 'chart451')"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/apexcharts@7.4.0/dist/apexcharts.min.js"
+      onerror="CDNM.scriptFallback(this, 'apexcharts')"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"
+      onerror="CDNM.scriptFallback(this, 'echarts')"
+    ></script>
+    <script
+      src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
+      onerror="CDNM.scriptFallback(this, 'xlsx0203')"
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+      onerror="CDNM.scriptFallback(this, 'html2canvas')"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"
+      onerror="CDNM.scriptFallback(this, 'jspdf421')"
+    ></script>
     <style>
       :root {
         --bg: #fff;
@@ -2077,6 +2095,7 @@
         ><button class="data-btn" id="save-png-btn">PNG</button
         ><button class="data-btn" id="save-svg-btn">SVG</button
         ><button class="data-btn" id="save-pdf-btn">PDF</button
+        ><button class="data-btn" id="save-tex-btn">TeX</button
         ><button class="data-btn" id="reset-btn">重置</button>
       </div>
     </div>
@@ -15105,6 +15124,975 @@
             reportError('PDF 导出失败', e, true)
           }
         }
+
+        /*
+         * LaTeX / PGFPlots 导出：把当前图表的数据编译成一份可被 MiKTeX
+         * （XeLaTeX）直接编译的 .tex 源码。与截图类导出不一样，这里导出的是
+         * “数据 + 矢量绘图代码”，放大不失真、可二次编辑。
+         * 说明：
+         * - 统一使用 standalone 文档类，编译后得到一张紧贴图表的独立图。
+         * - 中文依赖 ctex/xeCJK，默认 SimSun（宋体），Windows + MiKTeX 自带。
+         * - 折线/柱状/面积/散点/雷达/热图/箱线/直方/误差棒等使用 pgfplots 精确还原；
+         *   桑基/网络/弦线等没有通用矢量画法的类型，导出为可编译的数据表。
+         */
+        function texEscapeText(value) {
+          let s = String(value ?? '')
+          s = s.replace(/\u0000/g, '')
+          s = s.replace(/\\/g, '\u0000')
+          s = s.replace(/[&%$#_{}]/g, (c) => '\\' + c)
+          s = s.replace(/~/g, '\\textasciitilde{}').replace(/\^/g, '\\textasciicircum{}')
+          s = s.replace(/\u0000/g, '\\textbackslash{}')
+          s = s.replace(/\s+/g, ' ')
+          return s.trim()
+        }
+        function texNum(n) {
+          const v = Number(n)
+          if (!Number.isFinite(v)) return null
+          if (Number.isInteger(v)) return String(v)
+          let s = v.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
+          if (s === '' || s === '-0') s = '0'
+          return s
+        }
+        function texColorName(i) {
+          const len = palette().length || 1
+          return 'zenC' + (((i % len) + len) % len)
+        }
+        function texPreamble(libs) {
+          const L = []
+          L.push('% !TeX program = xelatex')
+          L.push('% 由 ZENVIZ 导出的图表 LaTeX 源码。')
+          L.push(
+            '% 请使用 XeLaTeX 编译（MiKTeX 自带）；中文默认字体 SimSun（宋体），可在下方 \\setCJKmainfont 修改。',
+          )
+          L.push('\\documentclass[border=12pt]{standalone}')
+          L.push('\\usepackage{xeCJK}')
+          L.push('\\setCJKmainfont{SimSun}')
+          L.push('\\usepackage{pgfplots}')
+          L.push('\\pgfplotsset{compat=1.18}')
+          Array.from(libs || []).forEach((lib) => L.push('\\usepgfplotslibrary{' + lib + '}'))
+          palette().forEach((hex, i) => {
+            const h = String(hex).replace('#', '').toUpperCase()
+            if (/^[0-9A-F]{6}$/.test(h)) L.push('\\definecolor{zenC' + i + '}{HTML}{' + h + '}')
+          })
+          L.push('\\begin{document}')
+          L.push('\\begin{tikzpicture}')
+          return L
+        }
+        function texFooter() {
+          return ['\\end{tikzpicture}', '\\end{document}']
+        }
+        function texQuantile(sorted, pct) {
+          if (!sorted.length) return 0
+          const idx = (sorted.length - 1) * pct
+          const lo = Math.floor(idx)
+          const hi = Math.ceil(idx)
+          return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+        }
+        function texHexToRgb(hex) {
+          const raw = String(hex).replace('#', '')
+          if (/^[0-9a-f]{6}$/i.test(raw))
+            return [
+              parseInt(raw.slice(0, 2), 16),
+              parseInt(raw.slice(2, 4), 16),
+              parseInt(raw.slice(4, 6), 16),
+            ]
+          return [128, 128, 128]
+        }
+        function texRampColor(stops, t) {
+          const arr = stops.map(texHexToRgb)
+          const tt = Math.max(0, Math.min(1, Number(t) || 0))
+          const seg = arr.length - 1
+          const scaled = tt * seg
+          const i = Math.min(arr.length - 2, Math.floor(scaled))
+          const f = scaled - i
+          const a = arr[i],
+            b = arr[i + 1]
+          const r = Math.round(a[0] + (b[0] - a[0]) * f)
+          const g = Math.round(a[1] + (b[1] - a[1]) * f)
+          const bl = Math.round(a[2] + (b[2] - a[2]) * f)
+          return r + ',' + g + ',' + bl
+        }
+
+        function buildTeX() {
+          const d = state.data
+          if (!d || !Array.isArray(d.rows) || d.rows.length === 0)
+            throw new Error('当前没有可导出的数据，请先导入或编辑数据')
+          const type = state.type
+          const libs = new Set()
+          const W = Math.max(8, Math.round(((Number(state.width) || 1000) / 96) * 2.54))
+          const H = Math.max(6, Math.round(((Number(state.height) || 620) / 96) * 2.54))
+          const showTitle = state.showTitle !== false
+          const figTitle = showTitle ? state.title || chartNames[type] || 'ZENVIZ' : ''
+          const legendOn = state.showLegend !== false
+          const gridOn = state.showGrid !== false
+
+          const coordsOf = (data) => {
+            const pts = []
+            data.forEach((v, i) => {
+              const n = numeric(v)
+              if (n !== null) pts.push('(' + (i + 1) + ',' + texNum(n) + ')')
+            })
+            return pts.join(' ')
+          }
+          const axisBase = (extra) => {
+            const opts = [
+              'width=' + W + 'cm',
+              'height=' + H + 'cm',
+              'axis lines=left',
+              gridOn ? 'grid=major' : 'grid=none',
+              'label style={font=\\small}',
+              'tick label style={font=\\footnotesize}',
+            ]
+            if (figTitle) opts.push('title={' + texEscapeText(figTitle) + '}')
+            if (Array.isArray(extra)) opts.push(...extra.filter(Boolean))
+            return opts
+          }
+          const catTicks = (labels) => {
+            if (!labels.length) return []
+            const ticks = labels.map((_, i) => i + 1).join(',')
+            const lstr = labels.map((l) => '{' + texEscapeText(l) + '}').join(',')
+            const out = ['xtick={' + ticks + '}', 'xticklabels={' + lstr + '}']
+            if (labels.length > 6)
+              out.push('xticklabel style={font=\\scriptsize, rotate=45, anchor=east}')
+            return out
+          }
+          const yTicks = (labels) => {
+            const ticks = labels.map((_, i) => i + 1).join(',')
+            const lstr = labels.map((l) => '{' + texEscapeText(l) + '}').join(',')
+            return ['ytick={' + ticks + '}', 'yticklabels={' + lstr + '}']
+          }
+          const legendOpt = () =>
+            legendOn
+              ? 'legend style={at={(0.5,-0.18)},anchor=north,legend columns=-1,draw=none,font=\\scriptsize}'
+              : null
+
+          // 热图/等值/相关矩阵：用核心 TikZ 手绘色块（不依赖 pgfplots matrix 库）
+          const rgbFill = (rgbStr) => {
+            const p = String(rgbStr).split(',')
+            return 'fill={rgb,255:red,' + p[0] + ';green,' + p[1] + ';blue,' + p[2] + '}'
+          }
+          const emitMatrix = (
+            xLabels,
+            yLabels,
+            M,
+            ramp,
+            pmin,
+            pmax,
+            xlabel,
+            ylabel,
+            showValues,
+          ) => {
+            const cw = 0.9,
+              ch = 0.6,
+              nx = xLabels.length,
+              ny = yLabels.length
+            const rotateX = nx > 6
+            const out = ['% —— 矩阵热图（核心 TikZ 手绘，不依赖 pgfplots matrix 库）——']
+            if (figTitle)
+              out.push(
+                '\\node[font=\\large, anchor=south] at (' +
+                  ((nx * cw) / 2).toFixed(2) +
+                  'cm,' +
+                  (ny * ch + 0.8).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(figTitle) +
+                  '};',
+              )
+            const centers = []
+            for (let yi = 0; yi < ny; yi++)
+              for (let xi = 0; xi < nx; xi++) {
+                const v = numeric(M[yi] ? M[yi][xi] : null)
+                const x = (xi * cw).toFixed(3),
+                  y = ((ny - 1 - yi) * ch).toFixed(3)
+                const rgb =
+                  v == null
+                    ? '230,230,230'
+                    : texRampColor(ramp, pmax > pmin ? (v - pmin) / (pmax - pmin) : 0.5)
+                out.push(
+                  '\\fill[' +
+                    rgbFill(rgb) +
+                    '] (' +
+                    x +
+                    'cm,' +
+                    y +
+                    'cm) rectangle +(' +
+                    cw +
+                    'cm,' +
+                    ch +
+                    'cm);',
+                )
+                centers.push({
+                  cx: (xi * cw + cw / 2).toFixed(3),
+                  cy: ((ny - 1 - yi) * ch + ch / 2).toFixed(3),
+                  v,
+                })
+              }
+            out.push(
+              '\\draw[white, line width=0.6pt] (0,0) grid (' +
+                (nx * cw).toFixed(3) +
+                ',' +
+                (ny * ch).toFixed(3) +
+                ');',
+            )
+            out.push(
+              '\\draw[black] (0,0) rectangle (' +
+                (nx * cw).toFixed(3) +
+                'cm,' +
+                (ny * ch).toFixed(3) +
+                'cm);',
+            )
+            if (showValues)
+              centers.forEach((c) => {
+                if (c.v != null)
+                  out.push(
+                    '\\node[font=\\tiny] at (' +
+                      c.cx +
+                      'cm,' +
+                      c.cy +
+                      'cm) {' +
+                      texNum(Math.round(c.v * 100) / 100) +
+                      '};',
+                  )
+              })
+            xLabels.forEach((l, xi) => {
+              const cx = (xi * cw + cw / 2).toFixed(3)
+              out.push(
+                '\\node[font=\\scriptsize,' +
+                  (rotateX ? 'rotate=45, anchor=north east' : 'anchor=north') +
+                  '] at (' +
+                  cx +
+                  'cm,-0.1cm) {' +
+                  texEscapeText(l) +
+                  '};',
+              )
+            })
+            yLabels.forEach((l, yi) => {
+              const cy = ((ny - 1 - yi) * ch + ch / 2).toFixed(3)
+              out.push(
+                '\\node[font=\\scriptsize, anchor=east] at (-0.15cm,' +
+                  cy +
+                  'cm) {' +
+                  texEscapeText(l) +
+                  '};',
+              )
+            })
+            if (xlabel)
+              out.push(
+                '\\node[font=\\small, anchor=north] at (' +
+                  ((nx * cw) / 2).toFixed(2) +
+                  'cm,' +
+                  (-1 - (rotateX ? 0.6 : 0)).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(xlabel) +
+                  '};',
+              )
+            if (ylabel)
+              out.push(
+                '\\node[font=\\small, rotate=90, anchor=south] at (-1.1cm,' +
+                  ((ny * ch) / 2).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(ylabel) +
+                  '};',
+              )
+            const cbx = (nx * cw + 0.5).toFixed(3),
+              steps = 24
+            for (let s = 0; s < steps; s++) {
+              const t = s / (steps - 1)
+              out.push(
+                '\\fill[' +
+                  rgbFill(texRampColor(ramp, t)) +
+                  '] (' +
+                  cbx +
+                  'cm,' +
+                  (t * ny * ch).toFixed(3) +
+                  'cm) rectangle +(0.35cm,' +
+                  ((ny * ch) / steps + 0.002).toFixed(3) +
+                  'cm);',
+              )
+            }
+            out.push(
+              '\\node[font=\\scriptsize, anchor=west] at (' +
+                (nx * cw + 0.9).toFixed(3) +
+                'cm, 0cm) {' +
+                texNum(pmin) +
+                '};',
+            )
+            out.push(
+              '\\node[font=\\scriptsize, anchor=west] at (' +
+                (nx * cw + 0.9).toFixed(3) +
+                'cm,' +
+                (ny * ch).toFixed(3) +
+                'cm) {' +
+                texNum(pmax) +
+                '};',
+            )
+            return out
+          }
+
+          const body = []
+          const stdPlot = (mode, s) => {
+            const labels = s.labels || []
+            const series = s.series || []
+            const extra = [
+              'xlabel={' + texEscapeText(state.xTitle || '') + '}',
+              'ylabel={' + texEscapeText(state.yTitle || '') + '}',
+              ...catTicks(labels),
+            ]
+            if (mode === 'bar') {
+              extra.unshift('ybar')
+              extra.push('enlarge x limits={abs=0.6}', 'bar width=0.5cm')
+            } else {
+              extra.push('enlarge x limits=0.08')
+            }
+            const lg = legendOpt()
+            if (lg && series.length > 1) extra.push(lg)
+            if (mode === 'area') {
+              const nums = series.flatMap((a) => a.data.map(numeric).filter((v) => v != null))
+              var base = nums.length ? Math.min(0, Math.min(...nums)) : 0
+            }
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            series.forEach((sr, si) => {
+              const cn = texColorName(si)
+              let style,
+                pts = coordsOf(sr.data)
+              if (mode === 'line')
+                style =
+                  'color=' +
+                  cn +
+                  ', thick, mark=*, mark size=1.6pt' +
+                  (state.smooth ? ', smooth' : '')
+              else if (mode === 'scatter' || mode === 'dot')
+                style = 'only marks, mark=*, mark size=2.2pt, color=' + cn
+              else if (mode === 'lollipop')
+                style = 'ycomb, thick, mark=*, mark size=3pt, color=' + cn
+              else if (mode === 'bar') style = 'ybar, draw=' + cn + ', fill=' + cn + '!65'
+              else if (mode === 'area') {
+                const list = sr.data
+                  .map(numeric)
+                  .map((n, i) => [i + 1, n])
+                  .filter((p) => p[1] != null)
+                if (list.length) {
+                  const inner = list.map((p) => '(' + p[0] + ',' + texNum(p[1]) + ')')
+                  pts =
+                    '(' +
+                    list[0][0] +
+                    ',' +
+                    texNum(base) +
+                    ') ' +
+                    inner.join(' ') +
+                    ' (' +
+                    list[list.length - 1][0] +
+                    ',' +
+                    texNum(base) +
+                    ')'
+                }
+                style = 'color=' + cn + ', fill=' + cn + '!35, thick'
+              }
+              if (!pts) return
+              lines.push('\\addplot[' + style + '] coordinates {' + pts + '};')
+              if (legendOn && series.length > 1)
+                lines.push('\\addlegendentry{' + texEscapeText(sr.name) + '}')
+            })
+            lines.push('\\end{axis}')
+            return lines
+          }
+
+          if (type === 'line') body.push(...stdPlot('line', rowsToSeries()))
+          else if (type === 'bar') body.push(...stdPlot('bar', rowsToSeries()))
+          else if (type === 'area') body.push(...stdPlot('area', rowsToSeries()))
+          else if (type === 'scatter') body.push(...stdPlot('scatter', rowsToSeries()))
+          else if (type === 'stream' || type === 'ribbon')
+            body.push(...stdPlot('line', rowsToSeries()))
+          else if (type === 'lollipop') body.push(...stdPlot('lollipop', rowsToSeries()))
+          else if (type === 'dotplot' || type === 'swarm')
+            body.push(...stdPlot('dot', rowsToSeries()))
+          else if (type === 'pie') {
+            const slices = getPieSlices().filter((x) => x.value > 0)
+            if (!slices.length) throw new Error('饼图没有可绘制的正数值')
+            const total = slices.reduce((a, b) => a + b.value, 0)
+            const R = 3,
+              L2 = []
+            L2.push('% —— 饼图（TikZ 手绘扇区）——')
+            if (figTitle)
+              L2.push(
+                '\\node[font=\\large] at (' +
+                  R * 0.5 +
+                  'cm,' +
+                  (R + 1.3) +
+                  'cm) {' +
+                  texEscapeText(figTitle) +
+                  '};',
+              )
+            let start = 90
+            slices.forEach((sl, i) => {
+              const frac = sl.value / total,
+                end = start - frac * 360
+              const cn = texColorName(i),
+                mid = (start + end) / 2,
+                pct = (frac * 100).toFixed(1)
+              L2.push(
+                '\\draw[draw=white, very thick, fill=' +
+                  cn +
+                  '] (0,0) -- (' +
+                  start.toFixed(3) +
+                  ':' +
+                  R +
+                  'cm) arc (' +
+                  start.toFixed(3) +
+                  ':' +
+                  end.toFixed(3) +
+                  ':' +
+                  R +
+                  'cm) -- cycle;',
+              )
+              if (frac >= 0.045)
+                L2.push(
+                  '\\node[font=\\scriptsize, align=center] at (' +
+                    mid.toFixed(3) +
+                    ':' +
+                    R * 0.62 +
+                    'cm) {' +
+                    pct +
+                    '\\%};',
+                )
+              start = end
+            })
+            const lx = R + 1.1
+            let ly = slices.length / 2 - 0.25
+            slices.forEach((sl, i) => {
+              const cn = texColorName(i),
+                pct = ((sl.value / total) * 100).toFixed(1)
+              L2.push(
+                '\\draw[fill=' +
+                  cn +
+                  ', draw=none] (' +
+                  lx +
+                  'cm,' +
+                  ly.toFixed(2) +
+                  'cm) rectangle ++(0.35cm,0.35cm);',
+              )
+              L2.push(
+                '\\node[anchor=west, font=\\footnotesize] at (' +
+                  (lx + 0.45) +
+                  'cm,' +
+                  (ly + 0.18).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(sl.name) +
+                  ' (' +
+                  pct +
+                  '\\%)};',
+              )
+              ly -= 0.72
+            })
+            body.push(...L2)
+          } else if (
+            type === 'wordfreq' ||
+            type === 'poster' ||
+            type === 'timeline' ||
+            type === 'smallmultiples'
+          ) {
+            let s = rowsToSeries(),
+              labels = s.labels,
+              data = s.series[0] ? s.series[0].data : []
+            if (type === 'wordfreq') {
+              const tot = new Map()
+              labels.forEach((lb, i) => {
+                const key = String(lb || '').trim(),
+                  v = numeric(data[i])
+                if (key && v != null) tot.set(key, (tot.get(key) || 0) + v)
+              })
+              const arr = Array.from(tot, ([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 30)
+              labels = arr.map((a) => a.name)
+              data = arr.map((a) => a.value)
+            } else if (type === 'smallmultiples') {
+              const sums = new Map()
+              s.series.forEach((sr) => {
+                const t = sr.data.map(numeric).reduce((a, b) => a + (b == null ? 0 : b), 0)
+                sums.set(sr.name, t)
+              })
+              const best = s.series
+                .slice()
+                .sort((a, b) => (sums.get(b.name) || 0) - (sums.get(a.name) || 0))[0]
+              data = best ? best.data : []
+            }
+            const n = labels.length
+            const extra = [
+              'xbar',
+              'xlabel={' + texEscapeText(type === 'wordfreq' ? '词频' : '数值') + '}',
+              'ylabel={' + texEscapeText(state.xTitle || '') + '}',
+              ...yTicks(labels),
+              'enlarge y limits=true',
+              'xmin=0',
+            ]
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            const cn = texColorName(0)
+            const pts = data
+              .map((v, i) => [v, i + 1])
+              .filter((p) => p[0] != null)
+              .map((p) => '(' + texNum(p[0]) + ',' + p[1] + ')')
+              .join(' ')
+            lines.push(
+              '\\addplot[draw=' +
+                cn +
+                ', fill=' +
+                cn +
+                '!65' +
+                (type === 'poster' ? ', nodes near coords' : '') +
+                '] coordinates {' +
+                pts +
+                '};',
+            )
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'heatmap' || type === 'contour') {
+            const s = rowsToSeries(),
+              xl = s.labels,
+              yl = s.series.map((a) => a.name)
+            const nums = []
+            s.series.forEach((a) =>
+              a.data.forEach((v) => {
+                const n = numeric(v)
+                if (n != null) nums.push(n)
+              }),
+            )
+            const mn = nums.length ? Math.min(...nums) : 0
+            const mx = nums.length ? Math.max(...nums) : 1
+            const M = s.series.map((a) => a.data)
+            body.push(
+              ...emitMatrix(
+                xl,
+                yl,
+                M,
+                ['#f7fbff', palette()[0] || '#155EEF'],
+                mn,
+                mx === mn ? mn + 1 : mx,
+                state.xTitle,
+                state.yTitle,
+                false,
+              ),
+            )
+          } else if (type === 'boxplot') {
+            libs.add('statistics')
+            const names = [],
+              stats = []
+            ;(state.yCols || []).forEach((ci) => {
+              const vals = (state.data.rows || [])
+                .map((r) => numeric(r?.[ci]))
+                .filter((v) => v != null)
+                .sort((a, b) => a - b)
+              if (!vals.length) return
+              names.push(String(state.data.headers[ci] ?? '列'))
+              stats.push({
+                min: vals[0],
+                q1: texQuantile(vals, 0.25),
+                med: texQuantile(vals, 0.5),
+                q3: texQuantile(vals, 0.75),
+                max: vals[vals.length - 1],
+              })
+            })
+            if (!stats.length) throw new Error('箱线图需要至少一个有效的数值列')
+            const allv = stats.flatMap((b) => [b.min, b.max])
+            const extra = [
+              'ylabel={' + texEscapeText(state.yTitle || '数值') + '}',
+              ...catTicks(names),
+              'enlarge x limits=0.3',
+              'boxplot/draw direction=y',
+              'ymin=' + texNum(Math.min(...allv)),
+              'ymax=' + texNum(Math.max(...allv)),
+            ]
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            stats.forEach((b, i) => {
+              const cn = texColorName(i)
+              lines.push(
+                '\\addplot+[boxplot prepared={lower whisker=' +
+                  texNum(b.min) +
+                  ', lower quartile=' +
+                  texNum(b.q1) +
+                  ', median=' +
+                  texNum(b.med) +
+                  ', upper quartile=' +
+                  texNum(b.q3) +
+                  ', upper whisker=' +
+                  texNum(b.max) +
+                  '}, draw=' +
+                  cn +
+                  ', fill=' +
+                  cn +
+                  '!20] coordinates {};',
+              )
+            })
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'histogram' || type === 'field') {
+            libs.add('statistics')
+            const s = rowsToSeries(),
+              col = (s.series[0] ? s.series[0].data : []).map(numeric).filter((v) => v != null)
+            if (col.length < 2) throw new Error('直方图至少需要 2 个有效数值')
+            const mn = Math.min(...col),
+              mx = Math.max(...col)
+            const bins = Math.max(5, Math.min(20, Math.round(Math.sqrt(col.length))))
+            const dmin = texNum(mn - (mx - mn) * 0.05 - 0.5),
+              dmax = texNum(mx + (mx - mn) * 0.05 + 0.5)
+            const cn = texColorName(0)
+            const lines = [
+              '\\begin{axis}[' +
+                axisBase([
+                  'xlabel={' + texEscapeText(s.xName || '数值') + '}',
+                  'ylabel={频数}',
+                  mx > mn ? 'xmin=' + dmin : '',
+                  mx > mn ? 'xmax=' + dmax : '',
+                ]).join(',\n  ') +
+                ']',
+            ]
+            lines.push(
+              '\\addplot[draw=' +
+                cn +
+                ', fill=' +
+                cn +
+                '!55, hist={bins=' +
+                bins +
+                ', data min=' +
+                dmin +
+                ', data max=' +
+                dmax +
+                '}] table[row sep=\\\\, y index=0] {',
+            )
+            lines.push(...col.map((v) => texNum(v) + '\\\\'))
+            lines.push('};')
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'errorbar') {
+            const s = rowsToSeries(),
+              pair = getPairSeries(),
+              labels = s.labels || []
+            const vals = pair.first.data,
+              errs = pair.second.data
+            const extra = [
+              'xlabel={' + texEscapeText(state.xTitle || '') + '}',
+              'ylabel={' + texEscapeText(state.yTitle || '') + '}',
+              ...catTicks(labels),
+              'enlarge x limits=0.1',
+            ]
+            const cn = texColorName(0)
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            const pts = []
+            labels.forEach((_, i) => {
+              const v = numeric(vals[i]),
+                e = numeric(errs[i])
+              if (v != null && e != null)
+                pts.push('(' + (i + 1) + ',' + texNum(v) + ') +- (0,' + texNum(e) + ')')
+            })
+            lines.push(
+              '\\addplot[only marks, mark=*, mark size=2pt, color=' +
+                cn +
+                ', error bars/.cd, y dir=both, y explicit] coordinates {',
+            )
+            lines.push(pts.join('\n'))
+            lines.push('};')
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'slope') {
+            const s = rowsToSeries(),
+              pair = getPairSeries(),
+              labels = s.labels || []
+            const objs = labels
+              .map((lb, i) => ({
+                name: String(lb || '对象' + (i + 1)),
+                a: numeric(pair.first.data[i]),
+                b: numeric(pair.second.data[i]),
+              }))
+              .filter((o) => o.a != null && o.b != null)
+            if (!objs.length) throw new Error('斜率图需要每个对象两端的数值')
+            const allv = objs.flatMap((o) => [o.a, o.b])
+            const lines = [
+              '\\begin{axis}[' +
+                axisBase([
+                  'xlabel={阶段}',
+                  'ylabel={' + texEscapeText(state.yTitle || '数值') + '}',
+                  'xtick={0,1}',
+                  'xticklabels={{起点},{终点}}',
+                  'enlarge x limits=0.3',
+                  'ymin=' + texNum(Math.min(...allv)),
+                  'ymax=' + texNum(Math.max(...allv)),
+                ]).join(',\n  ') +
+                ']',
+            ]
+            objs.forEach((o, i) => {
+              lines.push(
+                '\\addplot[mark=*, color=' +
+                  texColorName(i) +
+                  '] coordinates {(0,' +
+                  texNum(o.a) +
+                  ') (1,' +
+                  texNum(o.b) +
+                  ')};',
+              )
+              if (legendOn) lines.push('\\addlegendentry{' + texEscapeText(o.name) + '}')
+            })
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'bump') {
+            const s = rowsToSeries(),
+              stages = s.labels || [],
+              series = s.series || []
+            const k = series.length,
+              rank = series.map(() => [])
+            stages.forEach((_, j) => {
+              const order = series
+                .map((sr, si) => ({ si, v: numeric(sr.data[j]) }))
+                .filter((x) => x.v != null)
+                .sort((a, b) => b.v - a.v)
+              order.forEach((x, idx) => (rank[x.si][j] = idx + 1))
+            })
+            const extra = [
+              'xlabel={' + texEscapeText(state.xTitle || '阶段') + '}',
+              'ylabel={排名}',
+              'y dir=reverse',
+              'ymin=0.5',
+              'ymax=' + (k + 0.5),
+              ...catTicks(stages),
+              'enlarge x limits=0.08',
+            ]
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            series.forEach((sr, si) => {
+              const pts = stages
+                .map((_, j) => (rank[si][j] ? '(' + (j + 1) + ',' + rank[si][j] + ')' : null))
+                .filter(Boolean)
+                .join(' ')
+              if (!pts) return
+              lines.push(
+                '\\addplot[mark=*, color=' + texColorName(si) + '] coordinates {' + pts + '};',
+              )
+              if (legendOn) lines.push('\\addlegendentry{' + texEscapeText(sr.name) + '}')
+            })
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'parallel') {
+            const s = rowsToSeries(),
+              dims = (s.series || []).map((a) => a.name),
+              nrows = (state.data.rows || []).length
+            if (dims.length < 2) throw new Error('平行坐标需要至少 2 个数值维度')
+            const lines = [
+              '\\begin{axis}[' +
+                axisBase([
+                  'xlabel={维度}',
+                  'ylabel={数值}',
+                  'xtick={' + dims.map((_, i) => i + 1).join(',') + '}',
+                  'xticklabels={' + dims.map((d) => '{' + texEscapeText(d) + '}').join(',') + '}',
+                  'enlarge x limits=0.08',
+                ]).join(',\n  ') +
+                ']',
+            ]
+            const cap = Math.min(nrows, 24)
+            for (let r = 0; r < cap; r++) {
+              const pts = s.series
+                .map((a, i) => {
+                  const v = numeric(a.data[r])
+                  return '(' + (i + 1) + ',' + texNum(v == null ? 0 : v) + ')'
+                })
+                .join(' ')
+              lines.push(
+                '\\addplot[thin, mark=*, mark size=1pt, color=' +
+                  texColorName(r) +
+                  ', opacity=0.8] coordinates {' +
+                  pts +
+                  '};',
+              )
+            }
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'correlation') {
+            const cols = (state.yCols || []).map((ci) => ({
+              name: String(state.data.headers[ci] ?? '变量' + ci),
+              vals: (state.data.rows || []).map((r) => numeric(r?.[ci])),
+            }))
+            const m = cols.length
+            if (m < 2) throw new Error('相关矩阵需要至少 2 个数值变量')
+            const pear = (x, y) => {
+              const p = x.map((v, i) => [v, y[i]]).filter((q) => q[0] != null && q[1] != null)
+              if (p.length < 2) return 0
+              const n = p.length,
+                mx = p.reduce((a, q) => a + q[0], 0) / n,
+                my = p.reduce((a, q) => a + q[1], 0) / n
+              let sxy = 0,
+                sx = 0,
+                sy = 0
+              p.forEach((q) => {
+                const dx = q[0] - mx,
+                  dy = q[1] - my
+                sxy += dx * dy
+                sx += dx * dx
+                sy += dy * dy
+              })
+              return sx > 0 && sy > 0 ? sxy / Math.sqrt(sx * sy) : 0
+            }
+            const M = []
+            for (let a = 0; a < m; a++) {
+              M[a] = []
+              for (let b = 0; b < m; b++) M[a][b] = pear(cols[b].vals, cols[a].vals)
+            }
+            const names = cols.map((c) => c.name)
+            body.push(
+              ...emitMatrix(
+                names,
+                names,
+                M,
+                ['#2c7fb8', '#ffffff', '#d73027'],
+                -1,
+                1,
+                '',
+                '',
+                true,
+              ),
+            )
+          } else if (type === 'radial' || type === 'spiral') {
+            libs.add('polar')
+            const s = rowsToSeries(),
+              labels = s.labels || [],
+              data = s.series[0] ? s.series[0].data : []
+            const n = labels.length
+            const nums = data.map(numeric).filter((v) => v != null)
+            const maxv = Math.max(1, nums.length ? Math.max(...nums) : 100)
+            const lines = [
+              '% polaraxis：极角按序号等分；向径按最大值 ' + texNum(maxv) + ' 归一化到 0–10',
+            ]
+            lines.push(
+              '\\begin{polaraxis}[' +
+                axisBase([
+                  'ymin=0',
+                  'ymax=10',
+                  'xtick={0,90,180,270}',
+                  'xticklabel=\\empty',
+                  'minor tick num=0',
+                  'ytick={0,2,4,6,8,10}',
+                  'legend style={at={(1.15,1)},anchor=north,draw=none,font=\\scriptsize}',
+                ]).join(',\n  ') +
+                ']',
+            )
+            const pts = data
+              .map((v, i) => {
+                const x = numeric(v),
+                  ang = n ? (i / n) * 360 : 0
+                return x != null
+                  ? '(' + ang.toFixed(2) + ',' + texNum((Math.max(0, x) / maxv) * 10) + ')'
+                  : null
+              })
+              .filter(Boolean)
+            if (pts.length > 1) pts.push(pts[0])
+            lines.push(
+              '\\addplot[fill=' +
+                texColorName(0) +
+                '!30, draw=' +
+                texColorName(0) +
+                ', mark=*] coordinates {' +
+                pts.join(' ') +
+                '};',
+            )
+            lines.push('\\end{polaraxis}')
+            body.push(...lines)
+          } else if (type === 'radar') {
+            libs.add('polar')
+            const s = rowsToSeries(),
+              dims = s.labels || [],
+              series = s.series || []
+            const nums = series.flatMap((a) => a.data.map(numeric).filter((v) => v != null))
+            const maxv = Math.max(1, nums.length ? Math.max(...nums) : 100)
+            const n = dims.length
+            const lines = [
+              '% 雷达图：维度名见数据，极角按维度序号等分；向径按最大值 ' +
+                texNum(maxv) +
+                ' 归一化到 0–10',
+            ]
+            lines.push(
+              '\\begin{polaraxis}[' +
+                axisBase([
+                  'ymin=0',
+                  'ymax=10',
+                  'xtick={0,90,180,270}',
+                  'xticklabel=\\empty',
+                  'minor tick num=0',
+                  'ytick={0,2,4,6,8,10}',
+                  'legend style={at={(1.15,1)},anchor=north,draw=none,font=\\scriptsize}',
+                ]).join(',\n  ') +
+                ']',
+            )
+            series.forEach((sr, si) => {
+              const pts = sr.data
+                .map((v, i) => {
+                  const x = numeric(v),
+                    ang = n ? (i / n) * 360 : 0
+                  return x != null
+                    ? '(' + ang.toFixed(2) + ',' + texNum((Math.max(0, x) / maxv) * 10) + ')'
+                    : null
+                })
+                .filter(Boolean)
+              if (!pts.length) return
+              pts.push(pts[0])
+              lines.push(
+                '\\addplot[fill=' +
+                  texColorName(si) +
+                  '!20, draw=' +
+                  texColorName(si) +
+                  ', mark=*, mark size=1.2pt] coordinates {' +
+                  pts.join(' ') +
+                  '};',
+              )
+              if (legendOn) lines.push('\\addlegendentry{' + texEscapeText(sr.name) + '}')
+            })
+            lines.push('\\end{polaraxis}')
+            body.push(...lines)
+          } else if (type === 'network' || type === 'sankey' || type === 'chord') {
+            const rows = getFlowRows()
+            if (!rows.length) throw new Error('当前关系数据没有有效的“来源 → 去向 → 权重”记录')
+            const lines = ['% —— 关系数据（桑基/网络/弦线没有通用矢量画法，导出为可编译数据表）——']
+            lines.push(
+              '\\node[font=\\large, align=center] at (0,1.2cm) {' +
+                texEscapeText(figTitle || chartNames[type] || '关系数据') +
+                '};',
+            )
+            let tbl =
+              '\\begin{tabular}{llr}\n\\hline\n' +
+              texEscapeText(chartNames[type]) +
+              '来源 & 去向 & 数值\\\\\n\\hline\n'
+            rows.forEach((r) => {
+              tbl +=
+                texEscapeText(r.source) +
+                ' & ' +
+                texEscapeText(r.target) +
+                ' & ' +
+                texNum(r.value) +
+                '\\\\\n'
+            })
+            tbl += '\\hline\\end{tabular}'
+            lines.push('\\node[anchor=north, align=left, font=\\footnotesize] at (0,0.7cm) {')
+            lines.push(tbl)
+            lines.push('};')
+            body.push(...lines)
+          } else {
+            body.push(...stdPlot('line', rowsToSeries()))
+          }
+
+          const doc = [...texPreamble(libs), ...body, ...texFooter()]
+          return doc.join('\n') + '\n'
+        }
+
+        async function exportTeX() {
+          try {
+            const tex = buildTeX()
+            const blob = new Blob(['\\ufeff' + tex], { type: 'text/x-tex;charset=utf-8' })
+            const a = document.createElement('a')
+            a.download = safeName(state.title) + '.tex'
+            a.href = URL.createObjectURL(blob)
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+            setStatus('TeX 已导出 · 请用 XeLaTeX 编译生成矢量图')
+          } catch (e) {
+            reportError('TeX 导出失败', e, true)
+          }
+        }
+
         $('#property-import-input').onchange = async (e) => {
           const f = e.target.files?.[0]
           if (!f) return
@@ -15115,6 +16103,7 @@
         $('#save-png-btn').onclick = exportPNG
         $('#save-svg-btn').onclick = exportSVG
         $('#save-pdf-btn').onclick = exportPDF
+        $('#save-tex-btn').onclick = exportTeX
         $('#reset-inspector-btn').onclick = resetCurrentEngineProperties
         $('#reset-btn').onclick = () => {
           // 全局“重置”才会重置所有引擎、所有图表的独立属性；右侧“重置”只重置当前图表。
