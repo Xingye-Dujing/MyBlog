@@ -1903,6 +1903,25 @@
         border-width: 2px;
         z-index: 20;
       }
+      /* 多选中的节点：用 outline（不会被 .node.no-bg 的 box-shadow:none 覆盖），
+         并把 header 显出来，这样多选状态下也能抓到任意一个已选节点的把手整体拖动。 */
+      .node.selected {
+        outline: 2px solid var(--accent-green);
+        outline-offset: 3px;
+      }
+      .node.selected .node-header {
+        opacity: 1;
+      }
+      /* 左键框选的橡皮筋：固定定位、不吃事件，只在拖拽期间显示。
+         z-index 压在画布(1)之上、顶栏(999)之下。 */
+      #zw-marquee {
+        position: fixed;
+        display: none;
+        z-index: 500;
+        pointer-events: none;
+        border: 1px solid var(--accent-green);
+        background: rgba(51, 153, 51, 0.12);
+      }
       .node-header {
         height: 32px;
         border-bottom: 1px solid var(--border);
@@ -5484,6 +5503,7 @@ notify pgrst, 'reload schema';</textarea
           connections: [],
           connIdCounter: 0,
           selectedConnId: null,
+          selectedNodeIds: new Set(),
           clipboardNode: null,
           ctxNode: null,
           ctxLeftPress: false,
@@ -8837,7 +8857,8 @@ notify pgrst, 'reload schema';</textarea
               sy,
               ox,
               oy,
-              dragging = false
+              dragging = false,
+              moveList = null
             header.addEventListener('mousedown', (e) => {
               if (
                 e.target.closest('.node-action-btn') ||
@@ -8846,6 +8867,18 @@ notify pgrst, 'reload schema';</textarea
                 node.classList.contains('locked')
               )
                 return
+              // 按住 Shift / Ctrl / Cmd：只做加选/减选，不进入拖动
+              if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                SelectionManager.toggle(node)
+                e.preventDefault()
+                return
+              }
+              // 普通左键：没选中的话就把它单独选中，选中的保持整组一起拖
+              if (!SelectionManager.isSelected(node)) {
+                SelectionManager.clear()
+                SelectionManager.select(node)
+              }
+              moveList = SelectionManager.collectMoveNodes(node)
               dragging = true
               sx = e.clientX
               sy = e.clientY
@@ -8860,22 +8893,16 @@ notify pgrst, 'reload schema';</textarea
               const newTop = oy + (e.clientY - sy) / AppState.scale
               const dx = newLeft - parseFloat(node.style.left || 0)
               const dy = newTop - parseFloat(node.style.top || 0)
-              node.style.left = newLeft + 'px'
-              node.style.top = newTop + 'px'
-              // Sync move group children (both directions)
-              if (node.dataset.type === 'group') {
-                const nodeId = node.id
-                AppState.connections
-                  .filter((c) => c.from === nodeId || c.to === nodeId)
-                  .forEach((c) => {
-                    const childId = c.from === nodeId ? c.to : c.from
-                    const child = document.getElementById(childId)
-                    if (child && !child.classList.contains('locked')) {
-                      child.style.left = parseFloat(child.style.left) + dx + 'px'
-                      child.style.top = parseFloat(child.style.top) + dy + 'px'
-                    }
-                  })
-              }
+              moveList.forEach((n) => {
+                if (n === node) {
+                  n.style.left = newLeft + 'px'
+                  n.style.top = newTop + 'px'
+                  return
+                }
+                if (n.classList.contains('locked')) return
+                n.style.left = parseFloat(n.style.left) + dx + 'px'
+                n.style.top = parseFloat(n.style.top) + dy + 'px'
+              })
               ConnectionManager.renderAll()
             })
             document.addEventListener('mouseup', () => {
@@ -9160,6 +9187,7 @@ notify pgrst, 'reload schema';</textarea
             showConfirm(t('confirm.purgeAll')).then((confirmed) => {
               if (!confirmed) return
               getNodes().forEach((n) => n.remove())
+              SelectionManager.clear()
               ImageManager.gc()
               AppState.connections = []
               ConnectionManager.renderAll()
@@ -10362,6 +10390,188 @@ notify pgrst, 'reload schema';</textarea
                 return
               }
             })
+          },
+        }
+
+        // ================================================================
+        // 11.35 SELECTION MANAGER — 多选
+        // ------------------------------------------------------------
+        // 鼠标左键在空白画布上按下并拖动 = 框选（橡皮筋）。
+        //   - 落在节点上的左键不在这接管，交给节点自己的 header 逻辑
+        //     （header 里再做「点选 / Shift 加选 / 拖整组已选」）。
+        //   - 只在**鼠标**上生效：触屏空白处是平移画布，不会合成
+        //     workspace 的 mousedown，所以框选不会干扰触屏手势。
+        //   - 锁定节点不可被框选 / 加选，和「先解锁」的整体约定一致。
+        // 选中集合存 AppState.selectedNodeIds（一组节点 id）。
+        // ================================================================
+        const SelectionManager = {
+          _box: null,
+          _active: false,
+          _additive: false,
+          _base: null,
+          _startX: 0,
+          _startY: 0,
+
+          init() {
+            const ws = DOM.workspace
+            ws.addEventListener('mousedown', (e) => this._onDown(e))
+            document.addEventListener('mousemove', (e) => this._onMove(e))
+            document.addEventListener('mouseup', () => this._onUp())
+          },
+
+          _onDown(e) {
+            if (e.button !== 0) return
+            if (AppState.doodleMode) return
+            const target = e.target
+            if (!target || !target.closest) return
+            // 节点 / 端口 / 右键菜单自己会处理，空白才走框选
+            if (target.closest('.node')) return
+            if (target.closest('.node-port')) return
+            if (target.closest('#context-menu')) return
+            // 原生默认会 blur 掉正在编辑的节点文本；我们下面 preventDefault
+            // 挡住浏览器自带的选中拖拽，所以这里手动把焦点收走，行为保持一致。
+            const ae = document.activeElement
+            if (ae && ae !== document.body && typeof ae.blur === 'function') {
+              try {
+                ae.blur()
+              } catch (_) {}
+            }
+            e.preventDefault()
+            DOM.contextMenu.classList.remove('open')
+            this._additive = !!(e.shiftKey || e.ctrlKey || e.metaKey)
+            this._base = this._additive ? new Set(AppState.selectedNodeIds) : new Set()
+            if (!this._additive) this.clear()
+            this._startX = e.clientX
+            this._startY = e.clientY
+            this._active = true
+            this._ensureBox()
+          },
+
+          _ensureBox() {
+            if (this._box) {
+              this._box.style.display = 'none'
+              return
+            }
+            const box = document.createElement('div')
+            box.id = 'zw-marquee'
+            document.body.appendChild(box)
+            this._box = box
+          },
+
+          _onMove(e) {
+            if (!this._active || !this._box) return
+            const x0 = Math.min(this._startX, e.clientX)
+            const y0 = Math.min(this._startY, e.clientY)
+            const x1 = Math.max(this._startX, e.clientX)
+            const y1 = Math.max(this._startY, e.clientY)
+            this._box.style.left = x0 + 'px'
+            this._box.style.top = y0 + 'px'
+            this._box.style.width = x1 - x0 + 'px'
+            this._box.style.height = y1 - y0 + 'px'
+            this._box.style.display = 'block'
+            const a = CanvasManager.screenToWorld(x0, y0)
+            const b = CanvasManager.screenToWorld(x1, y1)
+            const next = new Set(this._base)
+            getNodes().forEach((n) => {
+              if (n.classList.contains('locked')) return
+              const nl = parseFloat(n.style.left) || 0
+              const nt = parseFloat(n.style.top) || 0
+              const nw = n.offsetWidth || parseFloat(n.style.width) || 0
+              const nh = n.offsetHeight || parseFloat(n.style.height) || 0
+              if (nl < b.x && nl + nw > a.x && nt < b.y && nt + nh > a.y) next.add(n.id)
+            })
+            this._apply(next)
+          },
+
+          _onUp() {
+            if (!this._active) return
+            this._active = false
+            if (this._box) this._box.style.display = 'none'
+          },
+
+          // 把 idSet 同步到 DOM 的 .selected 类
+          _apply(idSet) {
+            AppState.selectedNodeIds = idSet
+            getNodes().forEach((n) => n.classList.toggle('selected', idSet.has(n.id)))
+          },
+
+          clear() {
+            if (!AppState.selectedNodeIds) AppState.selectedNodeIds = new Set()
+            AppState.selectedNodeIds.clear()
+            getNodes().forEach((n) => n.classList.remove('selected'))
+          },
+
+          isSelected(node) {
+            return AppState.selectedNodeIds.has(node.id)
+          },
+
+          select(node) {
+            if (!node || node.classList.contains('locked')) return
+            AppState.selectedNodeIds.add(node.id)
+            node.classList.add('selected')
+          },
+
+          deselect(node) {
+            if (!node) return
+            AppState.selectedNodeIds.delete(node.id)
+            node.classList.remove('selected')
+          },
+
+          toggle(node) {
+            if (!node || node.classList.contains('locked')) return
+            if (this.isSelected(node)) this.deselect(node)
+            else this.select(node)
+          },
+
+          selectAll() {
+            const next = new Set(AppState.selectedNodeIds)
+            getNodes().forEach((n) => {
+              if (n.classList.contains('locked')) return
+              n.classList.add('selected')
+              next.add(n.id)
+            })
+            AppState.selectedNodeIds = next
+          },
+
+          // 拖动时要一起移动的所有节点：当前选中的每一个，
+          // 外加其中「分组节点」的连接子节点（任一方向），去重。
+          collectMoveNodes(primary) {
+            const ids = new Set(AppState.selectedNodeIds)
+            ids.add(primary.id)
+            AppState.connections.forEach((c) => {
+              const fSel = ids.has(c.from)
+              const tSel = ids.has(c.to)
+              if (!fSel && !tSel) return
+              const groupEl = fSel ? document.getElementById(c.from) : document.getElementById(c.to)
+              const other = fSel ? c.to : c.from
+              if (groupEl && groupEl.dataset.type === 'group') ids.add(other)
+            })
+            const list = []
+            ids.forEach((id) => {
+              const el = document.getElementById(id)
+              if (el) list.push(el)
+            })
+            if (!list.includes(primary)) list.push(primary)
+            return list
+          },
+
+          deleteSelected() {
+            const ids = new Set(AppState.selectedNodeIds)
+            if (!ids.size) return false
+            AppState.connections = AppState.connections.filter(
+              (c) => !ids.has(c.from) && !ids.has(c.to),
+            )
+            ids.forEach((id) => {
+              const el = document.getElementById(id)
+              if (el) el.remove()
+            })
+            this.clear()
+            ConnectionManager.renderAll()
+            UIManager.updateStats()
+            ImageManager.gc()
+            debouncedAutoSave(true)
+            notify(t('notify.nodeRemoved'))
+            return true
           },
         }
 
@@ -12915,6 +13125,7 @@ notify pgrst, 'reload schema';</textarea
               NodeTypeManager.close()
               AppState.ctxNode = null
               getNodes().forEach((n) => n.remove())
+              SelectionManager.clear()
               // 撤销可能把带图的节点删掉，回收没人引用的资产字节
               ImageManager.gc()
               AppState.connections = []
@@ -13658,6 +13869,7 @@ notify pgrst, 'reload schema';</textarea
               NodeBorder.close()
               NodeTypeManager.close()
               getNodes().forEach((n) => n.remove())
+              SelectionManager.clear()
               AppState.connections = []
               AppState.connIdCounter = 0
               AppState.nodeCounter = 0
@@ -14566,6 +14778,20 @@ notify pgrst, 'reload schema';</textarea
                 }
                 return
               }
+              // Ctrl/⌘+A：全选画布上的节点。输入框里保持浏览器原生的全选文本。
+              if (k === 'a') {
+                const tag = (e.target && e.target.tagName) || ''
+                const typing =
+                  tag === 'INPUT' ||
+                  tag === 'TEXTAREA' ||
+                  tag === 'SELECT' ||
+                  !!e.target?.closest?.('.node-content[contenteditable="true"]')
+                if (!typing) {
+                  e.preventDefault()
+                  SelectionManager.selectAll()
+                  return
+                }
+              }
             }
             if (e.key === '?') {
               const tag = (e.target && e.target.tagName) || ''
@@ -14583,6 +14809,7 @@ notify pgrst, 'reload schema';</textarea
             if (e.key === 'Escape') {
               closeAllDropdowns()
               DOM.floatingToolbar.classList.remove('visible')
+              SelectionManager.clear()
               if (AppState.portDrag) {
                 if (AppState.tempLine) {
                   AppState.tempLine.remove()
@@ -14624,6 +14851,18 @@ notify pgrst, 'reload schema';</textarea
               loadDocument()
             }
             if (e.key === 'Delete' || e.key === 'Backspace') {
+              const tag = (e.target && e.target.tagName) || ''
+              const typing =
+                tag === 'INPUT' ||
+                tag === 'TEXTAREA' ||
+                tag === 'SELECT' ||
+                !!e.target?.closest?.('.node-content[contenteditable="true"]')
+              // 优先删多选中的节点（没在输入框里时）
+              if (!typing && AppState.selectedNodeIds.size) {
+                e.preventDefault()
+                SelectionManager.deleteSelected()
+                return
+              }
               if (AppState.selectedConnId) {
                 AppState.connections = AppState.connections.filter(
                   (c) => c.id !== AppState.selectedConnId,
@@ -15006,6 +15245,7 @@ notify pgrst, 'reload schema';</textarea
 
           CanvasManager.initPanZoom()
           TouchManager.init()
+          SelectionManager.init()
           // 顺序其实不重要：涂鸦的监听器挂在 window 的**捕获**阶段，
           // 捕获一定先于 TouchManager 在 workspace 上的冒泡阶段跑。
           // 放在这里只是因为它依赖 DOM 已就绪。
@@ -15057,6 +15297,7 @@ notify pgrst, 'reload schema';</textarea
             // 兜底：至少把界面接起来，让用户还能导出数据
             try {
               CanvasManager.initPanZoom()
+              SelectionManager.init()
               bindGlobalEvents()
               bindPortDragEvents()
             } catch (__) {}
