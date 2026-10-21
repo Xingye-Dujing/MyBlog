@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import unquote
 
 import yaml
 from markdown_it import MarkdownIt
@@ -136,6 +137,15 @@ def _display_tex_caption(caption: str) -> str:
     return text.strip()
 
 
+def _decode_local_image_path(src: str) -> str:
+    if not src or re.match(r"^[a-z][a-z0-9+.-]*://", src, re.I) or src.startswith("//"):
+        return src
+    try:
+        return unquote(src)
+    except Exception:
+        return src
+
+
 def _extract_image(children: List[Any], caption_hint: str) -> Optional[Dict[str, Any]]:
     images = [t for t in children if t.type == "image"]
     if len(images) != 1:
@@ -166,7 +176,7 @@ def _extract_image(children: List[Any], caption_hint: str) -> Optional[Dict[str,
             width = wm.group(1)
         if am:
             align = am.group(1).lower()
-    src = image.attrGet("src") or ""
+    src = _decode_local_image_path(image.attrGet("src") or "")
     alt = image.content or image.attrGet("alt") or ""
     caption = caption_hint or alt
     attrs.update({"path": src, "alt": alt, "width": width, "align": align, "caption": caption})
@@ -313,11 +323,22 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
         doc.add_issue(level, message, line, code)
 
     pending_caption = ""
+    pending_caption_line = 0
+
+    def discard_pending_caption(message: str = "题注指令未紧邻可附着的图片或表格，已忽略") -> None:
+        nonlocal pending_caption
+        if pending_caption:
+            doc.add_issue("warning", message, pending_caption_line, "caption-orphan")
+            pending_caption = ""
+
     list_stack: List[Dict[str, Any]] = []
     blockquote_depth = 0
     i = 0
     while i < len(tokens):
         token = tokens[i]
+
+        if pending_caption and token.type not in ("table_open", "paragraph_open", "html_block", "fence", "code_block"):
+            discard_pending_caption()
 
         if token.type == "blockquote_open":
             blockquote_depth += 1
@@ -408,12 +429,14 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
         if token.type == "paragraph_open":
             inline = tokens[i + 1] if i + 1 < len(tokens) and tokens[i + 1].type == "inline" else None
             if inline is None:
+                discard_pending_caption()
                 i += 1
                 continue
             raw = (inline.content or "").strip()
             math_match = re.match(r"^\$\$([\s\S]*?)\$\$$", raw)
             line = (token.map[0] + line_offset) if token.map else 0
             if math_match and not list_stack:
+                discard_pending_caption()
                 doc.blocks.append(Block("math_block", text=math_match.group(1).strip(), line=line))
                 i += 3
                 continue
@@ -425,6 +448,8 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
                 doc.blocks.append(Block("image", image=image, caption=image.get("caption", ""), line=line))
                 i += 3
                 continue
+            if pending_caption:
+                discard_pending_caption()
             inlines = _convert_children(children, doc, line)
             if not inlines:
                 i += 3
@@ -455,7 +480,7 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
                 caption = _display_tex_caption(raw_caption)
                 if pending_caption:
                     pending_caption = ""
-                fallback = attrs.get("fallback", "").strip()
+                fallback = _decode_local_image_path(attrs.get("fallback", "").strip())
                 image = None
                 if fallback:
                     image = {
@@ -468,6 +493,8 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
                 doc.blocks.append(Block("latex_figure", text=code, caption=caption, image=image, line=block_line))
                 i += 1
                 continue
+            if pending_caption:
+                discard_pending_caption()
             doc.blocks.append(Block("code_block", text=token.content or "", lang=lang, line=block_line))
             i += 1
             continue
@@ -480,12 +507,17 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
         if token.type == "html_block":
             raw = (token.content or "").strip()
             if _PAGEBREAK_RE.match(raw):
+                discard_pending_caption()
                 doc.blocks.append(Block("pagebreak", line=(token.map[0] + line_offset) if token.map else 0))
             else:
                 caption_match = _CAPTION_RE.match(raw)
                 if caption_match:
+                    if pending_caption:
+                        discard_pending_caption()
                     pending_caption = caption_match.group(1).strip()
+                    pending_caption_line = (token.map[0] + line_offset) if token.map else 0
                 else:
+                    discard_pending_caption()
                     issue("warning", "不支持 HTML 块，已忽略：%s" % raw[:60].replace("\n", " "), token.map, "html-block")
             i += 1
             continue
@@ -497,7 +529,7 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
         i += 1
 
     if pending_caption:
-        doc.add_issue("warning", "题注指令后没有可附着的表格或图片", 0, "caption-orphan")
+        doc.add_issue("warning", "题注指令后没有可附着的表格或图片", pending_caption_line, "caption-orphan")
 
     _post_process(doc)
     return doc
@@ -529,6 +561,13 @@ def _post_process(doc: Document) -> None:
                     items.append(block.inlines)
             elif block.type == "list":
                 items.extend([row for row in _flatten_list_items(block) if plain_text(row).strip()])
+            else:
+                doc.add_issue(
+                    "error",
+                    "参考文献之后只能包含文献条目，不能再出现 %s" % block.type,
+                    block.line,
+                    "content-after-references",
+                )
         new_blocks = doc.blocks[:ref_index]
         new_blocks.append(Block("bibliography", items=items or [], line=doc.blocks[ref_index].line))
         doc.blocks = new_blocks

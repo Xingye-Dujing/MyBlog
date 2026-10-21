@@ -141,6 +141,15 @@ def _compile_tex_unlocked(
     workdir = os.path.dirname(tex_path) or os.getcwd()
     build_dir = output_dir or os.path.join(workdir, "build")
     os.makedirs(build_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(tex_path))[0]
+    pdf_path = os.path.join(build_dir, stem + ".pdf")
+    tex_name = os.path.basename(tex_path)
+    tex_arg = os.path.join(".", tex_name) if tex_name.startswith("-") else tex_name
+    try:
+        if os.path.isfile(pdf_path):
+            os.remove(pdf_path)
+    except OSError as exc:
+        raise CompileError("无法清理旧的 PDF 产物：%s" % exc)
     env = _env(miktex_bin)
     started = time.time()
     logs: List[str] = []
@@ -152,8 +161,9 @@ def _compile_tex_unlocked(
             "-interaction=nonstopmode",
             "-halt-on-error",
             "-file-line-error",
+            "-latexoption=-no-shell-escape",
             "-outdir=" + build_dir,
-            os.path.basename(tex_path),
+            tex_arg,
         ]
         try:
             result = subprocess.run(
@@ -184,7 +194,7 @@ def _compile_tex_unlocked(
             raise CompileError("未找到 MiKTeX / %s，请安装 MiKTeX 或检查 MIKTEX_BIN" % engine)
         code = 1
         for _pass in range(2):
-            command = [engine_path, "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "-output-directory=" + build_dir, os.path.basename(tex_path)]
+            command = [engine_path, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "-output-directory=" + build_dir, tex_arg]
             try:
                 result = subprocess.run(
                     command,
@@ -206,12 +216,10 @@ def _compile_tex_unlocked(
 
     elapsed = int((time.time() - started) * 1000)
     log_text = "\n".join(part for part in logs if part)
-    stem = os.path.splitext(os.path.basename(tex_path))[0]
-    pdf_path = os.path.join(build_dir, stem + ".pdf")
-    ok = os.path.isfile(pdf_path)
+    ok = code == 0 and os.path.isfile(pdf_path)
     if not ok:
         errors = _extract_errors(log_text)
-        summary = errors[0]["message"] if errors else "MiKTeX 编译失败，未生成 PDF"
+        summary = errors[0]["message"] if errors else "MiKTeX 编译失败，未生成有效 PDF"
         raise CompileError(summary, log_text[-60000:])
     return {
         "ok": True,

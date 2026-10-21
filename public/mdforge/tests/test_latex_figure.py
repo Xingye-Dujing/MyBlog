@@ -118,3 +118,39 @@ title: LaTeX 图表编译
     result = compile_tex(str(output), engine="xelatex", timeout=300)
     assert result["ok"] is True
     assert Path(result["pdf"]).is_file()
+
+
+def test_latex_fallback_outside_base_is_error(tmp_path):
+    from mdforge.validate import validate_document
+
+    base = tmp_path / "base"
+    base.mkdir()
+    outside = tmp_path / "secret.png"
+    outside.write_bytes((EXAMPLES / "images" / "pipeline.png").read_bytes())
+    source = r"""---
+title: T
+---
+
+```latex-figure fallback="../secret.png"
+\begin{figure}\centering\rule{2cm}{1cm}\caption{X}\end{figure}
+```
+"""
+    document = parse_markdown(source, "fallback.md", base_dir=str(base))
+    issues = validate_document(document, check_images=False)
+    assert any(issue["code"] == "latex-fallback-outside-base" and issue["level"] == "error" for issue in issues)
+
+
+def test_dangerous_latex_figure_commands_are_rejected():
+    from mdforge.validate import validate_document
+
+    source = r"""---
+title: T
+---
+
+```latex-figure
+\begin{figure}\centering\input{secret}\caption{X}\end{figure}
+```
+"""
+    document = parse_markdown(source, "danger.md")
+    issues = validate_document(document, check_images=False)
+    assert any(issue["code"] == "latex-figure-dangerous" and issue["level"] == "error" for issue in issues)

@@ -62,23 +62,16 @@ def _block_html(block: Block) -> str:
     if block.type == "image":
         image = block.image or {}
         path = html.escape(str(image.get("path") or ""), quote=True)
-        alt = html.escape(str(image.get("alt") or block.caption or ""))
         caption = html.escape(str(block.caption or image.get("alt") or ""))
-        if re.match(r"^https?://", str(image.get("path") or ""), re.I):
-            body = '<img src="%s" alt="%s" loading="lazy">' % (path, alt)
-        else:
-            body = '<div class="img-placeholder"><span class="img-glyph">IMG</span><span class="img-path">%s</span></div>' % path
+        body = '<div class="img-placeholder"><span class="img-glyph">IMG</span><span class="img-path">%s</span></div>' % path
         cap = "<figcaption>%s</figcaption>" % caption if caption else ""
         return '<figure data-image-path="%s">%s%s</figure>' % (path, body, cap)
     if block.type == "latex_figure":
         image = block.image or {}
         path = str(image.get("path") or "")
         safe_path = html.escape(path, quote=True)
-        alt = html.escape(str(image.get("alt") or block.caption or "LaTeX 图表"))
         caption = html.escape(str(block.caption or image.get("alt") or ""))
-        if re.match(r"^https?://", path, re.I):
-            body = '<img src="%s" alt="%s" loading="lazy">' % (safe_path, alt)
-        elif path:
+        if path:
             body = '<div class="img-placeholder"><span class="img-glyph">LATEX</span><span class="img-path">%s</span></div>' % safe_path
         else:
             body = '<div class="img-placeholder latex-placeholder"><span class="img-glyph">LATEX</span><span class="img-path">TeX 原生绘制，请在源码中编辑图表代码</span></div>'

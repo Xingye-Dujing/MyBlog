@@ -61,7 +61,8 @@ PDF 编译使用 `xelatex`，缺宏包时会设置 `MIKTEX_AUTOINSTALL=1` 让 Mi
 - 目录定制：「元信息 → 转换选项」可控制是否生成目录、目录标题、1–3 级标题层级、是否包含参考文献；DOCX 默认生成，TeX 默认不生成。
 - TeX 交付：结果卡提供「下载素材包」，ZIP 内含 `.tex`、独立素材目录与编译说明；每个输出使用独立的 `<stem>-assets/`，不会覆盖其它文稿的图片。
 - 结果状态：修改源文稿或 frontmatter 后，旧结果会标记为「源文稿已修改」，避免误下载过期文件。
-- 写作便利：附件图片可一键插入图片语法；每个图片附件还可以点「LaTeX」一键替换为 `latex-figure` 图表代码，原图自动作为 DOCX/预览回退图；校验问题可点击跳转到对应源码行；支持拖入 `.md` 导入、粘贴剪贴板图片自动附加并插入语法。
+- 写作便利：附件图片可一键插入图片语法；每个图片附件还可以点「LaTeX」一键替换为 `latex-figure` 图表代码，原图自动作为 DOCX/预览回退图；校验问题可点击跳转到对应源码行；支持拖入 `.md` 导入、粘贴剪贴板图片自动附加并插入语法。图片文件名支持中文与空格（Markdown 路径会做 URL 解码后匹配）。
+- 安全边界：`latex-figure` 原样嵌入 LaTeX，但校验器会拒绝 `\input`、`\include`、`\write18`、`\openin`、`\openout`、`\read`、`\usepackage`、`\documentclass`、`\directlua` 等文件/执行命令；编译显式使用 `-no-shell-escape`。仍建议只在受信任的本地文稿上使用。
 - AI 规范：顶部「AI 规范」打开写作规范，「图表重绘规范」标签提供从图片生成 LaTeX 图表的专用规范；附件下拉也提供快捷入口，可一键复制全部或下载 `.md`。
 - 选中态、主按钮使用 omm-planner 的黑底白字（深色模式自动反转为白底黑字）；复选框为黑框绿色勾选，不使用橄榄色。
 - 元信息表单会直接写回 YAML frontmatter。
@@ -139,6 +140,7 @@ toc_include_references: true
 - 路径相对 Markdown 文件所在目录；网页端上传后按**文件名**与路径匹配。
 - 宽度支持 `cm / mm / in / px / %`；TeX 额外支持 `0.8\textwidth`、`0.9\linewidth`。
 - 网页端仅接受 PNG / JPG；图片必须独占一个段落。
+- 本地图片路径会先做 URL 解码；中文文件名、带空格文件名均可与上传附件匹配。仍建议使用简单英文名以减少跨平台差异。
 - 缺省超宽会按模板的 `image.max_width_cm` 等比缩放。
 
 ### 3.5 版式微调
@@ -385,8 +387,9 @@ public/
 ### DOCX 模板
 
 - 必须包含 `template.docx` 与 `template.yaml`。
+- 模板目录名只能使用 `A-Z a-z 0-9 . _ -`，必须以字母或数字开头；目录名必须与 `template.yaml` 的 `name` 完全一致，且不能指向模板根目录之外。
 - `template.docx` 内需要样式：`Heading 1~4`、`ZEN Body`、`ZEN Title`、`ZEN Abstract`、`ZEN Keywords`、`ZEN Code`、`ZEN Quote`、`ZEN Caption`、`ZEN Table Text`、`ZEN Image`、`ZEN Math`、`ZEN Reference`、`ZEN Reference Title` 等，或通过 YAML `styles` 映射到你自己的英文样式名。
-- 必须有一个独立的 `{{CONTENT}}` 段落作为锚点；目录锚点为 `{{TOC}}`。
+- 必须有一个独立的内容锚点段落，默认 `{{CONTENT}}`；可通过 `content_anchor` 自定义。目录锚点默认 `{{TOC}}`，可通过 `toc_anchor` 自定义。
 - 版式集中放在样式里；渲染器只在「格式」微调时覆盖正文/标题字号、行距、缩进、中文字体与页边距。`template.yaml` 的 `tuning:` 块定义该模板的默认微调值，界面会据此初始化。
 - 模板可重建：
 
@@ -396,9 +399,9 @@ public/
 
 ### TeX 模板
 
-- 必须包含 `template.tex.j2` 与 `template.yaml`。
+- 必须包含 `template.tex.j2` 与 `template.yaml`；目录名规则与 DOCX 模板相同。
 - Jinja2 使用 `autoescape=False`；正文变量 `{{ body }}`，参考文献 `{{ bibliography }}`。
-- 可用变量：`title_tex`、`subtitle_tex`、`abstract_tex`、`keywords_tex`、`author_tex`、`subject_tex`；目录 `toc_enabled`、`toc_title_tex`、`toc_levels`、`toc_include_references`；格式微调 `margin_top/bottom/left/right`、`body_size`、`body_line`、`par_indent`、`body_font_tex`、`heading_font_tex`、`title_size/title_line`、`h1_size/h1_line`、`h2_size/h2_line`、`h3_size/h3_line`。
+- 可用变量：`title_tex`、`subtitle_tex`、`abstract_tex`、`keywords_tex`、`author_tex`、`subject_tex`、`documentclass`、`classoptions`；目录 `toc_enabled`、`toc_title_tex`、`toc_levels`、`toc_include_references`；格式微调 `margin_top/bottom/left/right`、`body_size`、`body_line`、`par_indent`、`body_font_tex`、`heading_font_tex`、`title_size/title_line`、`h1_size/h1_line`、`h2_size/h2_line`、`h3_size/h3_line`。
 - 图、表、公式、列表由渲染器输出完整环境，模板只需配置导言区。
 - `template.yaml` 的 `tuning:` 块提供该模板的默认页边距、字体与字号，界面可在此基线上微调。
 - 引擎建议 `xelatex`（中文）。
@@ -411,9 +414,9 @@ public/
 .venv/Scripts/python.exe -m pytest mdforge/tests -q
 ```
 
-测试覆盖：解析、嵌套列表、图片属性、公式、参考文献、DOCX 结构、样式、目录域、页边距、分页、格式微调、TeX 源码、真实 MiKTeX 编译、跨 run 占位符、元信息、API、前端禁用色契约。
+测试覆盖：解析、嵌套列表、图片属性、URL 解码图片名、公式、参考文献边界、题注作用域、DOCX 结构、样式、目录域、页边距、分页、格式微调、TeX 源码、特殊输出文件名、失败重编译、shell escape 禁用、真实 MiKTeX 编译、跨 run 占位符、元信息、API 输入校验、模板路径边界、前端禁用色契约。
 
-当前结果：**47 passed**。
+当前结果：**63 passed**。
 
 ---
 
@@ -421,7 +424,8 @@ public/
 
 - DOCX 中的数学公式是 Cambria Math 文本，不是 OMML 原生公式；需要原生公式时请使用 TeX 输出。
 - DOCX 目录页使用 Word 域 + 静态缓存条目；首次打开请允许 Word 更新域，以获得准确页码。
-- 网页端图片按文件名匹配 Markdown 路径，仅支持 PNG/JPG；绝对路径与 `..` 越界路径会被校验器拒绝。
+- 网页端图片按文件名匹配 Markdown 路径，仅支持 PNG/JPG；中文与空格文件名会先 URL 解码。绝对路径与 `..` 越界路径会被校验器拒绝。
+- `latex-figure` 是受信任的 LaTeX 图表代码输入：服务端拒绝外部文件/执行类命令并禁用 shell escape，但不是完整的 TeX 沙箱；不要将服务暴露到公网或用于不可信文稿。
 - 服务为本地开发服务；不要直接暴露到公网。启动器会检测端口占用，避免多个实例同时监听。
 - `pip install` 适合使用 CLI 与库；Web 界面、示例和 `mdforge_serve.py` 仍从仓库目录运行。
 - UI 对齐 omm-planner 的黑白体系，不使用蓝色与橄榄色；导出的文档使用标准黑色印刷色。

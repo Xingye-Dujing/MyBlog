@@ -123,3 +123,8 @@ def test_partial_edit_preserves_header_title(tmp_path):
     assert result.core_properties.title == "旧标题"
     assert result.core_properties.author == "新作者"
     assert result.sections[0].header.paragraphs[0].text == "旧标题 · 新作者"
+
+
+def test_tex_meta_patterns_empty_capture():
+    config = {"metadata": {"meta_patterns": {"title": r"\title\{([^{}]*)\}"}}}
+    assert apply_tex_metadata_patterns("\title{}\n", {"title": "新标题"}, config) == "\title{新标题}\n"

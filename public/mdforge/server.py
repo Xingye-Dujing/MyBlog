@@ -45,6 +45,17 @@ def _cleanup_jobs() -> None:
             job = JOBS.pop(job_id, None)
             if job:
                 shutil.rmtree(job.get("dir", ""), ignore_errors=True)
+        active_dirs = {os.path.abspath(job.get("dir", "")) for job in JOBS.values() if job.get("dir")}
+    if JOB_ROOT.is_dir():
+        cutoff = now - JOB_TTL
+        for entry in JOB_ROOT.iterdir():
+            try:
+                if not entry.is_dir() or os.path.abspath(entry) in active_dirs:
+                    continue
+                if entry.stat().st_mtime < cutoff:
+                    shutil.rmtree(entry, ignore_errors=True)
+            except OSError:
+                continue
 
 
 def _new_job() -> Tuple[str, str]:
@@ -100,9 +111,15 @@ def _tex_bundle(job: Dict[str, Any]) -> Tuple[io.BytesIO, str]:
 
 def _safe_filename(name: str, fallback: str = "document") -> str:
     name = os.path.basename(str(name or "")).strip()
-    name = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", name)
+    name = re.sub(r'[\\/:*?"<>|%\r\n\t]+', "_", name)
     name = name.strip(". ")
-    return (name or fallback)[:120]
+    name = name or fallback
+    if name.startswith("-"):
+        name = "_" + name
+    stem = name.split(".")[0].upper()
+    if stem in {"CON", "PRN", "AUX", "NUL"} or re.match(r"^(COM|LPT)[1-9]$", stem):
+        name = "_" + name
+    return name[:120]
 
 
 def _stem(filename: str, fallback: str = "document") -> str:
@@ -121,15 +138,28 @@ def _metadata_from_request() -> Dict[str, Any]:
         return {}
 
 
+def _format_overrides_value(data: Any) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValidationError("format_overrides 必须是 JSON 对象")
+    if "tuning" in data:
+        if not isinstance(data["tuning"], dict):
+            raise ValidationError("format_overrides.tuning 必须是 JSON 对象")
+        data = data["tuning"]
+    for section in ("margins", "body", "fonts", "headings"):
+        if section in data and not isinstance(data[section], dict):
+            raise ValidationError("format_overrides.%s 必须是 JSON 对象" % section)
+    return data
+
+
 def _format_overrides_from_request() -> Dict[str, Any]:
     raw = request.form.get("format_overrides") or request.values.get("format_overrides")
     if not raw:
         return {}
     try:
         data = json.loads(raw)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    except Exception as exc:
+        raise ValidationError("format_overrides 不是有效 JSON") from exc
+    return _format_overrides_value(data)
 
 
 def _bool(value: Any, default: bool = False) -> bool:
@@ -215,6 +245,8 @@ def _template_info(fmt: str, name: str) -> Dict[str, Any]:
 
 
 def _parse_payload(payload: Dict[str, Any]) -> Tuple[Document, Any, Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise ValidationError("请求体必须是 JSON 对象")
     source = payload.get("markdown")
     if not isinstance(source, str):
         raise ValidationError("缺少 markdown 字段")
@@ -342,15 +374,20 @@ def create_app() -> Flask:
         try:
             if request.is_json:
                 payload = request.get_json(silent=True) or {}
+                if not isinstance(payload, dict):
+                    raise ValidationError("请求体必须是 JSON 对象")
                 source = payload.get("markdown") or ""
+                if not isinstance(source, str):
+                    raise ValidationError("markdown 字段必须是字符串")
                 filename = _safe_filename(payload.get("filename") or "document.md")
                 fmt = str(payload.get("format") or "docx")
                 template_name = str(payload.get("template") or "").strip() or None
                 overrides = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-                format_overrides = payload.get("format_overrides") if isinstance(payload.get("format_overrides"), dict) else {}
-                strict = bool(payload.get("strict"))
-                compile_pdf = bool(payload.get("compile_pdf"))
-                keep_anchor = bool(payload.get("keep_anchor"))
+                raw_format_overrides = payload.get("format_overrides")
+                format_overrides = _format_overrides_value(raw_format_overrides) if raw_format_overrides is not None else {}
+                strict = _bool(payload.get("strict"))
+                compile_pdf = _bool(payload.get("compile_pdf"))
+                keep_anchor = _bool(payload.get("keep_anchor"))
                 engine = payload.get("engine")
                 uploads = []
             else:
@@ -365,7 +402,7 @@ def create_app() -> Flask:
                 keep_anchor = _bool(request.form.get("keep_anchor"))
                 engine = request.form.get("engine")
                 uploads = request.files.getlist("images")
-            if not source.strip():
+            if not isinstance(source, str) or not source.strip():
                 raise ValidationError("Markdown 内容为空")
             if len(source.encode("utf-8")) > MAX_MARKDOWN:
                 raise ValidationError("Markdown 超过 2 MB 限制")
@@ -432,9 +469,9 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "error": exc.message, "log": exc.log, "job_id": job_id}), 500
         except MdForgeError as exc:
             return jsonify({"ok": False, "error": exc.message, "line": exc.line, "job_id": job_id}), 500
-        except Exception as exc:
+        except Exception:
             app.logger.exception("conversion failed")
-            return jsonify({"ok": False, "error": "服务器内部错误：%s" % exc, "job_id": job_id}), 500
+            return jsonify({"ok": False, "error": "服务器内部错误", "job_id": job_id}), 500
 
     @app.get("/api/download/<job_id>/<kind>")
     def api_download(job_id: str, kind: str):
@@ -489,8 +526,9 @@ def create_app() -> Flask:
                     JOBS[job_id]["files"] = {"docx" if fmt == "docx" else "tex": output}
                     JOBS[job_id]["output_name"] = name
             return jsonify({"ok": True, "job_id": job_id, "filename": name, "download_url": "/api/download/%s/%s" % (job_id, fmt)})
-        except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+        except Exception:
+            app.logger.exception("metadata edit failed")
+            return jsonify({"ok": False, "error": "文件处理失败"}), 400
 
     @app.get("/api/md-spec")
     def api_md_spec():
@@ -528,8 +566,9 @@ def create_app() -> Flask:
         merged_metadata.update(updates)
         try:
             edit_metadata(path, merged_metadata, header_placeholders=headers, output=path, template_config=config)
-        except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+        except Exception:
+            app.logger.exception("job metadata edit failed")
+            return jsonify({"ok": False, "error": "文件处理失败"}), 400
         result: Dict[str, Any] = {
             "ok": True,
             "format": fmt,
@@ -595,6 +634,7 @@ def create_app() -> Flask:
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    _cleanup_jobs()
     return app
 
 

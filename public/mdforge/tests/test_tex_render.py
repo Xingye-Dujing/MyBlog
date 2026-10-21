@@ -137,3 +137,52 @@ def test_tuning_export_wrapper_is_unwrapped():
     assert tuning["body"]["font_size"] == 14
     assert tuning["body"]["font"] == "fangsong"
     assert tuning["headings"]["h1_size"] == 16
+
+
+@pytest.mark.skipif(not find_miktex_bin(), reason="需要本机 MiKTeX")
+def test_tex_asset_directory_supports_spaces(tmp_path):
+    source = SAMPLE.read_text(encoding="utf-8")
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    template = load_template("tex", "academic")
+    output = tmp_path / "my paper.tex"
+    result = render_tex(document, template, str(output))
+    assert "%20" not in result["tex"]
+    assert r"my\_paper-" in result["tex"]
+    assert Path(result["asset_dir"]).is_dir()
+    assert compile_tex(str(output), engine="xelatex", timeout=300)["ok"] is True
+
+
+@pytest.mark.skipif(not find_miktex_bin(), reason="需要本机 MiKTeX")
+def test_failed_recompile_does_not_return_stale_pdf(tmp_path):
+    source = "---\ntitle: T\nauthor: A\n---\n\n# H\n\nBody.\n"
+    document = parse_markdown(source, "stale.md", base_dir=str(tmp_path))
+    output = tmp_path / "stale.tex"
+    render_tex(document, load_template("tex", "academic"), str(output))
+    compile_tex(str(output), engine="xelatex", timeout=300)
+    broken = output.read_text(encoding="utf-8").replace(
+        r"\end{document}", r"\undefinedcommandforaudit" + "\n" + r"\end{document}"
+    )
+    output.write_text(broken, encoding="utf-8")
+    with pytest.raises(Exception):
+        compile_tex(str(output), engine="xelatex", timeout=300)
+    assert not (tmp_path / "build" / "stale.pdf").is_file()
+
+
+def test_tuning_malformed_sections_fall_back():
+    tuning = normalize_tuning({}, "docx", {"body": "oops", "margins": [1]})
+    assert tuning["body"]["font_size"] == 10.5
+    assert tuning["margins"]["top"] == 2.54
+
+
+@pytest.mark.skipif(not find_miktex_bin(), reason="需要本机 MiKTeX")
+def test_tex_shell_escape_is_disabled(tmp_path):
+    source = r"""\documentclass{article}
+\begin{document}
+Shell escape probe.
+\immediate\write18{echo audit > shell.txt}
+\end{document}
+"""
+    output = tmp_path / "shell.tex"
+    output.write_text(source, encoding="utf-8")
+    compile_tex(str(output), engine="xelatex", timeout=300)
+    assert not (tmp_path / "shell.txt").is_file()

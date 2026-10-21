@@ -132,3 +132,49 @@ def test_image_content_validation(tmp_path):
     doc = parse_markdown("---\ntitle: T\n---\n\n![x](fake.png)\n", base_dir=str(tmp_path))
     codes = {issue["code"] for issue in validate_document(doc, check_images=True)}
     assert "image-invalid" in codes
+
+
+def test_local_image_paths_are_url_decoded():
+    doc = parse_markdown(
+        "---\ntitle: T\n---\n\n![x](<images/my image.png>)\n\n![y](<images/图表.png>)\n",
+        "paths.md",
+    )
+    assert doc.blocks[0].image["path"] == "images/my image.png"
+    assert doc.blocks[1].image["path"] == "images/图表.png"
+
+
+def test_caption_does_not_cross_intervening_blocks():
+    source = """---
+title: T
+---
+
+<!-- caption: 迟到题注 -->
+
+普通段落。
+
+| A | B |
+| --- | --- |
+| 1 | 2 |
+"""
+    doc = parse_markdown(source, "caption.md")
+    assert doc.blocks[-1].type == "table"
+    assert doc.blocks[-1].caption == ""
+    assert any(issue["code"] == "caption-orphan" for issue in doc.issues)
+
+
+def test_content_after_references_is_an_error():
+    source = """---
+title: T
+---
+
+# 参考文献
+
+文献一
+
+# 附录
+
+正文
+"""
+    doc = parse_markdown(source, "refs.md")
+    assert [block.type for block in doc.blocks] == ["bibliography"]
+    assert any(issue["code"] == "content-after-references" and issue["level"] == "error" for issue in doc.issues)

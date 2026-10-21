@@ -3,9 +3,14 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
 from docx import Document as open_docx
 
+from mdforge.errors import TemplateError
+from mdforge.parser import parse_markdown
+from mdforge.preview import render_preview
 from mdforge.server import create_app
+from mdforge.template import load_template
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -174,12 +179,15 @@ def test_frontend_contract():
         'format_overrides',
         'mdforge.tuning.v1',
         '--pv-body-size',
+        'decodePath',
+        'configurationChanged',
         'data-action="settings"',
         'data-ai-spec-kind="figure"',
         "--radius",
         "var(--radius)",
     ]:
         assert marker in html
+    assert '<div id="preview"></div>' in html
     lowered = html.lower()
     assert "--bg: #ffffff" in lowered
     assert "--bg: #1a1a1a" in lowered
@@ -187,6 +195,69 @@ def test_frontend_contract():
     assert "--active-bg: #e8e8e8" in lowered
     for forbidden in ["blue", "#0000ff", "#657047", "#525c38", "#a9b27f", "#bcc594", "olive"]:
         assert forbidden not in lowered
+
+
+def test_template_name_cannot_escape_templates_root(tmp_path):
+    with pytest.raises(TemplateError):
+        load_template("docx", str(tmp_path))
+    with pytest.raises(TemplateError):
+        load_template("docx", "../academic")
+    assert load_template("docx", "academic").name == "academic"
+
+
+def test_api_rejects_invalid_markdown_and_tuning():
+    c = client()
+    response = c.post(
+        "/api/convert",
+        json={
+            "markdown": [1, 2],
+            "filename": "bad.md",
+            "format": "docx",
+            "template": "academic",
+        },
+    )
+    assert response.status_code == 400
+    assert "list" not in response.get_json()["error"].lower()
+
+    response = c.post(
+        "/api/convert",
+        json={
+            "markdown": "---\ntitle: T\nauthor: A\n---\n\n正文",
+            "filename": "bad.md",
+            "format": "docx",
+            "template": "academic",
+            "format_overrides": {"body": "oops"},
+        },
+    )
+    assert response.status_code == 400
+    assert "format_overrides" in response.get_json()["error"]
+
+
+def test_api_json_false_string_does_not_compile():
+    c = client()
+    response = c.post(
+        "/api/convert",
+        json={
+            "markdown": "---\ntitle: T\nauthor: A\n---\n\n正文",
+            "filename": "false.tex",
+            "format": "tex",
+            "template": "academic",
+            "compile_pdf": "false",
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["ok"] is True
+    assert "compile" not in response.get_json()
+
+
+def test_preview_does_not_embed_remote_images():
+    document = parse_markdown(
+        "---\ntitle: T\n---\n\n![remote](https://example.com/a.png)\n",
+        "remote.md",
+    )
+    preview = render_preview(document)
+    assert "<img" not in preview
+    assert "https://example.com/a.png" in preview
 
 
 def test_job_metadata_edit(tmp_path):
@@ -310,3 +381,24 @@ def test_tuning_template_defaults():
     assert tex["body"]["font"] == "fangsong"
     assert tex["fonts"]["heading"] == "fangsong"
     assert tex["margins"]["left"] == 3.18
+
+
+def test_api_accepts_unicode_and_space_image_names():
+    c = client()
+    image_bytes = IMAGE.read_bytes()
+    for name in ("my image.png", "图表.png"):
+        response = c.post(
+            "/api/convert",
+            data={
+                "markdown": "---\ntitle: T\nauthor: A\n---\n\n![cap](<images/%s>)\n" % name,
+                "filename": "space name.md",
+                "format": "docx",
+                "template": "academic",
+                "images": (io.BytesIO(image_bytes), name),
+            },
+            content_type="multipart/form-data",
+        )
+        payload = response.get_json()
+        assert response.status_code == 200
+        assert payload["ok"] is True
+        assert not [issue for issue in payload.get("issues", []) if issue.get("level") == "error"]

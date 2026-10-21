@@ -12,6 +12,22 @@ from .models import Document, plain_text
 
 _WIDTH_RE = re.compile(r"^\s*(?:\d+(?:\.\d+)?\s*(?:cm|mm|in|px|%|pt)|0?\.\d+\s*\\(?:textwidth|linewidth)|-?\d+(?:\.\d+)?\s*\\(?:textwidth|linewidth))\s*$", re.I)
 _ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+_DANGEROUS_TEX_RE = re.compile(
+    r"\\(?:write18|input|include|includeonly|openin|openout|read|usepackage|documentclass|directlua|latelua|luadirect|includegraphics)\b",
+    re.I,
+)
+
+
+def _tex_without_comments(code: str) -> str:
+    lines = []
+    for line in str(code or "").splitlines():
+        cut = len(line)
+        for index, char in enumerate(line):
+            if char == "%" and (index == 0 or line[index - 1] != "\\"):
+                cut = index
+                break
+        lines.append(line[:cut])
+    return "\n".join(lines)
 
 
 def _issue(level: str, message: str, line: int = 0, code: str = "") -> Dict[str, Any]:
@@ -131,13 +147,31 @@ def validate_document(
         if block.type == "latex_figure":
             if not (block.text or "").strip():
                 issues.append(_issue("error", "LaTeX 图表代码为空", block.line, "latex-figure-empty"))
-            fallback = (block.image or {}).get("path") if block.image else ""
-            if fallback:
-                issues.extend(
-                    _image_reference_issues(
-                        str(fallback), doc.base_dir, block.line, check_images, "warning", "latex-fallback"
+            dangerous = _DANGEROUS_TEX_RE.search(_tex_without_comments(block.text or ""))
+            if dangerous:
+                issues.append(
+                    _issue(
+                        "error",
+                        "LaTeX 图表包含不允许的命令：\\%s" % dangerous.group(0).lstrip("\\"),
+                        block.line,
+                        "latex-figure-dangerous",
                     )
                 )
+            fallback = (block.image or {}).get("path") if block.image else ""
+            if fallback:
+                fallback_issues = _image_reference_issues(
+                    str(fallback), doc.base_dir, block.line, check_images, "warning", "latex-fallback"
+                )
+                for item in fallback_issues:
+                    if item.get("code") in (
+                        "latex-fallback-absolute",
+                        "latex-fallback-remote",
+                        "latex-fallback-outside-base",
+                        "latex-fallback-format",
+                        "latex-fallback-invalid",
+                    ):
+                        item["level"] = "error"
+                issues.extend(fallback_issues)
     return issues
 
 

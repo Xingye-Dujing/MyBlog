@@ -1,8 +1,8 @@
 # MdForge · AI Markdown 写作规范
 
-版本：1.1<br>
-适用模板：`academic`（DOCX / TeX）<br>
-用途：让 AI 生成可直接由 MdForge 排版为学术 DOCX / TeX / PDF 的 Markdown 纯文本。
+- 版本：1.2
+- 适用模板：`academic`（DOCX / TeX）
+- 用途：让 AI 生成可直接由 MdForge 排版为学术 DOCX / TeX / PDF 的 Markdown 纯文本。
 
 > 你负责写 Markdown。版式、字体、页边距、目录、页眉页脚与参考文献样式由 MdForge 模板负责。平台另有「格式」微调与目录选项，不需要也不允许写进 Markdown。不要试图用空格、HTML 或手工分页模拟版式。
 
@@ -243,6 +243,9 @@ $$
 - 题注优先从代码中的 `\caption{...}` 读取；未找到时可以使用围栏属性 `caption="..."`。
 - `fallback="images/foo.png"` 是可选的回退图，用于 DOCX 输出和网页预览；TeX 输出不会使用它。推荐始终提供，且保证是本地 PNG/JPG。
 - 不要把 `\documentclass`、`\begin{document}`、`\end{document}` 放进围栏。
+- 不要使用 `\input`、`\include`、`\write18`、`\openin`、`\openout`、`\read`、`\usepackage`、`\directlua`、`\latelua` 等读取外部文件或执行命令的指令；服务端会拒绝这些图表代码。
+- 图表代码必须自包含；平台编译时禁用 shell escape。
+- `\includegraphics` 同样属于外部文件依赖，会被服务端拒绝；用 `fallback` 提供 DOCX 回退图，用 TikZ/pgfplots 原生绘图。
 - 模板已加载 `pgfplots`、`tikz`、`arrows.meta,calc,positioning,backgrounds` 等图表库，并定义了参考文件的 `cA`–`cJ` 配色与 `cixi` 坐标轴样式。
 - 如果用户是从一张图片出发要求重绘图表，请配合 `AI_LATEX_FIGURE_SPEC.md` 使用专用图表规范。
 - 仅当用户要求 TeX 重绘时使用；普通图片仍使用 PNG/JPG。

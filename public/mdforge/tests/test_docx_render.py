@@ -178,3 +178,33 @@ toc_include_references: false
     ref_title = next(p for p in doc.paragraphs if p.style.name == "ZEN Reference Title")
     outline = ref_title._p.pPr.find(qn("w:outlineLvl"))
     assert outline is not None and outline.get(qn("w:val")) == "9"
+
+
+def test_tuning_applies_h4_and_hyperlink_font(tmp_path):
+    source = """---
+title: T
+author: A
+---
+
+[链接](https://example.com)
+
+#### 四级标题
+"""
+    document = parse_markdown(source)
+    template = load_template("docx", "academic")
+    output = tmp_path / "tuned.docx"
+    render_docx(
+        document,
+        template,
+        str(output),
+        tuning={
+            "body": {"font": "kaiti", "font_size": 12},
+            "fonts": {"heading": "heiti"},
+            "headings": {"h1_size": 16, "h2_size": 14, "h3_size": 12},
+        },
+    )
+    doc = open_docx(str(output))
+    assert doc.styles["Heading 4"].font.size.pt == 12
+    hyperlink_fonts = doc.element.body.xpath(".//w:hyperlink//w:rFonts")
+    assert hyperlink_fonts
+    assert hyperlink_fonts[0].get(qn("w:eastAsia")) == "楷体"

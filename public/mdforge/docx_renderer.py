@@ -35,6 +35,15 @@ _ALIGN_MAP = {
 }
 
 
+def _inside_base(path: str, base_dir: Optional[str]) -> bool:
+    base = os.path.abspath(base_dir or os.getcwd())
+    target = os.path.abspath(path)
+    try:
+        return os.path.commonpath([os.path.normcase(base), os.path.normcase(target)]) == os.path.normcase(base)
+    except ValueError:
+        return False
+
+
 def _set_east_asia(run, name: str) -> None:
     r_pr = run._element.get_or_add_rPr()
     r_fonts = r_pr.find(qn("w:rFonts"))
@@ -83,8 +92,8 @@ class DocxRenderer:
         self.doc = load_document(str(self.template.path_for("template.docx")))
         self._apply_tuning()
         self._apply_metadata()
-        toc_anchor = self._find_anchor("{{TOC}}")
-        content_anchor = self._find_anchor("{{CONTENT}}")
+        toc_anchor = self._find_anchor(str(self.config.get("toc_anchor") or "{{TOC}}"))
+        content_anchor = self._find_anchor(str(self.config.get("content_anchor") or "{{CONTENT}}"))
         toc_enabled, entries = self._toc_entries()
         if toc_enabled:
             self._render_toc(toc_anchor, entries)
@@ -142,6 +151,8 @@ class DocxRenderer:
                 _set_style_east_asia(style, self.heading_font_name)
         h4 = self._style_opt("h4")
         if h4 is not None:
+            if "h3_size" in headings:
+                h4.font.size = Pt(float(headings["h3_size"]))
             _set_style_east_asia(h4, self.heading_font_name)
         title = self._style_opt("title")
         if title is not None:
@@ -197,7 +208,7 @@ class DocxRenderer:
         self._toc_include_references = _as_bool(include_references, True)
         if not self._toc_enabled:
             return False, []
-        pages = estimate_pages(self.document)
+        pages = estimate_pages(self.document, self.tuning, self.doc.sections[0])
         entries: List[Tuple[str, int]] = []
         for block in self.document.blocks:
             if block.type == "heading" and block.level <= self._toc_levels:
@@ -357,7 +368,7 @@ class DocxRenderer:
         if block.type == "heading":
             level = min(4, max(1, block.level))
             paragraph = self._new_paragraph("h%d" % level, "Heading %d" % level)
-            self._add_inlines(paragraph, block.inlines)
+            self._add_inlines(paragraph, block.inlines, font_name=self.heading_font_name)
             inserter.add(paragraph._p)
         elif block.type == "paragraph":
             paragraph = self._new_paragraph("paragraph")
@@ -493,6 +504,9 @@ class DocxRenderer:
         full_path = path
         if not os.path.isabs(full_path):
             full_path = os.path.normpath(os.path.join(self.document.base_dir or os.getcwd(), path))
+        if not _inside_base(full_path, self.document.base_dir):
+            self.document.add_issue("error", "图片路径不能超出 Markdown 所在目录：%s" % path, block.line, "image-outside-base")
+            return
         if not os.path.isfile(full_path):
             self.document.add_issue("error", "图片不存在：%s" % path, block.line, "image-missing")
             return
@@ -533,7 +547,14 @@ class DocxRenderer:
         path = str(image.get("path") or "")
         if path and not re.match(r"^[a-z]+://", path, re.I) and not os.path.isabs(path):
             full = os.path.normpath(os.path.join(self.document.base_dir or os.getcwd(), path))
-            if os.path.isfile(full):
+            if not _inside_base(full, self.document.base_dir):
+                self.document.add_issue(
+                    "error",
+                    "LaTeX 图表 fallback 不能超出 Markdown 所在目录：%s" % path,
+                    block.line,
+                    "latex-fallback-outside-base",
+                )
+            elif os.path.isfile(full):
                 self._render_image(block, inserter)
                 return
         self.figure_no += 1
@@ -579,16 +600,18 @@ class DocxRenderer:
         italic: bool = False,
         strike: bool = False,
         force_bold: bool = False,
+        font_name: Optional[str] = None,
     ) -> None:
+        effective_font = font_name or self.body_font_name
         for item in inlines:
             if item.type == "text":
-                self._add_text_run(paragraph, item.text, bold or force_bold, italic, strike)
+                self._add_text_run(paragraph, item.text, bold or force_bold, italic, strike, effective_font)
             elif item.type == "strong":
-                self._add_inlines(paragraph, item.children, True, italic, strike, force_bold)
+                self._add_inlines(paragraph, item.children, True, italic, strike, force_bold, effective_font)
             elif item.type == "em":
-                self._add_inlines(paragraph, item.children, bold, True, strike, force_bold)
+                self._add_inlines(paragraph, item.children, bold, True, strike, force_bold, effective_font)
             elif item.type == "strike":
-                self._add_inlines(paragraph, item.children, bold, italic, True, force_bold)
+                self._add_inlines(paragraph, item.children, bold, italic, True, force_bold, effective_font)
             elif item.type == "code":
                 run = paragraph.add_run(item.text)
                 run.font.name = "Consolas"
@@ -602,7 +625,15 @@ class DocxRenderer:
                     run.font.strike = True
             elif item.type == "link":
                 text = plain_text(item.children) or item.url
-                _add_hyperlink(paragraph, item.url, text)
+                _add_hyperlink(
+                    paragraph,
+                    item.url,
+                    text,
+                    effective_font,
+                    bold or force_bold,
+                    italic,
+                    strike,
+                )
 
             elif item.type == "math":
                 run = paragraph.add_run(item.text)
@@ -614,9 +645,17 @@ class DocxRenderer:
             elif item.type == "break":
                 paragraph.add_run().add_break()
             else:
-                self._add_inlines(paragraph, item.children, bold, italic, strike, force_bold)
+                self._add_inlines(paragraph, item.children, bold, italic, strike, force_bold, effective_font)
 
-    def _add_text_run(self, paragraph, text: str, bold: bool, italic: bool, strike: bool) -> None:
+    def _add_text_run(
+        self,
+        paragraph,
+        text: str,
+        bold: bool,
+        italic: bool,
+        strike: bool,
+        font_name: Optional[str] = None,
+    ) -> None:
         if not text:
             return
         run = paragraph.add_run()
@@ -626,6 +665,7 @@ class DocxRenderer:
             run.italic = True
         if strike:
             run.font.strike = True
+        _set_east_asia(run, font_name or self.body_font_name)
         for index, part in enumerate(str(text).split("\n")):
             if index:
                 run.add_break()
@@ -672,7 +712,15 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
-def _add_hyperlink(paragraph, url: str, text: str) -> None:
+def _add_hyperlink(
+    paragraph,
+    url: str,
+    text: str,
+    font_name: Optional[str] = None,
+    bold: bool = False,
+    italic: bool = False,
+    strike: bool = False,
+) -> None:
     try:
         r_id = paragraph.part.relate_to(url, RT.HYPERLINK, is_external=True)
     except Exception:
@@ -685,10 +733,16 @@ def _add_hyperlink(paragraph, url: str, text: str) -> None:
     underline = OxmlElement("w:u")
     underline.set(qn("w:val"), "single")
     r_pr.append(underline)
+    if bold:
+        r_pr.append(OxmlElement("w:b"))
+    if italic:
+        r_pr.append(OxmlElement("w:i"))
+    if strike:
+        r_pr.append(OxmlElement("w:strike"))
     r_fonts = OxmlElement("w:rFonts")
     r_fonts.set(qn("w:ascii"), "Times New Roman")
     r_fonts.set(qn("w:hAnsi"), "Times New Roman")
-    r_fonts.set(qn("w:eastAsia"), "宋体")
+    r_fonts.set(qn("w:eastAsia"), font_name or "宋体")
     r_pr.append(r_fonts)
     run.append(r_pr)
     for index, part in enumerate(str(text).split("\n")):
@@ -777,9 +831,25 @@ def _three_line_table(table, header_rows: int = 1) -> None:
                 tc_pr.append(cell_borders)
 
 
-def estimate_pages(document: Document) -> Dict[int, int]:
+def estimate_pages(
+    document: Document,
+    tuning: Optional[Dict[str, Any]] = None,
+    section=None,
+) -> Dict[int, int]:
     capacity = 43
     chars_per_line = 38
+    if section is not None:
+        body_tuning = (tuning or {}).get("body") or {}
+        body_size = float(body_tuning.get("font_size") or 10.5)
+        line_spacing = float(body_tuning.get("line_spacing") or 1.5)
+        available_width = section.page_width.cm - section.left_margin.cm - section.right_margin.cm
+        available_height = section.page_height.cm - section.top_margin.cm - section.bottom_margin.cm
+        char_cm = body_size * 2.54 / 72.0
+        line_cm = char_cm * line_spacing
+        if char_cm > 0:
+            chars_per_line = max(10, int(available_width / char_cm))
+        if line_cm > 0:
+            capacity = max(10, int(available_height / line_cm))
     page = 1
     lines = 0
     abstract = _as_text(document.metadata.get("abstract"))

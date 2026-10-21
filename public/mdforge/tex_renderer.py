@@ -1,6 +1,7 @@
 """LaTeX renderer matched to the reference TeX layout."""
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -33,6 +34,24 @@ def _as_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, str):
         return value.strip().lower() not in ("", "false", "0", "no", "off")
     return default
+
+
+def _asset_stem(stem: str) -> str:
+    original = stem or "document"
+    safe = re.sub(r"[^A-Za-z0-9_\-\u3400-\u9fff]+", "_", original).strip("_")
+    if safe != original or not safe:
+        digest = hashlib.sha1(original.encode("utf-8")).hexdigest()[:8]
+        safe = "%s-%s" % (safe or "document", digest)
+    return safe
+
+
+def _inside_base(path: str, base_dir: Optional[str]) -> bool:
+    base = os.path.abspath(base_dir or os.getcwd())
+    target = os.path.abspath(path)
+    try:
+        return os.path.commonpath([os.path.normcase(base), os.path.normcase(target)]) == os.path.normcase(base)
+    except ValueError:
+        return False
 
 
 def _toc_settings(metadata: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,6 +114,9 @@ class TexRenderer:
                 self.document.add_issue("error", "图片必须使用相对路径：%s" % source, block.line, "image-absolute")
                 continue
             full = os.path.normpath(os.path.join(self.document.base_dir or os.getcwd(), source))
+            if not _inside_base(full, self.document.base_dir):
+                self.document.add_issue("error", "图片路径不能超出 Markdown 所在目录：%s" % source, block.line, "image-outside-base")
+                continue
             if not os.path.isfile(full):
                 self.document.add_issue("error", "图片不存在：%s" % source, block.line, "image-missing")
                 continue
@@ -279,7 +301,7 @@ def render_tex(
     else:
         output_dir = tempfile.mkdtemp(prefix="mdforge-tex-")
         stem = "document"
-    asset_dir = os.path.join(output_dir, stem + "-assets")
+    asset_dir = os.path.join(output_dir, _asset_stem(stem) + "-assets")
     renderer = TexRenderer(document, template, asset_dir)
     renderer.prepare_assets()
     body = renderer.blocks(document.blocks)
@@ -337,7 +359,11 @@ def render_tex(
         "body": body,
         "bibliography": bibliography,
         "documentclass": template.config.get("documentclass") or "article",
-        "classoptions": template.config.get("classoptions") or ["a4paper"],
+        "classoptions": (
+            [template.config["classoptions"]]
+            if isinstance(template.config.get("classoptions"), str)
+            else list(template.config.get("classoptions") or ["a4paper"])
+        ),
     }
     try:
         tex_template = template.jinja_env().get_template(str(template.config.get("file") or "template.tex.j2"))

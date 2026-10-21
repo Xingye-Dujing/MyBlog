@@ -77,10 +77,13 @@ def normalize_tuning(
     if isinstance(overrides, dict) and overrides:
         _merge(base, overrides)
     defaults = DEFAULT_TUNING[fmt]
-    margins = base.setdefault("margins", {})
-    body = base.setdefault("body", {})
-    fonts = base.setdefault("fonts", {})
-    headings = base.setdefault("headings", {})
+    for section in ("margins", "body", "fonts", "headings"):
+        if not isinstance(base.get(section), dict):
+            base[section] = {}
+    margins = base["margins"]
+    body = base["body"]
+    fonts = base["fonts"]
+    headings = base["headings"]
     for edge in ("top", "bottom", "left", "right"):
         margins[edge] = _number(margins.get(edge), defaults["margins"][edge], 0.5, 8.0)
     body["font_size"] = _number(body.get("font_size"), defaults["body"]["font_size"], 6.0, 30.0)

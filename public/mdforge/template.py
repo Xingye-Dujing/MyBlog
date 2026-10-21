@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -15,6 +16,7 @@ from .escape import escape, escape_url
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 FORMATS = ("docx", "tex")
+_TEMPLATE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 @dataclass
@@ -79,7 +81,15 @@ def validate_template_config(fmt: str, config: Dict[str, Any]) -> None:
 def load_template(fmt: str, name: str) -> Template:
     if fmt not in FORMATS:
         raise TemplateError("未知格式：%s" % fmt)
-    directory = TEMPLATES_DIR / fmt / name
+    if not isinstance(name, str) or not _TEMPLATE_NAME_RE.match(name):
+        raise TemplateError("模板名不合法：%s" % name)
+    root = (TEMPLATES_DIR / fmt).resolve()
+    directory = (root / name).resolve()
+    try:
+        if os.path.normcase(os.path.commonpath([str(root), str(directory)])) != os.path.normcase(str(root)):
+            raise TemplateError("模板路径越界：%s" % name)
+    except ValueError:
+        raise TemplateError("模板路径越界：%s" % name)
     if not directory.is_dir():
         raise TemplateError("模板不存在：%s/%s" % (fmt, name))
     config = _load_yaml(directory / "template.yaml")
@@ -90,7 +100,14 @@ def load_template(fmt: str, name: str) -> Template:
         if not (directory / "template.docx").is_file():
             raise TemplateError("模板缺少 template.docx：%s" % directory)
     else:
-        if not (directory / str(config.get("file"))).is_file():
+        template_file = (directory / str(config.get("file"))).resolve()
+        try:
+            inside = os.path.normcase(os.path.commonpath([str(directory), str(template_file)])) == os.path.normcase(str(directory))
+        except ValueError:
+            inside = False
+        if not inside:
+            raise TemplateError("模板文件路径越界：%s" % config.get("file"))
+        if not template_file.is_file():
             raise TemplateError("模板缺少 %s：%s" % (config.get("file"), directory))
     return Template(format=fmt, name=name, directory=directory, config=config)
 
@@ -103,7 +120,7 @@ def list_templates(fmt: Optional[str] = None) -> List[Dict[str, Any]]:
         if not root.is_dir():
             continue
         for child in sorted(root.iterdir()):
-            if not child.is_dir():
+            if not child.is_dir() or not _TEMPLATE_NAME_RE.match(child.name):
                 continue
             yaml_path = child / "template.yaml"
             if not yaml_path.is_file():
@@ -111,6 +128,8 @@ def list_templates(fmt: Optional[str] = None) -> List[Dict[str, Any]]:
             try:
                 config = _load_yaml(yaml_path)
                 validate_template_config(current, config)
+                if str(config.get("name")) != child.name:
+                    continue
             except TemplateError:
                 continue
             meta = config.get("metadata") or {}

@@ -2398,7 +2398,7 @@
           </div>
           <div class="tab-panels">
             <div class="tab-panel active" id="panel-preview">
-              <div id="preview" class="preview-doc"></div>
+              <div id="preview"></div>
             </div>
             <div class="tab-panel" id="panel-meta">
               <div class="meta-scroll">
@@ -3623,6 +3623,7 @@ template: academic
           updateFormatUI();
           renderTemplateCard(null);
           syncTuning(true);
+          markResultStale();
           scheduleParse(0);
         }
 
@@ -3636,6 +3637,7 @@ template: academic
           updateTemplateUI();
           renderTemplateCard(null);
           syncTuning(true);
+          markResultStale();
           closeDropdowns();
           scheduleParse(0);
         }
@@ -3918,8 +3920,17 @@ template: academic
           return Array.from(new Set(paths));
         }
 
+        function decodePath(value) {
+          const text = String(value == null ? '' : value);
+          try {
+            return decodeURIComponent(text);
+          } catch (error) {
+            return text;
+          }
+        }
+
         function basename(path) {
-          return String(path || '').replace(/\\/g, '/').split('/').pop();
+          return decodePath(String(path || '').replace(/\\/g, '/').split('/').pop());
         }
 
         function missingImages() {
@@ -4239,7 +4250,7 @@ template: academic
                       </div>
                     </div>
                   </div>
-                  ${result.stale ? '<div class="notice-box">源文稿已修改，当前文件来自上一次铸造，请重新转换后再下载。</div>' : ''}
+                  ${result.stale ? '<div class="notice-box">源文稿或格式配置已修改，当前文件来自上一次铸造，请重新转换后再下载。</div>' : ''}
                   <div class="result-actions">
                     <a class="btn primary" href="${escapeHtml(result.download_url)}">下载 ${escapeHtml((result.format || state.format).toUpperCase())}</a>
                     ${result.pdf_url ? `<a class="btn" href="${escapeHtml(result.pdf_url)}">下载 PDF</a>` : ''}
@@ -4384,28 +4395,40 @@ template: academic
             return;
           }
           const submittedSource = dom.editor.value;
+          const submittedFormat = state.format;
+          const submittedTemplate = state.template;
+          const submittedTuning = JSON.stringify(state.tuning || {});
+          const submittedPdf = dom.optPdf.checked;
+          const submittedStrict = dom.optStrict.checked;
           setBusy(true);
           try {
             const form = new FormData();
             form.append('markdown', dom.editor.value);
             form.append('filename', state.filename || 'document.md');
-            form.append('format', state.format);
-            form.append('template', state.template);
-            form.append('strict', dom.optStrict.checked ? '1' : '0');
-            form.append('compile_pdf', state.format === 'tex' && dom.optPdf.checked ? '1' : '0');
+            form.append('format', submittedFormat);
+            form.append('template', submittedTemplate);
+            form.append('strict', submittedStrict ? '1' : '0');
+            form.append('compile_pdf', submittedFormat === 'tex' && submittedPdf ? '1' : '0');
             form.append('metadata', '{}');
-            form.append('format_overrides', JSON.stringify(state.tuning || {}));
+            form.append('format_overrides', submittedTuning);
             state.images.forEach((image) => form.append('images', image.file, image.name));
             const response = await fetch('/api/convert', { method: 'POST', body: form });
             const data = await response.json();
-            if (data.ok && dom.editor.value !== submittedSource) data.stale = true;
+            const configurationChanged =
+              state.format !== submittedFormat ||
+              state.template !== submittedTemplate ||
+              JSON.stringify(state.tuning || {}) !== submittedTuning ||
+              dom.optPdf.checked !== submittedPdf ||
+              dom.optStrict.checked !== submittedStrict;
+            if (data.ok && (dom.editor.value !== submittedSource || configurationChanged)) data.stale = true;
             state.result = data;
             state.issues = data.issues || (data.ok ? [] : [{ level: 'error', message: data.error || '转换失败', line: data.line || 0 }]);
             if (data.ok) {
               state.stats = data.stats || state.stats;
               updateWordStats();
               setHint(data.compile && !data.compile.ok ? 'TeX 已生成 · PDF 编译失败' : '铸造完成', data.compile && !data.compile.ok ? 'warn' : 'idle');
-              const kind = data.compile && !data.compile.ok ? '文件已生成，PDF 编译失败' : `${state.format.toUpperCase()} 铸造完成`;
+              const resultFormat = (data.format || submittedFormat).toUpperCase();
+              const kind = data.compile && !data.compile.ok ? '文件已生成，PDF 编译失败' : `${resultFormat} 铸造完成`;
               toast(kind, !!(data.compile && !data.compile.ok));
             } else {
               setHint('转换失败', 'warn');

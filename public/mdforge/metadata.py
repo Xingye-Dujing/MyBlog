@@ -150,8 +150,19 @@ def apply_tex_metadata_patterns(tex: str, updates: Dict[str, Any], config: Dict[
         if field not in updates:
             continue
         value = escape(_text(updates.get(field)))
+
+        def replace_match(match, replacement=value):
+            if not match.groups():
+                return match.group(0)
+            start, end = match.span(1)
+            if start < 0 or end < 0:
+                return match.group(0)
+            relative_start = start - match.start()
+            relative_end = end - match.start()
+            return match.group(0)[:relative_start] + replacement + match.group(0)[relative_end:]
+
         try:
-            result = re.sub(pattern, lambda m, v=value: m.group(0).replace(m.group(1), v) if m.groups() else m.group(0), result)
+            result = re.sub(pattern, replace_match, result)
         except re.error as exc:
             raise TemplateError("meta_patterns 正则无效（%s）：%s" % (field, exc))
     return result

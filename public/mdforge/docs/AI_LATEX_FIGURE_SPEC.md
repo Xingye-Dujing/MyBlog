@@ -1,8 +1,8 @@
 # MdForge · AI LaTeX 图表重绘规范
 
-版本：1.1<br>
-目标模板：`academic`（TeX / XeLaTeX）<br>
-使用场景：用户把一张已有图表图片发给你，要求你用 LaTeX 重新绘制，使其可直接用于 MdForge 的学术论文排版。
+- 版本：1.2
+- 目标模板：`academic`（TeX / XeLaTeX）
+- 使用场景：用户把一张已有图表图片发给你，要求你用 LaTeX 重新绘制，使其可直接用于 MdForge 的学术论文排版。
 
 > 平台「格式」微调只改变正文与标题的页边距、字体、字号等版式，不会改变图表内部绘制。图表宽度请使用 `\textwidth` 相对值，自动适配页边距；不要读取或改写微调 JSON。
 
@@ -78,6 +78,9 @@ MdForge 的 `academic` 模板已经预加载：
 因此：
 
 - 不要在围栏里写 `\usepackage`、`\documentclass`、`\begin{document}`、`\end{document}`。
+- 不要使用 `\input`、`\include`、`\write18`、`\openin`、`\openout`、`\read`、`\directlua`、`\latelua` 或任何外部文件依赖；MdForge 会拒绝这些命令。
+- `\includegraphics` 也会被拒绝；需要回退图时使用 `fallback` 属性，TeX 中必须原生重绘。
+- 编译使用 `-no-shell-escape`；图表必须完全由围栏内代码自包含绘制。
 - 不要新定义全局宏、重定义命令或加载额外宏包。
 - 需要形状、箭头、虚线、阴影、括号、分组时，优先使用上述库已有能力。
 - 如果某个效果必须依赖模板没有的包，改用简化方案，而不是偷偷加载宏包。
