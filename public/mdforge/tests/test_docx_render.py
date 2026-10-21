@@ -140,3 +140,41 @@ def test_toc_field_uses_configured_levels(tmp_path):
     assert r'TOC \o "1-3"' in instructions
     toc_texts = [p.text for p in doc.paragraphs if p.style.name == "ZEN TOC Entry"]
     assert any(text.startswith("三级") for text in toc_texts)
+
+
+def test_toc_customization(tmp_path):
+    source = """---
+title: 目录定制
+toc: true
+toc_title: 内容目录
+toc_levels: 3
+toc_include_references: false
+---
+
+# 一级
+
+## 二级
+
+### 三级
+
+# 参考文献
+
+文献一条.
+"""
+    document = parse_markdown(source)
+    template = load_template("docx", "academic")
+    output = tmp_path / "toc-custom.docx"
+    render_docx(document, template, str(output))
+    doc = open_docx(str(output))
+    texts = [p.text for p in doc.paragraphs]
+    assert "内容目录" in texts
+    toc_entries = [p.text for p in doc.paragraphs if p.style.name == "ZEN TOC Entry"]
+    assert any(text.startswith("一级") for text in toc_entries)
+    assert any(text.startswith("二级") for text in toc_entries)
+    assert any(text.startswith("三级") for text in toc_entries)
+    assert not any(text.startswith("参考文献") for text in toc_entries)
+    instructions = "".join(node.text or "" for node in doc.element.body.xpath(".//w:instrText"))
+    assert r'TOC \o "1-3"' in instructions
+    ref_title = next(p for p in doc.paragraphs if p.style.name == "ZEN Reference Title")
+    outline = ref_title._p.pPr.find(qn("w:outlineLvl"))
+    assert outline is not None and outline.get(qn("w:val")) == "9"

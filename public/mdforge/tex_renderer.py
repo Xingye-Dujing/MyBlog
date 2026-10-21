@@ -14,6 +14,7 @@ from .escape import escape, escape_url
 from .images import resolve_tex_width
 from .models import Block, Document, Inline, ListItem, plain_text
 from .template import Template
+from .tuning import normalize_tuning, tex_font
 
 
 def _as_text(value: Any) -> str:
@@ -22,6 +23,45 @@ def _as_text(value: Any) -> str:
     if isinstance(value, (list, tuple)):
         return "；".join(str(item) for item in value if str(item).strip())
     return str(value)
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "0", "no", "off")
+    return default
+
+
+def _toc_settings(metadata: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+    toc_config = config.get("toc") or {}
+    enabled: Any = toc_config.get("enabled", False)
+    title: Any = toc_config.get("title") or "目录"
+    levels: Any = toc_config.get("levels") or 2
+    include_references: Any = toc_config.get("include_references", True)
+    toc_meta = metadata.get("toc")
+    if isinstance(toc_meta, dict):
+        enabled = toc_meta.get("enabled", enabled)
+        title = toc_meta.get("title", title)
+        levels = toc_meta.get("levels", levels)
+        include_references = toc_meta.get("include_references", include_references)
+    elif "toc" in metadata:
+        enabled = toc_meta
+    title = str(metadata.get("toc_title", title) or "目录").strip() or "目录"
+    levels = metadata.get("toc_levels", levels)
+    include_references = metadata.get("toc_include_references", include_references)
+    try:
+        level_value = max(1, min(3, int(levels)))
+    except (TypeError, ValueError):
+        level_value = 2
+    return {
+        "enabled": _as_bool(enabled, False),
+        "title": title,
+        "levels": level_value,
+        "include_references": _as_bool(include_references, True),
+    }
 
 
 def _strip_caption_number(text: str, kind: str) -> str:
@@ -226,7 +266,12 @@ class TexRenderer:
         return "\n".join(lines)
 
 
-def render_tex(document: Document, template: Template, output: Optional[str] = None) -> Dict[str, Any]:
+def render_tex(
+    document: Document,
+    template: Template,
+    output: Optional[str] = None,
+    tuning: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     if output:
         absolute_output = os.path.abspath(output)
         output_dir = os.path.dirname(absolute_output) or os.getcwd()
@@ -248,6 +293,19 @@ def render_tex(document: Document, template: Template, output: Optional[str] = N
     metadata = document.metadata or {}
     keywords = _as_text(metadata.get("keywords"))
     abstract = _as_text(metadata.get("abstract")).replace("\n", " ")
+    toc = _toc_settings(metadata, template.config)
+    tune = normalize_tuning(template.config, "tex", tuning)
+    margins = tune.get("margins") or {}
+    body_tuning = tune.get("body") or {}
+    heading = tune.get("headings") or {}
+    body_size = float(body_tuning.get("font_size") or 10.5)
+    body_line = round(body_size * float(body_tuning.get("line_spacing") or 1.25), 2)
+    body_font_tex = tex_font(body_tuning.get("font"), "FangSong")
+    heading_font_tex = tex_font((tune.get("fonts") or {}).get("heading"), "FangSong")
+    title_size = float(heading.get("title_size") or 16)
+    h1_size = float(heading.get("h1_size") or 16)
+    h2_size = float(heading.get("h2_size") or 10.5)
+    h3_size = float(heading.get("h3_size") or 10.5)
     context = {
         "title_tex": escape(_as_text(metadata.get("title"))),
         "subtitle_tex": escape(_as_text(metadata.get("subtitle"))),
@@ -255,6 +313,27 @@ def render_tex(document: Document, template: Template, output: Optional[str] = N
         "keywords_tex": escape(keywords),
         "author_tex": escape(_as_text(metadata.get("author"))),
         "subject_tex": escape(_as_text(metadata.get("subject"))),
+        "toc_enabled": toc["enabled"],
+        "toc_title_tex": escape(toc["title"]),
+        "toc_levels": toc["levels"],
+        "toc_include_references": toc["include_references"],
+        "margin_top": margins.get("top", 2.54),
+        "margin_bottom": margins.get("bottom", 2.54),
+        "margin_left": margins.get("left", 3.18),
+        "margin_right": margins.get("right", 3.18),
+        "body_size": body_size,
+        "body_line": body_line,
+        "par_indent": float(body_tuning.get("first_line_indent") or 2),
+        "body_font_tex": body_font_tex,
+        "heading_font_tex": heading_font_tex,
+        "title_size": title_size,
+        "title_line": round(title_size * 1.5, 2),
+        "h1_size": h1_size,
+        "h1_line": round(h1_size * 1.375, 2),
+        "h2_size": h2_size,
+        "h2_line": round(h2_size * 1.4286, 2),
+        "h3_size": h3_size,
+        "h3_line": round(h3_size * 1.4286, 2),
         "body": body,
         "bibliography": bibliography,
         "documentclass": template.config.get("documentclass") or "article",

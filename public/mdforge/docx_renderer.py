@@ -22,6 +22,7 @@ from .docx_utils import (
 from .errors import TemplateError
 from .images import image_size_cm, resolve_docx_width_cm, align_value
 from .metadata import apply_docx_metadata, placeholder_mapping
+from .tuning import docx_font, normalize_tuning
 from .models import Block, Document, Inline, plain_text
 from .template import Template
 
@@ -57,12 +58,15 @@ class Inserter:
 
 
 class DocxRenderer:
-    def __init__(self, document: Document, template: Template):
+    def __init__(self, document: Document, template: Template, tuning: Optional[Dict[str, Any]] = None):
         self.document = document
         self.template = template
         self.config = template.config
         self.style_map: Dict[str, str] = dict(self.config.get("styles") or {})
         self.toc = self.config.get("toc") or {}
+        self.tuning = normalize_tuning(self.config, "docx", tuning)
+        self.body_font_name = docx_font((self.tuning.get("body") or {}).get("font"), "宋体")
+        self.heading_font_name = docx_font((self.tuning.get("fonts") or {}).get("heading"), "黑体")
         self.table_no = 0
         self.figure_no = 0
 
@@ -77,6 +81,7 @@ class DocxRenderer:
         self.metadata = metadata
         self.keep_anchor = keep_anchor
         self.doc = load_document(str(self.template.path_for("template.docx")))
+        self._apply_tuning()
         self._apply_metadata()
         toc_anchor = self._find_anchor("{{TOC}}")
         content_anchor = self._find_anchor("{{CONTENT}}")
@@ -94,6 +99,69 @@ class DocxRenderer:
             self.doc.save(output)
         return self.doc
 
+    def _style_opt(self, key: str):
+        name = self.style_map.get(key)
+        if not name:
+            return None
+        try:
+            return self.doc.styles[name]
+        except KeyError:
+            return None
+
+    def _apply_tuning(self) -> None:
+        tuning = self.tuning or {}
+        margins = tuning.get("margins") or {}
+        for section in self.doc.sections:
+            if "top" in margins:
+                section.top_margin = Cm(float(margins["top"]))
+            if "bottom" in margins:
+                section.bottom_margin = Cm(float(margins["bottom"]))
+            if "left" in margins:
+                section.left_margin = Cm(float(margins["left"]))
+            if "right" in margins:
+                section.right_margin = Cm(float(margins["right"]))
+        body = tuning.get("body") or {}
+        size = float(body.get("font_size") or 10.5)
+        line_spacing = float(body.get("line_spacing") or 1.5)
+        indent_chars = float(body.get("first_line_indent") or 0)
+        indent = Pt(size * indent_chars)
+        for key in ("paragraph", "abstract", "keywords"):
+            style = self._style_opt(key)
+            if style is None:
+                continue
+            style.font.size = Pt(size)
+            style.paragraph_format.line_spacing = line_spacing
+            style.paragraph_format.first_line_indent = indent
+            _set_style_east_asia(style, self.body_font_name)
+        headings = tuning.get("headings") or {}
+        for key, size_key in (("h1", "h1_size"), ("h2", "h2_size"), ("h3", "h3_size")):
+            style = self._style_opt(key)
+            if style is not None and size_key in headings:
+                style.font.size = Pt(float(headings[size_key]))
+            if style is not None:
+                _set_style_east_asia(style, self.heading_font_name)
+        h4 = self._style_opt("h4")
+        if h4 is not None:
+            _set_style_east_asia(h4, self.heading_font_name)
+        title = self._style_opt("title")
+        if title is not None:
+            if "title_size" in headings:
+                title.font.size = Pt(float(headings["title_size"]))
+            _set_style_east_asia(title, self.heading_font_name)
+        subtitle = self._style_opt("subtitle")
+        if subtitle is not None:
+            if "title_size" in headings:
+                subtitle.font.size = Pt(float(headings["title_size"]))
+            _set_style_east_asia(subtitle, self.heading_font_name)
+        for key in ("table_text", "caption", "toc_entry"):
+            style = self._style_opt(key)
+            if style is not None:
+                _set_style_east_asia(style, self.body_font_name)
+        for key in ("toc_title", "bibliography_title"):
+            style = self._style_opt(key)
+            if style is not None:
+                _set_style_east_asia(style, self.heading_font_name)
+
     def _apply_metadata(self):
         apply_docx_metadata(self.doc, self.metadata, self.config)
 
@@ -104,19 +172,55 @@ class DocxRenderer:
         raise TemplateError("模板中未找到内容锚点 %s" % text)
 
     def _toc_entries(self) -> Tuple[bool, List[Tuple[str, int]]]:
-        if self.toc.get("enabled", True) is False or self.metadata.get("toc") is False:
+        toc_config = self.config.get("toc") or {}
+        enabled: Any = toc_config.get("enabled", True)
+        title: Any = toc_config.get("title") or "目录"
+        levels: Any = toc_config.get("levels") or 2
+        include_references: Any = toc_config.get("include_references", True)
+        toc_meta = self.metadata.get("toc")
+        if isinstance(toc_meta, dict):
+            enabled = toc_meta.get("enabled", enabled)
+            title = toc_meta.get("title", title)
+            levels = toc_meta.get("levels", levels)
+            include_references = toc_meta.get("include_references", include_references)
+        elif "toc" in self.metadata:
+            enabled = toc_meta
+        title = self.metadata.get("toc_title", title)
+        levels = self.metadata.get("toc_levels", levels)
+        include_references = self.metadata.get("toc_include_references", include_references)
+        self._toc_enabled = _as_bool(enabled, True)
+        self._toc_title = str(title or "目录").strip() or "目录"
+        try:
+            self._toc_levels = max(1, min(3, int(levels)))
+        except (TypeError, ValueError):
+            self._toc_levels = 2
+        self._toc_include_references = _as_bool(include_references, True)
+        if not self._toc_enabled:
             return False, []
-        levels = int(self.toc.get("levels") or 2)
         pages = estimate_pages(self.document)
         entries: List[Tuple[str, int]] = []
         for block in self.document.blocks:
-            if block.type == "heading" and block.level <= levels:
+            if block.type == "heading" and block.level <= self._toc_levels:
                 text = plain_text(block.inlines).strip()
                 if text:
                     entries.append((text, pages.get(id(block), 1)))
-            elif block.type == "bibliography":
+            elif block.type == "bibliography" and self._toc_include_references:
                 entries.append(("参考文献", pages.get(id(block), entries[-1][1] if entries else 1)))
         return bool(entries), entries
+
+    def _set_toc_title(self) -> None:
+        style_name = self.style_map.get("toc_title")
+        if not style_name:
+            return
+        for paragraph in self.doc.paragraphs:
+            if paragraph.style is not None and paragraph.style.name == style_name:
+                if paragraph.runs:
+                    paragraph.runs[0].text = self._toc_title
+                    for extra in paragraph.runs[1:]:
+                        extra.text = ""
+                else:
+                    paragraph.add_run(self._toc_title)
+                return
 
     def _render_toc(self, anchor, entries: List[Tuple[str, int]]) -> None:
         if not entries:
@@ -127,9 +231,10 @@ class DocxRenderer:
         parent = anchor._p.getparent()
         index = list(parent).index(anchor._p)
         inserter = Inserter(parent, index)
+        self._set_toc_title()
         paragraphs = []
         use_field = bool(self.toc.get("field", True))
-        levels = int(self.toc.get("levels") or 2)
+        levels = self._toc_levels
         for entry_index, (text, page) in enumerate(entries):
             paragraph = self._new_paragraph("toc_entry")
             paragraph.paragraph_format.tab_stops.add_tab_stop(
@@ -138,10 +243,10 @@ class DocxRenderer:
             if entry_index == 0 and use_field:
                 _toc_field_begin(paragraph, levels)
             run = paragraph.add_run(text)
-            _set_east_asia(run, "宋体")
+            _set_east_asia(run, self.body_font_name)
             run.add_tab()
             page_run = paragraph.add_run(str(page))
-            _set_east_asia(page_run, "宋体")
+            _set_east_asia(page_run, self.body_font_name)
             paragraphs.append(paragraph)
             inserter.add(paragraph._p)
         if use_field:
@@ -197,7 +302,7 @@ class DocxRenderer:
                 if first and toc_enabled:
                     paragraph.paragraph_format.page_break_before = True
                 run = paragraph.add_run(line.strip())
-                _set_east_asia(run, "黑体")
+                _set_east_asia(run, self.heading_font_name)
                 inserter.add(paragraph._p)
                 first = False
         subtitle = str(self.metadata.get("subtitle") or "").strip()
@@ -207,7 +312,7 @@ class DocxRenderer:
                 if first and toc_enabled:
                     paragraph.paragraph_format.page_break_before = True
                 run = paragraph.add_run(line.strip())
-                _set_east_asia(run, "黑体")
+                _set_east_asia(run, self.heading_font_name)
                 inserter.add(paragraph._p)
                 first = False
         abstract = _as_text(self.metadata.get("abstract"))
@@ -217,9 +322,9 @@ class DocxRenderer:
                 paragraph.paragraph_format.page_break_before = True
             label = paragraph.add_run("摘  要：")
             label.bold = False
-            _set_east_asia(label, "黑体")
+            _set_east_asia(label, self.heading_font_name)
             body = paragraph.add_run(abstract)
-            _set_east_asia(body, "宋体")
+            _set_east_asia(body, self.body_font_name)
             inserter.add(paragraph._p)
             first = False
         keywords = self.metadata.get("keywords")
@@ -229,9 +334,9 @@ class DocxRenderer:
                 paragraph.paragraph_format.page_break_before = True
             label = paragraph.add_run("关键词：")
             label.bold = False
-            _set_east_asia(label, "黑体")
+            _set_east_asia(label, self.heading_font_name)
             body = paragraph.add_run(_as_text(keywords))
-            _set_east_asia(body, "宋体")
+            _set_east_asia(body, self.body_font_name)
             inserter.add(paragraph._p)
             first = False
             spacer = self._new_paragraph("paragraph")
@@ -265,7 +370,7 @@ class DocxRenderer:
             run = paragraph.add_run()
             run.font.name = "Consolas"
             run.font.size = Pt(9)
-            _set_east_asia(run, "宋体")
+            _set_east_asia(run, self.body_font_name)
             lines = block.text.rstrip("\n").split("\n")
             for index, line in enumerate(lines):
                 if index:
@@ -299,7 +404,7 @@ class DocxRenderer:
             run = paragraph.add_run(block.text)
             run.font.name = "Cambria Math"
             run.italic = True
-            _set_east_asia(run, "宋体")
+            _set_east_asia(run, self.body_font_name)
             inserter.add(paragraph._p)
         elif block.type == "bibliography":
             self._render_bibliography(block, inserter)
@@ -321,7 +426,7 @@ class DocxRenderer:
             else:
                 prefix = ["•", "◦", "▪"][level - 1] + " "
             prefix_run = paragraph.add_run(prefix)
-            _set_east_asia(prefix_run, "宋体")
+            _set_east_asia(prefix_run, self.body_font_name)
             self._add_inlines(paragraph, item.inlines)
             inserter.add(paragraph._p)
             for child in item.children:
@@ -346,9 +451,9 @@ class DocxRenderer:
             label = "表 %d　" % self.table_no
             run = paragraph.add_run(label)
             run.bold = True
-            _set_east_asia(run, "黑体")
+            _set_east_asia(run, self.heading_font_name)
             run2 = paragraph.add_run(caption)
-            _set_east_asia(run2, "宋体")
+            _set_east_asia(run2, self.body_font_name)
             inserter.add(paragraph._p)
         table = self._new_table(len(rows), cols)
         try:
@@ -418,9 +523,9 @@ class DocxRenderer:
             caption_paragraph = self._new_paragraph("caption")
             label = caption_paragraph.add_run("图 %d　" % self.figure_no)
             label.bold = True
-            _set_east_asia(label, "黑体")
+            _set_east_asia(label, self.heading_font_name)
             body = caption_paragraph.add_run(caption)
-            _set_east_asia(body, "宋体")
+            _set_east_asia(body, self.body_font_name)
             inserter.add(caption_paragraph._p)
 
     def _render_latex_figure(self, block: Block, inserter: Inserter) -> None:
@@ -436,12 +541,12 @@ class DocxRenderer:
         paragraph = self._new_paragraph("caption")
         label = paragraph.add_run("图 %d　" % self.figure_no)
         label.bold = True
-        _set_east_asia(label, "黑体")
+        _set_east_asia(label, self.heading_font_name)
         body = paragraph.add_run(caption or "LaTeX 图表")
-        _set_east_asia(body, "宋体")
+        _set_east_asia(body, self.body_font_name)
         note = paragraph.add_run("（DOCX 占位；TeX 输出使用 LaTeX 绘制）")
         note.font.size = Pt(8)
-        _set_east_asia(note, "宋体")
+        _set_east_asia(note, self.body_font_name)
         inserter.add(paragraph._p)
         self.document.add_issue(
             "warning",
@@ -454,7 +559,12 @@ class DocxRenderer:
         paragraph = self._new_paragraph("bibliography_title")
         run = paragraph.add_run("参考文献")
         run.bold = True
-        _set_east_asia(run, "黑体")
+        _set_east_asia(run, self.heading_font_name)
+        if not getattr(self, "_toc_include_references", True):
+            p_pr = paragraph._p.get_or_add_pPr()
+            outline = OxmlElement("w:outlineLvl")
+            outline.set(qn("w:val"), "9")
+            p_pr.append(outline)
         inserter.add(paragraph._p)
         for inlines in block.items:
             item = self._new_paragraph("bibliography")
@@ -483,7 +593,7 @@ class DocxRenderer:
                 run = paragraph.add_run(item.text)
                 run.font.name = "Consolas"
                 run.font.size = Pt(9.5)
-                _set_east_asia(run, "宋体")
+                _set_east_asia(run, self.body_font_name)
                 if bold or force_bold:
                     run.bold = True
                 if italic:
@@ -498,7 +608,7 @@ class DocxRenderer:
                 run = paragraph.add_run(item.text)
                 run.font.name = "Cambria Math"
                 run.italic = True
-                _set_east_asia(run, "宋体")
+                _set_east_asia(run, self.body_font_name)
                 if bold or force_bold:
                     run.bold = True
             elif item.type == "break":
@@ -531,6 +641,27 @@ class DocxRenderer:
 
 def _strip_caption_number(text: str) -> str:
     return _CAPTION_NUMBER_RE.sub("", str(text or "")).strip()
+
+
+def _set_style_east_asia(style, name: str) -> None:
+    r_pr = style.element.get_or_add_rPr()
+    r_fonts = r_pr.find(qn("w:rFonts"))
+    if r_fonts is None:
+        r_fonts = OxmlElement("w:rFonts")
+        r_pr.append(r_fonts)
+    r_fonts.set(qn("w:eastAsia"), name)
+    r_fonts.set(qn("w:ascii"), r_fonts.get(qn("w:ascii")) or "Times New Roman")
+    r_fonts.set(qn("w:hAnsi"), r_fonts.get(qn("w:hAnsi")) or "Times New Roman")
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "0", "no", "off")
+    return default
 
 
 def _as_text(value: Any) -> str:
@@ -704,5 +835,11 @@ def _consume_list_lines(block: Block, consume, chars_per_line: int) -> None:
                 _consume_list_lines(child, consume, chars_per_line)
 
 
-def render_docx(document: Document, template: Template, output: Optional[str] = None, keep_anchor: bool = False):
-    return DocxRenderer(document, template).run(document.metadata, output, keep_anchor=keep_anchor)
+def render_docx(
+    document: Document,
+    template: Template,
+    output: Optional[str] = None,
+    keep_anchor: bool = False,
+    tuning: Optional[Dict[str, Any]] = None,
+):
+    return DocxRenderer(document, template, tuning).run(document.metadata, output, keep_anchor=keep_anchor)

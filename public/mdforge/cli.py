@@ -41,8 +41,20 @@ def cli():
 @click.option("--engine", type=click.Choice(["xelatex", "lualatex", "pdflatex"]), default=None)
 @click.option("--strict", is_flag=True, help="遇到任一告警即失败")
 @click.option("--keep-anchor", is_flag=True, help="保留 DOCX 内容锚点（调试）")
-def convert(input_path, template, output, fmt, compile_pdf, engine, strict, keep_anchor):
+@click.option("--format-config", "format_config", type=click.Path(exists=True, dir_okay=False), default=None, help="格式微调 JSON 文件")
+def convert(input_path, template, output, fmt, compile_pdf, engine, strict, keep_anchor, format_config):
     """把 Markdown 转换为 DOCX 或 TeX。"""
+    tuning = None
+    if format_config:
+        try:
+            with open(format_config, "r", encoding="utf-8-sig") as handle:
+                tuning = json.load(handle)
+        except (OSError, ValueError) as exc:
+            click.echo("[错误] 无法读取格式微调配置：%s" % exc, err=True)
+            sys.exit(1)
+        if not isinstance(tuning, dict):
+            click.echo("[错误] 格式微调配置必须是 JSON 对象", err=True)
+            sys.exit(1)
     try:
         result = convert_file(
             input_path,
@@ -53,6 +65,7 @@ def convert(input_path, template, output, fmt, compile_pdf, engine, strict, keep
             compile_pdf=compile_pdf,
             engine=engine,
             keep_anchor=keep_anchor,
+            tuning=tuning,
         )
     except MdForgeError as exc:
         click.echo("[错误] %s" % exc.message, err=True)

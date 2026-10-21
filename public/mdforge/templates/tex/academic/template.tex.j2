@@ -13,7 +13,8 @@
 \usepackage{xcolor}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
-\usetikzlibrary{arrows.meta,calc,positioning,backgrounds}
+\usepgfplotslibrary{groupplots,fillbetween}
+\usetikzlibrary{arrows.meta,calc,positioning,backgrounds,patterns,shapes.geometric,shapes.misc,fit,decorations.pathreplacing}
 \definecolor{cA}{HTML}{22557A}
 \definecolor{cB}{HTML}{B5563C}
 \definecolor{cC}{HTML}{3E7A5A}
@@ -32,16 +33,18 @@
 \usepackage{enumitem}
 \usepackage[normalem]{ulem}
 \usepackage{fancyvrb}
-\usepackage[left=3.18cm,right=3.18cm,top=2.54cm,bottom=2.54cm,headheight=0pt,headsep=0pt,footskip=1.2cm]{geometry}
+\usepackage[left={{ margin_left }}cm,right={{ margin_right }}cm,top={{ margin_top }}cm,bottom={{ margin_bottom }}cm,headheight=0pt,headsep=0pt,footskip=1.2cm]{geometry}
 \usepackage{titlesec}
 \usepackage[hidelinks]{hyperref}
 
-\setCJKmainfont{FangSong}[AutoFakeBold=2.0]
-\setCJKsansfont{FangSong}[AutoFakeBold=2.0]
-\setCJKmonofont{FangSong}[AutoFakeBold=2.0]
+\setCJKmainfont{ {{- body_font_tex -}} }[AutoFakeBold=2.0]
+\setCJKsansfont{ {{- body_font_tex -}} }[AutoFakeBold=2.0]
+\setCJKmonofont{ {{- body_font_tex -}} }[AutoFakeBold=2.0]
 \setmainfont{FangSong}[AutoFakeBold=2.0]
 \setsansfont{FangSong}[AutoFakeBold=2.0]
 \setmonofont{FangSong}[AutoFakeBold=2.0]
+\setCJKfamilyfont{mdforgeheading}{ {{- heading_font_tex -}} }[AutoFakeBold=2.0]
+\newcommand{\mdheadingfont}{\CJKfamily{mdforgeheading}}
 \newfontfamily\codefont{Consolas}
 \newcommand{\mdinlinecode}[1]{\mbox{\codefont #1}}
 
@@ -58,13 +61,13 @@
 \newunicodechar{×}{$\times$}
 
 \setcounter{secnumdepth}{-1}
-\titleformat{\section}[block]{\normalfont\bfseries\fontsize{16}{22}\selectfont}{}{0pt}{}
+\titleformat{\section}[block]{\normalfont\mdheadingfont\bfseries\fontsize{ {{ h1_size }} }{ {{ h1_line }} }\selectfont}{}{0pt}{}
 \titlespacing*{\section}{0pt}{14pt}{8pt}
-\titleformat{\subsection}[block]{\normalfont\bfseries\fontsize{10.5}{15}\selectfont}{}{0pt}{}
+\titleformat{\subsection}[block]{\normalfont\mdheadingfont\bfseries\fontsize{ {{ h2_size }} }{ {{ h2_line }} }\selectfont}{}{0pt}{}
 \titlespacing*{\subsection}{0pt}{8pt}{4pt}
-\titleformat{\subsubsection}[block]{\normalfont\bfseries\fontsize{10.5}{15}\selectfont}{}{0pt}{}
+\titleformat{\subsubsection}[block]{\normalfont\mdheadingfont\bfseries\fontsize{ {{ h3_size }} }{ {{ h3_line }} }\selectfont}{}{0pt}{}
 \titlespacing*{\subsubsection}{0pt}{6pt}{3pt}
-\titleformat{\paragraph}[block]{\normalfont\bfseries\fontsize{10.5}{15}\selectfont}{}{0pt}{}
+\titleformat{\paragraph}[block]{\normalfont\mdheadingfont\bfseries\fontsize{ {{ h3_size }} }{ {{ h3_line }} }\selectfont}{}{0pt}{}
 \titlespacing*{\paragraph}{0pt}{6pt}{3pt}
 
 \renewcommand{\refname}{参考文献}
@@ -87,15 +90,15 @@
 \DefineVerbatimEnvironment{mdcode}{Verbatim}{fontsize=\small,formatcom=\codefont}
 
 \begin{document}
-\fontsize{10.5}{13.1}\selectfont
-\setlength{\parindent}{2em}
+\fontsize{ {{ body_size }} }{ {{ body_line }} }\selectfont
+\setlength{\parindent}{ {{ par_indent }}em}
 \setlength{\parskip}{0pt}
 
 {% if title_tex %}
-{\centering\bfseries\fontsize{16}{24}\selectfont {{ title_tex }}\par}
+{\centering\mdheadingfont\bfseries\fontsize{ {{ title_size }} }{ {{ title_line }} }\selectfont {{ title_tex }}\par}
 {% endif %}
 {% if subtitle_tex %}
-{\centering\bfseries\fontsize{16}{24}\selectfont {{ subtitle_tex }}\par}
+{\centering\mdheadingfont\bfseries\fontsize{ {{ title_size }} }{ {{ title_line }} }\selectfont {{ subtitle_tex }}\par}
 {% endif %}
 
 \vspace{14pt}
@@ -107,8 +110,19 @@
 {\bfseries 关键词：}{{ keywords_tex }}\par\vspace{6pt}
 {% endif %}
 
+{% if toc_enabled %}
+\newpage
+\setcounter{tocdepth}{ {{- toc_levels -}} }
+\renewcommand{\contentsname}{ {{- toc_title_tex -}} }
+\tableofcontents
+\newpage
+{% endif %}
+
 {{ body }}
 {% if bibliography %}
+{% if toc_enabled and toc_include_references %}
+\addcontentsline{toc}{section}{参考文献}
+{% endif %}
 \begin{thebibliography}{99}
 {% for item in bibliography %}
 \bibitem{ref{{ loop.index }}} {{ item }}

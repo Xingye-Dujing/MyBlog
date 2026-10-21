@@ -1,10 +1,10 @@
 # MdForge · AI Markdown 写作规范
 
-版本：1.0  
-适用模板：`academic`（DOCX / TeX）  
+版本：1.1<br>
+适用模板：`academic`（DOCX / TeX）<br>
 用途：让 AI 生成可直接由 MdForge 排版为学术 DOCX / TeX / PDF 的 Markdown 纯文本。
 
-> 你负责写 Markdown。版式、字体、页边距、目录、页眉页脚与参考文献样式由 MdForge 模板负责。不要试图用空格、HTML 或手工分页模拟版式。
+> 你负责写 Markdown。版式、字体、页边距、目录、页眉页脚与参考文献样式由 MdForge 模板负责。平台另有「格式」微调与目录选项，不需要也不允许写进 Markdown。不要试图用空格、HTML 或手工分页模拟版式。
 
 ---
 
@@ -15,11 +15,12 @@
 3. 文件第一行必须是 `---`，并以 YAML frontmatter 开头。
 4. 必须包含非空 `title`，并写 `template: academic`。
 5. 不要在正文中重复标题、作者、摘要、关键词；这些只放在 frontmatter。
-6. 不要写目录。DOCX 自动生成目录页；TeX 参考版式不含目录。
+6. 不要手写目录。目录是否生成由 `toc` 控制：DOCX 默认生成，TeX 默认不生成；可由界面或 frontmatter 开启。
 7. 不要写封面、页眉页脚、页码或“第 X 页”。
 8. 不要使用脚注、HTML 块、任务列表、嵌套引用、嵌套表格、远程图片、H5/H6、内联图片。
 9. 不要在正文里写 LaTeX 导言区或自定义宏，只允许数学模式。
 10. 标题、正文、图表题注、参考文献均使用本规范列出的语法。
+11. 不要在 Markdown 中表达页边距、字号、行距、首行缩进、字体等版式微调；这些由平台「格式」面板、API 的 `format_overrides` 或 CLI 的 `--format-config` 控制。
 
 ---
 
@@ -56,7 +57,10 @@ template: academic
 | `abstract` | 否 | 一整段，建议用双引号包成单行；不要写“摘要：”前缀 |
 | `keywords` | 否 | YAML 数组；不要写“关键词：”前缀 |
 | `template` | 是 | 固定写 `academic` |
-| `toc` | 否 | `false` 可关闭 DOCX 目录页；一般省略 |
+| `toc` | 否 | 是否生成目录；DOCX 默认 `true`，TeX 默认 `false` |
+| `toc_title` | 否 | 目录标题，默认“目录” |
+| `toc_levels` | 否 | 目录包含的标题层级，取值 1–3，默认 2 |
+| `toc_include_references` | 否 | 是否在目录中包含“参考文献”条目 |
 | `references` | 否 | 参考文献数组；优先用正文末尾的 `# 参考文献` 写法 |
 
 - YAML 值含冒号、方括号、引号等字符时，用双引号包裹。
@@ -239,7 +243,8 @@ $$
 - 题注优先从代码中的 `\caption{...}` 读取；未找到时可以使用围栏属性 `caption="..."`。
 - `fallback="images/foo.png"` 是可选的回退图，用于 DOCX 输出和网页预览；TeX 输出不会使用它。推荐始终提供，且保证是本地 PNG/JPG。
 - 不要把 `\documentclass`、`\begin{document}`、`\end{document}` 放进围栏。
-- 模板已加载 `pgfplots`、`tikz`、`arrows.meta,calc,positioning,backgrounds`，并定义了参考文件的 `cA`–`cJ` 配色与 `cixi` 坐标轴样式。
+- 模板已加载 `pgfplots`、`tikz`、`arrows.meta,calc,positioning,backgrounds` 等图表库，并定义了参考文件的 `cA`–`cJ` 配色与 `cixi` 坐标轴样式。
+- 如果用户是从一张图片出发要求重绘图表，请配合 `AI_LATEX_FIGURE_SPEC.md` 使用专用图表规范。
 - 仅当用户要求 TeX 重绘时使用；普通图片仍使用 PNG/JPG。
 
 ---
@@ -303,7 +308,7 @@ $$
 - 脚注、任务列表
 - 嵌套引用、嵌套表格
 - 代码围栏外的 LaTeX 命令
-- 目录、封面、页码、页眉页脚的手工写法
+- 手工目录、封面、页码、页眉页脚
 - 在 `# 参考文献` 之后继续写内容
 
 在平台的“严格模式”下，任何降级或告警都会终止转换；普通模式会尽量降级并给出带行号的提示。
@@ -368,7 +373,8 @@ $$
 - [ ] 第一行是 `---`，frontmatter 正常闭合。
 - [ ] `title` 非空，`template: academic`。
 - [ ] 正文没有重复标题、作者、摘要、关键词。
-- [ ] 没有目录、封面、页码、页眉页脚。
+- [ ] 没有手写目录、封面、页码、页眉页脚。
+- [ ] 没有用 Markdown / HTML / LaTeX 模拟页边距、字号、行距、缩进或字体。
 - [ ] 标题层级连续，只使用 H1–H4。
 - [ ] 图片独占段落，路径是本地 `images/...`，格式为 PNG/JPG，无远程图片。
 - [ ] 若使用 `latex-figure`，代码是合法 LaTeX，且只包含图表代码，不包含文档导言区。
@@ -382,7 +388,34 @@ $$
 
 ---
 
-## 十、可直接使用的系统提示词
+## 十、版式微调（不在 Markdown 中表达）
+
+页边距、正文字体/字号/行距/首行缩进、标题字体与字号属于**平台格式微调**，不写入 Markdown，也不写入 frontmatter。
+
+- 网页端：「格式」标签在模板默认值上微调，按「格式 + 模板」自动保存到 Local Storage；支持「另存为」JSON、「导入」与「恢复模板」。
+- API：`POST /api/convert` 接受 `format_overrides`（对象，或 multipart 中的 JSON 字符串）。
+- CLI：`convert ... --format-config <file.json>`。
+- Python：`convert_file(..., tuning={...})`。
+
+配置结构（所有字段可省略，省略项继承模板）：
+
+```json
+{
+  "margins": {"top": 2.54, "bottom": 2.54, "left": 3.18, "right": 3.18},
+  "body": {"font_size": 10.5, "line_spacing": 1.25, "first_line_indent": 2, "font": "fangsong"},
+  "fonts": {"heading": "fangsong"},
+  "headings": {"title_size": 16, "h1_size": 16, "h2_size": 10.5, "h3_size": 10.5}
+}
+```
+
+- `font` 取值：`songti`、`fangsong`、`heiti`、`kaiti`，控制中文正文/标题字体；西文仍按模板。`body.font` 为正文，`fonts.heading` 为标题。
+- 单位：页边距 `cm`，字号 `pt`，行距为倍数，首行缩进为字符数。
+- 如果用户提出版式要求，仍然只输出合格的 Markdown 正文；提醒用户在平台「格式」面板中调整，不要用空格、全角空格、HTML 或 LaTeX 命令模拟。
+- 目录由 `toc`、`toc_title`、`toc_levels`、`toc_include_references` 控制，不属于微调配置。
+
+---
+
+## 十一、可直接使用的系统提示词
 
 ```text
 你是 MdForge 学术文稿的 Markdown 生成器。请严格遵循以下规范生成内容：
@@ -394,10 +427,11 @@ $$
 5. 图片写成 ![描述](images/文件名.png){width=12cm align=center}，独占段落；仅使用 PNG/JPG。
 6. 表格最多 6 列，题注写成 <!-- caption: 题注 --> 放在表格上一行。
 7. 文末用 # 参考文献 结尾，每条文献单独成段；其后不要再写内容。
-8. 不使用目录、封面、页码、脚注、任务列表、HTML 块、嵌套引用、嵌套表格、远程图片、H5/H6。
+8. 不要手写目录；由 toc 控制；不使用封面、页码、脚注、任务列表、HTML 块、嵌套引用、嵌套表格、远程图片、H5/H6。
 9. 标题层级连续不跳级；标题默认不编号。
 10. 如果用户没有提供图片文件，请仍然写出确定性的 images/ 路径，并提醒用户上传同名图片。
 11. 只有用户明确要求 LaTeX 重绘图表时，才使用 latex-figure 围栏；普通图片继续使用 PNG/JPG。
+12. 不要在 Markdown 中写页边距、字号、行距、缩进或字体；这些由平台的「格式」微调负责。
 
 输出仅包含 Markdown 原文。
 ```

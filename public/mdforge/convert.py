@@ -86,6 +86,7 @@ def convert_text(
     overrides: Optional[Dict[str, Any]] = None,
     keep_anchor: bool = False,
     source_name: str = "untitled.md",
+    tuning: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     fmt = fmt if fmt in ("docx", "tex") else "docx"
     output = os.path.abspath(output)
@@ -110,10 +111,10 @@ def convert_text(
         "metadata": document.metadata,
     }
     if fmt == "docx":
-        render_docx(document, template, output=output, keep_anchor=keep_anchor)
+        render_docx(document, template, output=output, keep_anchor=keep_anchor, tuning=tuning)
         result["filename"] = os.path.basename(output)
     else:
-        tex_result = render_tex(document, template, output=output)
+        tex_result = render_tex(document, template, output=output, tuning=tuning)
         result["tex"] = tex_result["tex"]
         result["asset_dir"] = tex_result["asset_dir"]
         result["filename"] = os.path.basename(output)
@@ -155,6 +156,7 @@ def convert_file(
     engine: Optional[str] = None,
     overrides: Optional[Dict[str, Any]] = None,
     keep_anchor: bool = False,
+    tuning: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     input_path = os.path.abspath(input_path)
     if not os.path.isfile(input_path):
@@ -182,6 +184,7 @@ def convert_file(
         overrides=overrides,
         keep_anchor=keep_anchor,
         source_name=os.path.basename(input_path),
+        tuning=tuning,
     )
 
 

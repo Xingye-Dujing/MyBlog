@@ -6,6 +6,7 @@ from mdforge.compiler import compile_tex, find_miktex_bin
 from mdforge.parser import parse_markdown
 from mdforge.template import load_template
 from mdforge.tex_renderer import render_tex
+from mdforge.tuning import normalize_tuning
 
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "examples" / "sample.md"
@@ -85,3 +86,54 @@ def test_tex_ordered_list_start():
     template = load_template("tex", "academic")
     tex = render_tex(document, template, None)["tex"]
     assert r"\begin{enumerate}[start=3]" in tex
+
+
+def test_tex_toc_customization(tmp_path):
+    source = r'''---
+title: TeX 目录定制
+toc: true
+toc_title: 内容目录
+toc_levels: 3
+toc_include_references: true
+---
+
+# 一级
+
+## 二级
+
+### 三级
+
+# 参考文献
+
+文献一条.
+'''
+    document = parse_markdown(source, "toc.md", base_dir=str(tmp_path))
+    template = load_template("tex", "academic")
+    output = tmp_path / "toc-custom.tex"
+    tex = render_tex(document, template, str(output))["tex"]
+    assert r"\tableofcontents" in tex
+    assert "内容目录" in tex
+    assert r"\setcounter{tocdepth}{3}" in tex
+    assert r"\addcontentsline{toc}{section}{参考文献}" in tex
+    if find_miktex_bin():
+        result = compile_tex(str(output), engine="xelatex", timeout=300)
+        assert result["ok"] is True
+        assert Path(result["pdf"]).is_file()
+
+
+def test_tex_toc_is_off_by_default():
+    source = SAMPLE.read_text(encoding="utf-8")
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    tex = render_tex(document, load_template("tex", "academic"), None)["tex"]
+    assert r"\tableofcontents" not in tex
+
+
+def test_tuning_export_wrapper_is_unwrapped():
+    tuning = normalize_tuning(
+        {},
+        "tex",
+        {"kind": "format-tuning", "format": "tex", "tuning": {"body": {"font_size": 14}}},
+    )
+    assert tuning["body"]["font_size"] == 14
+    assert tuning["body"]["font"] == "fangsong"
+    assert tuning["headings"]["h1_size"] == 16

@@ -121,6 +121,17 @@ def _metadata_from_request() -> Dict[str, Any]:
         return {}
 
 
+def _format_overrides_from_request() -> Dict[str, Any]:
+    raw = request.form.get("format_overrides") or request.values.get("format_overrides")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def _bool(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
@@ -198,6 +209,7 @@ def _template_info(fmt: str, name: str) -> Dict[str, Any]:
         "features": list(config.get("features") or []),
         "engine": config.get("engine") or "",
         "toc": config.get("toc") or {},
+        "tuning": config.get("tuning") or {},
         "image": config.get("image") or {},
     }
 
@@ -335,6 +347,7 @@ def create_app() -> Flask:
                 fmt = str(payload.get("format") or "docx")
                 template_name = str(payload.get("template") or "").strip() or None
                 overrides = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+                format_overrides = payload.get("format_overrides") if isinstance(payload.get("format_overrides"), dict) else {}
                 strict = bool(payload.get("strict"))
                 compile_pdf = bool(payload.get("compile_pdf"))
                 keep_anchor = bool(payload.get("keep_anchor"))
@@ -346,6 +359,7 @@ def create_app() -> Flask:
                 fmt = str(request.form.get("format") or "docx")
                 template_name = str(request.form.get("template") or "").strip() or None
                 overrides = _metadata_from_request()
+                format_overrides = _format_overrides_from_request()
                 strict = _bool(request.form.get("strict"))
                 compile_pdf = _bool(request.form.get("compile_pdf"))
                 keep_anchor = _bool(request.form.get("keep_anchor"))
@@ -372,6 +386,7 @@ def create_app() -> Flask:
                 overrides=overrides if isinstance(overrides, dict) else {},
                 keep_anchor=keep_anchor,
                 source_name=filename,
+                tuning=format_overrides,
             )
             files = {"source": os.path.join(directory, "source-" + filename), fmt: output_path}
             with open(files["source"], "w", encoding="utf-8", newline="\n") as handle:
@@ -482,6 +497,13 @@ def create_app() -> Flask:
         path = Path(__file__).resolve().parent / "docs" / "AI_MD_SPEC.md"
         if not path.is_file():
             return jsonify({"ok": False, "error": "AI Markdown 规范不存在"}), 404
+        return jsonify({"ok": True, "filename": path.name, "content": path.read_text(encoding="utf-8")})
+
+    @app.get("/api/figure-spec")
+    def api_figure_spec():
+        path = Path(__file__).resolve().parent / "docs" / "AI_LATEX_FIGURE_SPEC.md"
+        if not path.is_file():
+            return jsonify({"ok": False, "error": "AI 图表规范不存在"}), 404
         return jsonify({"ok": True, "filename": path.name, "content": path.read_text(encoding="utf-8")})
 
     @app.post("/api/jobs/<job_id>/meta")

@@ -73,6 +73,76 @@ def test_api_convert_tex():
     assert c.get(payload["download_url"]).status_code == 200
 
 
+def test_api_convert_tex_with_format_overrides():
+    c = client()
+    source = "---\ntitle: 测试\nauthor: 作者\n---\n\n# 标题\n\n正文。\n"
+    tuning = {
+        "margins": {"top": 3.0, "bottom": 2.0, "left": 2.5, "right": 2.5},
+        "body": {"font_size": 12, "line_spacing": 1.8, "first_line_indent": 3, "font": "kaiti"},
+        "fonts": {"heading": "heiti"},
+        "headings": {"title_size": 20, "h1_size": 16, "h2_size": 14, "h3_size": 12},
+    }
+    response = c.post(
+        "/api/convert",
+        json={
+            "markdown": source,
+            "filename": "tuned.tex",
+            "format": "tex",
+            "template": "academic",
+            "format_overrides": tuning,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    tex = payload["tex"]
+    assert "left=2.5cm,right=2.5cm,top=3.0cm,bottom=2.0cm" in tex
+    assert "\\setCJKmainfont{KaiTi}" in tex
+    assert "\\setCJKfamilyfont{mdforgeheading}{SimHei}" in tex
+    assert "\\fontsize{ 12.0 }{ 21.6 }" in tex
+    assert "\\setlength{\\parindent}{ 3.0em}" in tex
+    assert "\\titleformat{\\section}[block]{\\normalfont\\mdheadingfont\\bfseries\\fontsize{ 16.0 }" in tex
+
+
+def test_api_convert_docx_with_format_overrides(tmp_path):
+    c = client()
+    source = SAMPLE.read_text(encoding="utf-8")
+    tuning = {
+        "margins": {"top": 3.0, "bottom": 2.0, "left": 2.5, "right": 2.5},
+        "body": {"font_size": 12, "line_spacing": 1.8, "first_line_indent": 3, "font": "kaiti"},
+        "fonts": {"heading": "heiti"},
+        "headings": {"title_size": 20, "h1_size": 16, "h2_size": 14, "h3_size": 12},
+    }
+    response = c.post(
+        "/api/convert",
+        data={
+            "markdown": source,
+            "filename": "tuned.docx",
+            "format": "docx",
+            "template": "academic",
+            "images": (io.BytesIO(IMAGE.read_bytes()), "pipeline.png"),
+            "format_overrides": json.dumps(tuning),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    target = tmp_path / "tuned.docx"
+    target.write_bytes(c.get(payload["download_url"]).data)
+    doc = open_docx(str(target))
+    section = doc.sections[0]
+    assert round(section.top_margin.cm, 2) == 3.0
+    assert round(section.bottom_margin.cm, 2) == 2.0
+    assert round(section.left_margin.cm, 2) == 2.5
+    body = doc.styles["ZEN Body"]
+    assert body.font.size.pt == 12
+    assert body.paragraph_format.line_spacing == 1.8
+    assert round(body.paragraph_format.first_line_indent.pt, 1) == 36.0
+    assert doc.styles["Heading 1"].font.size.pt == 16
+    assert doc.styles["ZEN Title"].font.size.pt == 20
+
+
 def test_api_missing_title():
     c = client()
     response = c.post("/api/convert", json={"markdown": "---\ntitle: ''\n---\n\n正文", "format": "docx"})
@@ -89,14 +159,33 @@ def test_frontend_contract():
         'id="status-bar"',
         'id="opt-strict"',
         'id="opt-toc"',
+        'id="opt-toc-title"',
+        'id="opt-toc-levels"',
+        'id="opt-toc-refs"',
         'id="convert-btn"',
+        'data-tab="tuning"',
+        'id="tuning-context"',
+        'id="tuning-file"',
+        'data-action="tuning-export"',
+        'data-action="tuning-import"',
+        'data-action="tuning-reset"',
+        'data-tune="body.font_size"',
+        'data-tune="margins.top"',
+        'format_overrides',
+        'mdforge.tuning.v1',
+        '--pv-body-size',
         'data-action="settings"',
+        'data-ai-spec-kind="figure"',
         "--radius",
         "var(--radius)",
     ]:
         assert marker in html
     lowered = html.lower()
-    for forbidden in ["#000", "#000000", "#1a1a1a", "black", "blue", "#fff", "#ffffff"]:
+    assert "--bg: #ffffff" in lowered
+    assert "--bg: #1a1a1a" in lowered
+    assert "--active-bg: #1a1a1a" in lowered
+    assert "--active-bg: #e8e8e8" in lowered
+    for forbidden in ["blue", "#0000ff", "#657047", "#525c38", "#a9b27f", "#bcc594", "olive"]:
         assert forbidden not in lowered
 
 
@@ -184,3 +273,40 @@ def test_tex_bundle_contains_source_and_assets():
     assert "sample.tex" in names
     assert "sample-assets/images/img01.png" in names
     assert "README-MdForge.txt" in names
+
+
+def test_figure_spec_endpoint():
+    c = client()
+    response = c.get("/api/figure-spec")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["filename"] == "AI_LATEX_FIGURE_SPEC.md"
+    assert "latex-figure" in payload["content"]
+    assert "pgfplots" in payload["content"]
+
+
+def test_toc_template_defaults():
+    c = client()
+    docx = c.get("/api/templates/docx/academic").get_json()["template"]["toc"]
+    tex = c.get("/api/templates/tex/academic").get_json()["template"]["toc"]
+    assert docx["enabled"] is True
+    assert docx["include_references"] is True
+    assert tex["enabled"] is False
+    assert tex["levels"] == 2
+
+
+def test_tuning_template_defaults():
+    c = client()
+    docx = c.get("/api/templates/docx/academic").get_json()["template"]["tuning"]
+    tex = c.get("/api/templates/tex/academic").get_json()["template"]["tuning"]
+    assert docx["body"] == {
+        "font_size": 10.5,
+        "line_spacing": 1.5,
+        "first_line_indent": 2,
+        "font": "songti",
+    }
+    assert docx["fonts"]["heading"] == "heiti"
+    assert tex["body"]["font"] == "fangsong"
+    assert tex["fonts"]["heading"] == "fangsong"
+    assert tex["margins"]["left"] == 3.18
