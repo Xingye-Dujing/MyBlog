@@ -1,0 +1,4361 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>MDFORGE · Markdown 铸造台</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,700;1,7..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @font-face {
+        font-family: 'ZenMono';
+        src: url('/APL385.ttf') format('truetype');
+        font-display: swap;
+      }
+      :root {
+        --bg: #f6f0e3;
+        --bg-soft: #faf6ec;
+        --bg-raised: #fdfaf3;
+        --text: #393024;
+        --text-dim: rgba(57, 48, 36, 0.56);
+        --text-faint: rgba(57, 48, 36, 0.32);
+        --border: #393024;
+        --border-dim: rgba(57, 48, 36, 0.22);
+        --border-faint: rgba(57, 48, 36, 0.09);
+        --hover: rgba(101, 112, 71, 0.08);
+        --active-bg: #657047;
+        --active-text: #fbf7ed;
+        --olive: #657047;
+        --olive-deep: #525c38;
+        --olive-soft: rgba(101, 112, 71, 0.13);
+        --accent: #9a5b34;
+        --accent-soft: rgba(154, 91, 52, 0.12);
+        --danger: #a3462e;
+        --cream: #fbf7ed;
+        --font-serif: 'Literata', 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia,
+          'Songti SC', 'STSong', 'SimSun', serif;
+        --font-code: 'ZenMono', 'Cascadia Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+        --fscale: 1;
+        --radius: 4px;
+        --shadow: 0 16px 42px rgba(57, 48, 36, 0.13);
+        --ed-line: calc(22px * var(--fscale));
+        --ed-size: calc(12.5px * var(--fscale));
+      }
+      body.theme-night {
+        --bg: #221c16;
+        --bg-soft: #28221a;
+        --bg-raised: #2e271e;
+        --text: #eadfc9;
+        --text-dim: rgba(234, 223, 201, 0.7);
+        --text-faint: rgba(234, 223, 201, 0.42);
+        --border: #eadfc9;
+        --border-dim: rgba(234, 223, 201, 0.22);
+        --border-faint: rgba(234, 223, 201, 0.09);
+        --hover: rgba(169, 178, 127, 0.1);
+        --active-bg: #a9b27f;
+        --active-text: #221c16;
+        --olive: #a9b27f;
+        --olive-deep: #bcc594;
+        --olive-soft: rgba(169, 178, 127, 0.14);
+        --accent: #d18a5f;
+        --accent-soft: rgba(209, 138, 95, 0.14);
+        --danger: #d47658;
+        --cream: #241e17;
+        --shadow: 0 16px 42px rgba(57, 48, 36, 0.28);
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: var(--font-serif);
+        font-size: calc(13px * var(--fscale));
+        overflow: hidden;
+        user-select: none;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      button,
+      input,
+      textarea {
+        font-family: var(--font-serif);
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      ::selection {
+        background: rgba(101, 112, 71, 0.24);
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 1px solid var(--olive);
+        outline-offset: 2px;
+      }
+      ::-webkit-scrollbar {
+        width: 9px;
+        height: 9px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-dim);
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-faint);
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      body.bg-grid {
+        background-image: linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+      body.bg-dots {
+        background-image: radial-gradient(circle, var(--border-dim) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      body.bg-cross {
+        background-image: linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 20px 20px;
+      }
+      body.bg-diagonal {
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 28px,
+          var(--border-faint) 28px,
+          var(--border-faint) 29px
+        );
+      }
+
+      #menu-trigger {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        z-index: 1000;
+      }
+      #top-menu {
+        position: fixed;
+        top: -48px;
+        left: 0;
+        width: 100%;
+        height: 48px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        border-radius: var(--radius);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        z-index: 999;
+        transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        padding: 0 12px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+      }
+      #top-menu::-webkit-scrollbar {
+        display: none;
+      }
+      #menu-trigger:hover ~ #top-menu,
+      #top-menu:hover,
+      #top-menu.pinned,
+      body.submenu-open #top-menu {
+        top: 0;
+      }
+      .menu-group {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 0 6px;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .menu-group + .menu-group::before {
+        content: '';
+        position: absolute;
+        left: -2px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1px;
+        height: 20px;
+        background: var(--border-dim);
+      }
+      .menu-label {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        padding: 0 4px;
+        font-weight: 500;
+        flex-shrink: 0;
+      }
+      .menu-btn {
+        color: var(--text-dim);
+        padding: 4px 10px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+        background: transparent;
+        border-radius: var(--radius);
+        user-select: none;
+      }
+      .menu-btn:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .menu-btn.active {
+        color: var(--olive);
+        background: var(--olive-soft);
+        border-color: var(--olive);
+        box-shadow: inset 0 -2px 0 var(--olive);
+      }
+      .menu-caret {
+        display: inline-block;
+        margin-left: 4px;
+        color: var(--text-faint);
+        font-size: 9px;
+        transform: translateY(-1px);
+      }
+      .pin-btn {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        cursor: pointer;
+        color: var(--text-faint);
+        transition: all 0.15s;
+        margin-left: 4px;
+        background: transparent;
+        flex-shrink: 0;
+        border-radius: var(--radius);
+      }
+      .pin-btn:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+      .pin-btn.pinned {
+        color: var(--olive);
+        border-color: var(--olive);
+        background: var(--olive-soft);
+      }
+      .pin-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      #main {
+        position: absolute;
+        inset: 0;
+        padding: 60px 26px 34px;
+        display: flex;
+        flex-direction: column;
+        z-index: 1;
+        min-height: 0;
+        transition: padding-top 0.38s cubic-bezier(0.16, 1, 0.3, 1),
+          padding-bottom 0.3s;
+      }
+      body:not(.menu-pinned):not(.submenu-open) #main {
+        padding-top: 14px;
+      }
+      body.submenu-open:not(.menu-pinned) #main {
+        padding-top: 60px;
+      }
+      body.status-hidden #main {
+        padding-bottom: 12px;
+      }
+      #doc-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding-bottom: 14px;
+        flex-shrink: 0;
+        gap: 14px;
+        min-width: 0;
+      }
+      .ch-left {
+        display: flex;
+        align-items: baseline;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+      }
+      #doc-title {
+        min-width: 0;
+        font-size: calc(25px * var(--fscale));
+        font-weight: 500;
+        letter-spacing: 2.4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #doc-sub {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text-faint);
+        margin-left: 14px;
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+      #ch-right {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 0.8px;
+        color: var(--text-dim);
+        display: flex;
+        gap: 18px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      #ch-right b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      #ch-right #ch-template {
+        color: var(--olive);
+      }
+
+      #workspace {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        border-top: 1px solid var(--border-dim);
+        border-bottom: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      #editor-pane {
+        flex: 1.04;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: transparent;
+      }
+      #inspector {
+        flex: 0.96;
+        min-width: 340px;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--border-dim);
+        background: var(--bg-soft);
+      }
+      .mode-edit #inspector {
+        display: none;
+      }
+      .mode-preview #editor-pane {
+        display: none;
+      }
+      .pane-head {
+        height: 38px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border-faint);
+        min-width: 0;
+      }
+      .pane-head-left {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+      }
+      .pane-label {
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        flex-shrink: 0;
+      }
+      .file-name {
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dirty-dot {
+        width: 5px;
+        height: 5px;
+        background: var(--accent);
+        display: none;
+        border-radius: var(--radius);
+      }
+      .dirty-dot.show {
+        display: block;
+      }
+      .pane-tools {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .tool-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-faint);
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 0.4px;
+        padding: 3px 7px;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+      }
+      .tool-btn:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+        background: var(--hover);
+      }
+      .tool-btn.count-on {
+        color: var(--olive);
+      }
+      #editor-wrap {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        position: relative;
+        transition: background 0.15s;
+      }
+      #editor-wrap.drag-over {
+        background: var(--olive-soft);
+      }
+      #line-gutter {
+        width: calc(52px * var(--fscale));
+        flex-shrink: 0;
+        padding: 16px 10px 16px 0;
+        text-align: right;
+        font-family: var(--font-code);
+        font-size: calc(9.5px * var(--fscale));
+        line-height: var(--ed-line);
+        color: var(--text-faint);
+        overflow: hidden;
+        user-select: none;
+        white-space: pre;
+      }
+      .line-mirror {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        visibility: hidden;
+        pointer-events: none;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        z-index: -1;
+        padding: 0;
+        margin: 0;
+      }
+      .line-mirror > div {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        padding: 0;
+        margin: 0;
+      }
+      #editor {
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        padding: 16px 18px 40px 2px;
+        border: 0;
+        outline: none;
+        resize: none;
+        background: transparent;
+        color: var(--text);
+        font-family: var(--font-code);
+        font-size: var(--ed-size);
+        line-height: var(--ed-line);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        overflow-x: hidden;
+        overflow-y: auto;
+        tab-size: 2;
+        caret-color: var(--olive);
+        user-select: text;
+      }
+      #editor::placeholder {
+        color: var(--text-faint);
+      }
+      .pane-foot {
+        height: 26px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid var(--border-faint);
+        padding: 0 14px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 0.9px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .inspector-tabs {
+        height: 38px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: stretch;
+        border-bottom: 1px solid var(--border-faint);
+        padding: 0 10px;
+        gap: 2px;
+      }
+      .tab {
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        color: var(--text-dim);
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 0.8px;
+        padding: 0 12px;
+        margin-bottom: -1px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+        border-radius: var(--radius) var(--radius) 0 0;
+      }
+      .tab:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      .tab.active {
+        color: var(--olive);
+        border-bottom-color: var(--olive);
+      }
+      .tab-badge {
+        min-width: 15px;
+        height: 15px;
+        padding: 0 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        line-height: 1;
+        border: 1px solid var(--border-dim);
+        background: var(--bg);
+        color: var(--text-dim);
+        border-radius: var(--radius);
+      }
+      .tab-badge.bad {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .tab-panels {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+      }
+      .tab-panel {
+        display: none;
+        height: 100%;
+        overflow: auto;
+        padding: 22px 24px 32px;
+        min-height: 0;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+      #panel-meta {
+        padding: 0;
+      }
+      .meta-scroll {
+        padding: 22px 24px 32px;
+      }
+      #panel-output {
+        padding: 22px 24px 32px;
+      }
+
+      .preview-doc {
+        max-width: 660px;
+        margin: 0 auto;
+        user-select: text;
+        color: var(--text);
+        font-size: calc(13px * var(--fscale));
+        line-height: 1.95;
+      }
+      .preview-title {
+        text-align: center;
+        font-size: calc(22px * var(--fscale));
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        line-height: 1.5;
+        margin-bottom: 6px;
+      }
+      .preview-subtitle {
+        text-align: center;
+        font-size: calc(14px * var(--fscale));
+        color: var(--text-dim);
+        letter-spacing: 0.6px;
+        margin-bottom: 18px;
+      }
+      .preview-abstract,
+      .preview-keywords {
+        font-size: calc(12px * var(--fscale));
+        line-height: 1.9;
+        text-align: justify;
+        color: var(--text-dim);
+        padding: 0 2px;
+      }
+      .preview-abstract .label,
+      .preview-keywords .label {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .preview-keywords {
+        margin-top: 4px;
+        margin-bottom: 22px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--border-faint);
+      }
+      .preview-doc p {
+        margin: 0 0 0.55em;
+        text-align: justify;
+        text-indent: 2em;
+      }
+      .preview-doc h1 {
+        font-size: calc(17px * var(--fscale));
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        margin: 1.35em 0 0.55em;
+        line-height: 1.6;
+      }
+      .preview-doc h1:first-of-type {
+        margin-top: 0.2em;
+      }
+      .preview-doc h2 {
+        font-size: calc(13.5px * var(--fscale));
+        font-weight: 600;
+        margin: 1.15em 0 0.4em;
+      }
+      .preview-doc h3,
+      .preview-doc h4 {
+        font-size: calc(12.5px * var(--fscale));
+        font-weight: 600;
+        margin: 1em 0 0.3em;
+      }
+      .preview-doc ul,
+      .preview-doc ol {
+        margin: 0.3em 0 0.8em 1.8em;
+        line-height: 1.85;
+      }
+      .preview-doc li {
+        padding-left: 0.2em;
+      }
+      .preview-doc blockquote {
+        border-left: 2px solid var(--olive);
+        margin: 0.9em 0;
+        padding: 0.1em 0 0.1em 14px;
+        color: var(--text-dim);
+      }
+      .preview-doc blockquote p {
+        text-indent: 0;
+        margin: 0;
+      }
+      .preview-doc a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .preview-doc code {
+        font-family: var(--font-code);
+        font-size: 0.88em;
+        background: var(--olive-soft);
+        padding: 1px 4px;
+        border-radius: var(--radius);
+        color: var(--olive-deep);
+      }
+      .preview-doc pre {
+        background: rgba(101, 112, 71, 0.07);
+        border: 1px solid var(--border-faint);
+        padding: 12px 14px;
+        overflow-x: auto;
+        margin: 0.8em 0 1.1em;
+        border-radius: var(--radius);
+      }
+      .preview-doc pre code {
+        background: transparent;
+        padding: 0;
+        color: var(--text);
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.7;
+        white-space: pre;
+      }
+      .preview-doc hr {
+        border: 0;
+        border-top: 1px solid var(--border-dim);
+        margin: 1.6em 0;
+      }
+      .preview-doc .table-wrap {
+        overflow-x: auto;
+        margin: 0.4em 0 0.7em;
+      }
+      .preview-doc table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: calc(11.5px * var(--fscale));
+        line-height: 1.65;
+      }
+      .preview-doc th {
+        border-top: 1.5px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        padding: 7px 8px;
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+      }
+      .preview-doc td {
+        border-bottom: 1px solid var(--border-faint);
+        padding: 6px 8px;
+        vertical-align: top;
+      }
+      .preview-doc .table-caption {
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-dim);
+        text-align: center;
+        margin-top: 8px;
+        letter-spacing: 0.3px;
+      }
+      .preview-doc figure {
+        margin: 1.2em 0;
+        text-align: center;
+      }
+      .preview-doc figure img {
+        max-width: 100%;
+        border: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+      }
+      .preview-doc figcaption {
+        font-size: calc(11px * var(--fscale));
+        color: var(--text-dim);
+        margin-top: 8px;
+        letter-spacing: 0.3px;
+      }
+      .img-placeholder {
+        min-height: 130px;
+        border: 1px dashed var(--border-dim);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        color: var(--text-faint);
+        background: rgba(101, 112, 71, 0.035);
+        border-radius: var(--radius);
+      }
+      .img-glyph {
+        font-family: var(--font-code);
+        font-size: 10px;
+        letter-spacing: 3px;
+        border: 1px solid var(--border-dim);
+        padding: 3px 7px;
+        color: var(--text-dim);
+        border-radius: var(--radius);
+      }
+      .img-path {
+        font-family: var(--font-code);
+        font-size: 10px;
+        max-width: 80%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .preview-doc .math {
+        font-family: var(--font-serif);
+        font-style: italic;
+        color: var(--accent);
+      }
+      .preview-doc .math-block {
+        text-align: center;
+        font-family: var(--font-serif);
+        font-style: italic;
+        color: var(--text);
+        padding: 8px 0;
+        letter-spacing: 0.3px;
+        font-size: 1.05em;
+        overflow-x: auto;
+      }
+      .preview-doc .pagebreak {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 1.6em 0;
+        color: var(--text-faint);
+        font-size: 8.5px;
+        letter-spacing: 2px;
+      }
+      .preview-doc .pagebreak::before,
+      .preview-doc .pagebreak::after {
+        content: '';
+        flex: 1;
+        border-top: 1px dashed var(--border-dim);
+      }
+      .preview-doc .bibliography {
+        margin-top: 1.6em;
+        border-top: 1px solid var(--border-dim);
+        padding-top: 12px;
+      }
+      .preview-doc .bibliography h2 {
+        text-align: center;
+        font-size: calc(13px * var(--fscale));
+        margin: 0.4em 0 0.7em;
+      }
+      .preview-doc .bibliography ol {
+        margin-left: 1.4em;
+        font-size: calc(11.5px * var(--fscale));
+        color: var(--text-dim);
+      }
+      .preview-empty {
+        color: var(--text-faint);
+        text-align: center;
+        padding: 60px 20px;
+        letter-spacing: 1px;
+        font-size: 11px;
+      }
+
+      .meta-section + .meta-section {
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border-faint);
+      }
+      .section-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin-bottom: 14px;
+        font-weight: 500;
+      }
+      .section-label span {
+        letter-spacing: 0.8px;
+        font-size: calc(8px * var(--fscale));
+      }
+      .field {
+        margin-bottom: 13px;
+        min-width: 0;
+      }
+      .field label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+      }
+      .field .req {
+        color: var(--accent);
+        margin-left: 3px;
+      }
+      .field .field-hint {
+        color: var(--text-faint);
+        letter-spacing: 0.3px;
+        text-transform: none;
+        font-size: calc(9px * var(--fscale));
+      }
+      .field input,
+      .field textarea {
+        width: 100%;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        outline: none;
+        padding: 8px 10px;
+        font-size: calc(12px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text);
+        border-radius: var(--radius);
+        transition: border-color 0.15s, background 0.15s;
+        user-select: text;
+      }
+      .field input:hover,
+      .field textarea:hover {
+        border-color: var(--text-faint);
+      }
+      .field input:focus,
+      .field textarea:focus {
+        border-color: var(--olive);
+        background: var(--bg-raised);
+        outline: none;
+      }
+      .field input::placeholder,
+      .field textarea::placeholder {
+        color: var(--text-faint);
+      }
+      .field textarea {
+        resize: vertical;
+        min-height: 76px;
+        max-height: 200px;
+      }
+      .field-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .meta-note {
+        font-size: calc(9px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-faint);
+        letter-spacing: 0.3px;
+        margin-top: 2px;
+      }
+      .seg-format {
+        display: flex;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+      .seg-format button {
+        flex: 1;
+        padding: 8px 10px;
+        border: 0;
+        background: transparent;
+        color: var(--text-dim);
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 1.5px;
+        transition: all 0.15s;
+      }
+      .seg-format button + button {
+        border-left: 1px solid var(--border-dim);
+      }
+      .seg-format button:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .seg-format button.active {
+        background: var(--olive);
+        color: var(--cream);
+      }
+      .template-field {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text);
+        padding: 9px 10px;
+        font-size: calc(12px * var(--fscale));
+        border-radius: var(--radius);
+        transition: all 0.15s;
+        margin-bottom: 10px;
+        text-align: left;
+      }
+      .template-field:hover {
+        border-color: var(--olive);
+        background: var(--hover);
+      }
+      .template-field .caret {
+        color: var(--text-faint);
+        font-size: 10px;
+      }
+      .template-card {
+        border: 1px solid var(--border-faint);
+        background: var(--bg);
+        padding: 13px;
+        border-radius: var(--radius);
+      }
+      .tc-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 7px;
+      }
+      .tc-title {
+        font-size: calc(12px * var(--fscale));
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .tc-ver {
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 1px;
+        font-family: var(--font-code);
+      }
+      .tc-desc {
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.75;
+        color: var(--text-dim);
+        margin-bottom: 10px;
+        user-select: text;
+      }
+      .tc-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .chip {
+        font-size: calc(8.5px * var(--fscale));
+        letter-spacing: 0.5px;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        padding: 2px 6px;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .chip.olive {
+        border-color: var(--olive);
+        color: var(--olive);
+        background: var(--olive-soft);
+      }
+      .tc-env {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border-faint);
+        font-family: var(--font-code);
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 0.3px;
+        line-height: 1.7;
+        user-select: text;
+      }
+      .check-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border-faint);
+        cursor: pointer;
+        transition: color 0.15s;
+      }
+      .check-row:last-child {
+        border-bottom: 0;
+      }
+      .check-main {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .check-title {
+        font-size: calc(11.5px * var(--fscale));
+        color: var(--text);
+        letter-spacing: 0.3px;
+      }
+      .check-desc {
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        line-height: 1.55;
+      }
+      .check-wrap {
+        position: relative;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .check-wrap input {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .cbox {
+        width: 15px;
+        height: 15px;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+        border-radius: var(--radius);
+      }
+      .cbox svg {
+        width: 9px;
+        height: 9px;
+        fill: none;
+        stroke: var(--cream);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .check-row:hover .cbox {
+        border-color: var(--olive);
+      }
+      .check-wrap input:checked + .cbox {
+        background: var(--olive);
+        border-color: var(--olive);
+      }
+      .check-wrap input:checked + .cbox svg {
+        opacity: 1;
+      }
+      .check-wrap input:focus-visible + .cbox {
+        outline: 1px solid var(--olive);
+        outline-offset: 2px;
+      }
+      .check-row.disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      .convert-bar {
+        height: 54px;
+        flex-shrink: 0;
+        border-top: 1px solid var(--border-dim);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+      }
+      .convert-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        background: var(--olive);
+        flex-shrink: 0;
+        border-radius: var(--radius);
+      }
+      .status-dot.busy {
+        animation: pulse 1s ease-in-out infinite;
+      }
+      .status-dot.warn {
+        background: var(--accent);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.8);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+      }
+      .convert-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-shrink: 0;
+      }
+      .btn {
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-dim);
+        padding: 7px 12px;
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 0.4px;
+        border-radius: var(--radius);
+        transition: all 0.15s;
+        white-space: nowrap;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+      }
+      .btn:hover {
+        color: var(--text);
+        border-color: var(--olive);
+        background: var(--hover);
+      }
+      .btn.primary {
+        background: var(--olive);
+        border-color: var(--olive);
+        color: var(--cream);
+        padding: 8px 18px;
+        letter-spacing: 0.8px;
+      }
+      .btn.primary:hover {
+        background: var(--olive-deep);
+        border-color: var(--olive-deep);
+        color: var(--cream);
+      }
+      .btn.ghost {
+        border-color: transparent;
+        color: var(--text-dim);
+      }
+      .btn.ghost:hover {
+        border-color: var(--border-dim);
+        color: var(--text);
+      }
+      .btn.accent {
+        color: var(--accent);
+        border-color: var(--accent-soft);
+      }
+      .btn.accent:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .btn.small {
+        padding: 6px 10px;
+        font-size: calc(10px * var(--fscale));
+      }
+      .btn:disabled,
+      .btn.disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      .empty-state {
+        min-height: 60%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: var(--text-faint);
+        padding: 50px 10px;
+      }
+      .empty-mark {
+        font-family: var(--font-code);
+        font-size: calc(36px * var(--fscale));
+        letter-spacing: 10px;
+        color: var(--border-dim);
+        border: 1px solid var(--border-faint);
+        padding: 8px 18px 8px 26px;
+        line-height: 1.2;
+        border-radius: var(--radius);
+        margin-bottom: 18px;
+      }
+      .empty-title {
+        font-size: calc(13px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text-dim);
+        margin-bottom: 8px;
+      }
+      .empty-hint {
+        font-size: calc(10px * var(--fscale));
+        letter-spacing: 0.5px;
+        line-height: 1.8;
+        max-width: 300px;
+      }
+      .result-card {
+        border: 1px solid var(--border-dim);
+        background: var(--bg);
+        padding: 18px;
+        border-radius: var(--radius);
+      }
+      .result-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--border-faint);
+        min-width: 0;
+      }
+      .format-stamp {
+        font-family: var(--font-code);
+        font-size: calc(12px * var(--fscale));
+        letter-spacing: 2px;
+        padding: 5px 8px;
+        border: 1px solid var(--olive);
+        color: var(--olive);
+        background: var(--olive-soft);
+        line-height: 1.2;
+        flex-shrink: 0;
+        border-radius: var(--radius);
+      }
+      .result-info {
+        min-width: 0;
+        flex: 1;
+      }
+      .result-file {
+        font-family: var(--font-code);
+        font-size: calc(12px * var(--fscale));
+        color: var(--text);
+        overflow-wrap: anywhere;
+        line-height: 1.5;
+      }
+      .result-meta {
+        margin-top: 5px;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        line-height: 1.7;
+      }
+      .result-meta b {
+        color: var(--text-dim);
+        font-weight: 500;
+      }
+      .result-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        padding: 14px 0;
+      }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        border-top: 1px solid var(--border-faint);
+        border-bottom: 1px solid var(--border-faint);
+        padding: 11px 0;
+        margin-bottom: 14px;
+      }
+      .stat-item {
+        text-align: center;
+        border-left: 1px solid var(--border-faint);
+      }
+      .stat-item:first-child {
+        border-left: 0;
+      }
+      .stat-value {
+        font-size: calc(16px * var(--fscale));
+        font-weight: 500;
+        color: var(--text);
+        line-height: 1.3;
+      }
+      .stat-label {
+        font-size: calc(8px * var(--fscale));
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin-top: 3px;
+      }
+      .issues {
+        margin-top: 6px;
+      }
+      .issues-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.4px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 16px 0 8px;
+      }
+      .issue {
+        display: flex;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border-faint);
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.7;
+      }
+      .issue:last-child {
+        border-bottom: 0;
+      }
+      .issue-level {
+        flex-shrink: 0;
+        font-family: var(--font-code);
+        font-size: calc(8.5px * var(--fscale));
+        letter-spacing: 0.5px;
+        border: 1px solid var(--border-dim);
+        color: var(--text-dim);
+        padding: 1px 5px;
+        align-self: flex-start;
+        margin-top: 2px;
+        border-radius: var(--radius);
+      }
+      .issue.error .issue-level {
+        border-color: var(--danger);
+        color: var(--danger);
+      }
+      .issue.error .issue-msg {
+        color: var(--danger);
+      }
+      .issue-line {
+        color: var(--text-faint);
+        flex-shrink: 0;
+        font-family: var(--font-code);
+        font-size: calc(9px * var(--fscale));
+      }
+      .issue-msg {
+        color: var(--text-dim);
+        overflow-wrap: anywhere;
+      }
+      .notice-box {
+        border: 1px solid var(--accent-soft);
+        background: var(--accent-soft);
+        color: var(--accent);
+        padding: 10px 12px;
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.7;
+        margin-top: 12px;
+        border-radius: var(--radius);
+        overflow-wrap: anywhere;
+      }
+      details {
+        border-top: 1px solid var(--border-faint);
+        margin-top: 14px;
+      }
+      details summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 10px 0;
+        font-size: calc(9px * var(--fscale));
+        letter-spacing: 1.3px;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      details summary::-webkit-details-marker {
+        display: none;
+      }
+      details summary::after {
+        content: '+';
+        font-family: var(--font-code);
+        color: var(--text-faint);
+        font-size: 12px;
+      }
+      details[open] summary::after {
+        content: '−';
+      }
+      details summary span {
+        color: var(--text-faint);
+        letter-spacing: 0.4px;
+        text-transform: none;
+        font-size: calc(9px * var(--fscale));
+      }
+      pre.log,
+      pre.code-view {
+        font-family: var(--font-code);
+        font-size: calc(9.5px * var(--fscale));
+        line-height: 1.7;
+        background: var(--bg-soft);
+        border: 1px solid var(--border-faint);
+        padding: 11px 12px;
+        max-height: 280px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: var(--text-dim);
+        border-radius: var(--radius);
+        user-select: text;
+      }
+      .code-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 6px;
+      }
+
+      #status-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 14px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-dim);
+        letter-spacing: 0.5px;
+        z-index: 100;
+        transition: opacity 0.3s, transform 0.3s;
+        border-radius: var(--radius);
+      }
+      body.status-hidden #status-bar {
+        opacity: 0;
+        transform: translateY(100%);
+        pointer-events: none;
+      }
+      #stat-left {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #stat-right {
+        letter-spacing: 2.4px;
+        color: var(--text-faint);
+        flex-shrink: 0;
+        margin-left: 12px;
+      }
+
+      .dropdown {
+        position: fixed;
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        padding: 5px;
+        min-width: 220px;
+        z-index: 1001;
+        display: none;
+        box-shadow: var(--shadow);
+        max-height: 74vh;
+        overflow-y: auto;
+        animation: ddIn 0.15s ease;
+        border-radius: var(--radius);
+      }
+      @keyframes ddIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .dropdown.open {
+        display: block;
+      }
+      .dd-label {
+        padding: 7px 10px 4px;
+        font-size: calc(9px * var(--fscale));
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--text-faint);
+        font-weight: 500;
+      }
+      .dd-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 10px;
+        cursor: pointer;
+        transition: all 0.1s;
+        font-size: calc(12px * var(--fscale));
+        color: var(--text-dim);
+        border: 1px solid transparent;
+        background: transparent;
+        width: 100%;
+        text-align: left;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .dd-item:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .dd-item.selected {
+        color: var(--text);
+        border-color: var(--olive);
+        background: var(--olive-soft);
+      }
+      .dd-item .hint {
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        margin-left: 12px;
+        font-family: var(--font-code);
+        white-space: nowrap;
+      }
+      .dd-item .dd-main {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dd-divider {
+        height: 1px;
+        background: var(--border-dim);
+        margin: 5px 0;
+      }
+      .dd-item-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 6px 10px;
+        font-size: calc(11.5px * var(--fscale));
+        color: var(--text);
+      }
+      .dd-item-row:hover {
+        background: var(--hover);
+      }
+      .dd-note {
+        padding: 7px 10px 4px;
+        font-size: calc(9px * var(--fscale));
+        line-height: 1.6;
+        color: var(--text-faint);
+        white-space: normal;
+        max-width: 280px;
+      }
+      .dd-empty {
+        padding: 14px 10px;
+        text-align: center;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-faint);
+      }
+      .settings-control {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex-shrink: 0;
+      }
+      .settings-value {
+        min-width: 38px;
+        text-align: center;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text);
+        font-family: var(--font-code);
+      }
+      .settings-btn {
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border: 1px solid var(--border-dim);
+        background: transparent;
+        color: var(--text-dim);
+        font-size: calc(13px * var(--fscale));
+        transition: all 0.1s;
+        border-radius: var(--radius);
+      }
+      .settings-btn:hover {
+        border-color: var(--olive);
+        color: var(--olive);
+        background: var(--hover);
+      }
+      .settings-bg-options {
+        display: flex;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .settings-bg-dot {
+        display: block;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        border: 1px solid var(--border-dim);
+        transition: all 0.1s;
+        background-color: var(--bg);
+        border-radius: var(--radius);
+      }
+      .settings-bg-dot:hover {
+        border-color: var(--text-dim);
+      }
+      .settings-bg-dot.active {
+        border-color: var(--olive);
+        box-shadow: inset 0 0 0 2px var(--olive-soft);
+      }
+      .settings-bg-dot[data-bg='bg-grid'],
+      .settings-bg-dot[data-bg='bg-cross'] {
+        background-image: linear-gradient(var(--border-dim) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+        background-size: 6px 6px;
+      }
+      .settings-bg-dot[data-bg='bg-cross'] {
+        background-position: 3px 3px;
+      }
+      .settings-bg-dot[data-bg='bg-dots'] {
+        background-image: radial-gradient(circle, var(--text-dim) 1px, transparent 1px);
+        background-size: 5px 5px;
+      }
+      .settings-bg-dot[data-bg='bg-diagonal'] {
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 5px,
+          var(--border-dim) 5px,
+          var(--border-dim) 6px
+        );
+      }
+      #dd-settings {
+        min-width: 302px;
+      }
+      #dd-template {
+        min-width: 292px;
+      }
+      #dd-attach {
+        min-width: 300px;
+      }
+      .attach-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        border-bottom: 1px solid var(--border-faint);
+        font-size: calc(10.5px * var(--fscale));
+        color: var(--text-dim);
+      }
+      .attach-item:last-child {
+        border-bottom: 0;
+      }
+      .attach-thumb {
+        width: 24px;
+        height: 24px;
+        object-fit: cover;
+        border: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+        flex-shrink: 0;
+        background: var(--bg);
+      }
+      .attach-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: var(--font-code);
+        font-size: calc(9.5px * var(--fscale));
+      }
+      .attach-size {
+        color: var(--text-faint);
+        font-size: calc(8.5px * var(--fscale));
+        font-family: var(--font-code);
+        flex-shrink: 0;
+      }
+      .attach-remove {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-faint);
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        border-radius: var(--radius);
+      }
+      .attach-remove:hover {
+        color: var(--accent);
+        border-color: var(--accent-soft);
+        background: var(--accent-soft);
+      }
+
+      #notification {
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%) translateY(10px);
+        background: var(--bg-raised);
+        border: 1px solid var(--olive);
+        border-radius: var(--radius);
+        padding: 7px 16px;
+        font-size: calc(11px * var(--fscale));
+        color: var(--text);
+        z-index: 3000;
+        opacity: 0;
+        transition: all 0.2s;
+        pointer-events: none;
+        max-width: min(80vw, 520px);
+        text-align: center;
+        box-shadow: var(--shadow);
+      }
+      #notification.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      #notification.error {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      body.status-hidden #notification {
+        bottom: 18px;
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 4000;
+        background: rgba(57, 48, 36, 0.38);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        backdrop-filter: blur(3px);
+      }
+      .overlay.open {
+        display: flex;
+      }
+      .modal-box {
+        width: min(840px, 100%);
+        max-height: 88vh;
+        overflow: auto;
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        animation: ddIn 0.18s ease;
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-dim);
+        position: sticky;
+        top: 0;
+        background: var(--bg-raised);
+        z-index: 1;
+      }
+      .modal-kicker {
+        font-size: calc(8.5px * var(--fscale));
+        letter-spacing: 2px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .modal-title {
+        font-size: calc(15px * var(--fscale));
+        letter-spacing: 1.2px;
+        font-weight: 500;
+      }
+      .icon-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-dim);
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        line-height: 1;
+        border-radius: var(--radius);
+      }
+      .icon-btn:hover {
+        color: var(--text);
+        border-color: var(--border-dim);
+        background: var(--hover);
+      }
+      .modal-body {
+        padding: 22px;
+      }
+      .help-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        margin-bottom: 22px;
+      }
+      .help-grid p {
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.85;
+        color: var(--text-dim);
+        margin-top: 8px;
+        user-select: text;
+      }
+      .mini-code {
+        font-family: var(--font-code);
+        font-size: calc(9.5px * var(--fscale));
+        line-height: 1.8;
+        background: var(--bg-soft);
+        border: 1px solid var(--border-faint);
+        padding: 12px;
+        overflow: auto;
+        white-space: pre;
+        color: var(--text-dim);
+        border-radius: var(--radius);
+        user-select: text;
+      }
+      .rule-list {
+        list-style: none;
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.9;
+        color: var(--text-dim);
+      }
+      .rule-list li {
+        padding-left: 14px;
+        position: relative;
+      }
+      .rule-list li::before {
+        content: '·';
+        position: absolute;
+        left: 0;
+        color: var(--olive);
+      }
+      .spec-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.65;
+      }
+      .spec-table th {
+        text-align: left;
+        font-size: calc(8.5px * var(--fscale));
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        border-bottom: 1px solid var(--border-dim);
+        padding: 7px 8px;
+      }
+      .spec-table td {
+        border-bottom: 1px solid var(--border-faint);
+        padding: 7px 8px;
+        color: var(--text-dim);
+        vertical-align: top;
+      }
+      .spec-table code {
+        font-family: var(--font-code);
+        font-size: 0.9em;
+        color: var(--olive-deep);
+      }
+      .help-foot {
+        margin-top: 20px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border-dim);
+        font-size: calc(9.5px * var(--fscale));
+        letter-spacing: 0.4px;
+        line-height: 1.9;
+        color: var(--text-faint);
+        user-select: text;
+      }
+      .confirm-box {
+        width: min(380px, 100%);
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        padding: 20px;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        animation: ddIn 0.15s ease;
+      }
+      .confirm-msg {
+        font-size: calc(12px * var(--fscale));
+        line-height: 1.8;
+        color: var(--text);
+        margin-bottom: 18px;
+        user-select: text;
+      }
+      .confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .ai-modal-box {
+        width: min(900px, 100%);
+      }
+      .ai-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .ai-hint {
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.7;
+        color: var(--text-dim);
+        flex: 1 1 260px;
+      }
+      .ai-actions {
+        display: flex;
+        gap: 7px;
+        flex-shrink: 0;
+      }
+      .ai-spec {
+        font-family: var(--font-code);
+        font-size: calc(10px * var(--fscale));
+        line-height: 1.75;
+        background: var(--bg-soft);
+        border: 1px solid var(--border-faint);
+        padding: 14px;
+        border-radius: var(--radius);
+        max-height: 58vh;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: var(--text-dim);
+        user-select: text;
+      }
+      .file-meta-box {
+        width: min(600px, 100%);
+      }
+      .file-meta-target {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 10px;
+        border: 1px solid var(--border-faint);
+        background: var(--bg-soft);
+        border-radius: var(--radius);
+        margin-bottom: 16px;
+        font-size: calc(10px * var(--fscale));
+        color: var(--text-dim);
+        overflow-wrap: anywhere;
+      }
+      .file-meta-target b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .modal-desc {
+        font-size: calc(10.5px * var(--fscale));
+        line-height: 1.8;
+        color: var(--text-dim);
+        margin-bottom: 15px;
+      }
+      .modal-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border-faint);
+        flex-wrap: wrap;
+      }
+      .modal-hint {
+        flex: 1 1 200px;
+        min-height: 1em;
+        font-size: calc(9.5px * var(--fscale));
+        line-height: 1.6;
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .attach-insert {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--olive);
+        font-size: calc(9px * var(--fscale));
+        padding: 2px 6px;
+        flex-shrink: 0;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .attach-insert:hover {
+        border-color: var(--olive);
+        background: var(--olive-soft);
+      }
+      .issue.jumpable {
+        cursor: pointer;
+      }
+      .issue.jumpable:hover {
+        background: var(--hover);
+      }
+      .issue.jumpable:focus-visible {
+        outline: 1px solid var(--olive);
+        outline-offset: 1px;
+      }
+      @media (max-width: 1080px) {
+        #workspace {
+          flex-direction: column;
+        }
+        #editor-pane {
+          flex: 1 1 48%;
+          min-height: 0;
+          border-bottom: 1px solid var(--border-dim);
+        }
+        #inspector {
+          flex: 1 1 52%;
+          border-left: 0;
+          min-width: 0;
+          min-height: 0;
+        }
+        #ch-right {
+          gap: 12px;
+        }
+        #doc-sub {
+          display: none;
+        }
+      }
+      @media (max-width: 840px) {
+        #main {
+          padding: 58px 14px 32px;
+        }
+        body:not(.menu-pinned):not(.submenu-open) #main {
+          padding-top: 12px;
+        }
+        .menu-label {
+          display: none;
+        }
+        .menu-group {
+          padding: 0 3px;
+        }
+        #doc-title {
+          font-size: calc(20px * var(--fscale));
+          letter-spacing: 1.5px;
+        }
+        #ch-right span:nth-child(1),
+        #ch-right span:nth-child(3) {
+          display: none;
+        }
+        .help-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 560px) {
+        #main {
+          padding: 54px 10px 30px;
+        }
+        #doc-head {
+          padding-bottom: 10px;
+        }
+        #ch-right {
+          font-size: calc(9px * var(--fscale));
+        }
+        .pane-head {
+          padding: 0 10px;
+        }
+        .tab-panel,
+        .meta-scroll,
+        #panel-output {
+          padding: 16px 14px 24px;
+        }
+        .field-grid {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+        .convert-bar {
+          padding: 0 10px;
+        }
+        .stat-grid {
+          grid-template-columns: repeat(3, 1fr);
+          row-gap: 10px;
+        }
+        .stat-item:nth-child(4) {
+          border-left: 0;
+        }
+        .result-actions .btn {
+          flex: 1;
+        }
+        #dd-settings,
+        #dd-template,
+        #dd-attach {
+          min-width: min(300px, calc(100vw - 16px));
+        }
+        .modal-body {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-grid menu-pinned">
+    <div id="menu-trigger"></div>
+    <header id="top-menu">
+      <div class="menu-group">
+        <span class="menu-label">文件</span>
+        <button class="menu-btn" data-action="new" title="新建文稿">新建</button>
+        <button class="menu-btn" data-action="import" title="导入 Markdown">导入</button>
+        <button class="menu-btn" data-action="save-md" title="存为 Markdown（Ctrl+S）">存为 MD</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">视图</span>
+        <button class="menu-btn view-btn active" data-view="split">分栏</button>
+        <button class="menu-btn view-btn" data-view="edit">编辑</button>
+        <button class="menu-btn view-btn" data-view="preview">预览</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">输出</span>
+        <button class="menu-btn fmt-btn active" data-format="docx">DOCX</button>
+        <button class="menu-btn fmt-btn" data-format="tex">TEX</button>
+        <button class="menu-btn" data-action="template-menu" id="menu-template">
+          学术论文 <span class="menu-caret">⌄</span>
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">铸造</span>
+        <button class="menu-btn" data-action="validate" title="校验（Ctrl+Shift+V）">校验</button>
+        <button class="menu-btn" data-action="convert" title="转换（Ctrl+Enter）">转换</button>
+        <button class="menu-btn" data-action="compile-pdf">编译 PDF</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">界面</span>
+        <button class="menu-btn" data-action="ai-spec" title="给 AI 的 Markdown 写作规范">AI 规范</button>
+        <button class="menu-btn" data-action="settings">偏好</button>
+        <button class="menu-btn" data-action="help" title="Markdown 写作规范">?</button>
+      </div>
+      <button class="pin-btn pinned" id="pin-btn" title="固定菜单栏" aria-label="固定菜单栏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </header>
+
+    <div id="main">
+      <div id="doc-head">
+        <div class="ch-left">
+          <span id="doc-title">从文本到版式</span>
+          <span id="doc-sub">Markdown → DOCX / TeX</span>
+        </div>
+        <div id="ch-right">
+          <span>模板 <b id="ch-template">学术论文</b></span>
+          <span>字数 <b id="ch-words">0</b></span>
+          <span>块 <b id="ch-blocks">0</b></span>
+          <span id="ch-date">2026.10.21</span>
+        </div>
+      </div>
+
+      <div id="workspace">
+        <section id="editor-pane">
+          <div class="pane-head">
+            <div class="pane-head-left">
+              <span class="pane-label">Source</span>
+              <span class="file-name" id="file-name">sample.md</span>
+              <span class="dirty-dot" id="dirty-dot"></span>
+            </div>
+            <div class="pane-tools">
+              <button class="tool-btn" data-action="sample">示例</button>
+              <button class="tool-btn" data-action="attachments" id="attach-btn">附件 <span id="attach-count">0</span></button>
+            </div>
+          </div>
+          <div id="editor-wrap">
+            <div id="line-gutter" aria-hidden="true">1</div>
+            <textarea id="editor" wrap="soft" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="# 从标题开始写作…"></textarea>
+          </div>
+          <div class="pane-foot">
+            <span id="cursor-pos">LN 1 · COL 1</span>
+            <span id="save-hint">UTF-8 · MARKDOWN</span>
+          </div>
+        </section>
+
+        <aside id="inspector">
+          <div class="inspector-tabs" role="tablist">
+            <button class="tab active" data-tab="preview" role="tab">预览</button>
+            <button class="tab" data-tab="meta" role="tab">元信息</button>
+            <button class="tab" data-tab="output" role="tab">输出 <span class="tab-badge hidden" id="output-badge">0</span></button>
+          </div>
+          <div class="tab-panels">
+            <div class="tab-panel active" id="panel-preview">
+              <div id="preview" class="preview-doc"></div>
+            </div>
+            <div class="tab-panel" id="panel-meta">
+              <div class="meta-scroll">
+                <section class="meta-section">
+                  <div class="section-label">文档信息 <span>Frontmatter</span></div>
+                  <div class="field">
+                    <label>标题 <span class="req" data-req="title">*</span></label>
+                    <input data-meta="title" type="text" placeholder="未命名文稿" />
+                  </div>
+                  <div class="field">
+                    <label>副标题</label>
+                    <input data-meta="subtitle" type="text" placeholder="可留空" />
+                  </div>
+                  <div class="field-grid">
+                    <div class="field">
+                      <label>作者 <span class="req" data-req="author">*</span></label>
+                      <input data-meta="author" type="text" placeholder="署名" />
+                    </div>
+                    <div class="field">
+                      <label>日期</label>
+                      <input data-meta="date" type="text" placeholder="YYYY-MM-DD" />
+                    </div>
+                  </div>
+                  <div class="field-grid">
+                    <div class="field">
+                      <label>部门 / 机构</label>
+                      <input data-meta="department" type="text" placeholder="可留空" />
+                    </div>
+                    <div class="field">
+                      <label>版本</label>
+                      <input data-meta="version" type="text" placeholder="v1.0" />
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>主题</label>
+                    <input data-meta="subject" type="text" placeholder="文档主题" />
+                  </div>
+                  <div class="field">
+                    <label>摘要</label>
+                    <textarea data-meta="abstract" rows="4" placeholder="摘要将写入封面后的第一段"></textarea>
+                  </div>
+                  <div class="field">
+                    <label>关键词 <span class="field-hint">以逗号或分号分隔</span></label>
+                    <input data-meta="keywords" type="text" placeholder="Markdown, 自动排版" />
+                  </div>
+                  <div class="meta-note">元信息修改会写回源文件的 YAML frontmatter，并立即重新解析。</div>
+                </section>
+
+                <section class="meta-section">
+                  <div class="section-label">模板与格式 <span>Output</span></div>
+                  <div class="seg-format">
+                    <button data-format-btn="docx" class="active">DOCX</button>
+                    <button data-format-btn="tex">TEX</button>
+                  </div>
+                  <button class="template-field" id="meta-template-btn" data-action="template-menu">
+                    <span id="meta-template-name">学术论文</span>
+                    <span class="caret">⌄</span>
+                  </button>
+                  <div class="template-card" id="template-card">
+                    <div class="tc-head">
+                      <span class="tc-title">学术论文</span>
+                      <span class="tc-ver">v1.0</span>
+                    </div>
+                    <div class="tc-desc">正在读取模板信息…</div>
+                    <div class="tc-meta"></div>
+                  </div>
+                </section>
+
+                <section class="meta-section">
+                  <div class="section-label">转换选项 <span>Options</span></div>
+                  <label class="check-row" for="opt-strict">
+                    <span class="check-main">
+                      <span class="check-title">严格模式</span>
+                      <span class="check-desc">任一告警即中止，不静默降级</span>
+                    </span>
+                    <span class="check-wrap">
+                      <input type="checkbox" id="opt-strict" />
+                      <span class="cbox">
+                        <svg viewBox="0 0 12 12"><polyline points="2,6.2 5,9 10,3"></polyline></svg>
+                      </span>
+                    </span>
+                  </label>
+                  <label class="check-row" for="opt-toc" id="toc-row">
+                    <span class="check-main">
+                      <span class="check-title">生成目录页</span>
+                      <span class="check-desc">DOCX 在正文前插入目录域</span>
+                    </span>
+                    <span class="check-wrap">
+                      <input type="checkbox" id="opt-toc" checked />
+                      <span class="cbox">
+                        <svg viewBox="0 0 12 12"><polyline points="2,6.2 5,9 10,3"></polyline></svg>
+                      </span>
+                    </span>
+                  </label>
+                  <label class="check-row" for="opt-pdf" id="pdf-row">
+                    <span class="check-main">
+                      <span class="check-title">编译 PDF</span>
+                      <span class="check-desc">调用本机 MiKTeX / xelatex</span>
+                    </span>
+                    <span class="check-wrap">
+                      <input type="checkbox" id="opt-pdf" />
+                      <span class="cbox">
+                        <svg viewBox="0 0 12 12"><polyline points="2,6.2 5,9 10,3"></polyline></svg>
+                      </span>
+                    </span>
+                  </label>
+                </section>
+              </div>
+            </div>
+            <div class="tab-panel" id="panel-output">
+              <div id="output-body"></div>
+            </div>
+          </div>
+          <div class="convert-bar">
+            <div class="convert-status">
+              <span class="status-dot" id="convert-dot"></span>
+              <span id="convert-hint">准备就绪</span>
+            </div>
+            <div class="convert-actions">
+              <button class="btn ghost small" data-action="validate">校验</button>
+              <button class="btn primary" id="convert-btn" data-action="convert">铸造 DOCX</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div id="status-bar">
+      <span id="stat-left">READY · 0 字 · 0 块</span>
+      <span id="stat-right">MDFORGE</span>
+    </div>
+
+    <div class="dropdown" id="dd-template">
+      <div class="dd-label">模板 · <span id="dd-template-format">DOCX</span></div>
+      <div id="dd-template-list"></div>
+      <div class="dd-divider"></div>
+      <div class="dd-note">模板来自 mdforge/templates/&lt;format&gt;/，新增目录即可出现在此处。</div>
+    </div>
+
+    <div class="dropdown" id="dd-settings">
+      <div class="dd-label">外观</div>
+      <button class="dd-item" id="set-theme">
+        <span>主题</span><span class="hint" id="sv-theme">纸</span>
+      </button>
+      <div class="dd-item-row">
+        <span>背景</span>
+        <div class="settings-bg-options">
+          <span class="settings-bg-dot" data-bg="bg-void" title="空白"></span>
+          <span class="settings-bg-dot active" data-bg="bg-grid" title="网格"></span>
+          <span class="settings-bg-dot" data-bg="bg-dots" title="点阵"></span>
+          <span class="settings-bg-dot" data-bg="bg-cross" title="十字"></span>
+          <span class="settings-bg-dot" data-bg="bg-diagonal" title="斜线"></span>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>统一圆角</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-radius">0</span>
+          <button class="settings-btn" data-setting="radius-down" aria-label="减小圆角">−</button>
+          <button class="settings-btn" data-setting="radius-up" aria-label="增大圆角">+</button>
+        </div>
+      </div>
+      <div class="dd-item-row">
+        <span>界面字号</span>
+        <div class="settings-control">
+          <span class="settings-value" id="sv-fontsize">13px</span>
+          <button class="settings-btn" data-setting="font-down" aria-label="减小字号">−</button>
+          <button class="settings-btn" data-setting="font-up" aria-label="增大字号">+</button>
+        </div>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-label">工作台</div>
+      <button class="dd-item" id="set-statusbar">
+        <span>状态栏</span><span class="hint" id="sv-statusbar">开</span>
+      </button>
+      <button class="dd-item" id="set-linenumbers">
+        <span>编辑器行号</span><span class="hint" id="sv-linenumbers">开</span>
+      </button>
+      <button class="dd-item" id="set-autoparse">
+        <span>输入时自动解析</span><span class="hint" id="sv-autoparse">开</span>
+      </button>
+      <div class="dd-divider"></div>
+      <button class="dd-item" id="set-reset">
+        <span>重置界面设置</span><span class="hint">RESET</span>
+      </button>
+    </div>
+
+    <div class="dropdown" id="dd-attach">
+      <div class="dd-label">附件图片</div>
+      <div id="attach-list"></div>
+      <div class="dd-divider"></div>
+      <button class="dd-item" data-action="pick-images">
+        <span>添加图片</span><span class="hint">PNG · JPG</span>
+      </button>
+      <div class="dd-note">图片按文件名与 Markdown 中的 <code>![alt](path)</code> 匹配。</div>
+    </div>
+
+    <input id="import-file" type="file" accept=".md,.markdown,text/markdown,text/plain" class="hidden" />
+    <input id="image-file" type="file" accept="image/png,image/jpeg" multiple class="hidden" />
+
+    <div id="notification"></div>
+
+    <div class="overlay" id="help-modal" aria-hidden="true">
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <div class="modal-head">
+          <div>
+            <div class="modal-kicker">MdForge · Writing Spec</div>
+            <div class="modal-title" id="help-title">Markdown 写作规范</div>
+          </div>
+          <button class="icon-btn" data-close="help" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="help-grid">
+            <section>
+              <div class="section-label">Frontmatter <span>必填 · YAML</span></div>
+              <pre class="mini-code">---
+title: 从文本到版式
+subtitle: ——Markdown 驱动的学术出版管线
+author: 星野笃敬
+date: 2026-10-21
+abstract: "[目的/意义] 摘要正文……"
+keywords: [Markdown, DOCX, LaTeX]
+department: 数字人文实验室
+version: v1.0
+template: academic
+---</pre>
+              <p>文件必须以 frontmatter 开头。<code>title</code> 为必填；其余字段按模板配置选用。<code>template</code> 决定使用哪套模板。</p>
+            </section>
+            <section>
+              <div class="section-label">写作约定</div>
+              <ul class="rule-list">
+                <li>标题从 <code>#</code> 开始，连续不跳级；H5/H6 会降级。</li>
+                <li>图片必须独占一个段落，可写 <code>{width=12cm align=center}</code>。</li>
+                <li>表格不超过 6 列；题注用 <code>&lt;!-- caption: ... --&gt;</code> 放在表格前。</li>
+                <li>分页使用 <code>&lt;!-- pagebreak --&gt;</code>。</li>
+                <li>支持行内 <code>$...$</code> 与块级 <code>$$...$$</code> 公式。</li>
+                <li>不支持 HTML 块、脚注、任务列表、嵌套引用与嵌套表格。</li>
+              </ul>
+            </section>
+          </div>
+          <div class="section-label">语法映射</div>
+          <table class="spec-table">
+            <thead>
+              <tr><th>Markdown</th><th>DOCX</th><th>TeX</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code># / ## / ###</code></td><td>Heading 1 / 2 / 3</td><td>section / subsection / subsubsection</td></tr>
+              <tr><td><code>**粗** · *斜* · ~~删~~</code></td><td>Run 级加粗 / 斜体 / 删除线</td><td>textbf / textit / sout</td></tr>
+              <tr><td><code>- 项</code> · <code>1. 项</code></td><td>模板列表样式，手动层级</td><td>itemize / enumerate 递归</td></tr>
+              <tr><td><code>```python</code></td><td>等宽代码段</td><td>Verbatim 环境</td></tr>
+              <tr><td><code>&gt; 引用</code></td><td>Quote 样式</td><td>quote 环境</td></tr>
+              <tr><td><code>[text](url)</code></td><td>下划线超链接</td><td>href（hidelinks）</td></tr>
+            </tbody>
+          </table>
+          <div class="help-foot">
+            快捷键：Ctrl+Enter 转换 · Ctrl+Shift+V 校验 · Ctrl+S 存为 MD · Esc 关闭浮层。<br />
+            参考版式：A4 · 上下 2.54cm / 左右 3.18cm · 正文五号 · 无编号标题 · 图表题注。
+            <div style="margin-top: 12px">
+              <button class="btn small" data-action="ai-spec">打开给 AI 的完整规范</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="confirm-modal" aria-hidden="true">
+      <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirm-msg">
+        <div class="confirm-msg" id="confirm-msg"></div>
+        <div class="confirm-actions">
+          <button class="btn" id="confirm-no">取消</button>
+          <button class="btn primary" id="confirm-yes">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="ai-modal" aria-hidden="true">
+      <div class="modal-box ai-modal-box" role="dialog" aria-modal="true" aria-labelledby="ai-title">
+        <div class="modal-head">
+          <div>
+            <div class="modal-kicker">MdForge · Upstream Prompt</div>
+            <div class="modal-title" id="ai-title">给 AI 的 Markdown 规范</div>
+          </div>
+          <button class="icon-btn" data-close="ai" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="ai-toolbar">
+            <div class="ai-hint">让 AI 只输出 Markdown 纯文本，不要解释、不要用代码围栏包裹全文；版式交给 MdForge。</div>
+            <div class="ai-actions">
+              <button class="btn" data-action="copy-ai-spec">复制全部</button>
+              <button class="btn" data-action="download-ai-spec">下载 .md</button>
+            </div>
+          </div>
+          <pre class="ai-spec" id="ai-spec-content">载入中…</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="file-meta-modal" aria-hidden="true">
+      <div class="modal-box file-meta-box" role="dialog" aria-modal="true" aria-labelledby="file-meta-title">
+        <div class="modal-head">
+          <div>
+            <div class="modal-kicker">Generated File · Properties</div>
+            <div class="modal-title" id="file-meta-title">编辑文件元信息</div>
+          </div>
+          <button class="icon-btn" data-close="file-meta" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="file-meta-target">
+            <span class="format-stamp" id="fm-format">DOCX</span>
+            <span id="fm-filename">document.docx</span>
+          </div>
+          <p class="modal-desc" id="fm-note">修改文件属性，不改动正文内容。</p>
+          <div class="field">
+            <label>标题</label>
+            <input data-file-meta="title" type="text" placeholder="文档标题" />
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label>作者</label>
+              <input data-file-meta="author" type="text" placeholder="作者" />
+            </div>
+            <div class="field">
+              <label>版本</label>
+              <input data-file-meta="version" type="text" placeholder="v1.0" />
+            </div>
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label>主题</label>
+              <input data-file-meta="subject" type="text" placeholder="文档主题" />
+            </div>
+            <div class="field">
+              <label>部门 / 机构</label>
+              <input data-file-meta="department" type="text" placeholder="部门" />
+            </div>
+          </div>
+          <div class="field">
+            <label>关键词 <span class="field-hint">以逗号或分号分隔</span></label>
+            <input data-file-meta="keywords" type="text" placeholder="关键词一, 关键词二" />
+          </div>
+          <label class="check-row" for="fm-recompile" id="fm-recompile-row">
+            <span class="check-main">
+              <span class="check-title">重新编译 PDF</span>
+              <span class="check-desc">更新 TeX 元信息后重新运行 MiKTeX</span>
+            </span>
+            <span class="check-wrap">
+              <input type="checkbox" id="fm-recompile" checked />
+              <span class="cbox">
+                <svg viewBox="0 0 12 12"><polyline points="2,6.2 5,9 10,3"></polyline></svg>
+              </span>
+            </span>
+          </label>
+          <div class="modal-actions">
+            <span class="modal-hint" id="file-meta-hint"></span>
+            <button class="btn" data-close="file-meta">取消</button>
+            <button class="btn primary" id="file-meta-save">应用并更新文件</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        'use strict';
+
+        const SETTINGS_KEY = 'mdforge.settings.v1';
+        const DRAFT_KEY = 'mdforge.draft.v1';
+        const DEFAULT_SETTINGS = {
+          theme: 'paper',
+          bg: 'bg-grid',
+          radius: 4,
+          fscale: 1,
+          statusbar: true,
+          lineNumbers: true,
+          autoParse: true,
+          menuPinned: true,
+        };
+        const state = {
+          format: 'docx',
+          template: 'academic',
+          templates: { docx: [], tex: [] },
+          templateInfo: null,
+          env: null,
+          metadata: {},
+          stats: {},
+          issues: [],
+          images: [],
+          result: null,
+          view: 'split',
+          tab: 'preview',
+          filename: 'sample.md',
+          busy: false,
+          parsing: false,
+          parseSeq: 0,
+          parseTimer: null,
+          draftTimer: null,
+          settings: { ...DEFAULT_SETTINGS },
+          openDropdown: null,
+          confirmCallback: null,
+          sampleLoading: false,
+          aiSpec: null,
+          fileMetaBusy: false,
+        };
+        const dom = {};
+        const $ = (selector, root = document) => root.querySelector(selector);
+        const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+        function cacheDom() {
+          dom.editor = $('#editor');
+          dom.gutter = $('#line-gutter');
+          dom.preview = $('#preview');
+          dom.docTitle = $('#doc-title');
+          dom.chTemplate = $('#ch-template');
+          dom.chWords = $('#ch-words');
+          dom.chBlocks = $('#ch-blocks');
+          dom.chDate = $('#ch-date');
+          dom.fileName = $('#file-name');
+          dom.dirtyDot = $('#dirty-dot');
+          dom.cursorPos = $('#cursor-pos');
+          dom.saveHint = $('#save-hint');
+          dom.attachBtn = $('#attach-btn');
+          dom.attachCount = $('#attach-count');
+          dom.menuTemplate = $('#menu-template');
+          dom.metaTemplateName = $('#meta-template-name');
+          dom.metaTemplateBtn = $('#meta-template-btn');
+          dom.templateCard = $('#template-card');
+          dom.ddTemplate = $('#dd-template');
+          dom.ddTemplateList = $('#dd-template-list');
+          dom.ddTemplateFormat = $('#dd-template-format');
+          dom.ddSettings = $('#dd-settings');
+          dom.ddAttach = $('#dd-attach');
+          dom.attachList = $('#attach-list');
+          dom.notification = $('#notification');
+          dom.statusBar = $('#status-bar');
+          dom.statLeft = $('#stat-left');
+          dom.convertHint = $('#convert-hint');
+          dom.convertDot = $('#convert-dot');
+          dom.convertBtn = $('#convert-btn');
+          dom.outputBody = $('#output-body');
+          dom.outputBadge = $('#output-badge');
+          dom.workspace = $('#workspace');
+          dom.importFile = $('#import-file');
+          dom.imageFile = $('#image-file');
+          dom.helpModal = $('#help-modal');
+          dom.aiModal = $('#ai-modal');
+          dom.aiSpecContent = $('#ai-spec-content');
+          dom.fileMetaModal = $('#file-meta-modal');
+          dom.fileMetaSave = $('#file-meta-save');
+          dom.fileMetaHint = $('#file-meta-hint');
+          dom.fmRecompile = $('#fm-recompile');
+          dom.fmRecompileRow = $('#fm-recompile-row');
+          dom.fmFormat = $('#fm-format');
+          dom.fmFilename = $('#fm-filename');
+          dom.fmNote = $('#fm-note');
+          dom.confirmModal = $('#confirm-modal');
+          dom.confirmMsg = $('#confirm-msg');
+          dom.optStrict = $('#opt-strict');
+          dom.optToc = $('#opt-toc');
+          dom.optPdf = $('#opt-pdf');
+          dom.tocRow = $('#toc-row');
+          dom.pdfRow = $('#pdf-row');
+          dom.pinBtn = $('#pin-btn');
+          dom.topMenu = $('#top-menu');
+          dom.editorWrap = $('#editor-wrap');
+        }
+
+        function loadSettings() {
+          try {
+            const raw = localStorage.getItem(SETTINGS_KEY);
+            if (!raw) return { ...DEFAULT_SETTINGS };
+            const parsed = JSON.parse(raw);
+            return { ...DEFAULT_SETTINGS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+          } catch (error) {
+            return { ...DEFAULT_SETTINGS };
+          }
+        }
+
+        function saveSettings() {
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+          } catch (error) {
+            /* storage may be unavailable */
+          }
+        }
+
+        function applySettings() {
+          const s = state.settings;
+          const root = document.documentElement;
+          root.style.setProperty('--radius', `${Math.max(0, Math.min(14, Number(s.radius) || 0))}px`);
+          root.style.setProperty('--fscale', String(Math.max(0.85, Math.min(1.2, Number(s.fscale) || 1))));
+          document.body.classList.toggle('theme-night', s.theme === 'night');
+          ['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach((name) => {
+            document.body.classList.toggle(name, s.bg === name);
+          });
+          document.body.classList.toggle('menu-pinned', !!s.menuPinned);
+          document.body.classList.toggle('status-hidden', !s.statusbar);
+          dom.pinBtn.classList.toggle('pinned', !!s.menuPinned);
+          dom.topMenu.classList.toggle('pinned', !!s.menuPinned);
+          dom.gutter.style.display = s.lineNumbers ? '' : 'none';
+          dom.editor.style.paddingLeft = s.lineNumbers ? '2px' : '18px';
+          $('#sv-theme').textContent = s.theme === 'night' ? '夜' : '纸';
+          $('#sv-radius').textContent = String(Math.round(Number(s.radius) || 0));
+          $('#sv-fontsize').textContent = `${Math.round(13 * Number(s.fscale || 1))}px`;
+          $('#sv-statusbar').textContent = s.statusbar ? '开' : '关';
+          $('#sv-linenumbers').textContent = s.lineNumbers ? '开' : '关';
+          $('#sv-autoparse').textContent = s.autoParse ? '开' : '关';
+          $$('.settings-bg-dot').forEach((dot) => dot.classList.toggle('active', dot.dataset.bg === s.bg));
+          updateFormatUI();
+          if (dom.editor) requestAnimationFrame(updateLineNumbers);
+          saveSettings();
+        }
+
+        function updateDate() {
+          const now = new Date();
+          const value = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
+          dom.chDate.textContent = value;
+        }
+
+        function toast(message, isError = false) {
+          dom.notification.textContent = message;
+          dom.notification.classList.toggle('error', !!isError);
+          dom.notification.classList.add('show');
+          clearTimeout(toast._timer);
+          toast._timer = setTimeout(() => dom.notification.classList.remove('show'), 2800);
+        }
+
+        function escapeHtml(value) {
+          return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+
+        function setStatus(text) {
+          dom.statLeft.textContent = text;
+        }
+
+        function setHint(text, kind) {
+          dom.convertHint.textContent = text;
+          dom.convertDot.classList.toggle('busy', kind === 'busy');
+          dom.convertDot.classList.toggle('warn', kind === 'warn');
+        }
+
+        function updateCursor() {
+          const value = dom.editor.value;
+          const position = dom.editor.selectionStart || 0;
+          const before = value.slice(0, position);
+          const line = before.split('\n').length;
+          const lastBreak = before.lastIndexOf('\n');
+          const column = position - lastBreak;
+          dom.cursorPos.textContent = `LN ${line} · COL ${column}`;
+        }
+
+        let lineMirror = null;
+
+        function ensureLineMirror() {
+          if (!lineMirror) {
+            lineMirror = document.createElement('div');
+            lineMirror.className = 'line-mirror';
+            dom.editorWrap.appendChild(lineMirror);
+          }
+          return lineMirror;
+        }
+
+        function updateLineNumbers() {
+          if (!dom.editor || !dom.gutter) return;
+          if (!state.settings.lineNumbers) {
+            dom.gutter.textContent = '';
+            return;
+          }
+          const lines = dom.editor.value.split('\n');
+          const mirror = ensureLineMirror();
+          const style = getComputedStyle(dom.editor);
+          const width = Math.max(
+            40,
+            dom.editor.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0)
+          );
+          mirror.style.width = `${width}px`;
+          mirror.style.fontFamily = style.fontFamily;
+          mirror.style.fontSize = style.fontSize;
+          mirror.style.lineHeight = style.lineHeight;
+          mirror.style.letterSpacing = style.letterSpacing;
+          mirror.style.tabSize = style.tabSize;
+          mirror.innerHTML = '';
+          const fragment = document.createDocumentFragment();
+          const blocks = [];
+          lines.forEach((line) => {
+            const block = document.createElement('div');
+            block.textContent = line.length ? line : '\u00a0';
+            fragment.appendChild(block);
+            blocks.push(block);
+          });
+          mirror.appendChild(fragment);
+          const lineHeight = parseFloat(style.lineHeight) || 22;
+          let numbers = '';
+          blocks.forEach((block, index) => {
+            const height = block.getBoundingClientRect().height || lineHeight;
+            const visualLines = Math.max(1, Math.round(height / lineHeight));
+            numbers += `${index + 1}\n`;
+            for (let i = 1; i < visualLines; i += 1) numbers += '\n';
+          });
+          dom.gutter.textContent = numbers;
+          dom.gutter.scrollTop = dom.editor.scrollTop;
+        }
+
+        function updateWordStats() {
+          const stats = state.stats || {};
+          dom.chWords.textContent = stats.words != null ? String(stats.words) : '0';
+          dom.chBlocks.textContent = stats.blocks != null ? String(stats.blocks) : '0';
+          if (stats.words != null) {
+            setStatus(`READY · ${stats.words} 字 · ${stats.blocks || 0} 块 · ${state.format.toUpperCase()}`);
+          }
+        }
+
+        function updateDocTitle() {
+          const title = String((state.metadata && state.metadata.title) || '').trim();
+          dom.docTitle.textContent = title || '未命名文稿';
+          dom.docTitle.title = title || '未命名文稿';
+        }
+
+        function templateChoices() {
+          return state.templates[state.format] || [];
+        }
+
+        function templateSummary(name) {
+          return templateChoices().find((item) => item.name === name) || null;
+        }
+
+        function templateTitle(name, format = state.format) {
+          const found = (state.templates[format] || []).find((item) => item.name === name);
+          return found ? found.title || found.name : name || '学术论文';
+        }
+
+        function updateTemplateUI() {
+          const title = templateTitle(state.template);
+          dom.menuTemplate.innerHTML = `${escapeHtml(title)} <span class="menu-caret">⌄</span>`;
+          dom.metaTemplateName.textContent = title;
+          dom.chTemplate.textContent = title;
+          dom.ddTemplateFormat.textContent = state.format.toUpperCase();
+          $$('.dd-template-item').forEach((item) => item.classList.toggle('selected', item.dataset.templateName === state.template));
+        }
+
+        function updateFormatUI() {
+          $$('.fmt-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.format === state.format));
+          $$('[data-format-btn]').forEach((btn) => btn.classList.toggle('active', btn.dataset.formatBtn === state.format));
+          dom.optPdf.checked = state.format === 'tex' ? dom.optPdf.checked : false;
+          dom.pdfRow.classList.toggle('disabled', state.format !== 'tex');
+          dom.optPdf.disabled = state.format !== 'tex';
+          dom.tocRow.classList.toggle('hidden', state.format !== 'docx');
+          dom.convertBtn.textContent = `铸造 ${state.format.toUpperCase()}`;
+          updateTemplateUI();
+          updateEmptyState();
+        }
+
+        function updateEmptyState() {
+          if (!state.result && (!state.issues || !state.issues.length)) {
+            renderOutput();
+          }
+        }
+
+        function switchTab(tab) {
+          state.tab = tab;
+          $$('.tab').forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
+          $$('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === `panel-${tab}`));
+        }
+
+        function setView(view) {
+          state.view = view;
+          dom.workspace.classList.remove('mode-split', 'mode-edit', 'mode-preview');
+          dom.workspace.classList.add(`mode-${view}`);
+          if (view === 'split') dom.workspace.classList.remove('mode-edit', 'mode-preview');
+          $$('.view-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === view));
+          if (view === 'preview') switchTab(state.tab);
+          requestAnimationFrame(updateLineNumbers);
+        }
+
+        function renderTemplateCard(info) {
+          const summary = templateSummary(state.template || '');
+          const data = info || summary || {};
+          const required = data.required || [];
+          const optional = data.optional || [];
+          const features = data.features || [];
+          const desc = data.description || '—';
+          const version = data.version || '1.0';
+          const title = data.title || templateTitle(state.template);
+          const env = state.format === 'tex'
+            ? (state.env && state.env.miktex_bin ? `MiKTeX ${state.env.version || ''} · xelatex`.trim() : 'MiKTeX 未找到')
+            : 'python-docx · 模板样式';
+          dom.templateCard.innerHTML = `
+            <div class="tc-head">
+              <span class="tc-title">${escapeHtml(title)}</span>
+              <span class="tc-ver">v${escapeHtml(version)}</span>
+            </div>
+            <div class="tc-desc">${escapeHtml(desc)}</div>
+            <div class="tc-meta">
+              ${required.map((item) => `<span class="chip olive">必填 ${escapeHtml(item)}</span>`).join('')}
+              ${features.slice(0, 4).map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join('')}
+            </div>
+            <div class="tc-env">${escapeHtml(env)}${optional.length ? ` · 可选字段 ${optional.length}` : ''}</div>
+          `;
+          $$('[data-req]').forEach((mark) => {
+            mark.classList.toggle('hidden', !required.includes(mark.dataset.req));
+          });
+        }
+
+        function fillTemplateDropdown() {
+          const items = templateChoices();
+          if (!items.length) {
+            dom.ddTemplateList.innerHTML = '<div class="dd-empty">暂无可用模板</div>';
+            return;
+          }
+          dom.ddTemplateList.innerHTML = items
+            .map(
+              (item) => `
+              <button class="dd-item dd-template-item ${item.name === state.template ? 'selected' : ''}" data-template-name="${escapeHtml(item.name)}">
+                <span class="dd-main">${escapeHtml(item.title || item.name)}</span>
+                <span class="hint">${escapeHtml(item.format ? item.format.toUpperCase() : '')} · v${escapeHtml(item.version || '1.0')}</span>
+              </button>`
+            )
+            .join('');
+        }
+
+        function openDropdown(element, anchor) {
+          if (!element || !anchor) return;
+          if (state.openDropdown === element) {
+            closeDropdowns();
+            return;
+          }
+          closeDropdowns();
+          element.classList.add('open');
+          document.body.classList.add('submenu-open');
+          state.openDropdown = element;
+          const rect = anchor.getBoundingClientRect();
+          element.style.left = '0px';
+          element.style.top = '0px';
+          const width = element.offsetWidth;
+          const height = element.offsetHeight;
+          let left = rect.left + rect.width / 2 - width / 2;
+          left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+          let top = rect.bottom + 6;
+          if (top + height > window.innerHeight - 36) {
+            top = Math.max(52, rect.top - height - 6);
+          }
+          element.style.left = `${Math.round(left)}px`;
+          element.style.top = `${Math.round(top)}px`;
+        }
+
+        function closeDropdowns() {
+          $$('.dropdown.open').forEach((item) => item.classList.remove('open'));
+          document.body.classList.remove('submenu-open');
+          state.openDropdown = null;
+        }
+
+        function setFormat(format) {
+          if (format !== 'docx' && format !== 'tex') return;
+          if (format === state.format) return;
+          state.format = format;
+          const choices = templateChoices();
+          if (!choices.some((item) => item.name === state.template)) {
+            state.template = choices[0] ? choices[0].name : 'academic';
+            updateFrontmatter({ template: state.template });
+          }
+          updateFormatUI();
+          renderTemplateCard(null);
+          scheduleParse(0);
+        }
+
+        function setTemplate(name) {
+          if (!name || name === state.template) {
+            closeDropdowns();
+            return;
+          }
+          state.template = name;
+          updateFrontmatter({ template: name });
+          updateTemplateUI();
+          renderTemplateCard(null);
+          closeDropdowns();
+          scheduleParse(0);
+        }
+
+        function currentTemplateFromFrontmatter() {
+          const text = dom.editor.value;
+          const match = text.match(/^---\n([\s\S]*?)\n---/);
+          if (!match) return '';
+          const line = match[1].match(/^template\s*:\s*(.+)$/m);
+          if (!line) return '';
+          let value = line[1].trim();
+          if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
+          return value.split(/\s+#/)[0].trim();
+        }
+
+        function ensureTemplateForFormat() {
+          const fromFrontmatter = currentTemplateFromFrontmatter();
+          const choices = templateChoices();
+          if (fromFrontmatter && choices.some((item) => item.name === fromFrontmatter)) {
+            state.template = fromFrontmatter;
+          } else if (!choices.some((item) => item.name === state.template)) {
+            state.template = choices[0] ? choices[0].name : state.template || 'academic';
+          }
+        }
+
+        function setEditorValue(text) {
+          dom.editor.value = text;
+          updateLineNumbers();
+          updateCursor();
+          dom.gutter.scrollTop = dom.editor.scrollTop;
+        }
+
+        function onEditorInput() {
+          updateLineNumbers();
+          updateCursor();
+          dom.dirtyDot.classList.add('show');
+          scheduleDraftSave();
+          if (state.settings.autoParse) scheduleParse(420);
+          else {
+            setHint('输入已变更 · 待解析');
+            setStatus('EDITED · 待解析');
+          }
+        }
+
+        function scheduleParse(delay = 300) {
+          clearTimeout(state.parseTimer);
+          state.parseTimer = setTimeout(() => parseNow(), delay);
+        }
+
+        async function parseNow() {
+          clearTimeout(state.parseTimer);
+          if (state.parsing) {
+            state.parseSeq += 1;
+          }
+          const seq = ++state.parseSeq;
+          state.parsing = true;
+          ensureTemplateForFormat();
+          updateTemplateUI();
+          setHint('解析中…', 'busy');
+          try {
+            const response = await fetch('/api/parse', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                markdown: dom.editor.value,
+                format: state.format,
+                template: state.template,
+                filename: state.filename,
+              }),
+            });
+            const data = await response.json();
+            if (seq !== state.parseSeq) return;
+            if (!response.ok || !data.ok) {
+              state.issues = data.issues || [{ level: 'error', message: data.error || '解析失败', line: data.line || 0 }];
+              renderOutput();
+              updateIssuesBadge();
+              setHint('解析失败', 'warn');
+              setStatus('PARSE ERROR');
+              return;
+            }
+            state.metadata = data.metadata || {};
+            state.stats = data.stats || {};
+            state.issues = data.issues || [];
+            state.templateInfo = data.template || null;
+            if (data.template && data.template.name) {
+              state.template = data.template.name;
+            }
+            dom.preview.innerHTML = data.preview_html || '<div class="preview-empty">正文为空</div>';
+            hydratePreviewImages();
+            syncMetaForm();
+            updateDocTitle();
+            updateWordStats();
+            updateTemplateUI();
+            renderTemplateCard(state.templateInfo);
+            renderOutput();
+            updateIssuesBadge();
+            const errorCount = state.issues.filter((item) => item.level === 'error').length;
+            if (errorCount) setHint(`${errorCount} 项错误待修正`, 'warn');
+            else setHint('准备就绪', 'idle');
+            dom.dirtyDot.classList.remove('show');
+            scheduleDraftSave();
+          } catch (error) {
+            if (seq !== state.parseSeq) return;
+            setHint('后端未连接', 'warn');
+            setStatus('OFFLINE');
+            toast('无法连接转换服务，请运行 mdforge_serve.py', true);
+          } finally {
+            if (seq === state.parseSeq) state.parsing = false;
+          }
+        }
+
+        function syncMetaForm() {
+          const meta = state.metadata || {};
+          const mapping = {
+            title: meta.title || '',
+            subtitle: meta.subtitle || '',
+            author: meta.author || '',
+            date: meta.date || '',
+            department: meta.department || '',
+            version: meta.version || '',
+            subject: meta.subject || '',
+            abstract: meta.abstract || '',
+            keywords: Array.isArray(meta.keywords) ? meta.keywords.join(', ') : meta.keywords || '',
+          };
+          $$('[data-meta]').forEach((input) => {
+            if (document.activeElement === input) return;
+            input.value = mapping[input.dataset.meta] != null ? mapping[input.dataset.meta] : '';
+          });
+          if (document.activeElement !== dom.optToc) {
+            dom.optToc.checked = meta.toc !== false;
+          }
+        }
+
+        function yamlValue(value) {
+          if (typeof value === 'boolean' || typeof value === 'number') return String(value);
+          if (Array.isArray(value)) {
+            return `[${value.map((item) => JSON.stringify(String(item))).join(', ')}]`;
+          }
+          return JSON.stringify(String(value == null ? '' : value));
+        }
+
+        function updateFrontmatter(updates) {
+          let text = dom.editor.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          const match = text.match(/^---\n([\s\S]*?)\n---(\n|$)/);
+          const entries = Object.entries(updates);
+          if (!match) {
+            const lines = entries
+              .filter(([, value]) => !(value == null || value === '' || (Array.isArray(value) && !value.length)))
+              .map(([key, value]) => `${key}: ${yamlValue(value)}`);
+            if (!lines.length) return;
+            dom.editor.value = `---\n${lines.join('\n')}\n---\n\n${text}`;
+          } else {
+            const header = match[1];
+            const lines = header.length ? header.split('\n') : [];
+            entries.forEach(([key, value]) => {
+              const lineIndex = lines.findIndex((line) => new RegExp(`^${key}\\s*:`).test(line));
+              const empty = value == null || value === '' || (Array.isArray(value) && !value.length);
+              if (empty) {
+                if (lineIndex >= 0) lines.splice(lineIndex, 1);
+                return;
+              }
+              const serialized = `${key}: ${yamlValue(value)}`;
+              if (lineIndex >= 0) lines[lineIndex] = serialized;
+              else lines.push(serialized);
+            });
+            const tail = text.slice(match.index + match[0].length);
+            const suffix = match[2] || '\n';
+            dom.editor.value = `${text.slice(0, match.index)}---\n${lines.join('\n')}\n---${suffix}${tail}`;
+          }
+          updateLineNumbers();
+          dom.dirtyDot.classList.add('show');
+          scheduleDraftSave();
+          scheduleParse(120);
+        }
+
+        function bindMetaForm() {
+          $$('[data-meta]').forEach((input) => {
+            input.addEventListener('change', () => {
+              const key = input.dataset.meta;
+              let value = input.value;
+              if (key === 'keywords') {
+                value = value
+                  .split(/[,，;；\n]/)
+                  .map((item) => item.trim())
+                  .filter(Boolean);
+              }
+              updateFrontmatter({ [key]: value });
+            });
+          });
+          dom.optStrict.addEventListener('change', () => {
+            if (state.issues.length) parseNow();
+          });
+          dom.optToc.addEventListener('change', () => {
+            updateFrontmatter({ toc: !!dom.optToc.checked });
+          });
+          dom.optPdf.addEventListener('change', () => {
+            if (dom.optPdf.checked && state.format !== 'tex') {
+              setFormat('tex');
+            }
+          });
+        }
+
+        function extractImagePaths(markdown) {
+          const paths = [];
+          const regex = /!\[[^\]]*\]\(\s*(?:<([^>\n]+)>|([^)\s]+))[^)]*\)/g;
+          let match;
+          while ((match = regex.exec(markdown)) !== null) {
+            const path = match[1] || match[2];
+            if (path && !/^https?:\/\//i.test(path) && !/^data:/i.test(path)) paths.push(path);
+          }
+          return Array.from(new Set(paths));
+        }
+
+        function basename(path) {
+          return String(path || '').replace(/\\/g, '/').split('/').pop();
+        }
+
+        function missingImages() {
+          const names = new Set(state.images.map((image) => image.name));
+          return extractImagePaths(dom.editor.value).filter((path) => !names.has(basename(path)));
+        }
+
+        function hydratePreviewImages() {
+          $$('figure[data-image-path]', dom.preview).forEach((figure) => {
+            const path = figure.dataset.imagePath;
+            const image = state.images.find((item) => item.name === basename(path));
+            if (!image) return;
+            const holder = $('.img-placeholder', figure);
+            if (!holder) return;
+            const img = document.createElement('img');
+            img.src = image.url;
+            img.alt = path;
+            img.loading = 'lazy';
+            holder.replaceWith(img);
+          });
+        }
+
+        function imageSizeLabel(size) {
+          if (!size && size !== 0) return '';
+          if (size < 1024) return `${size} B`;
+          if (size < 1024 * 1024) return `${(size / 1024).toFixed(0)} KB`;
+          return `${(size / 1024 / 1024).toFixed(1)} MB`;
+        }
+
+        function renderAttachments() {
+          dom.attachCount.textContent = String(state.images.length);
+          dom.attachBtn.classList.toggle('count-on', state.images.length > 0);
+          if (!state.images.length) {
+            dom.attachList.innerHTML = '<div class="dd-empty">尚未添加图片</div>';
+            return;
+          }
+          dom.attachList.innerHTML = state.images
+            .map(
+              (image, index) => `
+              <div class="attach-item">
+                <img class="attach-thumb" src="${image.url}" alt="" />
+                <span class="attach-name" title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</span>
+                <span class="attach-size">${escapeHtml(imageSizeLabel(image.size))}</span>
+                <button class="attach-insert" data-insert-image="${index}" title="在光标处插入图片语法">插入</button>
+                <button class="attach-remove" data-remove-image="${index}" title="移除">×</button>
+              </div>`
+            )
+            .join('');
+        }
+
+        function fileToDataUrl(file) {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(file);
+          });
+        }
+
+        async function addImageFile(file, options = {}) {
+          if (!file || !file.type.startsWith('image/')) return false;
+          if (state.images.some((item) => item.name === file.name)) return false;
+          if (file.size > 6 * 1024 * 1024) {
+            if (!options.silent) toast('图片超过 6 MB，未添加', true);
+            return false;
+          }
+          const url = URL.createObjectURL(file);
+          let dataUrl = '';
+          if (file.size <= 2 * 1024 * 1024) dataUrl = await fileToDataUrl(file);
+          state.images.push({ name: file.name, file, url, dataUrl, size: file.size });
+          renderAttachments();
+          hydratePreviewImages();
+          scheduleDraftSave();
+          if (!options.silent) toast(`已附加 ${file.name}`);
+          return true;
+        }
+
+        function removeImage(index) {
+          const image = state.images[index];
+          if (!image) return;
+          URL.revokeObjectURL(image.url);
+          state.images.splice(index, 1);
+          renderAttachments();
+          hydratePreviewImages();
+          scheduleDraftSave();
+          parseNow();
+        }
+
+        function scheduleDraftSave() {
+          clearTimeout(state.draftTimer);
+          state.draftTimer = setTimeout(saveDraft, 850);
+        }
+
+        function saveDraft() {
+          try {
+            const totalData = state.images.reduce((sum, image) => sum + (image.dataUrl ? image.dataUrl.length : 0), 0);
+            const includeImages = totalData < 3.6 * 1024 * 1024;
+            const payload = {
+              text: dom.editor.value,
+              filename: state.filename,
+              format: state.format,
+              template: state.template,
+              images: includeImages
+                ? state.images.filter((image) => image.dataUrl).map((image) => ({ name: image.name, type: image.file.type, dataUrl: image.dataUrl }))
+                : [],
+              imagesOmitted: !includeImages || state.images.some((image) => !image.dataUrl),
+              savedAt: Date.now(),
+            };
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+            const time = new Date(payload.savedAt);
+            dom.saveHint.textContent = `UTF-8 · MD · 草稿 ${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+          } catch (error) {
+            dom.saveHint.textContent = 'UTF-8 · MD · 草稿未保存';
+          }
+        }
+
+        function loadDraft() {
+          try {
+            const raw = localStorage.getItem(DRAFT_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed.text === 'string' ? parsed : null;
+          } catch (error) {
+            return null;
+          }
+        }
+
+        async function restoreDraftImages(draft) {
+          if (!draft || !Array.isArray(draft.images)) return;
+          for (const item of draft.images) {
+            if (!item || !item.dataUrl) continue;
+            try {
+              const response = await fetch(item.dataUrl);
+              const blob = await response.blob();
+              const file = new File([blob], item.name || 'image.png', { type: item.type || blob.type });
+              await addImageFile(file, { silent: true });
+            } catch (error) {
+              /* ignore broken draft image */
+            }
+          }
+          if (draft.imagesOmitted) toast('部分图片附件过大，未写入草稿', true);
+        }
+
+        async function fetchSampleMarkdown() {
+          const response = await fetch('/api/sample');
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || '示例不可用');
+          return { markdown: data.markdown, filename: data.filename || 'sample.md' };
+        }
+
+        async function attachSampleImages(markdown) {
+          const paths = extractImagePaths(markdown);
+          for (const path of paths) {
+            const name = basename(path);
+            if (state.images.some((image) => image.name === name)) continue;
+            try {
+              const response = await fetch(`/samples/${path.replace(/^\.?\//, '')}`);
+              if (!response.ok) continue;
+              const blob = await response.blob();
+              const file = new File([blob], name, { type: blob.type || 'image/png' });
+              await addImageFile(file, { silent: true });
+            } catch (error) {
+              /* optional sample asset */
+            }
+          }
+        }
+
+        async function loadSample(options = {}) {
+          if (state.sampleLoading) return;
+          state.sampleLoading = true;
+          try {
+            const sample = await fetchSampleMarkdown();
+            state.images.forEach((image) => URL.revokeObjectURL(image.url));
+            state.images = [];
+            renderAttachments();
+            setEditorValue(sample.markdown);
+            state.filename = sample.filename;
+            dom.fileName.textContent = state.filename;
+            state.result = null;
+            state.issues = [];
+            state.metadata = {};
+            await attachSampleImages(sample.markdown);
+            if (!state.templates.docx.length && !state.templates.tex.length) {
+              /* templates still loading; parse will use the server default */
+            }
+            updateFormatUI();
+            await parseNow();
+            if (!options.silent) toast('已载入示例文稿');
+          } catch (error) {
+            setEditorValue('---\ntitle: 未命名文稿\ntemplate: academic\n---\n\n# 引言\n\n从这里开始写作。\n');
+            dom.fileName.textContent = 'untitled.md';
+            await parseNow();
+            toast('示例加载失败，已打开空白文稿', true);
+          } finally {
+            state.sampleLoading = false;
+          }
+        }
+
+        function newDocument() {
+          state.images.forEach((image) => URL.revokeObjectURL(image.url));
+          state.images = [];
+          renderAttachments();
+          const today = new Date();
+          const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+          const template = state.template || 'academic';
+          const text = `---\ntitle: 未命名文稿\nauthor: ${yamlValue('')}\ndate: ${yamlValue(date)}\ntemplate: ${yamlValue(template)}\n---\n\n# 引言\n\n从这里开始写作。\n`;
+          setEditorValue(text);
+          state.filename = 'untitled.md';
+          dom.fileName.textContent = state.filename;
+          state.result = null;
+          state.issues = [];
+          closeDropdowns();
+          updateFormatUI();
+          renderOutput();
+          parseNow();
+          switchTab('meta');
+          toast('已新建文稿');
+        }
+
+        async function importMarkdown(file) {
+          if (!file) return;
+          try {
+            const text = await file.text();
+            state.images.forEach((image) => URL.revokeObjectURL(image.url));
+            state.images = [];
+            renderAttachments();
+            setEditorValue(text);
+            state.filename = file.name || 'imported.md';
+            dom.fileName.textContent = state.filename;
+            state.result = null;
+            state.issues = [];
+            updateFormatUI();
+            renderOutput();
+            await parseNow();
+            toast(`已导入 ${state.filename}`);
+          } catch (error) {
+            toast('导入失败', true);
+          }
+        }
+
+        function downloadMarkdown() {
+          let name = state.filename || 'document.md';
+          if (!/\.(md|markdown)$/i.test(name)) name = name.replace(/\.[^.]+$/, '') + '.md';
+          const blob = new Blob([dom.editor.value], { type: 'text/markdown;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = name;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 500);
+          toast('Markdown 已下载');
+        }
+
+        function issuesHtml(issues) {
+          if (!issues || !issues.length) return '';
+          return `
+            <div class="issues">
+              <div class="issues-head"><span>ISSUES · ${issues.length}</span><span>${issues.filter((item) => item.level === 'error').length} ERRORS</span></div>
+              ${issues
+                .map(
+                  (item) => `
+                <div class="issue ${item.level === 'error' ? 'error' : ''} ${item.line ? 'jumpable' : ''}"${item.line ? ` data-goto-line="${item.line}" role="button" tabindex="0" title="跳转到第 ${item.line} 行"` : ''}>
+                  <span class="issue-level">${item.level === 'error' ? 'ERR' : 'WARN'}</span>
+                  ${item.line ? `<span class="issue-line">L${item.line}</span>` : ''}
+                  <span class="issue-msg">${escapeHtml(item.message || '')}</span>
+                </div>`
+                )
+                .join('')}
+            </div>`
+          ;
+        }
+
+        function bytesLabel(bytes) {
+          if (!bytes && bytes !== 0) return '';
+          if (bytes < 1024) return `${bytes} B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+          return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+        }
+
+        function renderOutput() {
+          const result = state.result;
+          const issues = state.issues || [];
+          if (!result && !issues.length) {
+            dom.outputBody.innerHTML = `
+              <div class="empty-state">
+                <div class="empty-mark">${state.format.toUpperCase()}</div>
+                <div class="empty-title">尚未铸造</div>
+                <div class="empty-hint">完成编辑后点击「铸造」，这里会显示下载入口、转换告警与 MiKTeX 编译日志。</div>
+              </div>`;
+            return;
+          }
+          let html = '';
+          if (result) {
+            if (result.ok) {
+              const stats = result.stats || {};
+              const tocCount = (result.toc || []).length;
+              const compile = result.compile || null;
+              html += `
+                <div class="result-card">
+                  <div class="result-head">
+                    <span class="format-stamp">${escapeHtml((result.format || state.format).toUpperCase())}</span>
+                    <div class="result-info">
+                      <div class="result-file">${escapeHtml(result.filename || 'document')}</div>
+                      <div class="result-meta">
+                        <b>${escapeHtml(templateTitle(result.template || state.template, result.format || state.format))}</b> · ${escapeHtml(String(result.elapsed_ms || 0))} ms
+                        · ${result.format === 'tex' ? '标题' : '目录'} ${tocCount} 条
+                        ${compile ? ` · ${compile.ok ? 'PDF 已编译' : 'PDF 编译失败'}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="result-actions">
+                    <a class="btn primary" href="${escapeHtml(result.download_url)}">下载 ${escapeHtml((result.format || state.format).toUpperCase())}</a>
+                    ${result.pdf_url ? `<a class="btn" href="${escapeHtml(result.pdf_url)}">下载 PDF</a>` : ''}
+                    <button class="btn" data-action="edit-result-meta">编辑元信息</button>
+                    ${result.format === 'tex' && result.tex ? '<button class="btn" data-copy-action="tex">复制 TeX 源码</button>' : ''}
+                    <a class="btn ghost" href="${escapeHtml(result.source_url || '#')}">下载源 MD</a>
+                  </div>
+                  <div class="stat-grid">
+                    ${statItem(stats.words, '字数')}
+                    ${statItem(stats.blocks, '结构块')}
+                    ${statItem(stats.tables, '表格')}
+                    ${statItem(stats.images, '图片')}
+                    ${statItem(stats.pages, '估算页')}
+                  </div>
+                  ${compile && !compile.ok ? `<div class="notice-box">PDF 编译失败：${escapeHtml(compile.error || '未知错误')}。TeX 源文件仍可下载。</div>` : ''}
+                  ${compile && compile.ok && compile.log ? `
+                    <details>
+                      <summary>MiKTeX 日志 <span>${escapeHtml(String(compile.ms || 0))} ms · ${escapeHtml(compile.engine || 'xelatex')}</span></summary>
+                      <pre class="log">${escapeHtml(compile.log)}</pre>
+                    </details>` : ''}
+                  ${result.tex ? `
+                    <details>
+                      <summary>TeX 源码 <span>${escapeHtml(bytesLabel(new Blob([result.tex]).size))}</span></summary>
+                      <pre class="code-view">${escapeHtml(result.tex)}</pre>
+                    </details>` : ''}
+                  ${issuesHtml(issues)}
+                </div>`;
+            } else {
+              html += `
+                <div class="result-card">
+                  <div class="result-head">
+                    <span class="format-stamp">${escapeHtml((result.format || state.format).toUpperCase())}</span>
+                    <div class="result-info">
+                      <div class="result-file">转换未完成</div>
+                      <div class="result-meta">${escapeHtml(String(result.elapsed_ms || 0))} ms</div>
+                    </div>
+                  </div>
+                  <div class="notice-box">${escapeHtml(result.error || '服务器返回错误')}</div>
+                  ${issuesHtml(issues)}
+                </div>`;
+            }
+          } else if (issues.length) {
+            html += `
+              <div class="result-card">
+                <div class="result-head">
+                  <span class="format-stamp">CHECK</span>
+                  <div class="result-info">
+                    <div class="result-file">校验结果</div>
+                    <div class="result-meta">转换前的问题清单</div>
+                  </div>
+                </div>
+                ${issuesHtml(issues)}
+              </div>`;
+          }
+          dom.outputBody.innerHTML = html;
+        }
+
+        function statItem(value, label) {
+          return `<div class="stat-item"><div class="stat-value">${Number(value || 0)}</div><div class="stat-label">${label}</div></div>`;
+        }
+
+        function updateIssuesBadge() {
+          const issues = state.issues || [];
+          const errors = issues.filter((item) => item.level === 'error').length;
+          if (!issues.length) {
+            dom.outputBadge.classList.add('hidden');
+            return;
+          }
+          dom.outputBadge.classList.remove('hidden');
+          dom.outputBadge.textContent = String(issues.length);
+          dom.outputBadge.classList.toggle('bad', errors > 0);
+        }
+
+        async function validateDocument() {
+          if (state.busy) return;
+          closeDropdowns();
+          setHint('校验中…', 'busy');
+          try {
+            const response = await fetch('/api/validate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                markdown: dom.editor.value,
+                format: state.format,
+                template: state.template,
+                filename: state.filename,
+              }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+              state.issues = data.issues || [{ level: 'error', message: data.error || '校验失败', line: data.line || 0 }];
+              setHint('校验失败', 'warn');
+            } else {
+              const missing = missingImages();
+              state.issues = data.issues || [];
+              missing.forEach((path) => {
+                state.issues.push({ level: 'error', message: `本地图片未附加：${path}`, line: 0, code: 'image-missing' });
+              });
+              state.stats = data.stats || state.stats;
+              if (data.template) {
+                state.templateInfo = data.template;
+                renderTemplateCard(data.template);
+              }
+              const errors = state.issues.filter((item) => item.level === 'error').length;
+              setHint(errors ? `${errors} 项错误` : '校验通过', errors ? 'warn' : 'idle');
+              toast(errors ? `校验完成 · ${errors} 项错误` : '校验通过', errors > 0);
+            }
+            renderOutput();
+            updateIssuesBadge();
+            switchTab('output');
+            updateWordStats();
+          } catch (error) {
+            setHint('后端未连接', 'warn');
+            toast('校验服务不可用', true);
+          }
+        }
+
+        function setBusy(busy) {
+          state.busy = busy;
+          dom.convertBtn.disabled = busy;
+          dom.convertBtn.classList.toggle('disabled', busy);
+          if (busy) {
+            setHint(`正在铸造 ${state.format.toUpperCase()}…`, 'busy');
+            setStatus(`CASTING · ${state.format.toUpperCase()}`);
+          } else {
+            setStatus(`READY · ${state.stats.words || 0} 字 · ${state.stats.blocks || 0} 块 · ${state.format.toUpperCase()}`);
+          }
+        }
+
+        async function convertDocument() {
+          if (state.busy) return;
+          closeDropdowns();
+          const missing = missingImages();
+          if (missing.length) {
+            state.issues = [{ level: 'error', message: `本地图片未附加：${missing.join('、')}。请通过「附件」添加对应文件。`, line: 0 }];
+            renderOutput();
+            updateIssuesBadge();
+            switchTab('output');
+            setHint('图片未附加', 'warn');
+            toast('有图片尚未附加，转换已中止', true);
+            return;
+          }
+          setBusy(true);
+          try {
+            const form = new FormData();
+            form.append('markdown', dom.editor.value);
+            form.append('filename', state.filename || 'document.md');
+            form.append('format', state.format);
+            form.append('template', state.template);
+            form.append('strict', dom.optStrict.checked ? '1' : '0');
+            form.append('compile_pdf', state.format === 'tex' && dom.optPdf.checked ? '1' : '0');
+            form.append('metadata', '{}');
+            state.images.forEach((image) => form.append('images', image.file, image.name));
+            const response = await fetch('/api/convert', { method: 'POST', body: form });
+            const data = await response.json();
+            state.result = data;
+            state.issues = data.issues || (data.ok ? [] : [{ level: 'error', message: data.error || '转换失败', line: data.line || 0 }]);
+            if (data.ok) {
+              state.stats = data.stats || state.stats;
+              updateWordStats();
+              setHint(data.compile && !data.compile.ok ? 'TeX 已生成 · PDF 编译失败' : '铸造完成', data.compile && !data.compile.ok ? 'warn' : 'idle');
+              const kind = data.compile && !data.compile.ok ? '文件已生成，PDF 编译失败' : `${state.format.toUpperCase()} 铸造完成`;
+              toast(kind, !!(data.compile && !data.compile.ok));
+            } else {
+              setHint('转换失败', 'warn');
+              toast(data.error || '转换失败', true);
+            }
+            renderOutput();
+            updateIssuesBadge();
+            switchTab('output');
+            scheduleDraftSave();
+          } catch (error) {
+            state.result = { ok: false, format: state.format, error: '无法连接转换服务，请运行 mdforge_serve.py', elapsed_ms: 0 };
+            state.issues = [];
+            renderOutput();
+            updateIssuesBadge();
+            switchTab('output');
+            setHint('后端未连接', 'warn');
+            toast('转换服务不可用', true);
+          } finally {
+            setBusy(false);
+          }
+        }
+
+        async function compilePdf() {
+          if (state.busy) return;
+          if (state.env && state.env.engines && state.env.engines.xelatex === false) {
+            toast('未检测到 MiKTeX / xelatex', true);
+            return;
+          }
+          if (state.format !== 'tex') setFormat('tex');
+          dom.optPdf.checked = true;
+          updateFormatUI();
+          await convertDocument();
+        }
+
+        function askConfirm(message, callback) {
+          state.confirmCallback = callback;
+          dom.confirmMsg.textContent = message;
+          dom.confirmModal.classList.add('open');
+          dom.confirmModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeConfirm() {
+          dom.confirmModal.classList.remove('open');
+          dom.confirmModal.setAttribute('aria-hidden', 'true');
+          state.confirmCallback = null;
+        }
+
+        function openHelp() {
+          closeDropdowns();
+          dom.helpModal.classList.add('open');
+          dom.helpModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeHelp() {
+          dom.helpModal.classList.remove('open');
+          dom.helpModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function insertAtCursor(snippet, selectFrom, selectLength) {
+          const start = dom.editor.selectionStart || 0;
+          const end = dom.editor.selectionEnd || 0;
+          const value = dom.editor.value;
+          const before = value.slice(0, start);
+          const after = value.slice(end);
+          const prefix = !before || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+          const suffix = !after || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+          dom.editor.value = before + prefix + snippet + suffix + after;
+          const anchor = start + prefix.length;
+          dom.editor.focus();
+          if (selectFrom != null) {
+            dom.editor.setSelectionRange(anchor + selectFrom, anchor + selectFrom + (selectLength || 0));
+          } else {
+            dom.editor.setSelectionRange(anchor + snippet.length, anchor + snippet.length);
+          }
+          onEditorInput();
+        }
+
+        function insertAttachmentSyntax(index) {
+          const image = state.images[index];
+          if (!image) return;
+          if (state.view === 'preview') setView('split');
+          const dest = /[\s()<>[\]]/.test(image.name) ? `<images/${image.name}>` : `images/${image.name}`;
+          const snippet = `![图片说明](${dest}){width=12cm align=center}`;
+          closeDropdowns();
+          insertAtCursor(snippet);
+          toast('已插入图片语法，可修改图题');
+        }
+
+        function gotoLine(line) {
+          const lines = dom.editor.value.split('\n');
+          const target = Math.min(Math.max(1, Number(line) || 1), lines.length);
+          let index = 0;
+          for (let i = 0; i < target - 1; i += 1) index += lines[i].length + 1;
+          if (state.view === 'preview') setView('split');
+          const apply = () => {
+            dom.editor.focus();
+            dom.editor.setSelectionRange(index, index + (lines[target - 1] || '').length);
+            const lineHeight = parseFloat(getComputedStyle(dom.editor).lineHeight) || 22;
+            dom.editor.scrollTop = Math.max(0, (target - 1) * lineHeight - dom.editor.clientHeight / 2 + lineHeight);
+            updateCursor();
+          };
+          requestAnimationFrame(apply);
+        }
+
+        function closeAiSpec() {
+          dom.aiModal.classList.remove('open');
+          dom.aiModal.setAttribute('aria-hidden', 'true');
+        }
+
+        async function ensureAiSpec() {
+          if (state.aiSpec) return state.aiSpec;
+          const response = await fetch('/api/md-spec');
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || 'AI 规范读取失败');
+          state.aiSpec = data.content || '';
+          state.aiSpecFilename = data.filename || 'AI_MD_SPEC.md';
+          return state.aiSpec;
+        }
+
+        async function openAiSpec() {
+          closeDropdowns();
+          closeHelp();
+          dom.aiModal.classList.add('open');
+          dom.aiModal.setAttribute('aria-hidden', 'false');
+          if (state.aiSpec) {
+            dom.aiSpecContent.textContent = state.aiSpec;
+            return;
+          }
+          dom.aiSpecContent.textContent = '载入中…';
+          try {
+            dom.aiSpecContent.textContent = await ensureAiSpec();
+          } catch (error) {
+            dom.aiSpecContent.textContent = error.message;
+          }
+        }
+
+        async function copyAiSpec() {
+          try {
+            const content = await ensureAiSpec();
+            await copyText(content);
+          } catch (error) {
+            toast(error.message, true);
+          }
+        }
+
+        async function downloadAiSpec() {
+          try {
+            const content = await ensureAiSpec();
+            const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = state.aiSpecFilename || 'AI_MD_SPEC.md';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 500);
+            toast('AI 规范已下载');
+          } catch (error) {
+            toast(error.message, true);
+          }
+        }
+
+        function closeFileMeta() {
+          dom.fileMetaModal.classList.remove('open');
+          dom.fileMetaModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function openFileMeta() {
+          const result = state.result;
+          if (!result || !result.ok || !result.job_id) {
+            toast('请先完成一次转换', true);
+            return;
+          }
+          closeDropdowns();
+          const format = result.format || state.format;
+          const meta = result.metadata || {};
+          const values = {
+            title: meta.title || '',
+            author: meta.author || '',
+            subject: meta.subject || '',
+            version: meta.version || '',
+            department: meta.department || '',
+            keywords: Array.isArray(meta.keywords) ? meta.keywords.join(', ') : meta.keywords || '',
+          };
+          $$('[data-file-meta]').forEach((input) => {
+            input.value = values[input.dataset.fileMeta] || '';
+          });
+          dom.fmFormat.textContent = format.toUpperCase();
+          dom.fmFilename.textContent = result.filename || '';
+          dom.fmRecompileRow.classList.toggle('hidden', format !== 'tex');
+          dom.fmRecompile.checked = format === 'tex' && !!result.pdf_url;
+          dom.fmNote.textContent = format === 'tex'
+            ? '写入 TeX / PDF 元信息（pdftitle、pdfauthor、pdfsubject、pdfkeywords）。它不会改动 TeX 正文中的标题；重新编译后新 PDF 生效。'
+            : '写入 Word 核心属性（标题、作者、主题、关键词、备注、类别）。它不会改动 DOCX 正文。';
+          dom.fileMetaHint.textContent = '';
+          dom.fileMetaSave.disabled = false;
+          dom.fileMetaSave.classList.remove('disabled');
+          dom.fileMetaSave.textContent = '应用并更新文件';
+          dom.fileMetaModal.classList.add('open');
+          dom.fileMetaModal.setAttribute('aria-hidden', 'false');
+        }
+
+        async function saveFileMeta() {
+          if (state.fileMetaBusy) return;
+          const result = state.result;
+          if (!result || !result.ok || !result.job_id) return;
+          const format = result.format || state.format;
+          const updates = {};
+          $$('[data-file-meta]').forEach((input) => {
+            const key = input.dataset.fileMeta;
+            let value = input.value.trim();
+            if (key === 'keywords') {
+              value = value
+                .split(/[,，;；\n]/)
+                .map((item) => item.trim())
+                .filter(Boolean);
+            }
+            updates[key] = value;
+          });
+          state.fileMetaBusy = true;
+          dom.fileMetaSave.disabled = true;
+          dom.fileMetaSave.classList.add('disabled');
+          dom.fileMetaSave.textContent = '应用中…';
+          dom.fileMetaHint.textContent = '正在写入文件属性…';
+          try {
+            const response = await fetch(`/api/jobs/${result.job_id}/meta`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                metadata: updates,
+                recompile: format === 'tex' && dom.fmRecompile.checked,
+              }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || '更新失败');
+            result.download_url = data.download_url;
+            result.metadata = data.metadata || { ...(result.metadata || {}), ...updates };
+            if (data.filename) result.filename = data.filename;
+            if (format === 'tex') {
+              result.pdf_url = data.pdf_url || null;
+              result.compile = data.compile || null;
+              if (typeof data.tex === 'string') result.tex = data.tex;
+            }
+            closeFileMeta();
+            renderOutput();
+            switchTab('output');
+            if (data.compile && !data.compile.ok) toast('元信息已更新，但 PDF 编译失败', true);
+            else toast('文件元信息已更新');
+          } catch (error) {
+            dom.fileMetaHint.textContent = error.message;
+            toast(error.message, true);
+          } finally {
+            state.fileMetaBusy = false;
+            dom.fileMetaSave.disabled = false;
+            dom.fileMetaSave.classList.remove('disabled');
+            dom.fileMetaSave.textContent = '应用并更新文件';
+          }
+        }
+
+        async function copyText(text) {
+          try {
+            await navigator.clipboard.writeText(text);
+            toast('已复制到剪贴板');
+          } catch (error) {
+            const area = document.createElement('textarea');
+            area.value = text;
+            document.body.appendChild(area);
+            area.select();
+            try {
+              document.execCommand('copy');
+              toast('已复制到剪贴板');
+            } catch (err) {
+              toast('复制失败', true);
+            }
+            area.remove();
+          }
+        }
+
+        async function loadEnvironment() {
+          try {
+            const response = await fetch('/api/env');
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error('env failed');
+            state.env = data;
+            const groups = { docx: [], tex: [] };
+            (data.templates || []).forEach((item) => {
+              if (groups[item.format]) groups[item.format].push(item);
+            });
+            state.templates = groups;
+            if (!groups.docx.some((item) => item.name === state.template) && !groups.tex.some((item) => item.name === state.template)) {
+              state.template = (groups[state.format][0] || {}).name || 'academic';
+            }
+            updateTemplateUI();
+            fillTemplateDropdown();
+            renderTemplateCard(null);
+          } catch (error) {
+            state.templates = { docx: [], tex: [] };
+            fillTemplateDropdown();
+            toast('模板列表读取失败，请确认后端已启动', true);
+          }
+        }
+
+        async function restoreSession() {
+          const draft = loadDraft();
+          if (draft && draft.text.trim()) {
+            setEditorValue(draft.text);
+            state.filename = draft.filename || 'draft.md';
+            dom.fileName.textContent = state.filename;
+            state.format = draft.format === 'tex' ? 'tex' : 'docx';
+            if (draft.template) state.template = draft.template;
+            updateFormatUI();
+            await restoreDraftImages(draft);
+            await parseNow();
+            if (draft.imagesOmitted) toast('草稿已恢复；部分图片需重新附加', true);
+          } else {
+            await loadSample({ silent: true });
+          }
+        }
+
+        function bindMenus() {
+          document.addEventListener('click', (event) => {
+            const actionEl = event.target.closest('[data-action]');
+            if (actionEl) {
+              const action = actionEl.dataset.action;
+              switch (action) {
+                case 'new':
+                  askConfirm('新建文稿会清空当前内容与附件，是否继续？', newDocument);
+                  break;
+                case 'import':
+                  dom.importFile.click();
+                  break;
+                case 'save-md':
+                  downloadMarkdown();
+                  break;
+                case 'sample':
+                  if (dom.editor.value.trim()) askConfirm('载入示例会替换当前内容，是否继续？', () => loadSample());
+                  else loadSample();
+                  break;
+                case 'attachments':
+                  openDropdown(dom.ddAttach, actionEl);
+                  break;
+                case 'pick-images':
+                  dom.imageFile.click();
+                  break;
+                case 'template-menu':
+                  fillTemplateDropdown();
+                  openDropdown(dom.ddTemplate, actionEl);
+                  break;
+                case 'settings':
+                  openDropdown(dom.ddSettings, actionEl);
+                  break;
+                case 'help':
+                  openHelp();
+                  break;
+                case 'ai-spec':
+                  openAiSpec();
+                  break;
+                case 'copy-ai-spec':
+                  copyAiSpec();
+                  break;
+                case 'download-ai-spec':
+                  downloadAiSpec();
+                  break;
+                case 'edit-result-meta':
+                  openFileMeta();
+                  break;
+                case 'validate':
+                  validateDocument();
+                  break;
+                case 'convert':
+                  convertDocument();
+                  break;
+                case 'compile-pdf':
+                  compilePdf();
+                  break;
+                default:
+                  break;
+              }
+              return;
+            }
+
+            const gotoEl = event.target.closest('[data-goto-line]');
+            if (gotoEl) {
+              gotoLine(Number(gotoEl.dataset.gotoLine));
+              return;
+            }
+            const insertImageBtn = event.target.closest('[data-insert-image]');
+            if (insertImageBtn) {
+              insertAttachmentSyntax(Number(insertImageBtn.dataset.insertImage));
+              return;
+            }
+            const formatBtn = event.target.closest('[data-format]');
+            if (formatBtn) {
+              setFormat(formatBtn.dataset.format);
+              return;
+            }
+            const inspectorFormat = event.target.closest('[data-format-btn]');
+            if (inspectorFormat) {
+              setFormat(inspectorFormat.dataset.formatBtn);
+              return;
+            }
+            const viewBtn = event.target.closest('[data-view]');
+            if (viewBtn) {
+              setView(viewBtn.dataset.view);
+              return;
+            }
+            const tabBtn = event.target.closest('[data-tab]');
+            if (tabBtn) {
+              switchTab(tabBtn.dataset.tab);
+              return;
+            }
+            const templateItem = event.target.closest('[data-template-name]');
+            if (templateItem) {
+              setTemplate(templateItem.dataset.templateName);
+              return;
+            }
+            const removeBtn = event.target.closest('[data-remove-image]');
+            if (removeBtn) {
+              removeImage(Number(removeBtn.dataset.removeImage));
+              return;
+            }
+            const closeBtn = event.target.closest('[data-close]');
+            if (closeBtn) {
+              const target = closeBtn.dataset.close;
+              if (target === 'help') closeHelp();
+              else if (target === 'ai') closeAiSpec();
+              else if (target === 'file-meta') closeFileMeta();
+              return;
+            }
+            const copyBtn = event.target.closest('[data-copy-action]');
+            if (copyBtn && copyBtn.dataset.copyAction === 'tex' && state.result && state.result.tex) {
+              copyText(state.result.tex);
+              return;
+            }
+            if (!event.target.closest('.dropdown') && !event.target.closest('[data-action="template-menu"]') && !event.target.closest('[data-action="settings"]') && !event.target.closest('[data-action="attachments"]')) {
+              closeDropdowns();
+            }
+          });
+
+          dom.pinBtn.addEventListener('click', () => {
+            state.settings.menuPinned = !state.settings.menuPinned;
+            applySettings();
+          });
+
+          $('#set-theme').addEventListener('click', () => {
+            state.settings.theme = state.settings.theme === 'night' ? 'paper' : 'night';
+            applySettings();
+          });
+          $('#set-statusbar').addEventListener('click', () => {
+            state.settings.statusbar = !state.settings.statusbar;
+            applySettings();
+          });
+          $('#set-linenumbers').addEventListener('click', () => {
+            state.settings.lineNumbers = !state.settings.lineNumbers;
+            applySettings();
+          });
+          $('#set-autoparse').addEventListener('click', () => {
+            state.settings.autoParse = !state.settings.autoParse;
+            applySettings();
+            if (state.settings.autoParse) parseNow();
+          });
+          $('#set-reset').addEventListener('click', () => {
+            state.settings = { ...DEFAULT_SETTINGS };
+            applySettings();
+            closeDropdowns();
+            toast('界面设置已重置');
+          });
+
+          $$('.settings-bg-dot').forEach((dot) => {
+            dot.addEventListener('click', () => {
+              state.settings.bg = dot.dataset.bg;
+              applySettings();
+            });
+          });
+          $$('[data-setting]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const kind = btn.dataset.setting;
+              if (kind === 'radius-up') state.settings.radius = Math.min(14, (Number(state.settings.radius) || 0) + 1);
+              if (kind === 'radius-down') state.settings.radius = Math.max(0, (Number(state.settings.radius) || 0) - 1);
+              if (kind === 'font-up') state.settings.fscale = Math.min(1.2, Number((Number(state.settings.fscale) + 0.05).toFixed(2)));
+              if (kind === 'font-down') state.settings.fscale = Math.max(0.85, Number((Number(state.settings.fscale) - 0.05).toFixed(2)));
+              applySettings();
+            });
+          });
+
+          dom.importFile.addEventListener('change', () => {
+            const file = dom.importFile.files && dom.importFile.files[0];
+            dom.importFile.value = '';
+            if (!file) return;
+            if (dom.editor.value.trim()) askConfirm(`导入 ${file.name} 会替换当前内容，是否继续？`, () => importMarkdown(file));
+            else importMarkdown(file);
+          });
+          dom.imageFile.addEventListener('change', async () => {
+            const files = Array.from(dom.imageFile.files || []);
+            dom.imageFile.value = '';
+            for (const file of files) await addImageFile(file);
+            if (files.length) closeDropdowns();
+          });
+
+          $('#confirm-yes').addEventListener('click', () => {
+            const callback = state.confirmCallback;
+            closeConfirm();
+            if (callback) callback();
+          });
+          $('#confirm-no').addEventListener('click', closeConfirm);
+          dom.confirmModal.addEventListener('click', (event) => {
+            if (event.target === dom.confirmModal) closeConfirm();
+          });
+          dom.helpModal.addEventListener('click', (event) => {
+            if (event.target === dom.helpModal) closeHelp();
+          });
+          dom.aiModal.addEventListener('click', (event) => {
+            if (event.target === dom.aiModal) closeAiSpec();
+          });
+          dom.fileMetaModal.addEventListener('click', (event) => {
+            if (event.target === dom.fileMetaModal) closeFileMeta();
+          });
+          dom.fileMetaSave.addEventListener('click', saveFileMeta);
+
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+              closeDropdowns();
+              closeHelp();
+              closeAiSpec();
+              closeFileMeta();
+              closeConfirm();
+              return;
+            }
+            const meta = event.ctrlKey || event.metaKey;
+            if (meta && event.key === 'Enter') {
+              event.preventDefault();
+              convertDocument();
+            } else if (meta && event.shiftKey && event.key.toLowerCase() === 'v') {
+              event.preventDefault();
+              validateDocument();
+            } else if (meta && event.key.toLowerCase() === 's') {
+              event.preventDefault();
+              downloadMarkdown();
+            }
+          });
+
+          window.addEventListener('resize', () => {
+            closeDropdowns();
+            updateLineNumbers();
+          });
+          window.addEventListener('beforeunload', saveDraft);
+        }
+
+        function bindEditor() {
+          dom.editor.addEventListener('input', onEditorInput);
+          dom.editor.addEventListener('scroll', () => {
+            dom.gutter.scrollTop = dom.editor.scrollTop;
+          });
+          dom.editor.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab') {
+              event.preventDefault();
+              const start = dom.editor.selectionStart;
+              const end = dom.editor.selectionEnd;
+              dom.editor.value = `${dom.editor.value.slice(0, start)}  ${dom.editor.value.slice(end)}`;
+              dom.editor.selectionStart = dom.editor.selectionEnd = start + 2;
+              onEditorInput();
+            }
+          });
+          ['click', 'keyup', 'select'].forEach((name) => dom.editor.addEventListener(name, updateCursor));
+          const wrap = $('#editor-wrap');
+          ['dragenter', 'dragover'].forEach((name) => {
+            wrap.addEventListener(name, (event) => {
+              event.preventDefault();
+              wrap.classList.add('drag-over');
+            });
+          });
+          ['dragleave', 'drop'].forEach((name) => {
+            wrap.addEventListener(name, (event) => {
+              event.preventDefault();
+              wrap.classList.remove('drag-over');
+            });
+          });
+          wrap.addEventListener('drop', async (event) => {
+            const files = Array.from(event.dataTransfer && event.dataTransfer.files ? event.dataTransfer.files : []);
+            const markdownFile = files.find((file) => /\.(md|markdown)$/i.test(file.name) || file.type === 'text/markdown');
+            if (markdownFile) {
+              const run = () => importMarkdown(markdownFile);
+              if (dom.editor.value.trim()) askConfirm(`导入 ${markdownFile.name} 会替换当前内容，是否继续？`, run);
+              else run();
+              return;
+            }
+            const images = files.filter((file) => file.type.startsWith('image/'));
+            for (const file of images) await addImageFile(file);
+          });
+          dom.editor.addEventListener('paste', async (event) => {
+            const items = event.clipboardData ? Array.from(event.clipboardData.items) : [];
+            const files = items
+              .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+              .map((item) => item.getAsFile())
+              .filter(Boolean);
+            if (!files.length) return;
+            event.preventDefault();
+            let added = 0;
+            for (const file of files) {
+              const ext = file.type === 'image/jpeg' ? 'jpg' : 'png';
+              const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+              const named = new File([file], `pasted-${suffix}.${ext}`, { type: file.type });
+              const ok = await addImageFile(named, { silent: true });
+              if (ok) {
+                insertAttachmentSyntax(state.images.length - 1);
+                added += 1;
+              }
+            }
+            if (added) toast('已附加并插入图片语法');
+            else toast('图片附加失败', true);
+          });
+          if (window.ResizeObserver) {
+            const observer = new ResizeObserver(() => updateLineNumbers());
+            observer.observe(dom.editor);
+            observer.observe(wrap);
+          }
+        }
+
+        async function boot() {
+          cacheDom();
+          state.settings = loadSettings();
+          applySettings();
+          updateDate();
+          bindMenus();
+          bindEditor();
+          bindMetaForm();
+          setView('split');
+          setTabPreview();
+          await loadEnvironment();
+          await restoreSession();
+          renderAttachments();
+          renderOutput();
+          updateIssuesBadge();
+        }
+
+        function setTabPreview() {
+          switchTab('preview');
+        }
+
+        document.addEventListener('DOMContentLoaded', boot);
+      })();
+    </script>
+  </body>
+</html>
