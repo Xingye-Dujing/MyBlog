@@ -1,5 +1,6 @@
 import io
 import json
+import zipfile
 from pathlib import Path
 
 from docx import Document as open_docx
@@ -160,3 +161,26 @@ def test_md_spec_endpoint():
     assert payload["ok"] is True
     assert "AI_MD_SPEC" in payload["filename"]
     assert "frontmatter" in payload["content"].lower()
+
+
+def test_tex_bundle_contains_source_and_assets():
+    c = client()
+    source = SAMPLE.read_text(encoding="utf-8")
+    data = {
+        "markdown": source,
+        "filename": "sample.md",
+        "format": "tex",
+        "template": "academic",
+        "images": (io.BytesIO(IMAGE.read_bytes()), "pipeline.png"),
+    }
+    response = c.post("/api/convert", data=data, content_type="multipart/form-data")
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["bundle_url"]
+    bundle = c.get(payload["bundle_url"])
+    assert bundle.status_code == 200
+    archive = zipfile.ZipFile(io.BytesIO(bundle.data))
+    names = set(archive.namelist())
+    assert "sample.tex" in names
+    assert "sample-assets/images/img01.png" in names
+    assert "README-MdForge.txt" in names

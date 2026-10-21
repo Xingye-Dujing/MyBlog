@@ -105,3 +105,21 @@ def test_partial_metadata_update_keeps_other_properties():
     assert doc.core_properties.author == "新作者"
     assert doc.core_properties.title == "旧标题"
     assert doc.core_properties.keywords == "旧关键词"
+
+
+def test_partial_edit_preserves_header_title(tmp_path):
+    doc = open_docx()
+    doc.core_properties.title = "旧标题"
+    doc.core_properties.author = "旧作者"
+    header = doc.sections[0].header.paragraphs[0]
+    header.add_run("{{TITLE}}")
+    header.add_run(" · ")
+    header.add_run("{{AUTHOR}}")
+    source = tmp_path / "input.docx"
+    doc.save(str(source))
+    output = tmp_path / "output.docx"
+    edit_metadata(str(source), {"author": "新作者"}, output=str(output), template_config={})
+    result = open_docx(str(output))
+    assert result.core_properties.title == "旧标题"
+    assert result.core_properties.author == "新作者"
+    assert result.sections[0].header.paragraphs[0].text == "旧标题 · 新作者"

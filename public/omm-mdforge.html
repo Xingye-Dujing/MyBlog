@@ -789,6 +789,22 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .preview-doc .latex-badge {
+        display: inline-block;
+        font-family: var(--font-code);
+        font-size: calc(8px * var(--fscale));
+        letter-spacing: 1px;
+        border: 1px solid var(--olive);
+        color: var(--olive);
+        background: var(--olive-soft);
+        padding: 1px 4px;
+        margin-right: 5px;
+        border-radius: var(--radius);
+        vertical-align: 1px;
+      }
+      .preview-doc .latex-placeholder {
+        min-height: 160px;
+      }
       .preview-doc .math {
         font-family: var(--font-serif);
         font-style: italic;
@@ -829,9 +845,11 @@
         font-size: calc(13px * var(--fscale));
         margin: 0.4em 0 0.7em;
       }
-      .preview-doc .bibliography ol {
-        margin-left: 1.4em;
+      .preview-doc .bibliography p {
+        margin: 0 0 0.35em;
+        text-indent: 0;
         font-size: calc(11.5px * var(--fscale));
+        line-height: 1.8;
         color: var(--text-dim);
       }
       .preview-empty {
@@ -2054,6 +2072,20 @@
         border-color: var(--olive);
         background: var(--olive-soft);
       }
+      .attach-latex {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--accent);
+        font-size: calc(9px * var(--fscale));
+        padding: 2px 6px;
+        flex-shrink: 0;
+        border-radius: var(--radius);
+        white-space: nowrap;
+      }
+      .attach-latex:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
       .issue.jumpable {
         cursor: pointer;
       }
@@ -2228,7 +2260,7 @@
           </div>
           <div id="editor-wrap">
             <div id="line-gutter" aria-hidden="true">1</div>
-            <textarea id="editor" wrap="soft" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="# 从标题开始写作…"></textarea>
+            <textarea id="editor" wrap="soft" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Markdown 源文件" placeholder="# 从标题开始写作…"></textarea>
           </div>
           <div class="pane-foot">
             <span id="cursor-pos">LN 1 · COL 1</span>
@@ -2445,7 +2477,7 @@
     <input id="import-file" type="file" accept=".md,.markdown,text/markdown,text/plain" class="hidden" />
     <input id="image-file" type="file" accept="image/png,image/jpeg" multiple class="hidden" />
 
-    <div id="notification"></div>
+    <div id="notification" role="status" aria-live="polite"></div>
 
     <div class="overlay" id="help-modal" aria-hidden="true">
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="help-title">
@@ -2481,6 +2513,7 @@ template: academic
                 <li>表格不超过 6 列；题注用 <code>&lt;!-- caption: ... --&gt;</code> 放在表格前。</li>
                 <li>分页使用 <code>&lt;!-- pagebreak --&gt;</code>。</li>
                 <li>支持行内 <code>$...$</code> 与块级 <code>$$...$$</code> 公式。</li>
+                <li>图片附件可点「LaTeX」替换为 <code>latex-figure</code> 块，原图作为 DOCX/预览回退。</li>
                 <li>不支持 HTML 块、脚注、任务列表、嵌套引用与嵌套表格。</li>
               </ul>
             </section>
@@ -2497,6 +2530,7 @@ template: academic
               <tr><td><code>```python</code></td><td>等宽代码段</td><td>Verbatim 环境</td></tr>
               <tr><td><code>&gt; 引用</code></td><td>Quote 样式</td><td>quote 环境</td></tr>
               <tr><td><code>[text](url)</code></td><td>下划线超链接</td><td>href（hidelinks）</td></tr>
+              <tr><td><code>latex-figure</code> 围栏</td><td>fallback 图片</td><td>原样嵌入 TikZ / pgfplots 图表</td></tr>
             </tbody>
           </table>
           <div class="help-foot">
@@ -2909,7 +2943,11 @@ template: academic
 
         function switchTab(tab) {
           state.tab = tab;
-          $$('.tab').forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
+          $$('.tab').forEach((btn) => {
+            const active = btn.dataset.tab === tab;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
           $$('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === `panel-${tab}`));
         }
 
@@ -3057,9 +3095,17 @@ template: academic
           dom.gutter.scrollTop = dom.editor.scrollTop;
         }
 
+        function markResultStale() {
+          if (state.result && state.result.ok && !state.result.stale) {
+            state.result.stale = true;
+            renderOutput();
+          }
+        }
+
         function onEditorInput() {
           updateLineNumbers();
           updateCursor();
+          markResultStale();
           dom.dirtyDot.classList.add('show');
           scheduleDraftSave();
           if (state.settings.autoParse) scheduleParse(420);
@@ -3195,6 +3241,7 @@ template: academic
             dom.editor.value = `${text.slice(0, match.index)}---\n${lines.join('\n')}\n---${suffix}${tail}`;
           }
           updateLineNumbers();
+          markResultStale();
           dom.dirtyDot.classList.add('show');
           scheduleDraftSave();
           scheduleParse(120);
@@ -3283,6 +3330,7 @@ template: academic
                 <img class="attach-thumb" src="${image.url}" alt="" />
                 <span class="attach-name" title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</span>
                 <span class="attach-size">${escapeHtml(imageSizeLabel(image.size))}</span>
+                <button class="attach-latex" data-redraw-image="${index}" title="替换为 LaTeX 图表代码">LaTeX</button>
                 <button class="attach-insert" data-insert-image="${index}" title="在光标处插入图片语法">插入</button>
                 <button class="attach-remove" data-remove-image="${index}" title="移除">×</button>
               </div>`
@@ -3300,7 +3348,13 @@ template: academic
         }
 
         async function addImageFile(file, options = {}) {
-          if (!file || !file.type.startsWith('image/')) return false;
+          if (!file) return false;
+          const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+          const isJpg = file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
+          if (!isPng && !isJpg) {
+            if (!options.silent) toast('图片仅支持 PNG / JPG', true);
+            return false;
+          }
           if (state.images.some((item) => item.name === file.name)) return false;
           if (file.size > 6 * 1024 * 1024) {
             if (!options.silent) toast('图片超过 6 MB，未添加', true);
@@ -3547,14 +3601,16 @@ template: academic
                       <div class="result-file">${escapeHtml(result.filename || 'document')}</div>
                       <div class="result-meta">
                         <b>${escapeHtml(templateTitle(result.template || state.template, result.format || state.format))}</b> · ${escapeHtml(String(result.elapsed_ms || 0))} ms
-                        · ${result.format === 'tex' ? '标题' : '目录'} ${tocCount} 条
+                        · 标题 ${tocCount} 条
                         ${compile ? ` · ${compile.ok ? 'PDF 已编译' : 'PDF 编译失败'}` : ''}
                       </div>
                     </div>
                   </div>
+                  ${result.stale ? '<div class="notice-box">源文稿已修改，当前文件来自上一次铸造，请重新转换后再下载。</div>' : ''}
                   <div class="result-actions">
                     <a class="btn primary" href="${escapeHtml(result.download_url)}">下载 ${escapeHtml((result.format || state.format).toUpperCase())}</a>
                     ${result.pdf_url ? `<a class="btn" href="${escapeHtml(result.pdf_url)}">下载 PDF</a>` : ''}
+                    ${result.format === 'tex' && result.bundle_url ? `<a class="btn" href="${escapeHtml(result.bundle_url)}">下载素材包</a>` : ''}
                     <button class="btn" data-action="edit-result-meta">编辑元信息</button>
                     ${result.format === 'tex' && result.tex ? '<button class="btn" data-copy-action="tex">复制 TeX 源码</button>' : ''}
                     <a class="btn ghost" href="${escapeHtml(result.source_url || '#')}">下载源 MD</a>
@@ -3694,6 +3750,7 @@ template: academic
             toast('有图片尚未附加，转换已中止', true);
             return;
           }
+          const submittedSource = dom.editor.value;
           setBusy(true);
           try {
             const form = new FormData();
@@ -3707,6 +3764,7 @@ template: academic
             state.images.forEach((image) => form.append('images', image.file, image.name));
             const response = await fetch('/api/convert', { method: 'POST', body: form });
             const data = await response.json();
+            if (data.ok && dom.editor.value !== submittedSource) data.stale = true;
             state.result = data;
             state.issues = data.issues || (data.ok ? [] : [{ level: 'error', message: data.error || '转换失败', line: data.line || 0 }]);
             if (data.ok) {
@@ -3800,6 +3858,70 @@ template: academic
           closeDropdowns();
           insertAtCursor(snippet);
           toast('已插入图片语法，可修改图题');
+        }
+
+        function latexEscape(value) {
+          const map = {
+            '\\': '\\textbackslash{}',
+            '{': '\\{',
+            '}': '\\}',
+            '$': '\\$',
+            '&': '\\&',
+            '%': '\\%',
+            '#': '\\#',
+            '_': '\\_',
+            '~': '\\textasciitilde{}',
+            '^': '\\textasciicircum{}',
+          };
+          return String(value || '').replace(/[\\{}$&%#_~^]/g, (char) => map[char]);
+        }
+
+        function replaceImageWithLatex(index) {
+          const image = state.images[index];
+          if (!image) return;
+          if (state.view === 'preview') setView('split');
+          const value = dom.editor.value;
+          const pattern = /!\[([^\]]*)\]\(\s*(?:<([^>\n]+)>|([^)\s]+))[^)]*\)(?:\{[^}]*\})?/g;
+          let match = null;
+          let target = null;
+          while ((match = pattern.exec(value)) !== null) {
+            const path = match[2] || match[3] || '';
+            if (basename(path) === image.name) {
+              target = { start: match.index, end: pattern.lastIndex, alt: match[1] || '', path };
+              break;
+            }
+          }
+          const caption = (target && target.alt.trim()) || '图表题注';
+          const captionTex = latexEscape(caption);
+          const fallback = `images/${image.name}`.replace(/\\/g, '/').replace(/"/g, '');
+          const code = [
+            '\\begin{figure}[htbp]\\centering',
+            '\\resizebox{0.92\\textwidth}{!}{%',
+            '\\begin{tikzpicture}',
+            '\\draw[draw=cA!70, fill=cA!10, rounded corners=2pt] (0,0) rectangle (10,4);',
+            '\\node[text=cA!90] at (5,2) {在 LaTeX 中重绘图表};',
+            '\\end{tikzpicture}',
+            '}',
+            `\\caption{${captionTex}}`,
+            '\\end{figure}',
+          ].join('\n');
+          const fence = '```latex-figure fallback="' + fallback + '"\n' + code + '\n```';
+          if (target) {
+            dom.editor.value = value.slice(0, target.start) + fence + value.slice(target.end);
+          } else {
+            insertAtCursor(fence);
+          }
+          updateLineNumbers();
+          const fenceStart = dom.editor.value.indexOf(fence);
+          if (fenceStart >= 0) {
+            const codeStart = fenceStart + fence.indexOf('\n') + 1;
+            const codeEnd = fenceStart + fence.lastIndexOf('\n```');
+            dom.editor.focus();
+            dom.editor.setSelectionRange(codeStart, codeEnd);
+          }
+          onEditorInput();
+          closeDropdowns();
+          toast('已替换为 LaTeX 图表代码，可继续编辑或粘贴完整图表');
         }
 
         function gotoLine(line) {
@@ -3915,6 +4037,10 @@ template: academic
           dom.fileMetaSave.textContent = '应用并更新文件';
           dom.fileMetaModal.classList.add('open');
           dom.fileMetaModal.setAttribute('aria-hidden', 'false');
+          requestAnimationFrame(() => {
+            const first = $('[data-file-meta="title"]');
+            if (first) first.focus();
+          });
         }
 
         async function saveFileMeta() {
@@ -3956,6 +4082,7 @@ template: academic
             if (format === 'tex') {
               result.pdf_url = data.pdf_url || null;
               result.compile = data.compile || null;
+              result.bundle_url = data.bundle_url || result.bundle_url;
               if (typeof data.tex === 'string') result.tex = data.tex;
             }
             closeFileMeta();
@@ -4101,6 +4228,11 @@ template: academic
               gotoLine(Number(gotoEl.dataset.gotoLine));
               return;
             }
+            const redrawBtn = event.target.closest('[data-redraw-image]');
+            if (redrawBtn) {
+              replaceImageWithLatex(Number(redrawBtn.dataset.redrawImage));
+              return;
+            }
             const insertImageBtn = event.target.closest('[data-insert-image]');
             if (insertImageBtn) {
               insertAttachmentSyntax(Number(insertImageBtn.dataset.insertImage));
@@ -4233,6 +4365,14 @@ template: academic
             if (event.target === dom.fileMetaModal) closeFileMeta();
           });
           dom.fileMetaSave.addEventListener('click', saveFileMeta);
+          dom.outputBody.addEventListener('keydown', (event) => {
+            const item = event.target.closest('[data-goto-line]');
+            if (!item) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              gotoLine(Number(item.dataset.gotoLine));
+            }
+          });
 
           document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {

@@ -26,6 +26,7 @@ class Block:
     type: str
     level: int = 0
     ordered: bool = False
+    start: int = 1
     text: str = ""
     lang: str = ""
     inlines: List[Inline] = field(default_factory=list)

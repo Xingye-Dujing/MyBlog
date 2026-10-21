@@ -99,3 +99,36 @@ def test_ordered_list_nested():
     assert block.ordered is True
     assert len(block.items) == 2
     assert block.items[0].children[0].ordered is True
+
+
+def test_ordered_list_start():
+    doc = parse_markdown("---\ntitle: T\n---\n\n3. 三\n4. 四\n")
+    block = doc.blocks[0]
+    assert block.type == "list"
+    assert block.start == 3
+
+
+def test_image_path_and_format_validation():
+    from mdforge.validate import validate_document
+
+    absolute = parse_markdown("---\ntitle: T\n---\n\n![x](C:/secret.png)\n")
+    codes = {issue["code"] for issue in validate_document(absolute, check_images=False)}
+    assert "image-absolute" in codes
+
+    outside = parse_markdown("---\ntitle: T\n---\n\n![x](../secret.png)\n", base_dir=".")
+    codes = {issue["code"] for issue in validate_document(outside, check_images=False)}
+    assert "image-outside-base" in codes
+
+    wrong_format = parse_markdown("---\ntitle: T\n---\n\n![x](images/foo.webp)\n")
+    codes = {issue["code"] for issue in validate_document(wrong_format, check_images=False)}
+    assert "image-format" in codes
+
+
+def test_image_content_validation(tmp_path):
+    from mdforge.validate import validate_document
+
+    fake = tmp_path / "fake.png"
+    fake.write_bytes(b"not an image")
+    doc = parse_markdown("---\ntitle: T\n---\n\n![x](fake.png)\n", base_dir=str(tmp_path))
+    codes = {issue["code"] for issue in validate_document(doc, check_images=True)}
+    assert "image-invalid" in codes

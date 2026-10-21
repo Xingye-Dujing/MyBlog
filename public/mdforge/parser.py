@@ -18,6 +18,8 @@ _ALIGN_RE = re.compile(r"(?:^|[\s,;])align\s*=\s*(left|center|right)", re.I)
 _PAGEBREAK_RE = re.compile(r"^\s*<!--\s*pagebreak\s*-->\s*$", re.I | re.S)
 _CAPTION_RE = re.compile(r"^\s*<!--\s*caption\s*:\s*(.*?)\s*-->\s*$", re.I | re.S)
 _HTML_BLOCK_RE = re.compile(r"^\s*<")
+_FENCE_ATTR_RE = re.compile(r"""([A-Za-z_][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))""")
+_LATEX_FIGURE_LANGS = {"latex-figure", "latex_figure", "tex-figure", "tex_figure"}
 
 
 def _jsonable(value: Any) -> Any:
@@ -82,6 +84,56 @@ def _attrs_text(children: List[Any]) -> str:
         if token.type in ("text", "code_inline"):
             parts.append(token.content or "")
     return " ".join(parts).strip()
+
+
+def _parse_fence_attrs(info: str) -> Dict[str, str]:
+    attrs: Dict[str, str] = {}
+    for match in _FENCE_ATTR_RE.finditer(info or ""):
+        value = match.group(2) if match.group(2) is not None else (match.group(3) if match.group(3) is not None else match.group(4))
+        attrs[match.group(1).lower()] = value
+    return attrs
+
+
+def _extract_tex_caption(code: str) -> str:
+    match = re.search(r"\\caption(?:\[[^\]]*\])?\{", code or "")
+    if not match:
+        return ""
+    start = match.end()
+    depth = 1
+    index = start
+    while index < len(code):
+        char = code[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return code[start:index].strip()
+        index += 1
+    return ""
+
+
+def _display_tex_caption(caption: str) -> str:
+    text = str(caption or "")
+    text = re.sub(r"\\(?:textbf|textit|emph|textrm|textsf|underline|mbox)\{([^{}]*)\}", r"\1", text)
+    replacements = {
+        "\\&": "&",
+        "\\%": "%",
+        "\\_": "_",
+        "\\#": "#",
+        "\\$": "$",
+        "\\{": "{",
+        "\\}": "}",
+        "\\textbackslash{}": "\\",
+        "\\textasciitilde{}": "~",
+        "\\textasciicircum{}": "^",
+    }
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+    return text.strip()
 
 
 def _extract_image(children: List[Any], caption_hint: str) -> Optional[Dict[str, Any]]:
@@ -288,7 +340,19 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
 
         if token.type == "bullet_list_open" or token.type == "ordered_list_open":
             ordered = token.type == "ordered_list_open"
-            block = Block("list", level=len(list_stack) + 1, ordered=ordered, line=(token.map[0] + line_offset) if token.map else 0)
+            start = 1
+            if ordered:
+                try:
+                    start = int(token.attrGet("start") or 1)
+                except (TypeError, ValueError):
+                    start = 1
+            block = Block(
+                "list",
+                level=len(list_stack) + 1,
+                ordered=ordered,
+                start=start,
+                line=(token.map[0] + line_offset) if token.map else 0,
+            )
             if list_stack:
                 parent = list_stack[-1].get("current_item")
                 if parent is not None:
@@ -381,10 +445,30 @@ def parse_markdown(source: str, source_name: str = "untitled.md", base_dir: Opti
             continue
 
         if token.type == "fence" or token.type == "code_block":
-            lang = (token.info or "").strip().split()[0] if token.info else ""
-            doc.blocks.append(
-                Block("code_block", text=token.content or "", lang=lang, line=(token.map[0] + line_offset) if token.map else 0)
-            )
+            info = (token.info or "").strip()
+            lang = info.split()[0].lower() if info else ""
+            block_line = (token.map[0] + line_offset) if token.map else 0
+            if token.type == "fence" and lang in _LATEX_FIGURE_LANGS:
+                attrs = _parse_fence_attrs(info)
+                code = token.content or ""
+                raw_caption = attrs.get("caption", "") or _extract_tex_caption(code) or pending_caption
+                caption = _display_tex_caption(raw_caption)
+                if pending_caption:
+                    pending_caption = ""
+                fallback = attrs.get("fallback", "").strip()
+                image = None
+                if fallback:
+                    image = {
+                        "path": fallback,
+                        "alt": caption,
+                        "caption": caption,
+                        "width": attrs.get("width", ""),
+                        "align": attrs.get("align", ""),
+                    }
+                doc.blocks.append(Block("latex_figure", text=code, caption=caption, image=image, line=block_line))
+                i += 1
+                continue
+            doc.blocks.append(Block("code_block", text=token.content or "", lang=lang, line=block_line))
             i += 1
             continue
 

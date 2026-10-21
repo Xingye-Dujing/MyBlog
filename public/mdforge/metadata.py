@@ -54,7 +54,9 @@ def core_mapping(config: Dict[str, Any]) -> Dict[str, str]:
     return mapping
 
 
-def placeholder_mapping(config: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, str]:
+def placeholder_mapping(
+    config: Dict[str, Any], metadata: Dict[str, Any], include_missing: bool = True
+) -> Dict[str, str]:
     defaults = {
         "{{TITLE}}": "title",
         "{{AUTHOR}}": "author",
@@ -65,16 +67,24 @@ def placeholder_mapping(config: Dict[str, Any], metadata: Dict[str, Any]) -> Dic
     }
     mapping: Dict[str, str] = {}
     for placeholder, field in defaults.items():
+        if not include_missing and field not in metadata:
+            continue
         mapping[placeholder] = _text(metadata.get(field))
     meta = config.get("metadata") or {}
     for group in ("header", "footer", "body"):
         for item in meta.get(group) or []:
-            if isinstance(item, dict) and item.get("placeholder"):
-                mapping[str(item["placeholder"])] = _text(metadata.get(item.get("field") or ""))
+            if not isinstance(item, dict) or not item.get("placeholder"):
+                continue
+            field = item.get("field") or ""
+            if not include_missing and field not in metadata:
+                continue
+            mapping[str(item["placeholder"])] = _text(metadata.get(field))
     return mapping
 
 
-def apply_docx_metadata(doc, metadata: Dict[str, Any], config: Dict[str, Any]) -> None:
+def apply_docx_metadata(
+    doc, metadata: Dict[str, Any], config: Dict[str, Any], clear_missing: bool = True
+) -> None:
     mapping = core_mapping(config)
     props = doc.core_properties
     for field, prop in mapping.items():
@@ -105,7 +115,7 @@ def apply_docx_metadata(doc, metadata: Dict[str, Any], config: Dict[str, Any]) -
     if metadata.get("author") and not props.author:
         props.author = _text(metadata.get("author"))
 
-    replacement = placeholder_mapping(config, metadata)
+    replacement = placeholder_mapping(config, metadata, include_missing=clear_missing)
     seen = set()
     for section in doc.sections:
         for container in (
@@ -158,7 +168,14 @@ def edit_metadata(
     lower = str(path).lower()
     if lower.endswith(".docx"):
         doc = load_docx(path)
-        apply_docx_metadata(doc, updates, config)
+        seed: Dict[str, Any] = {}
+        for field, prop in core_mapping(config).items():
+            if hasattr(doc.core_properties, prop):
+                value = getattr(doc.core_properties, prop)
+                if value not in (None, ""):
+                    seed[field] = value
+        seed.update(updates)
+        apply_docx_metadata(doc, seed, config, clear_missing=False)
         if header_placeholders:
             seen = set()
             for section in doc.sections:

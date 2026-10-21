@@ -70,6 +70,21 @@ def _block_html(block: Block) -> str:
             body = '<div class="img-placeholder"><span class="img-glyph">IMG</span><span class="img-path">%s</span></div>' % path
         cap = "<figcaption>%s</figcaption>" % caption if caption else ""
         return '<figure data-image-path="%s">%s%s</figure>' % (path, body, cap)
+    if block.type == "latex_figure":
+        image = block.image or {}
+        path = str(image.get("path") or "")
+        safe_path = html.escape(path, quote=True)
+        alt = html.escape(str(image.get("alt") or block.caption or "LaTeX 图表"))
+        caption = html.escape(str(block.caption or image.get("alt") or ""))
+        if re.match(r"^https?://", path, re.I):
+            body = '<img src="%s" alt="%s" loading="lazy">' % (safe_path, alt)
+        elif path:
+            body = '<div class="img-placeholder"><span class="img-glyph">LATEX</span><span class="img-path">%s</span></div>' % safe_path
+        else:
+            body = '<div class="img-placeholder latex-placeholder"><span class="img-glyph">LATEX</span><span class="img-path">TeX 原生绘制，请在源码中编辑图表代码</span></div>'
+        cap = '<figcaption><span class="latex-badge">LATEX</span>%s</figcaption>' % ((" " + caption) if caption else "")
+        data_attr = ' data-image-path="%s"' % safe_path if path else ""
+        return '<figure class="latex-figure"%s>%s%s</figure>' % (data_attr, body, cap)
     if block.type == "pagebreak":
         return '<div class="pagebreak"><span>PAGE BREAK</span></div>'
     if block.type == "hr":
@@ -77,14 +92,15 @@ def _block_html(block: Block) -> str:
     if block.type == "math_block":
         return '<div class="math-block">%s</div>' % html.escape(block.text)
     if block.type == "bibliography":
-        items = "".join("<li>%s</li>" % inline_html(inlines) for inlines in block.items)
-        return '<section class="bibliography"><h2>参考文献</h2><ol>%s</ol></section>' % items
+        items = "".join("<p>%s</p>" % inline_html(inlines) for inlines in block.items)
+        return '<section class="bibliography"><h2>参考文献</h2>%s</section>' % items
     return ""
 
 
 def _list_html(block: Block) -> str:
     tag = "ol" if block.ordered else "ul"
-    parts = ["<%s>" % tag]
+    start_attr = ' start="%d"' % block.start if block.ordered and block.start != 1 else ""
+    parts = ["<%s%s>" % (tag, start_attr)]
     for item in block.items:
         parts.append("<li>%s" % inline_html(item.inlines))
         for child in item.children:
@@ -173,7 +189,8 @@ def document_stats(document: Document) -> Dict[str, Any]:
         "blocks": len(document.blocks),
         "headings": len(headings),
         "tables": counts.get("table", 0),
-        "images": counts.get("image", 0),
+        "images": counts.get("image", 0) + counts.get("latex_figure", 0),
+        "latex_figures": counts.get("latex_figure", 0),
         "code_blocks": counts.get("code_block", 0),
         "lists": counts.get("list", 0),
         "references": sum(len(b.items) for b in document.blocks if b.type == "bibliography"),

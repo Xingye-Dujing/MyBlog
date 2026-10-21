@@ -57,7 +57,9 @@ PDF 编译使用 `xelatex`，缺宏包时会设置 `MIKTEX_AUTOINSTALL=1` 让 Mi
 - 右栏：预览 / 元信息 / 输出。
 - 偏好面板：纸/夜主题、五种背景、**统一圆角滑杆（0–14px，默认 4px）**、界面字号、状态栏、行号、自动解析。所有可见圆角统一使用 `--radius`。
 - 生成文件元信息：转换完成后可在结果卡点击「编辑元信息」，修改 DOCX 核心属性或 TeX/PDF 属性；TeX 可选重新编译 PDF。
-- 写作便利：附件图片可一键插入图片语法；校验问题可点击跳转到对应源码行；支持拖入 `.md` 导入、粘贴剪贴板图片自动附加并插入语法。
+- TeX 交付：结果卡提供「下载素材包」，ZIP 内含 `.tex`、独立素材目录与编译说明；每个输出使用独立的 `<stem>-assets/`，不会覆盖其它文稿的图片。
+- 结果状态：修改源文稿或 frontmatter 后，旧结果会标记为「源文稿已修改」，避免误下载过期文件。
+- 写作便利：附件图片可一键插入图片语法；每个图片附件还可以点「LaTeX」一键替换为 `latex-figure` 图表代码，原图自动作为 DOCX/预览回退图；校验问题可点击跳转到对应源码行；支持拖入 `.md` 导入、粘贴剪贴板图片自动附加并插入语法。
 - AI 规范：顶部「AI 规范」打开完整 Markdown 写作规范，可一键复制全部或下载 `.md`，直接交给上游 AI 使用。
 - 选中态、复选框、主按钮全部使用橄榄色（`#657047`）与陶土色，不使用黑色或蓝色。
 - 元信息表单会直接写回 YAML frontmatter。
@@ -102,6 +104,7 @@ template: academic
 | 引用 | Quote 样式 | quote 环境 |
 | GFM 表格 | 三线表，首行加粗 | tabularx + booktabs 三线表 |
 | 图片 | 等比缩放，居中/左/右对齐 | figure + includegraphics |
+| `latex-figure` 围栏 | 使用 fallback 图片 | 原样嵌入 LaTeX 图表代码 |
 | `<!-- pagebreak -->` | 分页符 | `\newpage` |
 | 水平线 | 下边框空段落 | `\rule` |
 | `$...$` | Cambria Math 文本 | 原生数学模式 |
@@ -133,7 +136,30 @@ template: academic
 
 图题使用图片的 `alt` 或 `<!-- caption: ... -->`。DOCX 和 TeX 都会自动编号：`表 1　…` / `图 1　…`。
 
-### 3.5 不支持的语法
+### 3.5 LaTeX 原生图表
+
+如果希望 TeX 输出像参考文件一样由 LaTeX 绘制图表，可使用 `latex-figure` 围栏：
+
+````markdown
+```latex-figure fallback="images/chart.png"
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[cixi,width=8cm,height=5cm]
+\addplot coordinates {(1,2) (2,3) (3,4)};
+\end{axis}
+\end{tikzpicture}
+\caption{图表题注}
+\end{figure}
+```
+````
+
+- 代码会原样插入 TeX；可给完整 `figure` 环境，也可只给内部 `tikzpicture` / `pgfplots` 代码（平台自动补 `figure` 与题注）。
+- `fallback` 是 DOCX 输出和网页预览回退图，建议提供本地 PNG/JPG。
+- 模板已加载 `pgfplots`、`tikz`、`arrows.meta`、`calc`、`positioning`、`backgrounds`，并带有参考文件的 `cA`–`cJ` 配色与 `cixi` 坐标轴样式。
+- 网页端在附件列表中点击「LaTeX」即可把已有图片替换成该围栏，原图保留为 fallback。
+- 普通图片继续使用 PNG/JPG；LaTeX 代码仅用于 TeX 输出。
+
+### 3.6 不支持的语法
 
 HTML 块、脚注、任务列表、嵌套引用、嵌套表格会被忽略或降级并给出带行号的告警。`严格模式` 会把任一告警视为失败；普通模式只阻止错误级问题（例如缺标题、缺图片）。
 
@@ -169,7 +195,8 @@ HTML 块、脚注、任务列表、嵌套引用、嵌套表格会被忽略或降
 - 图题 `图N`、表题 `表N`，标签加粗，条目 10.5pt。
 - 参考文献使用 `thebibliography`，标题为「参考文献」。
 - 与参考 TeX 一致，不生成目录。
-- 表格 `tabularx` + `booktabs`，表题在上；图片复制到输出目录的 `images/`。
+- 导言区加载 `pgfplots` / `tikz` 及参考配色与 `cixi` 样式，支持 `latex-figure` 原生图表。
+- 表格 `tabularx` + `booktabs`，表题在上；图片复制到输出目录的 `<stem>-assets/images/`，并可随 TeX 一起打包为 ZIP。
 
 ---
 
@@ -224,7 +251,7 @@ edit_metadata("out.docx", {"title": "新标题", "author": "李四"})
 | POST | `/api/parse` | `{markdown, format, template}` → metadata、预览 HTML、统计、告警 |
 | POST | `/api/validate` | 结构与模板校验 |
 | POST | `/api/convert` | JSON 或 multipart；fields：`markdown`、`filename`、`format`、`template`、`strict`、`compile_pdf`、`images[]` |
-| GET | `/api/download/<job_id>/<kind>` | `docx` / `tex` / `pdf` / `source` |
+| GET | `/api/download/<job_id>/<kind>` | `docx` / `tex` / `pdf` / `source` / `bundle`（TeX 素材 ZIP） |
 | POST | `/api/meta` | multipart：上传 DOCX/TEX，`metadata` JSON + `header_placeholders` JSON |
 | POST | `/api/jobs/<job_id>/meta` | 编辑已生成文件的元信息；TeX 可传 `recompile: true` |
 
@@ -332,7 +359,7 @@ public/
 
 测试覆盖：解析、嵌套列表、图片属性、公式、参考文献、DOCX 结构、样式、目录域、页边距、分页、TeX 源码、真实 MiKTeX 编译、跨 run 占位符、元信息、API、前端禁用色契约。
 
-当前结果：**24 passed**。
+当前结果：**38 passed**。
 
 ---
 
@@ -340,7 +367,8 @@ public/
 
 - DOCX 中的数学公式是 Cambria Math 文本，不是 OMML 原生公式；需要原生公式时请使用 TeX 输出。
 - DOCX 目录页使用 Word 域 + 静态缓存条目；首次打开请允许 Word 更新域，以获得准确页码。
-- 网页端图片按文件名匹配 Markdown 路径，图片仅支持 PNG/JPG 上传。
-- 服务为本地开发服务；不要直接暴露到公网。
+- 网页端图片按文件名匹配 Markdown 路径，仅支持 PNG/JPG；绝对路径与 `..` 越界路径会被校验器拒绝。
+- 服务为本地开发服务；不要直接暴露到公网。启动器会检测端口占用，避免多个实例同时监听。
+- `pip install` 适合使用 CLI 与库；Web 界面、示例和 `mdforge_serve.py` 仍从仓库目录运行。
 - UI 遵循「不使用黑色/蓝色」的约束；导出的文档本身仍使用标准黑色印刷色。
 - 生成文件的「编辑元信息」只修改 DOCX 核心属性或 TeX/PDF 属性，不改变正文标题；TeX 需要重新编译后新 PDF 才会同步。

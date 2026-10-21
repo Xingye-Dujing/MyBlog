@@ -5,12 +5,14 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
 from .errors import CompileError
 
 _ENGINES = ("xelatex", "lualatex", "pdflatex")
+_COMPILE_LOCK = threading.Lock()
 _CANDIDATE_BINS = [
     os.environ.get("MIKTEX_BIN", ""),
     r"D:\MiKTeX\miktex\bin\x64",
@@ -124,7 +126,7 @@ def _extract_errors(log: str) -> List[Dict[str, Any]]:
     return errors
 
 
-def compile_tex(
+def _compile_tex_unlocked(
     tex_path: str,
     engine: str = "xelatex",
     output_dir: Optional[str] = None,
@@ -220,3 +222,14 @@ def compile_tex(
         "engine": engine,
         "returncode": code,
     }
+
+
+def compile_tex(
+    tex_path: str,
+    engine: str = "xelatex",
+    output_dir: Optional[str] = None,
+    timeout: int = 300,
+) -> Dict[str, Any]:
+    """Serialize MiKTeX calls: its package database is not concurrency-safe."""
+    with _COMPILE_LOCK:
+        return _compile_tex_unlocked(tex_path, engine=engine, output_dir=output_dir, timeout=timeout)

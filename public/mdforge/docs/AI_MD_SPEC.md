@@ -199,7 +199,7 @@ $$
 - 图片文件名建议使用英文、数字、连字符，例如 `images/method-flow.png`。
 - 支持的宽度单位：`cm`、`mm`、`in`、`px`、`%`；TeX 还支持 `0.8\textwidth`。
 - `align` 可选 `left`、`center`、`right`；缺省居中。
-- 不要使用远程 URL（`http://`、`https://`）或 SVG。
+- 仅支持 PNG / JPG；不要使用 WebP、GIF、SVG 或远程 URL（`http://`、`https://`）。
 - 图片必须单独成段，前后各空一行；不要出现“文字 + 图片 + 文字”的同一段。
 - 如果无法生成图片，先用占位路径写出语法，并明确告知用户需要上传同名图片。
 
@@ -211,6 +211,36 @@ $$
 ```
 
 > 这里的 caption 注释也必须独占一行，并紧邻图片。
+
+### 4.1 LaTeX 原生图表（仅 TeX 重绘时使用）
+
+如果用户明确要求「用 LaTeX 重绘图表」，不要插入图片，改用 `latex-figure` 围栏：
+
+````markdown
+```latex-figure fallback="images/chart.png"
+\begin{figure}[htbp]\centering
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}
+\begin{axis}[cixi,width=8cm,height=5cm]
+\addplot coordinates {(1,2) (2,3) (3,4)};
+\end{axis}
+\end{tikzpicture}
+}
+\caption{图表题注}
+\end{figure}
+```
+````
+
+规则：
+
+- 围栏语言必须是 `latex-figure`。
+- 代码会**原样嵌入 TeX 文件**，平台不转义、不改写。
+- 可以给完整 `figure` 环境（推荐，参考格式即如此），也可以只给内部的 `tikzpicture` / `pgfplots` 代码；只有内部代码时平台会自动补 `figure`、`centering` 和 `\caption{}`。
+- 题注优先从代码中的 `\caption{...}` 读取；未找到时可以使用围栏属性 `caption="..."`。
+- `fallback="images/foo.png"` 是可选的回退图，用于 DOCX 输出和网页预览；TeX 输出不会使用它。推荐始终提供，且保证是本地 PNG/JPG。
+- 不要把 `\documentclass`、`\begin{document}`、`\end{document}` 放进围栏。
+- 模板已加载 `pgfplots`、`tikz`、`arrows.meta,calc,positioning,backgrounds`，并定义了参考文件的 `cA`–`cJ` 配色与 `cixi` 坐标轴样式。
+- 仅当用户要求 TeX 重绘时使用；普通图片仍使用 PNG/JPG。
 
 ---
 
@@ -340,7 +370,8 @@ $$
 - [ ] 正文没有重复标题、作者、摘要、关键词。
 - [ ] 没有目录、封面、页码、页眉页脚。
 - [ ] 标题层级连续，只使用 H1–H4。
-- [ ] 图片独占段落，路径是本地 `images/...`，无远程图片。
+- [ ] 图片独占段落，路径是本地 `images/...`，格式为 PNG/JPG，无远程图片。
+- [ ] 若使用 `latex-figure`，代码是合法 LaTeX，且只包含图表代码，不包含文档导言区。
 - [ ] 表格 ≤ 6 列，题注在表格上一行，单元格无换行。
 - [ ] 列表 ≤ 3 级，未使用任务列表。
 - [ ] 公式只使用 `$...$` / `$$...$$`。
@@ -360,12 +391,13 @@ $$
 2. 文件必须以 YAML frontmatter 开头，必填 title，写 template: academic。
 3. 标题、作者、摘要、关键词只放在 frontmatter；正文不要重复。
 4. 正文只使用 #~#### 标题、普通段落、**粗**、*斜*、~~删~~、行内代码、链接、最多 3 级列表、围栏代码块、一层引用、GFM 表格、独占段落的图片、行内 $...$ 与块级 $$...$$、<!-- pagebreak -->。
-5. 图片写成 ![描述](images/文件名.png){width=12cm align=center}，独占段落。
+5. 图片写成 ![描述](images/文件名.png){width=12cm align=center}，独占段落；仅使用 PNG/JPG。
 6. 表格最多 6 列，题注写成 <!-- caption: 题注 --> 放在表格上一行。
 7. 文末用 # 参考文献 结尾，每条文献单独成段；其后不要再写内容。
 8. 不使用目录、封面、页码、脚注、任务列表、HTML 块、嵌套引用、嵌套表格、远程图片、H5/H6。
 9. 标题层级连续不跳级；标题默认不编号。
 10. 如果用户没有提供图片文件，请仍然写出确定性的 images/ 路径，并提醒用户上传同名图片。
+11. 只有用户明确要求 LaTeX 重绘图表时，才使用 latex-figure 围栏；普通图片继续使用 PNG/JPG。
 
 输出仅包含 Markdown 原文。
 ```

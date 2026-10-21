@@ -7,6 +7,8 @@ import shutil
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
+from PIL import Image
+
 from .errors import RenderError, TemplateError
 from .escape import escape, escape_url
 from .images import resolve_tex_width
@@ -35,6 +37,7 @@ class TexRenderer:
         self.template = template
         self.config = template.config
         self.asset_dir = asset_dir
+        self.asset_prefix = os.path.basename(os.path.normpath(asset_dir)) or "assets"
         self.assets: Dict[int, str] = {}
 
     def prepare_assets(self) -> None:
@@ -48,21 +51,25 @@ class TexRenderer:
             source = str(image.get("path") or "")
             if not source or re.match(r"^[a-z]+://", source, re.I):
                 continue
-            full = source
-            if not os.path.isabs(full):
-                full = os.path.normpath(os.path.join(self.document.base_dir or os.getcwd(), source))
+            if os.path.isabs(source):
+                self.document.add_issue("error", "图片必须使用相对路径：%s" % source, block.line, "image-absolute")
+                continue
+            full = os.path.normpath(os.path.join(self.document.base_dir or os.getcwd(), source))
             if not os.path.isfile(full):
                 self.document.add_issue("error", "图片不存在：%s" % source, block.line, "image-missing")
                 continue
             counter += 1
             ext = os.path.splitext(full)[1].lower() or ".png"
-            if ext not in (".png", ".jpg", ".jpeg", ".pdf", ".eps"):
-                ext = ".png"
-            dest_name = "img%02d%s" % (counter, ext)
+            dest_name = "img%02d%s" % (counter, ext if ext in (".png", ".jpg", ".jpeg") else ".png")
             dest = os.path.join(image_dir, dest_name)
             try:
-                shutil.copy2(full, dest)
-                self.assets[id(block)] = "images/" + dest_name
+                if ext in (".png", ".jpg", ".jpeg"):
+                    shutil.copy2(full, dest)
+                else:
+                    with Image.open(full) as image_obj:
+                        converted = image_obj.convert("RGBA" if "A" in image_obj.getbands() else "RGB")
+                        converted.save(dest, format="PNG")
+                self.assets[id(block)] = self.asset_prefix + "/images/" + dest_name
             except Exception as exc:
                 self.document.add_issue("error", "图片复制失败：%s (%s)" % (source, exc), block.line, "image-copy")
 
@@ -118,6 +125,8 @@ class TexRenderer:
             return self._table(block)
         if block.type == "image":
             return self._figure(block)
+        if block.type == "latex_figure":
+            return self._latex_figure(block)
         if block.type == "pagebreak":
             return r"\newpage"
         if block.type == "hr":
@@ -130,7 +139,9 @@ class TexRenderer:
 
     def _list_block(self, block: Block) -> str:
         environment = "enumerate" if block.ordered else "itemize"
-        lines = ["\\begin{%s}" % environment]
+        start = max(1, int(block.start or 1))
+        start_option = "[start=%d]" % start if block.ordered and start != 1 else ""
+        lines = ["\\begin{%s}%s" % (environment, start_option)]
         for item in block.items:
             content = self.inlines(item.inlines)
             child_fragments = []
@@ -182,6 +193,19 @@ class TexRenderer:
         lines.append(r"\end{table}")
         return "\n".join(lines)
 
+    def _latex_figure(self, block: Block) -> str:
+        code = (block.text or "").strip()
+        if not code:
+            return ""
+        if "\\begin{figure}" in code or "\\begin{figure*}" in code:
+            return code
+        lines = [r"\begin{figure}[htbp]", r"\centering", code]
+        caption = _strip_caption_number(block.caption or "", "figure")
+        if caption and "\\caption" not in code:
+            lines.append(r"\caption{%s}" % escape(caption))
+        lines.append(r"\end{figure}")
+        return "\n".join(lines)
+
     def _figure(self, block: Block) -> str:
         image = block.image or {}
         rel = self.assets.get(id(block))
@@ -204,10 +228,14 @@ class TexRenderer:
 
 def render_tex(document: Document, template: Template, output: Optional[str] = None) -> Dict[str, Any]:
     if output:
-        output_dir = os.path.dirname(os.path.abspath(output)) or os.getcwd()
+        absolute_output = os.path.abspath(output)
+        output_dir = os.path.dirname(absolute_output) or os.getcwd()
+        stem = os.path.splitext(os.path.basename(absolute_output))[0] or "document"
     else:
         output_dir = tempfile.mkdtemp(prefix="mdforge-tex-")
-    renderer = TexRenderer(document, template, output_dir)
+        stem = "document"
+    asset_dir = os.path.join(output_dir, stem + "-assets")
+    renderer = TexRenderer(document, template, asset_dir)
     renderer.prepare_assets()
     body = renderer.blocks(document.blocks)
     bibliography = []
@@ -241,4 +269,4 @@ def render_tex(document: Document, template: Template, output: Optional[str] = N
     if output:
         with open(output, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(tex)
-    return {"tex": tex, "output": output, "asset_dir": output_dir, "assets": renderer.assets}
+    return {"tex": tex, "output": output, "asset_dir": asset_dir, "assets": renderer.assets}

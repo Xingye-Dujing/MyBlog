@@ -90,3 +90,53 @@ def test_template_is_not_modified(tmp_path):
     render_docx(make_document(), template, str(tmp_path / "out.docx"))
     after = hashlib.sha256(template_path.read_bytes()).hexdigest()
     assert before == after
+
+
+def test_table_numbering_and_caption_keep(tmp_path):
+    source = """---
+title: 表格编号
+---
+
+# 一
+
+| A | B |
+| --- | --- |
+| 1 | 2 |
+
+<!-- caption: 有题注 -->
+| C | D |
+| --- | --- |
+| 3 | 4 |
+"""
+    document = parse_markdown(source)
+    template = load_template("docx", "academic")
+    output = tmp_path / "tables.docx"
+    render_docx(document, template, str(output))
+    doc = open_docx(str(output))
+    captions = [p for p in doc.paragraphs if p.style.name == "ZEN Caption"]
+    assert len(captions) == 1
+    assert captions[0].text.startswith("表 1")
+    assert captions[0].paragraph_format.keep_with_next is True
+
+
+def test_ordered_list_start_in_docx(tmp_path):
+    document = parse_markdown("---\ntitle: T\n---\n\n3. 三\n4. 四\n")
+    template = load_template("docx", "academic")
+    output = tmp_path / "list.docx"
+    render_docx(document, template, str(output))
+    doc = open_docx(str(output))
+    list_lines = [p.text for p in doc.paragraphs if p.style.name == "ZEN List 1"]
+    assert list_lines == ["3. 三", "4. 四"]
+
+
+def test_toc_field_uses_configured_levels(tmp_path):
+    document = parse_markdown("---\ntitle: T\n---\n\n# 一级\n\n## 二级\n\n### 三级\n")
+    template = load_template("docx", "academic")
+    template.config["toc"]["levels"] = 3
+    output = tmp_path / "toc.docx"
+    render_docx(document, template, str(output))
+    doc = open_docx(str(output))
+    instructions = "".join(node.text or "" for node in doc.element.body.xpath(".//w:instrText"))
+    assert r'TOC \o "1-3"' in instructions
+    toc_texts = [p.text for p in doc.paragraphs if p.style.name == "ZEN TOC Entry"]
+    assert any(text.startswith("三级") for text in toc_texts)

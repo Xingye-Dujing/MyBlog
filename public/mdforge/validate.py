@@ -6,13 +6,25 @@ import re
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
 
+from PIL import Image
+
 from .models import Document, plain_text
 
 _WIDTH_RE = re.compile(r"^\s*(?:\d+(?:\.\d+)?\s*(?:cm|mm|in|px|%|pt)|0?\.\d+\s*\\(?:textwidth|linewidth)|-?\d+(?:\.\d+)?\s*\\(?:textwidth|linewidth))\s*$", re.I)
+_ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
 def _issue(level: str, message: str, line: int = 0, code: str = "") -> Dict[str, Any]:
     return {"level": level, "message": message, "line": int(line or 0), "code": code or level}
+
+
+def _is_inside_base(path: str, base_dir: Optional[str]) -> bool:
+    base = os.path.abspath(base_dir or os.getcwd())
+    target = os.path.abspath(path)
+    try:
+        return os.path.commonpath([os.path.normcase(base), os.path.normcase(target)]) == os.path.normcase(base)
+    except ValueError:
+        return False
 
 
 def resolve_image_path(path: str, base_dir: Optional[str]) -> Optional[str]:
@@ -25,6 +37,50 @@ def resolve_image_path(path: str, base_dir: Optional[str]) -> Optional[str]:
         return os.path.normpath(clean)
     root = base_dir or os.getcwd()
     return os.path.normpath(os.path.join(root, clean))
+
+
+def _image_reference_issues(
+    path: str,
+    base_dir: Optional[str],
+    line: int,
+    check_images: bool,
+    level: str,
+    prefix: str,
+) -> List[Dict[str, Any]]:
+    result: List[Dict[str, Any]] = []
+
+    def add(message: str, suffix: str) -> None:
+        result.append(_issue(level, message, line, "%s-%s" % (prefix, suffix)))
+
+    if not path:
+        add("图片路径为空", "path")
+        return result
+    if os.path.isabs(path) or re.match(r"^[A-Za-z]:[\\/]", path):
+        add("图片必须使用相对路径：%s" % path, "absolute")
+        return result
+    parsed = urlparse(path)
+    if parsed.scheme:
+        add("仅支持本地相对图片路径：%s" % path, "remote")
+        return result
+    extension = os.path.splitext(path)[1].lower()
+    if extension not in _ALLOWED_IMAGE_EXTENSIONS:
+        add("图片仅支持 PNG / JPG：%s" % path, "format")
+        return result
+    resolved = resolve_image_path(path, base_dir)
+    if resolved and not _is_inside_base(resolved, base_dir):
+        add("图片路径不能超出 Markdown 所在目录：%s" % path, "outside-base")
+        return result
+    if check_images and (not resolved or not os.path.isfile(resolved)):
+        add("图片不存在：%s" % path, "missing")
+    elif check_images and resolved:
+        try:
+            with Image.open(resolved) as image_obj:
+                image_format = (image_obj.format or "").upper()
+            if image_format not in ("PNG", "JPEG"):
+                add("图片内容必须是 PNG / JPG：%s" % path, "content")
+        except Exception:
+            add("无法读取图片：%s" % path, "invalid")
+    return result
 
 
 def validate_document(
@@ -65,22 +121,23 @@ def validate_document(
         if block.type == "image":
             image = block.image or {}
             path = str(image.get("path") or "")
-            if not path:
-                issues.append(_issue("error", "图片路径为空", block.line, "image-path"))
-                continue
-            parsed = urlparse(path)
-            if parsed.scheme in ("http", "https"):
-                issues.append(_issue("error", "仅支持本地图片：%s" % path, block.line, "image-remote"))
-                continue
-            resolved = resolve_image_path(path, doc.base_dir)
-            if check_images and (not resolved or not os.path.isfile(resolved)):
-                issues.append(_issue("error", "图片不存在：%s" % path, block.line, "image-missing"))
+            issues.extend(_image_reference_issues(path, doc.base_dir, block.line, check_images, "error", "image"))
             width = str(image.get("width") or "")
             if width and not _WIDTH_RE.match(width) and not re.match(r"^\d+(?:\.\d+)?$", width):
                 issues.append(_issue("warning", "无法识别的图片宽度：%s，将使用默认宽度" % width, block.line, "image-width"))
             align = str(image.get("align") or "").lower()
             if align and align not in ("left", "center", "right"):
                 issues.append(_issue("warning", "无法识别的图片对齐：%s，将居中" % align, block.line, "image-align"))
+        if block.type == "latex_figure":
+            if not (block.text or "").strip():
+                issues.append(_issue("error", "LaTeX 图表代码为空", block.line, "latex-figure-empty"))
+            fallback = (block.image or {}).get("path") if block.image else ""
+            if fallback:
+                issues.extend(
+                    _image_reference_issues(
+                        str(fallback), doc.base_dir, block.line, check_images, "warning", "latex-fallback"
+                    )
+                )
     return issues
 
 

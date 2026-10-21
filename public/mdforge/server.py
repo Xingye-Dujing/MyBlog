@@ -1,6 +1,7 @@
 """Flask API for the MdForge web console."""
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -9,6 +10,7 @@ import tempfile
 import threading
 import time
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -61,6 +63,39 @@ def _job(job_id: str) -> Dict[str, Any]:
     if not job:
         abort(404, description="任务不存在或已过期")
     return job
+
+
+def _tex_bundle(job: Dict[str, Any]) -> Tuple[io.BytesIO, str]:
+    files = job.get("files") or {}
+    tex_path = files.get("tex")
+    if not tex_path or not os.path.isfile(tex_path):
+        abort(404, description="TeX 文件不存在")
+    asset_dir = job.get("asset_dir") or ""
+    buffer = io.BytesIO()
+    tex_name = os.path.basename(tex_path)
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(tex_path, tex_name)
+        if asset_dir and os.path.isdir(asset_dir):
+            parent = os.path.dirname(os.path.normpath(asset_dir))
+            for root, _dirs, names in os.walk(asset_dir):
+                for name in names:
+                    full = os.path.join(root, name)
+                    arcname = os.path.relpath(full, parent).replace(os.sep, "/")
+                    archive.write(full, arcname)
+        asset_name = os.path.basename(os.path.normpath(asset_dir)) if asset_dir else "assets"
+        readme = (
+            "MdForge TeX bundle\n"
+            "=================\n\n"
+            "Main file : %s\n"
+            "Images    : %s/images/\n\n"
+            "Compile with XeLaTeX (run twice for references):\n"
+            "  xelatex \"%s\"\n"
+            "  xelatex \"%s\"\n"
+        ) % (tex_name, asset_name, tex_name, tex_name)
+        archive.writestr("README-MdForge.txt", readme)
+    buffer.seek(0)
+    stem = os.path.splitext(tex_name)[0] or "document"
+    return buffer, stem + "_tex.zip"
 
 
 def _safe_filename(name: str, fallback: str = "document") -> str:
@@ -350,6 +385,7 @@ def create_app() -> Flask:
                     JOBS[job_id]["format"] = fmt
                     JOBS[job_id]["template"] = result.get("template") or template_name or "academic"
                     JOBS[job_id]["metadata"] = result.get("metadata") or overrides
+                    JOBS[job_id]["asset_dir"] = result.get("asset_dir")
             result.update(
                 {
                     "ok": True,
@@ -357,6 +393,7 @@ def create_app() -> Flask:
                     "download_url": "/api/download/%s/%s" % (job_id, fmt),
                     "source_url": "/api/download/%s/source" % job_id,
                     "pdf_url": "/api/download/%s/pdf" % job_id if result.get("pdf") else None,
+                    "bundle_url": "/api/download/%s/bundle" % job_id if fmt == "tex" else None,
                     "elapsed_ms": int((time.time() - started) * 1000),
                     "filename": output_name,
                 }
@@ -387,6 +424,11 @@ def create_app() -> Flask:
     @app.get("/api/download/<job_id>/<kind>")
     def api_download(job_id: str, kind: str):
         job = _job(job_id)
+        if kind == "bundle":
+            if job.get("format") != "tex" and not (job.get("files") or {}).get("tex"):
+                abort(404, description="素材包只适用于 TeX 输出")
+            buffer, bundle_name = _tex_bundle(job)
+            return send_file(buffer, as_attachment=True, download_name=bundle_name, mimetype="application/zip")
         files = job.get("files") or {}
         path = files.get(kind)
         if not path or not os.path.isfile(path):
@@ -497,6 +539,7 @@ def create_app() -> Flask:
                 files.pop("pdf", None)
                 result["pdf_url"] = None
             result["compile"] = compile_info
+            result["bundle_url"] = "/api/download/%s/bundle" % job_id
             try:
                 result["tex"] = Path(path).read_text(encoding="utf-8")
             except Exception:
@@ -516,6 +559,13 @@ def create_app() -> Flask:
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "error": getattr(error, "description", "未找到")}), 404
         return jsonify({"ok": False, "error": "未找到"}), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        app.logger.exception("internal server error")
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "服务器内部错误"}), 500
+        return "服务器内部错误", 500
 
     @app.after_request
     def no_cache_api(response):

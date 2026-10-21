@@ -129,13 +129,14 @@ class DocxRenderer:
         inserter = Inserter(parent, index)
         paragraphs = []
         use_field = bool(self.toc.get("field", True))
+        levels = int(self.toc.get("levels") or 2)
         for entry_index, (text, page) in enumerate(entries):
             paragraph = self._new_paragraph("toc_entry")
             paragraph.paragraph_format.tab_stops.add_tab_stop(
                 Cm(max(2.0, available_cm - 0.01)), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS
             )
             if entry_index == 0 and use_field:
-                _toc_field_begin(paragraph)
+                _toc_field_begin(paragraph, levels)
             run = paragraph.add_run(text)
             _set_east_asia(run, "宋体")
             run.add_tab()
@@ -279,6 +280,8 @@ class DocxRenderer:
             self._render_table(block, inserter)
         elif block.type == "image":
             self._render_image(block, inserter)
+        elif block.type == "latex_figure":
+            self._render_latex_figure(block, inserter)
         elif block.type == "pagebreak":
             paragraph = self._new_paragraph("paragraph")
             paragraph.paragraph_format.first_line_indent = Pt(0)
@@ -311,7 +314,9 @@ class DocxRenderer:
             key = "ordered_list_l%d" % level if block.ordered else "bullet_list_l%d" % level
             paragraph = self._new_paragraph(key)
             if block.ordered:
-                counters[id(block)] = counters.get(id(block), 0) + 1
+                if id(block) not in counters:
+                    counters[id(block)] = max(0, int(block.start or 1) - 1)
+                counters[id(block)] += 1
                 prefix = "%d. " % counters[id(block)]
             else:
                 prefix = ["•", "◦", "▪"][level - 1] + " "
@@ -333,10 +338,11 @@ class DocxRenderer:
         for row in rows:
             while len(row) < cols:
                 row.append([])
-        self.table_no += 1
         caption = _strip_caption_number(block.caption or "")
         if caption:
+            self.table_no += 1
             paragraph = self._new_paragraph("caption")
+            paragraph.paragraph_format.keep_with_next = True
             label = "表 %d　" % self.table_no
             run = paragraph.add_run(label)
             run.bold = True
@@ -416,6 +422,33 @@ class DocxRenderer:
             body = caption_paragraph.add_run(caption)
             _set_east_asia(body, "宋体")
             inserter.add(caption_paragraph._p)
+
+    def _render_latex_figure(self, block: Block, inserter: Inserter) -> None:
+        image = block.image or {}
+        path = str(image.get("path") or "")
+        if path and not re.match(r"^[a-z]+://", path, re.I) and not os.path.isabs(path):
+            full = os.path.normpath(os.path.join(self.document.base_dir or os.getcwd(), path))
+            if os.path.isfile(full):
+                self._render_image(block, inserter)
+                return
+        self.figure_no += 1
+        caption = _strip_caption_number(block.caption or "")
+        paragraph = self._new_paragraph("caption")
+        label = paragraph.add_run("图 %d　" % self.figure_no)
+        label.bold = True
+        _set_east_asia(label, "黑体")
+        body = paragraph.add_run(caption or "LaTeX 图表")
+        _set_east_asia(body, "宋体")
+        note = paragraph.add_run("（DOCX 占位；TeX 输出使用 LaTeX 绘制）")
+        note.font.size = Pt(8)
+        _set_east_asia(note, "宋体")
+        inserter.add(paragraph._p)
+        self.document.add_issue(
+            "warning",
+            "LaTeX 图表在 DOCX 中使用占位，请提供 fallback 图片以获得可视图表：%s" % (caption or "未命名"),
+            block.line,
+            "latex-figure-docx",
+        )
 
     def _render_bibliography(self, block: Block, inserter: Inserter) -> None:
         paragraph = self._new_paragraph("bibliography_title")
@@ -539,7 +572,7 @@ def _add_hyperlink(paragraph, url: str, text: str) -> None:
     paragraph._p.append(hyperlink)
 
 
-def _toc_field_begin(paragraph) -> None:
+def _toc_field_begin(paragraph, levels: int = 2) -> None:
     p = paragraph._p
     begin_run = OxmlElement("w:r")
     begin = OxmlElement("w:fldChar")
@@ -548,7 +581,7 @@ def _toc_field_begin(paragraph) -> None:
     instr_run = OxmlElement("w:r")
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
-    instr.text = ' TOC \\o "1-2" \\h \\z \\u '
+    instr.text = ' TOC \\o "1-%d" \\h \\z \\u ' % max(1, int(levels))
     instr_run.append(instr)
     sep_run = OxmlElement("w:r")
     separate = OxmlElement("w:fldChar")

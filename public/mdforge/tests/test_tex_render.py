@@ -24,7 +24,7 @@ def test_tex_source():
     assert "\\subsection{管线设计}" not in tex
     assert "\\subsection{共享解析层}" in tex
     assert "\\begin{tabularx}{\\textwidth}" in tex
-    assert "\\includegraphics[width=12cm]{images/img01.png}" in tex
+    assert "\\includegraphics[width=12cm]{document-assets/images/img01.png}" in tex
     assert "\\begin{thebibliography}{99}" in tex
     assert "\\mdinlinecode{Block}" in tex
     assert "\\[ \na^2" not in tex
@@ -63,3 +63,25 @@ $$
     result = compile_tex(str(output), engine="xelatex", timeout=300)
     assert result["ok"] is True
     assert Path(result["pdf"]).is_file()
+
+
+def test_tex_assets_are_per_output(tmp_path):
+    source = SAMPLE.read_text(encoding="utf-8")
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    template = load_template("tex", "academic")
+    one = tmp_path / "one.tex"
+    two = tmp_path / "two.tex"
+    first = render_tex(document, template, str(one))
+    second = render_tex(document, template, str(two))
+    assert "one-assets/images/img01.png" in first["tex"]
+    assert "two-assets/images/img01.png" in second["tex"]
+    assert (tmp_path / "one-assets" / "images" / "img01.png").is_file()
+    assert (tmp_path / "two-assets" / "images" / "img01.png").is_file()
+    assert first["asset_dir"] != second["asset_dir"]
+
+
+def test_tex_ordered_list_start():
+    document = parse_markdown("---\ntitle: T\n---\n\n3. 三\n4. 四\n")
+    template = load_template("tex", "academic")
+    tex = render_tex(document, template, None)["tex"]
+    assert r"\begin{enumerate}[start=3]" in tex
