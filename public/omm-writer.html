@@ -10342,6 +10342,27 @@ notify pgrst, 'reload schema';</textarea
 
           initPanZoom() {
             const workspace = DOM.workspace
+            // 滚轮 / 触控板判定看「滚动流」，不看单个事件：
+            //   横向分量 / 同一段流里 delta 发生变化 / 小步进流 → 触控板 → 平移
+            //   恒定的纯纵向大 delta（整数或小数都可以） → 鼠标滚轮 → 缩放
+            // 注意不能把「小数 delta」单独当触控板证据：Windows/Chrome 下
+            // 部分鼠标一格就是 111.111… 这种小数，但一段流里恒定不变。
+            // 一旦判定为触控板，整段流都按平移处理，直到安静超过 180ms。
+            let lastWheelAt = 0
+            let lastWheelDeltaY = 0
+            let wheelStreamTrackpad = false
+            // 滚轮按「格」缩放：Mac Chrome 一格 deltaY 只有 4，Windows 是 100，
+            // Firefox 行模式是 3 行，不能直接拿 deltaY 当系数。
+            const wheelZoomFactor = (e) => {
+              const wd = Math.abs(e.wheelDeltaY)
+              let steps
+              if (Number.isFinite(wd) && wd > 0) steps = wd / 120
+              else if (e.deltaMode === 1) steps = Math.abs(e.deltaY) / 3
+              else steps = Math.abs(e.deltaY) / 100
+              steps = Math.min(4, Math.max(0.02, steps))
+              return Math.pow(1.12, -Math.sign(e.deltaY) * steps)
+            }
+
             workspace.addEventListener('mousedown', (e) => {
               if (e.button === 2) {
                 CanvasManager.beginPan(e.clientX, e.clientY)
@@ -10364,19 +10385,38 @@ notify pgrst, 'reload schema';</textarea
                 const ta = el.closest ? el.closest('textarea') : null
                 const nc = el.closest ? el.closest('.node-content') : null
                 const scrollable = ta || (nc && nc.scrollHeight > nc.clientHeight ? nc : null)
-                if (scrollable && scrollable.scrollHeight > scrollable.clientHeight) {
+                const pinch = e.ctrlKey || e.metaKey
+                // 捏合永远缩放画布；普通滚动让文本框/节点内容自己滚
+                if (!pinch && scrollable && scrollable.scrollHeight > scrollable.clientHeight) {
                   return
                 }
                 e.preventDefault()
-                // 触控板 / 鼠标手势分工：
-                //   ctrlKey = true  → 双指捏合（pinch）→ 以指针为中心缩放
-                //   ctrlKey = false → 双指滑动 / 滚轮      → 平移画布
                 const unitScale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1
-                if (e.ctrlKey) {
-                  const raw = e.deltaY * unitScale
-                  CanvasManager.zoomAt(e.clientX, e.clientY, Math.exp(-raw * 0.0022))
-                } else {
+                // 触控板捏合（带 ctrlKey）与 Ctrl/Cmd+滚轮都以指针为中心缩放。
+                // 0.999^deltaY：捏合的小 delta 连续平滑，Ctrl+滚轮一格约 10%。
+                if (pinch) {
+                  CanvasManager.zoomAt(e.clientX, e.clientY, Math.pow(0.999, e.deltaY * unitScale))
+                  lastWheelAt = 0
+                  lastWheelDeltaY = 0
+                  wheelStreamTrackpad = false
+                  return
+                }
+                const now = performance.now()
+                const inBurst = now - lastWheelAt < 180
+                const wd = Math.abs(e.wheelDeltaY)
+                // 行/页模式或 wheelDeltaY 是 120 的整数倍：确定的物理滚轮
+                const wheelTick =
+                  e.deltaMode !== 0 || (Number.isFinite(wd) && wd >= 120 && wd % 120 === 0)
+                const isTrackpad = inBurst
+                  ? e.deltaX !== 0 || e.deltaY !== lastWheelDeltaY || wheelStreamTrackpad
+                  : e.deltaX !== 0 || (Math.abs(e.deltaY) < 40 && !wheelTick)
+                lastWheelAt = now
+                lastWheelDeltaY = e.deltaY
+                wheelStreamTrackpad = isTrackpad
+                if (isTrackpad) {
                   CanvasManager.panBy(-e.deltaX * unitScale, -e.deltaY * unitScale)
+                } else {
+                  CanvasManager.zoomAt(e.clientX, e.clientY, wheelZoomFactor(e))
                 }
               },
               { passive: false },
