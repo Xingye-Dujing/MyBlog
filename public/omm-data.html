@@ -22,6 +22,9 @@
         --border-dim: rgba(26, 26, 26, 0.15);
         --border-faint: rgba(26, 26, 26, 0.06);
         --hover: rgba(26, 26, 26, 0.06);
+        /* 选中行的行号格是 sticky 单元格，背景必须不透明：
+           用半透明的 --hover 会让下面滚动的行透上来，出现“折叠”重影 */
+        --row-act-bg: #f1f1f1;
         --active-bg: #1a1a1a;
         --active-text: #ffffff;
         --accent-red: #cc3333;
@@ -42,6 +45,7 @@
         --border-dim: rgba(232, 232, 232, 0.15);
         --border-faint: rgba(232, 232, 232, 0.06);
         --hover: rgba(232, 232, 232, 0.08);
+        --row-act-bg: #2a2a2a;
         --active-bg: #e8e8e8;
         --active-text: #1a1a1a;
       }
@@ -354,6 +358,57 @@
       .dd-select option {
         background: var(--bg);
         color: var(--text);
+      }
+      /* 自定义下拉（替代浏览器内置 select）：触发器 + 候选弹窗。
+         弹窗复用 .dropdown / .dd-item 的视觉体系，候选区不再是浏览器原生样式 */
+      .csel {
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 78px;
+        padding: 3px 7px;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(11px * var(--fscale));
+        line-height: 1.6;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.15s;
+        outline: none;
+      }
+      .csel:hover {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .csel.open,
+      .csel:focus-visible {
+        border-color: var(--text);
+      }
+      .csel-caret {
+        flex: none;
+        width: 0;
+        height: 0;
+        border-left: 3.5px solid transparent;
+        border-right: 3.5px solid transparent;
+        border-top: 4px solid var(--text-faint);
+        transition: border-top-color 0.15s;
+      }
+      .csel:hover .csel-caret {
+        border-top-color: var(--text-dim);
+      }
+      .csel.open .csel-caret {
+        border-top-color: var(--text);
+      }
+      .csel-pop {
+        min-width: 88px;
+      }
+      .csel-pop .dd-item {
+        justify-content: flex-start;
+        gap: 8px;
       }
       .dd-text {
         width: 100%;
@@ -958,7 +1013,9 @@
       }
       .gc.rn.act {
         color: var(--text);
-        background: var(--hover);
+        /* 必须用不透明底色：sticky 行号格一旦半透明，
+           横向滚动时下面的数据行会从它上面透出来 */
+        background: var(--row-act-bg);
       }
       .grow:hover .gc.rn {
         color: var(--text-dim);
@@ -1605,6 +1662,19 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      .sheet-tab .st-rename {
+        width: 84px;
+        min-width: 0;
+        padding: 0;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-family: var(--font-mono);
+        letter-spacing: inherit;
+        outline: none;
       }
       .sheet-tab .st-c {
         font-size: calc(9px * var(--fscale));
@@ -3156,6 +3226,9 @@
 
     <!-- ===== Context Menu ===== -->
     <div class="dropdown" id="dd-ctx"></div>
+
+    <!-- ===== Custom Select Popup（列类型等，替代浏览器内置 select 的候选区） ===== -->
+    <div class="dropdown csel-pop" id="csel-pop"></div>
 
     <!-- ===== Main ===== -->
     <div id="main">
@@ -7019,6 +7092,61 @@ notify pgrst, 'reload schema';</textarea
           DOM.sheetTabs.innerHTML = h
         }
 
+        /* 双击 sheet 名字：原地变成输入框，回车 / 失焦提交，Esc 取消 */
+        function startTabRename(tab) {
+          var tid = tab.dataset.tid
+          var tb = null
+          Store.tables.forEach(function (x) {
+            if (x.id === tid) tb = x
+          })
+          if (!tb) return
+          var nameEl = tab.querySelector('.st-n')
+          if (!nameEl || tab.querySelector('.st-rename')) return
+          var input = document.createElement('input')
+          input.className = 'st-rename'
+          input.value = tb.name
+          input.setAttribute('spellcheck', 'false')
+          nameEl.replaceWith(input)
+          input.focus()
+          input.select()
+          var finished = false
+          function finish(commit) {
+            if (finished) return
+            finished = true
+            var v = input.value.trim()
+            input.remove()
+            if (commit && v && v !== tb.name) {
+              pushUndo()
+              tb.name = v
+              afterChange()
+              notify(T('msg.renamed'))
+            } else {
+              /* 取消 / 没改：重建 tabs 恢复原始名字 */
+              renderTabs()
+            }
+          }
+          input.addEventListener('keydown', function (ev) {
+            /* 别让应用级快捷键在改名过程中触发 */
+            ev.stopPropagation()
+            if (ev.key === 'Enter') {
+              ev.preventDefault()
+              finish(true)
+            } else if (ev.key === 'Escape') {
+              ev.preventDefault()
+              finish(false)
+            }
+          })
+          input.addEventListener('blur', function () {
+            finish(true)
+          })
+          input.addEventListener('click', function (ev) {
+            ev.stopPropagation()
+          })
+          input.addEventListener('dblclick', function (ev) {
+            ev.stopPropagation()
+          })
+        }
+
         function renderCtxBar() {
           var h = ''
           if (S.filter.on) {
@@ -7209,6 +7337,8 @@ notify pgrst, 'reload schema';</textarea
           else if (move === 'left') S.sel = { r: e.r, c: Math.max(e.c - 1, 0) }
           else S.sel = { r: e.r, c: e.c }
           S.sel2 = null
+          /* 方向键 / Enter / Tab 跳转时同样保证新选区滚入视野 */
+          if (move) scrollToCell(S.sel.r, S.sel.c)
           afterChange()
         }
 
@@ -7222,11 +7352,16 @@ notify pgrst, 'reload schema';</textarea
         function scrollToCell(ri, ci) {
           var gs = DOM.gridScroll
           var pos = viewIdx().indexOf(ri)
-          if (pos < 0) return
-          var y = pos * S.rowH
-          if (y < gs.scrollTop) gs.scrollTop = y
-          else if (y + S.rowH > gs.scrollTop + gs.clientHeight - CONFIG.HEAD_H)
-            gs.scrollTop = y + S.rowH - gs.clientHeight + CONFIG.HEAD_H + 2
+          if (pos < 0) {
+            /* 筛选视图下该行不在结果集（例如刚自动补出的空行被条件过滤）：
+               退化为滚到底部，避免选区彻底离开视野 */
+            gs.scrollTop = gs.scrollHeight
+          } else {
+            var y = pos * S.rowH
+            if (y < gs.scrollTop) gs.scrollTop = y
+            else if (y + S.rowH > gs.scrollTop + gs.clientHeight - CONFIG.HEAD_H)
+              gs.scrollTop = y + S.rowH - gs.clientHeight + CONFIG.HEAD_H + 2
+          }
           if (ci >= 0) {
             var t = Store.active()
             var x = 56,
@@ -8546,25 +8681,18 @@ notify pgrst, 'reload schema';</textarea
                 ':' +
                 i +
                 '"></td>' +
-                '<td><select class="dd-select" data-ctype="' +
+                '<td><span class="csel" data-ctype="' +
                 tb.id +
                 ':' +
                 i +
-                '">' +
-                ['text', 'number', 'date', 'bool']
-                  .map(function (x) {
-                    return (
-                      '<option value="' +
-                      x +
-                      '"' +
-                      (c.type === x ? ' selected' : '') +
-                      '>' +
-                      x +
-                      '</option>'
-                    )
-                  })
-                  .join('') +
-                '</select></td>' +
+                '" data-val="' +
+                esc(c.type || 'text') +
+                '" role="button" tabindex="0" aria-haspopup="listbox">' +
+                '<span class="csel-v">' +
+                esc(c.type || 'text') +
+                '</span>' +
+                '<span class="csel-caret"></span>' +
+                '</span></td>' +
                 '<td>' +
                 stats[i].nul +
                 '</td><td>' +
@@ -8612,6 +8740,8 @@ notify pgrst, 'reload schema';</textarea
               if (['btn-grid', 'btn-sql', 'btn-schema'].indexOf(b.id) < 0)
                 b.classList.remove('active')
             })
+            /* 自定义下拉（列类型）同步收起：只摘 .open 会残留 trigger 上的高亮与内部状态 */
+            if (typeof Csel !== 'undefined' && Csel.close) Csel.close()
           },
           showDropdown: function (id, btn) {
             var dd = document.getElementById(id)
@@ -8645,6 +8775,92 @@ notify pgrst, 'reload schema';</textarea
           },
           closeModal: function () {
             DOM.modal.classList.remove('open')
+          },
+        }
+
+        /* ============================================================
+           15c. CUSTOM SELECT（列类型下拉：替代浏览器内置 select）
+           触发器是 .csel（renderSchema 渲染），候选区是 #csel-pop，
+           复用 .dropdown / .dd-item 的样式与 UIMgr 的开关体系。
+           ============================================================ */
+        var CSEL_TYPES = ['text', 'number', 'date', 'bool']
+        var Csel = {
+          trigger: null,
+          idx: -1,
+          isOpen: function () {
+            return DOM.cselPop.classList.contains('open')
+          },
+          open: function (trigger) {
+            var pop = DOM.cselPop
+            var cur = trigger.dataset.val || 'text'
+            var opts = CSEL_TYPES.slice()
+            /* 数据里出现了标准之外的类型（导入数据）：也列出来，保证可见即可改 */
+            if (opts.indexOf(cur) < 0) opts.unshift(cur)
+            var h = ''
+            opts.forEach(function (v) {
+              h +=
+                '<div class="dd-item' +
+                (v === cur ? ' selected' : '') +
+                '" data-cval="' +
+                esc(v) +
+                '" role="option">' +
+                esc(v) +
+                '</div>'
+            })
+            pop.innerHTML = h
+            Csel.trigger = trigger
+            Csel.idx = opts.indexOf(cur)
+            pop.classList.add('open')
+            trigger.classList.add('open')
+            Csel.position()
+          },
+          position: function () {
+            var pop = DOM.cselPop
+            var t = Csel.trigger
+            if (!t) return
+            var r = t.getBoundingClientRect()
+            var w = pop.offsetWidth || 88
+            var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 10))
+            var top = r.bottom + 4
+            if (top + pop.offsetHeight > window.innerHeight - 8)
+              top = Math.max(8, r.top - pop.offsetHeight - 4)
+            pop.style.left = left + 'px'
+            pop.style.top = top + 'px'
+          },
+          close: function () {
+            DOM.cselPop.classList.remove('open')
+            DOM.cselPop.style.left = '-9999px'
+            if (Csel.trigger) Csel.trigger.classList.remove('open')
+            Csel.trigger = null
+            Csel.idx = -1
+          },
+          move: function (d) {
+            var items = DOM.cselPop.querySelectorAll('.dd-item')
+            if (!items.length) return
+            Csel.idx = (Csel.idx + d + items.length) % items.length
+            Array.prototype.forEach.call(items, function (el, i) {
+              el.classList.toggle('selected', i === Csel.idx)
+            })
+          },
+          apply: function (val) {
+            var t = Csel.trigger
+            if (!t) return
+            var key = t.dataset.ctype
+            var parts = key.split(':')
+            var tb = null
+            Store.tables.forEach(function (x) {
+              if (x.id === parts[0]) tb = x
+            })
+            Csel.close()
+            if (!tb) return
+            var col = tb.cols[+parts[1]]
+            if (!col || col.type === val) return
+            pushUndo()
+            col.type = val
+            afterChange()
+            /* 重绘后焦点会丢，把焦点还给同一个字段的类型下拉，键盘操作能接着用 */
+            var nt = DOM.schemaList.querySelector('.csel[data-ctype="' + key + '"]')
+            if (nt) nt.focus()
           },
         }
 
@@ -10835,6 +11051,7 @@ notify pgrst, 'reload schema';</textarea
           DOM.resMsg = document.getElementById('res-msg')
           DOM.resMeta = document.getElementById('res-meta')
           DOM.ddCtx = document.getElementById('dd-ctx')
+          DOM.cselPop = document.getElementById('csel-pop')
           DOM.mMask = document.getElementById('m-mask')
           DOM.mSheet = document.getElementById('m-sheet')
 
@@ -11005,6 +11222,8 @@ notify pgrst, 'reload schema';</textarea
             })
 
           /* sheet tabs */
+          var lastTabTid = null
+          var lastTabAt = 0
           DOM.sheetTabs.addEventListener('click', function (e) {
             var x = e.target.closest('[data-del]')
             if (x) {
@@ -11013,7 +11232,17 @@ notify pgrst, 'reload schema';</textarea
             }
             var tab = e.target.closest('[data-tid]')
             if (!tab) return
-            Store.activeId = tab.dataset.tid
+            var tid = tab.dataset.tid
+            /* 双击改名：不能依赖原生 dblclick。
+               每次单击都会走 renderAll() → renderTabs() 重写 innerHTML，
+               tab 节点在两次单击之间已被替换，而 Chrome 只在两次点击命中
+               同一节点时才派发 dblclick（实测双击只会收到两次 click）。
+               改为按 tid + 时间间隔自己判定，与节点身份无关。 */
+            var now = Date.now()
+            var dbl = tid === lastTabTid && now - lastTabAt < 500
+            lastTabTid = tid
+            lastTabAt = now
+            Store.activeId = tid
             S.sel = { r: 0, c: 0 }
             S.sel2 = null
             S.find = null
@@ -11022,11 +11251,39 @@ notify pgrst, 'reload schema';</textarea
             S.filter.on = false
             S.filter.conds = []
             renderAll()
+            if (dbl) {
+              var cur = DOM.sheetTabs.querySelector('[data-tid="' + tid + '"]')
+              if (cur) startTabRename(cur)
+            }
+          })
+          /* 原生 dblclick 作为兜底：个别场景下（两次点击命中同一节点）浏览器
+             仍会派发，此时上面按点击判定已覆盖；两条路都进 startTabRename，
+             其内部对已存在的输入框有去重保护，不会重复触发 */
+          DOM.sheetTabs.addEventListener('dblclick', function (e) {
+            if (e.target.closest('[data-del]')) return
+            var tab = e.target.closest('[data-tid]')
+            if (!tab) {
+              var el =
+                typeof document.elementFromPoint === 'function'
+                  ? document.elementFromPoint(e.clientX, e.clientY)
+                  : null
+              if (el && el.closest('[data-del]')) return
+              tab = el && el.closest('[data-tid]')
+            }
+            if (!tab && lastTabTid)
+              tab = DOM.sheetTabs.querySelector('[data-tid="' + lastTabTid + '"]')
+            if (!tab) return
+            startTabRename(tab)
           })
 
           /* schema */
           DOM.schemaList.addEventListener('click', function (e) {
             e.stopPropagation()
+            /* schema 内的点击被这里拦下，冒泡不到 document 级的
+               “点在 .dropdown 之外就收起”，导致在这里点别处时打开的下拉不消失。
+               手动补一次；.csel 触发器由下面的专用 handler 负责开合，这里不碰，
+               否则再次点击同一触发器想收起时会被立刻重新打开。 */
+            if (!e.target.closest('.dropdown') && !e.target.closest('.csel')) UIMgr.closeDropdowns()
             var s = e.target.closest('[data-ctype]')
             if (s) return
             var d = e.target.closest('[data-cdel]')
@@ -11056,20 +11313,64 @@ notify pgrst, 'reload schema';</textarea
             var del = e.target.closest('[data-action="tableDel"]')
             if (del) ACTIONS.tableDel(del)
           })
-          DOM.schemaList.addEventListener('change', function (e) {
-            var s = e.target.closest('[data-ctype]')
-            if (s) {
-              var parts = s.dataset.ctype.split(':')
-              var tb = null
-              Store.tables.forEach(function (x) {
-                if (x.id === parts[0]) tb = x
-              })
-              if (!tb) return
-              pushUndo()
-              tb.cols[+parts[1]].type = s.value
-              afterChange()
+          /* 列类型下拉：点触发器开关；点候选项应用 */
+          DOM.schemaList.addEventListener('click', function (e) {
+            var trg = e.target.closest('.csel')
+            if (!trg) {
+              /* 点在 schema 列表其它地方：收起打开的类型下拉 */
+              if (Csel.isOpen()) Csel.close()
               return
             }
+            if (Csel.isOpen() && Csel.trigger === trg) Csel.close()
+            else {
+              UIMgr.closeDropdowns()
+              Csel.open(trg)
+            }
+          })
+          DOM.cselPop.addEventListener('click', function (e) {
+            var it = e.target.closest('[data-cval]')
+            if (!it) return
+            Csel.apply(it.dataset.cval)
+          })
+          /* 键盘：Enter / Space / 方向键操作自定义下拉 */
+          DOM.schemaList.addEventListener('keydown', function (e) {
+            var trg = e.target.closest('.csel')
+            if (!trg) return
+            var open = Csel.isOpen() && Csel.trigger === trg
+            if (e.key === 'Escape') {
+              if (open) {
+                e.preventDefault()
+                e.stopPropagation()
+                Csel.close()
+              }
+              return
+            }
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (open) {
+                var items = DOM.cselPop.querySelectorAll('.dd-item')
+                if (items[Csel.idx]) Csel.apply(items[Csel.idx].dataset.cval)
+              } else {
+                UIMgr.closeDropdowns()
+                Csel.open(trg)
+              }
+            } else if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault()
+              e.stopPropagation()
+              Csel.move(e.key === 'ArrowDown' ? 1 : -1)
+            } else if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault()
+              e.stopPropagation()
+              Csel.open(trg)
+            }
+          })
+          /* 列表滚动 / 窗口变化时收起：弹窗是固定定位的，不随内容移动 */
+          DOM.schemaList.addEventListener('scroll', function () {
+            if (Csel.isOpen()) Csel.close()
+          })
+          window.addEventListener('resize', function () {
+            if (Csel.isOpen()) Csel.close()
           })
           DOM.schemaList.addEventListener('input', function (e) {
             var cn = e.target.closest('[data-cname]')
@@ -11545,9 +11846,15 @@ notify pgrst, 'reload schema';</textarea
             }
           }
 
-          scrollToCell(S.sel.r, S.sel.c)
-          if (changed) afterChange()
-          else {
+          if (changed) {
+            /* 自动补了行 / 列：必须先重绘，让滚动范围（占位高度 / 内容宽度）
+               包含新行新列，再滚动定位。顺序反了的话，scrollTop / scrollLeft
+               会被旧的滚动上限截断，新选区落在视图外，必须手动滚动才能看见。 */
+            afterChange()
+            scrollToCell(S.sel.r, S.sel.c)
+            renderGrid()
+          } else {
+            scrollToCell(S.sel.r, S.sel.c)
             renderGrid()
             renderStatus()
           }

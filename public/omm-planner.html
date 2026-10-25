@@ -1499,6 +1499,32 @@
       #ed-past-row .hint {
         color: var(--text-dim);
       }
+      #ed-hidden-row .dd-item {
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        cursor: pointer;
+        user-select: none;
+      }
+      #ed-hidden-row .dd-item:hover {
+        border-color: var(--border);
+      }
+      #ed-hidden-row .hint {
+        color: var(--text-dim);
+      }
+      #ed-hidden-row .dd-item.on .hint {
+        color: var(--accent, #cc6600);
+        font-weight: 700;
+      }
+      .chip.is-hidden {
+        border-left-style: dashed;
+        border-left-color: var(--accent, #cc6600);
+        opacity: 0.9;
+      }
+      .ag-item.is-hidden {
+        border-left-style: dashed;
+        border-left-color: var(--accent, #cc6600);
+        opacity: 0.9;
+      }
       .pk-day.dis {
         color: var(--text-faint);
         opacity: 0.35;
@@ -4858,6 +4884,12 @@ notify pgrst, 'reload schema';</textarea
             <div class="ft-color-dot" data-color="#cc6600" style="background: #cc6600"></div>
           </div>
         </div>
+        <div class="ed-field" id="ed-hidden-row">
+          <div class="dd-item" id="ed-hidden-toggle" title="">
+            <span data-i18n="ed.hidden">隐藏内容（仅编辑页可见）</span
+            ><span class="hint" id="ed-hidden-hint">OFF</span>
+          </div>
+        </div>
       </div>
       <div class="ed-foot">
         <button
@@ -5251,6 +5283,9 @@ notify pgrst, 'reload schema';</textarea
             'ed.color': '颜色',
             'ed.repeat': '重复',
             'ed.past': '渲染基准日之前的重复',
+            'ed.hidden': '隐藏内容（仅编辑页可见）',
+            'ed.hiddenOn': '已隐藏：以占位符显示',
+            'ed.hiddenOff': '未隐藏',
             'ed.end': '截止日期',
             'ed.pickdates': '指定日期',
             'ed.tag': '标签 / 分类',
@@ -5574,6 +5609,9 @@ notify pgrst, 'reload schema';</textarea
             'ed.color': 'Color',
             'ed.repeat': 'Repeat',
             'ed.past': 'Render Pre-base Repeats',
+            'ed.hidden': 'Hide content (editor-only)',
+            'ed.hiddenOn': 'Hidden: shown as a placeholder',
+            'ed.hiddenOff': 'Not hidden',
             'ed.end': 'End Date',
             'ed.pickdates': 'Specific dates',
             'ed.tag': 'Tag / Category',
@@ -5881,6 +5919,15 @@ notify pgrst, 'reload schema';</textarea
           get edPastRow() {
             return document.getElementById('ed-past-row')
           },
+          get edHiddenToggle() {
+            return document.getElementById('ed-hidden-toggle')
+          },
+          get edHiddenHint() {
+            return document.getElementById('ed-hidden-hint')
+          },
+          get edHiddenRow() {
+            return document.getElementById('ed-hidden-row')
+          },
           get edEndRow() {
             return document.getElementById('ed-end-row')
           },
@@ -5927,6 +5974,13 @@ notify pgrst, 'reload schema';</textarea
           return String(text == null ? '' : text).replace(/[&<>"']/g, function (m) {
             return map[m]
           })
+        }
+
+        // 隐藏条目：除编辑页外，所有视图中的标题统一显示为占位符 •••••
+        const HIDDEN_MASK = '•••••'
+        function dispTitle(ev) {
+          if (ev && ev.hidden) return HIDDEN_MASK
+          return ev ? ev.title || '' : ''
         }
 
         function pad(n) {
@@ -6015,6 +6069,7 @@ notify pgrst, 'reload schema';</textarea
             priority: ['high', 'mid', 'low'].indexOf(e.priority) >= 0 ? e.priority : 'mid',
             tag: String(e.tag || ''),
             subtasks: normSubtasks(e.subtasks),
+            hidden: !!e.hidden,
             done: e.done === 'failed' ? 'failed' : !!e.done,
             created: e.created || 0,
             order: typeof e.order === 'number' ? e.order : e.created || 0,
@@ -6033,6 +6088,7 @@ notify pgrst, 'reload schema';</textarea
             priority: ['high', 'mid', 'low'].indexOf(r.priority) >= 0 ? r.priority : 'mid',
             tag: String(r.tag || ''),
             subtasks: normSubtasks(r.subtasks),
+            hidden: !!r.hidden,
             created: r.created || 0,
             order: typeof r.order === 'number' ? r.order : -1,
             renderPast: r.renderPast !== undefined ? !!r.renderPast : true,
@@ -6796,6 +6852,7 @@ notify pgrst, 'reload schema';</textarea
               color: r.color,
               priority: r.priority,
               tag: r.tag,
+              hidden: !!r.hidden,
               subtasks: r.subtasks,
               done: r.doneMap[ds] === true ? true : r.doneMap[ds] === 'failed' ? 'failed' : false,
               created: r.created || 0,
@@ -7224,6 +7281,7 @@ notify pgrst, 'reload schema';</textarea
             const isDone = ev.done === true
             const isFailed = ev.done === 'failed'
             const cls = ev.type === 'todo' && (isDone || isFailed) ? ' done' : ''
+            const secretCls = ev.hidden ? ' is-hidden' : ''
             const left =
               ev.type === 'todo'
                 ? '<span class="tbox' +
@@ -7239,10 +7297,14 @@ notify pgrst, 'reload schema';</textarea
                 '">↻</span>'
               : ''
             const note =
-              expanded && ev.note ? '<span class="chip-note">' + esc(ev.note) + '</span>' : ''
+              expanded && ev.note && !ev.hidden
+                ? '<span class="chip-note">' + esc(ev.note) + '</span>'
+                : ''
+            const secretAttr = ev.hidden ? ' title="' + esc(t('ed.hiddenOn')) + '"' : ''
             return (
               '<div class="chip' +
               cls +
+              secretCls +
               '" draggable="' +
               (ev._virt ? 'false' : 'true') +
               '" data-date="' +
@@ -7251,13 +7313,15 @@ notify pgrst, 'reload schema';</textarea
               ev.id +
               '" style="--c:' +
               ev.color +
-              '">' +
+              '"' +
+              secretAttr +
+              '>' +
               left +
               time +
               Render.badgesHTML(ev) +
               rep +
               '<span class="chip-title">' +
-              esc(ev.title) +
+              esc(dispTitle(ev)) +
               '</span>' +
               Render.progressHTML(ev) +
               note +
@@ -7427,6 +7491,7 @@ notify pgrst, 'reload schema';</textarea
                 const isDone = ev.done === true
                 const isFailed = ev.done === 'failed'
                 const cls = ev.type === 'todo' && (isDone || isFailed) ? ' done' : ''
+                const secretCls = ev.hidden ? ' is-hidden' : ''
                 const left =
                   ev.type === 'todo'
                     ? '<span class="tbox' +
@@ -7436,12 +7501,16 @@ notify pgrst, 'reload schema';</textarea
                       '</span>'
                     : '<span class="tdot"></span>'
                 const time = ev.time ? '<span class="chip-time">' + esc(ev.time) + '</span>' : ''
+                const secretAttr = ev.hidden ? ' title="' + esc(t('ed.hiddenOn')) + '"' : ''
                 rows +=
                   '<div class="ag-item' +
                   cls +
+                  secretCls +
                   '" style="--c:' +
                   ev.color +
-                  '">' +
+                  '"' +
+                  secretAttr +
+                  '>' +
                   left +
                   time +
                   '<div class="ag-main"><span class="ag-title">' +
@@ -7450,10 +7519,12 @@ notify pgrst, 'reload schema';</textarea
                       esc(t('rep.' + (ev._mode || 'daily'))) +
                       '">↻</span>'
                     : '') +
-                  esc(ev.title) +
+                  esc(dispTitle(ev)) +
                   '</span>' +
                   Render.progressHTML(ev) +
-                  (ev.note ? '<span class="ag-note">' + esc(ev.note) + '</span>' : '') +
+                  (ev.note && !ev.hidden
+                    ? '<span class="ag-note">' + esc(ev.note) + '</span>'
+                    : '') +
                   '</div>' +
                   '<span style="display:flex;gap:4px;flex-shrink:0">' +
                   Render.badgesHTML(ev) +
@@ -7662,6 +7733,7 @@ notify pgrst, 'reload schema';</textarea
                 color: '#888888',
                 priority: 'mid',
                 tag: '',
+                hidden: false,
                 subtasks: [],
               }
             }
@@ -7706,6 +7778,8 @@ notify pgrst, 'reload schema';</textarea
             DOM.edTitle.value = ev.title || ''
             DOM.edNote.value = ev.note || ''
             DOM.edTag.value = ev.tag || ''
+            S.edHidden = !!ev.hidden
+            Editor.syncHiddenHint()
             Editor.fillTagSuggestions()
             Editor.renderSubs()
             DOM.edColors.querySelectorAll('.ft-color-dot').forEach(function (dotEl) {
@@ -7834,6 +7908,13 @@ notify pgrst, 'reload schema';</textarea
           syncPastHint() {
             DOM.edPastHint.textContent = S.edRenderPast ? t('on') : t('off')
           },
+          syncHiddenHint() {
+            const on = !!S.edHidden
+            DOM.edHiddenHint.textContent = on ? t('on') : t('off')
+            if (DOM.edHiddenToggle) DOM.edHiddenToggle.classList.toggle('on', on)
+            if (DOM.edHiddenToggle)
+              DOM.edHiddenToggle.title = on ? t('ed.hiddenOn') : t('ed.hiddenOff')
+          },
           syncRepeatRows() {
             const m = S.edRepeat
             DOM.edPastRow.style.display = m === 'none' ? 'none' : ''
@@ -7876,6 +7957,7 @@ notify pgrst, 'reload schema';</textarea
               color: Editor.currentColor(),
               priority: Editor.currentPriority(),
               tag: DOM.edTag.value.trim(),
+              hidden: !!S.edHidden,
               subtasks: S.edSubs
                 .filter(function (s) {
                   return s.title.trim()
@@ -8629,7 +8711,7 @@ notify pgrst, 'reload schema';</textarea
                 r.ev.color +
                 '"></span>' +
                 '<span class="sr-title">' +
-                esc(r.ev.title) +
+                esc(dispTitle(r.ev)) +
                 '</span>' +
                 '<span class="sr-type">' +
                 esc(typeName[r.ev.type] || '') +
@@ -10294,6 +10376,10 @@ notify pgrst, 'reload schema';</textarea
           DOM.edPastToggle.addEventListener('click', function () {
             S.edRenderPast = !S.edRenderPast
             Editor.syncPastHint()
+          })
+          DOM.edHiddenToggle.addEventListener('click', function () {
+            S.edHidden = !S.edHidden
+            Editor.syncHiddenHint()
           })
           DOM.edSubs.addEventListener('click', function (e) {
             e.stopPropagation()
