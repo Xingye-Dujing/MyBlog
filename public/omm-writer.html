@@ -4943,7 +4943,8 @@ notify pgrst, 'reload schema';</textarea
             'menu.reset': 'RESET',
             'menu.resetView': 'RESET ZOOM',
             'menu.autoLayout': 'LAYOUT',
-            'menu.autoLayoutTitle': 'Auto-arrange every node into a tidy top-down tree',
+            'menu.autoLayoutTitle':
+              'Auto-arrange by connections: layer each block, then pack the blocks side by side',
             'menu.fitView': 'FIT',
             'menu.fitViewTitle': 'Fit the whole canvas into the window',
             'menu.settings': 'SETTINGS',
@@ -5233,7 +5234,7 @@ notify pgrst, 'reload schema';</textarea
             'menu.reset': '重置',
             'menu.resetView': '重置缩放',
             'menu.autoLayout': '自动布局',
-            'menu.autoLayoutTitle': '把所有节点自动排成整齐的下行树',
+            'menu.autoLayoutTitle': '按连线分块排版：块内分层、长线走空隙，块与块并排',
             'menu.fitView': '适应',
             'menu.fitViewTitle': '让整张画布适应窗口显示',
             'menu.settings': '设置',
@@ -9776,6 +9777,1028 @@ notify pgrst, 'reload schema';</textarea
           },
         }
 
+        // ==== AUTO-LAYOUT CORE BEGIN ====
+        // ----------------------------------------------------------------
+        // 自动布局核心（纯函数，不碰 DOM）
+        // ----------------------------------------------------------------
+        // 排布只认连线，不认节点创建顺序：
+        //   1) 先按连通性分块（连在一起的就是一块），块内单独排，
+        //      最后把块按面积从大到小货架式并排摆放；
+        //   2) 块内按端口朝向分层：bottom→top 这类竖直连线决定谁上谁下，
+        //      right→left 这类水平连线要求两端同一层，并在层内挨着站；
+        //   3) 跨多层的长连线在中间层插一个虚拟通道，两端和通道硬对齐成
+        //      一条直线，长线于是只走层与层之间的空隙，不会压在节点上；
+        //   4) 层内顺序用中位数扫描 + 相邻交换消交叉，层与层之间留出整条
+        //      水平空隙；层内统一竖直居中，同一层的端口中心自然对齐；
+        //   5) 最后拿真正会画出来的那条贝塞尔曲线采样复核，发现贴到节点就
+        //      换位/加大间距后重排，直到没有遮挡为止（有轮数上限）。
+        // 入参：nodes = [{ id, w, h }]，conns = [{ from, to, fromPort, toPort }]
+        // 出参：{ items: [{ id, x, y }], w, h, ports: { [连线key]: 端口覆盖 } }
+        // 其中 ports 只对「实在绕不开、必须换端口朝向」的极少数连线给值。
+        function computeCanvasLayout(nodes, conns, opts) {
+          const opt = opts || {}
+          const COL_GAP = opt.colGap || 56 // 层内相邻节点之间的水平净距
+          const ROW_GAP = opt.rowGap || 76 // 相邻两层之间的垂直净距
+          const COMP_GAP = opt.compGap || 150 // 互不相连的块之间的净距
+          const DUMMY_W = 16 // 跨层连线在中间层占的通道宽度
+          const DUMMY_H = 8
+          const SWEEPS = 12 // 消交叉扫描轮数
+          const REPAIRS = 10 // 「复核—修复」轮数上限
+          const SAFE = 6 // 复核时连线与节点之间至少留出的余量
+          const SAMPLES = 56 // 每条连线采样段数
+          const MAX_HALO = 640 // 单个节点最多额外撑开多少间距
+          const MIN_GAP = Math.max(16, Math.round(COL_GAP * 0.4)) // 硬对齐时允许压到的最小净距
+
+          const isVertPort = (p) => p === 'top' || p === 'bottom'
+          const isHorzPort = (p) => p === 'left' || p === 'right'
+
+          // ---------- 0. 输入整理：节点尺寸、去重后的连线 ----------
+          const nodeById = new Map()
+          nodes.forEach((n) => {
+            nodeById.set(n.id, { id: n.id, w: Math.max(1, n.w || 0), h: Math.max(1, n.h || 0) })
+          })
+
+          const edges = []
+          const seenEdge = new Set()
+          ;(conns || []).forEach((c) => {
+            if (!c || !nodeById.has(c.from) || !nodeById.has(c.to) || c.from === c.to) return
+            const fromPort = c.fromPort || 'bottom'
+            const toPort = c.toPort || 'top'
+            const key = c.from + '>' + c.to + ':' + fromPort + ':' + toPort
+            if (seenEdge.has(key)) return
+            seenEdge.add(key)
+            edges.push({ key, from: c.from, to: c.to, fromPort, toPort })
+          })
+
+          // 端口定朝向：竖直型 V / 水平型 H / 拐弯型 M，
+          // 并推断排布意义上的上下、左右两端（只看画法，不看箭头方向）。
+          edges.forEach((e) => {
+            const fv = isVertPort(e.fromPort)
+            const tv = isVertPort(e.toPort)
+            e.kind = fv && tv ? 'V' : !fv && !tv ? 'H' : 'M'
+            if (e.kind === 'H') {
+              if (e.fromPort === 'right' && e.toPort !== 'right') {
+                e.left = e.from
+                e.right = e.to
+              } else if (e.toPort === 'right' && e.fromPort !== 'right') {
+                e.left = e.to
+                e.right = e.from
+              } else if (e.fromPort === 'left') {
+                e.left = e.to
+                e.right = e.from
+              } else {
+                e.left = e.from
+                e.right = e.to
+              }
+            } else {
+              const vId = fv ? e.from : e.to
+              const oId = fv ? e.to : e.from
+              const vPort = fv ? e.fromPort : e.toPort
+              // bottom（线从下面走）的一端在上；top 的一端在下
+              e.up = vPort === 'top' ? oId : vId
+              e.down = vPort === 'top' ? vId : oId
+            }
+          })
+
+          // ---------- 1. 分块：互不相连的节点各成一块 ----------
+          const adj = new Map()
+          nodes.forEach((n) => adj.set(n.id, []))
+          edges.forEach((e) => {
+            adj.get(e.from).push(e.to)
+            adj.get(e.to).push(e.from)
+          })
+          const comps = []
+          const walked = new Set()
+          nodes.forEach((n) => {
+            if (walked.has(n.id)) return
+            walked.add(n.id)
+            const queue = [n.id]
+            const ids = []
+            while (queue.length) {
+              const id = queue.shift()
+              ids.push(id)
+              adj.get(id).forEach((nb) => {
+                if (walked.has(nb)) return
+                walked.add(nb)
+                queue.push(nb)
+              })
+            }
+            comps.push(ids)
+          })
+
+          // ---------- 2. 逐块排布 ----------
+          const blocks = comps.map((ids) => layoutBlock(ids))
+          blocks.sort((a, b) => b.w * b.h - a.w * a.h)
+          const totalArea = blocks.reduce((s, b) => s + (b.w + COMP_GAP) * (b.h + COMP_GAP), 0)
+          const maxBlockW = blocks.reduce((m, b) => Math.max(m, b.w), 0)
+          const shelfW = Math.max(maxBlockW, Math.sqrt(totalArea) * 1.3)
+          const positions = []
+          const ports = {}
+          let cursorX = 0
+          let cursorY = 0
+          let shelfH = 0
+          blocks.forEach((b) => {
+            if (cursorX > 0 && cursorX + b.w > shelfW) {
+              cursorX = 0
+              cursorY += shelfH + COMP_GAP
+              shelfH = 0
+            }
+            b.items.forEach((it) => {
+              positions.push({ id: it.id, x: it.x + cursorX, y: it.y + cursorY })
+            })
+            Object.assign(ports, b.ports)
+            cursorX += b.w + COMP_GAP
+            if (b.h > shelfH) shelfH = b.h
+          })
+          let outW = 0
+          let outH = 0
+          positions.forEach((p) => {
+            const n = nodeById.get(p.id)
+            if (!n) return
+            if (p.x + n.w > outW) outW = p.x + n.w
+            if (p.y + n.h > outH) outH = p.y + n.h
+          })
+          return { items: positions, w: outW, h: outH, ports: ports }
+
+          // ================================================================
+          // 单块排布：分层 → 行内定序 → 逐层定位 → 复核修复
+          // ================================================================
+          function layoutBlock(ids) {
+            const inBlock = new Set(ids)
+            const own = edges.filter((e) => inBlock.has(e.from) && inBlock.has(e.to))
+            const itemOf = new Map()
+            ids.forEach((id) => {
+              const n = nodeById.get(id)
+              itemOf.set(id, {
+                key: id,
+                id: id,
+                real: true,
+                w: n.w,
+                h: n.h,
+                row: 0,
+                halo: 0,
+                preds: [],
+                succs: [],
+              })
+            })
+
+            // 每个节点在本块里的连接数（判断「只连了一条线」的叶子和 1:1）
+            const deg = new Map()
+            ids.forEach((id) => deg.set(id, 0))
+            own.forEach((e) => {
+              deg.set(e.from, deg.get(e.from) + 1)
+              deg.set(e.to, deg.get(e.to) + 1)
+            })
+
+            // 2.1 水平连线：一个节点在同一层里最多左右各一条，多余的、
+            //     或者会串成环的先降级成普通连线，免得一行被挤成一大团。
+            const hKeep = new Set()
+            const hDeg = new Map()
+            const uf = new Map()
+            ids.forEach((id) => {
+              hDeg.set(id, 0)
+              uf.set(id, id)
+            })
+            const find = (x) => {
+              while (uf.get(x) !== x) x = uf.get(x)
+              return x
+            }
+            own.forEach((e) => {
+              if (e.kind !== 'H') return
+              if (hDeg.get(e.left) >= 2 || hDeg.get(e.right) >= 2) return
+              if (find(e.left) === find(e.right)) return
+              uf.set(find(e.left), find(e.right))
+              hDeg.set(e.left, hDeg.get(e.left) + 1)
+              hDeg.set(e.right, hDeg.get(e.right) + 1)
+              hKeep.add(e)
+            })
+            const upDownEdges = []
+            own.forEach((e) => {
+              if (e.kind !== 'H' || hKeep.has(e)) return
+              e.loose = true
+              e.up = e.left
+              e.down = e.right
+            })
+            own.forEach((e) => {
+              if (e.kind !== 'H' || e.loose) upDownEdges.push(e)
+            })
+
+            // 2.2 分层：竖直连线按「上→下」做最长路径分层。端口互相打架
+            //     形成环时，按入度最小的节点破环；被破的连线只画线，
+            //     不参与分层（端点不互相约束）。
+            const succAll = new Map()
+            const predAll = new Map()
+            const indeg = new Map()
+            ids.forEach((id) => {
+              succAll.set(id, [])
+              predAll.set(id, [])
+              indeg.set(id, 0)
+            })
+            upDownEdges.forEach((e) => {
+              if (e.up === e.down) return
+              succAll.get(e.up).push({ id: e.down, e: e })
+              predAll.get(e.down).push({ id: e.up, e: e })
+              indeg.set(e.down, indeg.get(e.down) + 1)
+            })
+            const rank = new Map()
+            ids.forEach((id) => rank.set(id, 0))
+            const cut = new Set()
+            const rankDone = new Set()
+            const queue = ids.filter((id) => indeg.get(id) === 0)
+            let processed = 0
+            while (processed < ids.length) {
+              while (queue.length) {
+                const u = queue.shift()
+                if (rankDone.has(u)) continue
+                rankDone.add(u)
+                processed++
+                succAll.get(u).forEach((link) => {
+                  if (cut.has(link.e)) return
+                  rank.set(link.id, Math.max(rank.get(link.id), rank.get(u) + 1))
+                  indeg.set(link.id, indeg.get(link.id) - 1)
+                  if (indeg.get(link.id) === 0) queue.push(link.id)
+                })
+              }
+              if (processed >= ids.length) break
+              let pick = null
+              ids.forEach((id) => {
+                if (rankDone.has(id) || indeg.get(id) <= 0) return
+                if (pick === null || indeg.get(id) < indeg.get(pick)) pick = id
+              })
+              if (pick === null) break
+              predAll.get(pick).forEach((link) => {
+                if (cut.has(link.e) || rankDone.has(link.id)) return
+                cut.add(link.e)
+                indeg.set(pick, indeg.get(pick) - 1)
+              })
+              queue.push(pick)
+            }
+
+            // 2.3 水平连线要求两端同一层：把两端统一到较大的层号，
+            //     再把这个层号往下传（层号只增不减，必然收敛）。
+            //     若两端本身已经隔着一条有向路径（端口互相打架），
+            //     同一层是登不上的，直接降级成普通连线。
+            const bumpQueue = []
+            const buildRankSucc = () => {
+              const map = new Map()
+              ids.forEach((id) => map.set(id, []))
+              upDownEdges.forEach((e) => {
+                if (e.up === e.down || cut.has(e)) return
+                map.get(e.up).push(e.down)
+              })
+              return map
+            }
+            const reachable = (from, to) => {
+              const seen = new Set([from])
+              const stack = [from]
+              while (stack.length) {
+                const u = stack.pop()
+                if (u === to) return true
+                succAll.get(u).forEach((link) => {
+                  if (cut.has(link.e) || seen.has(link.id)) return
+                  seen.add(link.id)
+                  stack.push(link.id)
+                })
+              }
+              return false
+            }
+            hKeep.forEach((e) => {
+              if (!reachable(e.left, e.right) && !reachable(e.right, e.left)) return
+              hKeep.delete(e)
+              e.loose = true
+              // 端点之间有路径时，长在上游的那端才是排布意义上的「上面」
+              if (reachable(e.right, e.left)) {
+                e.up = e.right
+                e.down = e.left
+              } else {
+                e.up = e.left
+                e.down = e.right
+              }
+              upDownEdges.push(e)
+            })
+            let rankSucc = buildRankSucc()
+            let bumpCount = 0
+            const bump = (id, r) => {
+              if (rank.get(id) >= r) return
+              rank.set(id, r)
+              bumpQueue.push(id)
+            }
+            const drain = () => {
+              while (bumpQueue.length && bumpCount < ids.length * ids.length + 256) {
+                bumpCount++
+                const u = bumpQueue.shift()
+                rankSucc.get(u).forEach((v) => bump(v, rank.get(u) + 1))
+              }
+              bumpQueue.length = 0
+            }
+            let hGuard = 0
+            for (;;) {
+              let changed = false
+              hKeep.forEach((e) => {
+                const a = rank.get(e.left)
+                const b = rank.get(e.right)
+                if (a === b) return
+                const r = Math.max(a, b)
+                bump(e.left, r)
+                bump(e.right, r)
+                changed = true
+              })
+              drain()
+              if (!changed || hGuard++ > ids.length * 2 + 8) break
+            }
+            // 统一不上去的（极少数）降级成普通连线，交给复核与端口兜底
+            hKeep.forEach((e) => {
+              if (rank.get(e.left) === rank.get(e.right)) return
+              hKeep.delete(e)
+              e.loose = true
+              if (reachable(e.right, e.left)) {
+                e.up = e.right
+                e.down = e.left
+              } else {
+                e.up = e.left
+                e.down = e.right
+              }
+              upDownEdges.push(e)
+            })
+            rankSucc = buildRankSucc()
+            bumpCount = 0
+            upDownEdges.forEach((e) => {
+              if (e.up === e.down) return
+              bump(e.down, rank.get(e.up) + 1)
+            })
+            drain()
+
+            // 2.4 行结构：真实节点按层入行，跨层连线在中间层插虚拟通道
+            let maxRank = 0
+            ids.forEach((id) => {
+              const r = rank.get(id)
+              itemOf.get(id).row = r
+              if (r > maxRank) maxRank = r
+            })
+            const rows = []
+            for (let r = 0; r <= maxRank; r++) rows.push([])
+            ids.forEach((id) => rows[itemOf.get(id).row].push(itemOf.get(id)))
+            let dummySeq = 0
+            upDownEdges.forEach((e) => {
+              if (e.up === e.down || cut.has(e)) return
+              const ru = rank.get(e.up)
+              const rv = rank.get(e.down)
+              if (rv <= ru) return
+              let prev = itemOf.get(e.up)
+              for (let r = ru + 1; r < rv; r++) {
+                const dummy = {
+                  key: '__d' + dummySeq++,
+                  id: null,
+                  real: false,
+                  w: DUMMY_W,
+                  h: DUMMY_H,
+                  row: r,
+                  halo: 0,
+                  chain: e,
+                  preds: [],
+                  succs: [],
+                }
+                rows[r].push(dummy)
+                dummy.preds.push(prev)
+                prev.succs.push(dummy)
+                prev = dummy
+              }
+              const tail = itemOf.get(e.down)
+              tail.preds.push(prev)
+              prev.succs.push(tail)
+            })
+
+            // 2.5 层内顺序：先按父节点位置铺下来，再中位数扫描 + 相邻交换
+            //     消交叉，取交叉最少的一版。
+            const median = (arr) => {
+              if (!arr.length) return null
+              const s = arr.slice().sort((a, b) => a - b)
+              const m = s.length >> 1
+              return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+            }
+            rows.forEach((row) => row.forEach((it, i) => (it.pos = i)))
+            for (let r = 1; r < rows.length; r++) {
+              rows[r].forEach((it) => {
+                it._k = it.preds.length
+                  ? it.preds.reduce((s, p) => s + p.pos, 0) / it.preds.length
+                  : it.pos
+              })
+              rows[r].sort((a, b) => a._k - b._k)
+              rows[r].forEach((it, i) => (it.pos = i))
+            }
+            const sweep = (r, usePred) => {
+              const row = rows[r]
+              row.forEach((it) => {
+                const nb = usePred ? it.preds : it.succs
+                it._m = nb.length ? median(nb.map((p) => p.pos)) : null
+              })
+              row.sort((a, b) => (a._m === null ? a.pos : a._m) - (b._m === null ? b.pos : b._m))
+              row.forEach((it, i) => (it.pos = i))
+            }
+            const countCross = () => {
+              let total = 0
+              for (let r = 0; r + 1 < rows.length; r++) {
+                const pairs = []
+                rows[r + 1].forEach((v) => v.preds.forEach((p) => pairs.push([p.pos, v.pos])))
+                if (pairs.length < 2) continue
+                pairs.sort((x, y) => x[0] - y[0] || x[1] - y[1])
+                const n = rows[r + 1].length + 1
+                const bit = new Array(n + 1).fill(0)
+                const add = (i) => {
+                  for (i += 1; i <= n; i += i & -i) bit[i]++
+                }
+                const sum = (i) => {
+                  let s = 0
+                  for (i += 1; i > 0; i -= i & -i) s += bit[i]
+                  return s
+                }
+                for (let i = pairs.length - 1; i >= 0; i--) {
+                  total += sum(pairs[i][1] - 1)
+                  add(pairs[i][1])
+                }
+              }
+              return total
+            }
+            let bestRows = rows.map((row) => row.slice())
+            let bestCross = countCross()
+            for (let it = 0; it < SWEEPS && bestCross > 0; it++) {
+              if (it % 2 === 0) for (let r = 1; r < rows.length; r++) sweep(r, true)
+              else for (let r = rows.length - 2; r >= 0; r--) sweep(r, false)
+              const c = countCross()
+              if (c < bestCross) {
+                bestCross = c
+                bestRows = rows.map((row) => row.slice())
+              }
+            }
+            rows.forEach((row, r) => {
+              rows[r] = bestRows[r]
+              rows[r].forEach((it, i) => (it.pos = i))
+            })
+
+            // 2.6 水平连线的两端在层内必须挨着，否则线会从别人身上穿过去；
+            //     把每一簇水平连线的节点收拢成连续的一小段。
+            const hPair = new Map()
+            hKeep.forEach((e) => {
+              const a = itemOf.get(e.left)
+              const b = itemOf.get(e.right)
+              if (!a || !b || a.row !== b.row) return
+              if (!hPair.has(a.key)) hPair.set(a.key, [])
+              if (!hPair.has(b.key)) hPair.set(b.key, [])
+              hPair.get(a.key).push(b.key)
+              hPair.get(b.key).push(a.key)
+            })
+            rows.forEach((row, r) => {
+              if (row.length < 2) return
+              const byKey = new Map(row.map((it) => [it.key, it]))
+              const oldIdx = new Map(row.map((it, i) => [it.key, i]))
+              const used = new Set()
+              const next = []
+              row.forEach((it) => {
+                if (used.has(it.key)) return
+                const partners = hPair.get(it.key)
+                if (!partners || !partners.length) {
+                  used.add(it.key)
+                  next.push(it)
+                  return
+                }
+                const cluster = []
+                const stack = [it.key]
+                used.add(it.key)
+                while (stack.length) {
+                  const k = stack.pop()
+                  cluster.push(k)
+                  ;(hPair.get(k) || []).forEach((nk) => {
+                    if (used.has(nk)) return
+                    used.add(nk)
+                    stack.push(nk)
+                  })
+                }
+                const inCluster = new Set(cluster)
+                let head = cluster.find(
+                  (k) => (hPair.get(k) || []).filter((nk) => inCluster.has(nk)).length <= 1,
+                )
+                if (head == null) head = cluster[0]
+                const order = []
+                const seen = new Set()
+                let cur = head
+                while (cur != null) {
+                  order.push(cur)
+                  seen.add(cur)
+                  const nk = (hPair.get(cur) || []).find((k) => inCluster.has(k) && !seen.has(k))
+                  cur = nk == null ? null : nk
+                }
+                if (
+                  order.length > 1 &&
+                  oldIdx.get(order[0]) > oldIdx.get(order[order.length - 1])
+                ) {
+                  order.reverse()
+                }
+                order.forEach((k) => next.push(byKey.get(k)))
+              })
+              rows[r] = next
+              rows[r].forEach((it, i) => (it.pos = i))
+            })
+
+            // 2.7 行高与行距：层内统一居中（同一层的端口中心自然对齐），
+            //     行与行之间留出整条水平空隙给连线走。
+            const rowH = rows.map((row) => row.reduce((m, it) => Math.max(m, it.h), 1))
+            const rowTop = []
+            let stackY = 0
+            rows.forEach((row, r) => {
+              rowTop[r] = stackY
+              stackY += rowH[r] + ROW_GAP
+            })
+            rows.forEach((row, r) => {
+              row.forEach((it) => {
+                it.y = rowTop[r] + (rowH[r] - it.h) / 2
+              })
+            })
+
+            // 2.8 逐层定位：硬对齐（长连线的通道、只连一条线的叶子）一定落在
+            //     目标中心上，绝不因为左边的邻居被推歪；普通节点在两段硬对齐
+            //     之间尽量向父节点中心靠。行内只准让位，不准交叉重叠。
+            const gapTo = (a, b) => COL_GAP + (a.halo || 0) + (b.halo || 0)
+            // 硬对齐的项可以把它和左边邻居的净距压到 MIN_GAP（仍然不会重叠），
+            // 这样「两边都要精确对齐、目标只差一点点」时不用牺牲其中一条线。
+            const gapHard = (a, b) => MIN_GAP + (a.halo || 0) + (b.halo || 0)
+            const solveRow = (row) => {
+              if (!row.length) return
+              const wantLeft = (it) =>
+                it.pin != null ? it.pin - it.w / 2 : it.desire != null ? it.desire - it.w / 2 : null
+              const leftLimit = (i) => {
+                if (i <= 0) return -Infinity
+                const prev = row[i - 1]
+                return (
+                  prev.x +
+                  prev.w +
+                  (row[i].pin != null ? gapHard(prev, row[i]) : gapTo(prev, row[i]))
+                )
+              }
+              // 左→右：硬对齐（一对一的叶子、长连线的通道）要精确落在目标上。
+              // 左边顶住了，先把「上一个硬对齐之后的那一段」整体往左挪（整行
+              // 可以向左延伸，不遮挡就行）；硬对齐还可以和左邻居压到 MIN_GAP；
+              // 实在放不下才降级成普通期望 —— 比如一个父节点下挂好几个孩子，
+              // 都想对齐到同一个中心，那就只有第一个对得上，其余自然排开。
+              let lastPin = -1
+              row.forEach((it, i) => {
+                let want = wantLeft(it)
+                if (i > 0) {
+                  let limit = leftLimit(i)
+                  if (it.pin != null && want != null && want < limit - 0.5) {
+                    const prevPin = lastPin >= 0 ? row[lastPin] : null
+                    const first = prevPin ? row[lastPin + 1] : null
+                    const room =
+                      prevPin && first
+                        ? first.x -
+                          (prevPin.x +
+                            prevPin.w +
+                            (first.pin != null ? gapHard(prevPin, first) : gapTo(prevPin, first)))
+                        : Infinity
+                    const shift = Math.min(limit - want, Math.max(0, room))
+                    if (shift > 0.5) {
+                      for (let k = lastPin + 1; k < i; k++) row[k].x -= shift
+                      limit = leftLimit(i)
+                    }
+                    if (want < limit - 0.5) {
+                      it.pin = null
+                      if (it.desire == null) it.desire = want + it.w / 2
+                      want = wantLeft(it)
+                      limit = leftLimit(i)
+                    }
+                  }
+                  it.x = want == null ? limit : Math.max(limit, want)
+                } else {
+                  it.x = want == null ? 0 : want
+                }
+                if (it.pin != null) lastPin = i
+              })
+              // 右→左：没有硬对齐的往期望位置收，但不能挤到两边邻居
+              for (let i = row.length - 2; i >= 0; i--) {
+                const it = row[i]
+                if (it.pin != null) continue
+                const right = row[i + 1]
+                const lb = leftLimit(i)
+                const rb =
+                  right.x - it.w - (right.pin != null ? gapHard(it, right) : gapTo(it, right))
+                const want = it.desire != null ? it.desire - it.w / 2 : it.x
+                it.x = Math.max(lb, Math.min(Math.max(want, lb), rb))
+              }
+            }
+
+            const placeAll = () => {
+              rows.forEach((row) => {
+                row.forEach((it) => {
+                  it.pin = null
+                  it.desire = null
+                  it.anchor = null
+                  if (!it.preds.length) return
+                  const chained = it.preds.filter((p) => !p.real)
+                  if (!it.real) {
+                    // 虚拟通道：永远对齐到链首（源头节点中心，逐段传下来）
+                    const src = it.preds.find((p) => p.anchor != null)
+                    it.anchor = src ? src.anchor : it.preds[0].x + it.preds[0].w / 2
+                    it.pin = it.anchor
+                  } else if (chained.length) {
+                    // 长连线的末端：同样对齐链首，整条线才是一条直线
+                    const src = chained.find((p) => p.anchor != null)
+                    it.anchor = src ? src.anchor : chained[0].x + chained[0].w / 2
+                    it.pin = it.anchor
+                  } else if (
+                    it.preds.length === 1 &&
+                    (deg.get(it.id) === 1 || deg.get(it.preds[0].id) === 1)
+                  ) {
+                    // 一对一的连线（这一端或者那一端只连了这一条线）：硬对齐到
+                    // 父节点中心，连线就是一条竖直直线（摆不下时会自动降级）
+                    it.pin = it.preds[0].x + it.preds[0].w / 2
+                  } else {
+                    it.desire = it.preds.reduce((s, p) => s + p.x + p.w / 2, 0) / it.preds.length
+                  }
+                })
+                solveRow(row)
+              })
+            }
+            const portXY = (it, port) => {
+              const cx = it.x + it.w / 2
+              const cy = it.y + it.h / 2
+              if (port === 'top') return { x: cx, y: it.y }
+              if (port === 'bottom') return { x: cx, y: it.y + it.h }
+              if (port === 'left') return { x: it.x, y: cy }
+              if (port === 'right') return { x: it.x + it.w, y: cy }
+              return { x: cx, y: cy }
+            }
+            // 与 ConnectionManager._getCurvePath 完全一致的控制点，采样成折线
+            const edgeSamples = (e) => {
+              const aIt = itemOf.get(e.from)
+              const bIt = itemOf.get(e.to)
+              const p1 = portXY(aIt, e.fromPort)
+              const p2 = portXY(bIt, e.toPort)
+              const dx = p2.x - p1.x
+              const dy = p2.y - p1.y
+              const h1 = isHorzPort(e.fromPort)
+              const h2 = isHorzPort(e.toPort)
+              const v1 = isVertPort(e.fromPort)
+              const v2 = isVertPort(e.toPort)
+              let c1x = p1.x
+              let c1y = p1.y
+              let c2x = p2.x
+              let c2y = p2.y
+              if (h1 && h2) {
+                const mid = (p1.x + p2.x) / 2
+                c1x = mid
+                c1y = p1.y
+                c2x = mid
+                c2y = p2.y
+              } else if (v1 && v2) {
+                const mid = (p1.y + p2.y) / 2
+                c1x = p1.x
+                c1y = mid
+                c2x = p2.x
+                c2y = mid
+              } else if (h1 && v2) {
+                c1x = p1.x
+                c1y = p1.y + dy * 0.5
+                c2x = p1.x + dx * 0.5
+                c2y = p2.y
+              } else {
+                c1x = p1.x + dx * 0.5
+                c1y = p1.y
+                c2x = p2.x
+                c2y = p1.y + dy * 0.5
+              }
+              const pts = []
+              for (let i = 0; i <= SAMPLES; i++) {
+                const t = i / SAMPLES
+                const u = 1 - t
+                pts.push({
+                  x:
+                    u * u * u * p1.x + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * p2.x,
+                  y:
+                    u * u * u * p1.y + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * p2.y,
+                })
+              }
+              return pts
+            }
+            const hitsNode = (pts, it) => {
+              for (let i = 0; i < pts.length; i++) {
+                const p = pts[i]
+                if (
+                  p.x > it.x - SAFE &&
+                  p.x < it.x + it.w + SAFE &&
+                  p.y > it.y - SAFE &&
+                  p.y < it.y + it.h + SAFE
+                ) {
+                  return true
+                }
+              }
+              return false
+            }
+            // 连线自己也不能从端点的身子里穿过去（bottom→bottom 这类拧着
+            // 画的端口会出现这种情况），端口部位附近不算。
+            const selfClip = (e, pts) => {
+              for (let i = 3; i < pts.length - 3; i++) {
+                const p = pts[i]
+                const ok = [e.from, e.to].some((id) => {
+                  const it = itemOf.get(id)
+                  if (!it) return false
+                  return (
+                    p.x > it.x + SAFE &&
+                    p.x < it.x + it.w - SAFE &&
+                    p.y > it.y + SAFE &&
+                    p.y < it.y + it.h - SAFE
+                  )
+                })
+                if (ok) return true
+              }
+              return false
+            }
+            // 复核：每条连线（按真实端口画出的曲线采样）都不能压到别的节点
+            const verifyBlock = () => {
+              const found = []
+              const realRows = rows.map((row) => row.filter((it) => it.real))
+              own.forEach((e) => {
+                const a = itemOf.get(e.from)
+                const b = itemOf.get(e.to)
+                if (!a || !b) return
+                const pts = edgeSamples(e)
+                let x0 = Infinity
+                let x1 = -Infinity
+                let y0 = Infinity
+                let y1 = -Infinity
+                pts.forEach((p) => {
+                  if (p.x < x0) x0 = p.x
+                  if (p.x > x1) x1 = p.x
+                  if (p.y < y0) y0 = p.y
+                  if (p.y > y1) y1 = p.y
+                })
+                rows.forEach((row, r) => {
+                  if (rowTop[r] > y1 + SAFE || rowTop[r] + rowH[r] < y0 - SAFE) return
+                  realRows[r].forEach((it) => {
+                    if (it === a || it === b) return
+                    if (it.x > x1 + SAFE || it.x + it.w < x0 - SAFE) return
+                    if (hitsNode(pts, it)) found.push({ e: e, it: it, pts: pts })
+                  })
+                })
+                if (selfClip(e, pts)) {
+                  const mid = itemOf.get(e.from)
+                  if (mid) found.push({ e: e, it: mid, pts: pts, self: true })
+                }
+              })
+              return found
+            }
+            // 修复：谁挡了路就把谁挪开 ——
+            //  1) 被扫到的节点如果紧挨着连线的落脚点、自己又没有任何父节点要照顾，
+            //     直接和它换个位置：连线不用拐弯，整行也不会被撑大；
+            //  2) 换不了位的，就加大这一段间距，把节点从连线的横向范围里让出去。
+            const applyFixes = (vios) => {
+              vios.forEach((v) => {
+                if (v.self) return // 自己穿自己的端点：只能换端口，挪不动
+                const e = v.e
+                const it = v.it
+                const row = rows[it.row]
+                const eItem =
+                  row &&
+                  row.find((x) => (x.real && (x.id === e.from || x.id === e.to)) || x.chain === e)
+                if (!eItem) return
+                const top = rowTop[it.row]
+                const bottom = top + rowH[it.row]
+                let dev = 0
+                v.pts.forEach((p) => {
+                  if (p.y < top - SAFE || p.y > bottom + SAFE) return
+                  const c = eItem.x + eItem.w / 2
+                  const d = Math.abs(p.x - c)
+                  if (d > dev) dev = d
+                })
+                if (dev <= 0) return
+                // 1) 换位：只动一个自由节点，最省事也最不容易连锁
+                if (it.preds.length === 0 && !hPair.has(it.key)) {
+                  const idx = row.indexOf(it)
+                  const jdx = row.indexOf(eItem)
+                  if (idx >= 0 && jdx >= 0 && Math.abs(idx - jdx) === 1) {
+                    row[idx] = eItem
+                    row[jdx] = it
+                    return
+                  }
+                }
+                // 2) 兜底：加大间距，把节点从连线的横向范围里让出去
+                const gapNow = COL_GAP + (eItem.halo || 0) + (it.halo || 0)
+                const extra = dev + SAFE - eItem.w / 2 - gapNow
+                if (extra > 0.5) it.halo = Math.min(MAX_HALO, (it.halo || 0) + extra + 2)
+              })
+            }
+
+            // 2.8.1 定序与坐标互相校正：先按父节点中心摆一遍位置，再按摆出来
+            //       的位置把层内顺序理顺（水平连线的连续块当作整体），再摆一遍。
+            //       顺序和期望位置一致之后，谁都不会被硬生生挤到很远的地方，
+            //       长连线也不会横着扫过好几层。
+            const rowBlockKeys = (row) => {
+              const ids = new Map()
+              let seq = 0
+              row.forEach((it) => {
+                if (ids.has(it.key)) return
+                const stack = [it.key]
+                ids.set(it.key, seq)
+                while (stack.length) {
+                  const k = stack.pop()
+                  ;(hPair.get(k) || []).forEach((nk) => {
+                    if (ids.has(nk)) return
+                    ids.set(nk, seq)
+                    stack.push(nk)
+                  })
+                }
+                seq++
+              })
+              return ids
+            }
+            for (let round = 0; round < 2; round++) {
+              placeAll()
+              rows.forEach((row, r) => {
+                if (r === 0 || row.length < 2) return
+                const meta = rowBlockKeys(row)
+                const sum = new Map()
+                const cnt = new Map()
+                let any = false
+                row.forEach((it) => {
+                  const w = it.pin != null ? it.pin : it.desire
+                  if (w == null) return
+                  any = true
+                  const b = meta.get(it.key)
+                  sum.set(b, (sum.get(b) || 0) + w)
+                  cnt.set(b, (cnt.get(b) || 0) + 1)
+                })
+                if (!any) return
+                const key = (it) => {
+                  const b = meta.get(it.key)
+                  return sum.has(b) ? sum.get(b) / cnt.get(b) : it.x + it.w / 2
+                }
+                rows[r] = row.slice().sort((a, b) => key(a) - key(b))
+              })
+            }
+            placeAll()
+            for (let round = 0; round < REPAIRS; round++) {
+              const vios = verifyBlock()
+              if (!vios.length) break
+              applyFixes(vios)
+              placeAll()
+            }
+
+            // 2.8.2 整块朝向：right→left 这类水平连线本身就写着「谁在左边」，
+            //       如果整块排出来正好反了，把这一块左右镜像一下 —— 镜像不改变
+            //       任何相对关系（不遮挡的依旧不遮挡），却能把方向掰正。
+            const countFlipped = () => {
+              let bad = 0
+              hKeep.forEach((e) => {
+                const l = itemOf.get(e.left)
+                const r = itemOf.get(e.right)
+                if (!l || !r || l === r) return
+                if (l.x + l.w / 2 > r.x + r.w / 2) bad++
+              })
+              return bad
+            }
+            if (hKeep.size && countFlipped() * 2 > hKeep.size) {
+              let mirrorMin = Infinity
+              let mirrorMax = -Infinity
+              rows.forEach((row) => {
+                row.forEach((it) => {
+                  if (!it.real) return
+                  if (it.x < mirrorMin) mirrorMin = it.x
+                  if (it.x + it.w > mirrorMax) mirrorMax = it.x + it.w
+                })
+              })
+              if (isFinite(mirrorMin)) {
+                rows.forEach((row) => {
+                  row.forEach((it) => {
+                    it.x = mirrorMin + mirrorMax - it.x - it.w
+                  })
+                })
+              }
+            }
+
+            // 2.9 端口：松散/破环的连线本来就不按原端口朝向排（比如同一对
+            //     节点既连了上下又连了左右），照原端口画会绕一大圈，这里按
+            //     实际几何给它换一个顺手的朝向；复核后仍压着节点的连线也
+            //     在这里兜底换端口 —— 两条曲线的取舍以「压到几个节点、曲线
+            //     多长」为准，宁可不换。
+            const portFix = {}
+            const curveScore = (e) => {
+              const pts = edgeSamples(e)
+              const a = itemOf.get(e.from)
+              const b = itemOf.get(e.to)
+              let clips = selfClip(e, pts) ? 1 : 0
+              rows.forEach((row) => {
+                row.forEach((it) => {
+                  if (!it.real || it === a || it === b) return
+                  if (hitsNode(pts, it)) clips++
+                })
+              })
+              let len = 0
+              for (let i = 1; i < pts.length; i++) {
+                len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+              }
+              return clips * 100000 + len
+            }
+            const naturalPorts = (e) => {
+              const a = itemOf.get(e.from)
+              const b = itemOf.get(e.to)
+              if (!a || !b) return null
+              if (a.row !== b.row) {
+                const upper = a.row < b.row ? a : b
+                return {
+                  fromPort: upper === a ? 'bottom' : 'top',
+                  toPort: upper === a ? 'top' : 'bottom',
+                }
+              }
+              const left = a.x <= b.x ? a : b
+              return {
+                fromPort: left === a ? 'right' : 'left',
+                toPort: left === a ? 'left' : 'right',
+              }
+            }
+            own.forEach((e) => {
+              if (!e.loose && !cut.has(e)) return
+              const nat = naturalPorts(e)
+              if (!nat) return
+              if (nat.fromPort === e.fromPort && nat.toPort === e.toPort) return
+              const fp0 = e.fromPort
+              const tp0 = e.toPort
+              const before = curveScore(e)
+              e.fromPort = nat.fromPort
+              e.toPort = nat.toPort
+              if (curveScore(e) < before) {
+                portFix[e.key] = nat
+              } else {
+                e.fromPort = fp0
+                e.toPort = tp0
+              }
+            })
+            const residual = verifyBlock()
+            if (residual.length) {
+              const bad = []
+              const badSeen = new Set()
+              residual.forEach((v) => {
+                if (badSeen.has(v.e.key)) return
+                badSeen.add(v.e.key)
+                bad.push(v.e)
+              })
+              const ALL_PORTS = ['top', 'bottom', 'left', 'right']
+              bad.forEach((e) => {
+                const fp0 = e.fromPort
+                const tp0 = e.toPort
+                let best = curveScore(e)
+                let bestPair = null
+                ALL_PORTS.forEach((fp) => {
+                  ALL_PORTS.forEach((tp) => {
+                    if (fp === fp0 && tp === tp0) return
+                    e.fromPort = fp
+                    e.toPort = tp
+                    const s = curveScore(e)
+                    if (s < best) {
+                      best = s
+                      bestPair = { fromPort: fp, toPort: tp }
+                    }
+                  })
+                })
+                if (bestPair) {
+                  e.fromPort = bestPair.fromPort
+                  e.toPort = bestPair.toPort
+                  portFix[e.key] = bestPair
+                } else {
+                  e.fromPort = fp0
+                  e.toPort = tp0
+                }
+              })
+            }
+
+            // 2.10 输出：把这一块平移到 (0,0) 起点
+            let minX = Infinity
+            let minY = Infinity
+            let maxX = -Infinity
+            let maxY = -Infinity
+            rows.forEach((row) => {
+              row.forEach((it) => {
+                if (!it.real) return
+                if (it.x < minX) minX = it.x
+                if (it.y < minY) minY = it.y
+                if (it.x + it.w > maxX) maxX = it.x + it.w
+                if (it.y + it.h > maxY) maxY = it.y + it.h
+              })
+            })
+            if (!isFinite(minX)) {
+              minX = 0
+              minY = 0
+              maxX = 0
+              maxY = 0
+            }
+            const items = []
+            rows.forEach((row) => {
+              row.forEach((it) => {
+                if (it.real) items.push({ id: it.id, x: it.x - minX, y: it.y - minY })
+              })
+            })
+            return { items: items, w: maxX - minX, h: maxY - minY, ports: portFix }
+          }
+        }
+        // ==== AUTO-LAYOUT CORE END ====
+
         // ================================================================
         // 11. CANVAS MANAGER
         // ================================================================
@@ -9803,7 +10826,10 @@ notify pgrst, 'reload schema';</textarea
           },
 
           // 适应：把全部可见节点整体缩放、居中，一次装进窗口。
-          fitView() {
+          // 适应：把整张画布（所有节点）缩放到窗口里并居中。
+          // opts.minScale 可以放宽缩放下限 —— 自动排布用它，保证排完之后
+          // 「所有节点都能看见」，哪怕画布很大。
+          fitView(opts) {
             const rect = DOM.workspace.getBoundingClientRect()
             const menuH =
               parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--menu-h')) ||
@@ -9846,8 +10872,13 @@ notify pgrst, 'reload schema';</textarea
             const availH = Math.max(1, rect.height - menuH - 2 * MARGIN)
             const fit = Math.min(availW / contentW, availH / contentH)
             // 只缩不放：已经装得下就保持 100%，不会突然逼近；
-            // 下限跟缩放按钮一致，免得小到看不清。
-            const scale = Math.min(1, Math.max(CONFIG.MIN_SCALE, fit))
+            // 下限默认跟缩放按钮一致（免得小到看不清），自动排布会传一个
+            // 更小的下限，保证「适应」真的把所有节点都装进来。
+            const minScale =
+              opts && typeof opts.minScale === 'number'
+                ? Math.max(0.005, opts.minScale)
+                : CONFIG.MIN_SCALE
+            const scale = Math.min(1, Math.max(minScale, fit))
             const cx = (minX + maxX) / 2
             const cy = (minY + maxY) / 2
             // 在「菜单栏以下」这条可用带里居中，而不是整个视口。
@@ -9859,331 +10890,46 @@ notify pgrst, 'reload schema';</textarea
             CanvasManager.scheduleViewSave()
           },
 
-          // 自动布局：Sugiyama 式分层排布，自上而下。
-          // 步骤：破环 → 最长路径分层 → 跨层长线插虚拟节点占住通道 →
-          // 中位数扫描 + 相邻交换消交叉 → 整层带高定 y、按「自身实测尺寸」
-          // 做横向松弛居中定 x。保证：
-          //   1) 节点两两不重叠：同层按各自宽度留距，跨层按整层统一带高留距，
-          //      所以一排里高低不一的节点也不会纵向互压；
-          //   2) 连线只在层与层之间的空隙里走（竖直端口的贝塞尔曲线 x 被两端
-          //      夹住、y 落在空隙内），既不压节点，长线也靠虚拟通道尽量走直；
-          //   3) 交叉数被排序扫描尽量压低。互不相连的几块子图再横向并排。
+          // 自动布局：按连线分块 → 块内按端口朝向分层 → 块与块货架式并排。
+          // 全部计算在 computeCanvasLayout 里（纯函数，不碰 DOM），这里只
+          // 负责量真实尺寸、落位置、把极少数绕不开的端口调整写回连线，
+          // 最后交给 fitView 收尾。保证：节点两两不重叠、连线不穿过任何
+          // 非端点节点、水平连线两端同行相邻、长连线只在层间空隙里走。
           autoLayout() {
             const nodes = Array.from(getNodes())
             if (nodes.length === 0) {
               CanvasManager.fitView()
               return
             }
-            const COL_GAP = 52 // 同层相邻节点水平净间距
-            const ROW_GAP = 72 // 相邻层之间垂直净间距（给连线留空隙）
-            const DUMMY_W = 16 // 跨层连线在中间层占用的通道宽度
-            const DUMMY_H = 8
-            const COMP_GAP = 120 // 互不相连子图之间的水平间距
-            const SWEEPS = 8 // 排序扫描轮数
-
-            // 每个节点读取自身真实尺寸用于排布：minimized 高 32；
-            // display:none（折叠分组里的子节点）量到 0 时回退中间尺寸，
-            // 绝不把某层塌成 0 挤到相邻层。
-            const size = {}
+            // 尺寸按真实 DOM 量：minimized 的高度会矮一截；折叠分组里的
+            // 节点量到 0 时回退到行内样式，再回退到中间尺寸，绝不把
+            // 某一层塌成 0 挤到相邻层。
+            const nodeList = nodes.map((n) => ({
+              id: n.id,
+              w: n.offsetWidth || parseFloat(n.style.width) || 240,
+              h: n.offsetHeight || parseFloat(n.style.height) || 120,
+            }))
+            const res = computeCanvasLayout(nodeList, AppState.connections, {})
+            const placed = new Map(res.items.map((it) => [it.id, it]))
             nodes.forEach((n) => {
-              size[n.id] = {
-                w: n.offsetWidth || parseFloat(n.style.width) || 240,
-                h: n.offsetHeight || parseFloat(n.style.height) || 120,
-              }
+              const p = placed.get(n.id)
+              if (!p) return
+              n.style.left = Math.round(p.x) + 'px'
+              n.style.top = Math.round(p.y) + 'px'
             })
-
-            // 有向边：去掉自环、去掉重复，只保留两端都存在的
-            const idSet = new Set(nodes.map((n) => n.id))
-            const edgeSeen = new Set()
-            const edges = []
-            AppState.connections.forEach((c) => {
-              if (!idSet.has(c.from) || !idSet.has(c.to) || c.from === c.to) return
-              const k = c.from + '>' + c.to
-              if (edgeSeen.has(k)) return
-              edgeSeen.add(k)
-              edges.push({ from: c.from, to: c.to })
-            })
-
-            // 无向连通块，逐块独立排布
-            const uadj = {}
-            nodes.forEach((n) => (uadj[n.id] = []))
-            edges.forEach((e) => {
-              uadj[e.from].push(e.to)
-              uadj[e.to].push(e.from)
-            })
-            const seen = new Set()
-            const comps = []
-            nodes.forEach((n) => {
-              if (seen.has(n.id)) return
-              const q = [n.id]
-              seen.add(n.id)
-              const comp = []
-              while (q.length) {
-                const cur = q.shift()
-                comp.push(cur)
-                uadj[cur].forEach((nb) => {
-                  if (!seen.has(nb)) {
-                    seen.add(nb)
-                    q.push(nb)
-                  }
-                })
-              }
-              comps.push(comp)
-            })
-
-            const median = (arr) => {
-              if (!arr.length) return null
-              const s = arr.slice().sort((a, b) => a - b)
-              const m = s.length >> 1
-              return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+            // 极少数端口互相打架的连线（比如同一对节点既连了上下又连了
+            // 左右），复核后会给出更顺手的端口朝向，这里写回连线数据。
+            const fixes = res.ports || {}
+            if (Object.keys(fixes).length) {
+              AppState.connections.forEach((c) => {
+                const key =
+                  c.from + '>' + c.to + ':' + (c.fromPort || 'bottom') + ':' + (c.toPort || 'top')
+                const fix = fixes[key]
+                if (!fix) return
+                c.fromPort = fix.fromPort
+                c.toPort = fix.toPort
+              })
             }
-
-            function layoutComponent(comp) {
-              const compSet = new Set(comp)
-              const ce = edges.filter((e) => compSet.has(e.from) && compSet.has(e.to))
-
-              // 1) 破环：DFS 把回边反向（仅用于排布，不改真实连线数据）
-              const succ = {}
-              comp.forEach((id) => (succ[id] = []))
-              ce.forEach((e) => succ[e.from].push(e.to))
-              const color = {}
-              comp.forEach((id) => (color[id] = 0))
-              const back = new Set()
-              function dfs(u) {
-                color[u] = 1
-                for (const v of succ[u]) {
-                  if (color[v] === 1) back.add(u + '>' + v)
-                  else if (color[v] === 0) dfs(v)
-                }
-                color[u] = 2
-              }
-              const hasIn = new Set(ce.map((e) => e.to))
-              comp.forEach((id) => {
-                if (!hasIn.has(id)) dfs(id)
-              })
-              comp.forEach((id) => {
-                if (color[id] === 0) dfs(id)
-              })
-              const orient = ce.map((e) =>
-                back.has(e.from + '>' + e.to)
-                  ? { from: e.to, to: e.from }
-                  : { from: e.from, to: e.to },
-              )
-
-              // 2) 最长路径分层（源=0）
-              const rPred = {}
-              const rSucc = {}
-              comp.forEach((id) => {
-                rPred[id] = []
-                rSucc[id] = []
-              })
-              orient.forEach((e) => {
-                rSucc[e.from].push(e.to)
-                rPred[e.to].push(e.from)
-              })
-              const layer = {}
-              const indeg = {}
-              comp.forEach((id) => (indeg[id] = rPred[id].length))
-              const q0 = comp.filter((id) => indeg[id] === 0)
-              q0.forEach((id) => (layer[id] = 0))
-              const qq = q0.slice()
-              while (qq.length) {
-                const u = qq.shift()
-                rSucc[u].forEach((v) => {
-                  layer[v] = Math.max(layer[v] == null ? 0 : layer[v], layer[u] + 1)
-                  if (--indeg[v] === 0) qq.push(v)
-                })
-              }
-              let maxLayer = 0
-              comp.forEach((id) => {
-                if (layer[id] == null) layer[id] = 0
-                maxLayer = Math.max(maxLayer, layer[id])
-              })
-
-              // 3) 建节点表 + 跨层长线插虚拟节点（通道）
-              const all = {}
-              comp.forEach((id) => {
-                all[id] = {
-                  id,
-                  real: true,
-                  layer: layer[id],
-                  w: size[id].w,
-                  h: size[id].h,
-                  preds: [],
-                  succs: [],
-                }
-              })
-              const layerArr = []
-              for (let i = 0; i <= maxLayer; i++) layerArr.push([])
-              comp.forEach((id) => layerArr[layer[id]].push(all[id]))
-              let dc = 0
-              orient.forEach((e) => {
-                const a = all[e.from]
-                const b = all[e.to]
-                if (b.layer - a.layer === 1) {
-                  a.succs.push(b)
-                  b.preds.push(a)
-                  return
-                }
-                if (b.layer <= a.layer) return
-                let prev = a
-                for (let l = a.layer + 1; l < b.layer; l++) {
-                  const d = {
-                    id: '__d' + dc++,
-                    real: false,
-                    layer: l,
-                    w: DUMMY_W,
-                    h: DUMMY_H,
-                    preds: [],
-                    succs: [],
-                  }
-                  layerArr[l].push(d)
-                  all[d.id] = d
-                  prev.succs.push(d)
-                  d.preds.push(prev)
-                  prev = d
-                }
-                prev.succs.push(b)
-                b.preds.push(prev)
-              })
-
-              // 4) 排序消交叉：中位数扫描 + 相邻交换，保留最优的一版
-              layerArr.forEach((L) => L.forEach((v, i) => (v.pos = i)))
-              function crossings() {
-                let total = 0
-                for (let l = 0; l + 1 < layerArr.length; l++) {
-                  const B = layerArr[l + 1]
-                  const pairs = []
-                  B.forEach((v) => v.preds.forEach((p) => pairs.push([p.pos, v.pos])))
-                  pairs.sort((x, y) => x[0] - y[0] || x[1] - y[1])
-                  for (let i = 0; i < pairs.length; i++)
-                    for (let j = i + 1; j < pairs.length; j++)
-                      if (pairs[i][1] > pairs[j][1]) total++
-                }
-                return total
-              }
-              function sweep(l, usePred) {
-                const L = layerArr[l]
-                L.forEach((v) => {
-                  const nb = usePred ? v.preds : v.succs
-                  v._m = nb.length ? median(nb.map((p) => p.pos)) : null
-                  v._fixed = v.real
-                })
-                L.sort((a, b) => {
-                  const am = a._m == null ? -1 : a._m
-                  const bm = b._m == null ? -1 : b._m
-                  if (a._fixed && b._fixed) return am - bm || a.pos - b.pos
-                  if (a._fixed) return -1
-                  if (b._fixed) return 1
-                  return am - bm || a.pos - b.pos
-                })
-                L.forEach((v, i) => (v.pos = i))
-                let swapped = true
-                let guard = 0
-                while (swapped && guard++ <= L.length) {
-                  swapped = false
-                  for (let i = 0; i + 1 < L.length; i++) {
-                    if (L[i]._m != null && L[i + 1]._m != null && L[i]._m > L[i + 1]._m) {
-                      const t = L[i]
-                      L[i] = L[i + 1]
-                      L[i + 1] = t
-                      L[i].pos = i
-                      L[i + 1].pos = i + 1
-                      swapped = true
-                    }
-                  }
-                }
-              }
-              let best = layerArr.map((L) => L.slice())
-              let bestX = crossings()
-              for (let it = 0; it < SWEEPS && bestX > 0; it++) {
-                if (it % 2 === 0) for (let l = 1; l < layerArr.length; l++) sweep(l, true)
-                else for (let l = layerArr.length - 2; l >= 0; l--) sweep(l, false)
-                const x = crossings()
-                if (x < bestX) {
-                  bestX = x
-                  best = layerArr.map((L) => L.slice())
-                }
-              }
-              layerArr.forEach((L, l) => {
-                layerArr[l] = best[l]
-                layerArr[l].forEach((v, i) => (v.pos = i))
-              })
-
-              // 5) 纵向：整层统一带高 + 间隙，矮节点在带内居中
-              const layerMaxH = layerArr.map((L) => L.reduce((m, v) => Math.max(m, v.h), 0))
-              const bandTop = []
-              let y = 0
-              layerArr.forEach((L, l) => {
-                bandTop[l] = y
-                y += layerMaxH[l] + ROW_GAP
-              })
-              layerArr.forEach((L, l) => {
-                L.forEach((v) => {
-                  v.y = bandTop[l] + (layerMaxH[l] - v.h) / 2
-                })
-              })
-
-              // 6) 横向：先左锚定铺满，再按邻居中心做受约束松弛居中。
-              //    每个移动都被夹在左右邻之间，天然保证同层不重叠。
-              layerArr.forEach((L) => {
-                let x = 0
-                L.forEach((v) => {
-                  v.x = x
-                  x += v.w + COL_GAP
-                })
-              })
-              for (let it = 0; it < 8; it++) {
-                const lr = it % 2 === 0
-                layerArr.forEach((L) => {
-                  for (let s = 0; s < L.length; s++) {
-                    const i = lr ? s : L.length - 1 - s
-                    const v = L[i]
-                    const nb = v.preds.concat(v.succs)
-                    if (!nb.length) continue
-                    const target =
-                      nb.reduce((sum, p) => sum + p.x + p.w / 2, 0) / nb.length - v.w / 2
-                    const lo = i > 0 ? L[i - 1].x + L[i - 1].w + COL_GAP : -Infinity
-                    const hi = i < L.length - 1 ? L[i + 1].x - v.w - COL_GAP : Infinity
-                    v.x = Math.max(lo, Math.min(hi, target))
-                  }
-                })
-              }
-
-              const out = []
-              let minX = Infinity
-              let maxX = -Infinity
-              layerArr.forEach((L) =>
-                L.forEach((v) => {
-                  if (!v.real) return
-                  minX = Math.min(minX, v.x)
-                  maxX = Math.max(maxX, v.x + v.w)
-                }),
-              )
-              if (!isFinite(minX)) minX = 0
-              layerArr.forEach((L) =>
-                L.forEach((v) => {
-                  if (v.real) out.push({ id: v.id, x: v.x - minX, y: v.y })
-                }),
-              )
-              return { out, width: isFinite(maxX) ? maxX - minX : 0 }
-            }
-
-            const placements = []
-            let cursorX = 0
-            comps.forEach((comp) => {
-              const res = layoutComponent(comp)
-              res.out.forEach((p) => placements.push({ id: p.id, x: p.x + cursorX, y: p.y }))
-              cursorX += res.width + COMP_GAP
-            })
-
-            placements.forEach((p) => {
-              const el = getNodeById(p.id)
-              if (el) {
-                el.style.left = Math.round(p.x) + 'px'
-                el.style.top = Math.round(p.y) + 'px'
-              }
-            })
             CanvasManager.applyTransform()
             // 顺序要紧：先 fitView 定好镜头，再落盘。
             // 反过来的话 saveCurrent 会把「排版前」的 pan/scale 写进 doc.view，
@@ -10191,7 +10937,8 @@ notify pgrst, 'reload schema';</textarea
             // 看起来就像「自动排布没保存」。
             // 排完把镜头交给 fitView，和「适应」按钮同一套规则，
             // 不会出现重排后仍有节点跑出视野。
-            CanvasManager.fitView()
+            // 排布 = 排布 + 画布适应：节点整体居中，缩放到全部可见
+            CanvasManager.fitView({ minScale: 0.005 })
             debouncedAutoSave(true)
             notify(t('notify.layoutApplied'))
           },
