@@ -11,7 +11,7 @@ from mdforge.template import load_template
 from mdforge.tex_renderer import render_tex
 
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLES = ROOT / "examples"
+EXAMPLES = ROOT / "mdforge-examples"
 
 FULL_FIGURE = r'''---
 title: LaTeX 图表

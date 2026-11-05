@@ -14,8 +14,8 @@ from mdforge.template import load_template
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE = ROOT / "examples" / "sample.md"
-IMAGE = ROOT / "examples" / "images" / "pipeline.png"
+SAMPLE = ROOT / "mdforge-examples" / "sample.md"
+IMAGE = ROOT / "mdforge-examples" / "images" / "pipeline.png"
 
 
 def client():

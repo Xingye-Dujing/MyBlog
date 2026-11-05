@@ -314,14 +314,14 @@ def create_app() -> Flask:
 
     @app.get("/api/sample")
     def api_sample():
-        path = PUBLIC_ROOT / "examples" / "sample.md"
+        path = PUBLIC_ROOT / "mdforge-examples" / "sample.md"
         if not path.is_file():
             return jsonify({"ok": False, "error": "示例文件不存在"}), 404
         return jsonify({"ok": True, "markdown": path.read_text(encoding="utf-8"), "filename": "sample.md"})
 
     @app.get("/samples/<path:filename>")
     def sample_asset(filename: str):
-        allowed = PUBLIC_ROOT / "examples"
+        allowed = PUBLIC_ROOT / "mdforge-examples"
         target = (allowed / filename).resolve()
         if allowed.resolve() not in target.parents or not target.is_file():
             abort(404)

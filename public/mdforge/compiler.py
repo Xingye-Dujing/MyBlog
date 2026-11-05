@@ -1,4 +1,4 @@
-"""MiKTeX / latexmk compilation wrapper."""
+"""MiKTeX / xelatex compilation wrapper: two fixed engine passes."""
 from __future__ import annotations
 
 import os
@@ -43,15 +43,6 @@ def _env(miktex_bin: Optional[str]) -> Dict[str, str]:
     return env
 
 
-def find_latexmk(miktex_bin: Optional[str]) -> Optional[str]:
-    if miktex_bin:
-        for name in ("latexmk.exe", "latexmk"):
-            path = os.path.join(miktex_bin, name)
-            if os.path.isfile(path):
-                return path
-    return shutil.which("latexmk")
-
-
 def environment_info() -> Dict[str, Any]:
     miktex_bin = find_miktex_bin()
     engines = {}
@@ -64,7 +55,6 @@ def environment_info() -> Dict[str, Any]:
         if not path:
             path = shutil.which(engine)
         engines[engine] = bool(path)
-    latexmk = find_latexmk(miktex_bin)
     version = ""
     if miktex_bin:
         exe = os.path.join(miktex_bin, "xelatex.exe")
@@ -85,7 +75,6 @@ def environment_info() -> Dict[str, Any]:
     return {
         "miktex_bin": miktex_bin or "",
         "engines": engines,
-        "latexmk": latexmk or "",
         "version": version,
     }
 
@@ -137,7 +126,6 @@ def _compile_tex_unlocked(
     if not os.path.isfile(tex_path):
         raise CompileError("TeX 文件不存在：%s" % tex_path)
     miktex_bin = find_miktex_bin()
-    latexmk = find_latexmk(miktex_bin)
     workdir = os.path.dirname(tex_path) or os.getcwd()
     build_dir = output_dir or os.path.join(workdir, "build")
     os.makedirs(build_dir, exist_ok=True)
@@ -154,17 +142,19 @@ def _compile_tex_unlocked(
     started = time.time()
     logs: List[str] = []
 
-    if latexmk:
-        command = [
-            latexmk,
-            "-" + engine,
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            "-file-line-error",
-            "-latexoption=-no-shell-escape",
-            "-outdir=" + build_dir,
-            tex_arg,
-        ]
+    engine_path = None
+    if miktex_bin:
+        candidate = os.path.join(miktex_bin, engine + ".exe")
+        if os.path.isfile(candidate):
+            engine_path = candidate
+    engine_path = engine_path or shutil.which(engine)
+    if not engine_path:
+        raise CompileError("未找到 MiKTeX / %s，请安装 MiKTeX 或检查 MIKTEX_BIN" % engine)
+    # 生成的 TeX 只有手写 thebibliography 与可选目录，无 BibTeX / makeindex 依赖。
+    # 固定两遍让 .toc / .aux 生效即可，无需额外的构建调度程序。
+    code = 1
+    for _pass in range(2):
+        command = [engine_path, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "-output-directory=" + build_dir, tex_arg]
         try:
             result = subprocess.run(
                 command,
@@ -182,37 +172,7 @@ def _compile_tex_unlocked(
             logs.append(_decode(exc.stderr))
             raise CompileError("MiKTeX 编译超时（%d 秒）" % timeout, "\n".join(logs)[-60000:])
         except Exception as exc:
-            raise CompileError("无法启动 latexmk：%s" % exc)
-    else:
-        engine_path = None
-        if miktex_bin:
-            candidate = os.path.join(miktex_bin, engine + ".exe")
-            if os.path.isfile(candidate):
-                engine_path = candidate
-        engine_path = engine_path or shutil.which(engine)
-        if not engine_path:
-            raise CompileError("未找到 MiKTeX / %s，请安装 MiKTeX 或检查 MIKTEX_BIN" % engine)
-        code = 1
-        for _pass in range(2):
-            command = [engine_path, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "-output-directory=" + build_dir, tex_arg]
-            try:
-                result = subprocess.run(
-                    command,
-                    cwd=workdir,
-                    env=env,
-                    capture_output=True,
-                    timeout=timeout,
-                    creationflags=0x08000000,
-                )
-                logs.append(_decode(result.stdout))
-                logs.append(_decode(result.stderr))
-                code = result.returncode
-            except subprocess.TimeoutExpired as exc:
-                logs.append(_decode(exc.stdout))
-                logs.append(_decode(exc.stderr))
-                raise CompileError("MiKTeX 编译超时（%d 秒）" % timeout, "\n".join(logs)[-60000:])
-            except Exception as exc:
-                raise CompileError("无法启动编译器：%s" % exc)
+            raise CompileError("无法启动编译器：%s" % exc)
 
     elapsed = int((time.time() - started) * 1000)
     log_text = "\n".join(part for part in logs if part)

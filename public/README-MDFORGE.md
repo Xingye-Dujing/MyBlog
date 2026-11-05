@@ -47,6 +47,8 @@ python -m venv .venv
 
 PDF 编译使用 `xelatex`，缺宏包时会设置 `MIKTEX_AUTOINSTALL=1` 让 MiKTeX 自动安装。首次编译可能较慢。
 
+编译固定直接调用 `xelatex` 两遍（第一遍生成 `.toc` / `.aux`，第二遍读取目录页码与交叉引用）。生成的 TeX 参考文献为手写 `thebibliography` 环境，不涉及 BibTeX、makeindex 等辅助程序，也不需要任何构建调度程序；每次转换都在新的临时目录生成全新的 TeX，固定两遍即可覆盖全部场景。
+
 ---
 
 ## 2. 界面
@@ -240,16 +242,16 @@ HTML 块、脚注、任务列表、嵌套引用、嵌套表格会被忽略或降
 
 ```bash
 # 校验
-.venv/Scripts/python.exe -m mdforge.cli validate examples/sample.md -t academic
+.venv/Scripts/python.exe -m mdforge.cli validate mdforge-examples/sample.md -t academic
 
 # DOCX
-.venv/Scripts/python.exe -m mdforge.cli convert examples/sample.md -t academic -o out.docx
+.venv/Scripts/python.exe -m mdforge.cli convert mdforge-examples/sample.md -t academic -o out.docx
 
 # TeX + PDF
-.venv/Scripts/python.exe -m mdforge.cli convert examples/sample.md -t academic -o out.tex --pdf
+.venv/Scripts/python.exe -m mdforge.cli convert mdforge-examples/sample.md -t academic -o out.tex --pdf
 
 # 套用格式微调 JSON
-.venv/Scripts/python.exe -m mdforge.cli convert examples/sample.md -t academic -o out.docx --format-config mdforge-format-docx-academic.json
+.venv/Scripts/python.exe -m mdforge.cli convert mdforge-examples/sample.md -t academic -o out.docx --format-config mdforge-format-docx-academic.json
 
 # 列表 / 查看模板
 .venv/Scripts/python.exe -m mdforge.cli templates list
@@ -270,7 +272,7 @@ Python API：
 ```python
 from mdforge import convert_file, compile_tex, edit_metadata
 
-result = convert_file("examples/sample.md", output="out.tex", template="academic", compile_pdf=True)
+result = convert_file("mdforge-examples/sample.md", output="out.tex", template="academic", compile_pdf=True)
 pdf = result["pdf"]
 
 tuning = {
@@ -279,7 +281,7 @@ tuning = {
     "fonts": {"heading": "heiti"},
     "headings": {"title_size": 18, "h1_size": 16, "h2_size": 12, "h3_size": 10.5},
 }
-convert_file("examples/sample.md", output="out-tuned.docx", template="academic", tuning=tuning)
+convert_file("mdforge-examples/sample.md", output="out-tuned.docx", template="academic", tuning=tuning)
 
 edit_metadata("out.docx", {"title": "新标题", "author": "李四"})
 ```
@@ -315,9 +317,9 @@ public/
 ├── mdforge_serve.py              # Flask 启动器
 ├── pyproject.toml
 ├── requirements-mdforge.txt
-├── README.md
+├── README-MDFORGE.md
 ├── .gitignore
-├── examples/
+├── mdforge-examples/
 │   ├── sample.md                 # 覆盖全部语法的示例
 │   └── images/pipeline.png
 └── mdforge/
@@ -330,7 +332,7 @@ public/
     ├── docx_renderer.py          # DOCX 渲染
     ├── docx_template.py          # 生成内置 DOCX 模板
     ├── tex_renderer.py           # TeX 渲染
-    ├── compiler.py               # MiKTeX / latexmk
+    ├── compiler.py               # MiKTeX / xelatex 两遍编译
     ├── docx_utils.py             # run 级占位符与域
     ├── metadata.py               # 核心属性、页眉页脚、TeX PDF 属性
     ├── preview.py                # 网页预览、统计、目录

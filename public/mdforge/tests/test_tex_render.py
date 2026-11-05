@@ -9,12 +9,12 @@ from mdforge.tex_renderer import render_tex
 from mdforge.tuning import normalize_tuning
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE = ROOT / "examples" / "sample.md"
+SAMPLE = ROOT / "mdforge-examples" / "sample.md"
 
 
 def test_tex_source():
     source = SAMPLE.read_text(encoding="utf-8")
-    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "mdforge-examples"))
     template = load_template("tex", "academic")
     result = render_tex(document, template, None)
     tex = result["tex"]
@@ -68,7 +68,7 @@ $$
 
 def test_tex_assets_are_per_output(tmp_path):
     source = SAMPLE.read_text(encoding="utf-8")
-    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "mdforge-examples"))
     template = load_template("tex", "academic")
     one = tmp_path / "one.tex"
     two = tmp_path / "two.tex"
@@ -123,7 +123,7 @@ toc_include_references: true
 
 def test_tex_toc_is_off_by_default():
     source = SAMPLE.read_text(encoding="utf-8")
-    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "mdforge-examples"))
     tex = render_tex(document, load_template("tex", "academic"), None)["tex"]
     assert r"\tableofcontents" not in tex
 
@@ -142,7 +142,7 @@ def test_tuning_export_wrapper_is_unwrapped():
 @pytest.mark.skipif(not find_miktex_bin(), reason="需要本机 MiKTeX")
 def test_tex_asset_directory_supports_spaces(tmp_path):
     source = SAMPLE.read_text(encoding="utf-8")
-    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    document = parse_markdown(source, "sample.md", base_dir=str(ROOT / "mdforge-examples"))
     template = load_template("tex", "academic")
     output = tmp_path / "my paper.tex"
     result = render_tex(document, template, str(output))
@@ -186,3 +186,29 @@ Shell escape probe.
     output.write_text(source, encoding="utf-8")
     compile_tex(str(output), engine="xelatex", timeout=300)
     assert not (tmp_path / "shell.txt").is_file()
+
+
+def test_compile_uses_two_xelatex_passes(tmp_path, monkeypatch):
+    commands = []
+
+    class _Result:
+        returncode = 0
+        stdout = b""
+        stderr = b""
+
+    def _fake_run(command, *args, **kwargs):
+        commands.append(command)
+        for flag in command:
+            if str(flag).startswith("-output-directory="):
+                pdf = Path(str(flag).split("=", 1)[1]) / "compile.pdf"
+                pdf.write_bytes(b"%PDF-1.4")
+        return _Result()
+
+    monkeypatch.setattr("mdforge.compiler.subprocess.run", _fake_run)
+    output = tmp_path / "compile.tex"
+    output.write_text(r"\documentclass{article}\begin{document}hi\end{document}", encoding="utf-8")
+    result = compile_tex(str(output), engine="xelatex", timeout=30)
+    assert result["ok"] is True
+    assert len(commands) == 2
+    assert all("xelatex" in str(cmd[0]) for cmd in commands)
+    assert all("-no-shell-escape" in cmd for cmd in commands)

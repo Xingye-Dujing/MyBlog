@@ -43,7 +43,6 @@ def main() -> None:
     env = environment_info()
     print("MDFORGE  http://%s:%d" % (args.host, args.port))
     print("MiKTeX  ", env.get("miktex_bin") or "未找到")
-    print("latexmk ", env.get("latexmk") or "未找到")
     print("engines ", ", ".join(k for k, v in env.get("engines", {}).items() if v) or "无")
     if args.open:
         threading.Timer(0.8, lambda: webbrowser.open("http://%s:%d/omm-mdforge.html" % (args.host, args.port))).start()

@@ -9,12 +9,12 @@ from mdforge.parser import parse_markdown
 from mdforge.template import load_template
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE = ROOT / "examples" / "sample.md"
+SAMPLE = ROOT / "mdforge-examples" / "sample.md"
 
 
 def make_document():
     source = SAMPLE.read_text(encoding="utf-8")
-    return parse_markdown(source, "sample.md", base_dir=str(ROOT / "examples"))
+    return parse_markdown(source, "sample.md", base_dir=str(ROOT / "mdforge-examples"))
 
 
 def test_render_reference_layout(tmp_path):
