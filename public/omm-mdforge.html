@@ -40,7 +40,7 @@
         --font-code:
           'ZenMono', 'Cascadia Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
         --fscale: 1;
-        --radius: 4px;
+        --radius: 0px;
         --shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
         --ed-line: calc(22px * var(--fscale));
         --ed-size: calc(12.5px * var(--fscale));
@@ -2808,6 +2808,20 @@
         <span>输入时自动解析</span><span class="hint" id="sv-autoparse">开</span>
       </button>
       <div class="dd-divider"></div>
+      <div class="dd-label">MiKTeX</div>
+      <div style="padding:2px 12px 10px">
+        <input
+          id="set-miktex-bin"
+          spellcheck="false"
+          placeholder="D:\\MiKTeX\\miktex\\bin\\x64"
+          style="width:100%;box-sizing:border-box;padding:5px 7px;font:inherit;font-size:11px;color:inherit;background:transparent;border:1px solid var(--line);border-radius:4px;outline:none"
+        />
+        <button class="dd-item" id="set-miktex-save" style="margin-top:6px;padding-left:0">
+          <span>保存 MiKTeX 路径</span><span class="hint" id="miktex-hint">自动</span>
+        </button>
+        <div class="dd-note">填 xelatex.exe 所在目录，留空恢复自动探测。</div>
+      </div>
+      <div class="dd-divider"></div>
       <button class="dd-item" id="set-reset">
         <span>重置界面设置</span><span class="hint">RESET</span>
       </button>
@@ -3071,7 +3085,7 @@ template: academic
         const DEFAULT_SETTINGS = {
           theme: 'paper',
           bg: 'bg-void',
-          radius: 4,
+          radius: 0,
           fscale: 1,
           statusbar: true,
           lineNumbers: true,
@@ -5092,6 +5106,12 @@ template: academic
             const data = await response.json()
             if (!response.ok || !data.ok) throw new Error('env failed')
             state.env = data
+            const miktexInput = $('#set-miktex-bin')
+            if (miktexInput && document.activeElement !== miktexInput) {
+              miktexInput.value = data.configured_bin || data.miktex_bin || ''
+            }
+            const miktexHint = $('#miktex-hint')
+            if (miktexHint) miktexHint.textContent = data.miktex_bin ? '已找到' : '未找到'
             const groups = { docx: [], tex: [] }
             ;(data.templates || []).forEach((item) => {
               if (groups[item.format]) groups[item.format].push(item)
@@ -5304,6 +5324,41 @@ template: academic
             state.settings.autoParse = !state.settings.autoParse
             applySettings()
             if (state.settings.autoParse) parseNow()
+          })
+          const miktexInput = $('#set-miktex-bin')
+          const miktexHint = $('#miktex-hint')
+          function syncMiktexInput(env) {
+            if (!miktexInput || document.activeElement === miktexInput) return
+            miktexInput.value = (env && (env.configured_bin || env.miktex_bin)) || ''
+            if (miktexHint)
+              miktexHint.textContent = env && env.miktex_bin ? '已找到' : '未找到'
+          }
+          if (miktexInput) syncMiktexInput(state.env)
+          $('#set-miktex-save').addEventListener('click', async () => {
+            const value = miktexInput ? miktexInput.value.trim() : ''
+            try {
+              const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ miktex_bin: value }),
+              })
+              const data = await response.json()
+              if (!response.ok || !data.ok) throw new Error(data.error || '保存失败')
+              state.env = data.env || state.env
+              if (miktexInput) miktexInput.value = data.configured || ''
+              if (miktexHint)
+                miktexHint.textContent = data.miktex_bin ? '已找到' : '未找到'
+              renderTemplateCard(null)
+              closeDropdowns()
+              toast(
+                data.miktex_bin
+                  ? 'MiKTeX 路径已保存：' + data.miktex_bin
+                  : '未检测到 MiKTeX，请检查目录',
+                !data.miktex_bin,
+              )
+            } catch (err) {
+              toast('保存失败：' + (err && err.message ? err.message : String(err)), true)
+            }
           })
           $('#set-reset').addEventListener('click', () => {
             state.settings = { ...DEFAULT_SETTINGS }

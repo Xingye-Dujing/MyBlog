@@ -18,7 +18,8 @@ from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
 from . import __version__
-from .compiler import compile_tex, environment_info
+from .compiler import (compile_tex, environment_info, configured_miktex_bin,
+                       set_miktex_bin, find_miktex_bin)
 from .convert import convert_text
 from .errors import CompileError, MdForgeError, TemplateError, ValidationError
 from .metadata import edit_metadata
@@ -286,6 +287,14 @@ def create_app() -> Flask:
     def apl_font():
         return send_from_directory(str(PUBLIC_ROOT), "APL385.ttf")
 
+    @app.get("/vendor/<path:filename>")
+    def vendor_asset(filename: str):
+        root = (PUBLIC_ROOT / "vendor").resolve()
+        target = (root / filename).resolve()
+        if root not in target.parents or not target.is_file():
+            abort(404)
+        return send_from_directory(str(root), filename)
+
     @app.get("/api/env")
     def api_env():
         env = environment_info()
@@ -296,9 +305,37 @@ def create_app() -> Flask:
                 "version": __version__,
                 "python": ".".join(str(part) for part in os.sys.version_info[:3]),
                 "templates": list_templates(),
+                "configured_bin": configured_miktex_bin(),
             }
         )
         return jsonify(env)
+
+    @app.get("/api/config")
+    def api_config():
+        return jsonify(
+            {
+                "ok": True,
+                "miktex_bin": find_miktex_bin() or "",
+                "configured": configured_miktex_bin(),
+            }
+        )
+
+    @app.post("/api/config")
+    def api_config_save():
+        payload = request.get_json(silent=True) or {}
+        raw = payload.get("miktex_bin", "")
+        try:
+            resolved = set_miktex_bin(str(raw))
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify(
+            {
+                "ok": True,
+                "miktex_bin": resolved or "",
+                "configured": configured_miktex_bin(),
+                "env": environment_info(),
+            }
+        )
 
     @app.get("/api/templates")
     def api_templates():

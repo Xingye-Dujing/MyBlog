@@ -30,7 +30,6 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-MIKTEX_BIN = r"D:\MiKTeX\miktex\bin\x64"
 # 编译在系统临时目录里进行，不污染项目目录
 BUILD_DIR = os.path.join(tempfile.gettempdir(), "zentex-build")
 
@@ -39,6 +38,70 @@ ENGINE_FILES = {
     "pdflatex": "pdflatex.exe",
     "lualatex": "lualatex.exe",
 }
+
+# 自动探测的 MiKTeX 安装目录（用户可在前端设置里覆盖并持久化）
+DEFAULT_MIKTEX_BINS = [
+    r"D:\MiKTeX\miktex\bin\x64",
+    r"C:\Program Files\MiKTeX\miktex\bin\x64",
+    r"C:\Program Files\MiKTeX 2.9\miktex\bin\x64",
+    os.path.expandvars(r"%LOCALAPPDATA%\Programs\MiKTeX\miktex\bin\x64"),
+    os.path.expandvars(r"%ProgramFiles%\MiKTeX\miktex\bin\x64"),
+]
+
+
+def config_dir():
+    """Shared, writable folder for user settings (survives EXE rebuilds)."""
+    for key in ("OMM_SHARED_DIR", "OMM_DATA_DIR"):
+        value = os.environ.get(key)
+        if value:
+            return value
+    return os.path.join(os.path.expanduser("~"), ".omm-zen")
+
+
+def config_path():
+    return os.path.join(config_dir(), "miktex.json")
+
+
+def load_config():
+    try:
+        with open(config_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_config(**updates):
+    path = config_path()
+    data = load_config()
+    data.update(updates)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    return data
+
+
+def valid_miktex_bin(path):
+    if not path or not os.path.isdir(path):
+        return False
+    return any(os.path.isfile(os.path.join(path, exe)) for exe in ENGINE_FILES.values())
+
+
+def miktex_bin():
+    """Configured path first, then env var, then common install locations."""
+    candidates = [load_config().get("miktex_bin"), os.environ.get("MIKTEX_BIN")]
+    candidates += DEFAULT_MIKTEX_BINS
+    for candidate in candidates:
+        if valid_miktex_bin(candidate):
+            return os.path.normpath(candidate)
+    for name in ENGINE_FILES.values():
+        found = shutil.which(name)
+        if found:
+            return os.path.dirname(found)
+    return ""
+
 
 # 编译超时（秒）。首次编译时 MiKTeX 可能要联网装宏包，给足时间。
 COMPILE_TIMEOUT = 300
@@ -69,8 +132,12 @@ def engine_path(name):
     f = ENGINE_FILES.get(name)
     if not f:
         return None
-    p = os.path.join(MIKTEX_BIN, f)
-    return p if os.path.isfile(p) else None
+    b = miktex_bin()
+    if b:
+        p = os.path.join(b, f)
+        if os.path.isfile(p):
+            return p
+    return shutil.which(f) or None
 
 
 def miktex_version():
@@ -352,6 +419,9 @@ def run_pass(exe, work, mainfile, timeout=COMPILE_TIMEOUT, job_id=None, cancel_e
         mainfile,
     ]
     env = dict(os.environ)
+    bin_dir = miktex_bin()
+    if bin_dir:
+        env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
     env["MIKTEX_AUTOINSTALL"] = "1"     # 缺宏包时自动安装
     env["max_print_line"] = "1000"
     t0 = time.time()
@@ -616,7 +686,16 @@ class Handler(SimpleHTTPRequestHandler):
                     "ok": True,
                     "engines": eng,
                     "miktex": miktex_version(),
-                    "bin": MIKTEX_BIN,
+                    "bin": miktex_bin(),
+                }
+            )
+        if p == "/api/config":
+            return self.send_json(
+                {
+                    "ok": True,
+                    "miktex_bin": miktex_bin(),
+                    "configured": load_config().get("miktex_bin") or "",
+                    "defaults": DEFAULT_MIKTEX_BINS,
                 }
             )
         if p == "/api/status":
@@ -647,6 +726,32 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == "/api/config":
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+            except Exception as e:
+                return self.send_json({"ok": False, "error": "JSON 解析失败：%r" % (e,)}, 400)
+            raw = str(payload.get("miktex_bin") or "").strip().strip('"')
+            if not raw:
+                save_config(miktex_bin="")
+                detected = miktex_bin()
+                return self.send_json(
+                    {"ok": True, "miktex_bin": detected, "configured": "",
+                     "miktex": miktex_version(), "reset": True}
+                )
+            candidate = os.path.normpath(raw)
+            if not valid_miktex_bin(candidate):
+                return self.send_json(
+                    {"ok": False,
+                     "error": "该目录里找不到 xelatex.exe / pdflatex.exe / lualatex.exe，请选择 MiKTeX 的 bin 目录"},
+                    400,
+                )
+            save_config(miktex_bin=candidate)
+            return self.send_json(
+                {"ok": True, "miktex_bin": candidate, "configured": candidate,
+                 "miktex": miktex_version()}
+            )
         if u.path == "/api/cancel":
             cancelled = cancel_active_compile(wait=True, timeout=15.0)
             # 正常情况下这里已经彻底空闲；若极端情况下超时，明确告诉前端，
@@ -701,7 +806,7 @@ def main():
     os.makedirs(BUILD_DIR, exist_ok=True)
     avail = [k for k in ENGINE_FILES if engine_path(k)]
     print("ZENTEX 本地编译服务  http://127.0.0.1:%d/" % port)
-    print("  MiKTeX: %s" % (MIKTEX_BIN))
+    print("  MiKTeX: %s" % (miktex_bin() or "未检测到（可在页面设置里指定）"))
     print("  可用引擎: %s" % (", ".join(avail) if avail else "无（请检查 MiKTeX 路径）"))
     print("  本地打开: http://127.0.0.1:%d/omm-latex.html" % port)
     print("  云端页面: 在「编译 → 服务地址」填 http://127.0.0.1:%d" % port)

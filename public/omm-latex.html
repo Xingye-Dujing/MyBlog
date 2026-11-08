@@ -3622,8 +3622,17 @@
               '留空表示使用同源地址（页面与编译服务在同一端口）。' +
               '若本页托管在云端，请填 <code>http://127.0.0.1:8123</code>，' +
               '并让本机保持运行 <code>latex-serve.py</code>。</p>' +
+              '<h4>MiKTeX 路径</h4>' +
+              '<div class="field"><label>安装目录（bin）</label>' +
+              '<input id="miktex-input" spellcheck="false" value="' +
+              esc((state.service && state.service.bin) || '') +
+              '" placeholder="D:\\MiKTeX\\miktex\\bin\\x64" /></div>' +
+              '<p style="font-size:10.5px;line-height:1.9;color:var(--faint);margin-top:4px">' +
+              '填 <code>xelatex.exe</code> 所在的目录；留空则自动探测。' +
+              '设置保存在本机，下次启动仍然有效。</p>' +
               '<div style="display:flex;gap:6px;padding-top:10px">' +
               '<button class="ghost-btn" data-svc="save">保存并连接</button>' +
+              '<button class="ghost-btn" data-svc="miktex">保存 MiKTeX 路径</button>' +
               '<button class="ghost-btn" data-svc="clear">恢复同源</button>' +
               '</div>' +
               '<div id="svc-msg" style="font-size:10px;color:var(--dim);padding-top:9px;line-height:1.8"></div>',
@@ -3653,6 +3662,42 @@
           if (ok) {
             toast('已连接本地服务')
             compile(true)
+          }
+        }
+        async function saveMiktexInput() {
+          const msg = $id('svc-msg')
+          const input = $id('miktex-input')
+          const value = input ? input.value.trim() : ''
+          if (msg) {
+            msg.textContent = '正在保存 MiKTeX 路径 …'
+            msg.style.color = 'var(--dim)'
+          }
+          try {
+            const res = await fetch((state.apiBase || '') + '/api/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ miktex_bin: value }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok || !data.ok) throw new Error(data.error || '保存失败')
+            if (state.service) {
+              state.service.bin = data.miktex_bin || ''
+              state.service.miktex = data.miktex || ''
+            }
+            if (input) input.value = data.miktex_bin || ''
+            if (msg) {
+              msg.textContent = data.miktex_bin
+                ? '已保存：' + data.miktex_bin + (data.miktex ? '（MiKTeX ' + data.miktex + '）' : '')
+                : '已清除自定义路径，改为自动探测；当前未找到 MiKTeX。'
+              msg.style.color = data.miktex_bin ? 'var(--ok)' : 'var(--err)'
+            }
+            toast(data.miktex_bin ? 'MiKTeX 路径已保存' : '未检测到 MiKTeX', !data.miktex_bin)
+            if (data.miktex_bin) compile(true)
+          } catch (e) {
+            if (msg) {
+              msg.textContent = '保存失败：' + (e && e.message ? e.message : String(e || ''))
+              msg.style.color = 'var(--err)'
+            }
           }
         }
         function updateChip() {
@@ -4908,7 +4953,10 @@
               return
             }
             const sv = e.target.closest('[data-svc]')
-            if (sv) return saveServiceInput(sv.dataset.svc === 'clear')
+            if (sv)
+              return sv.dataset.svc === 'miktex'
+                ? saveMiktexInput()
+                : saveServiceInput(sv.dataset.svc === 'clear')
             const er = e.target.closest('[data-err]')
             if (er) jumpToError(Number(er.dataset.err))
           })

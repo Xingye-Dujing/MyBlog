@@ -1,0 +1,137 @@
+# OMM-ZEN 桌面版（EXE）构建说明
+
+把 `public/` 下的每个 `omm-*.html` 打包成一个独立的 Windows 程序。每个 EXE：
+
+- 内嵌页面、字体和所有前端依赖（`vendor/`），**不联网也能完整打开和操作界面**；
+- 在本机回环地址上起一个仅本机可访问的 HTTP 服务，再用系统自带的 **WebView2** 打开窗口；
+- 每个应用使用固定端口，`localStorage` / IndexedDB / 登录态稳定保存在
+  `%LOCALAPPDATA%\OMM-ZEN\<应用名>\`；
+- 关闭窗口后后台服务随进程退出。
+
+`dist/` 下已生成 11 个程序：
+
+| EXE | 对应页面 | 端口 | 大小 | 离线资源 |
+| --- | --- | --- | --- | --- |
+| OMM-Annotate.exe | omm-annotate.html | 8311 | 21.1 MB | pdf.js |
+| OMM-Corpus.exe | omm-corpus.html | 8312 | 19.3 MB | Supabase SDK |
+| OMM-Data.exe | omm-data.html | 8313 | 19.3 MB | Supabase SDK |
+| OMM-English.exe | omm-english.html | 8314 | 19.4 MB | Supabase SDK |
+| OMM-LaTeX.exe | omm-latex.html | 8123 | 21.1 MB | pdf.js |
+| OMM-MdForge.exe | omm-mdforge.html | 8316 | 19.3 MB | 字体 + `mdforge` |
+| OMM-Message.exe | omm-message.html | 8317 | 19.2 MB | Supabase SDK |
+| OMM-Planner.exe | omm-planner.html | 8318 | 19.3 MB | html2canvas |
+| OMM-Redact.exe | omm-redact.html | 8319 | 30.4 MB | pdf.js、MuPDF、pdf-lib、JSZip、PptxViewJS、mammoth、Chart.js、jsPDF |
+| OMM-Visualization.exe | omm-visualization.html | 8320 | 20.4 MB | Chart.js、ApexCharts、ECharts、SheetJS、html2canvas、jsPDF |
+| OMM-Writer.exe | omm-writer.html | 8321 | 20.3 MB | html2canvas、jsPDF、MathJax、Supabase SDK |
+
+单个 EXE 复制到任何 Windows 10/11 电脑即可运行，目标机器不需要 Python、Node 或网络。
+
+## 运行要求
+
+1. **WebView2 运行时**：Windows 11 自带；Windows 10 通常随 Edge 已安装。
+   缺失时安装 “Microsoft Edge WebView2 Runtime”（Evergreen）即可。
+2. **MiKTeX（仅 LaTeX / MdForge）**：真正编译 `.tex` 时需要。
+   路径不再写死，见下一节。
+3. **仍然需要联网的功能**：AI 接口（DeepSeek / OpenAI 等）、翻译、Supabase 云同步、
+   MiKTeX 首次自动安装缺失宏包。这些是服务本身需要网络，界面和本地编辑/导出不受影响。
+
+## 设置 MiKTeX 路径（不再写死）
+
+两个应用都可在前端设置，保存后立即生效，并写入共享配置：
+
+```
+%LOCALAPPDATA%\OMM-ZEN\miktex.json
+```
+
+- **LaTeX 编译工作台**：菜单「编译 → 服务地址」→ 填写「MiKTeX 路径」→
+  「保存 MiKTeX 路径」。目录填 `xelatex.exe` 所在的 `...\miktex\bin\x64`。
+  留空会恢复自动探测。
+- **Markdown 铸造台**：右上角「偏好 / 设置 → MiKTeX」→ 填路径 →「保存 MiKTeX 路径」。
+- 顺序：用户设置 → `MIKTEX_BIN` 环境变量 → 常见安装目录 → `PATH` 里的 `xelatex`。
+- 保存时会校验目录内是否存在 `xelatex.exe` / `pdflatex.exe` / `lualatex.exe`，
+  路径无效会直接报错，不会把错误配置写进去。
+
+## 离线是怎么做的
+
+- `vendor/` 存放所有第三方库和 Literata 字体（约 30 MB，含 PDF/MuPDF/图表等）。
+- 构建时 `desktop/offline.py` 会：
+  1. 把页面里的 CDN `<script>` / Google Fonts 链接改成本地 `vendor/...`；
+  2. 生成只含本地路径的 `cdn-mirrors.js`（打包版不再保留任何 CDN 回退）；
+  3. 按应用只复制它真正用到的库，避免每个 EXE 都塞满 30 MB。
+- 源码 HTML 不改动，网站部署仍走 CDN；离线改写只发生在构建阶段的临时目录。
+- 已验证 11 个 EXE 启动后对公网的请求数为 **0**；PDF.js、MuPDF、
+  MathJax、ECharts、SheetJS 等均从包内加载。
+
+## 重新构建
+
+```powershell
+# 全部重建（输出到 dist/）
+.venv\Scripts\python.exe desktop\build_exes.py --clean
+
+# 只构建某几个
+.venv\Scripts\python.exe desktop\build_exes.py planner writer
+
+# 查看应用清单
+.venv\Scripts\python.exe desktop\build_exes.py --list
+
+# 直接从源码运行（调试用，改 HTML 后无需重新打包）
+.venv\Scripts\python.exe desktop\omm_launcher.py --app planner --debug
+```
+
+构建依赖已装进 `.venv`：`pywebview`、`pythonnet`、`pyinstaller`。新环境：
+
+```powershell
+.venv\Scripts\python.exe -m pip install pywebview pyinstaller
+```
+
+## 更新/补充离线资源
+
+```powershell
+.venv\Scripts\python.exe desktop\fetch_vendor.py
+```
+
+脚本按 `desktop/fetch_vendor.py` 里的版本表下载到 `vendor/`，已存在的文件会跳过。
+换库版本时改 `FILES` / `TREES`，同时更新 `desktop/offline.py` 里的 `LOCAL` 路径。
+
+新增一个应用：
+
+1. 把 HTML 放进 `public/`，在 `desktop/omm_launcher.py` 的 `APPS` 加一行
+   （文件名、固定端口、后端 `None` / `"mdforge"` / `"latex"`），
+   `WINDOW_TITLES` 写窗口标题。
+2. 在 `desktop/build_exes.py` 的 `EXE_NAMES` 加 EXE 名。
+3. 在 `desktop/offline.py` 的 `APP_VENDOR` 写它需要的库目录；
+   如果用了新的 CDN 库，先加进 `LOCAL` 和 `URL_MAP`。
+4. 重新构建该应用。
+
+## 图标
+
+`public/icon.ico` 和 `public/icon-writer.ico` 实际是 PNG 改名，WebView2 不能直接用。
+构建时会用 Pillow 转成真正的多尺寸 `app.ico`。
+想给单个应用换图标，放 `desktop/icons-src/<app>.png`（id 见上表），会自动优先使用。
+
+## 签名 EXE（可选）
+
+`desktop/sign_exes.py` 支持 PFX 或证书存储指纹，优先使用 Windows SDK 的
+`signtool.exe`，否则回退到 PowerShell：
+
+```powershell
+.venv\Scripts\python.exe desktop\sign_exes.py --pfx cert.pfx --password *** --all
+.venv\Scripts\python.exe desktop\sign_exes.py --thumbprint <指纹> --all
+```
+
+签名要在构建之后做，**每次重新构建都要重签**。证书选择：
+
+| 方案 | 费用 | SmartScreen | 适用 |
+| --- | --- | --- | --- |
+| 自签名证书 | 免费 | 仍提示未知发布者 | 仅本机/内网测试 |
+| OV 代码签名证书 | 约 $100–300/年 | 需积累信誉后逐步放行 | 一般分发 |
+| EV 代码签名证书 | 约 $300–600/年 + 硬件令牌 | 通常立即受信任 | 面向公众分发 |
+| Azure Trusted Signing | 约 $10/月 | 微软托管、CA 信任链 | 有 3 年经营记录的组织 |
+
+## 已知取舍
+
+- **固定端口**：端口被其它程序占用时会退回随机端口，该次运行的
+  `localStorage` 会落在另一个 origin，看起来像“数据没了”。关掉占用端口的程序再启动即可。
+- **首次启动约 1–3 秒**：onefile 包需要先解压到临时目录。
+- **h5-news.html 未打包**：它依赖 `h5news/`（约 16 MB 图片/视频），需要时可按同样方式加入。
+- **TeX 宏包**：离线环境请在联网机器上预先装好所需 MiKTeX 宏包。

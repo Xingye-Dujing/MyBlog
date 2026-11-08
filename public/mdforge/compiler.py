@@ -1,6 +1,7 @@
 """MiKTeX / xelatex compilation wrapper: two fixed engine passes."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -13,20 +14,73 @@ from .errors import CompileError
 
 _ENGINES = ("xelatex", "lualatex", "pdflatex")
 _COMPILE_LOCK = threading.Lock()
-_CANDIDATE_BINS = [
-    os.environ.get("MIKTEX_BIN", ""),
+_DEFAULT_BINS = [
     r"D:\MiKTeX\miktex\bin\x64",
     r"C:\Program Files\MiKTeX\miktex\bin\x64",
     r"C:\Program Files\MiKTeX 2.9\miktex\bin\x64",
+    os.path.expandvars(r"%LOCALAPPDATA%\Programs\MiKTeX\miktex\bin\x64"),
+    os.path.expandvars(r"%ProgramFiles%\MiKTeX\miktex\bin\x64"),
 ]
 
 
+def _config_path() -> str:
+    for key in ("OMM_SHARED_DIR", "OMM_DATA_DIR"):
+        folder = os.environ.get(key)
+        if folder:
+            return os.path.join(folder, "miktex.json")
+    return os.path.join(os.path.expanduser("~"), ".omm-zen", "miktex.json")
+
+
+def _load_config() -> Dict[str, Any]:
+    try:
+        with open(_config_path(), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_config(**updates) -> Dict[str, Any]:
+    path = _config_path()
+    data = _load_config()
+    data.update(updates)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    return data
+
+
+def has_engine(path: Optional[str]) -> bool:
+    if not path or not os.path.isdir(path):
+        return False
+    return any(os.path.isfile(os.path.join(path, engine + ".exe")) for engine in _ENGINES)
+
+
+def set_miktex_bin(path: str) -> Optional[str]:
+    """Persist a user-chosen MiKTeX bin folder; empty string clears it."""
+    raw = (path or "").strip().strip('"')
+    if not raw:
+        _save_config(miktex_bin="")
+        return find_miktex_bin()
+    candidate = os.path.normpath(raw)
+    if not has_engine(candidate):
+        raise ValueError("该目录里找不到 xelatex.exe / pdflatex.exe / lualatex.exe")
+    _save_config(miktex_bin=candidate)
+    return candidate
+
+
+def configured_miktex_bin() -> str:
+    return str(_load_config().get("miktex_bin") or "")
+
+
 def find_miktex_bin() -> Optional[str]:
-    for candidate in _CANDIDATE_BINS:
-        if candidate and os.path.isdir(candidate):
-            for engine in _ENGINES:
-                if os.path.isfile(os.path.join(candidate, engine + ".exe")):
-                    return os.path.normpath(candidate)
+    candidates = [configured_miktex_bin(), os.environ.get("MIKTEX_BIN", "")]
+    candidates += _DEFAULT_BINS
+    for candidate in candidates:
+        if has_engine(candidate):
+            return os.path.normpath(candidate)
     for engine in _ENGINES:
         location = shutil.which(engine)
         if location:
