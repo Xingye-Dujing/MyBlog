@@ -80,7 +80,7 @@ def build(app_id: str) -> bool:
         encoding="utf-8",
     )
 
-    # Offline staging: rewritten HTML + local-first mirror table + vendored libs.
+    # Staging: source page already points at vendor/, bundle its subset.
     stage = offline.stage(
         app_id,
         html,

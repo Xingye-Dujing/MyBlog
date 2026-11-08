@@ -54,11 +54,10 @@
 ## 离线是怎么做的
 
 - `vendor/` 存放所有第三方库和 Literata 字体（约 30 MB，含 PDF/MuPDF/图表等）。
-- 构建时 `desktop/offline.py` 会：
-  1. 把页面里的 CDN `<script>` / Google Fonts 链接改成本地 `vendor/...`；
-  2. 生成只含本地路径的 `cdn-mirrors.js`（打包版不再保留任何 CDN 回退）；
-  3. 按应用只复制它真正用到的库，避免每个 EXE 都塞满 30 MB。
-- 源码 HTML 不改动，网站部署仍走 CDN；离线改写只发生在构建阶段的临时目录。
+- 源码 HTML 直接引用 `vendor/...`，不再包含 CDN 地址、镜像表或加载回退逻辑。
+- 构建时 `desktop/offline.py` 只做一件事：按应用复制它真正用到的库，
+  避免每个 EXE 都塞满 30 MB。
+- 网站部署和 EXE 使用同一套资源，不再需要构建期改写。
 - 已验证 11 个 EXE 启动后对公网的请求数为 **0**；PDF.js、MuPDF、
   MathJax、ECharts、SheetJS 等均从包内加载。
 
@@ -91,7 +90,7 @@
 ```
 
 脚本按 `desktop/fetch_vendor.py` 里的版本表下载到 `vendor/`，已存在的文件会跳过。
-换库版本时改 `FILES` / `TREES`，同时更新 `desktop/offline.py` 里的 `LOCAL` 路径。
+换库版本时改 `FILES` / `TREES`，同时更新页面里对应的 `vendor/...` 路径。
 
 新增一个应用：
 
@@ -100,7 +99,7 @@
    `WINDOW_TITLES` 写窗口标题。
 2. 在 `desktop/build_exes.py` 的 `EXE_NAMES` 加 EXE 名。
 3. 在 `desktop/offline.py` 的 `APP_VENDOR` 写它需要的库目录；
-   如果用了新的 CDN 库，先加进 `LOCAL` 和 `URL_MAP`。
+   页面里直接用 `vendor/...` 路径引用。
 4. 重新构建该应用。
 
 ## 图标
