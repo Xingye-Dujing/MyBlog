@@ -94,8 +94,8 @@ macOS 程序必须在 macOS 上构建，不能在 Windows 上交叉编译。仓�
 Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 
 1. 推送 `macos-*` 标签，或在 Actions 页面手动运行 “Build macOS apps”。
-2. 工作流会执行 `python desktop/build_exes.py --clean`，把每个 `.app` 压缩成
-   `OMM-<App>-macOS-<arch>.zip`，上传到指定的 GitHub Release（默认 `v1.0.0`）。
+2. 工作流会执行 `python desktop/build_exes.py --clean`，把每个 `.app` 打包成
+   `OMM-<App>-macOS-<arch>.dmg`，上传到指定的 GitHub Release（默认 `v1.0.0`）。
 
 本机 Mac 构建：
 
@@ -105,11 +105,11 @@ python3 desktop/build_exes.py --clean
 # 产物：dist/OMM-<App>.app
 ```
 
-未签名/未公证的 `.app` 首次打开会被 Gatekeeper 拦截，可右键「打开」，
-或执行：
+未签名/未公证的 `.app` 首次打开会被 Gatekeeper 拦截。从 DMG 拖入 Applications 后，
+可右键「打开」，或执行：
 
 ```bash
-xattr -dr com.apple.quarantine /path/to/OMM-Planner.app
+xattr -dr com.apple.quarantine /Applications/OMM-Planner.app
 ```
 
 需要正式分发时，再给 `.app` 做 `codesign` + `notarytool` 公证。

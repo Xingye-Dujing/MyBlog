@@ -47,14 +47,19 @@ jobs:
         working-directory: public
         run: python desktop/build_exes.py --clean
 
-      - name: Package .app bundles
+      - name: Package .app bundles as DMG
         working-directory: public
         run: |
           mkdir -p artifacts
           for app in dist/*.app; do
             name="$(basename "$app" .app)"
-            ditto -c -k --sequesterRsrc --keepParent \
-              "$app" "artifacts/${name}-macOS-${{ matrix.arch }}.zip"
+            stage="$(mktemp -d)"
+            ditto "$app" "$stage/$name.app"
+            ln -s /Applications "$stage/Applications"
+            hdiutil create -volname "$name" -srcfolder "$stage" \
+              -ov -format UDZO \
+              "artifacts/${name}-macOS-${{ matrix.arch }}.dmg"
+            rm -rf "$stage"
           done
           ls -lh artifacts
 
@@ -62,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: omm-zen-macos-${{ matrix.arch }}
-          path: public/artifacts/*.zip
+          path: public/artifacts/*.dmg
           if-no-files-found: error
 
       - name: Upload to GitHub Release
@@ -70,5 +75,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$RELEASE_TAG" artifacts/*.zip \
+          gh release upload "$RELEASE_TAG" artifacts/*.dmg \
             --repo "$GITHUB_REPOSITORY" --clobber
