@@ -13,14 +13,26 @@ from typing import Any, Dict, List, Optional
 from .errors import CompileError
 
 _ENGINES = ("xelatex", "lualatex", "pdflatex")
+_ENGINE_EXT = ".exe" if os.name == "nt" else ""
 _COMPILE_LOCK = threading.Lock()
-_DEFAULT_BINS = [
-    r"D:\MiKTeX\miktex\bin\x64",
-    r"C:\Program Files\MiKTeX\miktex\bin\x64",
-    r"C:\Program Files\MiKTeX 2.9\miktex\bin\x64",
-    os.path.expandvars(r"%LOCALAPPDATA%\Programs\MiKTeX\miktex\bin\x64"),
-    os.path.expandvars(r"%ProgramFiles%\MiKTeX\miktex\bin\x64"),
-]
+if os.name == "nt":
+    _DEFAULT_BINS = [
+        r"D:\MiKTeX\miktex\bin\x64",
+        r"C:\Program Files\MiKTeX\miktex\bin\x64",
+        r"C:\Program Files\MiKTeX 2.9\miktex\bin\x64",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\MiKTeX\miktex\bin\x64"),
+        os.path.expandvars(r"%ProgramFiles%\MiKTeX\miktex\bin\x64"),
+    ]
+else:
+    # macOS: MacTeX installs the stable symlink at /Library/TeX/texbin.
+    _DEFAULT_BINS = [
+        "/Library/TeX/texbin",
+        "/usr/local/texlive/2026/bin/universal-darwin",
+        "/usr/local/texlive/2025/bin/universal-darwin",
+        "/usr/local/texlive/2024/bin/universal-darwin",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ]
 
 
 def _config_path() -> str:
@@ -55,7 +67,7 @@ def _save_config(**updates) -> Dict[str, Any]:
 def has_engine(path: Optional[str]) -> bool:
     if not path or not os.path.isdir(path):
         return False
-    return any(os.path.isfile(os.path.join(path, engine + ".exe")) for engine in _ENGINES)
+    return any(os.path.isfile(os.path.join(path, engine + _ENGINE_EXT)) for engine in _ENGINES)
 
 
 def set_miktex_bin(path: str) -> Optional[str]:
@@ -66,7 +78,7 @@ def set_miktex_bin(path: str) -> Optional[str]:
         return find_miktex_bin()
     candidate = os.path.normpath(raw)
     if not has_engine(candidate):
-        raise ValueError("该目录里找不到 xelatex.exe / pdflatex.exe / lualatex.exe")
+        raise ValueError("该目录里找不到 xelatex / pdflatex / lualatex")
     _save_config(miktex_bin=candidate)
     return candidate
 
@@ -103,7 +115,7 @@ def environment_info() -> Dict[str, Any]:
     for engine in _ENGINES:
         path = None
         if miktex_bin:
-            candidate = os.path.join(miktex_bin, engine + ".exe")
+            candidate = os.path.join(miktex_bin, engine + _ENGINE_EXT)
             if os.path.isfile(candidate):
                 path = candidate
         if not path:
@@ -111,7 +123,7 @@ def environment_info() -> Dict[str, Any]:
         engines[engine] = bool(path)
     version = ""
     if miktex_bin:
-        exe = os.path.join(miktex_bin, "xelatex.exe")
+        exe = os.path.join(miktex_bin, "xelatex" + _ENGINE_EXT)
         if os.path.isfile(exe):
             try:
                 result = subprocess.run(
@@ -119,7 +131,7 @@ def environment_info() -> Dict[str, Any]:
                     capture_output=True,
                     timeout=20,
                     env=_env(miktex_bin),
-                    creationflags=0x08000000,
+                    creationflags=0x08000000 if os.name == "nt" else 0,
                 )
                 text = _decode(result.stdout) + _decode(result.stderr)
                 match = re.search(r"MiKTeX\s+([0-9.]+)", text)
@@ -198,12 +210,12 @@ def _compile_tex_unlocked(
 
     engine_path = None
     if miktex_bin:
-        candidate = os.path.join(miktex_bin, engine + ".exe")
+        candidate = os.path.join(miktex_bin, engine + _ENGINE_EXT)
         if os.path.isfile(candidate):
             engine_path = candidate
     engine_path = engine_path or shutil.which(engine)
     if not engine_path:
-        raise CompileError("未找到 MiKTeX / %s，请安装 MiKTeX 或检查 MIKTEX_BIN" % engine)
+        raise CompileError("未找到 TeX 引擎 / %s，请安装 TeX 或检查 MIKTEX_BIN" % engine)
     # 生成的 TeX 只有手写 thebibliography 与可选目录，无 BibTeX / makeindex 依赖。
     # 固定两遍让 .toc / .aux 生效即可，无需额外的构建调度程序。
     code = 1
@@ -216,7 +228,7 @@ def _compile_tex_unlocked(
                 env=env,
                 capture_output=True,
                 timeout=timeout,
-                creationflags=0x08000000,
+                creationflags=0x08000000 if os.name == "nt" else 0,
             )
             logs.append(_decode(result.stdout))
             logs.append(_decode(result.stderr))

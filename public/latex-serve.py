@@ -33,20 +33,32 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # 编译在系统临时目录里进行，不污染项目目录
 BUILD_DIR = os.path.join(tempfile.gettempdir(), "zentex-build")
 
+_ENGINE_EXT = ".exe" if os.name == "nt" else ""
 ENGINE_FILES = {
-    "xelatex": "xelatex.exe",
-    "pdflatex": "pdflatex.exe",
-    "lualatex": "lualatex.exe",
+    "xelatex": "xelatex" + _ENGINE_EXT,
+    "pdflatex": "pdflatex" + _ENGINE_EXT,
+    "lualatex": "lualatex" + _ENGINE_EXT,
 }
 
-# 自动探测的 MiKTeX 安装目录（用户可在前端设置里覆盖并持久化）
-DEFAULT_MIKTEX_BINS = [
-    r"D:\MiKTeX\miktex\bin\x64",
-    r"C:\Program Files\MiKTeX\miktex\bin\x64",
-    r"C:\Program Files\MiKTeX 2.9\miktex\bin\x64",
-    os.path.expandvars(r"%LOCALAPPDATA%\Programs\MiKTeX\miktex\bin\x64"),
-    os.path.expandvars(r"%ProgramFiles%\MiKTeX\miktex\bin\x64"),
-]
+# 自动探测的 TeX 安装目录（用户可在前端设置里覆盖并持久化）
+if os.name == "nt":
+    DEFAULT_MIKTEX_BINS = [
+        r"D:\MiKTeX\miktex\bin\x64",
+        r"C:\Program Files\MiKTeX\miktex\bin\x64",
+        r"C:\Program Files\MiKTeX 2.9\miktex\bin\x64",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\MiKTeX\miktex\bin\x64"),
+        os.path.expandvars(r"%ProgramFiles%\MiKTeX\miktex\bin\x64"),
+    ]
+else:
+    # macOS: MacTeX installs the stable symlink at /Library/TeX/texbin.
+    DEFAULT_MIKTEX_BINS = [
+        "/Library/TeX/texbin",
+        "/usr/local/texlive/2026/bin/universal-darwin",
+        "/usr/local/texlive/2025/bin/universal-darwin",
+        "/usr/local/texlive/2024/bin/universal-darwin",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ]
 
 
 def config_dir():
@@ -149,7 +161,7 @@ def miktex_version():
             [exe, "--version"],
             capture_output=True,
             timeout=25,
-            creationflags=0x08000000,
+            creationflags=0x08000000 if os.name == "nt" else 0,
         )
         txt = (r.stdout or b"").decode("utf-8", "replace")
         m = re.search(r"MiKTeX\s+([0-9.]+)", txt)
@@ -744,7 +756,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not valid_miktex_bin(candidate):
                 return self.send_json(
                     {"ok": False,
-                     "error": "该目录里找不到 xelatex.exe / pdflatex.exe / lualatex.exe，请选择 MiKTeX 的 bin 目录"},
+                     "error": "该目录里找不到 xelatex / pdflatex / lualatex，请选择 TeX 的 bin 目录"},
                     400,
                 )
             save_config(miktex_bin=candidate)

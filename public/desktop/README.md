@@ -1,14 +1,17 @@
-# OMM-ZEN 桌面版（EXE）构建说明
+# OMM-ZEN 桌面版构建说明
 
-把 `public/` 下的每个 `omm-*.html` 打包成一个独立的 Windows 程序。每个 EXE：
+把 `public/` 下的每个 `omm-*.html` 打包成独立的桌面程序：Windows 为 `.exe`，
+macOS 为 `.app`。每个程序：
 
 - 内嵌页面、字体和所有前端依赖（`vendor/`），**不联网也能完整打开和操作界面**；
-- 在本机回环地址上起一个仅本机可访问的 HTTP 服务，再用系统自带的 **WebView2** 打开窗口；
+- 在本机回环地址上起一个仅本机可访问的 HTTP 服务，再用系统 WebView 打开窗口
+  （Windows 用 WebView2，macOS 用系统 WebKit/WKWebView）；
 - 每个应用使用固定端口，`localStorage` / IndexedDB / 登录态稳定保存在
-  `%LOCALAPPDATA%\OMM-ZEN\<应用名>\`；
+  `%LOCALAPPDATA%\OMM-ZEN\<应用名>\`（Windows）或
+  `~/Library/Application Support/OMM-ZEN/<应用名>/`（macOS）；
 - 关闭窗口后后台服务随进程退出。
 
-`dist/` 下已生成 11 个程序：
+`dist/` 下已生成 11 个 Windows 程序：
 
 | EXE | 对应页面 | 端口 | 大小 | 离线资源 |
 | --- | --- | --- | --- | --- |
@@ -24,31 +27,32 @@
 | OMM-Visualization.exe | omm-visualization.html | 8320 | 20.4 MB | Chart.js、ApexCharts、ECharts、SheetJS、html2canvas、jsPDF |
 | OMM-Writer.exe | omm-writer.html | 8321 | 20.3 MB | html2canvas、jsPDF、MathJax、Supabase SDK |
 
-单个 EXE 复制到任何 Windows 10/11 电脑即可运行，目标机器不需要 Python、Node 或网络。
+单个程序复制到对应系统的电脑即可运行，目标机器不需要 Python、Node 或网络。
 
 ## 运行要求
 
-1. **WebView2 运行时**：Windows 11 自带；Windows 10 通常随 Edge 已安装。
-   缺失时安装 “Microsoft Edge WebView2 Runtime”（Evergreen）即可。
-2. **MiKTeX（仅 LaTeX / MdForge）**：真正编译 `.tex` 时需要。
-   路径不再写死，见下一节。
+1. **WebView2 运行时（仅 Windows）**：Windows 11 自带；Windows 10 通常随 Edge 已安装。
+   缺失时安装 “Microsoft Edge WebView2 Runtime”（Evergreen）即可。macOS 使用系统 WebKit。
+2. **TeX（仅 LaTeX / MdForge）**：真正编译 `.tex` 时需要。
+   Windows 用 MiKTeX，macOS 用 MacTeX；路径不再写死，见下一节。
 3. **仍然需要联网的功能**：AI 接口（DeepSeek / OpenAI 等）、翻译、Supabase 云同步、
-   MiKTeX 首次自动安装缺失宏包。这些是服务本身需要网络，界面和本地编辑/导出不受影响。
+   TeX 首次自动安装缺失宏包。这些是服务本身需要网络，界面和本地编辑/导出不受影响。
 
-## 设置 MiKTeX 路径（不再写死）
+## 设置 TeX 路径（不再写死）
 
 两个应用都可在前端设置，保存后立即生效，并写入共享配置：
 
 ```
-%LOCALAPPDATA%\OMM-ZEN\miktex.json
+Windows: %LOCALAPPDATA%\OMM-ZEN\miktex.json
+macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 ```
 
 - **LaTeX 编译工作台**：菜单「编译 → 服务地址」→ 填写「MiKTeX 路径」→
-  「保存 MiKTeX 路径」。目录填 `xelatex.exe` 所在的 `...\miktex\bin\x64`。
-  留空会恢复自动探测。
+  「保存 MiKTeX 路径」。Windows 填 `xelatex.exe` 所在的 `...\miktex\bin\x64`；
+  macOS 填 `/Library/TeX/texbin`（MacTeX 的稳定入口）。留空会恢复自动探测。
 - **Markdown 铸造台**：右上角「偏好 / 设置 → MiKTeX」→ 填路径 →「保存 MiKTeX 路径」。
 - 顺序：用户设置 → `MIKTEX_BIN` 环境变量 → 常见安装目录 → `PATH` 里的 `xelatex`。
-- 保存时会校验目录内是否存在 `xelatex.exe` / `pdflatex.exe` / `lualatex.exe`，
+- 保存时会校验目录内是否存在 `xelatex` / `pdflatex` / `lualatex`，
   路径无效会直接报错，不会把错误配置写进去。
 
 ## 离线是怎么做的
@@ -83,6 +87,33 @@
 .venv\Scripts\python.exe -m pip install pywebview pyinstaller
 ```
 
+## macOS 构建
+
+macOS 程序必须在 macOS 上构建，不能在 Windows 上交叉编译。仓库自带
+`.github/workflows/macos-build.yml`，用 GitHub Actions 的 macOS runner 生成
+Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
+
+1. 推送 `macos-*` 标签，或在 Actions 页面手动运行 “Build macOS apps”。
+2. 工作流会执行 `python desktop/build_exes.py --clean`，把每个 `.app` 压缩成
+   `OMM-<App>-macOS-<arch>.zip`，上传到指定的 GitHub Release（默认 `v1.0.0`）。
+
+本机 Mac 构建：
+
+```bash
+python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
+python3 desktop/build_exes.py --clean
+# 产物：dist/OMM-<App>.app
+```
+
+未签名/未公证的 `.app` 首次打开会被 Gatekeeper 拦截，可右键「打开」，
+或执行：
+
+```bash
+xattr -dr com.apple.quarantine /path/to/OMM-Planner.app
+```
+
+需要正式分发时，再给 `.app` 做 `codesign` + `notarytool` 公证。
+
 ## 更新/补充离线资源
 
 ```powershell
@@ -105,8 +136,9 @@
 ## 图标
 
 `public/icon.ico` 和 `public/icon-writer.ico` 实际是 PNG 改名，WebView2 不能直接用。
-构建时会用 Pillow 转成真正的多尺寸 `app.ico`。
-想给单个应用换图标，放 `desktop/icons-src/<app>.png`（id 见上表），会自动优先使用。
+Windows 构建时用 Pillow 转成真正的多尺寸 `app.ico`；macOS 构建时用 `iconutil`
+生成 `app.icns`。想给单个应用换图标，放 `desktop/icons-src/<app>.png`
+（id 见上表），会自动优先使用。
 
 ## 签名 EXE（可选）
 
