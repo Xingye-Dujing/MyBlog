@@ -16,6 +16,8 @@
   var catalogCache = null;
   var pluginLoadError = '';
   var PLUGIN_DIR = '';
+  var APPEARANCE_KEY = 'omm.hub.appearance.v1';
+  var hubAppearance = { radius: 0, accent: 'amber', motion: true };
 
   function setApps(plugins) {
     var valid = [];
@@ -301,6 +303,11 @@
     els.ppBody = document.getElementById('pp-body');
     els.ppTitle = document.getElementById('pp-title');
     els.ppStatus = document.getElementById('pp-status');
+    els.hubSettings = document.getElementById('hub-settings');
+
+    loadHubAppearance();
+    applyHubAppearance();
+    bindHubSettings();
 
     ensureSplitKeys(state.tree);
     applyDockState();
@@ -508,8 +515,103 @@
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   }
 
+  function loadHubAppearance() {
+    try {
+      var raw = localStorage.getItem(APPEARANCE_KEY);
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return;
+      hubAppearance.radius = [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0
+        ? Number(data.radius)
+        : 0;
+      hubAppearance.accent = ['amber', 'olive', 'rust', 'blue'].indexOf(data.accent) >= 0
+        ? data.accent
+        : 'amber';
+      hubAppearance.motion = data.motion !== false;
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function saveHubAppearance() {
+    try {
+      localStorage.setItem(APPEARANCE_KEY, JSON.stringify(hubAppearance));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function applyHubAppearance() {
+    if (!document.documentElement) return;
+    document.documentElement.style.setProperty('--radius', hubAppearance.radius + 'px');
+    document.documentElement.dataset.accent = hubAppearance.accent;
+    document.body.classList.toggle('no-motion', !hubAppearance.motion);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-hub-radius]'), function (btn) {
+      btn.classList.toggle('active', Number(btn.dataset.hubRadius) === hubAppearance.radius);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-hub-accent]'), function (btn) {
+      btn.classList.toggle('active', btn.dataset.hubAccent === hubAppearance.accent);
+    });
+    var motion = document.getElementById('hub-motion');
+    if (motion) motion.setAttribute('aria-checked', String(hubAppearance.motion));
+  }
+
+  function openHubSettings() {
+    closePopovers();
+    closePluginPanel();
+    els.hubSettings.hidden = false;
+    applyHubAppearance();
+  }
+
+  function closeHubSettings() {
+    els.hubSettings.hidden = true;
+  }
+
+  function bindHubSettings() {
+    if (!els.hubSettings) return;
+    document.getElementById('hub-settings-close').addEventListener('click', closeHubSettings);
+    document.getElementById('hub-settings-done').addEventListener('click', closeHubSettings);
+    els.hubSettings.addEventListener('click', function (event) {
+      if (event.target === els.hubSettings) closeHubSettings();
+    });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-hub-radius]'),
+      function (btn) {
+        btn.addEventListener('click', function () {
+          hubAppearance.radius = Number(btn.dataset.hubRadius);
+          saveHubAppearance();
+          applyHubAppearance();
+        });
+      }
+    );
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-hub-accent]'),
+      function (btn) {
+        btn.addEventListener('click', function () {
+          hubAppearance.accent = btn.dataset.hubAccent;
+          saveHubAppearance();
+          applyHubAppearance();
+        });
+      }
+    );
+    var motion = document.getElementById('hub-motion');
+    if (motion) {
+      motion.addEventListener('click', function () {
+        hubAppearance.motion = !hubAppearance.motion;
+        saveHubAppearance();
+        applyHubAppearance();
+      });
+    }
+    document.getElementById('hub-settings-reset').addEventListener('click', function () {
+      hubAppearance = { radius: 0, accent: 'amber', motion: true };
+      saveHubAppearance();
+      applyHubAppearance();
+    });
+  }
+
   function openPluginPanel(tab) {
     closePopovers();
+    if (els.hubSettings) els.hubSettings.hidden = true;
     if (tab) pluginPanelTab = tab;
     els.pluginPanel.hidden = false;
     els.ppStatus.textContent = '按需安装产品，或导入自己的插件';
@@ -1559,6 +1661,7 @@
         applyDockState();
         save();
       } else if (act === 'plugins') openPluginPanel();
+      else if (act === 'settings') openHubSettings();
       else if (act === 'launcher') toggleLauncher();
     });
     els.brand.addEventListener('click', function () {
@@ -1889,7 +1992,10 @@
     var mod = event.ctrlKey || event.metaKey;
     if (!mod) {
       if (event.key === 'Escape') {
-        if (!els.pluginPanel.hidden) {
+        if (!els.hubSettings.hidden) {
+          closeHubSettings();
+          event.preventDefault();
+        } else if (!els.pluginPanel.hidden) {
           closePluginPanel();
           event.preventDefault();
         } else if (!els.ctxMenu.hidden || !els.layoutMenu.hidden || launcherOpen) {

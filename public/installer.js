@@ -9,6 +9,9 @@
     installing: false,
   };
 
+  var APPEARANCE_KEY = 'omm.installer.appearance.v1';
+  var appearance = { radius: 0, accent: 'amber', motion: true, compact: false };
+
   var els = {};
 
   function esc(text) {
@@ -54,6 +57,13 @@
     els.progressLog = document.getElementById('progress-log');
     els.done = document.getElementById('done');
     els.shortcut = document.getElementById('shortcut');
+    els.railCount = document.getElementById('rail-count');
+    els.railSize = document.getElementById('rail-size');
+    els.settings = document.getElementById('settings');
+
+    loadAppearance();
+    applyAppearance();
+    bindSettings();
 
     document.getElementById('select-all').addEventListener('click', function () {
       if (!state.catalog) return;
@@ -82,7 +92,7 @@
       .then(function (config) {
         state.config = config;
         els.dir.value = config.install_dir;
-        els.pluginDir.textContent = '插件目录：' + config.plugin_dir;
+        els.pluginDir.textContent = config.plugin_dir;
         els.platform.textContent = {
           win64: 'Windows 64-bit',
           'macos-arm64': 'macOS Apple Silicon',
@@ -191,8 +201,99 @@
     }, 0);
     els.summaryCount.textContent = String(chosen.length);
     els.summarySize.textContent = bytes(size);
+    els.railCount.textContent = String(chosen.length);
+    els.railSize.textContent = bytes(size);
     els.install.disabled = state.installing || !state.catalog;
     els.install.textContent = state.installing ? '安装中…' : '开始安装';
+  }
+
+  function loadAppearance() {
+    try {
+      var raw = localStorage.getItem(APPEARANCE_KEY);
+      if (raw) {
+        var data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+          appearance.radius = [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0 ? Number(data.radius) : 0;
+          appearance.accent = ['amber', 'olive', 'rust', 'blue'].indexOf(data.accent) >= 0 ? data.accent : 'amber';
+          appearance.motion = data.motion !== false;
+          appearance.compact = !!data.compact;
+        }
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function saveAppearance() {
+    try {
+      localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function applyAppearance() {
+    document.documentElement.style.setProperty('--radius', appearance.radius + 'px');
+    document.documentElement.dataset.accent = appearance.accent;
+    document.body.classList.toggle('no-motion', !appearance.motion);
+    document.body.classList.toggle('compact', appearance.compact);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
+      btn.classList.toggle('active', Number(btn.dataset.radius) === appearance.radius);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-accent]'), function (btn) {
+      btn.classList.toggle('active', btn.dataset.accent === appearance.accent);
+    });
+    var motion = document.getElementById('motion');
+    var compact = document.getElementById('compact');
+    if (motion) motion.setAttribute('aria-checked', String(appearance.motion));
+    if (compact) compact.setAttribute('aria-checked', String(appearance.compact));
+  }
+
+  function bindSettings() {
+    function open() {
+      els.settings.hidden = false;
+    }
+    function close() {
+      els.settings.hidden = true;
+    }
+    ['settings-open', 'settings-open-2'].forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', open);
+    });
+    document.getElementById('settings-close').addEventListener('click', close);
+    document.getElementById('settings-done').addEventListener('click', close);
+    els.settings.addEventListener('click', function (event) {
+      if (event.target === els.settings) close();
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
+      btn.addEventListener('click', function () {
+        appearance.radius = Number(btn.dataset.radius);
+        saveAppearance();
+        applyAppearance();
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-accent]'), function (btn) {
+      btn.addEventListener('click', function () {
+        appearance.accent = btn.dataset.accent;
+        saveAppearance();
+        applyAppearance();
+      });
+    });
+    document.getElementById('motion').addEventListener('click', function () {
+      appearance.motion = !appearance.motion;
+      saveAppearance();
+      applyAppearance();
+    });
+    document.getElementById('compact').addEventListener('click', function () {
+      appearance.compact = !appearance.compact;
+      saveAppearance();
+      applyAppearance();
+    });
+    document.getElementById('settings-reset').addEventListener('click', function () {
+      appearance = { radius: 0, accent: 'amber', motion: true, compact: false };
+      saveAppearance();
+      applyAppearance();
+    });
   }
 
   function browse() {

@@ -290,8 +290,13 @@ def sha256_file(path: Path) -> str:
 
 def _read_url(url: str, timeout: float = 30.0) -> bytes:
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme == "file":
-        return Path(urllib.request.url2pathname(parsed.path)).read_bytes()
+    if parsed.scheme in ("", "file"):
+        path = (
+            Path(url)
+            if not parsed.scheme
+            else Path(urllib.request.url2pathname(parsed.path))
+        )
+        return path.read_bytes()
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "OMM-ZEN/1.0", "Accept": "*/*"},
@@ -334,7 +339,7 @@ def fetch_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
     last = None
     for candidate in mirror_urls(url):
         try:
-            if urllib.parse.urlparse(candidate).scheme == "file":
+            if urllib.parse.urlparse(candidate).scheme in ("", "file"):
                 data = _read_url(candidate, timeout=timeout)
             else:
                 data = _retry_network(
@@ -369,7 +374,7 @@ def download_bytes(
 ) -> bytes:
     def once(candidate: str) -> bytes:
         parsed = urllib.parse.urlparse(candidate)
-        if parsed.scheme == "file":
+        if parsed.scheme in ("", "file"):
             data = _read_url(candidate, timeout=timeout)
             if progress:
                 progress(len(data), len(data))
@@ -400,7 +405,7 @@ def download_bytes(
     last = None
     for candidate in candidates:
         try:
-            if urllib.parse.urlparse(candidate).scheme == "file":
+            if urllib.parse.urlparse(candidate).scheme in ("", "file"):
                 data = once(candidate)
             else:
                 data = _retry_network(lambda candidate=candidate: once(candidate), attempts=2)
