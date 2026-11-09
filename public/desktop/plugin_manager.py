@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 CATALOG_URL = (
     "https://github.com/Xingye-Dujing/MyBlog/releases/latest/download/catalog.json"
 )
+MIRROR_PREFIX = "https://ghproxy.net/"
 PLUGIN_API = 1
 MAX_ZIP_BYTES = 220 * 1024 * 1024
 MAX_UNPACKED_BYTES = 600 * 1024 * 1024
@@ -317,11 +318,34 @@ def _retry_network(fn: Callable[[], bytes], attempts: int = 3) -> bytes:
     raise PluginError("网络请求失败：%s" % last)
 
 
+def mirror_urls(url: str) -> List[str]:
+    """GitHub release assets first, then a public acceleration mirror.
+
+    The mirror is only used when the direct download fails; local file URLs and
+    custom hosts are left untouched.
+    """
+    if url.startswith("https://github.com/"):
+        return [url, MIRROR_PREFIX + url]
+    return [url]
+
+
 def fetch_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
-    if urllib.parse.urlparse(url).scheme == "file":
-        data = _read_url(url, timeout=timeout)
-    else:
-        data = _retry_network(lambda: _read_url(url, timeout=timeout))
+    data = None
+    last = None
+    for candidate in mirror_urls(url):
+        try:
+            if urllib.parse.urlparse(candidate).scheme == "file":
+                data = _read_url(candidate, timeout=timeout)
+            else:
+                data = _retry_network(
+                    lambda candidate=candidate: _read_url(candidate, timeout=timeout),
+                    attempts=2,
+                )
+            break
+        except Exception as exc:
+            last = exc
+    if data is None:
+        raise PluginError("插件目录下载失败：%s" % last)
     try:
         return json.loads(data.decode("utf-8"))
     except Exception as exc:
@@ -338,19 +362,21 @@ def fetch_catalog(url: str = CATALOG_URL) -> Dict[str, Any]:
 
 
 def download_bytes(
-    url: str,
+    url: str | List[str],
     expected_sha256: str = "",
     progress: Optional[Callable[[int, int], None]] = None,
     timeout: float = 60.0,
 ) -> bytes:
-    def once() -> bytes:
-        parsed = urllib.parse.urlparse(url)
+    def once(candidate: str) -> bytes:
+        parsed = urllib.parse.urlparse(candidate)
         if parsed.scheme == "file":
-            data = _read_url(url, timeout=timeout)
+            data = _read_url(candidate, timeout=timeout)
             if progress:
                 progress(len(data), len(data))
             return data
-        request = urllib.request.Request(url, headers={"User-Agent": "OMM-ZEN/1.0"})
+        request = urllib.request.Request(
+            candidate, headers={"User-Agent": "OMM-ZEN/1.0"}
+        )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             if response.status != 200:
                 raise PluginError("下载失败（HTTP %s）" % response.status)
@@ -369,10 +395,20 @@ def download_bytes(
                     progress(received, total)
             return b"".join(chunks)
 
-    if urllib.parse.urlparse(url).scheme == "file":
-        data = once()
-    else:
-        data = _retry_network(once)
+    candidates = url if isinstance(url, list) else mirror_urls(url)
+    data = None
+    last = None
+    for candidate in candidates:
+        try:
+            if urllib.parse.urlparse(candidate).scheme == "file":
+                data = once(candidate)
+            else:
+                data = _retry_network(lambda candidate=candidate: once(candidate), attempts=2)
+            break
+        except Exception as exc:
+            last = exc
+    if data is None:
+        raise PluginError("下载失败：%s" % last)
     if expected_sha256 and sha256_bytes(data).lower() != expected_sha256.lower():
         raise PluginError("文件校验失败（SHA-256 不匹配）")
     return data
