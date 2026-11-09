@@ -29,7 +29,7 @@ import tempfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.environ.get("OMM_PLUGIN_ROOT") or os.path.dirname(os.path.abspath(__file__))
 # 编译在系统临时目录里进行，不污染项目目录
 BUILD_DIR = os.path.join(tempfile.gettempdir(), "zentex-build")
 

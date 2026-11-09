@@ -215,7 +215,7 @@ def run(app_id: str, debug: bool = False) -> None:
     webview.start(**start_options)
 
 
-def run_hub(debug: bool = False) -> None:
+def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     """Open the integrated OMM-ZEN workspace."""
     root = resource_root()
     if not (root / HUB_HTML).is_file():
@@ -228,7 +228,7 @@ def run_hub(debug: bool = False) -> None:
 
     from hub_server import start_hub_server  # noqa: WPS433 - bundled module
 
-    port = start_hub_server(root, HUB_PORT)
+    port = start_hub_server(root, HUB_PORT, plugin_root=plugin_root)
 
     import webview
 
@@ -260,11 +260,19 @@ def run_hub(debug: bool = False) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run an OMM-ZEN app in a desktop window")
-    parser.add_argument("--app", required=True, choices=sorted(APPS) + ["hub"])
+    parser.add_argument(
+        "--app", required=True, choices=sorted(APPS) + ["hub", "installer"]
+    )
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--plugins", type=Path, default=None, help="plugin root for the hub")
+    parser.add_argument("--catalog", default="", help="catalog URL/file for the installer")
     args = parser.parse_args()
     if args.app == "hub":
-        run_hub(debug=args.debug)
+        run_hub(debug=args.debug, plugin_root=args.plugins)
+    elif args.app == "installer":
+        from installer_server import run_installer  # noqa: WPS433
+
+        run_installer(debug=args.debug, catalog=args.catalog)
     else:
         run(args.app, debug=args.debug)
 

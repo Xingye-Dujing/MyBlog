@@ -29,7 +29,9 @@ from .preview import document_stats, render_preview, toc_payload
 from .template import default_template_name, list_templates, load_template
 from .validate import validate_document
 
-PUBLIC_ROOT = Path(__file__).resolve().parent.parent
+PUBLIC_ROOT = Path(
+    os.environ.get("OMM_PLUGIN_ROOT") or Path(__file__).resolve().parent.parent
+).resolve()
 FRONTEND = "omm-mdforge.html"
 JOB_ROOT = Path(tempfile.gettempdir()) / "mdforge-jobs"
 JOBS: Dict[str, Dict[str, Any]] = {}

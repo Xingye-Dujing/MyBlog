@@ -1,23 +1,27 @@
 # OMM-ZEN 桌面版构建说明
 
-把 `public/` 下的 11 个 `omm-*.html` 打包成独立桌面程序，并额外提供一个把它们
-集成到同一窗口的 **OMM-ZEN 工作台**。Windows 为 `.exe`，macOS 为 `.app`。每个程序：
+把 `public/` 下的 11 个产品打包成独立桌面程序，并提供三种集成形态：
 
-- 内嵌页面、字体和所有前端依赖（`vendor/`），**不联网也能完整打开和操作界面**；
+- **OMM-ZEN.exe / .app**：完整离线版，内置全部 11 个插件。
+- **OMM-ZEN-Framework**：只含工作台框架，产品以插件形式按需安装。
+- **OMM-ZEN-Setup.exe / .app**：在线安装器，勾选要安装的产品，下载框架和对应插件包。
+
+每个程序：
+
 - 在本机回环地址上起一个仅本机可访问的 HTTP 服务，再用系统 WebView 打开窗口
   （Windows 用 WebView2，macOS 用系统 WebKit/WKWebView）；
-- 每个应用使用固定端口，`localStorage` / IndexedDB / 登录态稳定保存在
-  `%LOCALAPPDATA%\OMM-ZEN\<应用名>\`（Windows）或
-  `~/Library/Application Support/OMM-ZEN/<应用名>/`（macOS）；
+- 每个插件使用固定或持久化的独立端口，`localStorage` / IndexedDB / 登录态按
+  origin 隔离；
 - 关闭窗口后后台服务随进程退出。
 
 所有程序都不再显示各产品的品牌启动页，打开后直接进入工作界面。
 
-`dist/` 下生成 12 个 Windows 程序：
+`dist/` 下生成 12 个 Windows 程序，另有框架 zip 和在线安装器：
 
 | EXE | 对应页面 | 端口 | 大小 | 离线资源 |
 | --- | --- | --- | --- | --- |
-| **OMM-ZEN.exe** | **omm-hub.html + 全部 11 个应用** | **8300** | **33.2 MB** | **全量 `vendor/`** |
+| **OMM-ZEN.exe** | **omm-hub.html + 内置全部插件** | **8300** | **60.4 MB** | **各插件自带** |
+| **OMM-ZEN-Setup.exe** | 在线安装器 | — | 17.7 MB | 无，联网下载 |
 | OMM-Annotate.exe | omm-annotate.html | 8311 | 21.1 MB | pdf.js |
 | OMM-Corpus.exe | omm-corpus.html | 8312 | 19.3 MB | Supabase SDK |
 | OMM-Data.exe | omm-data.html | 8313 | 19.3 MB | Supabase SDK |
@@ -32,15 +36,53 @@
 
 单个程序复制到对应系统的电脑即可运行，目标机器不需要 Python、Node 或网络。
 
+## 插件架构
+
+工作台本身不包含产品逻辑，只读取插件：
+
+```text
+插件目录/
+├── plugin.json     # id、名称、入口页面、运行时、排序
+├── index.html      # entry
+├── vendor/...      # 离线依赖
+└── assets/...
+```
+
+- 内置插件放在程序目录的 `plugins/<id>/`；用户插件放在
+  `%LOCALAPPDATA%\OMM-ZEN\plugins\<id>\`（macOS 为
+  `~/Library/Application Support/OMM-ZEN/plugins/<id>/`）。
+- 同一 id 的用户插件覆盖内置插件；卸载用户版本后内置版本重新出现。
+- 插件使用独立的本地端口，`static` 插件由静态服务器提供；官方
+  `mdforge` / `latex` 插件使用框架内置的 Python 后端。
+- 用户导入的插件必须是 `static` 运行时，不能执行本机后端代码。
+- 完整规范见 `public/plugin-spec.md`，最小示例见 `public/plugin-template/`。
+
+## 在线安装器
+
+`OMM-ZEN-Setup.exe` / `OMM-ZEN-Setup.app` 从 GitHub Release 的
+`catalog.json` 读取插件目录：
+
+1. 选择安装位置（默认用户目录，无需管理员权限）。
+2. 勾选要安装的产品；未勾选的产品不会下载。
+3. 下载平台框架 `OMM-ZEN-Framework-*.zip` 和对应插件包。
+4. 插件写入用户插件目录，框架写入安装位置；安装完成后可直接启动。
+
+工作台内的「插件」面板还支持：
+
+- 查看已安装插件及其来源（内置 / 用户安装）；
+- 在线安装、更新、卸载插件；
+- 导入本地 `plugin-template.zip` 或自己的插件 zip；
+- 查看插件规范。
+
 ## OMM-ZEN 工作台
 
-`OMM-ZEN.exe` / `OMM-ZEN.app` 是 11 个产品的合集外壳，单独的程序仍然保留。
+`OMM-ZEN.exe` / `OMM-ZEN.app` 是完整离线合集，单独的程序仍然保留。
 
 - **顶部标签**：打开的应用形成标签，点击切换，`×` 或中键关闭。
 - **分屏**：工具栏左右/上下分屏；把标签或 Dock 图标拖到窗格上/下/左/右边缘
   可半屏分割，拖到中间可替换窗格；分隔条可拖动，双击恢复均分。
 - **布局预设**：单窗格、左右双栏、上下双栏、四宫格、专注当前窗格。
-- **Dock**：底部常驻 11 个应用入口，运行中的应用有黄色标记；可隐藏。
+- **Dock**：底部常驻应用入口，运行中的应用有黄色标记；可隐藏。
 - **状态恢复**：打开的应用、分屏树、分隔比例、Dock 状态和焦点会自动保存，
   下次启动恢复；首次启动显示应用选择网格。
 - **快捷键**：`Ctrl+Tab` 切换、`Ctrl+W` 关闭、`Ctrl+1…9` 打开应用、
@@ -79,8 +121,8 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 
 - `vendor/` 存放所有第三方库和 Literata 字体（约 30 MB，含 PDF/MuPDF/图表等）。
 - 源码 HTML 直接引用 `vendor/...`，不再包含 CDN 地址、镜像表或加载回退逻辑。
-- 构建时 `desktop/offline.py` 按应用复制它真正用到的库；合集版复制全量
-  `vendor/`，因此任意产品的任意功能都不会缺资源。
+- 构建时 `desktop/offline.py` 按插件复制它真正用到的库；完整版把每个插件放在
+  `plugins/<id>/`，在线安装器也只下载选中的插件包。
 - 网站部署和 EXE 使用同一套资源，不再需要构建期改写。
 - 已验证应用启动后对公网的请求数为 **0**；PDF.js、MuPDF、MathJax、
   ECharts、SheetJS 等均从包内加载。
@@ -88,20 +130,22 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 ## 重新构建
 
 ```powershell
-# 全部重建（11 个应用 + OMM-ZEN 工作台，输出到 dist/）
+# 全部重建（11 个单独应用 + 完整版 + 框架 + 安装器）
 .venv\Scripts\python.exe desktop\build_exes.py --clean
 
-# 只构建工作台
+# 只构建框架 / 安装器 / 完整版
+.venv\Scripts\python.exe desktop\build_exes.py framework
+.venv\Scripts\python.exe desktop\build_exes.py installer
 .venv\Scripts\python.exe desktop\build_exes.py hub
 
-# 只构建某几个
-.venv\Scripts\python.exe desktop\build_exes.py planner writer
+# 生成在线插件包和 catalog.json（先构建 framework，才能写入其校验值）
+.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.0
 
-# 查看应用清单
-.venv\Scripts\python.exe desktop\build_exes.py --list
+# 直接从源码运行工作台（使用生成的插件目录）
+.venv\Scripts\python.exe desktop\omm_launcher.py --app hub --debug --plugins build\plugin-dirs
 
-# 直接从源码运行工作台（调试用）
-.venv\Scripts\python.exe desktop\omm_launcher.py --app hub --debug
+# 直接运行安装器（使用本地或线上目录）
+.venv\Scripts\python.exe desktop\omm_launcher.py --app installer --catalog dist\catalog.json
 ```
 
 构建依赖已装进 `.venv`：`pywebview`、`pythonnet`、`pyinstaller`。新环境：
@@ -110,23 +154,32 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 .venv\Scripts\python.exe -m pip install pywebview pyinstaller
 ```
 
+构建顺序：先 `framework`，再 `build_plugins.py`（生成带框架校验值的目录），
+最后 `hub` / `installer`。发布时上传 `dist/catalog.json`、`dist/plugins/*.zip`、
+`dist/plugin-template.zip`、`dist/OMM-ZEN-Framework-win64.zip`。
+
 ## macOS 构建
 
 macOS 程序必须在 macOS 上构建，不能在 Windows 上交叉编译。仓库自带
 `.github/workflows/macos-build.yml`，用 GitHub Actions 的 macOS runner 生成
 Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 
-1. 推送 `macos-*` 标签，或在 Actions 页面手动运行 “Build macOS apps”。
-2. 工作流会执行 `python desktop/build_exes.py --clean`，把每个 `.app` 打包成
-   `OMM-<App>-macOS-<arch>.dmg`（合集为 `OMM-ZEN-macOS-<arch>.dmg`），
-   上传到指定的 GitHub Release（默认 `v1.0.0`）。
+1. 在 Actions 页面手动运行 “Build macOS apps”，传入目标 Release 标签。
+2. 工作流会执行 `python desktop/build_exes.py --clean`，构建 11 个单独应用、
+   完整版、框架和安装器。
+3. 每个 `.app` 打包成 `OMM-<App>-macOS-<arch>.dmg`；框架额外打成
+   `OMM-ZEN-Framework-macOS-<arch>.zip`；安装器为
+   `OMM-ZEN-Setup-macOS-<arch>.dmg`。
+4. DMG 和框架 zip 都会上传到 Release。
 
 本机 Mac 构建：
 
 ```bash
 python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
 python3 desktop/build_exes.py --clean
-# 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app
+python3 desktop/build_plugins.py --tag v1.0.0
+# 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app、dist/OMM-ZEN-Setup.app
+#       dist/OMM-ZEN-Framework-macOS-<arch>.zip
 ```
 
 未签名/未公证的 `.app` 首次打开会被 Gatekeeper 拦截。从 DMG 拖入 Applications 后，
@@ -147,20 +200,17 @@ xattr -dr com.apple.quarantine /Applications/OMM-Planner.app
 脚本按 `desktop/fetch_vendor.py` 里的版本表下载到 `vendor/`，已存在的文件会跳过。
 换库版本时改 `FILES` / `TREES`，同时更新页面里对应的 `vendor/...` 路径。
 
-新增一个应用：
+新增一个内置插件：
 
-1. 把 HTML 放进 `public/`，在 `desktop/omm_launcher.py` 的 `APPS` 加一行
-   （文件名、固定端口、后端 `None` / `"mdforge"` / `"latex"`），
-   `WINDOW_TITLES` 写窗口标题。
-2. 在 `desktop/build_exes.py` 的 `EXE_NAMES` 加 EXE 名。
-3. 在 `desktop/offline.py` 的 `APP_VENDOR` 写它需要的库目录，
-   并把 HTML 加进同文件的 `ALL_APPS`（合集版会一起打包）；
-   页面里直接用 `vendor/...` 路径引用。
-4. 在 `public/omm-hub.js` 的 `APP_LIST` 加一项（名称、字标、说明），
-   顶部标签、Dock 和启动网格会自动出现。
-5. 页面 `<head>` 引入 `<script src="omm-embed.js"></script>`；单独构建和
-   合集都会自动带上这个脚本，启动页会直接跳过。
-6. 重新构建该应用和 `hub`。
+1. 把 HTML 放进 `public/`，在 `desktop/plugin_specs.py` 的 `BUILTIN_PLUGINS`
+   增加一项（id、名称、字标、入口页面、固定端口、runtime、依赖的 vendor 子目录）。
+2. 在 `desktop/omm_launcher.py` 的 `APPS` 与 `WINDOW_TITLES` 增加独立运行入口。
+3. 页面 `<head>` 引入 `<script src="omm-embed.js"></script>`。
+4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.0` →
+   `build_exes.py hub installer`。在线安装器与工作台插件面板会自动看到它。
+
+用户导入自己的产品不需要改代码：按 `public/plugin-spec.md` 准备目录和
+`plugin.json`，压成 zip，在工作台「插件 → 导入插件」中安装即可。
 
 ## 图标
 
@@ -194,5 +244,7 @@ Windows 构建时用 Pillow 转成真正的多尺寸 `app.ico`；macOS 构建时
 - **固定端口**：端口被其它程序占用时会退回随机端口，该次运行的
   `localStorage` 会落在另一个 origin，看起来像“数据没了”。关掉占用端口的程序再启动即可。
 - **首次启动约 1–3 秒**：onefile 包需要先解压到临时目录。
+- **在线安装器需要网络**：安装器本身和首次下载插件需要联网；安装完成后工作台和插件可离线使用。
+- **自定义插件只支持 static**：导入的插件不能执行本机 Python 后端；官方 mdforge / latex 插件除外。
 - **h5-news.html 未打包**：它依赖 `h5news/`（约 16 MB 图片/视频），需要时可按同样方式加入。
 - **TeX 宏包**：离线环境请在联网机器上预先装好所需 MiKTeX 宏包。

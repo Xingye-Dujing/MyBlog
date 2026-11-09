@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Build the OMM-ZEN desktop programs.
 
-Windows: dist/OMM-<App>.exe, dist/OMM-ZEN.exe (PyInstaller + WebView2)
-macOS:   dist/OMM-<App>.app, dist/OMM-ZEN.app (PyInstaller + WKWebView)
+Windows: dist/OMM-<App>.exe, OMM-ZEN.exe, OMM-ZEN-Setup.exe
+macOS:   dist/OMM-<App>.app, OMM-ZEN.app, OMM-ZEN-Setup.app
 
-    python desktop/build_exes.py              # 11 apps + the hub
+    python desktop/build_exes.py              # 11 apps + hub + framework + installer
+    python desktop/build_exes.py hub framework installer
     python desktop/build_exes.py planner writer
-    python desktop/build_exes.py hub
     python desktop/build_exes.py --list
     python desktop/build_exes.py --clean
 
@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 from omm_launcher import APPS
@@ -51,7 +53,11 @@ EXE_NAMES = {
 
 HUB_TARGET = "hub"
 HUB_NAME = "OMM-ZEN"
-TARGETS = sorted(EXE_NAMES) + [HUB_TARGET]
+FRAMEWORK_TARGET = "framework"
+FRAMEWORK_NAME = "OMM-ZEN"
+INSTALLER_TARGET = "installer"
+INSTALLER_NAME = "OMM-ZEN-Setup"
+TARGETS = sorted(EXE_NAMES) + [HUB_TARGET, FRAMEWORK_TARGET, INSTALLER_TARGET]
 
 COMMON_ASSETS = ["APL385.ttf", "icon.ico", "icon-writer.ico"]
 
@@ -111,6 +117,10 @@ def make_icns(source: Path, target: Path) -> Path:
 def build(app_id: str) -> bool:
     if app_id == HUB_TARGET:
         return build_hub()
+    if app_id == FRAMEWORK_TARGET:
+        return build_framework()
+    if app_id == INSTALLER_TARGET:
+        return build_installer()
     html, _port, backend = APPS[app_id]
     name = EXE_NAMES[app_id]
     entry = BUILD / "entries" / ("omm_start_%s.py" % app_id)
@@ -262,6 +272,9 @@ def build_hub() -> bool:
         "--add-data", "%s%s." % (stage, DATA_SEP),
         "--add-data", "%s%s%s" % (icon, DATA_SEP, icon.name),
         "--hidden-import", "hub_server",
+        "--hidden-import", "plugin_manager",
+        "--hidden-import", "plugin_specs",
+        "--hidden-import", "werkzeug.serving",
         "--hidden-import", "mdforge.server",
         "--collect-submodules", "mdforge",
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "templates", DATA_SEP, "mdforge/templates"),
@@ -306,10 +319,189 @@ def build_hub() -> bool:
     return True
 
 
+def _webview_args(target: str) -> list[str]:
+    if IS_MACOS:
+        return [
+            "--osx-bundle-identifier", "com.ommzen.%s" % target,
+            "--hidden-import", "webview.platforms.cocoa",
+            "--hidden-import", "objc",
+            "--hidden-import", "Foundation",
+            "--hidden-import", "AppKit",
+            "--hidden-import", "WebKit",
+            "--hidden-import", "PyObjCTools.AppHelper",
+            "--collect-all", "webview",
+        ]
+    if IS_WINDOWS:
+        return [
+            "--collect-all", "webview",
+            "--collect-all", "clr_loader",
+            "--collect-all", "pythonnet",
+        ]
+    return ["--collect-all", "webview"]
+
+
+def _artifact_ok(path: Path) -> tuple[bool, int]:
+    if IS_MACOS:
+        if not path.is_dir():
+            return False, 0
+        return True, sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+    if not path.is_file():
+        return False, 0
+    return True, path.stat().st_size
+
+
+def build_framework() -> bool:
+    """Build the plugin-less hub shell used by the online installer."""
+    name = FRAMEWORK_NAME
+    dist = DIST / "framework"
+    entry = BUILD / "entries" / "omm_start_framework.py"
+    work = BUILD / "work" / FRAMEWORK_TARGET
+    icon_src = DESKTOP / "icons-src" / "hub.png"
+    if not icon_src.is_file():
+        icon_src = ROOT / "icon.ico"
+    icon = (
+        make_icns(icon_src, BUILD / "icons" / "framework.icns")
+        if IS_MACOS
+        else make_ico(icon_src, BUILD / "icons" / "framework.ico")
+    )
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text(
+        "import os, sys, traceback\n"
+        "from omm_launcher import run_hub\n"
+        "try:\n"
+        "    run_hub()\n"
+        "except Exception:\n"
+        "    base = (os.path.expanduser('~/Library/Application Support')\n"
+        "            if sys.platform == 'darwin'\n"
+        "            else (os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')))\n"
+        "    folder = os.path.join(base, 'OMM-ZEN', 'hub')\n"
+        "    os.makedirs(folder, exist_ok=True)\n"
+        "    with open(os.path.join(folder, 'crash.log'), 'w', encoding='utf-8') as fh:\n"
+        "        fh.write(traceback.format_exc())\n"
+        "    raise\n",
+        encoding="utf-8",
+    )
+    stage = offline.stage_framework(
+        BUILD / "stage" / FRAMEWORK_TARGET,
+        common_assets=COMMON_ASSETS,
+    )
+    args = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconfirm", "--clean", "--onefile", "--windowed",
+        "--name", name,
+        "--icon", str(icon),
+        "--paths", str(DESKTOP),
+        "--distpath", str(dist),
+        "--workpath", str(work),
+        "--specpath", str(work),
+        "--add-data", "%s%s." % (stage, DATA_SEP),
+        "--add-data", "%s%s%s" % (icon, DATA_SEP, icon.name),
+        "--hidden-import", "hub_server",
+        "--hidden-import", "plugin_manager",
+        "--hidden-import", "plugin_specs",
+        "--hidden-import", "werkzeug.serving",
+        "--hidden-import", "mdforge.server",
+        "--collect-submodules", "mdforge",
+        "--add-data", "%s%s%s" % (ROOT / "mdforge" / "templates", DATA_SEP, "mdforge/templates"),
+        "--add-data", "%s%s%s" % (ROOT / "mdforge" / "docs", DATA_SEP, "mdforge/docs"),
+    ]
+    args += _webview_args(FRAMEWORK_TARGET)
+    args.append(str(entry))
+    print("\n=== framework -> %s%s ===" % (name, APP_SUFFIX), flush=True)
+    proc = subprocess.run(args, cwd=str(ROOT))
+    artifact = dist / (name + APP_SUFFIX)
+    ok, size = _artifact_ok(artifact)
+    if not ok:
+        print("  FAILED (PyInstaller exit %s)" % proc.returncode, file=sys.stderr)
+        return False
+    if IS_MACOS:
+        arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64"
+        archive = DIST / ("OMM-ZEN-Framework-macOS-%s.zip" % arch)
+        if archive.exists():
+            archive.unlink()
+        subprocess.run(
+            [
+                "ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+                str(artifact), str(archive),
+            ],
+            check=True,
+        )
+        print("  zip %s" % archive, flush=True)
+    else:
+        archive = DIST / "OMM-ZEN-Framework-win64.zip"
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(artifact, artifact.name)
+        print("  zip %s" % archive, flush=True)
+    print("  ok  %s  (%.1f MB)" % (artifact, size / 1024 / 1024), flush=True)
+    return True
+
+
+def build_installer() -> bool:
+    """Build the online installer UI."""
+    name = INSTALLER_NAME
+    entry = BUILD / "entries" / "omm_start_installer.py"
+    work = BUILD / "work" / INSTALLER_TARGET
+    icon_src = DESKTOP / "icons-src" / "hub.png"
+    if not icon_src.is_file():
+        icon_src = ROOT / "icon.ico"
+    icon = (
+        make_icns(icon_src, BUILD / "icons" / "installer.icns")
+        if IS_MACOS
+        else make_ico(icon_src, BUILD / "icons" / "installer.ico")
+    )
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text(
+        "import os, sys, traceback\n"
+        "from installer_server import run_installer\n"
+        "try:\n"
+        "    run_installer()\n"
+        "except Exception:\n"
+        "    base = (os.path.expanduser('~/Library/Application Support')\n"
+        "            if sys.platform == 'darwin'\n"
+        "            else (os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')))\n"
+        "    folder = os.path.join(base, 'OMM-ZEN', 'installer')\n"
+        "    os.makedirs(folder, exist_ok=True)\n"
+        "    with open(os.path.join(folder, 'crash.log'), 'w', encoding='utf-8') as fh:\n"
+        "        fh.write(traceback.format_exc())\n"
+        "    raise\n",
+        encoding="utf-8",
+    )
+    stage = offline.stage_installer(
+        BUILD / "stage" / INSTALLER_TARGET,
+        common_assets=COMMON_ASSETS,
+    )
+    args = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconfirm", "--clean", "--onefile", "--windowed",
+        "--name", name,
+        "--icon", str(icon),
+        "--paths", str(DESKTOP),
+        "--distpath", str(DIST),
+        "--workpath", str(work),
+        "--specpath", str(work),
+        "--add-data", "%s%s." % (stage, DATA_SEP),
+        "--add-data", "%s%s%s" % (icon, DATA_SEP, icon.name),
+        "--hidden-import", "installer_server",
+        "--hidden-import", "plugin_manager",
+        "--hidden-import", "plugin_specs",
+    ]
+    args += _webview_args(INSTALLER_TARGET)
+    args.append(str(entry))
+    print("\n=== online installer -> %s%s ===" % (name, APP_SUFFIX), flush=True)
+    proc = subprocess.run(args, cwd=str(ROOT))
+    artifact = DIST / (name + APP_SUFFIX)
+    ok, size = _artifact_ok(artifact)
+    if not ok:
+        print("  FAILED (PyInstaller exit %s)" % proc.returncode, file=sys.stderr)
+        return False
+    print("  ok  %s  (%.1f MB)" % (artifact, size / 1024 / 1024), flush=True)
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build OMM-ZEN desktop applications")
     parser.add_argument("apps", nargs="*", metavar="app",
-                        help="app ids to build (default: all, including the hub)")
+                        help="app ids to build (default: all, including hub/framework/installer)")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--clean", action="store_true", help="remove dist/ and build/desktop first")
     args = parser.parse_args()
@@ -317,6 +509,8 @@ def main() -> None:
         for app_id in sorted(APPS):
             print("%-14s %-24s -> %s%s" % (app_id, APPS[app_id][0], EXE_NAMES[app_id], APP_SUFFIX))
         print("%-14s %-24s -> %s%s" % (HUB_TARGET, "omm-hub.html + 11 apps", HUB_NAME, APP_SUFFIX))
+        print("%-14s %-24s -> %s%s" % (FRAMEWORK_TARGET, "plugin-less hub", FRAMEWORK_NAME, APP_SUFFIX))
+        print("%-14s %-24s -> %s%s" % (INSTALLER_TARGET, "online installer", INSTALLER_NAME, APP_SUFFIX))
         return
     if args.clean:
         shutil.rmtree(DIST, ignore_errors=True)

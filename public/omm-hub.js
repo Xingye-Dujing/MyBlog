@@ -9,23 +9,52 @@
 (function () {
   'use strict';
 
-  var APP_LIST = [
-    { id: 'annotate', name: '文本标注', glyph: '标', desc: 'PDF 标注 · 精读 · 批注' },
-    { id: 'corpus', name: '英语语料库', glyph: '语', desc: '个人英语语料与检索' },
-    { id: 'data', name: '数据工作台', glyph: '数', desc: '数据整理 · 查询 · 导出' },
-    { id: 'english', name: '六级备考', glyph: '英', desc: '词汇 · 听力 · 训练' },
-    { id: 'latex', name: 'LaTeX 编译工作台', glyph: 'T', desc: 'TeX 编写与实时编译' },
-    { id: 'mdforge', name: 'Markdown 铸造台', glyph: 'M', desc: 'Markdown 转 DOCX / TeX' },
-    { id: 'message', name: '消息同步', glyph: '信', desc: '多设备消息与文件同步' },
-    { id: 'planner', name: '日程安排', glyph: '日', desc: '日程 · 待办 · 时间线' },
-    { id: 'redact', name: '文档脱敏工具', glyph: '脱', desc: 'PDF / Office 脱敏导出' },
-    { id: 'visualization', name: '可视化图表', glyph: '图', desc: '图表与数据可视化' },
-    { id: 'writer', name: '所思所想', glyph: '写', desc: '长文写作与排版' },
-  ];
+  var APP_LIST = [];
   var APP_BY_ID = {};
-  APP_LIST.forEach(function (app) {
-    APP_BY_ID[app.id] = app;
-  });
+  var PLUGIN_INFO = [];
+  var pluginPanelTab = 'installed';
+  var catalogCache = null;
+  var pluginLoadError = '';
+  var PLUGIN_DIR = '';
+
+  function setApps(plugins) {
+    var valid = [];
+    var map = {};
+    (plugins || []).forEach(function (item) {
+      if (!item || !item.id || !item.name) return;
+      map[item.id] = item;
+      valid.push(item);
+    });
+    APP_LIST = valid.sort(function (a, b) {
+      return (a.order || 999) - (b.order || 999);
+    });
+    APP_BY_ID = map;
+    PLUGIN_INFO = APP_LIST;
+    pruneMissingPlugins();
+    paneEls.forEach(function (el) {
+      var holder = el.querySelector('.pane-placeholder');
+      if (holder) holder.dataset.mode = '';
+    });
+  }
+
+  function pruneMissingPlugins() {
+    if (!state || !state.panes) return;
+    var open = [];
+    state.open.forEach(function (id) {
+      if (APP_BY_ID[id]) open.push(id);
+      else destroyFrame(id);
+    });
+    state.open = open;
+    Object.keys(state.panes).forEach(function (paneId) {
+      var app = state.panes[paneId];
+      if (app && !APP_BY_ID[app]) state.panes[paneId] = null;
+    });
+    if (state.maximized && !APP_BY_ID[paneApp(state.maximized)]) state.maximized = null;
+  }
+
+  function appOf(appId) {
+    return APP_BY_ID[appId] || null;
+  }
 
   var STORAGE_KEY = 'omm.hub.workspace.v1';
   var SPLIT = 4;
@@ -76,10 +105,6 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  }
-
-  function appOf(appId) {
-    return APP_BY_ID[appId] || null;
   }
 
   function paneApp(paneId) {
@@ -272,15 +297,17 @@
     els.layoutMenu = document.getElementById('layout-menu');
     els.ctxMenu = document.getElementById('ctx-menu');
     els.toast = document.getElementById('toast');
+    els.pluginPanel = document.getElementById('plugin-panel');
+    els.ppBody = document.getElementById('pp-body');
+    els.ppTitle = document.getElementById('pp-title');
+    els.ppStatus = document.getElementById('pp-status');
 
-    loadState();
     ensureSplitKeys(state.tree);
-    buildDock();
     applyDockState();
     bindEvents();
     renderAll();
-    mountVisible();
-    save();
+
+    loadPlugins(true);
 
     if (window.ResizeObserver) {
       new ResizeObserver(scheduleLayout).observe(els.workspace);
@@ -288,6 +315,37 @@
     window.addEventListener('resize', scheduleLayout);
     window.addEventListener('beforeunload', saveNow);
     window.addEventListener('pagehide', saveNow);
+  }
+
+  function loadPlugins(restore) {
+    return fetch('/api/plugins', { cache: 'no-store' })
+      .then(function (response) {
+        if (!response.ok) throw new Error('插件列表加载失败（' + response.status + '）');
+        return response.json();
+      })
+      .then(function (data) {
+        pluginLoadError = '';
+        PLUGIN_DIR = data.plugin_dir || '';
+        if (els.pluginPanel) els.pluginPanel.dataset.dir = PLUGIN_DIR;
+        setApps(data.plugins || []);
+        buildDock();
+        if (restore) {
+          loadState();
+          ensureSplitKeys(state.tree);
+          renderAll();
+          mountVisible();
+          save();
+        } else {
+          renderAll();
+          save();
+        }
+        return data;
+      })
+      .catch(function (error) {
+        pluginLoadError = error && error.message ? error.message : '插件列表加载失败';
+        renderAll();
+        toast(pluginLoadError);
+      });
   }
 
   function mountVisible() {
@@ -421,7 +479,7 @@
         esc(app.name) +
         (open ? ' ·' : '') +
         '</span><span class="desc">' +
-        esc(app.desc) +
+        esc(app.description || '') +
         '</span></span>' +
         (key ? '<span class="key">' + key + '</span>' : '') +
         '</button>'
@@ -440,6 +498,332 @@
     els.app.classList.toggle('dock-hidden', !state.dock);
     updateToolState();
     scheduleLayout();
+  }
+
+  /* ------------------------------------------------------------ plugin panel */
+
+  function formatBytes(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function openPluginPanel(tab) {
+    closePopovers();
+    if (tab) pluginPanelTab = tab;
+    els.pluginPanel.hidden = false;
+    els.ppStatus.textContent = '按需安装产品，或导入自己的插件';
+    renderPluginPanel();
+  }
+
+  function closePluginPanel() {
+    els.pluginPanel.hidden = true;
+    catalogCache = null;
+  }
+
+  function setPluginTab(tab) {
+    pluginPanelTab = tab;
+    Array.prototype.forEach.call(
+      els.pluginPanel.querySelectorAll('[data-pp-tab]'),
+      function (el) {
+        el.classList.toggle('active', el.dataset.ppTab === tab);
+      }
+    );
+    renderPluginPanel();
+  }
+
+  function renderPluginPanel() {
+    if (!els.ppBody || els.pluginPanel.hidden) return;
+    if (pluginPanelTab === 'installed') renderInstalledPlugins();
+    else if (pluginPanelTab === 'online') renderOnlinePlugins();
+    else if (pluginPanelTab === 'import') renderImportPlugin();
+    else renderPluginSpec();
+  }
+
+  function pluginRow(app, source, version) {
+    var user = source === 'user';
+    return (
+      '<div class="pp-row">' +
+      '<span class="pp-glyph">' +
+      esc(app.glyph || '?') +
+      '</span>' +
+      '<span class="pp-meta"><span class="pp-name">' +
+      esc(app.name) +
+      '<span class="pp-badge ' +
+      (user ? 'user' : '') +
+      '">' +
+      (user ? '用户安装' : '内置') +
+      '</span></span>' +
+      '<span class="pp-desc">' +
+      esc(app.description || '') +
+      '</span></span>' +
+      '<span class="pp-version">' +
+      esc(version || app.version || '') +
+      '</span>' +
+      '<span class="pp-actions">' +
+      '<button class="pp-btn" type="button" data-pp-action="open" data-id="' +
+      esc(app.id) +
+      '">打开</button>' +
+      (user
+        ? '<button class="pp-btn danger" type="button" data-pp-action="remove" data-id="' +
+          esc(app.id) +
+          '">卸载</button>'
+        : '') +
+      '</span></div>'
+    );
+  }
+
+  function renderInstalledPlugins() {
+    if (!APP_LIST.length) {
+      els.ppBody.innerHTML =
+        '<div class="pp-empty">还没有安装插件。<br>切换到「在线插件」选择产品，或「导入插件」安装自己的页面。</div>';
+      return;
+    }
+    var rows = APP_LIST.map(function (app) {
+      return pluginRow(app, app.source, app.version);
+    }).join('');
+    els.ppBody.innerHTML =
+      '<p class="pp-note">插件按需安装，安装后立即出现在顶部标签、Dock 和应用面板中。内置插件可以保留，也可以被在线版本覆盖。</p>' +
+      '<div class="pp-list">' +
+      rows +
+      '</div>' +
+      '<div class="pp-foot"><span>数据目录：' +
+      esc(PLUGIN_DIR) +
+      '</span><span>共 ' +
+      APP_LIST.length +
+      ' 个插件</span></div>';
+  }
+
+  function renderOnlinePlugins() {
+    if (!catalogCache) {
+      els.ppBody.innerHTML = '<div class="pp-empty">正在获取在线插件目录…</div>';
+      fetch('/api/catalog', { cache: 'no-store' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('在线目录加载失败（' + response.status + '）');
+          return response.json();
+        })
+        .then(function (data) {
+          catalogCache = data;
+          if (pluginPanelTab === 'online') renderOnlinePlugins();
+        })
+        .catch(function (error) {
+          if (pluginPanelTab !== 'online') return;
+          els.ppBody.innerHTML =
+            '<div class="pp-empty">' +
+            esc(error.message || '网络不可用') +
+            '<br><br><button class="pp-btn" type="button" data-pp-action="reload-catalog">重试</button></div>';
+        });
+      return;
+    }
+    var items = catalogCache.plugins || [];
+    if (!items.length) {
+      els.ppBody.innerHTML = '<div class="pp-empty">在线目录暂时没有插件。</div>';
+      return;
+    }
+    var cards = items
+      .map(function (item) {
+        var installed = item.installed;
+        var busy = pluginBusy[item.id];
+        var label = busy ? '处理中…' : installed ? (item.update_available ? '更新' : '重新安装') : '安装';
+        return (
+          '<div class="pp-card-item">' +
+          '<div class="pp-card-top"><span class="pp-glyph">' +
+          esc(item.glyph || '?') +
+          '</span><span class="pp-meta"><span class="pp-name">' +
+          esc(item.name) +
+          '<span class="pp-version">' +
+          esc(item.version || '') +
+          '</span></span><span class="pp-desc">' +
+          esc(item.description || '') +
+          '</span></span></div>' +
+          '<div class="pp-actions"><span class="pp-version">' +
+          formatBytes(item.size) +
+          '</span><button class="pp-btn ' +
+          (installed ? '' : 'primary') +
+          '" type="button" data-pp-action="install" data-id="' +
+          esc(item.id) +
+          '"' +
+          (busy ? ' disabled' : '') +
+          '>' +
+          esc(label) +
+          '</button></div></div>'
+        );
+      })
+      .join('');
+    els.ppBody.innerHTML =
+      '<p class="pp-note">在线插件来自 OMM-ZEN Release，下载后安装到本地，之后离线可用。</p>' +
+      '<div class="pp-grid">' +
+      cards +
+      '</div>' +
+      '<div class="pp-foot"><span>目录版本：' +
+      esc(catalogCache.version || '') +
+      '</span><button class="pp-btn" type="button" data-pp-action="reload-catalog">刷新目录</button></div>';
+  }
+
+  function renderImportPlugin() {
+    els.ppBody.innerHTML =
+      '<p class="pp-note">插件是一个 zip 包，根目录包含 <code>plugin.json</code> 和入口 HTML。导入的插件使用纯前端 <code>static</code> 运行时。</p>' +
+      '<div class="pp-import" id="pp-drop">' +
+      '<strong>拖入插件 zip，或选择文件</strong>' +
+      '<span>最多 220 MB；入口页面和资源全部包含在包内</span>' +
+      '<input type="file" id="pp-file" accept=".zip,application/zip">' +
+      '<button class="pp-btn primary" type="button" data-pp-action="pick-file">选择插件包</button>' +
+      '</div>' +
+      '<div class="pp-foot"><span>安装位置：' +
+      esc(PLUGIN_DIR) +
+      '</span><button class="pp-btn" type="button" data-pp-action="show-spec">查看插件规范</button></div>';
+    var drop = document.getElementById('pp-drop');
+    var input = document.getElementById('pp-file');
+    if (input) {
+      input.addEventListener('change', function () {
+        if (input.files && input.files[0]) importPluginFile(input.files[0]);
+      });
+    }
+    if (drop) {
+      ['dragenter', 'dragover'].forEach(function (name) {
+        drop.addEventListener(name, function (event) {
+          event.preventDefault();
+          drop.classList.add('drag');
+        });
+      });
+      ['dragleave', 'drop'].forEach(function (name) {
+        drop.addEventListener(name, function (event) {
+          event.preventDefault();
+          drop.classList.remove('drag');
+        });
+      });
+      drop.addEventListener('drop', function (event) {
+        var file = event.dataTransfer && event.dataTransfer.files[0];
+        if (file) importPluginFile(file);
+      });
+    }
+  }
+
+  function renderPluginSpec() {
+    els.ppBody.innerHTML = '<div class="pp-empty">正在载入插件规范…</div>';
+    fetch('plugin-spec.md', { cache: 'no-store' })
+      .then(function (response) {
+        if (!response.ok) throw new Error();
+        return response.text();
+      })
+      .then(function (text) {
+        if (pluginPanelTab !== 'spec') return;
+        els.ppBody.innerHTML =
+          '<p class="pp-note">把页面打包成 zip，即可在「导入插件」中安装；完整字段说明如下。</p>' +
+          '<pre class="pp-spec">' +
+          esc(text) +
+          '</pre>';
+      })
+      .catch(function () {
+        els.ppBody.innerHTML =
+          '<div class="pp-empty">无法读取 plugin-spec.md，请查看程序目录中的同名文件。</div>';
+      });
+  }
+
+  var pluginBusy = {};
+
+  function refreshPluginsAfterChange() {
+    catalogCache = null;
+    return loadPlugins(false).then(function () {
+      if (!els.pluginPanel.hidden) renderPluginPanel();
+    });
+  }
+
+  function installOnlinePlugin(pluginId) {
+    if (pluginBusy[pluginId]) return;
+    pluginBusy[pluginId] = true;
+    renderOnlinePlugins();
+    closeTab(pluginId);
+    fetch('/api/plugins/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pluginId }),
+    })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok || data.ok === false) throw new Error(data.error || '安装失败');
+          return data;
+        });
+      })
+      .then(function () {
+        toast('插件已安装');
+        return refreshPluginsAfterChange();
+      })
+      .catch(function (error) {
+        toast(error.message || '安装失败');
+      })
+      .finally(function () {
+        pluginBusy[pluginId] = false;
+        if (pluginPanelTab === 'online') renderPluginPanel();
+      });
+  }
+
+  function removePlugin(pluginId) {
+    var app = appOf(pluginId);
+    if (!app) return;
+    if (!window.confirm('卸载「' + app.name + '」？本地数据会保留。')) return;
+    pluginBusy[pluginId] = true;
+    closeTab(pluginId);
+    fetch('/api/plugins/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pluginId }),
+    })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok || data.ok === false) throw new Error(data.error || '卸载失败');
+          return data;
+        });
+      })
+      .then(function (data) {
+        toast(data.bundled_remains ? '已移除用户版本，内置版本仍可用' : '插件已卸载');
+        return refreshPluginsAfterChange();
+      })
+      .catch(function (error) {
+        toast(error.message || '卸载失败');
+      })
+      .finally(function () {
+        pluginBusy[pluginId] = false;
+        renderPluginPanel();
+      });
+  }
+
+  function importPluginFile(file) {
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name) && file.type !== 'application/zip') {
+      toast('请选择 zip 插件包');
+      return;
+    }
+    if (file.size > 220 * 1024 * 1024) {
+      toast('插件包不能超过 220 MB');
+      return;
+    }
+    els.ppStatus.textContent = '正在导入 ' + file.name + '…';
+    file
+      .arrayBuffer()
+      .then(function (buffer) {
+        return fetch('/api/plugins/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/zip' },
+          body: buffer,
+        });
+      })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok || data.ok === false) throw new Error(data.error || '导入失败');
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (data.plugin && data.plugin.id) closeTab(data.plugin.id);
+        toast('已导入「' + (data.plugin ? data.plugin.name : file.name) + '」');
+        els.ppStatus.textContent = '插件导入成功';
+        return refreshPluginsAfterChange();
+      })
+      .catch(function (error) {
+        els.ppStatus.textContent = '导入失败';
+        toast(error.message || '导入失败');
+      });
   }
 
   function toast(message) {
@@ -595,12 +979,22 @@
   function placeholderHtml(app, paneId) {
     var status = app ? appStatus[app.id] || 'idle' : 'idle';
     if (!app) {
+      if (!APP_LIST.length) {
+        return (
+          '<div class="empty-wrap"><div class="empty-title">还没有安装插件</div>' +
+          '<div class="empty-sub">' +
+          esc(pluginLoadError || '打开插件管理，选择要安装的产品，或导入自己的插件包。') +
+          '</div>' +
+          '<button class="retry-btn" type="button" data-act="open-plugins">打开插件管理</button>' +
+          '</div>'
+        );
+      }
       var grid = APP_LIST.map(function (item) {
         return (
           '<button class="app-tile" type="button" data-app="' +
           esc(item.id) +
           '" title="' +
-          esc(item.desc) +
+          esc(item.description || '') +
           '"><span class="glyph">' +
           esc(item.glyph) +
           '</span><span class="label">' +
@@ -1164,7 +1558,8 @@
         state.dock = !state.dock;
         applyDockState();
         save();
-      } else if (act === 'launcher') toggleLauncher();
+      } else if (act === 'plugins') openPluginPanel();
+      else if (act === 'launcher') toggleLauncher();
     });
     els.brand.addEventListener('click', function () {
       toggleLauncher();
@@ -1282,6 +1677,45 @@
       else if (action === 'close') closeTab(appId);
     });
 
+    /* plugin panel */
+    var ppClose = document.getElementById('pp-close');
+    if (ppClose) ppClose.addEventListener('click', closePluginPanel);
+    if (els.pluginPanel) {
+      els.pluginPanel.addEventListener('click', function (event) {
+        if (event.target === els.pluginPanel) closePluginPanel();
+      });
+      Array.prototype.forEach.call(
+        els.pluginPanel.querySelectorAll('[data-pp-tab]'),
+        function (el) {
+          el.addEventListener('click', function () {
+            setPluginTab(el.dataset.ppTab);
+          });
+        }
+      );
+    }
+    if (els.ppBody) {
+      els.ppBody.addEventListener('click', function (event) {
+        var action = event.target.closest('[data-pp-action]');
+        if (!action) return;
+        var id = action.dataset.id;
+        var name = action.dataset.ppAction;
+        if (name === 'install') installOnlinePlugin(id);
+        else if (name === 'remove') removePlugin(id);
+        else if (name === 'open') {
+          closePluginPanel();
+          activateApp(id);
+        } else if (name === 'reload-catalog') {
+          catalogCache = null;
+          renderPluginPanel();
+        } else if (name === 'pick-file') {
+          var input = document.getElementById('pp-file');
+          if (input) input.click();
+        } else if (name === 'show-spec') {
+          setPluginTab('spec');
+        }
+      });
+    }
+
     /* panes */
     els.paneLayer.addEventListener('pointerdown', function (event) {
       var pane = event.target.closest('.pane');
@@ -1303,7 +1737,8 @@
       }
       var action = event.target.closest('[data-act]');
       if (!action) return;
-      if (action.dataset.act === 'pane-split-v') splitPane(paneId, 'v', 'right', null);
+      if (action.dataset.act === 'open-plugins') openPluginPanel('online');
+      else if (action.dataset.act === 'pane-split-v') splitPane(paneId, 'v', 'right', null);
       else if (action.dataset.act === 'pane-split-h') splitPane(paneId, 'h', 'bottom', null);
       else if (action.dataset.act === 'pane-close') closePane(paneId);
     });
@@ -1454,7 +1889,10 @@
     var mod = event.ctrlKey || event.metaKey;
     if (!mod) {
       if (event.key === 'Escape') {
-        if (!els.ctxMenu.hidden || !els.layoutMenu.hidden || launcherOpen) {
+        if (!els.pluginPanel.hidden) {
+          closePluginPanel();
+          event.preventDefault();
+        } else if (!els.ctxMenu.hidden || !els.layoutMenu.hidden || launcherOpen) {
           closePopovers();
           event.preventDefault();
         } else if (state.maximized) {
