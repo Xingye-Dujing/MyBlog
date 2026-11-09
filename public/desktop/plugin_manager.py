@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 CATALOG_URL = (
-    "https://github.com/Xingye-Dujing/MyBlog/releases/latest/download/catalog.json"
+    "https://gitee.com/Xingye-Dujing/my-blog/releases/latest/download/catalog.json"
 )
 MIRROR_PREFIX = "https://ghproxy.net/"
 PLUGIN_API = 1
@@ -324,11 +324,13 @@ def _retry_network(fn: Callable[[], bytes], attempts: int = 3) -> bytes:
 
 
 def mirror_urls(url: str) -> List[str]:
-    """GitHub release assets first, then a public acceleration mirror.
+    """下载源优先 Gitee Release，国内直连更快，无需翻墙。
 
-    The mirror is only used when the direct download fails; local file URLs and
-    custom hosts are left untouched.
+    Gitee 资产直接返回；GitHub 资产保留 ghproxy 作为回退；本地文件和
+    自定义主机不做变更。
     """
+    if url.startswith("https://gitee.com/"):
+        return [url]
     if url.startswith("https://github.com/"):
         return [url, MIRROR_PREFIX + url]
     return [url]

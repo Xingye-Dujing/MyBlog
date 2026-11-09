@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build" / "plugin-dirs"
 DIST = ROOT / "dist"
 OUT = DIST / "plugins"
-REPO = "Xingye-Dujing/MyBlog"
+REPO = "Xingye-Dujing/my-blog"
 
 FRAMEWORKS = {
     "win64": "OMM-ZEN-Framework-win64.zip",
@@ -63,7 +63,7 @@ def main() -> None:
     BUILD.mkdir(parents=True)
     OUT.mkdir(parents=True, exist_ok=True)
 
-    base = args.base or "https://github.com/%s/releases/download/%s" % (REPO, args.tag)
+    base = args.base or "https://gitee.com/%s/releases/download/%s" % (REPO, args.tag)
     catalog = {
         "schema": 1,
         "version": VERSION,
