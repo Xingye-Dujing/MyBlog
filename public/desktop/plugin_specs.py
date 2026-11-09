@@ -23,7 +23,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "entry": "omm-annotate.html",
         "port": 8311,
         "runtime": "static",
-        "vendor": ["pdfjs"],
+        "vendor": ["pdfjs", "supabase"],
         "order": 10,
     },
     {

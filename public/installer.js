@@ -156,8 +156,10 @@
             '<input type="checkbox" ' +
             (checked ? 'checked' : '') +
             ' />' +
-            '<span class="glyph">' +
-            esc(item.glyph || '?') +
+            '<span class="glyph' +
+            (window.OMMIconClass ? window.OMMIconClass(item.id) : '') +
+            '">' +
+            (window.OMMIcon ? window.OMMIcon(item.id, item.glyph) : esc(item.glyph || '?')) +
             '</span>' +
             '<span class="meta"><span class="name">' +
             esc(item.name) +

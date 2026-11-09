@@ -17,7 +17,7 @@
   var pluginLoadError = '';
   var PLUGIN_DIR = '';
   var APPEARANCE_KEY = 'omm.hub.appearance.v1';
-  var hubAppearance = { radius: 0, accent: 'amber', motion: true };
+  var hubAppearance = { radius: 0, accent: 'amber', motion: true, topbar: true };
 
   function setApps(plugins) {
     var valid = [];
@@ -107,6 +107,15 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function appIconHTML(app) {
+    if (app && window.OMMIcon) return window.OMMIcon(app.id, app.glyph);
+    return esc((app && app.glyph) || '?');
+  }
+
+  function appIconClass(app) {
+    return app && window.OMMIconClass ? window.OMMIconClass(app.id) : '';
   }
 
   function paneApp(paneId) {
@@ -397,8 +406,8 @@
           '" title="' +
           esc(app.name) +
           '">' +
-          '<span class="tab-glyph">' +
-          esc(app.glyph) +
+          '<span class="tab-glyph' + appIconClass(app) + '">' +
+          appIconHTML(app) +
           '</span>' +
           '<span class="tab-label">' +
           esc(app.name) +
@@ -426,8 +435,8 @@
         esc(app.name) +
         (key ? '　Ctrl+' + key : '') +
         '">' +
-        '<span class="glyph">' +
-        esc(app.glyph) +
+        '<span class="glyph' + appIconClass(app) + '">' +
+        appIconHTML(app) +
         '</span>' +
         (key ? '<span class="shortcut">' + key + '</span>' : '') +
         '</button>'
@@ -479,8 +488,8 @@
         '<button class="launcher-app" type="button" data-app="' +
         esc(app.id) +
         '">' +
-        '<span class="glyph">' +
-        esc(app.glyph) +
+        '<span class="glyph' + appIconClass(app) + '">' +
+        appIconHTML(app) +
         '</span>' +
         '<span class="meta"><span class="name">' +
         esc(app.name) +
@@ -528,6 +537,7 @@
         ? data.accent
         : 'amber';
       hubAppearance.motion = data.motion !== false;
+      hubAppearance.topbar = data.topbar !== false;
     } catch (e) {
       /* ignore */
     }
@@ -546,6 +556,7 @@
     document.documentElement.style.setProperty('--radius', hubAppearance.radius + 'px');
     document.documentElement.dataset.accent = hubAppearance.accent;
     document.body.classList.toggle('no-motion', !hubAppearance.motion);
+    els.app.classList.toggle('topbar-hidden', !hubAppearance.topbar);
     Array.prototype.forEach.call(document.querySelectorAll('[data-hub-radius]'), function (btn) {
       btn.classList.toggle('active', Number(btn.dataset.hubRadius) === hubAppearance.radius);
     });
@@ -554,6 +565,8 @@
     });
     var motion = document.getElementById('hub-motion');
     if (motion) motion.setAttribute('aria-checked', String(hubAppearance.motion));
+    var topbar = document.getElementById('hub-topbar');
+    if (topbar) topbar.setAttribute('aria-checked', String(hubAppearance.topbar));
   }
 
   function openHubSettings() {
@@ -602,10 +615,29 @@
         applyHubAppearance();
       });
     }
+    var topbar = document.getElementById('hub-topbar');
+    if (topbar) {
+      topbar.addEventListener('click', function () {
+        hubAppearance.topbar = !hubAppearance.topbar;
+        saveHubAppearance();
+        applyHubAppearance();
+        scheduleLayout();
+      });
+    }
+    var reveal = document.getElementById('topbar-reveal');
+    if (reveal) {
+      reveal.addEventListener('click', function () {
+        hubAppearance.topbar = true;
+        saveHubAppearance();
+        applyHubAppearance();
+        scheduleLayout();
+      });
+    }
     document.getElementById('hub-settings-reset').addEventListener('click', function () {
-      hubAppearance = { radius: 0, accent: 'amber', motion: true };
+      hubAppearance = { radius: 0, accent: 'amber', motion: true, topbar: true };
       saveHubAppearance();
       applyHubAppearance();
+      scheduleLayout();
     });
   }
 
@@ -646,8 +678,8 @@
     var user = source === 'user';
     return (
       '<div class="pp-row">' +
-      '<span class="pp-glyph">' +
-      esc(app.glyph || '?') +
+      '<span class="pp-glyph' + appIconClass(app) + '">' +
+      appIconHTML(app) +
       '</span>' +
       '<span class="pp-meta"><span class="pp-name">' +
       esc(app.name) +
@@ -729,8 +761,8 @@
         var label = busy ? '处理中…' : installed ? (item.update_available ? '更新' : '重新安装') : '安装';
         return (
           '<div class="pp-card-item">' +
-          '<div class="pp-card-top"><span class="pp-glyph">' +
-          esc(item.glyph || '?') +
+          '<div class="pp-card-top"><span class="pp-glyph' + appIconClass(item) + '">' +
+          appIconHTML(item) +
           '</span><span class="pp-meta"><span class="pp-name">' +
           esc(item.name) +
           '<span class="pp-version">' +
@@ -1097,8 +1129,8 @@
           esc(item.id) +
           '" title="' +
           esc(item.description || '') +
-          '"><span class="glyph">' +
-          esc(item.glyph) +
+          '"><span class="glyph' + appIconClass(item) + '">' +
+          appIconHTML(item) +
           '</span><span class="label">' +
           esc(item.name) +
           '</span></button>'

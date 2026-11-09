@@ -19,20 +19,23 @@ HUB_ASSETS = [
     "omm-hub.html",
     "omm-hub.css",
     "omm-hub.js",
+    "omm-icons.js",
     "omm-embed.js",
     "plugin-spec.md",
 ]
 
-INSTALLER_ASSETS = ["installer.html", "installer.css", "installer.js"]
+INSTALLER_ASSETS = ["installer.html", "installer.css", "installer.js", "omm-icons.js"]
 
 PLUGIN_ASSETS = ["omm-embed.js", "icon.ico", "icon-writer.ico"]
 
 
 def _copy_common(dest: Path) -> None:
-    for asset in ("icon.ico", "icon-writer.ico"):
+    for asset in ("icon.ico", "icon-writer.ico", "icon-writer.png"):
         src = ROOT / asset
         if src.is_file():
             shutil.copy2(src, dest / src.name)
+    for src in ROOT.glob("icon-*.png"):
+        shutil.copy2(src, dest / src.name)
 
 
 def copy_vendor(dest: Path, app_id: str) -> None:
@@ -132,4 +135,6 @@ def stage_installer(dest: Path, common_assets=()) -> Path:
     _copy_common(dest)
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
+    (dest / "vendor").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(VENDOR / "fonts", dest / "vendor" / "fonts", dirs_exist_ok=True)
     return dest
