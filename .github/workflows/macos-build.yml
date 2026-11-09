@@ -56,10 +56,25 @@ jobs:
             stage="$(mktemp -d)"
             ditto "$app" "$stage/$name.app"
             ln -s /Applications "$stage/Applications"
-            hdiutil create -volname "$name" -srcfolder "$stage" \
-              -ov -format UDZO \
-              "artifacts/${name}-macOS-${{ matrix.arch }}.dmg"
+            dmg="artifacts/${name}-macOS-${{ matrix.arch }}.dmg"
+            # hdiutil occasionally reports "Resource busy" on hosted runners.
+            # Retry with a unique volume name and no Spotlight indexing.
+            vol="${name:0:16}-${{ matrix.arch }}"
+            ok=""
+            for attempt in 1 2 3; do
+              if hdiutil create -volname "$vol" -srcfolder "$stage" \
+                -ov -format UDZO -fs HFS+ -nospotlight "$dmg"; then
+                ok="1"
+                break
+              fi
+              echo "hdiutil attempt $attempt failed for $name; retrying"
+              sleep 5
+            done
             rm -rf "$stage"
+            if [ -z "$ok" ]; then
+              echo "hdiutil failed for $name"
+              exit 1
+            fi
           done
           ls -lh artifacts
 
