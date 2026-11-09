@@ -17,7 +17,7 @@
   var GREEN = '#5f8a5a';
 
   var dedicated = {
-    writer: 'icon-writer.png',
+    writer: 'icon-writer.ico',
   };
 
   var icons = {

@@ -445,7 +445,12 @@
     html +=
       '<span class="dock-sep"></span>' +
       '<button class="dock-app utility" type="button" data-act="launcher" title="所有应用　Ctrl+0">' +
-      '<span class="glyph">⊞</span></button>';
+      '<span class="glyph"><svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<rect x="3" y="3" width="7" height="7" fill="#e3a400" stroke="#26231f"/>' +
+      '<rect x="14" y="3" width="7" height="7" fill="#5b7692" stroke="#26231f"/>' +
+      '<rect x="3" y="14" width="7" height="7" fill="#7c7f42" stroke="#26231f"/>' +
+      '<rect x="14" y="14" width="7" height="7" fill="#b56545" stroke="#26231f"/>' +
+      '</svg></span></button>';
     els.dock.innerHTML = html;
   }
 

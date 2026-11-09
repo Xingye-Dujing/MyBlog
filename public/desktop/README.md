@@ -231,10 +231,9 @@ Windows 构建时用 Pillow 转成真正的多尺寸 `app.ico`；macOS 构建时
 （id 见上表），会自动优先使用；合集图标使用 `desktop/icons-src/hub.png`，
 不存在时回退到 `icon.ico`。
 
-工作台内的产品图标：所有图标都不加外边框。有专属图标的（当前为所思所想
-`icon-writer.png`）直接显示；其他产品暂用彩色 SVG 线稿。新增
-`icon-<id>.png` 并在 `public/omm-icons.js` 的 `dedicated` 表中登记后，会自动
-改为专属图标。
+工作台和安装器中的产品图标：所思所想使用 `icon-writer.ico` 专属图标，其他产品使用
+`public/omm-icons.js` 里的彩色 SVG 线稿；所有图标都不加外边框。Dock 的
+「所有应用」入口也是彩色 SVG 宫格图标。
 
 ## 签名 EXE（可选）
 
