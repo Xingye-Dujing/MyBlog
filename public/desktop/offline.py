@@ -43,12 +43,51 @@ def copy_vendor(dest: Path, app_id: str) -> None:
         shutil.copytree(src, target / item, dirs_exist_ok=True)
 
 
+def copy_all_vendor(dest: Path) -> None:
+    shutil.copytree(VENDOR, dest / "vendor", dirs_exist_ok=True)
+
+
+ALL_APPS = [
+    "omm-annotate.html",
+    "omm-corpus.html",
+    "omm-data.html",
+    "omm-english.html",
+    "omm-latex.html",
+    "omm-mdforge.html",
+    "omm-message.html",
+    "omm-planner.html",
+    "omm-redact.html",
+    "omm-visualization.html",
+    "omm-writer.html",
+]
+
+HUB_ASSETS = ["omm-hub.html", "omm-hub.css", "omm-hub.js", "omm-embed.js"]
+
+
+def stage_hub(dest: Path, common_assets=()) -> Path:
+    """Stage the integrated hub: every page, the full vendor tree and backends."""
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    for html in ALL_APPS:
+        shutil.copy2(ROOT / html, dest / html)
+    for asset in HUB_ASSETS:
+        shutil.copy2(ROOT / asset, dest / asset)
+    for asset in common_assets:
+        shutil.copy2(ROOT / asset, dest / Path(asset).name)
+    copy_all_vendor(dest)
+    shutil.copytree(ROOT / "mdforge-examples", dest / "mdforge-examples", dirs_exist_ok=True)
+    shutil.copy2(ROOT / "latex-serve.py", dest / "latex-serve.py")
+    return dest
+
+
 def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     """Create dest/ with the page, shared assets and the needed vendor files."""
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     shutil.copy2(ROOT / html_name, dest / html_name)
+    shutil.copy2(ROOT / "omm-embed.js", dest / "omm-embed.js")
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
     copy_vendor(dest, app_id)

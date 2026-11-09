@@ -283,6 +283,10 @@ def create_app() -> Flask:
     def icon():
         return send_from_directory(str(PUBLIC_ROOT), "icon.ico")
 
+    @app.get("/omm-embed.js")
+    def embed_bridge():
+        return send_from_directory(str(PUBLIC_ROOT), "omm-embed.js")
+
     @app.get("/APL385.ttf")
     def apl_font():
         return send_from_directory(str(PUBLIC_ROOT), "APL385.ttf")

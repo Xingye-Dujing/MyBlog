@@ -53,6 +53,9 @@ WINDOW_TITLES = {
     "writer": "所思所想",
 }
 
+HUB_PORT = 8300
+HUB_HTML = "omm-hub.html"
+
 
 def resource_root() -> Path:
     """Folder holding the bundled html/assets (onefile temp dir when frozen)."""
@@ -212,12 +215,58 @@ def run(app_id: str, debug: bool = False) -> None:
     webview.start(**start_options)
 
 
+def run_hub(debug: bool = False) -> None:
+    """Open the integrated OMM-ZEN workspace."""
+    root = resource_root()
+    if not (root / HUB_HTML).is_file():
+        raise SystemExit("missing %s next to the launcher" % HUB_HTML)
+
+    shared = app_data_base() / "OMM-ZEN"
+    shared.mkdir(parents=True, exist_ok=True)
+    os.environ["OMM_SHARED_DIR"] = str(shared)
+    os.environ["OMM_DATA_DIR"] = str(data_root("hub"))
+
+    from hub_server import start_hub_server  # noqa: WPS433 - bundled module
+
+    port = start_hub_server(root, HUB_PORT)
+
+    import webview
+
+    webview.settings["ALLOW_DOWNLOADS"] = True
+    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+    if IS_WINDOWS:
+        os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(data_root("hub")))
+
+    url = "http://127.0.0.1:%d/%s" % (port, HUB_HTML)
+    webview.create_window(
+        "OMM-ZEN 工作台",
+        url,
+        width=1440,
+        height=920,
+        min_size=(1024, 680),
+        text_select=True,
+        zoomable=True,
+    )
+    icon = root / ("app.icns" if IS_MACOS else "app.ico")
+    start_options = {
+        "debug": debug,
+        "private_mode": False,
+        "storage_path": str(data_root("hub")),
+    }
+    if not IS_MACOS and icon.is_file():
+        start_options["icon"] = str(icon)
+    webview.start(**start_options)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run an OMM-ZEN app in a desktop window")
-    parser.add_argument("--app", required=True, choices=sorted(APPS))
+    parser.add_argument("--app", required=True, choices=sorted(APPS) + ["hub"])
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
-    run(args.app, debug=args.debug)
+    if args.app == "hub":
+        run_hub(debug=args.debug)
+    else:
+        run(args.app, debug=args.debug)
 
 
 if __name__ == "__main__":

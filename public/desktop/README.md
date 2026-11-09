@@ -1,7 +1,7 @@
 # OMM-ZEN 桌面版构建说明
 
-把 `public/` 下的每个 `omm-*.html` 打包成独立的桌面程序：Windows 为 `.exe`，
-macOS 为 `.app`。每个程序：
+把 `public/` 下的 11 个 `omm-*.html` 打包成独立桌面程序，并额外提供一个把它们
+集成到同一窗口的 **OMM-ZEN 工作台**。Windows 为 `.exe`，macOS 为 `.app`。每个程序：
 
 - 内嵌页面、字体和所有前端依赖（`vendor/`），**不联网也能完整打开和操作界面**；
 - 在本机回环地址上起一个仅本机可访问的 HTTP 服务，再用系统 WebView 打开窗口
@@ -11,10 +11,13 @@ macOS 为 `.app`。每个程序：
   `~/Library/Application Support/OMM-ZEN/<应用名>/`（macOS）；
 - 关闭窗口后后台服务随进程退出。
 
-`dist/` 下已生成 11 个 Windows 程序：
+所有程序都不再显示各产品的品牌启动页，打开后直接进入工作界面。
+
+`dist/` 下生成 12 个 Windows 程序：
 
 | EXE | 对应页面 | 端口 | 大小 | 离线资源 |
 | --- | --- | --- | --- | --- |
+| **OMM-ZEN.exe** | **omm-hub.html + 全部 11 个应用** | **8300** | **33.2 MB** | **全量 `vendor/`** |
 | OMM-Annotate.exe | omm-annotate.html | 8311 | 21.1 MB | pdf.js |
 | OMM-Corpus.exe | omm-corpus.html | 8312 | 19.3 MB | Supabase SDK |
 | OMM-Data.exe | omm-data.html | 8313 | 19.3 MB | Supabase SDK |
@@ -28,6 +31,23 @@ macOS 为 `.app`。每个程序：
 | OMM-Writer.exe | omm-writer.html | 8321 | 20.3 MB | html2canvas、jsPDF、MathJax、Supabase SDK |
 
 单个程序复制到对应系统的电脑即可运行，目标机器不需要 Python、Node 或网络。
+
+## OMM-ZEN 工作台
+
+`OMM-ZEN.exe` / `OMM-ZEN.app` 是 11 个产品的合集外壳，单独的程序仍然保留。
+
+- **顶部标签**：打开的应用形成标签，点击切换，`×` 或中键关闭。
+- **分屏**：工具栏左右/上下分屏；把标签或 Dock 图标拖到窗格上/下/左/右边缘
+  可半屏分割，拖到中间可替换窗格；分隔条可拖动，双击恢复均分。
+- **布局预设**：单窗格、左右双栏、上下双栏、四宫格、专注当前窗格。
+- **Dock**：底部常驻 11 个应用入口，运行中的应用有黄色标记；可隐藏。
+- **状态恢复**：打开的应用、分屏树、分隔比例、Dock 状态和焦点会自动保存，
+  下次启动恢复；首次启动显示应用选择网格。
+- **快捷键**：`Ctrl+Tab` 切换、`Ctrl+W` 关闭、`Ctrl+1…9` 打开应用、
+  `Ctrl+0` 应用面板、`Ctrl+\` / `Ctrl+Shift+\` 分屏、`Ctrl+Shift+M` 专注、
+  `Ctrl+Shift+D` 显示/隐藏 Dock。
+- 合集使用独立的 WebView 配置目录 `OMM-ZEN/hub`，与单独应用的数据互不影响；
+  需要迁移旧数据时，使用各应用自带的导出/导入。
 
 ## 运行要求
 
@@ -59,17 +79,20 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 
 - `vendor/` 存放所有第三方库和 Literata 字体（约 30 MB，含 PDF/MuPDF/图表等）。
 - 源码 HTML 直接引用 `vendor/...`，不再包含 CDN 地址、镜像表或加载回退逻辑。
-- 构建时 `desktop/offline.py` 只做一件事：按应用复制它真正用到的库，
-  避免每个 EXE 都塞满 30 MB。
+- 构建时 `desktop/offline.py` 按应用复制它真正用到的库；合集版复制全量
+  `vendor/`，因此任意产品的任意功能都不会缺资源。
 - 网站部署和 EXE 使用同一套资源，不再需要构建期改写。
-- 已验证 11 个 EXE 启动后对公网的请求数为 **0**；PDF.js、MuPDF、
-  MathJax、ECharts、SheetJS 等均从包内加载。
+- 已验证应用启动后对公网的请求数为 **0**；PDF.js、MuPDF、MathJax、
+  ECharts、SheetJS 等均从包内加载。
 
 ## 重新构建
 
 ```powershell
-# 全部重建（输出到 dist/）
+# 全部重建（11 个应用 + OMM-ZEN 工作台，输出到 dist/）
 .venv\Scripts\python.exe desktop\build_exes.py --clean
+
+# 只构建工作台
+.venv\Scripts\python.exe desktop\build_exes.py hub
 
 # 只构建某几个
 .venv\Scripts\python.exe desktop\build_exes.py planner writer
@@ -77,8 +100,8 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 # 查看应用清单
 .venv\Scripts\python.exe desktop\build_exes.py --list
 
-# 直接从源码运行（调试用，改 HTML 后无需重新打包）
-.venv\Scripts\python.exe desktop\omm_launcher.py --app planner --debug
+# 直接从源码运行工作台（调试用）
+.venv\Scripts\python.exe desktop\omm_launcher.py --app hub --debug
 ```
 
 构建依赖已装进 `.venv`：`pywebview`、`pythonnet`、`pyinstaller`。新环境：
@@ -95,14 +118,15 @@ Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 
 1. 推送 `macos-*` 标签，或在 Actions 页面手动运行 “Build macOS apps”。
 2. 工作流会执行 `python desktop/build_exes.py --clean`，把每个 `.app` 打包成
-   `OMM-<App>-macOS-<arch>.dmg`，上传到指定的 GitHub Release（默认 `v1.0.0`）。
+   `OMM-<App>-macOS-<arch>.dmg`（合集为 `OMM-ZEN-macOS-<arch>.dmg`），
+   上传到指定的 GitHub Release（默认 `v1.0.0`）。
 
 本机 Mac 构建：
 
 ```bash
 python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
 python3 desktop/build_exes.py --clean
-# 产物：dist/OMM-<App>.app
+# 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app
 ```
 
 未签名/未公证的 `.app` 首次打开会被 Gatekeeper 拦截。从 DMG 拖入 Applications 后，
@@ -129,16 +153,22 @@ xattr -dr com.apple.quarantine /Applications/OMM-Planner.app
    （文件名、固定端口、后端 `None` / `"mdforge"` / `"latex"`），
    `WINDOW_TITLES` 写窗口标题。
 2. 在 `desktop/build_exes.py` 的 `EXE_NAMES` 加 EXE 名。
-3. 在 `desktop/offline.py` 的 `APP_VENDOR` 写它需要的库目录；
+3. 在 `desktop/offline.py` 的 `APP_VENDOR` 写它需要的库目录，
+   并把 HTML 加进同文件的 `ALL_APPS`（合集版会一起打包）；
    页面里直接用 `vendor/...` 路径引用。
-4. 重新构建该应用。
+4. 在 `public/omm-hub.js` 的 `APP_LIST` 加一项（名称、字标、说明），
+   顶部标签、Dock 和启动网格会自动出现。
+5. 页面 `<head>` 引入 `<script src="omm-embed.js"></script>`；单独构建和
+   合集都会自动带上这个脚本，启动页会直接跳过。
+6. 重新构建该应用和 `hub`。
 
 ## 图标
 
 `public/icon.ico` 和 `public/icon-writer.ico` 实际是 PNG 改名，WebView2 不能直接用。
 Windows 构建时用 Pillow 转成真正的多尺寸 `app.ico`；macOS 构建时用 `iconutil`
 生成 `app.icns`。想给单个应用换图标，放 `desktop/icons-src/<app>.png`
-（id 见上表），会自动优先使用。
+（id 见上表），会自动优先使用；合集图标使用 `desktop/icons-src/hub.png`，
+不存在时回退到 `icon.ico`。
 
 ## 签名 EXE（可选）
 
