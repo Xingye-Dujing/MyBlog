@@ -14,8 +14,11 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -298,8 +301,27 @@ def _read_url(url: str, timeout: float = 30.0) -> bytes:
         return response.read()
 
 
+def _retry_network(fn: Callable[[], bytes], attempts: int = 3) -> bytes:
+    last = None
+    for index in range(attempts):
+        try:
+            return fn()
+        except urllib.error.HTTPError as exc:
+            last = exc
+            if 400 <= exc.code < 500:
+                break
+        except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as exc:
+            last = exc
+        if index + 1 < attempts:
+            time.sleep(1.5 * (index + 1))
+    raise PluginError("网络请求失败：%s" % last)
+
+
 def fetch_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
-    data = _read_url(url, timeout=timeout)
+    if urllib.parse.urlparse(url).scheme == "file":
+        data = _read_url(url, timeout=timeout)
+    else:
+        data = _retry_network(lambda: _read_url(url, timeout=timeout))
     try:
         return json.loads(data.decode("utf-8"))
     except Exception as exc:
@@ -321,12 +343,13 @@ def download_bytes(
     progress: Optional[Callable[[int, int], None]] = None,
     timeout: float = 60.0,
 ) -> bytes:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme == "file":
-        data = _read_url(url, timeout=timeout)
-        if progress:
-            progress(len(data), len(data))
-    else:
+    def once() -> bytes:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme == "file":
+            data = _read_url(url, timeout=timeout)
+            if progress:
+                progress(len(data), len(data))
+            return data
         request = urllib.request.Request(url, headers={"User-Agent": "OMM-ZEN/1.0"})
         with urllib.request.urlopen(request, timeout=timeout) as response:
             if response.status != 200:
@@ -344,7 +367,12 @@ def download_bytes(
                     raise PluginError("下载文件过大")
                 if progress:
                     progress(received, total)
-            data = b"".join(chunks)
+            return b"".join(chunks)
+
+    if urllib.parse.urlparse(url).scheme == "file":
+        data = once()
+    else:
+        data = _retry_network(once)
     if expected_sha256 and sha256_bytes(data).lower() != expected_sha256.lower():
         raise PluginError("文件校验失败（SHA-256 不匹配）")
     return data
