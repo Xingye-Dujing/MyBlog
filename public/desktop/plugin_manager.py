@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 CATALOG_URL = (
-    "https://gitee.com/Xingye-Dujing/my-blog/releases/latest/download/catalog.json"
+    "https://gitee.com/Xingye-Dujing/my-blog/releases/download/v1.0.0/catalog.json"
 )
 MIRROR_PREFIX = "https://ghproxy.net/"
 PLUGIN_API = 1
