@@ -381,6 +381,8 @@ class HubHandler(ShellHandler):
     def do_POST(self):  # noqa: N802
         parsed = urlsplit(self.path)
         try:
+            if self.handle_desktop_post():
+                return
             if self.handle_update_post():
                 return
             if parsed.path == "/api/plugins/install":
