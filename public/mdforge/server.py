@@ -13,8 +13,9 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import parse_qs, urlsplit
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
 from . import __version__
@@ -32,6 +33,10 @@ from .validate import validate_document
 PUBLIC_ROOT = Path(
     os.environ.get("OMM_PLUGIN_ROOT") or Path(__file__).resolve().parent.parent
 ).resolve()
+try:  # The desktop shell provides shared storage; plain web installs do not.
+    import omm_shared  # type: ignore
+except Exception:  # pragma: no cover - optional on the public website
+    omm_shared = None  # type: ignore
 FRONTEND = "omm-mdforge.html"
 JOB_ROOT = Path(tempfile.gettempdir()) / "mdforge-jobs"
 JOBS: Dict[str, Dict[str, Any]] = {}
@@ -280,6 +285,35 @@ def create_app() -> Flask:
     @app.get("/omm-mdforge.html")
     def index():
         return send_from_directory(str(PUBLIC_ROOT), FRONTEND)
+
+    @app.get("/omm-desktop.js")
+    def desktop_bridge():
+        return send_from_directory(str(PUBLIC_ROOT), "omm-desktop.js")
+
+    @app.get("/__omm/fs/<path:sub>")
+    def omm_shared_get(sub: str):
+        if omm_shared is None:
+            abort(404)
+        parsed = urlsplit(request.full_path)
+        status, content_type, body = omm_shared.handle_get(
+            "/__omm/fs/" + sub,
+            parse_qs(parsed.query),
+            os.environ.get("OMM_APP_ID") or "mdforge",
+        )
+        return Response(body, status=status, content_type=content_type)
+
+    @app.post("/__omm/fs/<path:sub>")
+    def omm_shared_post(sub: str):
+        if omm_shared is None:
+            abort(404)
+        parsed = urlsplit(request.full_path)
+        status, content_type, body = omm_shared.handle_post(
+            "/__omm/fs/" + sub,
+            parse_qs(parsed.query),
+            request.get_data(cache=False),
+            os.environ.get("OMM_APP_ID") or "mdforge",
+        )
+        return Response(body, status=status, content_type=content_type)
 
     @app.get("/icon.ico")
     def icon():

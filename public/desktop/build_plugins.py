@@ -2,7 +2,7 @@
 """Build plugin bundles, a development plugin root, and the online catalog.
 
     python desktop/build_plugins.py
-    python desktop/build_plugins.py --tag v1.0.1
+    python desktop/build_plugins.py --tag v1.0.2
 
 Outputs:
     build/plugin-dirs/<id>/                 # for running the hub from source

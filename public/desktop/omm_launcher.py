@@ -22,6 +22,7 @@ import urllib.request
 from pathlib import Path
 
 from app_updater import ShellHandler
+import omm_shared
 
 IS_WINDOWS = os.name == "nt"
 IS_MACOS = sys.platform == "darwin"
@@ -154,6 +155,89 @@ def wait_ready(port: int, seconds: float = 20.0) -> bool:
     return False
 
 
+def _install_zoom(window, app_id: str) -> None:
+    """Persist the native WebView2 zoom factor per product.
+
+    Ctrl + mouse wheel is handled by WebView2 itself; subscribing to
+    ``ZoomFactorChanged`` means the user's zoom choice is written to
+    shared.json and restored the next time this product starts.
+    """
+    if not IS_WINDOWS:
+        return
+    try:
+        import clr  # noqa: F401 - loads pythonnet
+        from System import Action
+    except Exception:
+        return
+
+    def setup():
+        try:
+            view = window.native.browser.webview
+            saved = omm_shared.get_zoom(app_id)
+            if saved and abs(float(saved) - 1.0) > 0.001:
+                view.ZoomFactor = saved
+
+            def changed(sender, _args):
+                try:
+                    omm_shared.set_zoom(app_id, float(sender.ZoomFactor))
+                except Exception:
+                    pass
+
+            try:
+                view.ZoomFactorChanged += changed
+            except Exception:
+                pass
+            state["view"] = view
+            state["last"] = float(view.ZoomFactor)
+            state["ready"] = True
+        except Exception:
+            pass
+
+    state = {"ready": False, "view": None, "last": 1.0, "current": 1.0}
+
+    try:
+        window.native.Invoke(Action(setup))
+    except Exception:
+        return
+
+    def watch():
+        # Ctrl + wheel is handled by WebView2; poll the factor so a change is
+        # persisted even if the native ZoomFactorChanged event is not emitted.
+        while state.get("ready"):
+            time.sleep(0.8)
+            view = state.get("view")
+            if view is None:
+                return
+
+            def read():
+                try:
+                    state["current"] = float(view.ZoomFactor)
+                except Exception:
+                    pass
+
+            try:
+                window.native.Invoke(Action(read))
+            except Exception:
+                return
+            value = float(state.get("current") or 1.0)
+            if abs(value - float(state.get("last") or 1.0)) > 0.001:
+                state["last"] = value
+                try:
+                    omm_shared.set_zoom(app_id, value)
+                except Exception:
+                    pass
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
+def _present_maximized(window) -> None:
+    try:
+        window.maximize()
+    except Exception:
+        pass
+    _install_zoom(window, (os.environ.get("OMM_APP_ID") or "app").strip() or "app")
+
+
 def run(app_id: str, debug: bool = False) -> None:
     if app_id not in APPS:
         raise SystemExit("unknown app: %s (choose from %s)" % (app_id, ", ".join(APPS)))
@@ -165,6 +249,7 @@ def run(app_id: str, debug: bool = False) -> None:
     os.environ["OMM_SHARED_DIR"] = str(shared)
     os.environ["OMM_DATA_DIR"] = str(data_root(app_id))
     os.environ["OMM_APP_ID"] = app_id
+    os.environ["OMM_DESKTOP"] = "1"
 
     if not (root / html).is_file():
         raise SystemExit("missing %s next to the launcher" % html)
@@ -207,17 +292,12 @@ def run(app_id: str, debug: bool = False) -> None:
         text_select=True,
         zoomable=True,
     )
-    # Windows may start the process with a hidden show state (PyInstaller
-    # bootloader / parent process). Show and maximize the window explicitly so
-    # every launch path ends up with a visible, maximized window.
-    def _present(win):
-        try:
-            if IS_WINDOWS:
-                time.sleep(1.2)
-            win.show()
-            win.maximize()
-        except Exception:
-            pass
+    # maxmized=True sets the WinForms state before the first Show(); the shown
+    # handler is only a safety net and also restores the saved zoom factor.
+    try:
+        window.events.shown += _present_maximized
+    except Exception:
+        pass
 
     # Windows uses a generated .ico; macOS takes its icon from the .app bundle.
     icon = root / ("app.icns" if IS_MACOS else "app.ico")
@@ -228,7 +308,7 @@ def run(app_id: str, debug: bool = False) -> None:
     }
     if not IS_MACOS and icon.is_file():
         start_options["icon"] = str(icon)
-    webview.start(_present, [window], **start_options)
+    webview.start(**start_options)
 
 
 def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
@@ -242,6 +322,7 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     os.environ["OMM_SHARED_DIR"] = str(shared)
     os.environ["OMM_DATA_DIR"] = str(data_root("hub"))
     os.environ["OMM_APP_ID"] = "hub"
+    os.environ["OMM_DESKTOP"] = "1"
 
     from hub_server import start_hub_server  # noqa: WPS433 - bundled module
 
@@ -274,16 +355,12 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     if not IS_MACOS and icon.is_file():
         start_options["icon"] = str(icon)
 
-    def _present(win):
-        try:
-            if IS_WINDOWS:
-                time.sleep(1.2)
-            win.show()
-            win.maximize()
-        except Exception:
-            pass
+    try:
+        window.events.shown += _present_maximized
+    except Exception:
+        pass
 
-    webview.start(_present, [window], **start_options)
+    webview.start(**start_options)
 
 
 def main() -> None:

@@ -129,7 +129,7 @@ class HubServer:
 
     # ------------------------------------------------------------ servers
     def _start_static(self, port: int, directory: Path):
-        handler = functools.partial(QuietHandler, directory=str(directory))
+        handler = functools.partial(ShellHandler, directory=str(directory))
         server = _QuietHTTPServer(("127.0.0.1", port), handler)
         _serve(server)
         return server

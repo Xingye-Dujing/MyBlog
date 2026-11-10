@@ -128,6 +128,35 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 - 保存时会校验目录内是否存在 `xelatex` / `pdflatex` / `lualatex`，
   路径无效会直接报错，不会把错误配置写进去。
 
+## 保存路径、历史快照与跨产品共享
+
+桌面版每个产品都可以设置自己的保存目录（默认 `Documents/OMM-ZEN`）。设置
+入口是窗口左下角的「存档」按钮，包含三个页签：
+
+- **保存设置**：填写保存 / 快照目录，选择「每次保存加时间后缀（保留所有版本）」
+  或「覆盖同名文件」，并可把设置应用到所有产品。产品的「保存 / 导出」按钮
+  产生的文件会直接写入该目录，不再经过浏览器下载弹窗。
+- **历史快照**：保存时自动记录应用状态（LocalStorage + IndexedDB），也可以
+  点「立即创建快照」。列表按时间倒序，可一键恢复；快照与保存文件一样放在
+  保存目录下的 `snapshots/<产品>/`。
+- **共享数据**：所有产品保存文件时都会把路径登记到共享配置，其他产品在这里
+  自动看到最新文件，并按文件类型交给自己的导入入口「载入」，不需要手动导出
+  再导入。
+
+共享配置文件：
+
+```
+Windows: %LOCALAPPDATA%\OMM-ZEN\shared.json
+macOS:   ~/Library/Application Support/OMM-ZEN/shared.json
+```
+
+它记录每个产品的保存路径、保存方式以及已保存文件的路径，所有产品读写同一份
+文件。配置、快照和浏览器数据都在用户数据目录中，升级只会替换程序本体，不会
+覆盖这些内容；更新前还会额外备份一份 `shared.backup-*.json`。
+
+页面缩放也记录在同一份配置的 `ui.zoom` 下：在任意产品里用 Ctrl + 滚轮缩放后，
+下次启动会恢复该产品的缩放比例。
+
 ## 离线是怎么做的
 
 - `vendor/` 存放所有第三方库和 Literata 字体（约 30 MB，含 PDF/MuPDF/图表等）。
@@ -150,7 +179,7 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 .venv\Scripts\python.exe desktop\build_exes.py hub
 
 # 生成在线插件包和 catalog.json（先构建 framework，才能写入其校验值）
-.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.1
+.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.2
 
 # 直接从源码运行工作台（使用生成的插件目录）
 .venv\Scripts\python.exe desktop\omm_launcher.py --app hub --debug --plugins build\plugin-dirs
@@ -177,6 +206,9 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 脱离当前进程的 PowerShell 助手等待退出、替换 `exe` 并重启；完整版工作台
 下载 `OMM-ZEN.exe`，框架版工作台下载框架 zip 并取出其中的 exe。macOS 只提示
 并打开对应架构的 DMG 下载链接。
+
+更新只替换程序文件本身：`shared.json`、保存路径、历史快照、LocalStorage /
+IndexedDB 都在用户数据目录中，更新前还会备份配置文件，重启后继续读取原配置。
 
 发布新版本时：
 
@@ -206,7 +238,7 @@ Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 ```bash
 python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
 python3 desktop/build_exes.py --clean
-python3 desktop/build_plugins.py --tag v1.0.1
+python3 desktop/build_plugins.py --tag v1.0.2
 # 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app、dist/OMM-ZEN-Setup.app
 #       dist/OMM-ZEN-Framework-macOS-<arch>.zip
 ```
@@ -235,7 +267,7 @@ xattr -dr com.apple.quarantine /Applications/OMM-Planner.app
    增加一项（id、名称、字标、入口页面、固定端口、runtime、依赖的 vendor 子目录）。
 2. 在 `desktop/omm_launcher.py` 的 `APPS` 与 `WINDOW_TITLES` 增加独立运行入口。
 3. 页面 `<head>` 引入 `<script src="omm-embed.js"></script>`。
-4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.1` →
+4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.2` →
    `build_exes.py hub installer`。在线安装器与工作台插件面板会自动看到它。
 
 用户导入自己的产品不需要改代码：按 `public/plugin-spec.md` 准备目录和

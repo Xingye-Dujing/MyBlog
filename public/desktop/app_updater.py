@@ -23,7 +23,9 @@ import urllib.parse
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qs, urlsplit
 
+import omm_shared
 from plugin_specs import DESKTOP_EXE_NAMES, VERSION
 
 try:
@@ -258,6 +260,12 @@ def apply_update(info: Dict[str, Any]) -> Dict[str, Any]:
     target = Path(sys.executable)
     if not target.is_file():
         raise PluginError("找不到当前程序文件")
+    # Keep the user's save paths, shared registry and snapshots untouched by the
+    # swap; the config lives in %LOCALAPPDATA%/OMM-ZEN, not beside the exe.
+    try:
+        omm_shared.backup_config()
+    except Exception:
+        pass
     helper = _windows_helper(source, update_dir)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     # PyInstaller exports its extraction folder through the environment. The
@@ -341,6 +349,42 @@ class ShellHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def reply_raw(self, status: int, content_type: str, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _default_app_id(self) -> str:
+        return (os.environ.get("OMM_APP_ID") or "app").strip() or "app"
+
+    def handle_desktop_get(self) -> bool:
+        parsed = urlsplit(self.path)
+        if not parsed.path.startswith("/__omm/fs/"):
+            return False
+        status, content_type, body = omm_shared.handle_get(
+            parsed.path, parse_qs(parsed.query), self._default_app_id()
+        )
+        self.reply_raw(status, content_type, body)
+        return True
+
+    def handle_desktop_post(self) -> bool:
+        parsed = urlsplit(self.path)
+        if not parsed.path.startswith("/__omm/fs/"):
+            return False
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        body = self.rfile.read(length) if length > 0 else b""
+        status, content_type, payload = omm_shared.handle_post(
+            parsed.path, parse_qs(parsed.query), body, self._default_app_id()
+        )
+        self.reply_raw(status, content_type, payload)
+        return True
+
     def handle_update_get(self) -> bool:
         path = urllib.parse.urlsplit(self.path).path
         if path == UPDATE_JS_PATH:
@@ -404,6 +448,8 @@ class ShellHandler(SimpleHTTPRequestHandler):
         return True
 
     def do_GET(self):  # noqa: N802
+        if self.handle_desktop_get():
+            return
         if self.handle_update_get():
             return
         if self.send_injected_html():
@@ -411,6 +457,8 @@ class ShellHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):  # noqa: N802
+        if self.handle_desktop_post():
+            return
         if self.handle_update_post():
             return
         self.send_error(404)
@@ -470,7 +518,7 @@ UPDATE_JS = r"""
       b.style.cssText = [
         'padding:4px 12px', 'font:inherit', 'cursor:pointer',
         'border:1px solid #26231f',
-        primary ? 'background:#26231f;color:#fff' : 'background:#fff;color:#26231f'
+        primary ? 'background:#f2eee7;color:#26231f' : 'background:#fff;color:#26231f'
       ].join(';');
       return b;
     }

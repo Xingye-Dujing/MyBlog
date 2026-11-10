@@ -1,0 +1,882 @@
+# -*- coding: utf-8 -*-
+"""Shared desktop storage, snapshots and cross-product path registry.
+
+Every desktop page talks to ``/__omm/fs/...`` on its own loopback origin.  The
+handlers in this module are small and transport agnostic so the static server
+(``ShellHandler``), the MdForge Flask app and the LaTeX server can all expose
+the same API.
+
+The configuration file is the single source of truth for "where do products
+save" and "which files are available to other products"::
+
+    %LOCALAPPDATA%/OMM-ZEN/shared.json
+
+It is deliberately human readable and is updated atomically, so several OMM
+programs can write to it at the same time.
+"""
+from __future__ import annotations
+
+import base64
+import json
+import mimetypes
+import os
+import re
+import subprocess
+import sys
+import threading
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Iterable, Optional, Tuple
+from urllib.parse import parse_qs, urlsplit
+
+try:
+    from plugin_manager import app_data_base
+except Exception:  # pragma: no cover - keeps the module importable by itself
+
+    def app_data_base() -> Path:  # type: ignore[misc]
+        return Path.home() / ".omm-zen"
+
+
+API_VERSION = 1
+MAX_BODY = 256 * 1024 * 1024
+SNAPSHOT_SUFFIX = ".omm-snapshot.json"
+SNAPSHOT_DIRNAME = "snapshots"
+MODE_OVERWRITE = "overwrite"
+MODE_VERSIONED = "versioned"
+MODES = (MODE_OVERWRITE, MODE_VERSIONED)
+DEFAULT_MODE = MODE_VERSIONED
+
+APP_NAMES = {
+    "annotate": "文本标注",
+    "corpus": "英语语料库",
+    "data": "数据工作台",
+    "english": "六级备考",
+    "latex": "LaTeX 编译工作台",
+    "mdforge": "Markdown 铸造台",
+    "message": "消息同步",
+    "planner": "日程安排",
+    "redact": "文档脱敏工具",
+    "visualization": "可视化图表",
+    "writer": "所思所想",
+    "hub": "OMM-ZEN 工作台",
+}
+
+_KIND_BY_EXT = {
+    ".csv": "table",
+    ".tsv": "table",
+    ".xlsx": "table",
+    ".xls": "table",
+    ".db": "table",
+    ".sqlite": "table",
+    ".json": "json",
+    ".jsonl": "json",
+    ".ndjson": "json",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".tex": "latex",
+    ".txt": "text",
+    ".pdf": "pdf",
+    ".docx": "document",
+    ".pptx": "document",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
+    ".svg": "image",
+    ".zip": "archive",
+    ".zc": "writer-canvas",
+    ".zwlib": "writer-library",
+}
+
+
+# --------------------------------------------------------------------- basics
+
+
+def desktop_enabled() -> bool:
+    return os.environ.get("OMM_DESKTOP") == "1"
+
+
+def shared_root() -> Path:
+    override = (os.environ.get("OMM_SHARED_DIR") or "").strip()
+    path = Path(override) if override else app_data_base() / "OMM-ZEN"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def config_path() -> Path:
+    return shared_root() / "shared.json"
+
+
+def lock_path() -> Path:
+    return shared_root() / ".shared.lock"
+
+
+def default_save_path() -> Path:
+    home = Path.home()
+    docs = home / "Documents"
+    return (docs if docs.is_dir() else home) / "OMM-ZEN"
+
+
+def now_iso() -> str:
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def stamp() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def clean_app_id(value: Any) -> str:
+    text = re.sub(r"[^a-zA-Z0-9_-]+", "", str(value or "").strip())
+    return text[:40] or "app"
+
+
+def app_name(app: str) -> str:
+    return APP_NAMES.get(app, app)
+
+
+def kind_for(name: str) -> str:
+    return _KIND_BY_EXT.get(Path(name).suffix.lower(), "file")
+
+
+def mime_for(name: str) -> str:
+    return mimetypes.guess_type(name)[0] or "application/octet-stream"
+
+
+def _empty_config() -> Dict[str, Any]:
+    return {
+        "version": API_VERSION,
+        "updated": "",
+        "save": {
+            "path": str(default_save_path()),
+            "mode": DEFAULT_MODE,
+            "auto_snapshot": True,
+        },
+        "ui": {"zoom": {}},
+        "apps": {},
+    }
+
+
+def _normalize_config(raw: Any) -> Dict[str, Any]:
+    cfg = _empty_config()
+    if not isinstance(raw, dict):
+        return cfg
+    save = raw.get("save") if isinstance(raw.get("save"), dict) else {}
+    path = str(save.get("path") or "").strip()
+    mode = str(save.get("mode") or "").strip().lower()
+    cfg["save"] = {
+        "path": path or str(default_save_path()),
+        "mode": mode if mode in MODES else DEFAULT_MODE,
+        "auto_snapshot": bool(save.get("auto_snapshot", True)),
+    }
+    cfg["updated"] = str(raw.get("updated") or "")
+    apps = raw.get("apps") if isinstance(raw.get("apps"), dict) else {}
+    clean_apps: Dict[str, Any] = {}
+    for key, value in apps.items():
+        app = clean_app_id(key)
+        if not isinstance(value, dict):
+            continue
+        resources = value.get("resources")
+        if not isinstance(resources, dict):
+            resources = {}
+        clean_resources: Dict[str, Any] = {}
+        for rkey, rval in resources.items():
+            if not isinstance(rval, dict):
+                continue
+            item = dict(rval)
+            item["app"] = app
+            item["app_name"] = app_name(app)
+            item["name"] = str(item.get("name") or rkey)
+            item["path"] = str(item.get("path") or "")
+            item["kind"] = str(item.get("kind") or kind_for(item["name"]))
+            clean_resources[str(rkey)] = item
+        clean_apps[app] = {
+            "name": app_name(app),
+            "save_path": str(value.get("save_path") or "").strip(),
+            "mode": (
+                str(value.get("mode") or "").lower()
+                if str(value.get("mode") or "").lower() in MODES
+                else ""
+            ),
+            "auto_snapshot": bool(value.get("auto_snapshot", True)),
+            "updated": str(value.get("updated") or ""),
+            "last_snapshot": str(value.get("last_snapshot") or ""),
+            "resources": clean_resources,
+        }
+    cfg["apps"] = clean_apps
+    ui = raw.get("ui") if isinstance(raw.get("ui"), dict) else {}
+    zoom_raw = ui.get("zoom") if isinstance(ui.get("zoom"), dict) else {}
+    zoom: Dict[str, float] = {}
+    for key, value in zoom_raw.items():
+        try:
+            factor = float(value)
+        except (TypeError, ValueError):
+            continue
+        zoom[clean_app_id(key)] = max(0.3, min(3.0, factor))
+    cfg["ui"] = {"zoom": zoom}
+    return cfg
+
+
+class _FileLock:
+    """Tiny cross-process lock around the shared config file."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.file = None
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.file = open(self.path, "a+b")
+        if self.file.seek(0, os.SEEK_END) == 0:
+            self.file.write(b"\0")
+            self.file.flush()
+        self.file.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(self.file.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.05)
+        else:
+            import fcntl
+
+            fcntl.flock(self.file.fileno(), fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                self.file.seek(0)
+                msvcrt.locking(self.file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self.file.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.file.close()
+
+
+def load_config() -> Dict[str, Any]:
+    try:
+        data = json.loads(config_path().read_text(encoding="utf-8"))
+    except Exception:
+        data = None
+    return _normalize_config(data)
+
+
+def backup_config() -> str:
+    """Copy shared.json next to itself before an update swaps the program.
+
+    The configuration deliberately lives in the user data folder, never in the
+    installation directory, so an update cannot overwrite it.  The extra copy
+    is a safety net for a damaged or partially written file.
+    """
+    source = config_path()
+    if not source.is_file():
+        return ""
+    target = shared_root() / ("shared.backup-%s.json" % stamp())
+    try:
+        target.write_bytes(source.read_bytes())
+        return str(target)
+    except Exception:
+        return ""
+
+
+def _write_config(cfg: Dict[str, Any]) -> None:
+    target = config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    cfg["version"] = API_VERSION
+    cfg["updated"] = now_iso()
+    tmp = target.with_name(target.name + ".tmp-" + uuid.uuid4().hex[:8])
+    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, target)
+
+
+def mutate_config(mutator) -> Dict[str, Any]:
+    with _FileLock(lock_path()):
+        cfg = load_config()
+        mutator(cfg)
+        _write_config(cfg)
+        return cfg
+
+
+def get_zoom(app: str, default: float = 1.0) -> float:
+    cfg = load_config()
+    value = ((cfg.get("ui") or {}).get("zoom") or {}).get(clean_app_id(app))
+    try:
+        return max(0.3, min(3.0, float(value))) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def set_zoom(app: str, factor: float) -> float:
+    app = clean_app_id(app)
+    try:
+        value = max(0.3, min(3.0, float(factor)))
+    except (TypeError, ValueError):
+        return get_zoom(app)
+
+    def update(cfg: Dict[str, Any]) -> None:
+        ui = cfg.setdefault("ui", {})
+        if not isinstance(ui, dict):
+            ui = {}
+            cfg["ui"] = ui
+        zoom = ui.setdefault("zoom", {})
+        if not isinstance(zoom, dict):
+            zoom = {}
+            ui["zoom"] = zoom
+        zoom[app] = round(value, 4)
+
+    mutate_config(update)
+    return value
+
+
+def app_entry(cfg: Dict[str, Any], app: str) -> Dict[str, Any]:
+    app = clean_app_id(app)
+    apps = cfg.setdefault("apps", {})
+    entry = apps.get(app)
+    if not isinstance(entry, dict):
+        entry = {
+            "name": app_name(app),
+            "save_path": "",
+            "mode": "",
+            "auto_snapshot": True,
+            "updated": "",
+            "last_snapshot": "",
+            "resources": {},
+        }
+        apps[app] = entry
+    entry.setdefault("resources", {})
+    entry["name"] = app_name(app)
+    return entry
+
+
+def resolve_save_dir(app: str, cfg: Optional[Dict[str, Any]] = None) -> Path:
+    cfg = cfg or load_config()
+    entry = (cfg.get("apps") or {}).get(clean_app_id(app)) or {}
+    raw = str(entry.get("save_path") or "").strip() or str(
+        (cfg.get("save") or {}).get("path") or ""
+    )
+    path = Path(os.path.expandvars(os.path.expanduser(raw or str(default_save_path()))))
+    return path
+
+
+def resolve_mode(app: str, cfg: Optional[Dict[str, Any]] = None) -> str:
+    cfg = cfg or load_config()
+    entry = (cfg.get("apps") or {}).get(clean_app_id(app)) or {}
+    mode = str(entry.get("mode") or "").strip().lower()
+    if mode in MODES:
+        return mode
+    mode = str((cfg.get("save") or {}).get("mode") or "").strip().lower()
+    return mode if mode in MODES else DEFAULT_MODE
+
+
+def resolve_auto_snapshot(app: str, cfg: Optional[Dict[str, Any]] = None) -> bool:
+    cfg = cfg or load_config()
+    entry = (cfg.get("apps") or {}).get(clean_app_id(app)) or {}
+    if "auto_snapshot" in entry:
+        return bool(entry.get("auto_snapshot"))
+    return bool((cfg.get("save") or {}).get("auto_snapshot", True))
+
+
+def _safe_name(name: str, fallback: str = "export") -> str:
+    base = str(name or "").replace("\\", "/").split("/")[-1].strip()
+    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", base)
+    base = base.strip(" .")
+    if not base:
+        base = fallback
+    stem, ext = os.path.splitext(base)
+    stem = stem[:120].strip(" .") or fallback
+    ext = ext[:24]
+    return stem + ext
+
+
+def _unique_versioned(directory: Path, name: str) -> Path:
+    stem, ext = os.path.splitext(name)
+    first = directory / ("%s-%s%s" % (stem, stamp(), ext))
+    if not first.exists():
+        return first
+    for index in range(2, 1000):
+        candidate = directory / ("%s-%s-%d%s" % (stem, stamp(), index, ext))
+        if not candidate.exists():
+            return candidate
+    return directory / ("%s-%s-%s%s" % (stem, stamp(), uuid.uuid4().hex[:6], ext))
+
+
+def _atomic_write(target: Path, data: bytes) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp-" + uuid.uuid4().hex[:8])
+    tmp.write_bytes(data)
+    os.replace(tmp, target)
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _allowed_roots(cfg: Optional[Dict[str, Any]] = None) -> list[Path]:
+    cfg = cfg or load_config()
+    roots: list[Path] = [shared_root() / "updates"]
+    roots.append(Path(str((cfg.get("save") or {}).get("path") or default_save_path())))
+    for app, entry in (cfg.get("apps") or {}).items():
+        raw = str((entry or {}).get("save_path") or "").strip()
+        if raw:
+            roots.append(Path(os.path.expandvars(os.path.expanduser(raw))))
+        for item in ((entry or {}).get("resources") or {}).values():
+            if isinstance(item, dict) and str(item.get("path") or "").strip():
+                roots.append(Path(str(item["path"])).parent)
+    snapshots = shared_root() / SNAPSHOT_DIRNAME
+    roots.append(snapshots)
+    return roots
+
+
+def _inside_any(path: Path, roots: Iterable[Path]) -> bool:
+    return any(_inside(path, root) for root in roots)
+
+
+# --------------------------------------------------------------------- saving
+
+
+def save_file(
+    app: str,
+    filename: str,
+    data: bytes,
+    mime: str = "",
+    mode: str = "",
+    state: Optional[Dict[str, Any]] = None,
+    label: str = "",
+) -> Dict[str, Any]:
+    app = clean_app_id(app)
+    if not data:
+        raise ValueError("文件内容为空")
+    cfg = load_config()
+    directory = resolve_save_dir(app, cfg)
+    directory.mkdir(parents=True, exist_ok=True)
+    name = _safe_name(filename)
+    mode = (mode or resolve_mode(app, cfg)).lower()
+    if mode not in MODES:
+        mode = DEFAULT_MODE
+    target = _unique_versioned(directory, name) if mode == MODE_VERSIONED else directory / name
+    _atomic_write(target, data)
+    kind = kind_for(name)
+    entry = {
+        "name": name,
+        "file": target.name,
+        "path": str(target),
+        "kind": kind,
+        "mime": mime or mime_for(name),
+        "size": len(data),
+        "updated": now_iso(),
+        "mode": mode,
+        "app": app,
+        "app_name": app_name(app),
+    }
+
+    def update(cfg_in: Dict[str, Any]) -> None:
+        app_item = app_entry(cfg_in, app)
+        app_item["save_path"] = str(directory)
+        app_item["updated"] = entry["updated"]
+        app_item["resources"][name.lower()] = entry
+
+    cfg = mutate_config(update)
+    result: Dict[str, Any] = {
+        "ok": True,
+        "app": app,
+        "filename": target.name,
+        "path": str(target),
+        "mode": mode,
+        "resource": entry,
+        "snapshot": None,
+    }
+    if state and resolve_auto_snapshot(app, cfg):
+        try:
+            result["snapshot"] = write_snapshot(app, state, label=label or ("保存 " + name))
+        except Exception as exc:  # noqa: BLE001 - a snapshot must not break saving
+            result["snapshot_error"] = str(exc)
+    return result
+
+
+def _snapshot_dir(app: str, cfg: Optional[Dict[str, Any]] = None) -> Path:
+    return resolve_save_dir(app, cfg) / SNAPSHOT_DIRNAME / clean_app_id(app)
+
+
+def _snapshot_label(label: str) -> str:
+    text = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff _.-]+", "_", str(label or "").strip())
+    return text[:28].strip(" ._-") or "snapshot"
+
+
+def write_snapshot(
+    app: str, state: Dict[str, Any], label: str = ""
+) -> Dict[str, Any]:
+    app = clean_app_id(app)
+    if not isinstance(state, dict):
+        raise ValueError("快照内容无效")
+    cfg = load_config()
+    folder = _snapshot_dir(app, cfg)
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = dict(state)
+    payload.setdefault("version", 1)
+    payload.setdefault("app", app)
+    payload.setdefault("taken_at", now_iso())
+    payload.setdefault("label", label or "manual")
+    payload["saved_at"] = now_iso()
+    name = "%s-%s.omm-snapshot.json" % (datetime.now().strftime("%Y%m%d-%H%M%S"), _snapshot_label(label))
+    target = folder / name
+    if target.exists():
+        target = folder / ("%s-%s.omm-snapshot.json" % (
+            datetime.now().strftime("%Y%m%d-%H%M%S"), uuid.uuid4().hex[:6]
+        ))
+    _atomic_write(target, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+    def update(cfg_in: Dict[str, Any]) -> None:
+        app_item = app_entry(cfg_in, app)
+        app_item["save_path"] = str(resolve_save_dir(app, cfg_in))
+        app_item["last_snapshot"] = str(target)
+        app_item["updated"] = now_iso()
+
+    mutate_config(update)
+    return {
+        "ok": True,
+        "app": app,
+        "path": str(target),
+        "name": target.name,
+        "size": target.stat().st_size,
+        "label": payload.get("label") or "",
+        "taken_at": payload.get("taken_at") or "",
+    }
+
+
+def _snapshot_meta(path: Path) -> Dict[str, Any]:
+    app = path.parent.name
+    name = path.name
+    label = ""
+    try:
+        match = re.match(r"^\d{8}-\d{6}-?(.*)\.omm-snapshot\.json$", name)
+        if match:
+            label = match.group(1).replace("_", " ").strip()
+    except Exception:
+        pass
+    if not label:
+        label = "快照"
+    try:
+        stat = path.stat()
+    except OSError:
+        return {}
+    return {
+        "app": app,
+        "app_name": app_name(app),
+        "name": name,
+        "path": str(path),
+        "size": stat.st_size,
+        "mtime": stat.st_mtime,
+        "time": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        "label": label,
+    }
+
+
+def list_snapshots(app: str, all_apps: bool = False, limit: int = 500) -> list[Dict[str, Any]]:
+    cfg = load_config()
+    if all_apps:
+        folders = []
+        for key in sorted(set(list(APP_NAMES) + list((cfg.get("apps") or {}).keys()))):
+            folder = resolve_save_dir(key, cfg) / SNAPSHOT_DIRNAME / clean_app_id(key)
+            if folder.is_dir():
+                folders.append(folder)
+    else:
+        folder = resolve_save_dir(app, cfg) / SNAPSHOT_DIRNAME / clean_app_id(app)
+        folders = [folder] if folder.is_dir() else []
+    items: list[Dict[str, Any]] = []
+    for folder in folders:
+        if not folder.is_dir():
+            continue
+        for path in folder.glob("*" + SNAPSHOT_SUFFIX):
+            meta = _snapshot_meta(path)
+            if meta:
+                items.append(meta)
+    items.sort(key=lambda item: item.get("mtime") or 0, reverse=True)
+    return items[: max(1, min(int(limit or 500), 2000))]
+
+
+def _snapshot_path(raw: str) -> Path:
+    path = Path(os.path.expandvars(os.path.expanduser(str(raw or "")))).resolve()
+    if not _inside_any(path, [shared_root() / SNAPSHOT_DIRNAME, *[
+        Path(str((entry or {}).get("save_path") or "")) for entry in (load_config().get("apps") or {}).values()
+        if str((entry or {}).get("save_path") or "").strip()
+    ]]):
+        # Also allow snapshots that live in the global save directory.
+        if not _inside(path, Path(str((load_config().get("save") or {}).get("path") or default_save_path()))):
+            raise ValueError("快照路径不在允许的保存目录中")
+    return path
+
+
+def read_snapshot(raw: str) -> Dict[str, Any]:
+    path = _snapshot_path(raw)
+    if not path.is_file() or not path.name.endswith(SNAPSHOT_SUFFIX):
+        raise ValueError("快照文件不存在")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def delete_snapshot(raw: str) -> Dict[str, Any]:
+    path = _snapshot_path(raw)
+    if not path.is_file() or not path.name.endswith(SNAPSHOT_SUFFIX):
+        raise ValueError("快照文件不存在")
+    path.unlink()
+    return {"ok": True, "path": str(path)}
+
+
+def list_shared() -> Dict[str, Any]:
+    cfg = load_config()
+    resources: list[Dict[str, Any]] = []
+    for app, entry in (cfg.get("apps") or {}).items():
+        entry = entry or {}
+        for item in (entry.get("resources") or {}).values():
+            if not isinstance(item, dict):
+                continue
+            path = Path(str(item.get("path") or ""))
+            record = dict(item)
+            record["exists"] = path.is_file()
+            if record["exists"]:
+                try:
+                    record["size"] = path.stat().st_size
+                except OSError:
+                    pass
+            resources.append(record)
+    resources.sort(key=lambda item: str(item.get("updated") or ""), reverse=True)
+    return {
+        "ok": True,
+        "config": cfg,
+        "resources": resources,
+        "apps": [
+            {
+                "app": app,
+                "name": app_name(app),
+                "save_path": str(resolve_save_dir(app, cfg)),
+                "mode": resolve_mode(app, cfg),
+                "auto_snapshot": resolve_auto_snapshot(app, cfg),
+            }
+            for app in sorted(set(list(APP_NAMES) + list((cfg.get("apps") or {}).keys())))
+        ],
+    }
+
+
+def read_shared_file(raw: str) -> Tuple[bytes, str]:
+    path = Path(os.path.expandvars(os.path.expanduser(str(raw or "")))).resolve()
+    if not _inside_any(path, _allowed_roots()):
+        raise ValueError("文件不在共享目录中")
+    if not path.is_file():
+        raise ValueError("文件不存在")
+    return path.read_bytes(), mime_for(path.name)
+
+
+def open_folder(app: str) -> Dict[str, Any]:
+    folder = resolve_save_dir(clean_app_id(app))
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        if os.name == "nt":
+            os.startfile(str(folder))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(folder)])
+        else:
+            subprocess.Popen(["xdg-open", str(folder)])
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "path": str(folder)}
+    return {"ok": True, "path": str(folder)}
+
+
+# --------------------------------------------------------------------- routes
+
+
+def _json(status: int, payload: Dict[str, Any]) -> Tuple[int, str, bytes]:
+    return status, "application/json; charset=utf-8", json.dumps(
+        payload, ensure_ascii=False
+    ).encode("utf-8")
+
+
+def _error(status: int, message: str) -> Tuple[int, str, bytes]:
+    return _json(status, {"ok": False, "error": message})
+
+
+def _client_app(default_app: str, query: Dict[str, list[str]]) -> str:
+    raw = (query.get("app") or [""])[0]
+    return clean_app_id(raw or default_app or "app")
+
+
+def handle_get(
+    path: str, query: Dict[str, list[str]], default_app: str = "app"
+) -> Tuple[int, str, bytes]:
+    if not desktop_enabled():
+        return _error(404, "desktop API is not enabled")
+    app = _client_app(default_app, query)
+    if path == "/__omm/fs/status":
+        cfg = load_config()
+        return _json(
+            200,
+            {
+                "ok": True,
+                "desktop": True,
+                "api": API_VERSION,
+                "app": app,
+                "save_path": str(resolve_save_dir(app, cfg)),
+                "mode": resolve_mode(app, cfg),
+                "auto_snapshot": resolve_auto_snapshot(app, cfg),
+            },
+        )
+    if path == "/__omm/fs/config":
+        cfg = load_config()
+        return _json(
+            200,
+            {
+                "ok": True,
+                "app": app,
+                "config": cfg,
+                "save_path": str(resolve_save_dir(app, cfg)),
+                "mode": resolve_mode(app, cfg),
+                "auto_snapshot": resolve_auto_snapshot(app, cfg),
+                "default_path": str(default_save_path()),
+            },
+        )
+    if path == "/__omm/fs/shared":
+        return _json(200, list_shared())
+    if path == "/__omm/fs/snapshots":
+        all_apps = (query.get("all") or ["0"])[0] == "1"
+        try:
+            limit = int((query.get("limit") or ["500"])[0])
+        except ValueError:
+            limit = 500
+        return _json(
+            200,
+            {
+                "ok": True,
+                "app": app,
+                "snapshots": list_snapshots(app, all_apps=all_apps, limit=limit),
+            },
+        )
+    if path == "/__omm/fs/snapshot":
+        raw = (query.get("path") or [""])[0]
+        try:
+            snapshot = read_snapshot(raw)
+        except Exception as exc:  # noqa: BLE001
+            return _error(400, str(exc))
+        return _json(200, {"ok": True, "snapshot": snapshot})
+    if path == "/__omm/fs/file":
+        raw = (query.get("path") or [""])[0]
+        try:
+            data, mime = read_shared_file(raw)
+        except Exception as exc:  # noqa: BLE001
+            return _error(400, str(exc))
+        return 200, mime, data
+    return _error(404, "unknown endpoint")
+
+
+def handle_post(
+    path: str,
+    query: Dict[str, list[str]],
+    body: bytes,
+    default_app: str = "app",
+) -> Tuple[int, str, bytes]:
+    if not desktop_enabled():
+        return _error(404, "desktop API is not enabled")
+    app = _client_app(default_app, query)
+    try:
+        if len(body) > MAX_BODY:
+            return _error(413, "请求体过大")
+        payload = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(payload, dict):
+            raise ValueError("请求格式无效")
+        payload_app = clean_app_id(payload.get("app") or app)
+        if path == "/__omm/fs/config":
+            return _json(200, _update_config(payload_app, payload))
+        if path == "/__omm/fs/save":
+            raw = str(payload.get("data") or "")
+            if not raw:
+                raise ValueError("缺少文件内容")
+            data = base64.b64decode(raw, validate=True)
+            result = save_file(
+                payload_app,
+                str(payload.get("name") or "export.bin"),
+                data,
+                mime=str(payload.get("mime") or ""),
+                mode=str(payload.get("mode") or ""),
+                state=payload.get("state") if isinstance(payload.get("state"), dict) else None,
+                label=str(payload.get("label") or ""),
+            )
+            return _json(200, result)
+        if path == "/__omm/fs/snapshot":
+            state = payload.get("state")
+            if not isinstance(state, dict):
+                raise ValueError("快照内容无效")
+            result = write_snapshot(
+                payload_app, state, label=str(payload.get("label") or "")
+            )
+            return _json(200, result)
+        if path == "/__omm/fs/snapshot/delete":
+            return _json(200, delete_snapshot(str(payload.get("path") or "")))
+        if path == "/__omm/fs/open":
+            return _json(200, open_folder(payload_app))
+        return _error(404, "unknown endpoint")
+    except ValueError as exc:
+        return _error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error(500, str(exc))
+
+
+def _update_config(app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    scope = str(payload.get("scope") or "app").lower()
+    path_raw = payload.get("path")
+    mode = str(payload.get("mode") or "").strip().lower()
+    auto = payload.get("auto_snapshot")
+    cfg = load_config()
+    target_path: Optional[Path] = None
+    if path_raw is not None:
+        text = str(path_raw).strip()
+        target_path = Path(
+            os.path.expandvars(os.path.expanduser(text or str(default_save_path())))
+        )
+        target_path.mkdir(parents=True, exist_ok=True)
+
+    def update(cfg_in: Dict[str, Any]) -> None:
+        if target_path is not None:
+            if scope == "all":
+                cfg_in.setdefault("save", {})["path"] = str(target_path)
+                for item in (cfg_in.get("apps") or {}).values():
+                    if isinstance(item, dict):
+                        item["save_path"] = ""
+            else:
+                app_entry(cfg_in, app)["save_path"] = str(target_path)
+        if mode in MODES:
+            if scope == "all":
+                cfg_in.setdefault("save", {})["mode"] = mode
+                for item in (cfg_in.get("apps") or {}).values():
+                    if isinstance(item, dict):
+                        item["mode"] = ""
+            else:
+                app_entry(cfg_in, app)["mode"] = mode
+        if auto is not None:
+            if scope == "all":
+                cfg_in.setdefault("save", {})["auto_snapshot"] = bool(auto)
+                for item in (cfg_in.get("apps") or {}).values():
+                    if isinstance(item, dict):
+                        item["auto_snapshot"] = bool(auto)
+            else:
+                app_entry(cfg_in, app)["auto_snapshot"] = bool(auto)
+        app_entry(cfg_in, app)["updated"] = now_iso()
+
+    cfg = mutate_config(update)
+    return {
+        "ok": True,
+        "app": app,
+        "config": cfg,
+        "save_path": str(resolve_save_dir(app, cfg)),
+        "mode": resolve_mode(app, cfg),
+        "auto_snapshot": resolve_auto_snapshot(app, cfg),
+    }

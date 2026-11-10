@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 # Release asset name for each desktop program (without the platform suffix).
 DESKTOP_EXE_NAMES = {
