@@ -2,7 +2,7 @@
 """Build plugin bundles, a development plugin root, and the online catalog.
 
     python desktop/build_plugins.py
-    python desktop/build_plugins.py --tag v1.0.0
+    python desktop/build_plugins.py --tag v1.0.1
 
 Outputs:
     build/plugin-dirs/<id>/                 # for running the hub from source
@@ -18,7 +18,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from plugin_specs import BUILTIN_PLUGINS, VERSION
+from plugin_specs import BUILTIN_PLUGINS, DESKTOP_EXE_NAMES, VERSION
 import offline
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -71,6 +71,7 @@ def main() -> None:
         "base_url": base,
         "plugins": [],
         "frameworks": {},
+        "apps": {},
     }
 
     print("Building %d plugin bundles" % len(BUILTIN_PLUGINS))
@@ -106,6 +107,19 @@ def main() -> None:
             entry["sha256"] = sha256(local)
             entry["size"] = local.stat().st_size
         catalog["frameworks"][platform] = entry
+
+    for app_id, name in DESKTOP_EXE_NAMES.items():
+        local = DIST / (name + ".exe")
+        if not local.is_file():
+            continue
+        bundle = name + ".exe"
+        catalog["apps"][app_id] = {
+            "version": VERSION,
+            "url": base + "/" + bundle,
+            "bundle": bundle,
+            "sha256": sha256(local),
+            "size": local.stat().st_size,
+        }
 
     catalog_path = DIST / "catalog.json"
     catalog_path.write_text(

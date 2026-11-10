@@ -150,7 +150,7 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 .venv\Scripts\python.exe desktop\build_exes.py hub
 
 # 生成在线插件包和 catalog.json（先构建 framework，才能写入其校验值）
-.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.0
+.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.1
 
 # 直接从源码运行工作台（使用生成的插件目录）
 .venv\Scripts\python.exe desktop\omm_launcher.py --app hub --debug --plugins build\plugin-dirs
@@ -168,6 +168,24 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
 构建顺序：先 `framework`，再 `build_plugins.py`（生成带框架校验值的目录），
 最后 `hub` / `installer`。发布时上传 `dist/catalog.json`、`dist/plugins/*.zip`、
 `dist/plugin-template.zip`、`dist/OMM-ZEN-Framework-win64.zip`。
+
+## 自更新
+
+`catalog.json` 除插件外还包含顶层 `version` 和 `apps`：每个桌面程序的版本、
+下载文件名、大小和 SHA-256。应用启动后请求 `/__omm/update/check`，发现更高
+版本时在右下角提示。Windows 点击「立即更新」会下载并校验更新包，再由一个
+脱离当前进程的 PowerShell 助手等待退出、替换 `exe` 并重启；完整版工作台
+下载 `OMM-ZEN.exe`，框架版工作台下载框架 zip 并取出其中的 exe。macOS 只提示
+并打开对应架构的 DMG 下载链接。
+
+发布新版本时：
+
+1. 修改 `desktop/plugin_specs.py` 的 `VERSION`。
+2. 修改 `desktop/plugin_manager.py` 的 `CATALOG_URL` 和安装器/工作流里的默认标签。
+3. 先构建 `framework` 和全部 exe，再运行 `build_plugins.py --tag vX.Y.Z`，
+   让 `apps` 的校验值与最终 exe 一致。
+4. 按新标签创建 Release，上传全部 exe、zip、catalog 和模板。
+
 
 ## macOS 构建
 
@@ -188,7 +206,7 @@ Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 ```bash
 python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
 python3 desktop/build_exes.py --clean
-python3 desktop/build_plugins.py --tag v1.0.0
+python3 desktop/build_plugins.py --tag v1.0.1
 # 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app、dist/OMM-ZEN-Setup.app
 #       dist/OMM-ZEN-Framework-macOS-<arch>.zip
 ```
@@ -217,7 +235,7 @@ xattr -dr com.apple.quarantine /Applications/OMM-Planner.app
    增加一项（id、名称、字标、入口页面、固定端口、runtime、依赖的 vendor 子目录）。
 2. 在 `desktop/omm_launcher.py` 的 `APPS` 与 `WINDOW_TITLES` 增加独立运行入口。
 3. 页面 `<head>` 引入 `<script src="omm-embed.js"></script>`。
-4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.0` →
+4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.1` →
    `build_exes.py hub installer`。在线安装器与工作台插件面板会自动看到它。
 
 用户导入自己的产品不需要改代码：按 `public/plugin-spec.md` 准备目录和

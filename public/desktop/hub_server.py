@@ -27,7 +27,13 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from omm_launcher import QuietHandler, existing_server_ok, port_open, resource_root
+from omm_launcher import (
+    QuietHandler,
+    ShellHandler,
+    existing_server_ok,
+    port_open,
+    resource_root,
+)
 from plugin_manager import (
     PluginError,
     PluginRegistry,
@@ -305,7 +311,7 @@ class HubServer:
             return {"ok": True, "bundled_remains": fallback}
 
 
-class HubHandler(QuietHandler):
+class HubHandler(ShellHandler):
     hub: HubServer
 
     def _reply(self, status: int, payload: dict) -> None:
@@ -334,6 +340,8 @@ class HubHandler(QuietHandler):
     def do_GET(self):  # noqa: N802
         parsed = urlsplit(self.path)
         try:
+            if self.handle_update_get():
+                return
             if parsed.path == "/api/ensure":
                 query = parse_qs(parsed.query)
                 plugin_id = (query.get("app") or query.get("id") or [""])[0]
@@ -373,6 +381,8 @@ class HubHandler(QuietHandler):
     def do_POST(self):  # noqa: N802
         parsed = urlsplit(self.path)
         try:
+            if self.handle_update_post():
+                return
             if parsed.path == "/api/plugins/install":
                 payload = self._json_body()
                 plugin_id = str(payload.get("id") or "")

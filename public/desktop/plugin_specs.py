@@ -11,7 +11,23 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.0"
+VERSION = "1.0.1"
+
+# Release asset name for each desktop program (without the platform suffix).
+DESKTOP_EXE_NAMES = {
+    "annotate": "OMM-Annotate",
+    "corpus": "OMM-Corpus",
+    "data": "OMM-Data",
+    "english": "OMM-English",
+    "latex": "OMM-LaTeX",
+    "mdforge": "OMM-MdForge",
+    "message": "OMM-Message",
+    "planner": "OMM-Planner",
+    "redact": "OMM-Redact",
+    "visualization": "OMM-Visualization",
+    "writer": "OMM-Writer",
+    "hub": "OMM-ZEN",
+}
 
 # id, display name, glyph, description, page, preferred port, runtime, vendor subset
 BUILTIN_PLUGINS: List[Dict[str, Any]] = [

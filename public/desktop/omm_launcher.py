@@ -21,6 +21,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+from app_updater import ShellHandler
+
 IS_WINDOWS = os.name == "nt"
 IS_MACOS = sys.platform == "darwin"
 
@@ -105,7 +107,7 @@ def existing_server_ok(port: int, html: str) -> bool:
 
 
 def start_static(root: Path, port: int) -> int:
-    handler = functools.partial(QuietHandler, directory=str(root))
+    handler = functools.partial(ShellHandler, directory=str(root))
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv.server_address[1]
@@ -162,6 +164,7 @@ def run(app_id: str, debug: bool = False) -> None:
     shared.mkdir(parents=True, exist_ok=True)
     os.environ["OMM_SHARED_DIR"] = str(shared)
     os.environ["OMM_DATA_DIR"] = str(data_root(app_id))
+    os.environ["OMM_APP_ID"] = app_id
 
     if not (root / html).is_file():
         raise SystemExit("missing %s next to the launcher" % html)
@@ -194,15 +197,28 @@ def run(app_id: str, debug: bool = False) -> None:
         os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(data_root(app_id)))
 
     url = "http://127.0.0.1:%d/%s" % (port, html)
-    webview.create_window(
+    window = webview.create_window(
         window_title,
         url,
         width=1280,
         height=860,
         min_size=(880, 600),
+        maximized=True,
         text_select=True,
         zoomable=True,
     )
+    # Windows may start the process with a hidden show state (PyInstaller
+    # bootloader / parent process). Show and maximize the window explicitly so
+    # every launch path ends up with a visible, maximized window.
+    def _present(win):
+        try:
+            if IS_WINDOWS:
+                time.sleep(1.2)
+            win.show()
+            win.maximize()
+        except Exception:
+            pass
+
     # Windows uses a generated .ico; macOS takes its icon from the .app bundle.
     icon = root / ("app.icns" if IS_MACOS else "app.ico")
     start_options = {
@@ -212,7 +228,7 @@ def run(app_id: str, debug: bool = False) -> None:
     }
     if not IS_MACOS and icon.is_file():
         start_options["icon"] = str(icon)
-    webview.start(**start_options)
+    webview.start(_present, [window], **start_options)
 
 
 def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
@@ -225,6 +241,7 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     shared.mkdir(parents=True, exist_ok=True)
     os.environ["OMM_SHARED_DIR"] = str(shared)
     os.environ["OMM_DATA_DIR"] = str(data_root("hub"))
+    os.environ["OMM_APP_ID"] = "hub"
 
     from hub_server import start_hub_server  # noqa: WPS433 - bundled module
 
@@ -238,12 +255,13 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
         os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(data_root("hub")))
 
     url = "http://127.0.0.1:%d/%s" % (port, HUB_HTML)
-    webview.create_window(
+    window = webview.create_window(
         "OMM-ZEN 工作台",
         url,
         width=1440,
         height=920,
         min_size=(1024, 680),
+        maximized=True,
         text_select=True,
         zoomable=True,
     )
@@ -255,7 +273,17 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     }
     if not IS_MACOS and icon.is_file():
         start_options["icon"] = str(icon)
-    webview.start(**start_options)
+
+    def _present(win):
+        try:
+            if IS_WINDOWS:
+                time.sleep(1.2)
+            win.show()
+            win.maximize()
+        except Exception:
+            pass
+
+    webview.start(_present, [window], **start_options)
 
 
 def main() -> None:

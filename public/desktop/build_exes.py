@@ -25,6 +25,7 @@ import zipfile
 from pathlib import Path
 
 from omm_launcher import APPS
+from plugin_specs import DESKTOP_EXE_NAMES
 import offline
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,19 +38,7 @@ IS_WINDOWS = os.name == "nt"
 DATA_SEP = ":" if IS_MACOS else ";"
 APP_SUFFIX = ".app" if IS_MACOS else ".exe"
 
-EXE_NAMES = {
-    "annotate": "OMM-Annotate",
-    "corpus": "OMM-Corpus",
-    "data": "OMM-Data",
-    "english": "OMM-English",
-    "latex": "OMM-LaTeX",
-    "mdforge": "OMM-MdForge",
-    "message": "OMM-Message",
-    "planner": "OMM-Planner",
-    "redact": "OMM-Redact",
-    "visualization": "OMM-Visualization",
-    "writer": "OMM-Writer",
-}
+EXE_NAMES = {key: value for key, value in DESKTOP_EXE_NAMES.items() if key != "hub"}
 
 HUB_TARGET = "hub"
 HUB_NAME = "OMM-ZEN"
