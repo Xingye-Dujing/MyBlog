@@ -264,6 +264,17 @@
     }
   }
 
+  function storedDockVisible() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return true;
+      var data = JSON.parse(raw);
+      return !data || data.dock !== false;
+    } catch (e) {
+      return true;
+    }
+  }
+
   function save() {
     if (saveTimer) return;
     saveTimer = window.setTimeout(function () {
@@ -319,6 +330,7 @@
     bindHubSettings();
 
     ensureSplitKeys(state.tree);
+    state.dock = storedDockVisible();
     applyDockState();
     bindEvents();
     renderAll();
@@ -348,6 +360,7 @@
         if (restore) {
           loadState();
           ensureSplitKeys(state.tree);
+          applyDockState();
           renderAll();
           mountVisible();
           save();
