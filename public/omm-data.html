@@ -9251,10 +9251,51 @@ notify pgrst, 'reload schema';</textarea
           afterChange()
         }
 
+        /* 导入文件时用文件名做表名：
+           解析器只会给出 import / Sheet1 这类占位名，这里统一换成文件名（去掉扩展名）。
+           已是真实表名的（SQL 脚本、SQLite、Excel 工作表名等）保持原样，
+           多张占位表的表名按 文件名、文件名_2、文件名_3 依次编号。 */
+        function genericTableName(n) {
+          var s = String(n === null || n === undefined ? '' : n).trim()
+          if (!s) return true
+          return /^(import|sheet|sheet\s*\d+|table|table\s*\d+|result|data|untitled)$/i.test(s)
+        }
+
+        function nameTablesFromFile(tables, fileName) {
+          var list = tables || []
+          if (!list.length) return list
+          var base = String(fileName || '').split(/[\\/]/).pop() || ''
+          base = base
+            .replace(/\.[^.]+$/, '')
+            .replace(/[\\/:*?"<>|]/g, '_')
+            .trim()
+          if (!base) return list
+          var used = {}
+          list.forEach(function (tb) {
+            var n = tb && tb.name !== null && tb.name !== undefined ? String(tb.name).trim() : ''
+            if (n && !genericTableName(n)) used[n.toLowerCase()] = 1
+          })
+          var k = 0
+          list.forEach(function (tb) {
+            if (!tb) return
+            var n = tb.name !== null && tb.name !== undefined ? String(tb.name).trim() : ''
+            if (n && !genericTableName(n)) return
+            k++
+            var stem = k === 1 ? base : base + '_' + k
+            var name = stem,
+              i = 2
+            while (used[name.toLowerCase()]) name = stem + '_' + i++
+            used[name.toLowerCase()] = 1
+            tb.name = name
+          })
+          return list
+        }
+
         function doImportFile(file) {
           var name = file.name || ''
           var ext = (name.split('.').pop() || '').toLowerCase()
           var finish = function (tables, msg) {
+            nameTablesFromFile(tables, name)
             addTables(tables)
             notify(msg || T('msg.imported'))
           }
