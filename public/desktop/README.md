@@ -216,11 +216,30 @@ IndexedDB 都在用户数据目录中，更新前还会备份配置文件，重�
 2. 修改 `desktop/plugin_manager.py` 的 `CATALOG_URL` 和安装器/工作流里的默认标签。
 3. 先构建 `framework` 和全部 exe，再运行 `build_plugins.py --tag vX.Y.Z`，
    让 `apps` 的校验值与最终 exe 一致。
-4. 按新标签创建 Release，上传全部 exe、zip、catalog 和模板。
+4. 按新标签创建 Release：GitHub 上传 Windows + macOS 全量；Gitee 只上传
+   Windows、插件、框架、catalog 和模板。**不要**再把 macOS DMG 同步到 Gitee。
 
+## Gitee 附件配额与发布策略（重要）
 
-macOS 的 DMG 体积较大，GitHub Release 提供完整下载；Gitee Release 保留 Windows
-程序、插件和 `catalog.json`，macOS 的下载链接也写在 `catalog.json` 中指向 GitHub。
+Gitee 仓库附件总量只有 **1 GB**，按 Release 累计，不是每个 Release 各自 1 GB。
+当前一个完整版本大致占用：
+
+- Windows 全量（13 个 EXE + 框架 + catalog/模板/规范 + 11 个插件）≈ 490 MB；
+- macOS 28 个资源（26 个 DMG + 2 个框架 zip）≈ 925 MB；
+- 旧版本还会继续占用配额。
+
+因此 Gitee 无法同时放下 Windows 和 macOS。经验结论：
+
+- **Gitee 只发布 Windows 全量**（28 个附件），确保 EXE、框架、插件和 catalog 完整；
+- **macOS 全量只发布到 GitHub Release**；
+- 上传 macOS 到 Gitee 会返回 `验证失败：文件大小已超出仓库附件配额（1 GB）`，
+  不要反复重试，也不要为了腾空间删除当前 Windows 资源；
+- `desktop/build_plugins.py` 已自动生成混合 catalog：`base_url` 指向 GitHub
+  供 macOS 使用，Windows 程序、win64 框架和插件条目各自带 Gitee `url`；
+- 不再需要运行 macOS → Gitee 同步脚本。
+
+如需在 Gitee 放出 macOS，必须先删除旧 Release 附件腾出约 1 GB 空间；当前策略
+是保持 Windows 完整优先。
 
 ## macOS 构建
 
