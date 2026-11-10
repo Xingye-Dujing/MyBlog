@@ -219,6 +219,9 @@ IndexedDB 都在用户数据目录中，更新前还会备份配置文件，重�
 4. 按新标签创建 Release，上传全部 exe、zip、catalog 和模板。
 
 
+macOS 的 DMG 体积较大，GitHub Release 提供完整下载；Gitee Release 保留 Windows
+程序、插件和 `catalog.json`，macOS 的下载链接也写在 `catalog.json` 中指向 GitHub。
+
 ## macOS 构建
 
 macOS 程序必须在 macOS 上构建，不能在 Windows 上交叉编译。仓库自带

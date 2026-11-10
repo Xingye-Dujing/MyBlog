@@ -26,6 +26,7 @@ BUILD = ROOT / "build" / "plugin-dirs"
 DIST = ROOT / "dist"
 OUT = DIST / "plugins"
 REPO = "Xingye-Dujing/my-blog"
+GITHUB_REPO = "Xingye-Dujing/MyBlog"
 
 FRAMEWORKS = {
     "win64": "OMM-ZEN-Framework-win64.zip",
@@ -64,11 +65,15 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
     base = args.base or "https://gitee.com/%s/releases/download/%s" % (REPO, args.tag)
+    github_base = "https://github.com/%s/releases/download/%s" % (GITHUB_REPO, args.tag)
     catalog = {
         "schema": 1,
         "version": VERSION,
         "tag": args.tag,
-        "base_url": base,
+        # macOS assets are too large for Gitee's 1 GB attachment quota and are
+        # hosted on GitHub; Windows/plugins stay on Gitee for fast access.
+        "base_url": github_base,
+        "gitee_url": base,
         "plugins": [],
         "frameworks": {},
         "apps": {},
@@ -91,6 +96,7 @@ def main() -> None:
                 "runtime": manifest["runtime"],
                 "order": manifest["order"],
                 "bundle": bundle_name,
+                "url": base + "/" + bundle_name,
                 "sha256": sha256(target),
                 "size": target.stat().st_size,
             }
@@ -101,7 +107,7 @@ def main() -> None:
         )
 
     for platform, asset in FRAMEWORKS.items():
-        entry = {"url": base + "/" + asset, "bundle": asset}
+        entry = {"url": (base if platform == "win64" else github_base) + "/" + asset, "bundle": asset}
         local = DIST / asset
         if local.is_file():
             entry["sha256"] = sha256(local)
