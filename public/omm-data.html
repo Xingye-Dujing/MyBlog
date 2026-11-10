@@ -11124,6 +11124,7 @@ notify pgrst, 'reload schema';</textarea
               return
             }
           })
+          var lastCellClick = null
           DOM.gridScroll.addEventListener('click', function (e) {
             if (e.target.closest('.gh-res')) return
             /* 列头上的排序手柄：升 → 降 → 取消 */
@@ -11134,6 +11135,7 @@ notify pgrst, 'reload schema';</textarea
             }
             var gh = e.target.closest('.gh[data-c]')
             if (gh) {
+              lastCellClick = null
               /* 单击列头 = 选中整列（高亮），不再直接排序 */
               var c = +gh.dataset.c
               S.sel = { r: 0, c: c }
@@ -11145,13 +11147,31 @@ notify pgrst, 'reload schema';</textarea
             var cell = e.target.closest('.gc[data-r]')
             if (!cell) return
             if (cell.classList.contains('rn')) {
+              lastCellClick = null
               S.sel = { r: +cell.dataset.r, c: 0 }
               S.sel2 = { r: +cell.dataset.r, c: Store.active().cols.length - 1 }
               renderGrid()
               renderStatus()
               return
             }
-            S.sel = { r: +cell.dataset.r, c: +cell.dataset.c }
+            var cr = +cell.dataset.r,
+              cc = +cell.dataset.c
+            /* 单元格每次单击都会 renderGrid() 重建 DOM，浏览器原生 dblclick
+               因此不会触发；这里用同一格 + 短间隔自己判断双击，双击进入编辑。 */
+            var now = Date.now()
+            if (
+              !e.shiftKey &&
+              lastCellClick &&
+              lastCellClick.r === cr &&
+              lastCellClick.c === cc &&
+              now - lastCellClick.t < 500
+            ) {
+              lastCellClick = null
+              openEditor(cr, cc)
+              return
+            }
+            lastCellClick = { r: cr, c: cc, t: now }
+            S.sel = { r: cr, c: cc }
             if (e.shiftKey) S.sel2 = S.sel2 || { r: S.sel.r, c: S.sel.c }
             else S.sel2 = null
             renderGrid()
@@ -11165,7 +11185,7 @@ notify pgrst, 'reload schema';</textarea
               return
             }
             var cell = e.target.closest('.gc[data-r][data-c]')
-            if (!cell) return
+            if (!cell || S.editing) return
             openEditor(+cell.dataset.r, +cell.dataset.c)
           })
           DOM.gridScroll.addEventListener('contextmenu', function (e) {
