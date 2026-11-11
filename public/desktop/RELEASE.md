@@ -126,6 +126,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee
 > **硬性顺序：`catalog.json` 必须先出现在 Release 上。** 旧版程序靠它发现新版本，
 > 晚一步上传就会出现「检查不到更新」。
 
+### 5.3 把最新 catalog 同步到上一个版本的 Release（重要）
+
+桌面程序里的 `CATALOG_URL` 是写死的**它自己那个版本**的目录：
+
+```text
+https://gitee.com/.../releases/download/v1.0.3/catalog.json
+```
+
+也就是说，1.0.3 的程序只会去读 v1.0.3 的 `catalog.json`。如果那个文件一直
+停在 1.0.3，1.0.3 的用户就**永远不会**收到 1.0.4 的更新提示。
+
+所以每次发版后，必须把**最新**的 `catalog.json` 再覆盖上传到上一个版本的 Release
+上（两端都做）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\publish_pointer.ps1 -Tag v1.0.4 -PrevTag v1.0.3
+gh release upload v1.0.3 dist\catalog.json -R Xingye-Dujing/MyBlog --clobber
+```
+
+这样旧版本程序的 `is_newer()` 判断才能成立。覆盖的只是清单文件，上一个版本自己的
+EXE 和插件包都还在原处，不受影响。
+
+验证：
+
+```powershell
+# 用旧版本程序启动后，请求它的更新检查接口，应看到 available=true
+Invoke-WebRequest http://127.0.0.1:8300/__omm/update/check | Select-Object -Expand Content
+```
+
 ---
 
 ## 6. macOS 构建
@@ -188,6 +217,8 @@ Gitee 的附件配额是**仓库级 1 GB，跨 Release 累计**，不是每个 R
 - [ ] Gitee Release 资产数 = 28（Windows 全量，无 macOS）
 - [ ] 两端 `catalog.json` 的 SHA-256 与本地一致
 - [ ] `catalog.json` 的 `version` 等于本次版本号，`tag` 等于本次标签
+- [ ] **最新 `catalog.json` 已覆盖到上一个版本的 Release 上（两端，见 5.3）**，
+      否则旧版本用户收不到更新提示
 - [ ] 用旧版程序启动，确认弹出更新提示；点「立即更新」能完成替换并重启
 - [ ] 更新后重启，确认保存路径、页面缩放、历史快照仍在
 
@@ -197,7 +228,7 @@ Gitee 的附件配额是**仓库级 1 GB，跨 Release 累计**，不是每个 R
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
-| 旧版提示「检查不到更新」 | `catalog.json` 没上传，或 `version` 没改，或 catalog 还没推到 Release 所在仓库 |
+| 旧版提示「检查不到更新」 | `catalog.json` 没上传，或 `version` 没改，或 catalog 还没推到 Release 所在仓库；也可能是最新 catalog 没覆盖到旧版本自己的 Release 上（见 5.3） |
 | 更新后启动报 `Failed to load Python DLL` | 旧版更新助手没清理 `_MEIPASS2` 等环境变量；1.0.1 起已修复 |
 | Gitee 上传报「超出仓库附件配额」 | 仓库累计 1 GB 已满；macOS 不要传 Gitee |
 | 上传后校验值对不上 | 重新跑 `build_plugins.py --tag <新标签>` 并同步重传 catalog 与产物 |
