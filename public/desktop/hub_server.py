@@ -227,6 +227,21 @@ class HubServer:
         if record and record.get("owned") and record.get("server") is not None:
             _stop_server(record["server"])
 
+    def restart(self, plugin_id: str) -> dict:
+        """Stop the plugin's local server and start it again on the new files.
+
+        After an update the old server keeps running against the replaced
+        files (and, for the mdforge/latex runtimes, against the already
+        imported backend).  Restarting right away means the plugin is usable
+        again without restarting the whole hub.
+        """
+        with self.lock:
+            self.stop(plugin_id)
+            try:
+                return self.ensure(plugin_id)
+            except KeyError:
+                return {}
+
     # ------------------------------------------------------------ plugins
     def list_plugins(self) -> dict:
         with self.lock:
@@ -292,17 +307,28 @@ class HubServer:
         with self.lock:
             self.stop(plugin_id)
             plugin = self.registry.install_zip(payload, imported=False)
-            return {
-                "ok": True,
-                "plugin": plugin,
-                "sha256": sha256_bytes(payload),
-            }
+        # Restart on the new files right away: the user should be able to
+        # click the plugin right after the update without restarting the hub.
+        started = self.restart(plugin_id)
+        return {
+            "ok": True,
+            "plugin": plugin,
+            "sha256": sha256_bytes(payload),
+            "url": started.get("url", ""),
+            "port": started.get("port", 0),
+        }
 
     def import_zip(self, payload: bytes) -> dict:
         with self.lock:
             plugin = self.registry.install_zip(payload, imported=True)
             self.stop(plugin["id"])
-            return {"ok": True, "plugin": plugin}
+        started = self.restart(plugin["id"])
+        return {
+            "ok": True,
+            "plugin": plugin,
+            "url": started.get("url", ""),
+            "port": started.get("port", 0),
+        }
 
     def remove_plugin(self, plugin_id: str) -> dict:
         with self.lock:

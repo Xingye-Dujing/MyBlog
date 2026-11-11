@@ -343,6 +343,26 @@
     window.addEventListener('resize', scheduleLayout);
     window.addEventListener('beforeunload', saveNow);
     window.addEventListener('pagehide', saveNow);
+    lockShellScroll();
+  }
+
+  /* The shell is a fixed layout: it must never scroll.  An embedded page
+     calling scrollIntoView() can otherwise drag the whole document (the
+     top bar and the tab strip slide out of sight and blank space appears
+     below), because overflow:hidden containers are still scrollable
+     programmatically.  Keep the document pinned at the origin. */
+  function lockShellScroll() {
+    function pin() {
+      if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+      var app = els.app;
+      if (app && (app.scrollTop || app.scrollLeft)) {
+        app.scrollTop = 0;
+        app.scrollLeft = 0;
+      }
+    }
+    window.addEventListener('scroll', pin, { passive: true });
+    document.addEventListener('scroll', pin, { passive: true, capture: true });
+    pin();
   }
 
   function loadPlugins(restore) {
@@ -432,9 +452,17 @@
         );
       })
       .join('');
+    /* Keep the active tab visible without scrollIntoView(): that would also
+       scroll the shell document and drag the whole layout. */
     var active = els.tabs.querySelector('.tab.active');
-    if (active && active.scrollIntoView) {
-      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (active && els.tabs.scrollWidth > els.tabs.clientWidth) {
+      var ar = active.getBoundingClientRect();
+      var tr = els.tabs.getBoundingClientRect();
+      if (ar.left < tr.left) {
+        els.tabs.scrollLeft -= tr.left - ar.left;
+      } else if (ar.right > tr.right) {
+        els.tabs.scrollLeft += ar.right - tr.right;
+      }
     }
   }
 
@@ -885,7 +913,7 @@
     if (pluginBusy[pluginId]) return;
     pluginBusy[pluginId] = true;
     renderOnlinePlugins();
-    closeTab(pluginId);
+    var wasOpen = !!findPaneByApp(pluginId);
     fetch('/api/plugins/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -900,6 +928,12 @@
       .then(function () {
         toast('插件已安装');
         return refreshPluginsAfterChange();
+      })
+      .then(function () {
+        /* The plugin was replaced on disk: restart it right away so it can
+           be used immediately instead of showing as unreachable. */
+        if (wasOpen) reloadApp(pluginId);
+        else invalidateApp(pluginId);
       })
       .catch(function (error) {
         toast(error.message || '安装失败');
@@ -967,10 +1001,16 @@
         });
       })
       .then(function (data) {
-        if (data.plugin && data.plugin.id) closeTab(data.plugin.id);
+        var id = data.plugin && data.plugin.id;
         toast('已导入「' + (data.plugin ? data.plugin.name : file.name) + '」');
         els.ppStatus.textContent = '插件导入成功';
-        return refreshPluginsAfterChange();
+        return refreshPluginsAfterChange().then(function () {
+          /* Restart the imported plugin so it is usable right away. */
+          if (id) {
+            if (findPaneByApp(id)) reloadApp(id);
+            else invalidateApp(id);
+          }
+        });
       })
       .catch(function (error) {
         els.ppStatus.textContent = '导入失败';
@@ -1442,7 +1482,32 @@
     var pane = findPaneByApp(appId);
     if (pane) state.panes[pane] = null;
     destroyFrame(appId);
+    /* Drop the cached URL: the plugin's local server may have been stopped
+       or moved to another port (after an update), and a stale URL would
+       make the plugin show as unreachable. */
+    delete appUrls[appId];
     if (state.maximized && !paneApp(state.maximized)) state.maximized = null;
+    renderAll();
+    save();
+  }
+
+  /* Forget everything about an app so the next open starts it from
+     scratch (new files, possibly a new port). */
+  function invalidateApp(appId) {
+    delete appUrls[appId];
+    delete appStatus[appId];
+    delete ensurePromises[appId];
+    destroyFrame(appId);
+  }
+
+  /* Reload an app in place, e.g. after its files were replaced. */
+  function reloadApp(appId) {
+    invalidateApp(appId);
+    var pane = findPaneByApp(appId);
+    if (!pane) return;
+    state.panes[pane] = appId;
+    if (state.open.indexOf(appId) < 0) state.open.push(appId);
+    mountApp(appId);
     renderAll();
     save();
   }

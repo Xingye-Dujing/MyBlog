@@ -5999,6 +5999,46 @@ notify pgrst, 'reload schema';</textarea
           return fmt(new Date())
         }
 
+        /* 找到元素最近的、真正可以滚动的祖先容器。
+           只在页面内部的容器上滚动，避免 scrollIntoView 越过 iframe 边界
+           把集成器（hub）的整个文档也带着滚动。 */
+        function scrollableAncestor(el) {
+          var node = el && el.parentElement
+          while (node && node !== document.body && node !== document.documentElement) {
+            var oy = getComputedStyle(node).overflowY
+            if (
+              (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+              node.scrollHeight > node.clientHeight + 1
+            ) {
+              return node
+            }
+            node = node.parentElement
+          }
+          return null
+        }
+
+        /* 把元素滚进某个容器内部，只调整该容器的 scrollTop。
+           mode: 'start' | 'center' | 'nearest' */
+        function scrollIntoContainer(el, mode) {
+          if (!el) return false
+          var box = scrollableAncestor(el)
+          if (!box) return false
+          var er = el.getBoundingClientRect()
+          var br = box.getBoundingClientRect()
+          var top = er.top - br.top
+          var bottom = er.bottom - br.top
+          var viewH = box.clientHeight
+          if (mode === 'start') {
+            box.scrollTop += top
+          } else if (mode === 'center') {
+            box.scrollTop += top - (viewH - er.height) / 2
+          } else {
+            if (top < 0) box.scrollTop += top
+            else if (bottom > viewH) box.scrollTop += bottom - viewH
+          }
+          return true
+        }
+
         function uid() {
           return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
         }
@@ -6934,7 +6974,7 @@ notify pgrst, 'reload schema';</textarea
             })
             pop.querySelectorAll('.pk-col').forEach(function (colEl) {
               const act = colEl.querySelector('.pk-opt.active')
-              if (act && act.scrollIntoView) act.scrollIntoView({ block: 'center' })
+              scrollIntoContainer(act, 'center')
             })
           },
           onPick(b) {
@@ -7181,7 +7221,7 @@ notify pgrst, 'reload schema';</textarea
                 }
               }
               const el = DOM.calendar.querySelector('.sel')
-              if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' })
+              scrollIntoContainer(el, 'nearest')
             })
           },
           /* 把某个日期滚进视野：
@@ -7219,9 +7259,7 @@ notify pgrst, 'reload schema';</textarea
               target = el.querySelector('.ag-head') || el
               mode = 'start'
             }
-            if (!target.scrollIntoView) return false
-            target.scrollIntoView({ block: mode })
-            return true
+            return scrollIntoContainer(target, mode)
           },
           header() {
             const c = S.cursor
@@ -7694,7 +7732,7 @@ notify pgrst, 'reload schema';</textarea
             const el = DOM.calendar.querySelector('.cell[data-date="' + ds + '"]')
             if (!el) return
             el.classList.add('flash')
-            el.scrollIntoView({ block: 'nearest' })
+            scrollIntoContainer(el, 'nearest')
           },
           sheets() {
             if (!DOM.sheetTabs) return
@@ -8400,7 +8438,7 @@ notify pgrst, 'reload schema';</textarea
             const prev = DOM.calendar.querySelector('.sel')
             if (prev) prev.classList.remove('sel')
             el.classList.add('sel')
-            el.scrollIntoView({ block: 'nearest' })
+            scrollIntoContainer(el, 'nearest')
           })
         }
 
