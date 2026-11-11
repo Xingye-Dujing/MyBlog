@@ -219,6 +219,18 @@ IndexedDB 都在用户数据目录中，更新前还会备份配置文件，重�
 4. 按新标签创建 Release：GitHub 上传 Windows + macOS 全量；Gitee 只上传
    Windows、插件、框架、catalog 和模板。**不要**再把 macOS DMG 同步到 Gitee。
 
+完整的发布、自更新与发布后检查步骤见 **`desktop/RELEASE.md`**；仓库内还带有
+可直接运行的辅助脚本：
+
+```powershell
+# 发布后自检（校验本地产物、catalog 与 GitHub Release 资产）
+.venv\Scripts\python.exe desktop\release\verify_release.py --tag v1.0.2
+
+# Gitee Release 与 Windows 附件上传
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee_release.ps1 -Tag v1.0.2
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.2
+```
+
 ## Gitee 附件配额与发布策略（重要）
 
 Gitee 仓库附件总量只有 **1 GB**，按 Release 累计，不是每个 Release 各自 1 GB。
