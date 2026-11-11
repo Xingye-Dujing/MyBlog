@@ -199,8 +199,9 @@ def build(app_id: str) -> bool:
     args.append(str(entry))
 
     print("\n=== %s -> %s%s ===" % (html, name, APP_SUFFIX), flush=True)
-    proc = subprocess.run(args, cwd=str(ROOT))
     artifact = DIST / (name + APP_SUFFIX)
+    before = _artifact_stamp(artifact)
+    proc = subprocess.run(args, cwd=str(ROOT))
     if IS_MACOS:
         ok = artifact.is_dir()
         size = sum(p.stat().st_size for p in artifact.rglob("*") if p.is_file())
@@ -209,6 +210,16 @@ def build(app_id: str) -> bool:
         size = artifact.stat().st_size if ok else 0
     if not ok:
         print("  FAILED (PyInstaller exit %s)" % proc.returncode, file=sys.stderr)
+        return False
+    after = _artifact_stamp(artifact)
+    if before is not None and after == before:
+        # The artifact was not rewritten: a running instance of this program
+        # usually locks the old exe, PyInstaller cannot replace it and the
+        # stale binary would be published as if it were fresh.
+        print(
+            "  FAILED: %s was not rewritten (locked by a running instance?)" % artifact.name,
+            file=sys.stderr,
+        )
         return False
     print("  ok  %s  (%.1f MB)" % (artifact, size / 1024 / 1024), flush=True)
     return True
@@ -295,16 +306,19 @@ def build_hub() -> bool:
     args.append(str(entry))
 
     print("\n=== 11 apps -> %s%s ===" % (name, APP_SUFFIX), flush=True)
-    proc = subprocess.run(args, cwd=str(ROOT))
     artifact = DIST / (name + APP_SUFFIX)
-    if IS_MACOS:
-        ok = artifact.is_dir()
-        size = sum(p.stat().st_size for p in artifact.rglob("*") if p.is_file())
-    else:
-        ok = artifact.is_file()
-        size = artifact.stat().st_size if ok else 0
+    before = _artifact_stamp(artifact)
+    proc = subprocess.run(args, cwd=str(ROOT))
+    ok, size = _artifact_ok(artifact)
     if not ok:
         print("  FAILED (PyInstaller exit %s)" % proc.returncode, file=sys.stderr)
+        return False
+    after = _artifact_stamp(artifact)
+    if before is not None and after == before:
+        print(
+            "  FAILED: %s was not rewritten (locked by a running instance?)" % artifact.name,
+            file=sys.stderr,
+        )
         return False
     print("  ok  %s  (%.1f MB)" % (artifact, size / 1024 / 1024), flush=True)
     return True
@@ -339,6 +353,15 @@ def _artifact_ok(path: Path) -> tuple[bool, int]:
     if not path.is_file():
         return False, 0
     return True, path.stat().st_size
+
+
+def _artifact_stamp(path: Path):
+    """A fingerprint used to detect that a build did not rewrite the artifact."""
+    if not path.exists():
+        return None
+    if path.is_dir():
+        return ("dir", path.stat().st_mtime_ns)
+    return ("file", path.stat().st_mtime_ns, path.stat().st_size)
 
 
 def build_framework() -> bool:
@@ -399,11 +422,19 @@ def build_framework() -> bool:
     args += _webview_args(FRAMEWORK_TARGET)
     args.append(str(entry))
     print("\n=== framework -> %s%s ===" % (name, APP_SUFFIX), flush=True)
-    proc = subprocess.run(args, cwd=str(ROOT))
     artifact = dist / (name + APP_SUFFIX)
+    before = _artifact_stamp(artifact)
+    proc = subprocess.run(args, cwd=str(ROOT))
     ok, size = _artifact_ok(artifact)
     if not ok:
         print("  FAILED (PyInstaller exit %s)" % proc.returncode, file=sys.stderr)
+        return False
+    after = _artifact_stamp(artifact)
+    if before is not None and after == before:
+        print(
+            "  FAILED: %s was not rewritten (locked by a running instance?)" % artifact.name,
+            file=sys.stderr,
+        )
         return False
     if IS_MACOS:
         arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64"
@@ -480,11 +511,19 @@ def build_installer() -> bool:
     args += _webview_args(INSTALLER_TARGET)
     args.append(str(entry))
     print("\n=== online installer -> %s%s ===" % (name, APP_SUFFIX), flush=True)
-    proc = subprocess.run(args, cwd=str(ROOT))
     artifact = DIST / (name + APP_SUFFIX)
+    before = _artifact_stamp(artifact)
+    proc = subprocess.run(args, cwd=str(ROOT))
     ok, size = _artifact_ok(artifact)
     if not ok:
         print("  FAILED (PyInstaller exit %s)" % proc.returncode, file=sys.stderr)
+        return False
+    after = _artifact_stamp(artifact)
+    if before is not None and after == before:
+        print(
+            "  FAILED: %s was not rewritten (locked by a running instance?)" % artifact.name,
+            file=sys.stderr,
+        )
         return False
     print("  ok  %s  (%.1f MB)" % (artifact, size / 1024 / 1024), flush=True)
     return True
