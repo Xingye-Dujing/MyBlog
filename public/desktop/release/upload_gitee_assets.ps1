@@ -1,6 +1,6 @@
 param(
   [string]$Tag = 'v1.0.3',
-  [string]$AssetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist'),
+  [string]$AssetDir = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'dist'),
   [string[]]$Names
 )
 # Upload the Windows release assets to the Gitee release.
