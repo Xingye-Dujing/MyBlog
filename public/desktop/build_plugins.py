@@ -44,13 +44,26 @@ def sha256(path: Path) -> str:
 
 
 def zip_dir(source: Path, target: Path) -> None:
+    """Zip a directory deterministically.
+
+    The entries are written in a fixed order with a fixed timestamp, so
+    rebuilding the same sources yields the same bytes (and therefore the same
+    SHA-256).  Without this, every rebuild changed the archive only by its
+    timestamps, and the published catalog checksum no longer matched the
+    uploaded bundle.
+    """
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         target.unlink()
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for path in sorted(source.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(source).as_posix())
+            if not path.is_file():
+                continue
+            name = path.relative_to(source).as_posix()
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            zf.writestr(info, path.read_bytes())
 
 
 def main() -> None:
