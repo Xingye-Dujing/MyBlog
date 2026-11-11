@@ -5773,6 +5773,7 @@ notify pgrst, 'reload schema';</textarea
           focusOrigin: 'center',
           lastType: 'todo',
           editing: null,
+          scrollTarget: null,
           edAnchor: null,
           edDateVal: '',
           edTimeVal: '',
@@ -7137,6 +7138,10 @@ notify pgrst, 'reload schema';</textarea
             Render.header()
             Render.status()
             const cal = DOM.calendar
+            /* 列表视图会整体重建，记住原来的滚动位置，避免任何重绘都跳回顶部 */
+            const prevList = cal.querySelector('.v-list')
+            const prevListTop = prevList ? prevList.scrollTop : 0
+            const prevListMonth = prevList ? prevList.dataset.month : ''
             cal.innerHTML = ''
             cal.className = ''
             if (S.view === 'month') cal.appendChild(Render.month())
@@ -7153,9 +7158,70 @@ notify pgrst, 'reload schema';</textarea
             Render.sheets()
             Render.tagPill()
             requestAnimationFrame(function () {
+              /* 指定了跳转目标（“今天”/跳转到某天）优先滚到那一天所在的位置 */
+              if (S.scrollTarget) {
+                const ds = S.scrollTarget
+                S.scrollTarget = null
+                const jump = function () {
+                  Render.scrollToDate(ds, 'nearest')
+                }
+                /* 视图切换动画期间容器带 transform，此时测量的位置不准确：
+                   先跳一次，动画结束后再校正一次 */
+                jump()
+                setTimeout(jump, 340)
+                return
+              }
+              if (S.view === 'list') {
+                const list = cal.querySelector('.v-list')
+                if (list) {
+                  /* 同一个月内重绘 → 恢复原滚动位置；换月则回到顶部 */
+                  list.scrollTop =
+                    list.dataset.month === prevListMonth ? prevListTop : 0
+                  return
+                }
+              }
               const el = DOM.calendar.querySelector('.sel')
               if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' })
             })
+          },
+          /* 把某个日期滚进视野：
+             月/周/聚焦视图用格子自身，列表视图滚到那一天的小标题 */
+          scrollToDate(ds, block) {
+            const cal = DOM.calendar
+            if (!cal) return false
+            let el = cal.querySelector(
+              '.cell[data-date="' +
+                ds +
+                '"],.wcol[data-date="' +
+                ds +
+                '"],.fcard[data-date="' +
+                ds +
+                '"],.ag-day[data-date="' +
+                ds +
+                '"]',
+            )
+            if (!el && S.view === 'list') {
+              /* 列表视图只渲染有内容（或今天）的日子：
+                 找不到目标日就退而求其次，取其后最近的一天 */
+              const days = cal.querySelectorAll('.ag-day')
+              let best = null
+              days.forEach(function (d) {
+                if (d.dataset.date >= ds && (!best || d.dataset.date < best.dataset.date))
+                  best = d
+              })
+              if (!best && days.length) best = days[days.length - 1]
+              el = best
+            }
+            if (!el) return false
+            let target = el
+            let mode = block || 'nearest'
+            if (el.classList.contains('ag-day')) {
+              target = el.querySelector('.ag-head') || el
+              mode = 'start'
+            }
+            if (!target.scrollIntoView) return false
+            target.scrollIntoView({ block: mode })
+            return true
           },
           header() {
             const c = S.cursor
@@ -7462,6 +7528,7 @@ notify pgrst, 'reload schema';</textarea
             wrap.className = 'v-list'
             const y = S.cursor.getFullYear(),
               m = S.cursor.getMonth() + 1
+            wrap.dataset.month = y + '-' + pad(m)
             const dim = new Date(y, m, 0).getDate()
             const tds = todayDS()
             const wdn = t('wd.row').split('|')
@@ -8215,6 +8282,8 @@ notify pgrst, 'reload schema';</textarea
             S.cursor = new Date()
             S.selDate = todayDS()
             S.lastSelDs = S.selDate
+            /* 告诉渲染器：重绘后要把视图滚到今天所在的位置 */
+            S.scrollTarget = S.selDate
             Settings.save()
             swapView(function () {
               Render.all()
@@ -8237,6 +8306,7 @@ notify pgrst, 'reload schema';</textarea
             S.cursor = d
             S.selDate = ds
             S.lastSelDs = ds
+            S.scrollTarget = ds
             Settings.save()
             swapView(function () {
               Render.all()
