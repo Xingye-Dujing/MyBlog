@@ -36,6 +36,11 @@
 
 单个程序复制到对应系统的电脑即可运行，目标机器不需要 Python、Node 或网络。
 
+> **要自己构建可执行程序、或发布一个新版本，请参照 [`RELEASE.md`](RELEASE.md)。**
+> 那里写明了改版本号 → 构建全部 EXE → 生成 `catalog.json` → 提交打标签 →
+> 上传 GitHub / Gitee Release → 触发 macOS 构建 → 旧版本自更新的完整步骤，
+> 以及 Gitee 附件配额、发布后自检清单和辅助脚本用法。
+
 ## 插件架构
 
 工作台本身不包含产品逻辑，只读取插件：
@@ -168,6 +173,9 @@ macOS:   ~/Library/Application Support/OMM-ZEN/shared.json
   ECharts、SheetJS 等均从包内加载。
 
 ## 重新构建
+
+> 本节只是本地构建命令。**要发布成正式版本**（改版本号、生成 `catalog.json`、
+> 上传 Release、让旧版本自更新）请参照 [`RELEASE.md`](RELEASE.md)。
 
 ```powershell
 # 全部重建（11 个单独应用 + 完整版 + 框架 + 安装器）
