@@ -202,6 +202,19 @@ Gitee 的附件配额是**仓库级 1 GB，跨 Release 累计**，不是每个 R
 - 现行策略：Gitee 只保证 Windows 全量完整，macOS 只在 GitHub。
 - 早期版本用过「macOS → Gitee 同步脚本」，现已作废，不要再跑。
 
+### 腾空间：删掉更早版本的 Gitee 资源
+
+一个 Windows 全量 ≈ 370 MB。发新版前先算一下存量：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\delete_gitee_assets.ps1 -Tag v1.0.3 -Keep catalog.json
+```
+
+- 只删 **Gitee** 上的资源，GitHub 上照样保留（GitHub 没有这个配额）。
+- `-Keep` 里的文件会留下。**务必保留 `catalog.json`**：旧程序靠它发现新版本，
+  删掉它旧程序就再也收不到更新提示了。
+- 不要删当前版本和上一个版本的资源。
+
 ---
 
 ## 7. 旧版本如何自更新到新版本
