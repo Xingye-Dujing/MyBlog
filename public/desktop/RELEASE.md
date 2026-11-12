@@ -24,18 +24,37 @@ Release 标签一旦发布就视为不可变：同一个版本号不要覆盖重
 
 ---
 
-## 1. 改版本号（三处）
+## 1. 改版本号（两处）
 
 ```text
-public/desktop/plugin_specs.py        VERSION = "1.0.2"
-public/desktop/plugin_manager.py      CATALOG_URL = .../releases/download/v1.0.2/catalog.json
-.github/workflows/macos-build.yml     default: v1.0.2  /  RELEASE_TAG
+public/desktop/plugin_specs.py        VERSION = "1.0.5"
+.github/workflows/macos-build.yml     default: v1.0.5  /  RELEASE_TAG
 ```
 
 `VERSION` 同时决定：
 
 - 桌面程序自更新时「本地版本」是多少；
 - `build_plugins.py` 生成的插件包版本与 `catalog.json` 里的 `version`。
+
+### 目录地址不要写死版本号
+
+`plugin_manager.py` 里的 `CATALOG_URL` **不随版本变**，它一直指向 `latest`：
+
+```text
+https://gitee.com/Xingye-Dujing/my-blog/releases/download/latest/catalog.json
+```
+
+Gitee 与 GitHub 的 `latest` 都会解析到当前最新的 Release，所以：
+
+- 今天的程序永远能找到明天的新版本，不用改代码；
+- 直接下载链接也一直有效（`.../releases/download/latest/OMM-ZEN.exe`）。
+
+`catalog.json` 里每个条目的 `url` 仍然写死本次版本（校验值要对应具体文件），
+另外附带一个 `latest_url` 字段，指向永远拿到最新版的地址。
+
+> 例外：**已经发出去的旧程序**读的是它自己那个版本目录里的 `catalog.json`。
+> 为了让旧程序也能发现新版本，每次发版后要把最新 `catalog.json` 覆盖到上一个
+> 版本的 Release 上（见 5.3）。
 
 ---
 
@@ -128,21 +147,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee
 
 ### 5.3 把最新 catalog 同步到上一个版本的 Release（重要）
 
-桌面程序里的 `CATALOG_URL` 是写死的**它自己那个版本**的目录：
+1.0.5 起的程序读的是 `latest` 别名，自动就能发现新版本。但**已经发出去的旧程序**
+（1.0.4 及更早）读的是它自己那个版本目录里的 `catalog.json`：
 
 ```text
 https://gitee.com/.../releases/download/v1.0.3/catalog.json
 ```
 
-也就是说，1.0.3 的程序只会去读 v1.0.3 的 `catalog.json`。如果那个文件一直
-停在 1.0.3，1.0.3 的用户就**永远不会**收到 1.0.4 的更新提示。
+如果那个文件一直停在 1.0.3，1.0.3 的用户就**永远不会**收到更新提示。
 
 所以每次发版后，必须把**最新**的 `catalog.json` 再覆盖上传到上一个版本的 Release
 上（两端都做）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\publish_pointer.ps1 -Tag v1.0.4 -PrevTag v1.0.3
-gh release upload v1.0.3 dist\catalog.json -R Xingye-Dujing/MyBlog --clobber
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\publish_pointer.ps1 -Tag v1.0.5 -PrevTag v1.0.4
+gh release upload v1.0.4 dist\catalog.json -R Xingye-Dujing/MyBlog --clobber
 ```
 
 这样旧版本程序的 `is_newer()` 判断才能成立。覆盖的只是清单文件，上一个版本自己的

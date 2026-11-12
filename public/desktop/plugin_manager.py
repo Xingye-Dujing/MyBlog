@@ -25,9 +25,25 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-CATALOG_URL = (
-    "https://gitee.com/Xingye-Dujing/my-blog/releases/download/v1.0.4/catalog.json"
+# The catalog is always read from the "latest" release, never from a
+# version-pinned directory.  A program built today must still be able to
+# find tomorrow's release, so the version number must not appear in the
+# URL.  Both hosts resolve the alias to the newest published Release:
+#   Gitee  : /releases/download/latest/<asset>
+#   GitHub : /releases/latest/download/<asset>
+# The version is read from the catalog itself ("version"), which is what
+# the update check compares against the local build.
+GITEE_LATEST_URL = (
+    "https://gitee.com/Xingye-Dujing/my-blog/releases/download/latest"
 )
+GITHUB_LATEST_URL = (
+    "https://github.com/Xingye-Dujing/MyBlog/releases/latest/download"
+)
+CATALOG_URL = GITEE_LATEST_URL + "/catalog.json"
+# Fallbacks used when the primary host is unreachable, or while the newest
+# Release is still being uploaded and its catalog.json is not there yet.
+# fetch_json() already adds the ghproxy mirror for GitHub URLs.
+CATALOG_FALLBACK_URLS = (GITHUB_LATEST_URL + "/catalog.json",)
 MIRROR_PREFIX = "https://ghproxy.net/"
 PLUGIN_API = 1
 MAX_ZIP_BYTES = 220 * 1024 * 1024
@@ -359,13 +375,83 @@ def fetch_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
         raise PluginError("插件目录格式无效") from exc
 
 
+def _version_key(value: Any) -> tuple:
+    parts = re.findall(r"\d+", str(value or ""))
+    return tuple(int(part) for part in parts[:4]) or (0,)
+
+
+def _latest_release_catalog_urls() -> List[str]:
+    """Ask the release APIs which release is current.
+
+    The "latest" download alias is the fast path, but it points at the
+    newest release even while that release is still being uploaded, so the
+    catalog may not be there yet.  The API tells us which releases exist
+    and which of them already carry a catalog.json, so we can address the
+    newest usable one directly.
+    """
+    urls: List[str] = []
+    sources = (
+        (
+            "https://gitee.com/api/v5/repos/%s/releases?per_page=20" % "Xingye-Dujing/my-blog",
+            "https://gitee.com/Xingye-Dujing/my-blog/releases/download/%s/catalog.json",
+        ),
+        (
+            "https://api.github.com/repos/%s/releases?per_page=20" % "Xingye-Dujing/MyBlog",
+            "https://github.com/Xingye-Dujing/MyBlog/releases/download/%s/catalog.json",
+        ),
+    )
+    for api, template in sources:
+        try:
+            request = urllib.request.Request(
+                api, headers={"User-Agent": "OMM-ZEN/1.0", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(request, timeout=20) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except Exception:  # noqa: BLE001 - best effort
+            continue
+        if not isinstance(data, list):
+            continue
+        tags = []
+        for release in data:
+            if release.get("draft") or release.get("prerelease"):
+                continue
+            tag = str(release.get("tag_name") or "").strip()
+            if not tag:
+                continue
+            assets = release.get("assets") or []
+            if not any(str(a.get("name") or "") == "catalog.json" for a in assets):
+                continue
+            tags.append(tag)
+        # Newest release first, so the fallback never serves an old catalog.
+        tags.sort(key=_version_key, reverse=True)
+        urls.extend(template % tag for tag in tags)
+    return urls
+
+
 def fetch_catalog(url: str = CATALOG_URL) -> Dict[str, Any]:
-    catalog = fetch_json(url)
-    if not isinstance(catalog, dict) or not isinstance(catalog.get("plugins"), list):
-        raise PluginError("插件目录缺少 plugins 列表")
-    if not isinstance(catalog.get("frameworks"), dict):
-        raise PluginError("插件目录缺少 frameworks")
-    return catalog
+    """Read the online catalog.
+
+    `url` defaults to the "latest" release alias, so the caller always sees
+    the newest published version.  When an explicit URL is given (a local
+    file, a mirror) only that URL is used.
+    """
+    candidates = [url] if url and url != CATALOG_URL else [CATALOG_URL]
+    if url == CATALOG_URL:
+        candidates.extend(CATALOG_FALLBACK_URLS)
+        candidates.extend(_latest_release_catalog_urls())
+    last: Optional[Exception] = None
+    for candidate in candidates:
+        try:
+            catalog = fetch_json(candidate)
+        except Exception as exc:  # noqa: BLE001 - try the next mirror
+            last = exc
+            continue
+        if not isinstance(catalog, dict) or not isinstance(catalog.get("plugins"), list):
+            raise PluginError("插件目录缺少 plugins 列表")
+        if not isinstance(catalog.get("frameworks"), dict):
+            raise PluginError("插件目录缺少 frameworks")
+        return catalog
+    raise PluginError("插件目录下载失败：%s" % last)
 
 
 def download_bytes(

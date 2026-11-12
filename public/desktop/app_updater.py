@@ -138,6 +138,9 @@ def update_info(catalog: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
     if platform_key() == "win64":
         if app == "hub" and bundled_plugins() == 0:
+            # The framework build ships no plugins: it updates itself by
+            # downloading the framework archive and taking the new exe out
+            # of it.  The full build (with plugins) replaces its own exe.
             framework = (catalog.get("frameworks") or {}).get("win64") or {}
             if framework:
                 entry = dict(framework)

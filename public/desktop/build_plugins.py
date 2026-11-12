@@ -79,6 +79,11 @@ def main() -> None:
 
     base = args.base or "https://gitee.com/%s/releases/download/%s" % (REPO, args.tag)
     github_base = "https://github.com/%s/releases/download/%s" % (GITHUB_REPO, args.tag)
+    # Version-independent addresses.  Both hosts resolve "latest" to the
+    # newest published Release, so these links always yield the current
+    # build without anyone having to update a version number by hand.
+    gitee_latest = "https://gitee.com/%s/releases/download/latest" % REPO
+    github_latest = "https://github.com/%s/releases/latest/download" % GITHUB_REPO
     catalog = {
         "schema": 1,
         "version": VERSION,
@@ -87,6 +92,9 @@ def main() -> None:
         # hosted on GitHub; Windows/plugins stay on Gitee for fast access.
         "base_url": github_base,
         "gitee_url": base,
+        # Stable links that always point at the newest release.
+        "latest_url": github_latest,
+        "gitee_latest_url": gitee_latest,
         "plugins": [],
         "frameworks": {},
         "apps": {},
@@ -120,7 +128,15 @@ def main() -> None:
         )
 
     for platform, asset in FRAMEWORKS.items():
-        entry = {"url": (base if platform == "win64" else github_base) + "/" + asset, "bundle": asset}
+        # "url" stays pinned to this release: it carries the SHA-256 of
+        # exactly this file.  "latest_url" is the version-independent
+        # address for people who just want the newest build.
+        latest_host = gitee_latest if platform == "win64" else github_latest
+        entry = {
+            "url": (base if platform == "win64" else github_base) + "/" + asset,
+            "latest_url": latest_host + "/" + asset,
+            "bundle": asset,
+        }
         local = DIST / asset
         if local.is_file():
             entry["sha256"] = sha256(local)
@@ -135,6 +151,7 @@ def main() -> None:
         catalog["apps"][app_id] = {
             "version": VERSION,
             "url": base + "/" + bundle,
+            "latest_url": gitee_latest + "/" + bundle,
             "bundle": bundle,
             "sha256": sha256(local),
             "size": local.stat().st_size,

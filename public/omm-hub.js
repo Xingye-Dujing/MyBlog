@@ -14,6 +14,7 @@
   var PLUGIN_INFO = [];
   var pluginPanelTab = 'installed';
   var catalogCache = null;
+  var updateInfo = null;
   var pluginLoadError = '';
   var PLUGIN_DIR = '';
   var APPEARANCE_KEY = 'omm.hub.appearance.v1';
@@ -717,6 +718,7 @@
     if (pluginPanelTab === 'installed') renderInstalledPlugins();
     else if (pluginPanelTab === 'online') renderOnlinePlugins();
     else if (pluginPanelTab === 'import') renderImportPlugin();
+    else if (pluginPanelTab === 'update') renderUpdatePanel();
     else renderPluginSpec();
   }
 
@@ -772,6 +774,120 @@
       '</span><span>共 ' +
       APP_LIST.length +
       ' 个插件</span></div>';
+  }
+
+  function versionKey(value) {
+    var parts = String(value || '').match(/\d+/g) || [];
+    return parts.slice(0, 4).map(function (part) {
+      return parseInt(part, 10) || 0;
+    });
+  }
+
+  function isNewerVersion(latest, current) {
+    var a = versionKey(latest);
+    var b = versionKey(current);
+    if (!a.length) return false;
+    for (var i = 0; i < Math.max(a.length, b.length); i++) {
+      var x = a[i] || 0;
+      var y = b[i] || 0;
+      if (x !== y) return x > y;
+    }
+    return false;
+  }
+
+  function renderUpdatePanel() {
+    var info = updateInfo;
+    if (!info) {
+      els.ppBody.innerHTML =
+        '<div class="pp-empty">正在检查更新…</div>' +
+        '<div class="pp-foot"><button class="pp-btn" type="button" data-pp-action="check-update">重新检查</button></div>';
+      checkHubUpdate();
+      return;
+    }
+    var latest = info.latest || '';
+    var current = info.current || '';
+    var newer = isNewerVersion(latest, current);
+    var html =
+      '<p class="pp-note">工作台与产品都可以在这里检查更新；有新版本时直接替换当前程序，重启后生效。</p>';
+    if (info.error) {
+      html +=
+        '<div class="pp-empty">检查更新失败：' +
+        esc(info.error) +
+        '<br><br><button class="pp-btn" type="button" data-pp-action="check-update">重试</button></div>';
+    } else if (newer) {
+      html +=
+        '<div class="pp-list">' +
+        '<div class="pp-row"><span class="pp-meta"><span class="pp-name">发现新版本 ' +
+        esc(latest) +
+        '<span class="pp-badge">可用</span></span>' +
+        '<span class="pp-desc">当前 ' +
+        esc(current) +
+        (info.size ? ' · ' + (info.size / 1048576).toFixed(1) + ' MB' : '') +
+        (info.url ? '' : ' · 仅支持下载后手动替换') +
+        '</span></span><span class="pp-actions">' +
+        (info.can_self_update
+          ? '<button class="pp-btn primary" type="button" data-pp-action="apply-update">立即更新</button>'
+          : '<button class="pp-btn primary" type="button" data-pp-action="download-update">下载</button>') +
+        '</span></div></div>';
+    } else {
+      html +=
+        '<div class="pp-empty">当前已是最新版本（' +
+        esc(current || '未知') +
+        '）。</div>';
+    }
+    html +=
+      '<div class="pp-foot"><span>版本：' +
+      esc(current) +
+      ' → ' +
+      esc(latest || current) +
+      '</span><button class="pp-btn" type="button" data-pp-action="check-update">重新检查</button></div>';
+    els.ppBody.innerHTML = html;
+  }
+
+  function checkHubUpdate() {
+    fetch('/__omm/update/check', { cache: 'no-store' })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        updateInfo = data || null;
+        if (pluginPanelTab === 'update') renderUpdatePanel();
+      })
+      .catch(function (error) {
+        updateInfo = { error: (error && error.message) || '检查更新失败' };
+        if (pluginPanelTab === 'update') renderUpdatePanel();
+      });
+  }
+
+  function applyHubUpdate() {
+    if (!updateInfo || !updateInfo.available) {
+      toast('没有可用的更新');
+      return;
+    }
+    if (!updateInfo.can_self_update) {
+      downloadHubUpdate();
+      return;
+    }
+    toast('正在下载并校验更新…');
+    fetch('/__omm/update/apply', { method: 'POST', cache: 'no-store' })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        if (!data || !data.ok) throw new Error((data && data.error) || '更新失败');
+        toast('更新完成，工作台即将重启…');
+      })
+      .catch(function (error) {
+        toast('更新失败：' + ((error && error.message) || error));
+      });
+  }
+
+  function downloadHubUpdate() {
+    if (!updateInfo || !updateInfo.url) {
+      toast('没有可用的下载地址');
+      return;
+    }
+    window.open(updateInfo.url, '_blank', 'noopener');
   }
 
   function renderOnlinePlugins() {
@@ -1925,6 +2041,13 @@
         } else if (name === 'reload-catalog') {
           catalogCache = null;
           renderPluginPanel();
+        } else if (name === 'check-update') {
+          updateInfo = null;
+          renderUpdatePanel();
+        } else if (name === 'apply-update') {
+          applyHubUpdate();
+        } else if (name === 'download-update') {
+          downloadHubUpdate();
         } else if (name === 'pick-file') {
           var input = document.getElementById('pp-file');
           if (input) input.click();
