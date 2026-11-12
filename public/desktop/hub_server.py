@@ -227,6 +227,58 @@ class HubServer:
         if record and record.get("owned") and record.get("server") is not None:
             _stop_server(record["server"])
 
+    def stop_all(self) -> None:
+        for plugin_id in list(self.servers):
+            self.stop(plugin_id)
+
+    # ------------------------------------------------------------ settings
+    def settings(self) -> dict:
+        from plugin_manager import app_data_base
+
+        return {
+            "plugin_dir": str(self.user_plugin_root),
+            "default_plugin_dir": str(app_data_base() / "OMM-ZEN" / "plugins"),
+        }
+
+    def set_plugin_dir(self, raw_path: str) -> dict:
+        """Point the plugin root at a new directory and move what is there.
+
+        The per-plugin servers keep serving from the current paths, so they are
+        stopped before the move and started again on demand afterwards.
+        """
+        from plugin_manager import migrate_plugin_root, normalize_plugin_root
+
+        with self.lock:
+            new_root = normalize_plugin_root(raw_path)
+            old_root = self.user_plugin_root
+            try:
+                same = new_root.resolve() == old_root.resolve()
+            except OSError:
+                same = False
+            if same:
+                return {
+                    "ok": True,
+                    "unchanged": True,
+                    "plugin_dir": str(self.user_plugin_root),
+                    "moved": 0,
+                    "plugins": self.list_plugins()["plugins"],
+                }
+            self.stop_all()
+            result = migrate_plugin_root(new_root, old_root)
+            self.user_plugin_root = new_root
+            self.registry.user_root = new_root
+            self.registry.reload()
+            self.ports_path = new_root / "ports.json"
+            self.ports = self._load_ports()
+            return {
+                "ok": True,
+                "unchanged": False,
+                "plugin_dir": str(new_root),
+                "old_plugin_dir": result.get("old", str(old_root)),
+                "moved": result.get("moved", 0),
+                "plugins": self.list_plugins()["plugins"],
+            }
+
     def restart(self, plugin_id: str) -> dict:
         """Stop the plugin's local server and start it again on the new files.
 
@@ -376,6 +428,9 @@ class HubHandler(ShellHandler):
             if parsed.path == "/api/plugins":
                 self._reply(200, self.hub.list_plugins())
                 return
+            if parsed.path == "/api/settings":
+                self._reply(200, self.hub.settings())
+                return
             if parsed.path == "/api/catalog":
                 query = parse_qs(parsed.query)
                 url = (query.get("url") or [""])[0]
@@ -421,6 +476,10 @@ class HubHandler(ShellHandler):
             if parsed.path == "/api/plugins/import":
                 payload = self._body()
                 self._reply(200, self.hub.import_zip(payload))
+                return
+            if parsed.path == "/api/settings/plugin-dir":
+                payload = self._json_body()
+                self._reply(200, self.hub.set_plugin_dir(str(payload.get("path") or "")))
                 return
             if parsed.path == "/api/plugins/remove":
                 payload = self._json_body()

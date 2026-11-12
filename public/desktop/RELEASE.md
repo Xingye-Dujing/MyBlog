@@ -19,7 +19,8 @@
 | 远端 · Gitee | `Xingye-Dujing/my-blog` | 只放 Windows 全量（配额限制） |
 | 目录文件 | `catalog.json` | 版本号 + 每个条目的下载地址 / 大小 / SHA-256 |
 | 用户数据 | `%LOCALAPPDATA%\OMM-ZEN`（macOS：`~/Library/Application Support/OMM-ZEN`） | `shared.json`、快照、页面缩放、浏览器数据；升级不动它 |
-| 用户插件目录 | `%LOCALAPPDATA%\OMM-ZEN\plugins\<id>` | 用户手动装/导入的插件，覆盖同名内置插件 |
+| 用户插件目录 | 默认 `%LOCALAPPDATA%\OMM-ZEN\plugins\<id>`，可在集成器里改 | 用户手动装/导入的插件，覆盖同名内置插件；改目录会自动迁移 |
+| 本地设置 | `%LOCALAPPDATA%\OMM-ZEN\settings.json` | 目前只有 `plugin_root`（插件安装目录）；删掉即回到默认目录 |
 
 Release 标签一旦发布就视为不可变：同一个版本号不要覆盖重发（见 §8）。
 
@@ -84,6 +85,26 @@ Get-ChildItem D:\blog\web\public\dist\plugins -Filter *.zip |
 - `%LOCALAPPDATA%\OMM-ZEN\updates` 是自更新下载的临时 exe，正常会自动清空，可手动清。
 - `<app>` 数据目录（`hub`、`planner` 等）是 WebView2 的用户数据，**不是**版本副本，别删。
 - `shared.backup-*.json` 是更新前的配置备份，很小，可留。
+- `settings.json` 里的 `plugin_root` 是插件目录；删掉它即回到默认目录（不会删插件文件）。
+
+### 1.4 插件安装目录可以改（自动迁移）
+
+集成器 →「插件管理」→「已安装」顶部显示当前安装目录，点「修改」可直接改名，
+确认后**已安装的插件会自动迁移过去**，不需要重装：
+
+```text
+C:\Users\<用户>\AppData\Local\OMM-ZEN\plugins      ← 默认
+D:\OMM-ZEN\plugins                                 ← 可以改到别的盘
+```
+
+实现要点（改这块代码时注意）：
+
+- 路径存 `settings.json` 的 `plugin_root`，`default_plugin_root()` 启动时读它。
+- 先复制、**全部成功后才删除源目录**，中途失败不会留下搬了一半的安装。
+- 迁移前会**停掉所有插件本地服务器**（Windows 会锁文件），迁移后按需重启；
+  已打开的产品会自动重新挂载。
+- 新目录不能是旧目录本身或它的子目录；必须是绝对路径。
+- 配置的盘符不存在时，`default_plugin_root()` 回退到默认目录，不会起不来。
 
 清理后确认集成器仍能用内置插件：
 
@@ -550,7 +571,19 @@ Start-Sleep 35
 | `publish_pointer.ps1 -Tag -PrevTag` | 把最新 catalog 覆盖到 Gitee 旧版本 |
 | `verify_release.py --tag` | 校验 catalog 与两端资产是否自洽 |
 
-### 11.2 存档接口（`/__omm/fs/*`）
+### 11.2 集成器接口（`/api/*`）
+
+| 接口 | 用途 |
+| --- | --- |
+| `GET /api/plugins` | 插件列表（含 `source`：bundled / user）与 `plugin_dir` |
+| `GET /api/settings` | `plugin_dir`、`default_plugin_dir` |
+| `POST /api/settings/plugin-dir` `{path}` | 改插件目录并迁移，返回 `moved`（迁移项数） |
+| `GET /api/catalog` | 在线目录（插件安装/更新用） |
+| `POST /api/plugins/install` `{id}` | 在线安装/更新插件，装完立即重启该插件 |
+| `POST /api/plugins/import` | 导入插件 zip（请求体即 zip 字节） |
+| `POST /api/plugins/remove` `{id}` | 卸载用户安装的插件 |
+
+### 11.3 存档接口（`/__omm/fs/*`）
 
 `/__omm/fs/archive` 是唯一的「存档」接口，把两类记录合并成一条时间线：
 

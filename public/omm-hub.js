@@ -17,6 +17,7 @@
   var updateInfo = null;
   var pluginLoadError = '';
   var PLUGIN_DIR = '';
+var pluginDirEditing = false;
   var APPEARANCE_KEY = 'omm.hub.appearance.v1';
   var hubAppearance = { radius: 0, accent: 'amber', motion: true, topbar: true };
 
@@ -704,6 +705,7 @@
 
   function setPluginTab(tab) {
     pluginPanelTab = tab;
+    if (tab !== 'installed') pluginDirEditing = false;
     Array.prototype.forEach.call(
       els.pluginPanel.querySelectorAll('[data-pp-tab]'),
       function (el) {
@@ -766,14 +768,98 @@
     }).join('');
     els.ppBody.innerHTML =
       '<p class="pp-note">插件按需安装，安装后立即出现在顶部标签、Dock 和应用面板中。内置插件可以保留，也可以被在线版本覆盖。</p>' +
+      dirBarHtml() +
       '<div class="pp-list">' +
       rows +
       '</div>' +
-      '<div class="pp-foot"><span>数据目录：' +
-      esc(PLUGIN_DIR) +
-      '</span><span>共 ' +
-      APP_LIST.length +
-      ' 个插件</span></div>';
+      '<div class="pp-foot"><span>共 ' + APP_LIST.length + ' 个插件</span><span>内置 ' +
+      APP_LIST.filter(function (a) { return a.source !== 'user'; }).length + ' · 用户安装 ' +
+      APP_LIST.filter(function (a) { return a.source === 'user'; }).length +
+      '</span></div>';
+  }
+
+  /* Plugin install directory: shown above the list, editable in place. */
+  function dirBarHtml() {
+    if (pluginDirEditing) {
+      return (
+        '<div class="pp-dir pp-dir-edit">' +
+        '<input class="pp-input" id="pp-dir-input" spellcheck="false" autocomplete="off" ' +
+        'value="' + esc(PLUGIN_DIR) + '" placeholder="D:\\OMM-ZEN\\plugins" />' +
+        '<button class="pp-btn primary" type="button" data-pp-action="save-dir">迁移到此处</button>' +
+        '<button class="pp-btn" type="button" data-pp-action="cancel-dir">取消</button>' +
+        '</div>' +
+        '<p class="pp-dir-hint">修改后已安装的插件会自动迁移过去，不需要重新安装。</p>'
+      );
+    }
+    return (
+      '<div class="pp-dir">' +
+      '<span class="pp-dir-label">安装目录</span>' +
+      '<code class="pp-dir-path" title="' + esc(PLUGIN_DIR) + '">' + esc(PLUGIN_DIR) + '</code>' +
+      '<button class="pp-btn" type="button" data-pp-action="change-dir">修改</button>' +
+      '</div>' +
+      '<p class="pp-dir-hint">修改后已安装的插件会自动迁移过去。</p>'
+    );
+  }
+
+  function applyPluginDir() {
+    var input = document.getElementById('pp-dir-input');
+    if (!input) return;
+    var path = String(input.value || '').trim();
+    if (!path) {
+      toast('请填写目录');
+      return;
+    }
+    var count = APP_LIST.filter(function (a) { return a.source === 'user'; }).length;
+    var message =
+      '把插件安装目录改为：\n' + path + '\n\n' +
+      (count ? '已安装的 ' + count + ' 个用户插件会自动迁移过去。\n' : '') +
+      '迁移过程中已打开的产品会重新加载。继续？';
+    if (!window.confirm(message)) return;
+    var button = document.querySelector('[data-pp-action="save-dir"]');
+    if (button) {
+      button.disabled = true;
+      button.textContent = '迁移中…';
+    }
+    fetch('/api/settings/plugin-dir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path }),
+    })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok || !data.ok) {
+            throw new Error((data && data.error) || '修改失败');
+          }
+          return data;
+        });
+      })
+      .then(function (data) {
+        pluginDirEditing = false;
+        PLUGIN_DIR = data.plugin_dir || path;
+        if (els.pluginPanel) els.pluginPanel.dataset.dir = PLUGIN_DIR;
+        toast(
+          data.unchanged
+            ? '目录未变：' + PLUGIN_DIR
+            : '已迁移 ' + (data.moved || 0) + ' 项到 ' + PLUGIN_DIR
+        );
+        /* Plugin servers were restarted from the new location, so every open
+           app has to be mounted again. */
+        var open = state.open.slice();
+        open.forEach(function (appId) {
+          invalidateApp(appId);
+        });
+        return loadPlugins(false).then(function () {
+          open.forEach(function (appId) {
+            if (APP_BY_ID[appId]) reloadApp(appId);
+          });
+          renderPluginPanel();
+        });
+      })
+      .catch(function (error) {
+        toast((error && error.message) || '目录修改失败');
+        pluginDirEditing = true;
+        renderPluginPanel();
+      });
   }
 
   function versionKey(value) {
@@ -2080,6 +2166,17 @@
       );
     }
     if (els.ppBody) {
+      els.ppBody.addEventListener('keydown', function (event) {
+        if (!pluginDirEditing) return;
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          applyPluginDir();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          pluginDirEditing = false;
+          renderPluginPanel();
+        }
+      });
       els.ppBody.addEventListener('click', function (event) {
         var action = event.target.closest('[data-pp-action]');
         if (!action) return;
@@ -2105,6 +2202,19 @@
           if (input) input.click();
         } else if (name === 'show-spec') {
           setPluginTab('spec');
+        } else if (name === 'change-dir') {
+          pluginDirEditing = true;
+          renderPluginPanel();
+          var box = document.getElementById('pp-dir-input');
+          if (box) {
+            box.focus();
+            box.select();
+          }
+        } else if (name === 'cancel-dir') {
+          pluginDirEditing = false;
+          renderPluginPanel();
+        } else if (name === 'save-dir') {
+          applyPluginDir();
         }
       });
     }

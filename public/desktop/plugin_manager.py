@@ -67,9 +67,142 @@ def app_data_base() -> Path:
 
 def default_plugin_root() -> Path:
     override = os.environ.get("OMM_PLUGIN_DIR")
-    path = Path(override) if override else app_data_base() / "OMM-ZEN" / "plugins"
-    path.mkdir(parents=True, exist_ok=True)
+    fallback = app_data_base() / "OMM-ZEN" / "plugins"
+    if override:
+        path = Path(override)
+    else:
+        configured = str(load_settings().get("plugin_root") or "").strip()
+        path = Path(configured) if configured else fallback
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # The configured directory may sit on a drive that is gone; fall back
+        # to the default instead of refusing to start.
+        path = fallback
+        path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+# ------------------------------------------------------------------ settings
+
+SETTINGS_FILENAME = "settings.json"
+
+
+def settings_path() -> Path:
+    return app_data_base() / "OMM-ZEN" / SETTINGS_FILENAME
+
+
+def load_settings() -> Dict[str, Any]:
+    try:
+        data = json.loads(settings_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001 - a broken settings file must not block startup
+        return {}
+
+
+def save_settings(values: Dict[str, Any]) -> Dict[str, Any]:
+    data = load_settings()
+    for key, value in (values or {}).items():
+        if value in (None, ""):
+            data.pop(key, None)
+        else:
+            data[key] = value
+    target = settings_path()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temp = target.with_name(target.name + ".tmp")
+        temp.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        os.replace(temp, target)
+    except OSError:
+        pass
+    return data
+
+
+def normalize_plugin_root(raw: Any) -> Path:
+    """Turn user input into an absolute plugin directory path."""
+    text = str(raw or "").strip().strip('"').strip("'")
+    if not text:
+        raise PluginError("插件目录不能为空")
+    path = Path(os.path.expandvars(os.path.expanduser(text)))
+    if not path.is_absolute():
+        raise PluginError("请填写完整路径（例如 D:\\OMM-ZEN\\plugins）")
+    return path
+
+
+def _inside_path(child: Path, parent: Path) -> bool:
+    try:
+        child = child.resolve()
+        parent = parent.resolve()
+    except OSError:
+        return False
+    return child == parent or parent in child.parents
+
+
+def migrate_plugin_root(new_root: Path, old_root: Path) -> Dict[str, Any]:
+    """Move installed plugins to a new directory.
+
+    Copy first, delete the source only after *every* item arrived, so a failed
+    copy never leaves the user with a half-moved installation.
+    """
+    new_root = Path(new_root)
+    old_root = Path(old_root)
+    if _inside_path(new_root, old_root) or _inside_path(old_root, new_root):
+        raise PluginError("新目录不能是旧目录本身或它的子目录")
+    if new_root.exists() and not new_root.is_dir():
+        raise PluginError("目标路径已存在而且是文件")
+    try:
+        new_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise PluginError("无法创建目录：%s" % exc) from exc
+
+    if not old_root.is_dir():
+        return {"moved": 0, "names": [], "old": str(old_root), "new": str(new_root)}
+
+    items = sorted(old_root.iterdir())
+    copied: list[Path] = []
+    failures: list[tuple[str, str]] = []
+    for item in items:
+        target = new_root / item.name
+        try:
+            if target.exists():
+                if target.is_dir() and not target.is_symlink():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            if item.is_dir():
+                shutil.copytree(item, target)
+            else:
+                shutil.copy2(item, target)
+            copied.append(item)
+        except Exception as exc:  # noqa: BLE001
+            failures.append((item.name, str(exc)))
+
+    if failures:
+        names = ", ".join(name for name, _ in failures)
+        raise PluginError("迁移失败，未做任何改动：%s" % names)
+
+    for item in copied:
+        try:
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        except OSError:
+            pass
+    try:
+        old_root.rmdir()
+    except OSError:
+        pass
+
+    save_settings({"plugin_root": str(new_root)})
+    return {
+        "moved": len(copied),
+        "names": [item.name for item in copied],
+        "old": str(old_root),
+        "new": str(new_root),
+    }
 
 
 def _clean_name(value: Any, field: str, maximum: int) -> str:
