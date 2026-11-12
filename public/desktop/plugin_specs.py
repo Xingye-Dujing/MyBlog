@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.7"
+VERSION = "1.0.8"
 
 # Release asset name for each desktop program (without the platform suffix).
 DESKTOP_EXE_NAMES = {
@@ -41,6 +41,12 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["pdfjs", "supabase"],
         "order": 10,
+        "share": {
+            "channels": [
+                {"id": "notes.english", "role": "both"},
+                {"id": "documents", "role": "both"},
+            ]
+        },
     },
     {
         "id": "corpus",
@@ -52,6 +58,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["supabase"],
         "order": 20,
+        "share": {
+            "channels": [{"id": "notes.english", "role": "both"}]
+        },
     },
     {
         "id": "data",
@@ -63,6 +72,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["supabase"],
         "order": 30,
+        "share": {
+            "channels": [{"id": "data.tables", "role": "both"}]
+        },
     },
     {
         "id": "english",
@@ -74,6 +86,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["supabase"],
         "order": 40,
+        "share": {
+            "channels": [{"id": "notes.english", "role": "both"}]
+        },
     },
     {
         "id": "latex",
@@ -85,6 +100,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "latex",
         "vendor": ["pdfjs"],
         "order": 50,
+        "share": {
+            "channels": [{"id": "documents", "role": "both"}]
+        },
     },
     {
         "id": "mdforge",
@@ -96,6 +114,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "mdforge",
         "vendor": [],
         "order": 60,
+        "share": {
+            "channels": [{"id": "documents", "role": "both"}]
+        },
         "examples": True,
         "apl_font": True,
     },
@@ -109,6 +130,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["supabase"],
         "order": 70,
+        "share": {
+            "channels": [{"id": "documents", "role": "both"}]
+        },
     },
     {
         "id": "planner",
@@ -120,6 +144,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["html2canvas", "supabase"],
         "order": 80,
+        "share": {
+            "channels": [{"id": "documents", "role": "publish"}]
+        },
     },
     {
         "id": "redact",
@@ -134,6 +161,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
             "chartjs/4.4.1", "jspdf/2.5.1", "html2canvas", "mupdf",
         ],
         "order": 90,
+        "share": {
+            "channels": [{"id": "documents", "role": "both"}]
+        },
     },
     {
         "id": "visualization",
@@ -148,6 +178,12 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
             "jspdf/4.2.1", "xlsx",
         ],
         "order": 100,
+        "share": {
+            "channels": [
+                {"id": "data.tables", "role": "consume"},
+                {"id": "documents", "role": "publish"},
+            ]
+        },
     },
     {
         "id": "writer",
@@ -159,6 +195,9 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "static",
         "vendor": ["html2canvas", "jspdf/2.5.1", "mathjax", "supabase"],
         "order": 110,
+        "share": {
+            "channels": [{"id": "documents", "role": "both"}]
+        },
     },
 ]
 
@@ -180,4 +219,5 @@ def manifest(item: Dict[str, Any]) -> Dict[str, Any]:
         "order": item.get("order", 999),
         "author": "OMM-ZEN",
         "homepage": "https://github.com/Xingye-Dujing/MyBlog",
+        **({"share": item["share"]} if item.get("share") else {}),
     }

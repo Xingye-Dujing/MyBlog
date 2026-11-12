@@ -31,8 +31,10 @@ from urllib.parse import urlparse, parse_qs
 
 try:  # Desktop shell only; absent on the public website.
     import omm_shared  # type: ignore
+    import omm_share  # type: ignore
 except Exception:  # pragma: no cover
     omm_shared = None  # type: ignore
+    omm_share = None  # type: ignore
 
 ROOT = os.environ.get("OMM_PLUGIN_ROOT") or os.path.dirname(os.path.abspath(__file__))
 # 编译在系统临时目录里进行，不污染项目目录
@@ -694,6 +696,13 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         p = u.path
+        if p.startswith("/__omm/share/"):
+            if omm_share is None:
+                return self.send_bytes(b"not found", "text/plain", 404)
+            status, ctype, body = omm_share.handle_get(
+                p, parse_qs(u.query), os.environ.get("OMM_APP_ID") or "latex"
+            )
+            return self.send_bytes(body, ctype, status)
         if p.startswith("/__omm/fs/"):
             if omm_shared is None:
                 return self.send_bytes(b"not found", "text/plain", 404)
@@ -750,6 +759,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path.startswith("/__omm/share/"):
+            if omm_share is None:
+                return self.send_bytes(b"not found", "text/plain", 404)
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = 0
+            body = self.rfile.read(n) if n > 0 else b""
+            status, ctype, payload = omm_share.handle_post(
+                u.path, parse_qs(u.query), body, os.environ.get("OMM_APP_ID") or "latex"
+            )
+            return self.send_bytes(payload, ctype, status)
         if u.path.startswith("/__omm/fs/"):
             if omm_shared is None:
                 return self.send_bytes(b"not found", "text/plain", 404)

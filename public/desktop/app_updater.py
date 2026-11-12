@@ -26,6 +26,12 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlsplit
 
 import omm_shared
+
+try:  # Older installs may be updated before omm_share.py arrives.
+    import omm_share  # type: ignore
+except Exception:  # pragma: no cover
+    omm_share = None  # type: ignore
+
 from plugin_specs import DESKTOP_EXE_NAMES, VERSION
 
 try:
@@ -365,6 +371,15 @@ class ShellHandler(SimpleHTTPRequestHandler):
 
     def handle_desktop_get(self) -> bool:
         parsed = urlsplit(self.path)
+        if parsed.path.startswith("/__omm/share/"):
+            if omm_share is None:
+                self.reply_json(404, {"ok": False, "error": "share API is not available"})
+                return True
+            status, content_type, body = omm_share.handle_get(
+                parsed.path, parse_qs(parsed.query), self._default_app_id()
+            )
+            self.reply_raw(status, content_type, body)
+            return True
         if not parsed.path.startswith("/__omm/fs/"):
             return False
         status, content_type, body = omm_shared.handle_get(
@@ -375,16 +390,27 @@ class ShellHandler(SimpleHTTPRequestHandler):
 
     def handle_desktop_post(self) -> bool:
         parsed = urlsplit(self.path)
-        if not parsed.path.startswith("/__omm/fs/"):
+        if not (
+            parsed.path.startswith("/__omm/fs/")
+            or parsed.path.startswith("/__omm/share/")
+        ):
             return False
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = 0
         body = self.rfile.read(length) if length > 0 else b""
-        status, content_type, payload = omm_shared.handle_post(
-            parsed.path, parse_qs(parsed.query), body, self._default_app_id()
-        )
+        if parsed.path.startswith("/__omm/share/"):
+            if omm_share is None:
+                self.reply_json(404, {"ok": False, "error": "share API is not available"})
+                return True
+            status, content_type, payload = omm_share.handle_post(
+                parsed.path, parse_qs(parsed.query), body, self._default_app_id()
+            )
+        else:
+            status, content_type, payload = omm_shared.handle_post(
+                parsed.path, parse_qs(parsed.query), body, self._default_app_id()
+            )
         self.reply_raw(status, content_type, payload)
         return True
 

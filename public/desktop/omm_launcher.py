@@ -238,7 +238,145 @@ def _present_maximized(window) -> None:
     _install_zoom(window, (os.environ.get("OMM_APP_ID") or "app").strip() or "app")
 
 
-def run(app_id: str, debug: bool = False) -> None:
+def saved_geometry(app_id: str) -> dict | None:
+    """Window geometry persisted in shared.json (ui.window.<app>)."""
+    try:
+        cfg = omm_shared.load_config()
+        geo = ((cfg.get("ui") or {}).get("window") or {}).get(app_id)
+        if isinstance(geo, dict) and int(geo.get("width") or 0) > 0:
+            return geo
+    except Exception:
+        pass
+    return None
+
+
+def remember_geometry(window, app_id: str) -> None:
+    """Write the window rect back to shared.json when the window closes.
+
+    Best effort and Windows-only for now: WinForms exposes both the maximized
+    state and the restore bounds, which is everything we need.  Any failure
+    simply means the next launch uses the built-in default.
+    """
+    if not IS_WINDOWS:
+        return
+
+    def save():
+        try:
+            native = getattr(window, "native", None)
+            if native is None:
+                return
+            maximized = int(native.WindowState) == 2  # FormWindowState.Maximized
+            bounds = native.RestoreBounds if maximized else native.Bounds
+            geometry = {
+                "maximized": bool(maximized),
+                "x": int(bounds.X),
+                "y": int(bounds.Y),
+                "width": int(bounds.Width),
+                "height": int(bounds.Height),
+            }
+            if geometry["width"] < 200 or geometry["height"] < 200:
+                return
+
+            def apply(cfg):
+                ui = cfg.setdefault("ui", {})
+                win = ui.setdefault("window", {})
+                win[app_id] = geometry
+
+            omm_shared.mutate_config(apply)
+        except Exception:
+            pass
+
+    try:
+        window.events.closed += save
+    except Exception:
+        pass
+
+
+def icon_file(root: Path) -> Path:
+    """Window/tray icon: prefer the packaged app.ico, fall back to icon.ico."""
+    app_icon = root / "app.ico"
+    if app_icon.is_file():
+        return app_icon
+    return root / "icon.ico"
+
+
+def optional_extras(window, app_id: str, icon_path: Path, enabled: bool = True) -> dict:
+    """Tray icon + global hotkey when the optional dependencies exist.
+
+    Neither pystray/Pillow nor keyboard ships with the app, so every step is
+    guarded: without them the window simply behaves as before.  ``--plain``
+    turns both off explicitly.  Returns what actually started, mainly so the
+    tray can be stopped again in tests.
+    """
+    status = {"tray": None, "hotkey": False}
+    if not enabled:
+        return status
+
+    def restore():
+        try:
+            window.show()
+            window.restore()
+        except Exception:
+            pass
+
+    try:
+        import keyboard  # type: ignore
+
+        keyboard.add_hotkey("ctrl+alt+space", restore)
+        status["hotkey"] = True
+    except Exception:
+        pass
+
+    try:
+        import pystray  # type: ignore
+        from PIL import Image  # type: ignore
+
+        if not icon_path.is_file():
+            return status
+        image = Image.open(str(icon_path))
+        menu = pystray.Menu(
+            pystray.MenuItem(
+                "OMM-ZEN 工作台" if app_id == "hub" else "打开窗口",
+                lambda *_: restore(),
+                default=True,
+            ),
+            pystray.MenuItem("退出", lambda *_: window.destroy()),
+        )
+        tray = pystray.Icon("OMM-ZEN", image, "OMM-ZEN 工作台", menu)
+        threading.Thread(target=tray.run, daemon=True).start()
+        status["tray"] = tray
+    except Exception:
+        pass
+    return status
+
+
+def _window_kwargs(app_id: str, title: str, url: str, default_size) -> dict:
+    """create_window arguments that honour the saved geometry."""
+    geometry = saved_geometry(app_id)
+    kwargs = {
+        "title": title,
+        "url": url,
+        "width": default_size[0],
+        "height": default_size[1],
+        "min_size": (880, 600) if app_id != "hub" else (1024, 680),
+        "maximized": True,
+        "text_select": True,
+        "zoomable": True,
+    }
+    if geometry:
+        kwargs["width"] = int(geometry.get("width") or default_size[0])
+        kwargs["height"] = int(geometry.get("height") or default_size[1])
+        if geometry.get("maximized"):
+            kwargs["maximized"] = True
+        else:
+            kwargs["maximized"] = False
+            if geometry.get("x") is not None:
+                kwargs["x"] = int(geometry["x"])
+                kwargs["y"] = int(geometry.get("y") or 0)
+    return kwargs
+
+
+def run(app_id: str, debug: bool = False, extras: bool = True) -> None:
     if app_id not in APPS:
         raise SystemExit("unknown app: %s (choose from %s)" % (app_id, ", ".join(APPS)))
     html, wanted_port, backend = APPS[app_id]
@@ -282,16 +420,7 @@ def run(app_id: str, debug: bool = False) -> None:
         os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(data_root(app_id)))
 
     url = "http://127.0.0.1:%d/%s" % (port, html)
-    window = webview.create_window(
-        window_title,
-        url,
-        width=1280,
-        height=860,
-        min_size=(880, 600),
-        maximized=True,
-        text_select=True,
-        zoomable=True,
-    )
+    window = webview.create_window(**_window_kwargs(app_id, window_title, url, (1280, 860)))
     # maxmized=True sets the WinForms state before the first Show(); the shown
     # handler is only a safety net and also restores the saved zoom factor.
     try:
@@ -301,6 +430,8 @@ def run(app_id: str, debug: bool = False) -> None:
 
     # Windows uses a generated .ico; macOS takes its icon from the .app bundle.
     icon = root / ("app.icns" if IS_MACOS else "app.ico")
+    remember_geometry(window, app_id)
+    optional_extras(window, app_id, icon_file(root), enabled=extras)
     start_options = {
         "debug": debug,
         "private_mode": False,
@@ -308,10 +439,16 @@ def run(app_id: str, debug: bool = False) -> None:
     }
     if not IS_MACOS and icon.is_file():
         start_options["icon"] = str(icon)
+    elif not IS_MACOS and not icon.is_file():
+        fallback = root / "icon.ico"
+        if fallback.is_file():
+            start_options["icon"] = str(fallback)
     webview.start(**start_options)
 
 
-def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
+def run_hub(
+    debug: bool = False, plugin_root: Path | None = None, extras: bool = True
+) -> None:
     """Open the integrated OMM-ZEN workspace."""
     root = resource_root()
     if not (root / HUB_HTML).is_file():
@@ -354,6 +491,10 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     }
     if not IS_MACOS and icon.is_file():
         start_options["icon"] = str(icon)
+    elif not IS_MACOS and not icon.is_file():
+        fallback = root / "icon.ico"
+        if fallback.is_file():
+            start_options["icon"] = str(fallback)
 
     try:
         window.events.shown += _present_maximized
@@ -371,15 +512,20 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--plugins", type=Path, default=None, help="plugin root for the hub")
     parser.add_argument("--catalog", default="", help="catalog URL/file for the installer")
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="disable the optional tray icon and global hotkey",
+    )
     args = parser.parse_args()
     if args.app == "hub":
-        run_hub(debug=args.debug, plugin_root=args.plugins)
+        run_hub(debug=args.debug, plugin_root=args.plugins, extras=not args.plain)
     elif args.app == "installer":
         from installer_server import run_installer  # noqa: WPS433
 
         run_installer(debug=args.debug, catalog=args.catalog)
     else:
-        run(args.app, debug=args.debug)
+        run(args.app, debug=args.debug, extras=not args.plain)
 
 
 if __name__ == "__main__":

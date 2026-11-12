@@ -1,5 +1,10 @@
 # OMM-ZEN 插件规范
 
+> **本文是“契约”**：字段、打包方式、安装限制。它也会显示在工作台的「插件 → 插件规范」里。
+> 开发教程、保存/快照/共享 API、迁移规则和测试清单见
+> [`desktop/PLUGIN-GUIDE.md`](desktop/PLUGIN-GUIDE.md)；构建与发布见
+> [`desktop/README.md`](desktop/README.md)。
+
 OMM-ZEN 是一个插件化工作台。每个产品都是独立插件，可以随完整版内置、由在线安装器
 下载，也可以由用户按本规范导入。
 
@@ -60,6 +65,7 @@ my-plugin.zip
 | `order` | 否 | Dock / 应用面板中的排序，越小越靠前 |
 | `author` | 否 | 作者 |
 | `homepage` | 否 | 项目主页 |
+| `share` | 否 | 跨产品共享能力，见下一节 |
 
 ## 运行时
 
@@ -69,6 +75,51 @@ my-plugin.zip
 
 插件运行在独立的回环端口上，因此拥有自己的 `localStorage`、IndexedDB 和 Cookie
 空间，不会和其他插件互相覆盖。
+
+## 跨产品共享（share）
+
+插件可以声明自己愿意在哪些「频道」里发布或接收内容。频道是一个带类型的共享空间，
+例如表格数据、英语笔记、文档。声明只是**能力**；真正允许谁和谁通信，由用户在
+「存档 → 跨产品共享 → 连接规则」里最终决定，并且随时可以取消。
+
+```json
+{
+  "share": {
+    "channels": [
+      { "id": "data.tables", "role": "both" },
+      { "id": "documents", "role": "consume" }
+    ]
+  }
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `channels[].id` | 频道 id。内置频道：`data.tables`、`notes.english`、`documents` |
+| `channels[].role` | `publish`（只能发布）、`consume`（只能接收）、`both`（默认） |
+| `channels[].name` | 可选。新频道的显示名；内置频道已有名称 |
+| `channels[].description` | 可选。新频道的一句话说明 |
+| `channels[].types` | 可选。新频道接受的 MIME 类型，如 `text/csv`、`text/markdown` |
+
+工作台启动、安装或卸载插件时，会把清单里的能力合并进共享策略
+（`%LOCALAPPDATA%/OMM-ZEN/share/policy.json`）。合并只增不减：用户关掉的频道不会
+因为升级插件而被悄悄打开。
+
+页面接入使用桌面版注入的 `window.OMMShare`：`publishFile` / `publishRecord` /
+`send` / `onArtifact`。完整示例、频道选择和工作原理见开发指南的「共享 API」一节。
+
+现有的「三端互通」按钮（Annotate / English / Corpus）不需要改代码：桌面版会拦截
+它们原有的 `OMMBridge`，把 `localStorage` + `BroadcastChannel` 传输替换成共享空间的
+收件箱，因此跨端口仍然是一键直达。任何指向 `omm-*.html` 的链接也会被接管，改为在
+工作台中打开对应产品，而不是跳到 404。
+
+共享文件默认保存在 `%LOCALAPPDATA%/OMM-ZEN/share/`（`files/`、`records/`、
+`inbox/`），与 `shared.json`、`snapshots/` 同级；也可以在「存档 → 保存设置 →
+共享空间目录」里改成任意专用文件夹，修改会立即迁移并删除旧目录。
+`share/index.json` 只保存索引，删除共享项目不会删除产品自己的存档。
+
+完整的新产品接入指南（保存、快照、共享、权限、迁移、测试清单）见
+[`desktop/PLUGIN-GUIDE.md`](desktop/PLUGIN-GUIDE.md)。
 
 ## 打包和导入
 

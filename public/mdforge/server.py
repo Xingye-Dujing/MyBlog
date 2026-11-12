@@ -35,8 +35,10 @@ PUBLIC_ROOT = Path(
 ).resolve()
 try:  # The desktop shell provides shared storage; plain web installs do not.
     import omm_shared  # type: ignore
+    import omm_share  # type: ignore
 except Exception:  # pragma: no cover - optional on the public website
     omm_shared = None  # type: ignore
+    omm_share = None  # type: ignore
 FRONTEND = "omm-mdforge.html"
 JOB_ROOT = Path(tempfile.gettempdir()) / "mdforge-jobs"
 JOBS: Dict[str, Dict[str, Any]] = {}
@@ -290,6 +292,10 @@ def create_app() -> Flask:
     def desktop_bridge():
         return send_from_directory(str(PUBLIC_ROOT), "omm-desktop.js")
 
+    @app.get("/omm-share.js")
+    def share_bridge():
+        return send_from_directory(str(PUBLIC_ROOT), "omm-share.js")
+
     @app.get("/__omm/fs/<path:sub>")
     def omm_shared_get(sub: str):
         if omm_shared is None:
@@ -298,6 +304,31 @@ def create_app() -> Flask:
         status, content_type, body = omm_shared.handle_get(
             "/__omm/fs/" + sub,
             parse_qs(parsed.query),
+            os.environ.get("OMM_APP_ID") or "mdforge",
+        )
+        return Response(body, status=status, content_type=content_type)
+
+    @app.get("/__omm/share/<path:sub>")
+    def omm_share_get(sub: str):
+        if omm_share is None:
+            abort(404)
+        parsed = urlsplit(request.full_path)
+        status, content_type, body = omm_share.handle_get(
+            "/__omm/share/" + sub,
+            parse_qs(parsed.query),
+            os.environ.get("OMM_APP_ID") or "mdforge",
+        )
+        return Response(body, status=status, content_type=content_type)
+
+    @app.post("/__omm/share/<path:sub>")
+    def omm_share_post(sub: str):
+        if omm_share is None:
+            abort(404)
+        parsed = urlsplit(request.full_path)
+        status, content_type, body = omm_share.handle_post(
+            "/__omm/share/" + sub,
+            parse_qs(parsed.query),
+            request.get_data(cache=False),
             os.environ.get("OMM_APP_ID") or "mdforge",
         )
         return Response(body, status=status, content_type=content_type)

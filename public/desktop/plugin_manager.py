@@ -25,6 +25,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
+import omm_fs
+
 # The catalog is always read from the "latest" release, never from a
 # version-pinned directory.  A program built today must still be able to
 # find tomorrow's release, so the version number must not appear in the
@@ -152,6 +154,8 @@ def migrate_plugin_root(new_root: Path, old_root: Path) -> Dict[str, Any]:
         raise PluginError("新目录不能是旧目录本身或它的子目录")
     if new_root.exists() and not new_root.is_dir():
         raise PluginError("目标路径已存在而且是文件")
+    if omm_fs.unsafe_bulk_root(old_root):
+        raise PluginError("旧插件目录是系统或用户根目录，拒绝整体迁移；请把插件放在专用文件夹中")
     try:
         new_root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -166,13 +170,10 @@ def migrate_plugin_root(new_root: Path, old_root: Path) -> Dict[str, Any]:
     for item in items:
         target = new_root / item.name
         try:
-            if target.exists():
-                if target.is_dir() and not target.is_symlink():
-                    shutil.rmtree(target)
-                else:
-                    target.unlink()
+            # Merge instead of replacing: a plugin that already exists at the
+            # destination must not be wiped before the copy succeeds.
             if item.is_dir():
-                shutil.copytree(item, target)
+                shutil.copytree(item, target, dirs_exist_ok=True)
             else:
                 shutil.copy2(item, target)
             copied.append(item)
@@ -181,7 +182,7 @@ def migrate_plugin_root(new_root: Path, old_root: Path) -> Dict[str, Any]:
 
     if failures:
         names = ", ".join(name for name, _ in failures)
-        raise PluginError("迁移失败，未做任何改动：%s" % names)
+        raise PluginError("迁移中断，原目录保留：%s" % names)
 
     for item in copied:
         try:
@@ -191,10 +192,9 @@ def migrate_plugin_root(new_root: Path, old_root: Path) -> Dict[str, Any]:
                 item.unlink()
         except OSError:
             pass
-    try:
-        old_root.rmdir()
-    except OSError:
-        pass
+    # Remove the old root *and every empty folder below it*.  If something is
+    # still locked, report it instead of silently leaving an empty shell.
+    leftover = not omm_fs.remove_empty_tree(old_root)
 
     save_settings({"plugin_root": str(new_root)})
     return {
@@ -202,6 +202,7 @@ def migrate_plugin_root(new_root: Path, old_root: Path) -> Dict[str, Any]:
         "names": [item.name for item in copied],
         "old": str(old_root),
         "new": str(new_root),
+        "leftover": leftover,
     }
 
 
@@ -212,6 +213,39 @@ def _clean_name(value: Any, field: str, maximum: int) -> str:
     if len(text) > maximum:
         raise PluginError("%s 过长" % field)
     return text
+
+
+def _clean_share(raw: Any) -> Dict[str, Any]:
+    """Validate the optional cross-product capability block.
+
+    ``share.channels`` only declares *intent* (publish / consume / both).  The
+    actual allow/deny matrix lives in ``share/policy.json`` so the user can
+    revoke a pair without editing the plugin.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    channels = []
+    for entry in raw.get("channels") or []:
+        if not isinstance(entry, dict):
+            continue
+        channel_id = re.sub(
+            r"[^a-z0-9_.-]+", "", str(entry.get("id") or "").lower()
+        )[:48]
+        if not channel_id:
+            continue
+        role = str(entry.get("role") or "both").lower()
+        if role not in ("publish", "consume", "both"):
+            role = "both"
+        item: Dict[str, Any] = {"id": channel_id, "role": role}
+        if str(entry.get("name") or "").strip():
+            item["name"] = str(entry["name"]).strip()[:60]
+        if str(entry.get("description") or "").strip():
+            item["description"] = str(entry["description"]).strip()[:200]
+        types = entry.get("types")
+        if isinstance(types, list):
+            item["types"] = [str(t).strip()[:80] for t in types if str(t).strip()][:12]
+        channels.append(item)
+    return {"channels": channels[:12]} if channels else {}
 
 
 def validate_manifest(
@@ -270,6 +304,9 @@ def validate_manifest(
         target = (plugin_dir / entry).resolve()
         if plugin_dir.resolve() not in target.parents or not target.is_file():
             raise PluginError("找不到入口页面：%s" % entry)
+    share = _clean_share(data.get("share"))
+    if share:
+        manifest["share"] = share
     return manifest
 
 

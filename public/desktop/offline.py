@@ -22,12 +22,19 @@ HUB_ASSETS = [
     "omm-icons.js",
     "omm-embed.js",
     "omm-desktop.js",
+    "omm-share.js",
     "plugin-spec.md",
 ]
 
 INSTALLER_ASSETS = ["installer.html", "installer.css", "installer.js", "omm-icons.js"]
 
-PLUGIN_ASSETS = ["omm-embed.js", "omm-desktop.js", "icon.ico", "icon-writer.ico"]
+PLUGIN_ASSETS = [
+    "omm-embed.js",
+    "omm-desktop.js",
+    "omm-share.js",
+    "icon.ico",
+    "icon-writer.ico",
+]
 
 
 def _copy_common(dest: Path) -> None:
@@ -61,6 +68,7 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     shutil.copy2(ROOT / html_name, dest / html_name)
     shutil.copy2(ROOT / "omm-embed.js", dest / "omm-embed.js")
     shutil.copy2(ROOT / "omm-desktop.js", dest / "omm-desktop.js")
+    shutil.copy2(ROOT / "omm-share.js", dest / "omm-share.js")
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
     copy_vendor(dest, app_id)

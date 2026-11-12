@@ -54,16 +54,31 @@
       true
     );
 
-    /* The hub can ask this product to take a shared document. */
-    window.addEventListener('message', function (event) {
-      var data = event.data;
-      if (!data || data.type !== 'omm:load-file') return;
-      if (!window.OMMDesktop || !window.OMMDesktop.loadResource) return;
+    /* The hub can ask this product to take a shared document.  The desktop
+       bridge may still be booting, so a request that arrives too early is
+       queued until `omm-desktop-ready` instead of being dropped. */
+    var pendingFile = null;
+    function takeFile(data) {
+      if (!window.OMMDesktop || !window.OMMDesktop.loadResource) {
+        pendingFile = data;
+        return;
+      }
       window.OMMDesktop.loadResource({
         path: data.path,
         name: data.name,
         mime: data.mime,
       });
+    }
+    window.addEventListener('message', function (event) {
+      var data = event.data;
+      if (!data || data.type !== 'omm:load-file') return;
+      takeFile(data);
+    });
+    window.addEventListener('omm-desktop-ready', function () {
+      if (!pendingFile) return;
+      var data = pendingFile;
+      pendingFile = null;
+      takeFile(data);
     });
 
     window.addEventListener(
@@ -80,6 +95,12 @@
           action = event.shiftKey ? 'prev-tab' : 'next-tab';
         } else if (lower === 'w') {
           action = 'close-tab';
+        } else if (lower === 'k') {
+          action = 'command-palette';
+        } else if (lower === 't' && event.shiftKey) {
+          action = 'reopen-tab';
+        } else if (lower === 'n' && event.shiftKey) {
+          action = 'notify-panel';
         } else if (key === '\\' || key === '|') {
           action = event.shiftKey ? 'split-h' : 'split-v';
         } else if (lower === 'd' && event.shiftKey) {

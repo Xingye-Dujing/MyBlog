@@ -21,6 +21,7 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -30,6 +31,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
+
+import omm_fs
 
 try:
     from plugin_manager import app_data_base
@@ -152,8 +155,10 @@ def _empty_config() -> Dict[str, Any]:
             "path": str(default_save_path()),
             "mode": DEFAULT_MODE,
             "auto_snapshot": True,
+            "auto_share": False,
         },
         "ui": {"zoom": {}},
+        "share": {"path": ""},
         "apps": {},
     }
 
@@ -169,8 +174,11 @@ def _normalize_config(raw: Any) -> Dict[str, Any]:
         "path": path or str(default_save_path()),
         "mode": mode if mode in MODES else DEFAULT_MODE,
         "auto_snapshot": bool(save.get("auto_snapshot", True)),
+        "auto_share": bool(save.get("auto_share", False)),
     }
     cfg["updated"] = str(raw.get("updated") or "")
+    share = raw.get("share") if isinstance(raw.get("share"), dict) else {}
+    cfg["share"] = {"path": str(share.get("path") or "").strip()}
     apps = raw.get("apps") if isinstance(raw.get("apps"), dict) else {}
     clean_apps: Dict[str, Any] = {}
     for key, value in apps.items():
@@ -218,7 +226,7 @@ def _normalize_config(raw: Any) -> Dict[str, Any]:
     return cfg
 
 
-class _FileLock:
+class FileLock:
     """Tiny cross-process lock around the shared config file."""
 
     def __init__(self, path: Path):
@@ -262,6 +270,10 @@ class _FileLock:
             self.file.close()
 
 
+# Backwards-compatible alias for internal callers.
+_FileLock = FileLock
+
+
 def load_config() -> Dict[str, Any]:
     try:
         data = json.loads(config_path().read_text(encoding="utf-8"))
@@ -299,7 +311,7 @@ def _write_config(cfg: Dict[str, Any]) -> None:
 
 
 def mutate_config(mutator) -> Dict[str, Any]:
-    with _FileLock(lock_path()):
+    with FileLock(lock_path()):
         cfg = load_config()
         mutator(cfg)
         _write_config(cfg)
@@ -367,6 +379,18 @@ def resolve_save_dir(app: str, cfg: Optional[Dict[str, Any]] = None) -> Path:
     return path
 
 
+def resolve_share_dir(cfg: Optional[Dict[str, Any]] = None) -> Path:
+    """Where the cross-product share space lives.
+
+    Empty means the default next to ``shared.json``; a custom path is stored so
+    the hub and every product resolve the same directory.
+    """
+    cfg = cfg or load_config()
+    raw = str((cfg.get("share") or {}).get("path") or "").strip()
+    path = Path(os.path.expandvars(os.path.expanduser(raw))) if raw else shared_root() / "share"
+    return path
+
+
 def resolve_mode(app: str, cfg: Optional[Dict[str, Any]] = None) -> str:
     cfg = cfg or load_config()
     entry = (cfg.get("apps") or {}).get(clean_app_id(app)) or {}
@@ -383,6 +407,14 @@ def resolve_auto_snapshot(app: str, cfg: Optional[Dict[str, Any]] = None) -> boo
     if "auto_snapshot" in entry:
         return bool(entry.get("auto_snapshot"))
     return bool((cfg.get("save") or {}).get("auto_snapshot", True))
+
+
+def resolve_auto_share(app: str, cfg: Optional[Dict[str, Any]] = None) -> bool:
+    cfg = cfg or load_config()
+    entry = (cfg.get("apps") or {}).get(clean_app_id(app)) or {}
+    if "auto_share" in entry:
+        return bool(entry.get("auto_share"))
+    return bool((cfg.get("save") or {}).get("auto_share", False))
 
 
 def _safe_name(name: str, fallback: str = "export") -> str:
@@ -528,9 +560,15 @@ def write_snapshot(
     payload.setdefault("version", 1)
     payload.setdefault("app", app)
     payload.setdefault("taken_at", now_iso())
-    payload.setdefault("label", label or "manual")
+    # The explicit label wins over whatever the page embedded in its state:
+    # the file name is derived from it, and both must agree.
+    resolved_label = str(label or payload.get("label") or "manual")
+    payload["label"] = resolved_label
     payload["saved_at"] = now_iso()
-    name = "%s-%s.omm-snapshot.json" % (datetime.now().strftime("%Y%m%d-%H%M%S"), _snapshot_label(label))
+    name = "%s-%s.omm-snapshot.json" % (
+        datetime.now().strftime("%Y%m%d-%H%M%S"),
+        _snapshot_label(resolved_label),
+    )
     target = folder / name
     if target.exists():
         target = folder / ("%s-%s.omm-snapshot.json" % (
@@ -684,6 +722,87 @@ def _sort_stamp(value: str) -> float:
         return float(text)
     except ValueError:
         return 0.0
+
+
+TEXT_EXTS = {
+    ".md", ".markdown", ".txt", ".csv", ".tsv", ".tex", ".json", ".log",
+    ".html", ".css", ".js", ".ts", ".yml", ".yaml", ".xml", ".srt", ".vtt",
+}
+MAX_SEARCH_BYTES = 2 * 1024 * 1024
+
+
+def _snippet(text: str, lower_text: str, needle: str, around: int = 60) -> str:
+    """One line of context around the first match, trimmed to ~2*around chars."""
+    pos = lower_text.find(needle)
+    if pos < 0:
+        return ""
+    line_start = text.rfind("\n", 0, pos) + 1
+    line_end = text.find("\n", pos)
+    if line_end < 0:
+        line_end = len(text)
+    line = text[line_start:line_end].strip()
+    if len(line) <= around * 2:
+        return line
+    offset = pos - line_start
+    left = max(0, offset - around)
+    right = min(len(line), offset + len(needle) + around)
+    return ("…" if left > 0 else "") + line[left:right].strip() + ("…" if right < len(line) else "")
+
+
+def search_file_contents(
+    app: str, query: str, all_apps: bool = True, limit: int = 30
+) -> Dict[str, Any]:
+    """Search inside saved text files (not just their names).
+
+    Only reasonably small text files are opened, and the scan stops as soon as
+    ``limit`` matches are found, so a huge archive cannot stall the request.
+    """
+    needle = query.strip().lower()
+    if not needle:
+        return {"ok": True, "query": "", "matches": [], "scanned": 0, "truncated": False}
+    archive = list_archive(app, all_apps=all_apps, limit=500)
+    matches: list[Dict[str, Any]] = []
+    scanned = 0
+    truncated = False
+    for entry in archive.get("entries", []):
+        if len(matches) >= limit:
+            truncated = True
+            break
+        if entry.get("kind") != "file" or not entry.get("exists"):
+            continue
+        path = Path(str(entry.get("path") or ""))
+        if path.suffix.lower() not in TEXT_EXTS:
+            continue
+        try:
+            if path.stat().st_size > MAX_SEARCH_BYTES:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        scanned += 1
+        lower_text = text.lower()
+        count = lower_text.count(needle)
+        if not count:
+            continue
+        matches.append(
+            {
+                "app": entry.get("app"),
+                "app_name": entry.get("app_name"),
+                "name": entry.get("name") or path.name,
+                "title": entry.get("title") or entry.get("name") or path.name,
+                "path": str(path),
+                "mime": entry.get("mime") or "",
+                "count": count,
+                "snippet": _snippet(text, lower_text, needle),
+            }
+        )
+    return {
+        "ok": True,
+        "query": needle,
+        "matches": matches,
+        "scanned": scanned,
+        "truncated": truncated,
+    }
 
 
 def list_archive(app: str, all_apps: bool = True, limit: int = 500) -> Dict[str, Any]:
@@ -840,6 +959,8 @@ def handle_get(
                 "save_path": str(resolve_save_dir(app, cfg)),
                 "mode": resolve_mode(app, cfg),
                 "auto_snapshot": resolve_auto_snapshot(app, cfg),
+                "auto_share": resolve_auto_share(app, cfg),
+                "share_path": str(resolve_share_dir(cfg)),
             },
         )
     if path == "/__omm/fs/config":
@@ -853,11 +974,24 @@ def handle_get(
                 "save_path": str(resolve_save_dir(app, cfg)),
                 "mode": resolve_mode(app, cfg),
                 "auto_snapshot": resolve_auto_snapshot(app, cfg),
+                "auto_share": resolve_auto_share(app, cfg),
+                "share_path": str(resolve_share_dir(cfg)),
                 "default_path": str(default_save_path()),
             },
         )
     if path == "/__omm/fs/shared":
         return _json(200, list_shared())
+    if path == "/__omm/fs/search":
+        all_apps = (query.get("all") or ["1"])[0] != "0"
+        raw_query = (query.get("q") or [""])[0].strip()
+        try:
+            limit = int((query.get("limit") or ["30"])[0])
+        except ValueError:
+            limit = 30
+        limit = max(1, min(limit, 60))
+        return _json(
+            200, search_file_contents(app, raw_query, all_apps=all_apps, limit=limit)
+        )
     if path == "/__omm/fs/archive":
         all_apps = (query.get("all") or ["1"])[0] != "0"
         try:
@@ -955,11 +1089,166 @@ def handle_post(
         return _error(500, str(exc))
 
 
+def _all_app_ids(cfg: Dict[str, Any]) -> list[str]:
+    return sorted(set(list(APP_NAMES) + list((cfg.get("apps") or {}).keys())))
+
+
+def _move_registered_files(
+    app: str,
+    old_dir: Path,
+    target: Path,
+    cfg: Dict[str, Any],
+    mapping: Dict[str, str],
+) -> None:
+    """Move only the files this app registered (used for shared/unsafe dirs)."""
+    entry = (cfg.get("apps") or {}).get(app) or {}
+    for item in (entry.get("resources") or {}).values():
+        if not isinstance(item, dict):
+            continue
+        raw = str(item.get("path") or "").strip()
+        if not raw:
+            continue
+        path = Path(raw)
+        if not path.is_file() or not omm_fs.is_inside(path, old_dir):
+            continue
+        final = omm_fs.unique_target(target, path.name)
+        shutil.move(str(path), str(final))
+        mapping[str(path.resolve())] = str(final)
+
+
+def migrate_save_paths(
+    apps: list[str],
+    target: Path,
+    cfg: Dict[str, Any],
+    whole_tree: bool = False,
+) -> Dict[str, Any]:
+    """Move save data to a new directory and report what happened.
+
+    ``whole_tree`` is used when every product is being redirected (scope=all):
+    the complete old folder is merged into the new one, including files that
+    were never registered in ``shared.json``.  A per-product change moves only
+    that product's registered files and its ``snapshots/<app>`` folder, so a
+    directory shared with another product is never emptied under its feet.
+    """
+    target = omm_fs.resolve(target)
+    old_dirs: list[Path] = []
+    for app in apps:
+        old = omm_fs.resolve(resolve_save_dir(app, cfg))
+        if old != target and old not in old_dirs:
+            old_dirs.append(old)
+    for old in old_dirs:
+        if old.is_dir() and omm_fs.is_inside(target, old):
+            raise ValueError("新目录不能位于旧目录内部：%s" % old)
+    target.mkdir(parents=True, exist_ok=True)
+
+    mapping: Dict[str, str] = {}
+    leftovers: list[str] = []
+    deleted: list[str] = []
+    try:
+        for old in old_dirs:
+            existed = old.is_dir()
+            if not existed:
+                continue
+            users = [
+                app
+                for app in apps
+                if omm_fs.resolve(resolve_save_dir(app, cfg)) == old
+            ]
+            all_users = [
+                item
+                for item in _all_app_ids(cfg)
+                if omm_fs.resolve(resolve_save_dir(item, cfg)) == old
+            ]
+            shared = any(item not in apps for item in all_users)
+            # If the folder is exclusive to the products being moved, take
+            # everything (including unregistered files) and delete the folder.
+            bulk = (whole_tree or not shared) and not omm_fs.unsafe_bulk_root(old)
+            if bulk:
+                omm_fs.merge_tree(old, target, mapping)
+            else:
+                for app in users:
+                    _move_registered_files(app, old, target, cfg, mapping)
+                    snap = old / SNAPSHOT_DIRNAME / app
+                    if snap.is_dir():
+                        omm_fs.merge_tree(snap, target / SNAPSHOT_DIRNAME / app, mapping)
+            # Remove the source completely, including every empty folder.
+            if not omm_fs.remove_empty_tree(old) and bulk:
+                leftovers.append(str(old))
+            elif existed and not old.is_dir():
+                deleted.append(str(old))
+    except Exception:
+        omm_fs.rollback(mapping)
+        raise
+
+    updates: Dict[str, Any] = {}
+    for app_id, entry in (cfg.get("apps") or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        resources: Dict[str, Any] = {}
+        for key, item in (entry.get("resources") or {}).items():
+            if not isinstance(item, dict):
+                continue
+            raw = str(item.get("path") or "").strip()
+            if not raw:
+                continue
+            old_key = str(Path(raw).resolve())
+            if old_key in mapping:
+                new_path = mapping[old_key]
+                resources[key] = {
+                    "path": new_path,
+                    "file": Path(new_path).name,
+                }
+        patch: Dict[str, Any] = {}
+        if resources:
+            patch["resources"] = resources
+        raw_last = str(entry.get("last_snapshot") or "").strip()
+        if raw_last:
+            old_key = str(Path(raw_last).resolve())
+            if old_key in mapping:
+                patch["last_snapshot"] = mapping[old_key]
+        if patch:
+            updates[app_id] = patch
+
+    return {
+        "moved": len(mapping),
+        "old": deleted,
+        "leftover": leftovers,
+        "partial": any(item.is_dir() for item in old_dirs),
+        "updates": updates,
+    }
+
+
+def migrate_share_path(old: Path, new: Path) -> Dict[str, Any]:
+    """Move the entire share space (index, files, records, inbox, policy)."""
+    old = omm_fs.resolve(old)
+    new = omm_fs.resolve(new)
+    if old == new or not old.is_dir():
+        return {"moved": 0, "old": "", "new": str(new), "leftover": []}
+    if omm_fs.is_inside(new, old):
+        raise ValueError("新共享目录不能位于旧目录内部")
+    mapping: Dict[str, str] = {}
+    try:
+        new.mkdir(parents=True, exist_ok=True)
+        omm_fs.merge_tree(old, new, mapping)
+    except Exception:
+        omm_fs.rollback(mapping)
+        raise
+    leftover = [] if omm_fs.remove_empty_tree(old) else [str(old)]
+    return {
+        "moved": len(mapping),
+        "old": str(old),
+        "new": str(new),
+        "leftover": leftover,
+    }
+
+
 def _update_config(app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     scope = str(payload.get("scope") or "app").lower()
     path_raw = payload.get("path")
+    share_raw = payload.get("share_path")
     mode = str(payload.get("mode") or "").strip().lower()
     auto = payload.get("auto_snapshot")
+    share = payload.get("auto_share")
     cfg = load_config()
     target_path: Optional[Path] = None
     if path_raw is not None:
@@ -967,7 +1256,41 @@ def _update_config(app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         target_path = Path(
             os.path.expandvars(os.path.expanduser(text or str(default_save_path())))
         )
-        target_path.mkdir(parents=True, exist_ok=True)
+        if target_path.exists() and not target_path.is_dir():
+            raise ValueError("目标路径已存在而且是文件：%s" % target_path)
+
+    migration: Optional[Dict[str, Any]] = None
+    if target_path is not None:
+        affected = _all_app_ids(cfg) if scope == "all" else [app]
+        olds = {omm_fs.resolve(resolve_save_dir(item, cfg)) for item in affected}
+        if any(old != omm_fs.resolve(target_path) for old in olds):
+            migration = migrate_save_paths(
+                affected, target_path, cfg, whole_tree=(scope == "all")
+            )
+
+    share_target: Optional[Path] = None
+    share_migration: Optional[Dict[str, Any]] = None
+    if share_raw is not None:
+        text = str(share_raw).strip()
+        share_target = (
+            Path(os.path.expandvars(os.path.expanduser(text)))
+            if text
+            else shared_root() / "share"
+        )
+        if share_target.exists() and not share_target.is_dir():
+            raise ValueError("共享目录已存在而且是文件：%s" % share_target)
+        if omm_fs.unsafe_bulk_root(share_target):
+            raise ValueError("请选择一个专用文件夹作为共享目录，不要使用系统或用户根目录")
+        save_dirs = {omm_fs.resolve(resolve_save_dir(item, cfg)) for item in _all_app_ids(cfg)}
+        if target_path is not None:
+            save_dirs.add(omm_fs.resolve(target_path))
+        for save_dir in save_dirs:
+            if omm_fs.is_nested(share_target, save_dir):
+                raise ValueError("共享目录不能与保存目录重叠：%s" % save_dir)
+        share_target.mkdir(parents=True, exist_ok=True)
+        old_share = resolve_share_dir(cfg)
+        if omm_fs.resolve(old_share) != omm_fs.resolve(share_target):
+            share_migration = migrate_share_path(old_share, share_target)
 
     def update(cfg_in: Dict[str, Any]) -> None:
         if target_path is not None:
@@ -994,14 +1317,54 @@ def _update_config(app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                         item["auto_snapshot"] = bool(auto)
             else:
                 app_entry(cfg_in, app)["auto_snapshot"] = bool(auto)
+        if share is not None:
+            if scope == "all":
+                cfg_in.setdefault("save", {})["auto_share"] = bool(share)
+                for item in (cfg_in.get("apps") or {}).values():
+                    if isinstance(item, dict):
+                        item["auto_share"] = bool(share)
+            else:
+                app_entry(cfg_in, app)["auto_share"] = bool(share)
+        if share_target is not None:
+            cfg_in.setdefault("share", {})["path"] = (
+                "" if omm_fs.resolve(share_target) == omm_fs.resolve(shared_root() / "share") else str(share_target)
+            )
+        if migration:
+            for app_id, patch in (migration.get("updates") or {}).items():
+                entry = app_entry(cfg_in, app_id)
+                for key, value in (patch.get("resources") or {}).items():
+                    if key in entry["resources"]:
+                        entry["resources"][key].update(value)
+                if patch.get("last_snapshot"):
+                    entry["last_snapshot"] = patch["last_snapshot"]
+            cfg_in["last_migration"] = {
+                "at": now_iso(),
+                "save": {
+                    "moved": migration.get("moved", 0),
+                    "old": migration.get("old", []),
+                    "leftover": migration.get("leftover", []),
+                },
+            }
         app_entry(cfg_in, app)["updated"] = now_iso()
 
     cfg = mutate_config(update)
-    return {
+    result = {
         "ok": True,
         "app": app,
         "config": cfg,
         "save_path": str(resolve_save_dir(app, cfg)),
         "mode": resolve_mode(app, cfg),
         "auto_snapshot": resolve_auto_snapshot(app, cfg),
+        "auto_share": resolve_auto_share(app, cfg),
+        "share_path": str(resolve_share_dir(cfg)),
     }
+    if migration:
+        result["migrated_save"] = {
+            "moved": migration.get("moved", 0),
+            "old": migration.get("old", []),
+            "leftover": migration.get("leftover", []),
+            "partial": migration.get("partial", False),
+        }
+    if share_migration:
+        result["migrated_share"] = share_migration
+    return result

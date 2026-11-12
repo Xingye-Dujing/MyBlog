@@ -23,6 +23,7 @@ import os
 import sys
 import threading
 import time
+import webbrowser
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -34,6 +35,7 @@ from omm_launcher import (
     port_open,
     resource_root,
 )
+from plugin_specs import VERSION
 from plugin_manager import (
     PluginError,
     PluginRegistry,
@@ -89,6 +91,21 @@ class HubServer:
         self._catalog = None
         self._catalog_url = ""
         self._catalog_at = 0.0
+        self._storage_cache = (0.0, None)
+        self._sync_share()
+
+    def _sync_share(self) -> None:
+        """Seed the share policy from the installed plugin manifests.
+
+        The merge is additive and never re-enables a channel the user turned
+        off, so it is safe to run after every install / update / removal.
+        """
+        try:
+            from omm_share import sync_policy
+
+            sync_policy(self.registry.list())
+        except Exception:
+            pass
 
     # ------------------------------------------------------------- ports
     def _load_ports(self) -> dict:
@@ -268,6 +285,7 @@ class HubServer:
             self.user_plugin_root = new_root
             self.registry.user_root = new_root
             self.registry.reload()
+            self._sync_share()
             self.ports_path = new_root / "ports.json"
             self.ports = self._load_ports()
             return {
@@ -276,6 +294,7 @@ class HubServer:
                 "plugin_dir": str(new_root),
                 "old_plugin_dir": result.get("old", str(old_root)),
                 "moved": result.get("moved", 0),
+                "leftover": bool(result.get("leftover")),
                 "plugins": self.list_plugins()["plugins"],
             }
 
@@ -301,11 +320,11 @@ class HubServer:
             for item in self.registry.list():
                 plugins.append(
                     {
-                        key: item[key]
+                        key: item.get(key)
                         for key in (
                             "id", "name", "version", "description", "glyph",
                             "entry", "runtime", "port", "order", "author",
-                            "source",
+                            "source", "share",
                         )
                     }
                 )
@@ -362,6 +381,7 @@ class HubServer:
         # Restart on the new files right away: the user should be able to
         # click the plugin right after the update without restarting the hub.
         started = self.restart(plugin_id)
+        self._sync_share()
         return {
             "ok": True,
             "plugin": plugin,
@@ -375,6 +395,7 @@ class HubServer:
             plugin = self.registry.install_zip(payload, imported=True)
             self.stop(plugin["id"])
         started = self.restart(plugin["id"])
+        self._sync_share()
         return {
             "ok": True,
             "plugin": plugin,
@@ -386,7 +407,147 @@ class HubServer:
         with self.lock:
             self.stop(plugin_id)
             fallback = self.registry.remove(plugin_id)
+            self._sync_share()
             return {"ok": True, "bundled_remains": fallback}
+
+
+    # ------------------------------------------------------------- storage
+    def _dir_usage(self, path: Path, skip=()) -> dict:
+        """Recursive size with a file cap, so a corrupt folder cannot hang the UI."""
+        total = 0
+        files = 0
+        if not path.is_dir():
+            return {"bytes": 0, "files": 0}
+        for root, dirs, names in os.walk(str(path), followlinks=False):
+            if Path(root) == path and skip:
+                dirs[:] = [name for name in dirs if name not in skip]
+            for name in names:
+                try:
+                    total += os.path.getsize(os.path.join(root, name))
+                    files += 1
+                except OSError:
+                    pass
+                if files >= 200000:
+                    return {"bytes": total, "files": files, "truncated": True}
+        return {"bytes": total, "files": files}
+
+    def storage(self) -> dict:
+        import omm_shared
+
+        now = time.time()
+        cached_at, cached = self._storage_cache
+        if cached and now - cached_at < 5:
+            return cached
+        cfg = omm_shared.load_config()
+        save_dirs = []
+        for app in sorted(set(list(omm_shared.APP_NAMES) + list((cfg.get("apps") or {}).keys()))):
+            path = omm_shared.resolve_save_dir(app, cfg).resolve()
+            if path not in save_dirs:
+                save_dirs.append(path)
+        save_bytes = 0
+        save_files = 0
+        snap_bytes = 0
+        snap_files = 0
+        for path in save_dirs:
+            usage = self._dir_usage(path, skip={omm_shared.SNAPSHOT_DIRNAME})
+            save_bytes += usage.get("bytes", 0)
+            save_files += usage.get("files", 0)
+            snap = self._dir_usage(path / omm_shared.SNAPSHOT_DIRNAME)
+            snap_bytes += snap.get("bytes", 0)
+            snap_files += snap.get("files", 0)
+        share = self._dir_usage(omm_shared.resolve_share_dir(cfg))
+        plugins = self._dir_usage(self.user_plugin_root)
+        payload = {
+            "ok": True,
+            "version": VERSION,
+            "save": {"bytes": save_bytes, "files": save_files},
+            "snapshots": {"bytes": snap_bytes, "files": snap_files},
+            "share": share,
+            "plugins": plugins,
+            "total": {"bytes": save_bytes + snap_bytes + share["bytes"] + plugins["bytes"]},
+            "paths": {
+                "save": str(save_dirs[0]) if save_dirs else "",
+                "share": str(omm_shared.resolve_share_dir(cfg)),
+                "plugins": str(self.user_plugin_root),
+            },
+        }
+        self._storage_cache = (now, payload)
+        return payload
+
+    def open_storage(self, kind: str) -> dict:
+        import subprocess
+
+        import omm_shared
+
+        cfg = omm_shared.load_config()
+        if kind == "share":
+            path = omm_shared.resolve_share_dir(cfg)
+        elif kind == "plugins":
+            path = self.user_plugin_root
+        else:
+            path = Path(str((cfg.get("save") or {}).get("path") or omm_shared.default_save_path()))
+        path.mkdir(parents=True, exist_ok=True)
+        try:
+            if os.name == "nt":
+                os.startfile(str(path))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc), "path": str(path)}
+        return {"ok": True, "path": str(path)}
+
+    def backup(self) -> dict:
+        import omm_shared
+        import omm_share
+
+        return {
+            "ok": True,
+            "schema": 1,
+            "version": VERSION,
+            "created": omm_shared.now_iso(),
+            "shared": omm_shared.load_config(),
+            "policy": omm_share.load_policy(),
+        }
+
+    def restore(self, payload: dict) -> dict:
+        """Restore settings + share policy.
+
+        Deliberately does not touch files, plugins or the share index: a settings
+        backup must never delete a user's data.  The current config is copied to
+        ``shared.backup-*.json`` before it is replaced.
+        """
+        import omm_shared
+        import omm_share
+
+        shared = payload.get("shared")
+        policy = payload.get("policy")
+        if not isinstance(shared, dict):
+            raise ValueError("备份里没有 shared 配置")
+        cfg = omm_shared._normalize_config(shared)
+        saved = omm_shared.backup_config()
+        with omm_shared.FileLock(omm_shared.lock_path()):
+            omm_shared._write_config(cfg)
+        policy_restored = False
+        if isinstance(policy, dict):
+            omm_share.save_policy(omm_share._normalize_policy(policy))
+            policy_restored = True
+        return {
+            "ok": True,
+            "backup": saved,
+            "shared": True,
+            "policy": policy_restored,
+            "share_path": str(omm_shared.resolve_share_dir(cfg)),
+        }
+
+    def open_window(self, app_id: str) -> dict:
+        info = self.ensure(app_id)
+        url = info.get("url") or ""
+        if not url:
+            raise KeyError("unknown plugin")
+        threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
+        return {"ok": True, "url": url}
 
 
 class HubHandler(ShellHandler):
@@ -409,9 +570,9 @@ class HubHandler(ShellHandler):
             raise PluginError("请求体过大")
         return self.rfile.read(length)
 
-    def _json_body(self) -> dict:
+    def _json_body(self, limit: int = 1024 * 1024) -> dict:
         try:
-            return json.loads(self._body(1024 * 1024).decode("utf-8"))
+            return json.loads(self._body(limit).decode("utf-8"))
         except Exception as exc:
             raise PluginError("请求格式无效") from exc
 
@@ -437,11 +598,28 @@ class HubHandler(ShellHandler):
                 refresh = (query.get("refresh") or ["0"])[0] == "1"
                 self._reply(200, self.hub.catalog(url=url, refresh=refresh))
                 return
+            if parsed.path == "/api/storage":
+                self._reply(200, self.hub.storage())
+                return
+            if parsed.path == "/api/storage/open":
+                query = parse_qs(parsed.query)
+                kind = (query.get("kind") or ["save"])[0]
+                self._reply(200, self.hub.open_storage(kind))
+                return
+            if parsed.path == "/api/backup":
+                self._reply(200, self.hub.backup())
+                return
+            if parsed.path == "/api/window":
+                query = parse_qs(parsed.query)
+                app_id = (query.get("app") or [""])[0]
+                self._reply(200, self.hub.open_window(app_id))
+                return
             if parsed.path == "/api/health":
                 self._reply(
                     200,
                     {
                         "ok": True,
+                        "version": VERSION,
                         "apps": sorted(self.hub.servers),
                         "plugins": [p["id"] for p in self.hub.registry.list()],
                         "plugin_dir": str(self.hub.user_plugin_root),
@@ -465,6 +643,10 @@ class HubHandler(ShellHandler):
             if self.handle_desktop_post():
                 return
             if self.handle_update_post():
+                return
+            if parsed.path == "/api/restore":
+                payload = self._json_body(8 * 1024 * 1024)
+                self._reply(200, self.hub.restore(payload))
                 return
             if parsed.path == "/api/plugins/install":
                 payload = self._json_body()
