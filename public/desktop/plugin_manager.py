@@ -231,8 +231,18 @@ class PluginRegistry:
             if not child.is_dir() or child.name.startswith("."):
                 continue
             plugin = load_plugin_dir(child, "user")
-            if plugin:
-                found[plugin["id"]] = plugin
+            if not plugin:
+                continue
+            bundled = found.get(plugin["id"])
+            # A copy installed by the user normally wins.  But a new hub
+            # release ships new built-in versions, and an older user copy
+            # (installed before the update) must not keep shadowing them —
+            # otherwise updating the hub would never update the products.
+            if bundled is not None and _version_key(
+                bundled.get("version")
+            ) > _version_key(plugin.get("version")):
+                continue
+            found[plugin["id"]] = plugin
         self._plugins = found
 
     def list(self) -> List[Dict[str, Any]]:
