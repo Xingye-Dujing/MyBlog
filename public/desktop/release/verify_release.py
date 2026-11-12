@@ -31,7 +31,7 @@ def sha256(path: Path) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="verify an OMM-ZEN release")
-    parser.add_argument("--tag", default="v1.0.6")
+    parser.add_argument("--tag", default="v1.0.7")
     parser.add_argument("--catalog", default=str(DIST / "catalog.json"))
     args = parser.parse_args()
 
