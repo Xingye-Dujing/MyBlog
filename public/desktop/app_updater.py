@@ -417,7 +417,7 @@ class ShellHandler(SimpleHTTPRequestHandler):
     def handle_update_get(self) -> bool:
         path = urllib.parse.urlsplit(self.path).path
         if path == UPDATE_JS_PATH:
-            body = UPDATE_JS.encode("utf-8")
+            body = rendered_update_js().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -521,7 +521,8 @@ UPDATE_JS = r"""
       'max-width:330px', 'padding:14px 16px',
       'background:rgba(255,255,255,.97)', 'color:#26231f',
       'border:1px solid #26231f', 'box-shadow:0 10px 30px rgba(38,35,31,.18)',
-      'font-family:"Literata","SimSun",serif', 'font-size:13px', 'line-height:1.55'
+      'font-family:"Literata","SimSun",serif', 'font-size:13px', 'line-height:1.55',
+      'border-radius:__OMM_RADIUS__px'
     ].join(';');
 
     var title = document.createElement('div');
@@ -547,6 +548,7 @@ UPDATE_JS = r"""
       b.style.cssText = [
         'padding:4px 12px', 'font:inherit', 'cursor:pointer',
         'border:1px solid #26231f',
+        'border-radius:__OMM_BTN_RADIUS__px',
         primary ? 'background:#f2eee7;color:#26231f' : 'background:#fff;color:#26231f'
       ].join(';');
       return b;
@@ -608,3 +610,14 @@ UPDATE_JS = r"""
   window.setInterval(check, 4 * 60 * 60 * 1000);
 })();
 """
+
+
+def rendered_update_js() -> str:
+    """UPDATE_JS with the hub corner-radius setting applied (defaults to 0)."""
+    try:
+        radius = int(omm_shared.get_appearance().get("radius") or 0)
+    except Exception:  # noqa: BLE001 - never break the update banner on this
+        radius = 0
+    return UPDATE_JS.replace("__OMM_RADIUS__", str(radius)).replace(
+        "__OMM_BTN_RADIUS__", str(min(radius, 6))
+    )

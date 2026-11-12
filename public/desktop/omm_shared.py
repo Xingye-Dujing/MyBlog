@@ -222,8 +222,49 @@ def _normalize_config(raw: Any) -> Dict[str, Any]:
         except (TypeError, ValueError):
             continue
         zoom[clean_app_id(key)] = max(0.3, min(3.0, factor))
-    cfg["ui"] = {"zoom": zoom}
+    appearance_raw = ui.get("appearance") if isinstance(ui.get("appearance"), dict) else {}
+    cfg["ui"] = {"zoom": zoom, "appearance": _clean_appearance(appearance_raw)}
     return cfg
+
+
+APPEARANCE_RADII = (0, 4, 8, 12, 16)
+APPEARANCE_THEMES = ("light", "dark", "system")
+
+
+def _clean_appearance(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep only the appearance fields the desktop shell understands."""
+    clean: Dict[str, Any] = {}
+    try:
+        radius = int(raw.get("radius"))
+    except (TypeError, ValueError):
+        radius = 0
+    clean["radius"] = radius if radius in APPEARANCE_RADII else 0
+    theme = str(raw.get("theme") or "").strip().lower()
+    if theme in APPEARANCE_THEMES:
+        clean["theme"] = theme
+    return clean
+
+
+def get_appearance() -> Dict[str, Any]:
+    cfg = load_config()
+    raw = (cfg.get("ui") or {}).get("appearance")
+    return dict(raw) if isinstance(raw, dict) else {"radius": 0}
+
+
+def set_appearance(values: Dict[str, Any]) -> Dict[str, Any]:
+    incoming = values if isinstance(values, dict) else {}
+
+    def update(cfg: Dict[str, Any]) -> None:
+        ui = cfg.setdefault("ui", {})
+        current = ui.get("appearance") if isinstance(ui.get("appearance"), dict) else {}
+        merged = dict(current)
+        for key in ("radius", "theme"):
+            if key in incoming:
+                merged[key] = incoming[key]
+        ui["appearance"] = _clean_appearance(merged)
+
+    mutate_config(update)
+    return get_appearance()
 
 
 class FileLock:
@@ -1020,6 +1061,8 @@ def handle_get(
         except Exception as exc:  # noqa: BLE001
             return _error(400, str(exc))
         return _json(200, {"ok": True, "snapshot": snapshot})
+    if path == "/__omm/fs/appearance":
+        return _json(200, {"ok": True, "appearance": get_appearance()})
     if path == "/__omm/fs/file":
         raw = (query.get("path") or [""])[0]
         try:
@@ -1082,6 +1125,8 @@ def handle_post(
             return _json(200, delete_snapshot(str(payload.get("path") or "")))
         if path == "/__omm/fs/open":
             return _json(200, open_folder(payload_app))
+        if path == "/__omm/fs/appearance":
+            return _json(200, {"ok": True, "appearance": set_appearance(payload)})
         return _error(404, "unknown endpoint")
     except ValueError as exc:
         return _error(400, str(exc))

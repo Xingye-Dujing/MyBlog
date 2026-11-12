@@ -1273,6 +1273,18 @@
     } catch (e) {
       /* ignore */
     }
+    // Mirror the corner radius (and theme) into shared.json so native
+    // surfaces — the update banner, tray menus, dialogs — follow the same
+    // appearance settings.  Silently ignored in plain-browser mode.
+    try {
+      fetch('/__omm/fs/appearance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ radius: hubAppearance.radius, theme: hubAppearance.theme }),
+      }).catch(function () {});
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   var darkMedia = window.matchMedia

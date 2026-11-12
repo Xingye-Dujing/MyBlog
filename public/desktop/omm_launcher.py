@@ -300,6 +300,39 @@ def icon_file(root: Path) -> Path:
     return root / "icon.ico"
 
 
+def prepared_icon(root: Path, app_id: str) -> Path | None:
+    """A guaranteed-valid .ico for System.Drawing / the tray.
+
+    The bundled ``icon.ico`` may be a PNG that was merely renamed (repo
+    sources); WinForms loads it through System.Drawing and a bad file kills
+    the whole CLR thread with an unhandled ArgumentException.  Re-encoding
+    through Pillow produces a real multi-size ICO; if Pillow is missing or
+    the source cannot be read we return None and the window keeps the
+    default executable icon instead of crashing.
+    """
+    src = icon_file(root)
+    if not src.is_file():
+        return None
+    target = data_root(app_id) / "window-icon.ico"
+    try:
+        from PIL import Image, ImageOps  # type: ignore
+
+        img = Image.open(src).convert("RGBA")
+        side = max(img.size)
+        if side < 1:
+            return None
+        img = ImageOps.pad(img, (side, side), color=(0, 0, 0, 0))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        img.save(
+            target,
+            format="ICO",
+            sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+        )
+        return target
+    except Exception:
+        return None
+
+
 def optional_extras(window, app_id: str, icon_path: Path, enabled: bool = True) -> dict:
     """Tray icon + global hotkey when the optional dependencies exist.
 
@@ -428,8 +461,8 @@ def run(app_id: str, debug: bool = False, extras: bool = True) -> None:
     except Exception:
         pass
 
-    # Windows uses a generated .ico; macOS takes its icon from the .app bundle.
-    icon = root / ("app.icns" if IS_MACOS else "app.ico")
+    # Windows uses the re-encoded .ico (see prepared_icon); macOS takes its
+    # icon from the .app bundle.
     remember_geometry(window, app_id)
     optional_extras(window, app_id, icon_file(root), enabled=extras)
     start_options = {
@@ -437,12 +470,10 @@ def run(app_id: str, debug: bool = False, extras: bool = True) -> None:
         "private_mode": False,
         "storage_path": str(data_root(app_id)),
     }
-    if not IS_MACOS and icon.is_file():
-        start_options["icon"] = str(icon)
-    elif not IS_MACOS and not icon.is_file():
-        fallback = root / "icon.ico"
-        if fallback.is_file():
-            start_options["icon"] = str(fallback)
+    if IS_WINDOWS:
+        icon = prepared_icon(root, app_id)
+        if icon:
+            start_options["icon"] = str(icon)
     webview.start(**start_options)
 
 
@@ -483,23 +514,21 @@ def run_hub(
         text_select=True,
         zoomable=True,
     )
-    icon = root / ("app.icns" if IS_MACOS else "app.ico")
+    try:
+        window.events.shown += _present_maximized
+    except Exception:
+        pass
+
+    optional_extras(window, "hub", icon_file(root), enabled=extras)
     start_options = {
         "debug": debug,
         "private_mode": False,
         "storage_path": str(data_root("hub")),
     }
-    if not IS_MACOS and icon.is_file():
-        start_options["icon"] = str(icon)
-    elif not IS_MACOS and not icon.is_file():
-        fallback = root / "icon.ico"
-        if fallback.is_file():
-            start_options["icon"] = str(fallback)
-
-    try:
-        window.events.shown += _present_maximized
-    except Exception:
-        pass
+    if IS_WINDOWS:
+        icon = prepared_icon(root, "hub")
+        if icon:
+            start_options["icon"] = str(icon)
 
     webview.start(**start_options)
 
