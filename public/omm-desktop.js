@@ -17,6 +17,16 @@
     return ''
   })()
 
+  /* Products embedded in the hub shell must not draw their own floating
+     archive button: the hub keeps one archive entry in its top bar. */
+  var EMBEDDED = (function () {
+    try {
+      return new URLSearchParams(window.location.search).get('omm_embed') === '1'
+    } catch (e) {
+      return /[?&]omm_embed=1(?:&|$)/.test(window.location.search)
+    }
+  })()
+
   var state = {
     enabled: false,
     ready: false,
@@ -460,8 +470,7 @@
       return request('/save', { method: 'POST', body: payload }).then(function (result) {
         var extra = result.mode === 'versioned' ? '（历史版本）' : ''
         toast('已保存 ' + result.filename + extra + '\n' + result.path)
-        refreshHistory()
-        refreshShared()
+        refreshArchive()
         return result
       })
     }).catch(function (err) {
@@ -484,7 +493,7 @@
     }).then(function (result) {
       toast('快照已创建：' + result.name)
       state.lastSnapshotAt = Date.now()
-      refreshHistory()
+      refreshArchive()
       return result
     }).catch(function (err) {
       toast('快照失败：' + (err && err.message ? err.message : err), 'error')
@@ -631,36 +640,46 @@
   // --------------------------------------------------------------------- UI
 
   function panelCss() {
+    /* --omm-radius is inherited from the host page, so the hub's rounded-corner
+       setting controls the archive panel and every border inside it. */
     return [
-      ':host{all:initial}',
+      /* --radius is inherited from the host document, so the hub's rounded
+         corner setting also covers the archive panel and all of its borders. */
+      ':host{all:initial;--omm-radius:var(--radius,0px)}',
       '*{box-sizing:border-box}',
       '.omm-btn{position:fixed;left:16px;bottom:84px;z-index:2147482100;pointer-events:auto;',
       '  display:flex;align-items:center;gap:4px;border:1px solid #26231f;background:rgba(255,255,255,.96);',
       '  color:#26231f;font:600 11px/1 "Literata","Songti SC","SimSun",serif;letter-spacing:.04em;',
-      '  padding:5px 7px;cursor:pointer;box-shadow:0 3px 10px rgba(38,35,31,.10)}',
+      '  padding:5px 7px;cursor:pointer;box-shadow:0 3px 10px rgba(38,35,31,.10);',
+      '  border-radius:var(--omm-radius,0px)}',
       '.omm-btn:hover{background:#f2eee7;border-color:#26231f;color:#26231f}',
       '.omm-panel{position:fixed;left:16px;bottom:132px;z-index:2147482101;pointer-events:auto;',
       '  width:min(580px,calc(100vw - 32px));max-height:min(72vh,720px);display:none;flex-direction:column;',
       '  background:rgba(255,255,255,.985);color:#26231f;border:1px solid #26231f;',
+      '  border-radius:var(--omm-radius,0px);',
       '  box-shadow:0 22px 60px rgba(38,35,31,.24);font:12px/1.55 "Literata","Songti SC","SimSun",serif}',
       '.omm-panel.open{display:flex}',
+      ':host([data-shell="hub"]) .omm-btn{display:none}',
+      ':host([data-embedded="1"]) .omm-btn{display:none}',
+      ':host([data-shell="hub"]) .omm-panel{left:auto;right:16px;bottom:auto;top:calc(var(--topbar,46px) + 8px);',
+      '  width:min(460px,calc(100vw - 32px));max-height:min(76vh,720px)}',
       '.omm-head{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-bottom:1px solid #d9d3c8}',
       '.omm-head b{font-size:14px;letter-spacing:.04em}',
-      '.omm-x{border:0;background:transparent;font-size:17px;cursor:pointer;color:#26231f;padding:0 4px}',
+      '.omm-x{border:0;background:transparent;font-size:17px;cursor:pointer;color:#26231f;padding:0 4px;border-radius:var(--omm-radius,0px)}',
       '.omm-tabs{display:flex;gap:2px;padding:7px 11px 0;border-bottom:1px solid #d9d3c8}',
-      '.omm-tabs button{border:0;background:transparent;font:inherit;padding:5px 9px;cursor:pointer;color:#6d6559;border-bottom:2px solid transparent}',
+      '.omm-tabs button{border:0;background:transparent;font:inherit;padding:5px 9px;cursor:pointer;color:#6d6559;border-bottom:2px solid transparent;border-radius:var(--omm-radius,0px) var(--omm-radius,0px) 0 0}',
       '.omm-tabs button[aria-selected="true"]{color:#26231f;border-color:#26231f;font-weight:700}',
       '.omm-body{padding:11px 13px 13px;overflow:auto;min-height:180px}',
       '.omm-pane{display:none}.omm-pane.active{display:block}',
       '.omm-label{display:block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#6d6559;margin:9px 0 4px}',
-      '.omm-input{width:100%;padding:7px 8px;border:1px solid #b9b1a3;background:#fff;font:inherit;color:#26231f}',
+      '.omm-input{width:100%;padding:7px 8px;border:1px solid #b9b1a3;background:#fff;font:inherit;color:#26231f;border-radius:var(--omm-radius,0px)}',
       '.omm-input:focus{outline:1px solid #26231f;border-color:#26231f}',
       '.omm-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:7px 0}',
       '.omm-row label{display:flex;align-items:center;gap:6px;cursor:pointer}',
       '.omm-row input[type="checkbox"],.omm-row input[type="radio"]{',
       '  -webkit-appearance:none;appearance:none;width:13px;height:13px;margin:0;flex:0 0 auto;',
       '  border:1px solid #26231f;background:#fff;position:relative;display:inline-block;',
-      '  vertical-align:-2px;cursor:pointer;accent-color:#26231f}',
+      '  vertical-align:-2px;cursor:pointer;accent-color:#26231f;border-radius:var(--omm-radius,0px)}',
       '.omm-row input[type="radio"]{border-radius:50%}',
       '.omm-row input[type="checkbox"]:checked,.omm-row input[type="radio"]:checked{background:#f2eee7}',
       '.omm-row input[type="checkbox"]:checked::after{content:"";position:absolute;left:3px;top:0;',
@@ -669,25 +688,26 @@
       '  width:5px;height:5px;border-radius:50%;background:#26231f}',
       '.omm-row input[type="checkbox"]:focus-visible,.omm-row input[type="radio"]:focus-visible{',
       '  outline:1px solid #26231f;outline-offset:2px}',
-      '.omm-primary,.omm-secondary{border:1px solid #26231f;font:inherit;font-size:11.5px;padding:5px 11px;cursor:pointer;background:#fff;color:#26231f}',
+      '.omm-primary,.omm-secondary{border:1px solid #26231f;font:inherit;font-size:11.5px;padding:5px 11px;cursor:pointer;background:#fff;color:#26231f;border-radius:var(--omm-radius,0px)}',
       '.omm-primary{background:#f2eee7}.omm-primary:hover,.omm-secondary:hover{background:#e8dfd1}',
       '.omm-primary:disabled,.omm-secondary:disabled{opacity:.45;cursor:default}',
       '.omm-note{color:#6d6559;font-size:11.5px;margin-top:6px;word-break:break-all}',
-      '.omm-list{border:1px solid #d9d3c8;margin-top:8px;max-height:320px;overflow:auto}',
+      '.omm-list{border:1px solid #d9d3c8;margin-top:8px;max-height:320px;overflow:auto;border-radius:var(--omm-radius,0px)}',
       '.omm-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 9px;border-bottom:1px solid #ece7de}',
       '.omm-item:last-child{border-bottom:0}',
       '.omm-item-main{min-width:0;flex:1}',
       '.omm-item b{display:block;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.omm-meta{color:#817767;font-size:11px;word-break:break-all}',
       '.omm-actions{display:flex;gap:4px;flex-shrink:0}',
-      '.omm-actions button{border:1px solid #bcb3a4;background:#fff;color:#26231f;font:inherit;font-size:11px;padding:3px 7px;cursor:pointer}',
+      '.omm-actions button{border:1px solid #bcb3a4;background:#fff;color:#26231f;font:inherit;font-size:11px;padding:3px 7px;cursor:pointer;border-radius:var(--omm-radius,0px)}',
       '.omm-actions button:hover{background:#f2eee7;color:#26231f;border-color:#26231f}',
       '.omm-actions button:disabled{opacity:.38;cursor:default;background:#fff;color:#26231f}',
       '.omm-actions button.danger:hover{background:#f7e4e1;border-color:#8f2f27;color:#8f2f27}',
       '.omm-empty{padding:24px 8px;text-align:center;color:#8a8172;font-size:12px}',
-      '.omm-badge{display:inline-block;border:1px solid #c9c1b3;padding:0 5px;margin-right:5px;font-size:10px;color:#6d6559}',
+      '.omm-badge{display:inline-block;border:1px solid #c9c1b3;padding:0 5px;margin-right:5px;font-size:10px;color:#6d6559;border-radius:var(--omm-radius,0px)}',
       '.omm-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);z-index:2147482200;pointer-events:none;',
       '  max-width:min(680px,calc(100vw - 40px));padding:8px 13px;background:#fffdf8;color:#26231f;border:1px solid #26231f;',
+      '  border-radius:var(--omm-radius,0px);',
       '  font:12px/1.5 "Literata","Songti SC","SimSun",serif;white-space:pre-wrap;opacity:0;transition:.18s}',
       '.omm-toast.show{opacity:1;transform:translate(-50%,0)}',
       '.omm-toast[data-kind="error"]{background:#fdf0ee;border-color:#8f2f27;color:#8f2f27}',
@@ -696,13 +716,12 @@
 
   function panelHtml() {
     return [
-      '<button class="omm-btn" id="omm-open" type="button" title="保存路径、历史快照与共享数据">▣ 存档</button>',
-      '<section class="omm-panel" id="omm-panel" role="dialog" aria-label="OMM-ZEN 存档与共享">',
-      '  <div class="omm-head"><b>存档 · 快照 · 共享</b><button class="omm-x" id="omm-close" type="button" aria-label="关闭">×</button></div>',
+      '<button class="omm-btn" id="omm-open" type="button" title="保存路径、快照与共享文件">▣ 存档</button>',
+      '<section class="omm-panel" id="omm-panel" role="dialog" aria-label="OMM-ZEN 存档">',
+      '  <div class="omm-head"><b>存档</b><button class="omm-x" id="omm-close" type="button" aria-label="关闭">×</button></div>',
       '  <div class="omm-tabs" role="tablist">',
       '    <button type="button" role="tab" data-pane="save" aria-selected="true">保存设置</button>',
-      '    <button type="button" role="tab" data-pane="history" aria-selected="false">历史快照</button>',
-      '    <button type="button" role="tab" data-pane="shared" aria-selected="false">共享数据</button>',
+      '    <button type="button" role="tab" data-pane="archive" aria-selected="false">存档记录</button>',
       '  </div>',
       '  <div class="omm-body">',
       '    <div class="omm-pane active" data-pane="save">',
@@ -714,20 +733,14 @@
       '      <div class="omm-row"><label><input type="checkbox" id="omm-auto" /> 保存时自动记录历史快照</label></div>',
       '      <div class="omm-row"><label><input type="checkbox" id="omm-all" /> 以上路径与保存方式应用到所有产品</label></div>',
       '      <div class="omm-row"><button class="omm-primary" id="omm-save-config" type="button">保存设置</button>',
-      '        <button class="omm-secondary" id="omm-open-folder" type="button">打开文件夹</button>',
-      '        <button class="omm-secondary" id="omm-snap-now" type="button">立即快照</button></div>',
-      '      <div class="omm-note">保存时文件会写入上面的目录；其他产品的“共享数据”页会自动发现这里的文件。</div>',
+      '        <button class="omm-secondary" id="omm-open-folder" type="button">打开文件夹</button></div>',
+      '      <div class="omm-note">文件与快照都会写进上面的目录。</div>',
       '    </div>',
-      '    <div class="omm-pane" data-pane="history">',
-      '      <div class="omm-row"><button class="omm-primary" id="omm-snap-2" type="button">立即创建快照</button>',
-      '        <label><input type="checkbox" id="omm-all-snaps" /> 显示所有产品</label>',
-      '        <button class="omm-secondary" id="omm-refresh-snaps" type="button">刷新</button></div>',
-      '      <div class="omm-list" id="omm-snap-list"><div class="omm-empty">读取中…</div></div>',
-      '    </div>',
-      '    <div class="omm-pane" data-pane="shared">',
-      '      <div class="omm-row"><button class="omm-secondary" id="omm-refresh-shared" type="button">刷新</button>',
-      '        <span class="omm-note">保存后自动登记，无需手动导出导入。</span></div>',
-      '      <div class="omm-list" id="omm-shared-list"><div class="omm-empty">读取中…</div></div>',
+      '    <div class="omm-pane" data-pane="archive">',
+      '      <div class="omm-row"><button class="omm-primary" id="omm-snap-now" type="button">立即创建快照</button>',
+      '        <label><input type="checkbox" id="omm-all-snaps" checked /> 显示所有产品</label>',
+      '        <button class="omm-secondary" id="omm-refresh-archive" type="button">刷新</button></div>',
+      '      <div class="omm-list" id="omm-archive-list"><div class="omm-empty">读取中…</div></div>',
       '    </div>',
       '  </div>',
       '</section>',
@@ -747,8 +760,7 @@
     state.shadow.querySelectorAll('.omm-pane').forEach(function (pane) {
       pane.classList.toggle('active', pane.dataset.pane === name)
     })
-    if (name === 'history') refreshHistory()
-    if (name === 'shared') refreshShared()
+    if (name === 'archive') refreshArchive()
   }
 
   function openPanel() {
@@ -764,7 +776,7 @@
     var auto = el('omm-auto')
     if (auto) auto.checked = !!state.autoSnapshot
     setPane('save')
-    refreshHistory()
+    refreshArchive()
   }
 
   function closePanel() {
@@ -772,139 +784,166 @@
     if (panel) panel.classList.remove('open')
   }
 
-  function refreshHistory() {
+  /* One list for everything that was archived: saved documents ("file") and
+     captured application states ("snapshot").  The old build showed the same
+     records in two panels with two nearly identical renderers. */
+  function refreshArchive() {
     if (!state.enabled || !state.shadow) return
-    var list = el('omm-snap-list')
+    var list = el('omm-archive-list')
     if (!list) return
     var all = el('omm-all-snaps') && el('omm-all-snaps').checked
-    request('/snapshots', {}, { app: APP_ID, all: all ? '1' : '0' }).then(function (data) {
-      var snaps = (data && data.snapshots) || []
+    /* The hub manages every product, so it always lists them all. */
+    if (state.shell === 'hub') all = true
+    request('/archive', {}, { app: APP_ID, all: all ? '1' : '0' }).then(function (data) {
+      var entries = (data && data.entries) || []
       list.textContent = ''
-      if (!snaps.length) {
+      if (!entries.length) {
         var empty = document.createElement('div')
         empty.className = 'omm-empty'
-        empty.textContent = '还没有历史快照。保存文件或点“立即创建快照”即可。'
+        empty.textContent = '还没有存档。保存文件或点“立即创建快照”即可。'
         list.appendChild(empty)
         return
       }
-      snaps.forEach(function (item) {
-        var row = document.createElement('div')
-        row.className = 'omm-item'
-        var main = document.createElement('div')
-        main.className = 'omm-item-main'
-        var title = document.createElement('b')
-        title.textContent = item.label || item.name
-        var meta = document.createElement('div')
-        meta.className = 'omm-meta'
-        meta.textContent = (all ? (item.app_name || item.app) + ' · ' : '') + item.time + ' · ' + fmtSize(item.size)
-        main.appendChild(title)
-        main.appendChild(meta)
-        var actions = document.createElement('div')
-        actions.className = 'omm-actions'
-        var restore = document.createElement('button')
-        restore.type = 'button'
-        restore.textContent = '恢复'
-        if (item.app && APP_ID && item.app !== APP_ID) {
-          restore.disabled = true
-          restore.title = '请在该产品中恢复这条快照'
-        }
-        restore.onclick = function () {
-          if (restore.disabled) return
-          if (!confirm('恢复快照会覆盖当前应用数据，确定继续？\n' + item.time + ' · ' + (item.label || item.name))) return
-          toast('正在恢复快照…')
-          request('/snapshot', {}, { app: APP_ID, path: item.path }).then(function (data) {
-            return applyState(data.snapshot)
-          }).catch(function (err) {
-            toast('恢复失败：' + (err && err.message ? err.message : err), 'error')
-          })
-        }
-        var del = document.createElement('button')
-        del.type = 'button'
-        del.className = 'danger'
-        del.textContent = '删除'
-        del.onclick = function () {
-          if (!confirm('删除这个快照文件？\n' + (item.label || item.name))) return
-          request('/snapshot/delete', { method: 'POST', body: { app: APP_ID, path: item.path } }).then(function () {
-            toast('快照已删除')
-            refreshHistory()
-          }).catch(function (err) {
-            toast('删除失败：' + (err && err.message ? err.message : err), 'error')
-          })
-        }
-        actions.appendChild(restore)
-        actions.appendChild(del)
-        row.appendChild(main)
-        row.appendChild(actions)
-        list.appendChild(row)
+      entries.forEach(function (item) {
+        list.appendChild(item.kind === 'snapshot' ? snapshotRow(item, all) : fileRow(item, all))
       })
     }).catch(function (err) {
       list.innerHTML = ''
       var empty = document.createElement('div')
       empty.className = 'omm-empty'
-      empty.textContent = '读取快照失败：' + (err && err.message ? err.message : err)
+      empty.textContent = '读取存档失败：' + (err && err.message ? err.message : err)
       list.appendChild(empty)
     })
   }
 
-  function refreshShared() {
-    if (!state.enabled || !state.shadow) return
-    var list = el('omm-shared-list')
-    if (!list) return
-    request('/shared').then(function (data) {
-      var resources = (data && data.resources) || []
-      list.textContent = ''
-      if (!resources.length) {
-        var empty = document.createElement('div')
-        empty.className = 'omm-empty'
-        empty.textContent = '还没有共享文件。在任意产品里保存一次，这里就会出现。'
-        list.appendChild(empty)
+  function badgeFor(app) {
+    var badge = document.createElement('span')
+    badge.className = 'omm-badge'
+    badge.textContent = app || ''
+    return badge
+  }
+
+  function fileRow(item, all) {
+    var row = document.createElement('div')
+    row.className = 'omm-item'
+    var main = document.createElement('div')
+    main.className = 'omm-item-main'
+    var title = document.createElement('b')
+    title.textContent = item.name || item.file || 'shared'
+    var meta = document.createElement('div')
+    meta.className = 'omm-meta'
+    meta.appendChild(badgeFor(item.app_name || item.app || ''))
+    meta.appendChild(document.createTextNode(fmtTime(item.updated) + ' · ' + fmtSize(item.size) + (item.exists === false ? ' · 文件已丢失' : '')))
+    main.appendChild(title)
+    main.appendChild(meta)
+    var actions = document.createElement('div')
+    actions.className = 'omm-actions'
+    /* A shared document can be loaded into the product that saved it too.
+       From the hub there is no editor, so ask the owning product to take it. */
+    var load = document.createElement('button')
+    load.type = 'button'
+    load.textContent = state.shell === 'hub' ? '在应用中打开' : '载入'
+    load.disabled = item.exists === false
+    load.onclick = function () {
+      if (state.shell === 'hub') {
+        window.dispatchEvent(
+          new CustomEvent('omm:load-file', {
+            detail: { app: item.app, path: item.path, name: item.name, mime: item.mime },
+          })
+        )
+        closePanel()
         return
       }
-      resources.forEach(function (item) {
-        var row = document.createElement('div')
-        row.className = 'omm-item'
-        var main = document.createElement('div')
-        main.className = 'omm-item-main'
-        var title = document.createElement('b')
-        title.textContent = item.name || item.file || 'shared'
-        var meta = document.createElement('div')
-        meta.className = 'omm-meta'
-        var badge = document.createElement('span')
-        badge.className = 'omm-badge'
-        badge.textContent = item.app_name || item.app || ''
-        meta.appendChild(badge)
-        meta.appendChild(document.createTextNode(fmtTime(item.updated) + ' · ' + fmtSize(item.size) + (item.exists === false ? ' · 文件已丢失' : '')))
-        main.appendChild(title)
-        main.appendChild(meta)
-        var actions = document.createElement('div')
-        actions.className = 'omm-actions'
-        var load = document.createElement('button')
-        load.type = 'button'
-        load.textContent = '载入'
-        load.disabled = item.exists === false
-        load.onclick = function () { loadResource(item) }
-        var copy = document.createElement('button')
-        copy.type = 'button'
-        copy.textContent = '路径'
-        copy.onclick = function () {
-          try {
-            if (navigator.clipboard) navigator.clipboard.writeText(item.path)
-          } catch (e) {}
-          toast('已复制路径：' + item.path)
-        }
-        actions.appendChild(load)
-        actions.appendChild(copy)
-        row.appendChild(main)
-        row.appendChild(actions)
-        list.appendChild(row)
+      loadResource(item)
+    }
+    var copy = document.createElement('button')
+    copy.type = 'button'
+    copy.textContent = '路径'
+    copy.onclick = function () {
+      try {
+        if (navigator.clipboard) navigator.clipboard.writeText(item.path)
+      } catch (e) {}
+      toast('已复制路径：' + item.path)
+    }
+    actions.appendChild(load)
+    actions.appendChild(copy)
+    row.appendChild(main)
+    row.appendChild(actions)
+    return row
+  }
+
+  function snapshotRow(item, all) {
+    var row = document.createElement('div')
+    row.className = 'omm-item'
+    var main = document.createElement('div')
+    main.className = 'omm-item-main'
+    var title = document.createElement('b')
+    title.textContent = item.label || item.name
+    var meta = document.createElement('div')
+    meta.className = 'omm-meta'
+    if (all) meta.appendChild(badgeFor(item.app_name || item.app || ''))
+    meta.appendChild(document.createTextNode(item.time + ' · ' + fmtSize(item.size)))
+    main.appendChild(title)
+    main.appendChild(meta)
+    var actions = document.createElement('div')
+    actions.className = 'omm-actions'
+
+    var restore = document.createElement('button')
+    restore.type = 'button'
+    restore.textContent = '恢复'
+    if (item.app && APP_ID && item.app !== APP_ID) {
+      restore.disabled = true
+      restore.title = '请在该产品中恢复这条快照'
+    }
+    restore.onclick = function () {
+      if (restore.disabled) return
+      if (!confirm('恢复快照会覆盖当前应用数据，确定继续？\n' + item.time + ' · ' + (item.label || item.name))) return
+      toast('正在恢复快照…')
+      request('/snapshot', {}, { app: APP_ID, path: item.path }).then(function (data) {
+        return applyState(data.snapshot)
+      }).catch(function (err) {
+        toast('恢复失败：' + (err && err.message ? err.message : err), 'error')
       })
-    }).catch(function (err) {
-      list.innerHTML = ''
-      var empty = document.createElement('div')
-      empty.className = 'omm-empty'
-      empty.textContent = '读取共享数据失败：' + (err && err.message ? err.message : err)
-      list.appendChild(empty)
-    })
+    }
+
+    /* Snapshots used to have a fixed, timestamp derived name; rename them. */
+    var rename = document.createElement('button')
+    rename.type = 'button'
+    rename.textContent = '改名'
+    rename.onclick = function () {
+      var next = window.prompt('新的快照名称：', item.label || '')
+      if (next === null) return
+      next = String(next).trim()
+      if (!next) return
+      request('/snapshot/rename', { method: 'POST', body: { app: APP_ID, path: item.path, label: next } })
+        .then(function () {
+          toast('已改名为：' + next)
+          refreshArchive()
+        })
+        .catch(function (err) {
+          toast('改名失败：' + (err && err.message ? err.message : err), 'error')
+        })
+    }
+
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'danger'
+    del.textContent = '删除'
+    del.onclick = function () {
+      if (!confirm('删除这个快照文件？\n' + (item.label || item.name))) return
+      request('/snapshot/delete', { method: 'POST', body: { app: APP_ID, path: item.path } }).then(function () {
+        toast('快照已删除')
+        refreshArchive()
+      }).catch(function (err) {
+        toast('删除失败：' + (err && err.message ? err.message : err), 'error')
+      })
+    }
+    actions.appendChild(restore)
+    actions.appendChild(rename)
+    actions.appendChild(del)
+    row.appendChild(main)
+    row.appendChild(actions)
+    return row
   }
 
   function saveSettings() {
@@ -926,8 +965,7 @@
       if (el('omm-path')) el('omm-path').value = state.savePath
       if (el('omm-path-note')) el('omm-path-note').textContent = '当前路径：' + state.savePath
       toast('保存设置已更新：' + state.savePath)
-      refreshHistory()
-      refreshShared()
+      refreshArchive()
     }).catch(function (err) {
       toast('保存设置失败：' + (err && err.message ? err.message : err), 'error')
     }).finally(function () {
@@ -940,6 +978,16 @@
     var host = document.createElement('div')
     host.id = 'omm-desktop-host'
     host.style.cssText = 'position:fixed;inset:0;z-index:2147482000;pointer-events:none'
+    /* Inside the hub shell the archive is opened from the top bar instead of
+       the floating button, so the panel lives next to the toolbar. */
+    if (document.body && document.body.dataset.ommShell === 'hub') {
+      host.setAttribute('data-shell', 'hub')
+      state.shell = 'hub'
+    }
+    if (EMBEDDED) {
+      host.setAttribute('data-embedded', '1')
+      state.embedded = true
+    }
     var shadow = host.attachShadow({ mode: 'open' })
     shadow.innerHTML = '<style>' + panelCss() + '</style>' + panelHtml()
     state.shadow = shadow
@@ -961,15 +1009,32 @@
     el('omm-snap-now').addEventListener('click', function () {
       createSnapshot('手动快照').catch(function () {})
     })
-    el('omm-snap-2').addEventListener('click', function () {
-      createSnapshot('手动快照').catch(function () {})
-    })
-    el('omm-refresh-snaps').addEventListener('click', refreshHistory)
-    el('omm-refresh-shared').addEventListener('click', refreshShared)
-    el('omm-all-snaps').addEventListener('change', refreshHistory)
+    el('omm-refresh-archive').addEventListener('click', refreshArchive)
+    el('omm-all-snaps').addEventListener('change', refreshArchive)
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') closePanel()
     })
+    /* Clicking anywhere else closes the archive panel. */
+    document.addEventListener('pointerdown', function (event) {
+      var panel = el('omm-panel')
+      if (!panel || !panel.classList.contains('open')) return
+      var path = event.composedPath ? event.composedPath() : [event.target]
+      if (path.indexOf(panel) >= 0) return
+      if (path.indexOf(el('omm-open')) >= 0) return
+      closePanel()
+    }, true)
+    if (host.getAttribute('data-shell') === 'hub') {
+      window.addEventListener('omm:archive', function (event) {
+        var action = event && event.detail ? event.detail.action : ''
+        var panel = el('omm-panel')
+        if (action === 'toggle') {
+          if (panel && panel.classList.contains('open')) closePanel()
+          else openPanel()
+        } else if (action === 'close') {
+          closePanel()
+        }
+      })
+    }
   }
 
   // ------------------------------------------------------------------- boot

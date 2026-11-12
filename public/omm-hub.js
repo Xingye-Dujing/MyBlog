@@ -1150,6 +1150,57 @@
     els.ctxMenu.hidden = true;
   }
 
+  /* The archive panel lives in the desktop bridge (omm-desktop.js), which the
+     hub page loads as well.  Ask it to toggle. */
+  function toggleArchive() {
+    closePopovers();
+    closePluginPanel();
+    if (els.hubSettings) els.hubSettings.hidden = true;
+    window.dispatchEvent(
+      new CustomEvent('omm:archive', { detail: { action: 'toggle' } })
+    );
+  }
+
+  /* A shared document was picked in the hub's archive: open the product that
+     owns it and hand the file over once its frame exists. */
+  window.addEventListener('omm:load-file', function (event) {
+    var detail = event && event.detail ? event.detail : null;
+    if (!detail || !detail.path) return;
+    var appId = detail.app;
+    if (!appId || !APP_BY_ID[appId]) {
+      toast('找不到保存该文件的应用');
+      return;
+    }
+    activateApp(appId);
+    var tries = 0;
+    var timer = window.setInterval(function () {
+      tries += 1;
+      var frame = frames.get(appId);
+      if (frame && frame.contentWindow) {
+        window.clearInterval(timer);
+        try {
+          frame.contentWindow.postMessage(
+            {
+              type: 'omm:load-file',
+              path: detail.path,
+              name: detail.name,
+              mime: detail.mime,
+            },
+            '*'
+          );
+          toast('已交给「' + APP_BY_ID[appId].name + '」载入');
+        } catch (e) {
+          toast('载入失败');
+        }
+        return;
+      }
+      if (tries > 60) {
+        window.clearInterval(timer);
+        toast('应用启动超时');
+      }
+    }, 250);
+  });
+
   function toggleLauncher(force) {
     var show = typeof force === 'boolean' ? force : !launcherOpen;
     closePopovers();
@@ -1894,6 +1945,7 @@
       } else if (act === 'plugins') openPluginPanel();
       else if (act === 'settings') openHubSettings();
       else if (act === 'launcher') toggleLauncher();
+      else if (act === 'archive') toggleArchive();
     });
     els.brand.addEventListener('click', function () {
       toggleLauncher();
@@ -2208,6 +2260,19 @@
     /* shortcuts forwarded from product iframes */
     window.addEventListener('message', function (event) {
       var data = event.data;
+      if (data && data.type === 'omm:pointerdown') {
+        /* Clicking inside a product counts as "clicking elsewhere". */
+        var ours = false;
+        frames.forEach(function (frame) {
+          if (!ours && frame.contentWindow === event.source) ours = true;
+        });
+        if (!ours) return;
+        if (!els.launcher.hidden || !els.layoutMenu.hidden || !els.ctxMenu.hidden) {
+          closePopovers();
+        }
+        window.dispatchEvent(new CustomEvent('omm:archive', { detail: { action: 'close' } }));
+        return;
+      }
       if (!data || data.type !== 'omm:shortcut') return;
       var fromOurs = false;
       var sourceApp = null;

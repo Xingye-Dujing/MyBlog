@@ -339,8 +339,8 @@ def run_hub(debug: bool = False, plugin_root: Path | None = None) -> None:
     window = webview.create_window(
         "OMM-ZEN 工作台",
         url,
-        width=1440,
-        height=920,
+        width=1600,
+        height=1000,
         min_size=(1024, 680),
         maximized=True,
         text_select=True,

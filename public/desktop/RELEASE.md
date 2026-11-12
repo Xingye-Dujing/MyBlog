@@ -27,8 +27,8 @@ Release 标签一旦发布就视为不可变：同一个版本号不要覆盖重
 ## 1. 改版本号（两处）
 
 ```text
-public/desktop/plugin_specs.py        VERSION = "1.0.5"
-.github/workflows/macos-build.yml     default: v1.0.5  /  RELEASE_TAG
+public/desktop/plugin_specs.py        VERSION = "1.0.6"
+.github/workflows/macos-build.yml     default: v1.0.6  /  RELEASE_TAG
 ```
 
 `VERSION` 同时决定：
@@ -101,6 +101,21 @@ cd D:\blog\web\public
 ```
 
 必须全部为 `none` / `True`，否则不要发布。
+
+### 3.2 存档（文件 + 快照）
+
+`/__omm/fs/archive` 是唯一的「存档」接口，把两类记录合并成一个时间线：
+
+| `kind` | 内容 | 动作 |
+| --- | --- | --- |
+| `file` | 产品保存过的文件（旧版「共享数据」） | 载入 / 复制路径 |
+| `snapshot` | 应用状态快照 | 恢复 / 改名 / 删除 |
+
+旧的 `/snapshots`、`/shared` 仍然保留（兼容旧客户端），但界面只用 `/archive`。
+快照改名走 `POST /__omm/fs/snapshot/rename`（`{path, label}`），文件会按新名字重写。
+
+集成器顶栏的「存档」按钮打开的就是这个面板；产品在集成器里（`omm_embed=1`）
+不再显示左下角的浮动「存档」按钮，只保留顶栏入口。
 
 ---
 

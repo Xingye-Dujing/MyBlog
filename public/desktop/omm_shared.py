@@ -626,12 +626,123 @@ def read_snapshot(raw: str) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def rename_snapshot(raw: str, label: str) -> Dict[str, Any]:
+    """Give a snapshot a new name.
+
+    The label is stored twice: inside the payload and inside the file name, so
+    both have to be rewritten.  The file is rewritten atomically and the old
+    one is removed afterwards.
+    """
+    path = _snapshot_path(raw)
+    if not path.is_file() or not path.name.endswith(SNAPSHOT_SUFFIX):
+        raise ValueError("快照文件不存在")
+    clean = _snapshot_label(label)
+    if not clean:
+        raise ValueError("名称无效")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - a broken snapshot still deserves a rename
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload["label"] = clean
+    payload["renamed_at"] = now_iso()
+    stamp_text = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = path.parent / ("%s-%s%s" % (stamp_text, clean, SNAPSHOT_SUFFIX))
+    if target.exists():
+        target = path.parent / (
+            "%s-%s-%s%s" % (stamp_text, clean, uuid.uuid4().hex[:6], SNAPSHOT_SUFFIX)
+        )
+    _atomic_write(target, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    try:
+        if target != path:
+            path.unlink()
+    except OSError:
+        pass
+    meta = _snapshot_meta(target)
+    return {"ok": True, "path": str(target), "name": target.name, "label": clean, "meta": meta}
+
+
 def delete_snapshot(raw: str) -> Dict[str, Any]:
     path = _snapshot_path(raw)
     if not path.is_file() or not path.name.endswith(SNAPSHOT_SUFFIX):
         raise ValueError("快照文件不存在")
     path.unlink()
     return {"ok": True, "path": str(path)}
+
+
+def _sort_stamp(value: str) -> float:
+    """Turn an ISO timestamp into a comparable number (0 when unparsable)."""
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
+def list_archive(app: str, all_apps: bool = True, limit: int = 500) -> Dict[str, Any]:
+    """One list of everything that was archived.
+
+    Two kinds of entry live in the same save area:
+
+    ``file``     a document a product wrote (the "shared data" of old builds)
+    ``snapshot`` a captured application state that can be restored
+
+    They used to live in two separate panels with two nearly identical lists.
+    Now both are entries of a single timeline, distinguished by ``kind``.
+    """
+    cfg = load_config()
+    items: list[Dict[str, Any]] = []
+    apps = set(APP_NAMES) | set((cfg.get("apps") or {}).keys())
+    if not all_apps:
+        apps = {app}
+    for key in apps:
+        entry = (cfg.get("apps") or {}).get(key) or {}
+        for item in (entry.get("resources") or {}).values():
+            if not isinstance(item, dict):
+                continue
+            path = Path(str(item.get("path") or ""))
+            record = dict(item)
+            record["kind"] = "file"
+            record["exists"] = path.is_file()
+            if record["exists"]:
+                try:
+                    record["size"] = path.stat().st_size
+                except OSError:
+                    pass
+            record["app"] = key
+            record["app_name"] = app_name(key)
+            record["time"] = str(item.get("updated") or "")
+            record["sort"] = _sort_stamp(record["time"])
+            items.append(record)
+    for meta in list_snapshots(app, all_apps=all_apps, limit=limit):
+        record = dict(meta)
+        record["kind"] = "snapshot"
+        record["label"] = str(meta.get("label") or meta.get("name") or "")
+        record["sort"] = float(meta.get("mtime") or 0)
+        items.append(record)
+    items.sort(key=lambda item: item.get("sort") or 0, reverse=True)
+    return {
+        "ok": True,
+        "app": app,
+        "entries": items[: max(1, min(int(limit or 500), 2000))],
+        "apps": [
+            {
+                "app": key,
+                "name": app_name(key),
+                "save_path": str(resolve_save_dir(key, cfg)),
+                "mode": resolve_mode(key, cfg),
+                "auto_snapshot": resolve_auto_snapshot(key, cfg),
+            }
+            for key in sorted(set(list(APP_NAMES) + list((cfg.get("apps") or {}).keys())))
+        ],
+    }
 
 
 def list_shared() -> Dict[str, Any]:
@@ -747,6 +858,13 @@ def handle_get(
         )
     if path == "/__omm/fs/shared":
         return _json(200, list_shared())
+    if path == "/__omm/fs/archive":
+        all_apps = (query.get("all") or ["1"])[0] != "0"
+        try:
+            limit = int((query.get("limit") or ["500"])[0])
+        except ValueError:
+            limit = 500
+        return _json(200, list_archive(app, all_apps=all_apps, limit=limit))
     if path == "/__omm/fs/snapshots":
         all_apps = (query.get("all") or ["0"])[0] == "1"
         try:
@@ -819,6 +937,13 @@ def handle_post(
                 payload_app, state, label=str(payload.get("label") or "")
             )
             return _json(200, result)
+        if path == "/__omm/fs/snapshot/rename":
+            return _json(
+                200,
+                rename_snapshot(
+                    str(payload.get("path") or ""), str(payload.get("label") or "")
+                ),
+            )
         if path == "/__omm/fs/snapshot/delete":
             return _json(200, delete_snapshot(str(payload.get("path") or "")))
         if path == "/__omm/fs/open":

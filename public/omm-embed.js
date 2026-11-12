@@ -40,6 +40,32 @@
   }
 
   if (embedded) {
+    /* A click inside a product pane belongs to another document, so the hub
+       cannot hear it.  Forward it and let the shell close its popovers. */
+    document.addEventListener(
+      'pointerdown',
+      function () {
+        try {
+          window.parent.postMessage({ type: 'omm:pointerdown' }, '*');
+        } catch (e) {
+          /* ignore */
+        }
+      },
+      true
+    );
+
+    /* The hub can ask this product to take a shared document. */
+    window.addEventListener('message', function (event) {
+      var data = event.data;
+      if (!data || data.type !== 'omm:load-file') return;
+      if (!window.OMMDesktop || !window.OMMDesktop.loadResource) return;
+      window.OMMDesktop.loadResource({
+        path: data.path,
+        name: data.name,
+        mime: data.mime,
+      });
+    });
+
     window.addEventListener(
       'keydown',
       function (event) {
