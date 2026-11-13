@@ -5096,13 +5096,13 @@ notify pgrst, 'reload schema';</textarea
             'menu.resetView': 'RESET ZOOM',
             'menu.autoLayout': 'LAYOUT·AUTO',
             'menu.autoLayoutTitle':
-              'Smart layout: tries layered & force per block, keeps the tidier one (remembered for the L key)',
+              'No selection: lays out the whole canvas; select 2+ nodes: only the selection. Tries layered & force per block, keeps the tidier one (remembered for the L key)',
             'menu.autoLayoutLayered': 'LAYOUT·TREE',
             'menu.autoLayoutLayeredTitle':
-              'Layered layout: top-down rows, straight vertical links — best for trees & flows',
+              'No selection: whole canvas; select 2+ nodes: only the selection. Top-down rows, straight vertical links — best for trees & flows',
             'menu.autoLayoutForce': 'LAYOUT·NEAR',
             'menu.autoLayoutForceTitle':
-              'Force layout: connected nodes pull close together — best for dense or cyclic maps',
+              'No selection: whole canvas; select 2+ nodes: only the selection. Connected nodes pull close together — best for dense or cyclic maps',
             'menu.fitView': 'FIT',
             'menu.fitViewTitle': 'Fit the whole canvas into the window',
             'menu.settings': 'SETTINGS',
@@ -5302,6 +5302,7 @@ notify pgrst, 'reload schema';</textarea
             'notify.nodeBgOff': 'Node background: OFF',
             'notify.viewReset': 'View reset',
             'notify.layoutApplied': 'Auto layout applied',
+            'notify.layoutPartial': 'Rearranged selected nodes',
             'notify.fitApplied': 'Zoomed to fit',
             'notify.nodeRemoved': 'Node removed',
             'notify.dragToConnect': "Drag to another node's port to connect",
@@ -5408,13 +5409,13 @@ notify pgrst, 'reload schema';</textarea
             'menu.resetView': '重置缩放',
             'menu.autoLayout': '智能排布',
             'menu.autoLayoutTitle':
-              '每块都试分层与力导向，取更整齐的一种（记住选择，快捷键 L 沿用）',
+              '无选中=排整张画布；框选 ≥2 个节点=只排选中部分。每块分层/力导向各排一遍取更优（记住选择，快捷键 L 沿用）',
             'menu.autoLayoutLayered': '分层排版',
             'menu.autoLayoutLayeredTitle':
-              '自上而下分层、连线横平竖直，适合树状、流程类画布',
+              '无选中=排整张画布；框选=只排选中。自上而下分层、连线横平竖直，适合树状、流程类画布',
             'menu.autoLayoutForce': '聚拢排版',
             'menu.autoLayoutForceTitle':
-              '力导向：相连的节点互相靠拢、整图紧凑，适合稠密、多环、关系杂乱的画布',
+              '无选中=排整张画布；框选=只排选中。力导向：相连的节点互相靠拢、整图紧凑，适合稠密、多环、关系杂乱的画布',
             'menu.fitView': '适应',
             'menu.fitViewTitle': '让整张画布适应窗口显示',
             'menu.settings': '设置',
@@ -5615,6 +5616,7 @@ notify pgrst, 'reload schema';</textarea
             'theme.dark': '深色',
             'notify.viewReset': '视图已重置',
             'notify.layoutApplied': '已应用自动布局',
+            'notify.layoutPartial': '已排布选中的节点',
             'notify.fitApplied': '已缩放至适应窗口',
             'notify.nodeRemoved': '节点已删除',
             'notify.dragToConnect': '拖动到另一个节点的端口以连接',
@@ -11983,6 +11985,12 @@ notify pgrst, 'reload schema';</textarea
               CanvasManager.fitView()
               return
             }
+            // 选中局部排布：框选 ≥2 个节点时只重排选中的子图，
+            // 其余节点原地不动；无选中时排整张画布。
+            const sel = AppState.selectedNodeIds
+            if (sel && sel.size >= 2 && this.autoLayoutPartial(nodes, sel, st)) {
+              return
+            }
             // 尺寸按真实 DOM 量：minimized 的高度会矮一截；折叠分组里的
             // 节点量到 0 时回退到行内样式，再回退到中间尺寸，绝不把
             // 某一层塌成 0 挤到相邻层。
@@ -12039,6 +12047,211 @@ notify pgrst, 'reload schema';</textarea
                   ? 'menu.autoLayoutLayered'
                   : 'menu.autoLayout'
             notify(t('notify.layoutApplied') + ' · ' + t(nameKey))
+          },
+          // —— 选中局部排布：只重排选中的子图，其余节点原地不动 ——
+          // 子图走同一套排布流水线（策略/精修/折线兜底全部生效），
+          // 结果块移植回原选中区域中心；未选中的节点当作障碍物，
+          // 螺旋搜索一个互不重叠的落点，空间不够再逐点推开。
+          // 不动镜头（用户正看着选区），照常落盘进撤销栈。
+          autoLayoutPartial(nodes, sel, st) {
+            const selNodes = nodes.filter((n) => sel.has(n.id))
+            if (selNodes.length < 2) return false
+            const nodeList = selNodes.map((n) => ({
+              id: n.id,
+              w: n.offsetWidth || parseFloat(n.style.width) || 240,
+              h: n.offsetHeight || parseFloat(n.style.height) || 120,
+            }))
+            const sizeOf = new Map(nodeList.map((n) => [n.id, n]))
+            // 只取两端都在选区里的连线；跨到未选中节点的「边界线」
+            // 保持用户端口不动，重排后由渲染端按新几何重画。
+            const subConns = AppState.connections.filter(
+              (c) => c && sel.has(c.from) && sel.has(c.to) && c.from !== c.to,
+            )
+            const res = computeCanvasLayout(nodeList, subConns, { strategy: st })
+            const posMap = new Map(res.items.map((it) => [it.id, it]))
+
+            // 移植落点：结果块中心对齐原选中包围盒中心（原地重排）
+            let bx0 = Infinity
+            let by0 = Infinity
+            let bx1 = -Infinity
+            let by1 = -Infinity
+            selNodes.forEach((n) => {
+              const l = parseFloat(n.style.left) || n.offsetLeft || 0
+              const t = parseFloat(n.style.top) || n.offsetTop || 0
+              bx0 = Math.min(bx0, l)
+              by0 = Math.min(by0, t)
+              bx1 = Math.max(bx1, l + n.offsetWidth)
+              by1 = Math.max(by1, t + n.offsetHeight)
+            })
+            let rx0 = Infinity
+            let ry0 = Infinity
+            let rx1 = -Infinity
+            let ry1 = -Infinity
+            res.items.forEach((it) => {
+              const s = sizeOf.get(it.id)
+              rx0 = Math.min(rx0, it.x)
+              ry0 = Math.min(ry0, it.y)
+              rx1 = Math.max(rx1, it.x + s.w)
+              ry1 = Math.max(ry1, it.y + s.h)
+            })
+            const baseDx = Math.round((bx0 + bx1) / 2 - (rx0 + rx1) / 2)
+            const baseDy = Math.round((by0 + by1) / 2 - (ry0 + ry1) / 2)
+
+            // 障碍物 = 未选中的节点（外扩 PAD 留出连线空隙）
+            const PAD = 16
+            const obstacles = nodes
+              .filter((n) => !sel.has(n.id))
+              .map((n) => ({
+                x: (parseFloat(n.style.left) || n.offsetLeft || 0) - PAD,
+                y: (parseFloat(n.style.top) || n.offsetTop || 0) - PAD,
+                w: n.offsetWidth + PAD * 2,
+                h: n.offsetHeight + PAD * 2,
+              }))
+            const overlapArea = (dx, dy) => {
+              let area = 0
+              for (const it of res.items) {
+                const s = sizeOf.get(it.id)
+                const x = it.x + dx
+                const y = it.y + dy
+                for (const o of obstacles) {
+                  const ix = Math.min(x + s.w, o.x + o.w) - Math.max(x, o.x)
+                  const iy = Math.min(y + s.h, o.y + o.h) - Math.max(y, o.y)
+                  if (ix > 0 && iy > 0) area += ix * iy
+                }
+              }
+              return area
+            }
+            // 螺旋搜索：先原地，再向外一圈圈找无重叠落点
+            let best = { dx: baseDx, dy: baseDy, ov: overlapArea(baseDx, baseDy) }
+            if (best.ov > 0) {
+              for (const step of [180, 360, 620, 960]) {
+                if (best.ov === 0) break
+                for (let a = 0; a < 8; a++) {
+                  const ang = (a / 8) * Math.PI * 2
+                  const dx = Math.round(baseDx + Math.cos(ang) * step)
+                  const dy = Math.round(baseDy + Math.sin(ang) * step * 0.7)
+                  const ov = overlapArea(dx, dy)
+                  if (ov < best.ov) best = { dx: dx, dy: dy, ov: ov }
+                  if (best.ov === 0) break
+                }
+              }
+            }
+            selNodes.forEach((n) => {
+              const p = posMap.get(n.id)
+              if (!p) return
+              n.style.left = Math.round(p.x + best.dx) + 'px'
+              n.style.top = Math.round(p.y + best.dy) + 'px'
+            })
+            // 空间实在不够（密集画布）：把选中的节点从障碍物里沿最小
+            // 位移方向推开（3 轮），再处理选中节点之间的内部挤压
+            if (best.ov > 0) {
+              const rects = new Map()
+              selNodes.forEach((n) => {
+                rects.set(n.id, {
+                  x: parseFloat(n.style.left),
+                  y: parseFloat(n.style.top),
+                  w: n.offsetWidth,
+                  h: n.offsetHeight,
+                })
+              })
+              const pushCands = (r, o) => {
+                const cands = [
+                  { d: o.x + o.w - r.x, ax: 'x' },
+                  { d: o.x - (r.x + r.w), ax: 'x' },
+                  { d: o.y + o.h - r.y, ax: 'y' },
+                  { d: o.y - (r.y + r.h), ax: 'y' },
+                ]
+                let chosen = cands[0]
+                cands.forEach((cd) => {
+                  if (Math.abs(cd.d) < Math.abs(chosen.d)) chosen = cd
+                })
+                return chosen
+              }
+              // 1) 对障碍物解重叠
+              for (let round = 0; round < 3; round++) {
+                let did = false
+                selNodes.forEach((n) => {
+                  const r = rects.get(n.id)
+                  for (const o of obstacles) {
+                    if (
+                      !(
+                        r.x < o.x + o.w &&
+                        r.x + r.w > o.x &&
+                        r.y < o.y + o.h &&
+                        r.y + r.h > o.y
+                      )
+                    )
+                      continue
+                    const cd = pushCands(r, o)
+                    if (cd.ax === 'x') r.x += cd.d
+                    else r.y += cd.d
+                    did = true
+                  }
+                })
+                if (!did) break
+              }
+              // 2) 选中节点之间的内部挤压（沿重叠较小的轴对半推开）
+              for (let round = 0; round < 3; round++) {
+                let did = false
+                for (let i = 0; i < selNodes.length; i++) {
+                  for (let j = i + 1; j < selNodes.length; j++) {
+                    const a = rects.get(selNodes[i].id)
+                    const b = rects.get(selNodes[j].id)
+                    const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+                    const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+                    if (ix <= 0 || iy <= 0) continue
+                    if (ix < iy) {
+                      const half = ix / 2 + 2
+                      a.x += a.x <= b.x ? half : -half
+                      b.x += b.x <= a.x ? -half : half
+                    } else {
+                      const half = iy / 2 + 2
+                      a.y += a.y <= b.y ? half : -half
+                      b.y += b.y <= a.y ? -half : half
+                    }
+                    did = true
+                  }
+                }
+                if (!did) break
+              }
+              selNodes.forEach((n) => {
+                const r = rects.get(n.id)
+                n.style.left = Math.round(r.x) + 'px'
+                n.style.top = Math.round(r.y) + 'px'
+              })
+            }
+            // 端口决策写回（同全局排布：子图边全量决策，边界线不受影响）
+            const fixes = res.ports || {}
+            if (Object.keys(fixes).length) {
+              AppState.connections.forEach((c) => {
+                const key =
+                  c.from + '>' + c.to + ':' + (c.fromPort || 'bottom') + ':' + (c.toPort || 'top')
+                const fix = fixes[key]
+                if (!fix) return
+                c.fromPort = fix.fromPort
+                c.toPort = fix.toPort
+                if (fix.route === 'elbow') {
+                  c.route = 'elbow'
+                  c.routeHint = fix.hint || { v: 'lane', k: 0 }
+                } else {
+                  delete c.route
+                  delete c.routeHint
+                }
+              })
+            }
+            ConnectionManager.renderAll()
+            if (window.AlignManager) window.AlignManager.scheduleRefresh()
+            // 局部排布不动镜头：用户正看着选区，fitView 反而跳视野
+            debouncedAutoSave(true)
+            this.rememberLayoutStrategy(st)
+            const nameKey =
+              st === 'force'
+                ? 'menu.autoLayoutForce'
+                : st === 'layered'
+                  ? 'menu.autoLayoutLayered'
+                  : 'menu.autoLayout'
+            notify(t('notify.layoutPartial') + ' (' + selNodes.length + ') · ' + t(nameKey))
+            return true
           },
           applyTransform() {
             const inner = DOM.canvasInner
