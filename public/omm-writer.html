@@ -2497,6 +2497,60 @@
       .node-todo {
         border-left: 3px solid #cc6600 !important;
       }
+      /* ===== 画布引用节点（子画布体系）===== */
+      .node[data-type='canvas'] {
+        border-left: 3px solid #8a5fc0 !important;
+      }
+      .node[data-type='canvas'] .node-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 14px 16px;
+        cursor: pointer;
+        user-select: none;
+        overflow: hidden;
+      }
+      .node[data-type='canvas'] .zw-ref-icon {
+        font-size: 22px;
+        line-height: 1;
+        color: #8a5fc0;
+      }
+      .node[data-type='canvas'] .zw-ref-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+      }
+      .node[data-type='canvas'] .zw-ref-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+      .node[data-type='canvas'] .zw-ref-count {
+        background: rgba(138, 95, 192, 0.14);
+        color: #8a5fc0;
+        border-radius: 999px;
+        padding: 1px 9px;
+        font-weight: 600;
+      }
+      .node[data-type='canvas'] .zw-ref-hint {
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+      .node[data-type='canvas'] .node-content:hover .zw-ref-name {
+        color: #8a5fc0;
+      }
+      .node.minimized[data-type='canvas'] .node-content {
+        display: none;
+      }
       .node.minimized .node-header {
         border-radius: var(--radius);
       }
@@ -4520,6 +4574,12 @@
       <div class="dd-item" data-action="ctxNewGroup">
         <span data-i18n="ctx.newGroup">New Group Node</span>
       </div>
+      <div class="dd-item" data-action="ctxNewCanvas">
+        <span data-i18n="ctx.newCanvas">New Sub-canvas</span>
+      </div>
+      <div class="dd-item ctx-parent-only" data-action="ctxOpenParent">
+        <span data-i18n="ctx.openParent">Open Parent Canvas</span>
+      </div>
       <div class="dd-divider"></div>
       <!-- 以下项仅在选中节点时显示，通过 .ctx-node-only 控制 -->
       <div class="dd-item ctx-node-only" id="ctx-edit" data-action="ctxEdit">
@@ -4540,6 +4600,9 @@
       <div class="ctx-multi-only">
         <div class="ctx-align-label" data-i18n="ctx.alignGroup">对齐 / 分布</div>
         <div class="ctx-align-grid" id="ctx-align-grid"></div>
+      </div>
+      <div class="dd-item ctx-multi-only" data-action="ctxExtractCanvas">
+        <span data-i18n="ctx.extractCanvas">Extract Selection → Sub-canvas</span>
       </div>
       <div class="dd-item" id="ctx-paste-node" data-action="ctxPaste">
         <span data-i18n="ctx.pasteNode">Paste Node</span>
@@ -5303,6 +5366,15 @@ notify pgrst, 'reload schema';</textarea
             'notify.viewReset': 'View reset',
             'notify.layoutApplied': 'Auto layout applied',
             'notify.layoutPartial': 'Rearranged selected nodes',
+            'notify.subCreated': 'Sub-canvas created · double-click the ref node to open',
+            'notify.extracted': 'Extracted to sub-canvas · double-click the ref node to open',
+            'notify.refMissing': 'Referenced canvas is missing',
+            'ctx.newCanvas': 'New Sub-canvas',
+            'ctx.extractCanvas': 'Extract Selection → Sub-canvas',
+            'ctx.openParent': 'Open Parent Canvas',
+            'ref.openHint': 'Double-click to open',
+            'ref.missing': 'Missing canvas',
+            'notify.layoutPartial': 'Rearranged selected nodes',
             'notify.fitApplied': 'Zoomed to fit',
             'notify.nodeRemoved': 'Node removed',
             'notify.dragToConnect': "Drag to another node's port to connect",
@@ -5617,6 +5689,15 @@ notify pgrst, 'reload schema';</textarea
             'notify.viewReset': '视图已重置',
             'notify.layoutApplied': '已应用自动布局',
             'notify.layoutPartial': '已排布选中的节点',
+            'notify.subCreated': '已创建子画布 · 双击引用节点打开',
+            'notify.extracted': '已提取为子画布 · 双击引用节点打开',
+            'notify.refMissing': '引用的画布不存在',
+            'ctx.newCanvas': '新建子画布',
+            'ctx.extractCanvas': '提取选中 → 子画布',
+            'ctx.openParent': '打开父画布',
+            'ref.openHint': '双击打开子画布',
+            'ref.missing': '画布缺失',
+            'notify.layoutPartial': '已排布选中的节点',
             'notify.fitApplied': '已缩放至适应窗口',
             'notify.nodeRemoved': '节点已删除',
             'notify.dragToConnect': '拖动到另一个节点的端口以连接',
@@ -5900,6 +5981,10 @@ notify pgrst, 'reload schema';</textarea
             AppState.lang = AppState.lang === 'en' ? 'zh' : 'en'
             Settings.save()
             I18nManager.apply()
+            // 引用节点的提示文案跟语言走
+            try {
+              NodeManager.refreshRefNodes()
+            } catch (_) {}
           },
         }
 
@@ -8739,6 +8824,10 @@ notify pgrst, 'reload schema';</textarea
               if (ci) ci.classList.add('collapsed')
             }
 
+            if (type === 'canvas') {
+              NodeManager.refreshRefNode(node)
+            }
+
             // Init behaviors
             NodeManager._initDrag(node)
             NodeManager._initResize(node)
@@ -8756,6 +8845,194 @@ notify pgrst, 'reload schema';</textarea
             if (window._ro) window._ro.observe(node)
             return node
           },
+
+          // ==============================================================
+          // 画布引用节点（子画布体系）
+          // ==============================================================
+          // 引用节点 = 一个 type:'canvas' 的节点，dataset.ref 指向目标画布。
+          // 标题与内容由 refreshRefNode 依据索引 meta 实时渲染：
+          // 目标存在 → 名称 + 节点数 + 双击提示；目标被删 → 缺失态。
+          refreshRefNode(node) {
+            if (!node || node.dataset.type !== 'canvas') return
+            const ref = node.dataset.ref
+            const idx = DocManager._idx
+            const alive = !!(ref && idx && idx.order.indexOf(ref) >= 0 && idx.meta[ref])
+            const titleEl = getNodeTitle(node)
+            const tt = titleEl && titleEl.querySelector('.title-text')
+            if (tt) tt.textContent = alive ? idx.meta[ref].name : t('ref.missing')
+            const c = getNodeContent(node)
+            if (!c) return
+            if (alive) {
+              const cnt = idx.meta[ref].nodes || 0
+              c.innerHTML =
+                '<div class="zw-ref-icon">▦</div>' +
+                '<div class="zw-ref-name"></div>' +
+                '<div class="zw-ref-meta"><span class="zw-ref-count">' +
+                cnt +
+                '</span><span class="zw-ref-hint">' +
+                t('ref.openHint') +
+                '</span></div>'
+              c.querySelector('.zw-ref-name').textContent = idx.meta[ref].name
+              c.dataset.refState = 'ok'
+            } else {
+              c.innerHTML =
+                '<div class="zw-ref-icon">▦</div><div class="zw-ref-hint">' +
+                t('ref.missing') +
+                '</div>'
+              c.dataset.refState = 'missing'
+            }
+          },
+          refreshRefNodes() {
+            Array.from(getNodes()).forEach((n) => {
+              if (n.dataset.type === 'canvas') NodeManager.refreshRefNode(n)
+            })
+          },
+          openRef(node) {
+            const ref = node && node.dataset.ref
+            if (!ref) return
+            DocManager.indexAsync().then((idx) => {
+              if (!idx || idx.order.indexOf(ref) < 0) {
+                notify(t('notify.refMissing'))
+                NodeManager.refreshRefNode(node)
+                return
+              }
+              DocManager.open(ref)
+            })
+          },
+
+          // 在右键位置新建一个空子画布 + 引用节点
+          async newSubCanvasAt(x, y) {
+            const parentName = DocManager.activeName()
+            const childId = await DocManager.createDoc({
+              name: parentName + ' ▸ 子画布',
+              nodes: [],
+              connections: [],
+            })
+            await DocManager.setDocParent(childId, DocManager.activeId())
+            NodeManager.createNodeAt(x, y, 'canvas', {
+              ref: childId,
+              w: '240px',
+              h: '150px',
+            })
+            NodeManager.refreshRefNodes()
+            notify(t('notify.subCreated'))
+          },
+
+          // 把选中的节点（含组员、内部连线）提取成一个子画布：
+          // 节点整体移入新画布（相对布局保留），原位放一个引用节点，
+          // 跨选区的边界线自动重挂到引用节点上（端口按几何就近）。
+          async extractSelectionToChildCanvas() {
+            const sel = AppState.selectedNodeIds
+            const selNodes = Array.from(getNodes()).filter((n) => sel && sel.has(n.id))
+            if (!selNodes.length) return
+            // 组节点连带其成员（与拖动 collectMoveNodes 同规则）
+            const ids = new Set(selNodes.map((n) => n.id))
+            AppState.connections.forEach((c) => {
+              const f = ids.has(c.from)
+              const t2 = ids.has(c.to)
+              if (!f && !t2) return
+              const groupEl = document.getElementById(f ? c.from : c.to)
+              if (groupEl && groupEl.dataset.type === 'group') ids.add(f ? c.to : c.from)
+            })
+            const nodesAll = Array.from(getNodes()).filter((n) => ids.has(n.id))
+            let minX = Infinity
+            let minY = Infinity
+            let maxX = -Infinity
+            let maxY = -Infinity
+            nodesAll.forEach((n) => {
+              const l = parseFloat(n.style.left) || n.offsetLeft || 0
+              const t2 = parseFloat(n.style.top) || n.offsetTop || 0
+              minX = Math.min(minX, l)
+              minY = Math.min(minY, t2)
+              maxX = Math.max(maxX, l + n.offsetWidth)
+              maxY = Math.max(maxY, t2 + n.offsetHeight)
+            })
+            // 序列化节点（相对布局：选中包围盒左上角 → (80, 80)）
+            const nodeData = nodesAll.map((n) => {
+              const d = buildNodeData(n)
+              d.x = Math.round(parseFloat(n.style.left) - minX + 80) + 'px'
+              d.y = Math.round(parseFloat(n.style.top) - minY + 80) + 'px'
+              return d
+            })
+            const internalConns = AppState.connections
+              .filter((c) => ids.has(c.from) && ids.has(c.to) && c.from !== c.to)
+              .map((c) => ({
+                from: c.from,
+                to: c.to,
+                fromPort: c.fromPort,
+                toPort: c.toPort,
+                route: c.route === 'elbow' ? 'elbow' : undefined,
+                routeHint: c.route === 'elbow' ? c.routeHint : undefined,
+              }))
+            const parentName = DocManager.activeName()
+            const childId = await DocManager.createDoc({
+              name: parentName + ' ▸ 子画布',
+              nodes: nodeData,
+              connections: internalConns,
+            })
+            await DocManager.setDocParent(childId, DocManager.activeId())
+            // 原画布：原位放引用节点 → 移除被提取节点 → 边界线重挂
+            const refCx = Math.round((minX + maxX) / 2 - 130)
+            const refCy = Math.round((minY + maxY) / 2 - 80)
+            const refNode = NodeManager.createNodeAt(refCx, refCy, 'canvas', {
+              ref: childId,
+              w: '260px',
+              h: '160px',
+            })
+            const refId = refNode ? refNode.id : null
+            const centerOf = (el) => ({
+              x: el.offsetLeft + el.offsetWidth / 2,
+              y: el.offsetTop + el.offsetHeight / 2,
+            })
+            const nearestPort = (rc, oc) => {
+              const dx = oc.x - rc.x
+              const dy = oc.y - rc.y
+              return Math.abs(dx) > Math.abs(dy)
+                ? dx > 0
+                  ? 'right'
+                  : 'left'
+                : dy > 0
+                  ? 'bottom'
+                  : 'top'
+            }
+            nodesAll.forEach((n) => n.remove())
+            const reattach = []
+            AppState.connections = AppState.connections.filter((c) => {
+              const fin = ids.has(c.from)
+              const tin = ids.has(c.to)
+              if (fin && tin) return false // 内部线已随子画布走
+              if (!fin && !tin) return true // 与本次提取无关
+              if (!refId) return false // 兜底失败只能丢弃
+              const otherId = fin ? c.to : c.from
+              const otherEl = document.getElementById(otherId)
+              let rp = fin ? 'left' : 'right'
+              if (otherEl && refNode) {
+                rp = nearestPort(centerOf(refNode), centerOf(otherEl))
+              }
+              const nc = { id: c.id, route: undefined, routeHint: undefined }
+              if (fin) {
+                nc.from = refId
+                nc.fromPort = rp
+                nc.to = c.to
+                nc.toPort = c.toPort
+              } else {
+                nc.from = c.from
+                nc.fromPort = c.fromPort
+                nc.to = refId
+                nc.toPort = rp
+              }
+              reattach.push(nc)
+              return false
+            })
+            reattach.forEach((nc) => AppState.connections.push(nc))
+            SelectionManager.clear()
+            NodeManager.refreshRefNodes()
+            ConnectionManager.renderAll()
+            if (window.AlignManager) window.AlignManager.scheduleRefresh()
+            debouncedAutoSave(true)
+            notify(t('notify.extracted'))
+          },
+
           _createPort(nodeId, portType) {
             const port = document.createElement('div')
             port.className = 'node-port ' + portType
@@ -8821,6 +9098,19 @@ notify pgrst, 'reload schema';</textarea
                 ImageManager.openEditor(node)
               })
               content.addEventListener('selectstart', (e) => e.preventDefault())
+            } else if (type === 'canvas') {
+              // 画布引用节点：dataset.ref 指向目标画布 id，双击跳转。
+              // 内容由 refreshRefNode 按索引 meta 实时渲染（名称/节点数/缺失态）。
+              content.setAttribute('contenteditable', 'false')
+              content.classList.add('zw-canvas-ref')
+              if (node && data && data.ref) node.dataset.ref = data.ref
+              content.addEventListener('dblclick', function (e) {
+                e.stopPropagation()
+                NodeManager.openRef(node)
+              })
+              content.addEventListener('click', function (e) {
+                e.stopPropagation()
+              })
             } else if (type === 'markdown') {
               content.style.padding = '16px 24px'
               content.style.cursor = 'pointer'
@@ -9297,6 +9587,8 @@ notify pgrst, 'reload schema';</textarea
           },
           // ---- Title edit ----
           _initTitleEdit(node) {
+            // 画布引用节点的标题镜像目标画布名（改名走画布列表），不可直接编辑
+            if (node.dataset.type === 'canvas') return
             const titleEl = getNodeTitle(node)
             if (!titleEl) return
             const textSpan = titleEl.querySelector('.title-text')
@@ -15573,6 +15865,57 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         // 14. AUTO SAVE
         // ================================================================
+        // 单个节点 → 可持久化数据对象。buildCanvasData 与「提取为子画布」共用。
+        function buildNodeData(node) {
+          const type = node.dataset.type
+          const contentEl = getNodeContent(node)
+          const titleEl = getNodeTitle(node)
+          const title = titleEl ? titleEl.querySelector('.title-text')?.textContent || '' : ''
+          const obj = {
+            type,
+            x: node.style.left,
+            y: node.style.top,
+            w: node.style.width,
+            h: node.style.height,
+            title: title.trim(),
+            id: node.id,
+            locked: node.classList.contains('locked'),
+            minimized: node.classList.contains('minimized'),
+            collapsed: node.dataset.groupCollapsed === 'true' || undefined,
+            fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
+            borderColor: node.dataset.borderColor || '',
+          }
+          if (type === 'text' || type === 'todo' || type === 'group') {
+            obj.content = contentEl ? contentEl.innerHTML : ''
+            obj.lh = contentEl ? contentEl.style.lineHeight : ''
+          } else if (type === 'image') {
+            // 关键：不能从 <img>.src 取。
+            // link 模式渲染的是 blob: URL，那是会话级的，
+            // 存下来刷新后就是一条死链。必须存 assetId。
+            // embed 模式的 data URL 则要原样带走。
+            const info = ImageManager.normalize(node.dataset)
+            obj.srcMode = info.mode
+            obj.src = info.src
+            obj.assetId = info.assetId
+            obj.fileName = info.fileName
+            obj.mime = info.mime
+            obj.size = info.size
+            // 显示尺寸也要跟着存，否则重开/导出后图片大小会退回默认
+            obj.imgW = node.dataset.imgW || ''
+            obj.imgH = node.dataset.imgH || ''
+            obj.imgRatio = node.dataset.imgRatio === '0' ? '0' : '1'
+          } else if (type === 'markdown' || type === 'math') {
+            obj.source = contentEl ? contentEl.dataset.source : ''
+          } else if (type === 'canvas') {
+            // 引用节点：目标画布 id + 当前画布名（标题镜像，改名后保存即同步）
+            obj.ref = node.dataset.ref || ''
+            const idx = DocManager._idx
+            const meta = obj.ref && idx ? idx.meta[obj.ref] : null
+            if (meta) obj.title = meta.name
+          }
+          return obj
+        }
+
         function buildCanvasData() {
           const data = {
             nodes: [],
@@ -15590,47 +15933,7 @@ notify pgrst, 'reload schema';</textarea
             doodles: DoodleManager.serialize(),
           }
           getNodes().forEach((node) => {
-            const type = node.dataset.type
-            const contentEl = getNodeContent(node)
-            const titleEl = getNodeTitle(node)
-            const title = titleEl ? titleEl.querySelector('.title-text')?.textContent || '' : ''
-            const obj = {
-              type,
-              x: node.style.left,
-              y: node.style.top,
-              w: node.style.width,
-              h: node.style.height,
-              title: title.trim(),
-              id: node.id,
-              locked: node.classList.contains('locked'),
-              minimized: node.classList.contains('minimized'),
-              collapsed: node.dataset.groupCollapsed === 'true' || undefined,
-              fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
-              borderColor: node.dataset.borderColor || '',
-            }
-            if (type === 'text' || type === 'todo' || type === 'group') {
-              obj.content = contentEl ? contentEl.innerHTML : ''
-              obj.lh = contentEl ? contentEl.style.lineHeight : ''
-            } else if (type === 'image') {
-              // 关键：不能从 <img>.src 取。
-              // link 模式渲染的是 blob: URL，那是会话级的，
-              // 存下来刷新后就是一条死链。必须存 assetId。
-              // embed 模式的 data URL 则要原样带走。
-              const info = ImageManager.normalize(node.dataset)
-              obj.srcMode = info.mode
-              obj.src = info.src
-              obj.assetId = info.assetId
-              obj.fileName = info.fileName
-              obj.mime = info.mime
-              obj.size = info.size
-              // 显示尺寸也要跟着存，否则重开/导出后图片大小会退回默认
-              obj.imgW = node.dataset.imgW || ''
-              obj.imgH = node.dataset.imgH || ''
-              obj.imgRatio = node.dataset.imgRatio === '0' ? '0' : '1'
-            } else if (type === 'markdown' || type === 'math') {
-              obj.source = contentEl ? contentEl.dataset.source : ''
-            }
-            data.nodes.push(obj)
+            data.nodes.push(buildNodeData(node))
           })
           return data
         }
@@ -15897,6 +16200,7 @@ notify pgrst, 'reload schema';</textarea
               // 回放会重建整个 DOM，大纲必须跟着重画
               OutlineManager.currentId = null
               SearchManager.refresh()
+              NodeManager.refreshRefNodes()
 
               // 回放过程中可能被聚焦到某个节点上，退回后别留一个野生光标
               const a = document.activeElement
@@ -16633,6 +16937,8 @@ notify pgrst, 'reload schema';</textarea
               OutlineManager.currentId = null
               OutlineManager.collapsed.clear()
               SearchManager.refresh()
+              // 引用节点的名称/状态按索引刷一遍（画布可能刚被改名/删除）
+              NodeManager.refreshRefNodes()
             } finally {
               // 撤销栈闸门在这里复位；落盘冻结由 open() 统一收尾，
               // 并发切换时先完成的那次不能提前解冻。
@@ -16684,6 +16990,36 @@ notify pgrst, 'reload schema';</textarea
               await DocManager.writeDoc(id, doc)
             }
             UIManager.renderDocList()
+            // 引用节点的标题镜像画布名，改名后同步刷一遍
+            NodeManager.refreshRefNodes()
+            return true
+          },
+
+          // —— 子画布层级：parentId 存在索引 meta 里 ——
+          // parentOf 带存活校验（父画布被删后引用自动失效，不会跳进死链）
+          parentOf(id) {
+            const idx = DocManager._idx
+            if (!idx) return null
+            const m = idx.meta[id]
+            const pid = m && m.parentId
+            return pid && idx.order.indexOf(pid) >= 0 ? pid : null
+          },
+          childrenOf(id) {
+            const idx = DocManager._idx
+            if (!idx) return []
+            return idx.order.filter((x) => idx.meta[x] && idx.meta[x].parentId === id)
+          },
+          async setDocParent(id, parentId) {
+            const idx = await DocManager.indexAsync()
+            if (!idx || idx.order.indexOf(id) < 0) return false
+            const m = idx.meta[id]
+            if (!m) return false
+            if (parentId && idx.order.indexOf(parentId) >= 0 && parentId !== id) {
+              m.parentId = parentId
+            } else {
+              delete m.parentId
+            }
+            await DocManager.writeIndex(idx)
             return true
           },
 
@@ -17176,6 +17512,26 @@ notify pgrst, 'reload schema';</textarea
               case 'ctxNewGroup': {
                 const world = CanvasManager.screenToWorld(AppState.ctxX, AppState.ctxY)
                 NodeManager.createNodeAt(world.x, world.y, 'group')
+                DOM.contextMenu.classList.remove('open')
+                break
+              }
+              case 'ctxNewCanvas': {
+                const world = CanvasManager.screenToWorld(AppState.ctxX, AppState.ctxY)
+                NodeManager.newSubCanvasAt(world.x, world.y)
+                DOM.contextMenu.classList.remove('open')
+                break
+              }
+              case 'ctxExtractCanvas':
+                NodeManager.extractSelectionToChildCanvas()
+                DOM.contextMenu.classList.remove('open')
+                break
+              case 'ctxOpenParent': {
+                const pid = DocManager.parentOf(DocManager.activeId())
+                if (pid) {
+                  DocManager.open(pid)
+                } else {
+                  notify(t('notify.refMissing'))
+                }
                 DOM.contextMenu.classList.remove('open')
                 break
               }
@@ -17742,6 +18098,11 @@ notify pgrst, 'reload schema';</textarea
             const multiCount = AlignManager.selectedNodes().length
             document.querySelectorAll('.ctx-multi-only').forEach((el) => {
               el.style.display = multiCount >= 2 ? 'block' : 'none'
+            })
+            // 子画布项：「打开父画布」仅当前画布有存活父画布时出现
+            const curParent = DocManager.parentOf(DocManager.activeId())
+            document.querySelectorAll('.ctx-parent-only').forEach((el) => {
+              el.style.display = curParent ? 'block' : 'none'
             })
             // Also handle divider separation - we have one divider with class ctx-node-only
             // For paste, we may want to show always if clipboard exists
