@@ -8461,24 +8461,32 @@ notify pgrst, 'reload schema';</textarea
           // 过滤掉指向不存在节点的连线。旧版导出的文件里会残留这种
           // 「孤儿连线」（节点删了连线没清），它们既画不出来，
           // 又会在每次保存时继续写回去，越攒越多。
-          _saneConnections(conns) {
+          // knownIds：本次载入的节点 id 集合。用它判断端点，而不是查 DOM ——
+          // 某个节点渲染失败（createNodeAt 兜底返回 null）时，查 DOM 会把
+          // 指向它的连线判成孤儿并永久写回磁盘，节点好了连线却回不来。
+          _saneConnections(conns, knownIds) {
             const list = Array.isArray(conns) ? conns : []
+            const ids = knownIds instanceof Set ? knownIds : null
             const kept = []
             let dropped = 0
+            const exists = (id) => (ids ? ids.has(id) : !!getNodeById(id))
             list.forEach((c) => {
-              if (!c || typeof c.from !== 'string' || typeof c.to !== 'string') {
+              if (!c) {
                 dropped++
                 return
               }
-              if (!getNodeById(c.from) || !getNodeById(c.to)) {
+              const from = c.from == null ? '' : String(c.from)
+              const to = c.to == null ? '' : String(c.to)
+              if (!from || !to || from === to || !exists(from) || !exists(to)) {
                 dropped++
                 return
               }
-              if (c.from === c.to) {
-                dropped++
-                return
-              }
-              kept.push(c)
+              kept.push({
+                from: from,
+                to: to,
+                fromPort: c.fromPort || 'bottom',
+                toPort: c.toPort || 'top',
+              })
             })
             return { kept: kept, dropped: dropped }
           },
@@ -9867,7 +9875,13 @@ notify pgrst, 'reload schema';</textarea
             AppState.renderPending = true
             requestAnimationFrame(() => {
               AppState.renderPending = false
-              ConnectionManager._renderNow()
+              // 重建期偶尔会混进一条脏连线数据；一帧抛错会让整张画布
+              // 的连线都不画，看起来就像「连线全没了」。逐条隔离掉。
+              try {
+                ConnectionManager._renderNow()
+              } catch (e) {
+                console.warn('[ZenWriter] connection render failed', e)
+              }
             })
           },
           _renderNow() {
@@ -9880,6 +9894,7 @@ notify pgrst, 'reload schema';</textarea
             // Mark nodes with connections
             getNodes().forEach((n) => n.classList.remove('has-conn'))
             AppState.connections.forEach((conn) => {
+              if (!conn || typeof conn.from !== 'string' || typeof conn.to !== 'string') return
               const fn = getNodeById(conn.from)
               const tn = getNodeById(conn.to)
               if (fn) fn.classList.add('has-conn')
@@ -9887,6 +9902,7 @@ notify pgrst, 'reload schema';</textarea
             })
 
             AppState.connections.forEach((conn) => {
+              if (!conn || typeof conn.from !== 'string' || typeof conn.to !== 'string') return
               const fromNode = getNodeById(conn.from)
               const toNode = getNodeById(conn.to)
               if (!fromNode || !toNode) return
@@ -14179,13 +14195,18 @@ notify pgrst, 'reload schema';</textarea
             return buildCanvasData()
           }
           clearTimeout(AppState.autoSaveTimer)
+          AppState.autoSaveTimer = null
           const data = buildCanvasData()
+          // 目标槽位必须和这份 DOM 快照在同一时刻锁定。
+          // saveCurrent 是排队异步写的，等它真正落盘时 activeId 可能已被
+          // 删除/切换流程改掉；那时再取 idx.activeId 就会把内容串到别的画布。
+          let targetId = DocManager.activeId()
           try {
-            if (!DocManager.activeId()) {
+            if (!targetId) {
               // 还没有任何画布（比如首次打开就是空的）-> 先建一个
-              await DocManager.createDoc()
+              targetId = await DocManager.createDoc()
             }
-            await DocManager.saveCurrent(data)
+            await DocManager.saveCurrent(data, targetId)
           } catch (e) {
             console.warn('[ZenWriter] canvas persist failed', e)
             notify(t('notify.storageWriteFailed'))
@@ -14203,9 +14224,14 @@ notify pgrst, 'reload schema';</textarea
           // 每次改动都会走到这里，所以撤销栈的提交点就挂在这里
           History.record()
           clearTimeout(AppState.autoSaveTimer)
-          // 切换画布时不排落盘任务。重建过程里每个 createNodeAt 都会走到这里，
-          // 排了定时器就等于给「半张画布」发了一张写错槽位的通行证。
-          if (AppState.switchingCanvas) return
+          AppState.autoSaveTimer = null
+          // 批量重建 DOM（切换画布 / 启动载入 / 撤销回放）时，
+          // 节点是逐个 createNodeAt 建出来的，每个建完都会调到这里，
+          // 而此时 AppState.connections 往往还没恢复（仍是 []）。
+          // 一旦落盘就会把「半张画布 + 空连线」写回当前槽位，
+          // 刷新后整张画布的连线就没了 —— 正是「一打开就没连线」的根源。
+          // 载入/回放完成后由各自的提交点统一落盘（或盘上本来就是对的）。
+          if (AppState.switchingCanvas || History.applying) return
           if (immediate) {
             AppState.persistPromise = persistCanvasData()
               .then(() => OutlineManager.render())
@@ -14224,6 +14250,8 @@ notify pgrst, 'reload schema';</textarea
           if (!AppState.autoSaveTimer) return
           clearTimeout(AppState.autoSaveTimer)
           AppState.autoSaveTimer = null
+          // 切换/删除/载入期间 DOM 与 activeId 可能不一致，冲下去只会写错画布
+          if (AppState.switchingCanvas || History.applying) return
           AppState.persistPromise = persistCanvasData().catch(() => {})
         }
         document.addEventListener('visibilitychange', () => {
@@ -14442,7 +14470,8 @@ notify pgrst, 'reload schema';</textarea
               DoodleManager.load(snap.doodles)
               AppState.nodeCounter = Math.max(AppState.nodeCounter, snap.nodeCounter || 0)
               // 撤销快照里也可能带孤儿连线，同样过滤
-              const saneR = NodeManager._saneConnections(snap.connections)
+              const knownIdsR = new Set((snap.nodes || []).map((n) => n && n.id).filter(Boolean))
+              const saneR = NodeManager._saneConnections(snap.connections, knownIdsR)
               AppState.connections = saneR.kept.map((c) => ({
                 from: c.from,
                 to: c.to,
@@ -15058,10 +15087,12 @@ notify pgrst, 'reload schema';</textarea
           },
 
           // 保存当前画布到它自己的存储槽（不切画布）
-          saveCurrent(data) {
+          // targetId：调用方在读 DOM 的同时锁定的画布 id。
+          // 不传时退回当前 activeId（切画布前的 pre-open save 走这条）。
+          saveCurrent(data, targetId) {
             const idx = DocManager._idx
             if (!idx) return Promise.resolve()
-            const id = idx.activeId
+            const id = targetId || idx.activeId
             if (!id) return Promise.resolve()
             const prevMeta = idx.meta[id] || {}
             const now = Date.now()
@@ -15134,9 +15165,27 @@ notify pgrst, 'reload schema';</textarea
           },
 
           open(id) {
+            // 闸门必须在**调用时**同步关上。_openInner 是排在 Promise 锁
+            // 队列里的，等它真正跑起来才关，会留下一个微任务窗口：
+            // 删除画布时 activeId 已指向新画布、DOM 却还是旧画布，
+            // 这期间任何落盘都会把旧内容写进新画布的槽位。
+            // 计数是为了并发 open —— 先完成的那次不能提前开闸。
+            AppState.switchingCanvas = true
+            AppState._switchDepth = (AppState._switchDepth || 0) + 1
             const p = DocManager._withLock(() => DocManager._openInner(id))
             AppState.switchPromise = p
             return p
+              .catch((e) => {
+                console.error('[ZenWriter] canvas open failed', id, e)
+                return false
+              })
+              .finally(() => {
+                AppState._switchDepth = Math.max(0, (AppState._switchDepth || 0) - 1)
+                if (AppState._switchDepth === 0) {
+                  AppState.switchingCanvas = false
+                  AppState.switchPromise = null
+                }
+              })
           },
 
           async _openInner(id) {
@@ -15191,7 +15240,8 @@ notify pgrst, 'reload schema';</textarea
               DoodleManager.load(doc.doodles)
               // 旧数据里可能残留指向已删除节点的连线（导出时没清干净）。
               // 这些连线画不出来，留着只会越积越多，得明确丢掉并告知用户。
-              const sane = NodeManager._saneConnections(doc.connections)
+              const knownIds = new Set((doc.nodes || []).map((n) => n && n.id).filter(Boolean))
+              const sane = NodeManager._saneConnections(doc.connections, knownIds)
               AppState.connections = sane.kept.map((c) => ({
                 from: c.from,
                 to: c.to,
@@ -15233,9 +15283,8 @@ notify pgrst, 'reload schema';</textarea
               SearchManager.refresh()
             } finally {
               History.applying = false
-              // 必须复位，否则之后所有落盘都会被跳过 = 改动全丢
-              AppState.switchingCanvas = false
-              AppState.switchPromise = null
+              // 闸门 / switchPromise 由 open() 统一复位（支持并发 open），
+              // 这里不能提前清，否则排在后面的切换会失去保护。
             }
 
             setTimeout(() => {
@@ -15301,10 +15350,31 @@ notify pgrst, 'reload schema';</textarea
             }
             if (wasActive) {
               const nextId = idx.order[Math.min(pos, idx.order.length - 1)]
-              // 先把 activeId 切过去，避免 open() 又把已删除的画布存回来
-              idx.activeId = nextId
-              await DocManager.writeIndex(idx)
-              return DocManager.open(nextId)
+              // 改 activeId 之前先收干净所有待落盘/在飞的写入，并同步关闸：
+              // 从这里到 open() 重建 DOM 之间，DOM 仍是被删画布，
+              // 而 activeId 马上要指向 nextId，一次 stray persist 就会
+              // 把旧内容（含它的连线集合）覆盖到邻近画布上。
+              clearTimeout(AppState.autoSaveTimer)
+              AppState.autoSaveTimer = null
+              try {
+                if (AppState.persistPromise) await AppState.persistPromise
+                await DocManager._writeQueue
+              } catch (_) {}
+              AppState.switchingCanvas = true
+              let opening = false
+              try {
+                // 先把 activeId 切过去，避免 open() 又把已删除的画布存回来
+                idx.activeId = nextId
+                await DocManager.writeIndex(idx)
+                opening = true
+                return await DocManager.open(nextId)
+              } finally {
+                // 正常路径由 open() 复位；这里只兜住「open 没能启动」的情况
+                if (!opening && !AppState._switchDepth) {
+                  AppState.switchingCanvas = false
+                  AppState.switchPromise = null
+                }
+              }
             }
             await DocManager.writeIndex(idx)
             UIManager.renderDocList()
@@ -15566,7 +15636,7 @@ notify pgrst, 'reload schema';</textarea
               case 'docDelete': {
                 e.stopPropagation()
                 const xid = target.dataset.docId
-                if (xid) DocManager.deleteDocFlow(xid)
+                if (xid) await DocManager.deleteDocFlow(xid)
                 break
               }
               case 'save':
@@ -16528,6 +16598,9 @@ notify pgrst, 'reload schema';</textarea
             if (doc) {
               try {
                 History.applying = true // 载入历史数据不进撤销栈
+                // 启动重建同样要关落盘闸门：期间 AppState.connections
+                // 还是 []，任何一次 persist 都会把空连线写回磁盘。
+                AppState.switchingCanvas = true
                 clearTimeout(AppState.autoSaveTimer)
                 ;(doc.nodes || []).forEach((n) => {
                   const nx = parseFloat(n.x)
@@ -16540,7 +16613,8 @@ notify pgrst, 'reload schema';</textarea
                   )
                 })
                 DoodleManager.load(doc.doodles)
-                const sane = NodeManager._saneConnections(doc.connections)
+                const knownIds = new Set((doc.nodes || []).map((n) => n && n.id).filter(Boolean))
+                const sane = NodeManager._saneConnections(doc.connections, knownIds)
                 AppState.connections = sane.kept.map((c) => ({
                   from: c.from,
                   to: c.to,
@@ -16562,6 +16636,7 @@ notify pgrst, 'reload schema';</textarea
                 console.warn('[ZenWriter] active doc load failed', e)
               } finally {
                 History.applying = false
+                AppState.switchingCanvas = false
               }
             }
           }
@@ -16646,10 +16721,15 @@ notify pgrst, 'reload schema';</textarea
           // 顺序很重要：不冲的话云端拿到的可能是 300ms 之前的旧状态。
           async snapshot() {
             let data = null
-            try {
-              data = await persistCanvasData()
-            } catch (e) {
-              console.warn('[ZenWriter] snapshot flush failed', e)
+            // 切换/启动重建期间 DOM 是半张画布，persistCanvasData 也会被
+            // 闸门挡下；这时直接读盘即可，别把半张快照当兜底数据，
+            // 也别把等待切换的时间算进同步轮询里。
+            if (!AppState.switchingCanvas && !History.applying) {
+              try {
+                data = await persistCanvasData()
+              } catch (e) {
+                console.warn('[ZenWriter] snapshot flush failed', e)
+              }
             }
             const settings = Settings.collect()
             try {
