@@ -1910,6 +1910,99 @@
         border: 1px solid var(--accent-green);
         background: rgba(51, 153, 51, 0.12);
       }
+      /* 多选对齐工具条：选中 2 个以上节点时自动浮出，贴着选区包围盒上沿居中。
+         层级低于右键菜单(2500)、文本浮动工具条(2000)，高于画布与顶栏。 */
+      #zw-align-bar {
+        position: fixed;
+        display: none;
+        z-index: 1900;
+        align-items: center;
+        gap: 2px;
+        padding: 4px 6px;
+        max-width: calc(100vw - 16px);
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+      }
+      #zw-align-bar.visible {
+        display: flex;
+      }
+      #zw-align-bar::-webkit-scrollbar {
+        height: 0;
+      }
+      .zw-align-count {
+        flex-shrink: 0;
+        padding: 0 6px 0 2px;
+        font-size: 10px;
+        color: var(--text-dim);
+      }
+      .zw-align-btn {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-dim);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition:
+          color 0.1s,
+          background 0.1s,
+          border-color 0.1s;
+      }
+      .zw-align-btn svg {
+        display: block;
+      }
+      .zw-align-btn:hover {
+        color: var(--text);
+        background: var(--hover);
+        border-color: var(--border-dim);
+      }
+      .zw-align-btn.pressed {
+        color: var(--active-text);
+        background: var(--active-bg);
+        border-color: var(--active-bg);
+      }
+      .zw-align-btn.disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+      .zw-align-btn.disabled:hover {
+        color: var(--text-dim);
+        background: transparent;
+        border-color: transparent;
+      }
+      .zw-align-sep {
+        width: 1px;
+        height: 16px;
+        margin: 0 3px;
+        flex-shrink: 0;
+        background: var(--border-dim);
+      }
+      /* 右键菜单里的同一组按钮：紧凑网格，不把菜单撑出屏幕 */
+      .ctx-multi-only {
+        display: none;
+      }
+      .ctx-align-label {
+        padding: 2px 10px 4px;
+        font-size: 10px;
+        color: var(--text-faint);
+      }
+      .ctx-align-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 26px);
+        gap: 2px;
+        padding: 0 6px 2px;
+      }
       .node-header {
         height: 32px;
         border-bottom: 1px solid var(--border);
@@ -3761,6 +3854,10 @@
           max-width: calc(100vw - 16px);
           padding: 4px;
         }
+        #zw-align-bar {
+          max-width: calc(100vw - 16px);
+          padding: 3px;
+        }
         #status-bar {
           font-size: 9px;
           padding: 0 8px;
@@ -4426,6 +4523,12 @@
         <span data-i18n="ctx.changeType">Change Type…</span>
       </div>
       <div class="dd-divider ctx-node-only"></div>
+      <!-- 多选对齐：仅在选中 2 个以上节点时显示，按钮由 AlignManager 生成 -->
+      <div class="dd-divider ctx-multi-only"></div>
+      <div class="ctx-multi-only">
+        <div class="ctx-align-label" data-i18n="ctx.alignGroup">对齐 / 分布</div>
+        <div class="ctx-align-grid" id="ctx-align-grid"></div>
+      </div>
       <div class="dd-item" id="ctx-paste-node" data-action="ctxPaste">
         <span data-i18n="ctx.pasteNode">Paste Node</span>
       </div>
@@ -4434,6 +4537,9 @@
         <span data-i18n="ctx.clearConnections">Clear All Connections</span>
       </div>
     </div>
+
+    <!-- ===== Multi-selection align bar ===== -->
+    <div id="zw-align-bar" role="toolbar" aria-label="Align selected nodes"></div>
 
     <div id="zw-cloud-modal" aria-hidden="true" inert>
       <div id="zw-cloud-card" role="dialog" aria-modal="true" aria-labelledby="zw-cloud-title">
@@ -5214,6 +5320,21 @@ notify pgrst, 'reload schema';</textarea
             off: 'OFF',
             'theme.light': 'Light',
             'theme.dark': 'Dark',
+            // ---- Multi-selection align / distribute ----
+            'align.selected': '{0} selected',
+            'align.left': 'Align left edges',
+            'align.hcenter': 'Align horizontal centers',
+            'align.right': 'Align right edges',
+            'align.top': 'Align top edges',
+            'align.vcenter': 'Align vertical centers',
+            'align.bottom': 'Align bottom edges',
+            'align.distributeH': 'Distribute horizontally (equal gaps)',
+            'align.distributeV': 'Distribute vertically (equal gaps)',
+            'align.matchWidth': 'Match width (to the widest)',
+            'align.matchHeight': 'Match height (to the tallest)',
+            'align.needTwo': 'Select at least 2 nodes first',
+            'align.needThree': 'Distribution needs at least 3 nodes',
+            'ctx.alignGroup': 'ALIGN / DISTRIBUTE',
           },
           zh: {
             'splash.tagline': '线框写作环境',
@@ -5501,6 +5622,21 @@ notify pgrst, 'reload schema';</textarea
             'notify.storageWriteFailed': '写入本地存储失败',
             'notify.storageMigrated': '已把 {0} 张画布迁移到 IndexedDB，不再有体积上限',
             'stats.text': '{0} 个节点 · {2} 条连接',
+            // ---- 多选对齐 / 分布 ----
+            'align.selected': '已选 {0} 个',
+            'align.left': '左对齐',
+            'align.hcenter': '水平居中对齐',
+            'align.right': '右对齐',
+            'align.top': '顶部对齐',
+            'align.vcenter': '竖直居中对齐',
+            'align.bottom': '底部对齐',
+            'align.distributeH': '水平等距分布',
+            'align.distributeV': '竖直等距分布',
+            'align.matchWidth': '统一宽度（按最宽）',
+            'align.matchHeight': '统一高度（按最高）',
+            'align.needTwo': '请先选中至少 2 个节点',
+            'align.needThree': '等距分布需要至少 3 个节点',
+            'ctx.alignGroup': '对齐 / 分布',
           },
         }
 
@@ -10982,6 +11118,8 @@ notify pgrst, 'reload schema';</textarea
             ConnectionManager.renderAll()
             // 笔迹用的是同一套世界坐标，节点动了它也得跟着重画
             DoodleManager.render()
+            // 镜头变了，多选对齐工具条要重新贴住选区
+            if (window.AlignManager) window.AlignManager.scheduleRefresh()
           },
 
           // ---- 平移 / 缩放的原子操作 ----
@@ -11240,6 +11378,11 @@ notify pgrst, 'reload schema';</textarea
             document.addEventListener('mouseup', () => this._onUp())
           },
 
+          // 选中集合变化 → 多选对齐工具条跟着显隐 / 重定位
+          _changed() {
+            if (window.AlignManager) window.AlignManager.scheduleRefresh()
+          },
+
           _onDown(e) {
             if (e.button !== 0) return
             if (AppState.doodleMode) return
@@ -11314,12 +11457,14 @@ notify pgrst, 'reload schema';</textarea
           _apply(idSet) {
             AppState.selectedNodeIds = idSet
             getNodes().forEach((n) => n.classList.toggle('selected', idSet.has(n.id)))
+            this._changed()
           },
 
           clear() {
             if (!AppState.selectedNodeIds) AppState.selectedNodeIds = new Set()
             AppState.selectedNodeIds.clear()
             getNodes().forEach((n) => n.classList.remove('selected'))
+            this._changed()
           },
 
           isSelected(node) {
@@ -11330,12 +11475,14 @@ notify pgrst, 'reload schema';</textarea
             if (!node || node.classList.contains('locked')) return
             AppState.selectedNodeIds.add(node.id)
             node.classList.add('selected')
+            this._changed()
           },
 
           deselect(node) {
             if (!node) return
             AppState.selectedNodeIds.delete(node.id)
             node.classList.remove('selected')
+            this._changed()
           },
 
           toggle(node) {
@@ -11352,6 +11499,7 @@ notify pgrst, 'reload schema';</textarea
               next.add(n.id)
             })
             AppState.selectedNodeIds = next
+            this._changed()
           },
 
           // 拖动时要一起移动的所有节点：当前选中的每一个，
@@ -11392,9 +11540,342 @@ notify pgrst, 'reload schema';</textarea
             ImageManager.gc()
             debouncedAutoSave(true)
             notify(t('notify.nodeRemoved'))
+            this._changed()
             return true
           },
         }
+
+        // ================================================================
+        // 11.36 ALIGN MANAGER — 多选节点一键对齐 / 分布 / 统一尺寸
+        // ------------------------------------------------------------
+        // 选中 >= 2 个节点时，选区上沿自动浮出一条图标工具条；右键菜单里
+        // 也放了同一组按钮。两边共用 data-action="zwAlign:<mode>"，
+        // 由全局 click 委托统一派发，不在 switch 里堆十个 case。
+        //
+        // 基准一律是「选中节点的包围盒」，不是画布、也不是某个主节点：
+        //   左/右/上/下 = 贴包围盒对应边；水平/竖直居中 = 贴包围盒中线。
+        // 分布 = 保持首尾两个节点不动，其余按中心点等距插值。
+        // 只移动选中的节点；锁定节点不参与，也不会被移动。分组节点的
+        // 连接子节点不跟着走（对齐是逐个节点的位置操作，连线会自动重绘）。
+        // 落盘 + 撤销都走 debouncedAutoSave(true)：History 挂在那里。
+        // ================================================================
+        const AlignManager = {
+          PREFIX: 'zwAlign:',
+          // min = 该动作至少需要几个有效选中节点；group 用来插分隔线
+          MODES: [
+            { key: 'left', group: 0, min: 2 },
+            { key: 'hcenter', group: 0, min: 2 },
+            { key: 'right', group: 0, min: 2 },
+            { key: 'top', group: 1, min: 2 },
+            { key: 'vcenter', group: 1, min: 2 },
+            { key: 'bottom', group: 1, min: 2 },
+            { key: 'distributeH', group: 2, min: 3 },
+            { key: 'distributeV', group: 2, min: 3 },
+            { key: 'matchWidth', group: 3, min: 2 },
+            { key: 'matchHeight', group: 3, min: 2 },
+          ],
+          // 20×20 线框图：细线是参考基准，实心块是被对齐的节点
+          ICONS: {
+            left:
+              '<path d="M2 2v16" stroke="currentColor" stroke-width="1.4"/>' +
+              '<g fill="currentColor"><rect x="4" y="3.5" width="12" height="2.5"/>' +
+              '<rect x="4" y="8.75" width="8" height="2.5"/>' +
+              '<rect x="4" y="14" width="10" height="2.5"/></g>',
+            hcenter:
+              '<path d="M10 2v16" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/>' +
+              '<g fill="currentColor"><rect x="4" y="3.5" width="12" height="2.5"/>' +
+              '<rect x="6" y="8.75" width="8" height="2.5"/>' +
+              '<rect x="5" y="14" width="10" height="2.5"/></g>',
+            right:
+              '<path d="M18 2v16" stroke="currentColor" stroke-width="1.4"/>' +
+              '<g fill="currentColor"><rect x="4" y="3.5" width="12" height="2.5"/>' +
+              '<rect x="8" y="8.75" width="8" height="2.5"/>' +
+              '<rect x="6" y="14" width="10" height="2.5"/></g>',
+            top:
+              '<path d="M2 2h16" stroke="currentColor" stroke-width="1.4"/>' +
+              '<g fill="currentColor"><rect x="3.5" y="4" width="2.5" height="12"/>' +
+              '<rect x="8.75" y="4" width="2.5" height="8"/>' +
+              '<rect x="14" y="4" width="2.5" height="10"/></g>',
+            vcenter:
+              '<path d="M2 10h16" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/>' +
+              '<g fill="currentColor"><rect x="3.5" y="4" width="2.5" height="12"/>' +
+              '<rect x="8.75" y="6" width="2.5" height="8"/>' +
+              '<rect x="14" y="5" width="2.5" height="10"/></g>',
+            bottom:
+              '<path d="M2 18h16" stroke="currentColor" stroke-width="1.4"/>' +
+              '<g fill="currentColor"><rect x="3.5" y="4" width="2.5" height="12"/>' +
+              '<rect x="8.75" y="8" width="2.5" height="8"/>' +
+              '<rect x="14" y="6" width="2.5" height="10"/></g>',
+            distributeH:
+              '<path d="M2 2v16M18 2v16" stroke="currentColor" stroke-width="1.4"/>' +
+              '<g fill="currentColor"><rect x="4" y="4" width="2.5" height="12"/>' +
+              '<rect x="8.75" y="4" width="2.5" height="12"/>' +
+              '<rect x="13.5" y="4" width="2.5" height="12"/></g>',
+            distributeV:
+              '<path d="M2 2h16M2 18h16" stroke="currentColor" stroke-width="1.4"/>' +
+              '<g fill="currentColor"><rect x="4" y="4" width="12" height="2.5"/>' +
+              '<rect x="4" y="8.75" width="12" height="2.5"/>' +
+              '<rect x="4" y="13.5" width="12" height="2.5"/></g>',
+            matchWidth:
+              '<g fill="none" stroke="currentColor" stroke-width="1.4">' +
+              '<rect x="2.5" y="3" width="15" height="5.5"/>' +
+              '<rect x="2.5" y="11.5" width="15" height="5.5"/></g>' +
+              '<path d="M10 8.5v3" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 2"/>',
+            matchHeight:
+              '<g fill="none" stroke="currentColor" stroke-width="1.4">' +
+              '<rect x="2.5" y="2.5" width="7" height="15"/>' +
+              '<rect x="10.5" y="2.5" width="7" height="15"/></g>' +
+              '<path d="M9.5 10h1" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1 1"/>',
+          },
+
+          _bar: null,
+          _count: null,
+          _buttons: [],
+          _raf: 0,
+
+          init() {
+            this._bar = document.getElementById('zw-align-bar')
+            if (!this._bar) return
+            this._buttons = []
+            const count = document.createElement('span')
+            count.className = 'zw-align-count'
+            this._bar.appendChild(count)
+            this._count = count
+
+            // 浮条 + 右键菜单网格，两处按钮共用同一套动作
+            const grid = document.getElementById('ctx-align-grid')
+            let group = -1
+            this.MODES.forEach((mode, i) => {
+              if (i && mode.group !== group) {
+                const sep = document.createElement('div')
+                sep.className = 'zw-align-sep'
+                this._bar.appendChild(sep)
+              }
+              group = mode.group
+              const b1 = this._makeButton(mode)
+              this._bar.appendChild(b1)
+              this._buttons.push({ mode: mode, el: b1 })
+              if (grid) {
+                const b2 = this._makeButton(mode)
+                grid.appendChild(b2)
+                this._buttons.push({ mode: mode, el: b2 })
+              }
+            })
+
+            // 别让按钮抢走正在编辑的节点焦点（click 仍会正常冒泡到委托）
+            this._bar.addEventListener('mousedown', (e) => e.preventDefault())
+            if (grid) grid.addEventListener('mousedown', (e) => e.preventDefault())
+
+            // 拖动节点、平移/缩放画布、改窗口大小时，浮条要重新贴住选区
+            const soft = () => {
+              if (this._bar.classList.contains('visible')) this.scheduleRefresh()
+            }
+            document.addEventListener('mousemove', soft, { passive: true })
+            document.addEventListener('wheel', soft, { passive: true })
+            document.addEventListener('keydown', soft)
+            window.addEventListener('resize', soft)
+            this.refresh()
+          },
+
+          _makeButton(mode) {
+            const b = document.createElement('button')
+            b.type = 'button'
+            b.className = 'zw-align-btn'
+            b.dataset.action = this.PREFIX + mode.key
+            b.dataset.i18nTitle = 'align.' + mode.key
+            b.title = t('align.' + mode.key)
+            b.setAttribute('aria-label', b.title)
+            b.innerHTML =
+              '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" ' +
+              'focusable="false" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+              this.ICONS[mode.key] +
+              '</svg>'
+            return b
+          },
+
+          scheduleRefresh() {
+            if (this._raf) return
+            this._raf = requestAnimationFrame(() => {
+              this._raf = 0
+              this.refresh()
+            })
+          },
+
+          // 有效选中节点：id 已失效、节点被锁定的都不算
+          selectedNodes() {
+            const ids = AppState.selectedNodeIds
+            const out = []
+            if (!ids || !ids.size) return out
+            ids.forEach((id) => {
+              const el = document.getElementById(id)
+              if (
+                el &&
+                el.isConnected &&
+                el.classList.contains('node') &&
+                !el.classList.contains('locked')
+              )
+                out.push(el)
+            })
+            return out
+          },
+
+          _measure(nodes) {
+            return nodes.map((n) => ({
+              el: n,
+              x: parseFloat(n.style.left) || 0,
+              y: parseFloat(n.style.top) || 0,
+              // 折叠分组里被隐藏的节点量到 0，回退行内尺寸，和 autoLayout 同规则
+              w: n.offsetWidth || parseFloat(n.style.width) || 240,
+              h: n.offsetHeight || parseFloat(n.style.height) || 120,
+            }))
+          },
+
+          apply(key) {
+            const mode = this.MODES.find((m) => m.key === key)
+            if (!mode) return false
+            const nodes = this.selectedNodes()
+            if (nodes.length < 2) {
+              notify(t('align.needTwo'))
+              return false
+            }
+            if (nodes.length < mode.min) {
+              notify(t('align.needThree'))
+              return false
+            }
+            const items = this._measure(nodes)
+            const minL = Math.min(...items.map((i) => i.x))
+            const maxR = Math.max(...items.map((i) => i.x + i.w))
+            const minT = Math.min(...items.map((i) => i.y))
+            const maxB = Math.max(...items.map((i) => i.y + i.h))
+            const cx = (minL + maxR) / 2
+            const cy = (minT + maxB) / 2
+            const nx = new Map()
+            const ny = new Map()
+            const nw = new Map()
+            const nh = new Map()
+
+            switch (key) {
+              case 'left':
+                items.forEach((i) => nx.set(i.el, minL))
+                break
+              case 'right':
+                items.forEach((i) => nx.set(i.el, maxR - i.w))
+                break
+              case 'hcenter':
+                items.forEach((i) => nx.set(i.el, cx - i.w / 2))
+                break
+              case 'top':
+                items.forEach((i) => ny.set(i.el, minT))
+                break
+              case 'bottom':
+                items.forEach((i) => ny.set(i.el, maxB - i.h))
+                break
+              case 'vcenter':
+                items.forEach((i) => ny.set(i.el, cy - i.h / 2))
+                break
+              case 'distributeH': {
+                const sorted = items.slice().sort((a, b) => a.x + a.w / 2 - (b.x + b.w / 2))
+                const first = sorted[0]
+                const last = sorted[sorted.length - 1]
+                const c0 = first.x + first.w / 2
+                const c1 = last.x + last.w / 2
+                const step = (c1 - c0) / (sorted.length - 1)
+                sorted.forEach((it, idx) => nx.set(it.el, c0 + step * idx - it.w / 2))
+                break
+              }
+              case 'distributeV': {
+                const sorted = items.slice().sort((a, b) => a.y + a.h / 2 - (b.y + b.h / 2))
+                const first = sorted[0]
+                const last = sorted[sorted.length - 1]
+                const c0 = first.y + first.h / 2
+                const c1 = last.y + last.h / 2
+                const step = (c1 - c0) / (sorted.length - 1)
+                sorted.forEach((it, idx) => ny.set(it.el, c0 + step * idx - it.h / 2))
+                break
+              }
+              case 'matchWidth': {
+                const w = Math.max(...items.map((i) => i.w))
+                items.forEach((i) => nw.set(i.el, w))
+                break
+              }
+              case 'matchHeight': {
+                const h = Math.max(...items.map((i) => i.h))
+                // minimized 节点只有 32px 的 header，撑高只会得到一个空框
+                items.forEach((i) => {
+                  if (!i.el.classList.contains('minimized')) nh.set(i.el, h)
+                })
+                break
+              }
+            }
+
+            items.forEach((i) => {
+              if (nx.has(i.el)) i.el.style.left = Math.round(nx.get(i.el)) + 'px'
+              if (ny.has(i.el)) i.el.style.top = Math.round(ny.get(i.el)) + 'px'
+              if (nw.has(i.el)) i.el.style.width = Math.round(nw.get(i.el)) + 'px'
+              if (nh.has(i.el)) i.el.style.height = Math.round(nh.get(i.el)) + 'px'
+            })
+            ConnectionManager.renderAll()
+            // 提交点唯一：这里一调用，落盘 + 撤销栈就都记上了
+            debouncedAutoSave(true)
+            this._flash(key)
+            this.scheduleRefresh()
+            return true
+          },
+
+          _flash(key) {
+            this._buttons.forEach(({ mode, el }) => {
+              if (mode.key !== key) return
+              el.classList.add('pressed')
+              setTimeout(() => el.classList.remove('pressed'), 220)
+            })
+          },
+
+          refresh() {
+            if (!this._bar) return
+            const nodes = this.selectedNodes()
+            const visible = nodes.length >= 2
+            this._bar.classList.toggle('visible', visible)
+            this._buttons.forEach(({ mode, el }) => {
+              const label = t('align.' + mode.key)
+              el.title = label
+              el.setAttribute('aria-label', label)
+              const off = nodes.length < mode.min
+              el.classList.toggle('disabled', off)
+              el.setAttribute('aria-disabled', off ? 'true' : 'false')
+            })
+            if (!visible) return
+            if (this._count) this._count.textContent = t('align.selected', nodes.length)
+
+            // 用屏幕包围盒定位，自动涵盖 pan / scale，不必反算世界坐标
+            let l = Infinity
+            let tp = Infinity
+            let r = -Infinity
+            let bt = -Infinity
+            nodes.forEach((n) => {
+              const rc = n.getBoundingClientRect()
+              if (!rc.width && !rc.height) return
+              l = Math.min(l, rc.left)
+              tp = Math.min(tp, rc.top)
+              r = Math.max(r, rc.right)
+              bt = Math.max(bt, rc.bottom)
+            })
+            if (!isFinite(l)) {
+              this._bar.classList.remove('visible')
+              return
+            }
+            const bw = this._bar.offsetWidth || 360
+            const bh = this._bar.offsetHeight || 36
+            const m = 8
+            let x = (l + r) / 2 - bw / 2
+            let y = tp - bh - 12
+            if (y < m) y = bt + 12 // 上沿贴不到就改挂到选区下方
+            x = Math.max(m, Math.min(x, window.innerWidth - bw - m))
+            y = Math.max(m, Math.min(y, window.innerHeight - bh - m))
+            this._bar.style.left = Math.round(x) + 'px'
+            this._bar.style.top = Math.round(y) + 'px'
+          },
+        }
+        window.AlignManager = AlignManager
 
         // ================================================================
         // 11.4 DOODLE MANAGER — 涂鸦
@@ -14986,6 +15467,15 @@ notify pgrst, 'reload schema';</textarea
             if (!target) return
             const action = target.dataset.action
 
+            // 多选对齐：浮条与右键菜单共用一组 zwAlign:<mode> 动作，
+            // 放在 switch 外面统一派发，避免为十个按钮各写一个 case。
+            if (action && action.indexOf(AlignManager.PREFIX) === 0) {
+              e.preventDefault()
+              AlignManager.apply(action.slice(AlignManager.PREFIX.length))
+              DOM.contextMenu.classList.remove('open')
+              return
+            }
+
             // Menu actions
             switch (action) {
               case 'enter':
@@ -15825,6 +16315,11 @@ notify pgrst, 'reload schema';</textarea
             nodeOnlyItems.forEach((el) => {
               el.style.display = node ? 'block' : 'none'
             })
+            // 多选对齐项只在选中 >= 2 个节点时出现
+            const multiCount = AlignManager.selectedNodes().length
+            document.querySelectorAll('.ctx-multi-only').forEach((el) => {
+              el.style.display = multiCount >= 2 ? 'block' : 'none'
+            })
             // Also handle divider separation - we have one divider with class ctx-node-only
             // For paste, we may want to show always if clipboard exists
             const pasteItem = DOM.ctxPaste
@@ -16076,6 +16571,7 @@ notify pgrst, 'reload schema';</textarea
           CanvasManager.initPanZoom()
           TouchManager.init()
           SelectionManager.init()
+          AlignManager.init()
           // 顺序其实不重要：涂鸦的监听器挂在 window 的**捕获**阶段，
           // 捕获一定先于 TouchManager 在 workspace 上的冒泡阶段跑。
           // 放在这里只是因为它依赖 DOM 已就绪。
@@ -16128,6 +16624,7 @@ notify pgrst, 'reload schema';</textarea
             try {
               CanvasManager.initPanZoom()
               SelectionManager.init()
+              AlignManager.init()
               bindGlobalEvents()
               bindPortDragEvents()
             } catch (__) {}
