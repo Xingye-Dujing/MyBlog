@@ -3974,6 +3974,18 @@
         ></div>
         <div
           class="menu-btn"
+          data-action="autoLayoutLayered"
+          data-i18n="menu.autoLayoutLayered"
+          data-i18n-title="menu.autoLayoutLayeredTitle"
+        ></div>
+        <div
+          class="menu-btn"
+          data-action="autoLayoutForce"
+          data-i18n="menu.autoLayoutForce"
+          data-i18n-title="menu.autoLayoutForceTitle"
+        ></div>
+        <div
+          class="menu-btn"
           data-action="fitView"
           data-i18n="menu.fitView"
           data-i18n-title="menu.fitViewTitle"
@@ -5082,9 +5094,15 @@ notify pgrst, 'reload schema';</textarea
             'menu.full': 'FULL',
             'menu.reset': 'RESET',
             'menu.resetView': 'RESET ZOOM',
-            'menu.autoLayout': 'LAYOUT',
+            'menu.autoLayout': 'LAYOUT·AUTO',
             'menu.autoLayoutTitle':
-              'Auto-arrange by connections: layer each block, then pack the blocks side by side',
+              'Smart layout: tries layered & force per block, keeps the tidier one (remembered for the L key)',
+            'menu.autoLayoutLayered': 'LAYOUT·TREE',
+            'menu.autoLayoutLayeredTitle':
+              'Layered layout: top-down rows, straight vertical links — best for trees & flows',
+            'menu.autoLayoutForce': 'LAYOUT·NEAR',
+            'menu.autoLayoutForceTitle':
+              'Force layout: connected nodes pull close together — best for dense or cyclic maps',
             'menu.fitView': 'FIT',
             'menu.fitViewTitle': 'Fit the whole canvas into the window',
             'menu.settings': 'SETTINGS',
@@ -5388,8 +5406,15 @@ notify pgrst, 'reload schema';</textarea
             'menu.full': '全部',
             'menu.reset': '重置',
             'menu.resetView': '重置缩放',
-            'menu.autoLayout': '自动布局',
-            'menu.autoLayoutTitle': '按连线分块排版：块内分层、长线走空隙，块与块并排',
+            'menu.autoLayout': '智能排布',
+            'menu.autoLayoutTitle':
+              '每块都试分层与力导向，取更整齐的一种（记住选择，快捷键 L 沿用）',
+            'menu.autoLayoutLayered': '分层排版',
+            'menu.autoLayoutLayeredTitle':
+              '自上而下分层、连线横平竖直，适合树状、流程类画布',
+            'menu.autoLayoutForce': '聚拢排版',
+            'menu.autoLayoutForceTitle':
+              '力导向：相连的节点互相靠拢、整图紧凑，适合稠密、多环、关系杂乱的画布',
             'menu.fitView': '适应',
             'menu.fitViewTitle': '让整张画布适应窗口显示',
             'menu.settings': '设置',
@@ -8545,6 +8570,8 @@ notify pgrst, 'reload schema';</textarea
                 to: to,
                 fromPort: c.fromPort || 'bottom',
                 toPort: c.toPort || 'top',
+                route: c.route === 'elbow' ? 'elbow' : undefined,
+                routeHint: c.route === 'elbow' ? c.routeHint : undefined,
               })
             })
             return { kept: kept, dropped: dropped }
@@ -9929,6 +9956,93 @@ notify pgrst, 'reload schema';</textarea
             }
             return `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`
           },
+          // —— 折线路径（横平竖直 + 圆角拐弯）——
+          // 自动布局对「16 组端口组合都救不回来」的连线会标记 route:'elbow'
+          // 并给出 hint（路线选型）。这里用同一算法 + 当前几何重建路径，
+          // 节点挪动后路线跟随移动；box 是两端节点的合并包围盒。
+          _getElbowPath(x1, y1, x2, y2, port1, port2, hint, box) {
+            const h = hint || {}
+            const DIR = { top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0] }
+            const d1 = DIR[port1] || [0, 1]
+            const d2 = DIR[port2] || [0, -1]
+            const k = h.k || 0
+            const stub = 26 * (1 + k * 0.6)
+            const p1 = { x: x1, y: y1 }
+            const p2 = { x: x2, y: y2 }
+            const s1 = { x: p1.x + d1[0] * stub, y: p1.y + d1[1] * stub }
+            const s2 = { x: p2.x + d2[0] * stub, y: p2.y + d2[1] * stub }
+            const v1 = d1[1] !== 0
+            const v2 = d2[1] !== 0
+            const laneT = [0.5, 0.25, 0.75][k] || 0.5
+            const b =
+              box || {
+                x0: Math.min(p1.x, p2.x),
+                y0: Math.min(p1.y, p2.y),
+                x1: Math.max(p1.x, p2.x),
+                y1: Math.max(p1.y, p2.y),
+              }
+            const v = h.v || 'lane'
+            let wps
+            if (v === 'lane' && v1 && v2) {
+              const lane = s1.y + (s2.y - s1.y) * laneT
+              wps = [p1, s1, { x: s1.x, y: lane }, { x: s2.x, y: lane }, s2, p2]
+            } else if (v === 'lane' && !v1 && !v2) {
+              const lane = s1.x + (s2.x - s1.x) * laneT
+              wps = [p1, s1, { x: lane, y: s1.y }, { x: lane, y: s2.y }, s2, p2]
+            } else if (v === 'aroundL' || v === 'aroundR') {
+              const m = stub + 30 + k * 70
+              if (v1 && v2) {
+                const laneX = v === 'aroundL' ? b.x0 - m : b.x1 + m
+                wps = [p1, s1, { x: laneX, y: s1.y }, { x: laneX, y: s2.y }, s2, p2]
+              } else if (!v1 && !v2) {
+                const laneY = v === 'aroundL' ? b.y0 - m : b.y1 + m
+                wps = [p1, s1, { x: s1.x, y: laneY }, { x: s2.x, y: laneY }, s2, p2]
+              } else {
+                const cx = v === 'aroundL' ? b.x0 - m : b.x1 + m
+                const cy = v === 'aroundL' ? b.y0 - m : b.y1 + m
+                wps = v1
+                  ? [p1, s1, { x: s1.x, y: cy }, { x: cx, y: cy }, { x: cx, y: s2.y }, s2, p2]
+                  : [p1, s1, { x: cx, y: s1.y }, { x: cx, y: cy }, { x: s2.x, y: cy }, s2, p2]
+              }
+            } else if (v === 'L') {
+              if (v1 && !v2) wps = [p1, s1, { x: s2.x, y: s1.y }, s2, p2]
+              else if (!v1 && v2) wps = [p1, s1, { x: s1.x, y: s2.y }, s2, p2]
+              else if (v1 && v2) {
+                const lane = (s1.y + s2.y) / 2
+                wps = [p1, s1, { x: s1.x, y: lane }, { x: s2.x, y: lane }, s2, p2]
+              } else {
+                const lane = (s1.x + s2.x) / 2
+                wps = [p1, s1, { x: lane, y: s1.y }, { x: lane, y: s2.y }, s2, p2]
+              }
+            } else {
+              wps = [p1, p2]
+            }
+            // 去重 + 圆角（拐角处用二次贝塞尔收出小圆弧）
+            const P = []
+            wps.forEach((p) => {
+              const q = P[P.length - 1]
+              if (!q || Math.hypot(p.x - q.x, p.y - q.y) > 0.5) P.push({ x: p.x, y: p.y })
+            })
+            if (P.length < 2) return this._getCurvePath(x1, y1, x2, y2, port1, port2)
+            const r = 14
+            let d = 'M ' + P[0].x + ' ' + P[0].y
+            for (let i = 1; i < P.length - 1; i++) {
+              const p = P[i]
+              const prev = P[i - 1]
+              const next = P[i + 1]
+              const l1 = Math.hypot(p.x - prev.x, p.y - prev.y) || 1
+              const l2 = Math.hypot(next.x - p.x, next.y - p.y) || 1
+              const rr = Math.min(r, l1 / 2, l2 / 2)
+              const ax = p.x + ((prev.x - p.x) / l1) * rr
+              const ay = p.y + ((prev.y - p.y) / l1) * rr
+              const bx = p.x + ((next.x - p.x) / l2) * rr
+              const by = p.y + ((next.y - p.y) / l2) * rr
+              d += ' L ' + ax + ' ' + ay + ' Q ' + p.x + ' ' + p.y + ' ' + bx + ' ' + by
+            }
+            const last = P[P.length - 1]
+            d += ' L ' + last.x + ' ' + last.y
+            return d
+          },
           renderAll() {
             if (AppState.renderPending) return
             AppState.renderPending = true
@@ -9981,7 +10095,37 @@ notify pgrst, 'reload schema';</textarea
                 fromY = fromPos.y
               const toX = toPos.x,
                 toY = toPos.y
-              const d = ConnectionManager._getCurvePath(fromX, fromY, toX, toY, fromPort, toPort)
+              // 折线兜底的连线按 route:'elbow' 画正交折线；其余走贝塞尔
+              let d
+              if (conn.route === 'elbow') {
+                const rect = (n) => ({
+                  x: n.offsetLeft,
+                  y: n.offsetTop,
+                  w: n.offsetWidth,
+                  h: n.offsetHeight,
+                })
+                const fr = rect(fromNode)
+                const tr = rect(toNode)
+                const box = {
+                  x0: Math.min(fr.x, tr.x),
+                  y0: Math.min(fr.y, tr.y),
+                  x1: Math.max(fr.x + fr.w, tr.x + tr.w),
+                  y1: Math.max(fr.y + fr.h, tr.y + tr.h),
+                }
+                d = ConnectionManager._getElbowPath(
+                  fromX,
+                  fromY,
+                  toX,
+                  toY,
+                  fromPort,
+                  toPort,
+                  conn.routeHint || {},
+                  box,
+                )
+              }
+              if (!d) {
+                d = ConnectionManager._getCurvePath(fromX, fromY, toX, toY, fromPort, toPort)
+              }
 
               const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
               path.setAttribute('class', 'conn-line')
@@ -10042,13 +10186,17 @@ notify pgrst, 'reload schema';</textarea
         // 其中 ports 只对「实在绕不开、必须换端口朝向」的极少数连线给值。
         function computeCanvasLayout(nodes, conns, opts) {
           const opt = opts || {}
+          // 排布策略：'layered' 分层瀑布 / 'force' 力导向 / 'smart'（默认，
+          // 按每块的稠密程度自动路由：边数接近节点数的稠密块走力导向）
+          const strategyMode =
+            opt.strategy === 'force' || opt.strategy === 'layered' ? opt.strategy : 'smart'
           const COL_GAP = opt.colGap || 56 // 层内相邻节点之间的水平净距
           const ROW_GAP = opt.rowGap || 76 // 相邻两层之间的垂直净距
           const COMP_GAP = opt.compGap || 150 // 互不相连的块之间的净距
           const DUMMY_W = 16 // 跨层连线在中间层占的通道宽度
           const DUMMY_H = 8
           const SWEEPS = 12 // 消交叉扫描轮数
-          const REPAIRS = 10 // 「复核—修复」轮数上限
+          const REPAIRS = 14 // 「复核—修复」轮数上限
           const SAFE = 6 // 复核时连线与节点之间至少留出的余量
           const SAMPLES = 56 // 每条连线采样段数
           const MAX_HALO = 640 // 单个节点最多额外撑开多少间距
@@ -10131,8 +10279,51 @@ notify pgrst, 'reload schema';</textarea
             comps.push(ids)
           })
 
-          // ---------- 2. 逐块排布 ----------
-          const blocks = comps.map((ids) => layoutBlock(ids))
+          // ---------- 2. 逐块排布（策略可按块路由） ----------
+          const blocks = comps.map((ids) => {
+            const inB = new Set(ids)
+            let eCnt = 0
+            edges.forEach((e) => {
+              if (inB.has(e.from) && inB.has(e.to)) eCnt++
+            })
+            if (strategyMode === 'force') return layoutBlockForce(ids)
+            if (strategyMode === 'layered' || ids.length <= 6) return layoutBlock(ids)
+            // smart：两种都排一遍，按「穿线 + 长度 + 空旷度」打分择优。
+            // 分层擅长树/链/浅 DAG，力导向擅长稠密含环——不必猜，比一下。
+            // 注意：排布会改写边对象（loose 标记、端口），第二种策略开跑前
+            // 必须把现场恢复成原始输入，否则两者的结果互相污染。
+            const inBEdges = edges.filter((e) => inB.has(e.from) && inB.has(e.to))
+            const savedEdges = inBEdges.map((e) => ({
+              e: e,
+              fromPort: e.fromPort,
+              toPort: e.toPort,
+              loose: !!e.loose,
+              up: e.up,
+              down: e.down,
+            }))
+            const restoreEdges = () => {
+              savedEdges.forEach((s2) => {
+                s2.e.fromPort = s2.fromPort
+                s2.e.toPort = s2.toPort
+                s2.e.loose = s2.loose
+                s2.e.up = s2.up
+                s2.e.down = s2.down
+              })
+            }
+            const nodeArea = ids.reduce((s2, id) => {
+              const n2 = nodeById.get(id)
+              return s2 + n2.w * n2.h
+            }, 0)
+            const score = (r) => {
+              const spread = Math.max(0, (r.w * r.h) / Math.max(1, nodeArea) - 8)
+              return r.vios * 100000 + r.len * 0.2 + spread * 300
+            }
+            const rL = layoutBlock(ids)
+            restoreEdges()
+            const rF = layoutBlockForce(ids)
+            restoreEdges()
+            return score(rF) < score(rL) ? rF : rL
+          })
           blocks.sort((a, b) => b.w * b.h - a.w * a.h)
           const totalArea = blocks.reduce((s, b) => s + (b.w + COMP_GAP) * (b.h + COMP_GAP), 0)
           const maxBlockW = blocks.reduce((m, b) => Math.max(m, b.w), 0)
@@ -10193,6 +10384,14 @@ notify pgrst, 'reload schema';</textarea
             own.forEach((e) => {
               deg.set(e.from, deg.get(e.from) + 1)
               deg.set(e.to, deg.get(e.to) + 1)
+            })
+            // 真实邻居表（不含虚拟通道），供「重心精修」把相连的点拉近
+            const adjReal = new Map()
+            ids.forEach((id) => adjReal.set(id, []))
+            own.forEach((e) => {
+              if (e.from === e.to) return
+              adjReal.get(e.from).push(e.to)
+              adjReal.get(e.to).push(e.from)
             })
 
             // 2.1 水平连线：一个节点在同一层里最多左右各一条，多余的、
@@ -10385,7 +10584,10 @@ notify pgrst, 'reload schema';</textarea
             ids.forEach((id) => rows[itemOf.get(id).row].push(itemOf.get(id)))
             let dummySeq = 0
             upDownEdges.forEach((e) => {
-              if (e.up === e.down || cut.has(e)) return
+              // 破环被切的连线也插通道：它们正是稠密图里「横穿整个画布」的
+              // 元凶——没有通道就不参与行内定序，自由飞行几千像素还压节点。
+              // 给它们同样的通道后，定序扫描会把通道和真实节点排开。
+              if (e.up === e.down) return
               const ru = rank.get(e.up)
               const rv = rank.get(e.down)
               if (rv <= ru) return
@@ -10544,14 +10746,47 @@ notify pgrst, 'reload schema';</textarea
               rows[r].forEach((it, i) => (it.pos = i))
             })
 
+            // 分层流水线到此结束，收尾（行高/求解/精修/复核/端口优化）交给
+            // 与力导向策略共用的 finishBlock。
+            return finishBlock({
+              rows: rows,
+              own: own,
+              itemOf: itemOf,
+              deg: deg,
+              adjReal: adjReal,
+              hPair: hPair,
+              cut: cut,
+              canPin: true,
+              useMirror: true,
+            })
+          }
+
+          // ================================================================
+          // 收尾引擎（分层 / 力导向两种策略共用）：
+          // 行高行距 → 坐标求解 → 重心精修 → 复核修复 → 镜像 → 端口优化 → 输出
+          // ================================================================
+          function finishBlock(ctx) {
+            const rows = ctx.rows
+            const own = ctx.own
+            const itemOf = ctx.itemOf
+            const deg = ctx.deg
+            const adjReal = ctx.adjReal
+            const hPair = ctx.hPair
+            const cut = ctx.cut
+            const canPin = !!ctx.canPin
+            const useMirror = !!ctx.useMirror
+            const forceDesire = ctx.forceDesire || null
+            const naturalAll = !!ctx.naturalAll
+
             // 2.7 行高与行距：层内统一居中（同一层的端口中心自然对齐），
             //     行与行之间留出整条水平空隙给连线走。
             const rowH = rows.map((row) => row.reduce((m, it) => Math.max(m, it.h), 1))
             const rowTop = []
             let stackY = 0
+            const rowGapEff = ctx.rowGap != null ? ctx.rowGap : ROW_GAP
             rows.forEach((row, r) => {
               rowTop[r] = stackY
-              stackY += rowH[r] + ROW_GAP
+              stackY += rowH[r] + rowGapEff
             })
             rows.forEach((row, r) => {
               row.forEach((it) => {
@@ -10630,13 +10865,42 @@ notify pgrst, 'reload schema';</textarea
               }
             }
 
-            const placeAll = () => {
-              rows.forEach((row) => {
+            // mode：'preds' 只按父节点中心（首次铺排，自上而下）；
+            //       'down' / 'up' 重心精修——期望位置 = 父节点中心 + 真实
+            //       邻居（含子节点）中心的重心，上下交替扫把相连的点拉近、
+            //       消掉逐层向右下的对角漂移。pin 的硬对齐和通道链在每次
+            //       placeAll 都按最新几何重新推导，竖直直线不会被掰弯。
+            const placeAll = (mode) => {
+              const m = mode || 'preds'
+              const order = []
+              for (let r = 0; r < rows.length; r++) order.push(r)
+              if (m === 'up') order.reverse()
+              order.forEach((r) => {
+                const row = rows[r]
                 row.forEach((it) => {
                   it.pin = null
                   it.desire = null
                   it.anchor = null
-                  if (!it.preds.length) return
+                  if (!it.preds.length) {
+                    if (m === 'preds') {
+                      // 首次铺排：力导向块用力模拟收敛出的 x 作期望；
+                      // 分层块顶层没有父节点，保持原样（从左侧依次排开）
+                      if (forceDesire) it.desire = forceDesire.get(it.id)
+                    } else {
+                      // 重心精修：顶层节点向它的真实邻居重心靠拢
+                      let s2 = 0
+                      let c2 = 0
+                      ;(adjReal.get(it.id) || []).forEach((nid) => {
+                        const nb = itemOf.get(nid)
+                        if (nb && nb.real) {
+                          s2 += nb.x + nb.w / 2
+                          c2++
+                        }
+                      })
+                      if (c2) it.desire = s2 / c2
+                    }
+                    return
+                  }
                   const chained = it.preds.filter((p) => !p.real)
                   if (!it.real) {
                     // 虚拟通道：永远对齐到链首（源头节点中心，逐段传下来）
@@ -10649,6 +10913,7 @@ notify pgrst, 'reload schema';</textarea
                     it.anchor = src ? src.anchor : chained[0].x + chained[0].w / 2
                     it.pin = it.anchor
                   } else if (
+                    canPin &&
                     it.preds.length === 1 &&
                     (deg.get(it.id) === 1 || deg.get(it.preds[0].id) === 1)
                   ) {
@@ -10656,7 +10921,22 @@ notify pgrst, 'reload schema';</textarea
                     // 父节点中心，连线就是一条竖直直线（摆不下时会自动降级）
                     it.pin = it.preds[0].x + it.preds[0].w / 2
                   } else {
-                    it.desire = it.preds.reduce((s, p) => s + p.x + p.w / 2, 0) / it.preds.length
+                    let s2 = 0
+                    let c2 = 0
+                    it.preds.forEach((p) => {
+                      s2 += p.x + p.w / 2
+                      c2++
+                    })
+                    if (m !== 'preds') {
+                      ;(adjReal.get(it.id) || []).forEach((nid) => {
+                        const nb = itemOf.get(nid)
+                        if (nb && nb.real) {
+                          s2 += nb.x + nb.w / 2
+                          c2++
+                        }
+                      })
+                    }
+                    if (c2) it.desire = s2 / c2
                   }
                 })
                 solveRow(row)
@@ -10672,7 +10952,8 @@ notify pgrst, 'reload schema';</textarea
               return { x: cx, y: cy }
             }
             // 与 ConnectionManager._getCurvePath 完全一致的控制点，采样成折线
-            const edgeSamples = (e) => {
+            const edgeSamples = (e, sampleCount) => {
+              const S2 = sampleCount || SAMPLES
               const aIt = itemOf.get(e.from)
               const bIt = itemOf.get(e.to)
               const p1 = portXY(aIt, e.fromPort)
@@ -10757,14 +11038,14 @@ notify pgrst, 'reload schema';</textarea
               return false
             }
             // 复核：每条连线（按真实端口画出的曲线采样）都不能压到别的节点
-            const verifyBlock = () => {
+            const verifyBlock = (sampleCount) => {
               const found = []
               const realRows = rows.map((row) => row.filter((it) => it.real))
               own.forEach((e) => {
                 const a = itemOf.get(e.from)
                 const b = itemOf.get(e.to)
                 if (!a || !b) return
-                const pts = edgeSamples(e)
+                const pts = edgeSamples(e, sampleCount)
                 let x0 = Infinity
                 let x1 = -Infinity
                 let y0 = Infinity
@@ -10831,6 +11112,50 @@ notify pgrst, 'reload schema';</textarea
               })
             }
 
+            // —— 力导向块：相邻行中位数扫描降交叉（守卫用真实穿线数）——
+            const fPred = ctx.forcePred
+            const fSucc = ctx.forceSucc
+            if (fPred) {
+              const medianF2 = (arr) => {
+                if (!arr.length) return null
+                const s3 = arr.slice().sort((a, b) => a - b)
+                const m3 = s3.length >> 1
+                return s3.length % 2 ? s3[m3] : (s3[m3 - 1] + s3[m3]) / 2
+              }
+              const resortF2 = (r, usePred) => {
+                const row = rows[r]
+                row.forEach((it) => {
+                  const nb = usePred ? fPred.get(it.id) : fSucc.get(it.id)
+                  it._m = nb && nb.length ? medianF2(nb.map((p) => p.pos)) : null
+                })
+                row.sort(
+                  (a, b) => (a._m === null ? a.pos : a._m) - (b._m === null ? b.pos : b._m),
+                )
+                row.forEach((it, i) => (it.pos = i))
+              }
+              const orderSnapF = () => rows.map((row) => row.map((it) => it.key))
+              const orderRestoreF = (snap) => {
+                rows.forEach((row, r) => {
+                  const order = snap[r]
+                  row.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key))
+                  row.forEach((it, i) => (it.pos = i))
+                })
+              }
+              placeAll('preds')
+              const clip0 = verifyBlock().length
+              const ord0 = orderSnapF()
+              for (let it2 = 0; it2 < 8; it2++) {
+                if (it2 % 2 === 0) for (let r = 1; r < rows.length; r++) resortF2(r, true)
+                else for (let r = rows.length - 2; r >= 0; r--) resortF2(r, false)
+              }
+              placeAll('preds')
+              if (verifyBlock().length > clip0) {
+                orderRestoreF(ord0)
+                placeAll('preds')
+              }
+            }
+
+
             // 2.8.1 定序与坐标互相校正：先按父节点中心摆一遍位置，再按摆出来
             //       的位置把层内顺序理顺（水平连线的连续块当作整体），再摆一遍。
             //       顺序和期望位置一致之后，谁都不会被硬生生挤到很远的地方，
@@ -10855,7 +11180,7 @@ notify pgrst, 'reload schema';</textarea
               return ids
             }
             for (let round = 0; round < 2; round++) {
-              placeAll()
+              placeAll('preds')
               rows.forEach((row, r) => {
                 if (r === 0 || row.length < 2) return
                 const meta = rowBlockKeys(row)
@@ -10878,20 +11203,73 @@ notify pgrst, 'reload schema';</textarea
                 rows[r] = row.slice().sort((a, b) => key(a) - key(b))
               })
             }
-            placeAll()
-            for (let round = 0; round < REPAIRS; round++) {
-              const vios = verifyBlock()
-              if (!vios.length) break
-              applyFixes(vios)
-              placeAll()
+            placeAll('preds')
+
+            // —— 重心精修：上下交替扫几轮，只保留「总连线长度更短」的结果。
+            // 这是把相连的节点拉近（用户核心诉求）、消掉对角漂移的主力。
+            const totalEdgeLen = () => {
+              let L = 0
+              own.forEach((e) => {
+                const pts = edgeSamples(e)
+                for (let i = 1; i < pts.length; i++) {
+                  L += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+                }
+              })
+              return L
+            }
+            const snapX = () => {
+              const out = new Map()
+              rows.forEach((row) => row.forEach((it) => out.set(it.key, it.x)))
+              return out
+            }
+            const restoreX = (snap) => {
+              rows.forEach((row) =>
+                row.forEach((it) => {
+                  const v = snap.get(it.key)
+                  if (v != null) it.x = v
+                }),
+              )
+            }
+            const initSnap = snapX()
+            const initVios = verifyBlock().length
+            let bestLen = totalEdgeLen()
+            let bestSnap = initSnap
+            for (let s = 0; s < 8; s++) {
+              placeAll(s % 2 === 0 ? 'down' : 'up')
+              const L = totalEdgeLen()
+              if (L < bestLen - 1) {
+                bestLen = L
+                bestSnap = snapX()
+              }
+            }
+            restoreX(bestSnap)
+
+            const runRepairs = () => {
+              const R = ctx.repairs || REPAIRS
+              for (let round = 0; round < R; round++) {
+                const vios = verifyBlock()
+                if (!vios.length) break
+                applyFixes(vios)
+                placeAll('preds')
+              }
+            }
+            // 安全阀：精修可能把节点挪进连线的路径里。修复后若穿线反而
+            // 比精修前多，说明这个块不适合精修（比如连线通道恰好被占），
+            // 整块回滚到精修前的坐标再修复一次——宁要整齐，不要紧凑的事故。
+            const initLen = totalEdgeLen()
+            runRepairs()
+            if (verifyBlock().length > initVios || totalEdgeLen() > initLen + 1) {
+              restoreX(initSnap)
+              runRepairs()
             }
 
             // 2.8.2 整块朝向：right→left 这类水平连线本身就写着「谁在左边」，
             //       如果整块排出来正好反了，把这一块左右镜像一下 —— 镜像不改变
             //       任何相对关系（不遮挡的依旧不遮挡），却能把方向掰正。
+            const hStraight = own.filter((e) => e.kind === 'H' && !e.loose)
             const countFlipped = () => {
               let bad = 0
-              hKeep.forEach((e) => {
+              hStraight.forEach((e) => {
                 const l = itemOf.get(e.left)
                 const r = itemOf.get(e.right)
                 if (!l || !r || l === r) return
@@ -10899,7 +11277,7 @@ notify pgrst, 'reload schema';</textarea
               })
               return bad
             }
-            if (hKeep.size && countFlipped() * 2 > hKeep.size) {
+            if (useMirror && hStraight.length && countFlipped() * 2 > hStraight.length) {
               let mirrorMin = Infinity
               let mirrorMax = -Infinity
               rows.forEach((row) => {
@@ -10924,22 +11302,25 @@ notify pgrst, 'reload schema';</textarea
             //     在这里兜底换端口 —— 两条曲线的取舍以「压到几个节点、曲线
             //     多长」为准，宁可不换。
             const portFix = {}
+            // 曲线打分：自穿（线穿过端点自己的身子）最恶劣，压到别的节点
+            // 次之，最后才看长短。分开计罚才能在「自穿但短」和「绕一点但
+            // 干净」之间做出正确取舍——原来的合并计数会让这类互换永远平局。
             const curveScore = (e) => {
               const pts = edgeSamples(e)
               const a = itemOf.get(e.from)
               const b = itemOf.get(e.to)
-              let clips = selfClip(e, pts) ? 1 : 0
+              let penalty = selfClip(e, pts) ? 100000 : 0
               rows.forEach((row) => {
                 row.forEach((it) => {
                   if (!it.real || it === a || it === b) return
-                  if (hitsNode(pts, it)) clips++
+                  if (hitsNode(pts, it)) penalty += 50000
                 })
               })
               let len = 0
               for (let i = 1; i < pts.length; i++) {
                 len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
               }
-              return clips * 100000 + len
+              return penalty + len
             }
             const naturalPorts = (e) => {
               const a = itemOf.get(e.from)
@@ -10959,7 +11340,7 @@ notify pgrst, 'reload schema';</textarea
               }
             }
             own.forEach((e) => {
-              if (!e.loose && !cut.has(e)) return
+              if (!naturalAll && !e.loose && !cut.has(e)) return
               const nat = naturalPorts(e)
               if (!nat) return
               if (nat.fromPort === e.fromPort && nat.toPort === e.toPort) return
@@ -11013,6 +11394,171 @@ notify pgrst, 'reload schema';</textarea
               })
             }
 
+            // 2.9.5 折线兜底：16 组端口组合都救不回来的连线（画出来要么
+            // 自穿要么压节点），改画横平竖直的折线——出端口走一小段，
+            // 沿「通道」绕行、圆角拐弯。候选路线按节点几何打分，只接受
+            // 完全干净的折线；hint 记住选型，渲染端用同一算法 + 当前几何
+            // 重建路径（节点挪动后路线跟随移动）。
+            const ELBOW_STUB = 26
+            const PORT_DIR = { top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0] }
+            const elbowWaypoints = (p1, d1, p2, d2, v, k, box) => {
+              const stub = ELBOW_STUB * (1 + k * 0.6)
+              const s1 = { x: p1.x + d1[0] * stub, y: p1.y + d1[1] * stub }
+              const s2 = { x: p2.x + d2[0] * stub, y: p2.y + d2[1] * stub }
+              const v1 = d1[1] !== 0
+              const v2 = d2[1] !== 0
+              const laneT = [0.5, 0.25, 0.75][k] || 0.5
+              if (v === 'lane' && v1 && v2) {
+                const lane = s1.y + (s2.y - s1.y) * laneT
+                return [p1, s1, { x: s1.x, y: lane }, { x: s2.x, y: lane }, s2, p2]
+              }
+              if (v === 'lane' && !v1 && !v2) {
+                const lane = s1.x + (s2.x - s1.x) * laneT
+                return [p1, s1, { x: lane, y: s1.y }, { x: lane, y: s2.y }, s2, p2]
+              }
+              if (v === 'aroundL' || v === 'aroundR') {
+                const m = stub + 30 + k * 70
+                if (v1 && v2) {
+                  const laneX = v === 'aroundL' ? box.x0 - m : box.x1 + m
+                  return [p1, s1, { x: laneX, y: s1.y }, { x: laneX, y: s2.y }, s2, p2]
+                }
+                if (!v1 && !v2) {
+                  const laneY = v === 'aroundL' ? box.y0 - m : box.y1 + m
+                  return [p1, s1, { x: s1.x, y: laneY }, { x: s2.x, y: laneY }, s2, p2]
+                }
+                const cx = v === 'aroundL' ? box.x0 - m : box.x1 + m
+                const cy = v === 'aroundL' ? box.y0 - m : box.y1 + m
+                return v1
+                  ? [p1, s1, { x: s1.x, y: cy }, { x: cx, y: cy }, { x: cx, y: s2.y }, s2, p2]
+                  : [p1, s1, { x: cx, y: s1.y }, { x: cx, y: cy }, { x: s2.x, y: cy }, s2, p2]
+              }
+              if (v === 'L') {
+                if (v1 && !v2) return [p1, s1, { x: s2.x, y: s1.y }, s2, p2]
+                if (!v1 && v2) return [p1, s1, { x: s1.x, y: s2.y }, s2, p2]
+                if (v1 && v2) {
+                  const lane = (s1.y + s2.y) / 2
+                  return [p1, s1, { x: s1.x, y: lane }, { x: s2.x, y: lane }, s2, p2]
+                }
+                const lane = (s1.x + s2.x) / 2
+                return [p1, s1, { x: lane, y: s1.y }, { x: lane, y: s2.y }, s2, p2]
+              }
+              return [p1, p2]
+            }
+            const elbowSample = (e, hint) => {
+              const a = itemOf.get(e.from)
+              const b = itemOf.get(e.to)
+              const p1 = portXY(a, e.fromPort)
+              const p2 = portXY(b, e.toPort)
+              const box = {
+                x0: Math.min(a.x, b.x),
+                y0: Math.min(a.y, b.y),
+                x1: Math.max(a.x + a.w, b.x + b.w),
+                y1: Math.max(a.y + a.h, b.y + b.h),
+              }
+              const wps = elbowWaypoints(
+                p1,
+                PORT_DIR[e.fromPort],
+                p2,
+                PORT_DIR[e.toPort],
+                hint.v,
+                hint.k,
+                box,
+              )
+              const pts = []
+              for (let i = 0; i + 1 < wps.length; i++) {
+                const A = wps[i]
+                const B = wps[i + 1]
+                const d = Math.hypot(B.x - A.x, B.y - A.y)
+                const n = Math.max(1, Math.round(d / 8))
+                for (let j = 0; j < n; j++) {
+                  pts.push({ x: A.x + ((B.x - A.x) * j) / n, y: A.y + ((B.y - A.y) * j) / n })
+                }
+              }
+              pts.push(wps[wps.length - 1])
+              return pts
+            }
+            const routePenalty = (pts, e) => {
+              const a = itemOf.get(e.from)
+              const b = itemOf.get(e.to)
+              let pen = 0
+              rows.forEach((row) => {
+                row.forEach((it) => {
+                  if (!it.real || it === a || it === b) return
+                  if (hitsNode(pts, it)) pen++
+                })
+              })
+              const selfHit = pts.some((p) =>
+                [a, b].some(
+                  (it) =>
+                    p.x > it.x + SAFE &&
+                    p.x < it.x + it.w - SAFE &&
+                    p.y > it.y + SAFE &&
+                    p.y < it.y + it.h - SAFE,
+                ),
+              )
+              if (selfHit) pen += 2
+              return pen
+            }
+            const curvePenalty = (e) => routePenalty(edgeSamples(e), e)
+            const elbowFixed = new Set()
+            own.forEach((e) => {
+              const pen0 = curvePenalty(e)
+              if (pen0 === 0) return
+              const a = itemOf.get(e.from)
+              const b = itemOf.get(e.to)
+              const v1 = isVertPort(e.fromPort)
+              const v2 = isVertPort(e.toPort)
+              const combos =
+                v1 === v2
+                  ? [
+                      ['lane', 0],
+                      ['lane', 1],
+                      ['lane', 2],
+                      ['aroundL', 0],
+                      ['aroundR', 0],
+                      ['aroundL', 1],
+                      ['aroundL', 2],
+                      ['aroundR', 1],
+                      ['aroundR', 2],
+                    ]
+                  : [
+                      ['L', 0],
+                      ['L', 1],
+                      ['aroundL', 0],
+                      ['aroundR', 0],
+                      ['aroundL', 1],
+                      ['aroundL', 2],
+                      ['aroundR', 1],
+                      ['aroundR', 2],
+                    ]
+              let best = null
+              let bestPen = pen0
+              combos.forEach(([v, k]) => {
+                const pen = routePenalty(elbowSample(e, { v: v, k: k }), e)
+                if (pen < bestPen) {
+                  bestPen = pen
+                  best = { v: v, k: k }
+                }
+              })
+              // 严格改进（折线比曲线少压节点/少自穿）就改画折线；
+              // 完全干净的折线（bestPen===0）才从 vios 里减除
+              if (best && bestPen < pen0) {
+                portFix[e.key] = {
+                  fromPort: e.fromPort,
+                  toPort: e.toPort,
+                  route: 'elbow',
+                  hint: best,
+                }
+                if (bestPen === 0) elbowFixed.add(e.key)
+              }
+            })
+
+            // 端口决策权威化：每条边都给出最终端口决策，应用端据此
+            // 清掉过期状态（比如上一轮排布留下的折线标记）。
+            own.forEach((e) => {
+              if (!portFix[e.key]) portFix[e.key] = { fromPort: e.fromPort, toPort: e.toPort }
+            })
+
             // 2.10 输出：把这一块平移到 (0,0) 起点
             let minX = Infinity
             let minY = Infinity
@@ -11039,9 +11585,283 @@ notify pgrst, 'reload schema';</textarea
                 if (it.real) items.push({ id: it.id, x: it.x - minX, y: it.y - minY })
               })
             })
-            return { items: items, w: maxX - minX, h: maxY - minY, ports: portFix }
+            return {
+              items: items,
+              w: maxX - minX,
+              h: maxY - minY,
+              ports: portFix,
+              // 加权违规数（加密采样，自穿权重 2，与视觉感受一致，供 smart 择优）；
+              // 折线兜底已干净的边不再计入
+              vios: (() => {
+                const w = new Map()
+                verifyBlock(128).forEach((v) => {
+                  if (elbowFixed.has(v.e.key)) return
+                  w.set(v.e.key, Math.max(w.get(v.e.key) || 0, v.self ? 2 : 1))
+                })
+                let total = 0
+                w.forEach((x) => (total += x))
+                return total
+              })(),
+              len: totalEdgeLen(),
+            }
+          }
+
+          // ================================================================
+          // 单块排布·力导向：稠密 / 多环图的专用通道。
+          // FR 式力模拟把有连线的节点拉到一起（连线当弹簧、无关节点互斥），
+          // 然后按 y 聚类成行、行内按 x 排序，交给与分层策略同一套
+          // finishBlock 收尾（求解—精修—复核—端口优化），输出一样整齐。
+          // 分层策略处理稠密图会「加 halo 让路 → 行距爆炸 → 连线更长」
+          // 正反馈，画布被撑到上万像素；力导向从根上没有这个问题。
+          // ================================================================
+          function layoutBlockForce(ids) {
+            const inBlock = new Set(ids)
+            const own = edges.filter((e) => inBlock.has(e.from) && inBlock.has(e.to))
+            const itemOf = new Map()
+            ids.forEach((id) => {
+              const n = nodeById.get(id)
+              itemOf.set(id, {
+                key: id,
+                id: id,
+                real: true,
+                w: n.w,
+                h: n.h,
+                row: 0,
+                halo: 0,
+                preds: [],
+                succs: [],
+              })
+            })
+            const deg = new Map()
+            ids.forEach((id) => deg.set(id, 0))
+            own.forEach((e) => {
+              deg.set(e.from, deg.get(e.from) + 1)
+              deg.set(e.to, deg.get(e.to) + 1)
+            })
+            const adjReal = new Map()
+            ids.forEach((id) => adjReal.set(id, []))
+            own.forEach((e) => {
+              if (e.from === e.to) return
+              adjReal.get(e.from).push(e.to)
+              adjReal.get(e.to).push(e.from)
+            })
+
+            // —— 确定性伪随机：同一块每次排布结果一致（可重复、可撤销）
+            let fseed = 0x9e3779b9
+            ids.forEach((id) => {
+              for (let i = 0; i < id.length; i++) fseed = (fseed * 31 + id.charCodeAt(i)) | 0
+            })
+            const rndF = () => {
+              fseed |= 0
+              fseed = (fseed + 0x6d2b79f5) | 0
+              let t = Math.imul(fseed ^ (fseed >>> 15), 1 | fseed)
+              t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+              return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+            }
+
+            const n = ids.length
+            let sumW = 0
+            let sumH = 0
+            ids.forEach((id) => {
+              sumW += itemOf.get(id).w
+              sumH += itemOf.get(id).h
+            })
+            const avgW = sumW / n
+            const avgH = sumH / n
+            // 初始位置：圆环撒点
+            const R = Math.max(200, Math.sqrt(n) * (avgW + COL_GAP) * 0.8)
+            ids.forEach((id, i) => {
+              const it = itemOf.get(id)
+              const ang = (i / n) * Math.PI * 2 + rndF() * 0.5
+              it.fx = Math.cos(ang) * R * (0.7 + rndF() * 0.6)
+              it.fy = Math.sin(ang) * R * (0.7 + rndF() * 0.6)
+            })
+
+            if (n > 3 && own.length) {
+              // 平衡距离取小一些：排布收尾还有重心精修补刀，力模拟只管把
+              // 邻接关系聚成团，太大会把画布撑得很空。
+              const K = Math.max(240, Math.min(360, avgW * 0.95 + COL_GAP * 2))
+              const MINSEP = Math.min(avgW, avgH) * 0.55 + COL_GAP
+              let temp = K * 0.45
+              let cx0 = 0
+              let cy0 = 0
+              ids.forEach((id) => {
+                cx0 += itemOf.get(id).fx
+                cy0 += itemOf.get(id).fy
+              })
+              cx0 /= n
+              cy0 /= n
+              for (let iter = 0; iter < 240; iter++) {
+                // 斥力（所有节点两两互斥，靠太近时额外加压）
+                for (let i = 0; i < ids.length; i++) {
+                  const a = itemOf.get(ids[i])
+                  for (let j = i + 1; j < ids.length; j++) {
+                    const b = itemOf.get(ids[j])
+                    let dx = a.fx - b.fx
+                    let dy = a.fy - b.fy
+                    let d2 = dx * dx + dy * dy
+                    if (d2 < 1) {
+                      dx = rndF() - 0.5
+                      dy = rndF() - 0.5
+                      d2 = 1
+                    }
+                    const d = Math.sqrt(d2)
+                    // 标准 FR 斥力：K²/d（平衡距离 = K）
+                    let f = (K * K) / d
+                    if (d < MINSEP) f += (MINSEP - d) * 8
+                    const fx = (dx / d) * f
+                    const fy = (dy / d) * f
+                    a._dx = (a._dx || 0) + fx
+                    a._dy = (a._dy || 0) + fy
+                    b._dx = (b._dx || 0) - fx
+                    b._dy = (b._dy || 0) - fy
+                  }
+                }
+                // 引力（连线当弹簧，把相连的点拉到一起）
+                own.forEach((e) => {
+                  const a = itemOf.get(e.from)
+                  const b = itemOf.get(e.to)
+                  const dx = b.fx - a.fx
+                  const dy = b.fy - a.fy
+                  const d = Math.max(1, Math.hypot(dx, dy))
+                  const f = (d * d) / K
+                  const fx = (dx / d) * f
+                  const fy = (dy / d) * f
+                  a._dx = (a._dx || 0) + fx
+                  a._dy = (a._dy || 0) + fy
+                  b._dx = (b._dx || 0) - fx
+                  b._dy = (b._dy || 0) - fy
+                })
+                // 向初始质心的弱重力，防散架
+                ids.forEach((id) => {
+                  const it = itemOf.get(id)
+                  it._dx = (it._dx || 0) + (cx0 - it.fx) * 0.06
+                  it._dy = (it._dy || 0) + (cy0 - it.fy) * 0.06
+                })
+                // 限步降温
+                ids.forEach((id) => {
+                  const it = itemOf.get(id)
+                  const dx = it._dx || 0
+                  const dy = it._dy || 0
+                  const d = Math.hypot(dx, dy)
+                  if (d > temp) {
+                    it.fx += (dx / d) * temp
+                    it.fy += (dy / d) * temp
+                  } else {
+                    it.fx += dx
+                    it.fy += dy
+                  }
+                  it._dx = 0
+                  it._dy = 0
+                })
+                temp = Math.max(2, temp * 0.965)
+              }
+            }
+
+            // 质心归零
+            let mcx = 0
+            let mcy = 0
+            ids.forEach((id) => {
+              mcx += itemOf.get(id).fx
+              mcy += itemOf.get(id).fy
+            })
+            mcx /= n
+            mcy /= n
+            ids.forEach((id) => {
+              const it = itemOf.get(id)
+              it.fx -= mcx
+              it.fy -= mcy
+            })
+
+            // —— 按 y 聚类成行、行内按 x 排序，之后走统一收尾 ——
+            // 阈值取大一些：行少一点、每行节点多一点，行内精修会自动收紧
+            const sorted = ids.slice().sort((a, b) => itemOf.get(a).fy - itemOf.get(b).fy)
+            const T = avgH * 0.95 + 40
+            const rows = []
+            let cur = []
+            let curY = null
+            sorted.forEach((id) => {
+              const it = itemOf.get(id)
+              if (curY == null || it.fy - curY > T) {
+                if (cur.length) rows.push(cur)
+                cur = []
+                curY = it.fy
+              }
+              cur.push(it)
+              curY = cur.reduce((s, x) => s + x.fy, 0) / cur.length
+            })
+            if (cur.length) rows.push(cur)
+            const forceDesire = new Map()
+            rows.forEach((row, r) => {
+              row.sort((a, b) => a.fx - b.fx)
+              row.forEach((it, i) => {
+                it.row = r
+                it.pos = i
+                forceDesire.set(it.id, it.fx)
+              })
+            })
+
+            // —— 相邻行的连线建 pred/succ 关系，跑中位数扫描降交叉 ——
+            // （与分层策略同一思路：力导向只负责把关系聚成团，行内顺序
+            //   交给扫描理顺，跨两行以上的连线才需要端口优化兜底）
+            const rowOf = new Map()
+            rows.forEach((row, r) => row.forEach((it) => rowOf.set(it.id, r)))
+            const predMap = new Map()
+            const succMap = new Map()
+            ids.forEach((id) => {
+              predMap.set(id, [])
+              succMap.set(id, [])
+            })
+            own.forEach((e) => {
+              const r1 = rowOf.get(e.from)
+              const r2 = rowOf.get(e.to)
+              if (r2 === r1 + 1) predMap.get(e.to).push(itemOf.get(e.from))
+              if (r1 === r2 + 1) succMap.get(e.from).push(itemOf.get(e.to))
+            })
+            ids.forEach((id) => {
+              itemOf.get(id).preds = predMap.get(id)
+              itemOf.get(id).succs = succMap.get(id)
+            })
+            const medianF = (arr) => {
+              if (!arr.length) return null
+              const s2 = arr.slice().sort((a, b) => a - b)
+              const m2 = s2.length >> 1
+              return s2.length % 2 ? s2[m2] : (s2[m2 - 1] + s2[m2]) / 2
+            }
+            const resortF = (r, usePred) => {
+              const row = rows[r]
+              row.forEach((it) => {
+                const nb = usePred ? predMap.get(it.id) : succMap.get(it.id)
+                it._m = nb && nb.length ? medianF(nb.map((p) => p.pos)) : null
+              })
+              row.sort(
+                (a, b) => (a._m === null ? a.pos : a._m) - (b._m === null ? b.pos : b._m),
+              )
+              row.forEach((it, i) => (it.pos = i))
+            }
+
+
+            return finishBlock({
+              rows: rows,
+              own: own,
+              itemOf: itemOf,
+              deg: deg,
+              adjReal: adjReal,
+              hPair: new Map(),
+              cut: new Set(),
+              canPin: false,
+              useMirror: false,
+              forceDesire: forceDesire,
+              forcePred: predMap,
+              forceSucc: succMap,
+              naturalAll: true,
+              rowGap: 64,
+              repairs: 24,
+            })
           }
         }
+        
+
         // ==== AUTO-LAYOUT CORE END ====
 
         // ================================================================
@@ -11140,7 +11960,24 @@ notify pgrst, 'reload schema';</textarea
           // 负责量真实尺寸、落位置、把极少数绕不开的端口调整写回连线，
           // 最后交给 fitView 收尾。保证：节点两两不重叠、连线不穿过任何
           // 非端点节点、水平连线两端同行相邻、长连线只在层间空隙里走。
-          autoLayout() {
+          // 排布方案选择：smart（智能，默认）/ layered（分层）/ force（力导向）。
+          // 用户在菜单里选过就记住，下次快捷键 L 沿用；换方案重排后
+          // 不满意可以撤销（自动落盘带 History 提交点）。
+          readLayoutStrategy() {
+            try {
+              const v = localStorage.getItem('zwLayoutStrategy')
+              return v === 'layered' || v === 'force' || v === 'smart' ? v : 'smart'
+            } catch (_) {
+              return 'smart'
+            }
+          },
+          rememberLayoutStrategy(st) {
+            try {
+              localStorage.setItem('zwLayoutStrategy', st)
+            } catch (_) {}
+          },
+          autoLayout(strategy) {
+            const st = strategy || this.readLayoutStrategy()
             const nodes = Array.from(getNodes())
             if (nodes.length === 0) {
               CanvasManager.fitView()
@@ -11154,7 +11991,7 @@ notify pgrst, 'reload schema';</textarea
               w: n.offsetWidth || parseFloat(n.style.width) || 240,
               h: n.offsetHeight || parseFloat(n.style.height) || 120,
             }))
-            const res = computeCanvasLayout(nodeList, AppState.connections, {})
+            const res = computeCanvasLayout(nodeList, AppState.connections, { strategy: st })
             const placed = new Map(res.items.map((it) => [it.id, it]))
             nodes.forEach((n) => {
               const p = placed.get(n.id)
@@ -11164,6 +12001,8 @@ notify pgrst, 'reload schema';</textarea
             })
             // 极少数端口互相打架的连线（比如同一对节点既连了上下又连了
             // 左右），复核后会给出更顺手的端口朝向，这里写回连线数据。
+            // 端口决策是权威全量：每条被评估的边都有决策，据此设置/清除
+            // 折线兜底标记（route:'elbow' 的连线渲染成正交折线）。
             const fixes = res.ports || {}
             if (Object.keys(fixes).length) {
               AppState.connections.forEach((c) => {
@@ -11173,6 +12012,13 @@ notify pgrst, 'reload schema';</textarea
                 if (!fix) return
                 c.fromPort = fix.fromPort
                 c.toPort = fix.toPort
+                if (fix.route === 'elbow') {
+                  c.route = 'elbow'
+                  c.routeHint = fix.hint || { v: 'lane', k: 0 }
+                } else {
+                  delete c.route
+                  delete c.routeHint
+                }
               })
             }
             CanvasManager.applyTransform()
@@ -11185,7 +12031,14 @@ notify pgrst, 'reload schema';</textarea
             // 排布 = 排布 + 画布适应：节点整体居中，缩放到全部可见
             CanvasManager.fitView({ minScale: 0.005 })
             debouncedAutoSave(true)
-            notify(t('notify.layoutApplied'))
+            this.rememberLayoutStrategy(st)
+            const nameKey =
+              st === 'force'
+                ? 'menu.autoLayoutForce'
+                : st === 'layered'
+                  ? 'menu.autoLayoutLayered'
+                  : 'menu.autoLayout'
+            notify(t('notify.layoutApplied') + ' · ' + t(nameKey))
           },
           applyTransform() {
             const inner = DOM.canvasInner
@@ -14284,6 +15137,8 @@ notify pgrst, 'reload schema';</textarea
                       to: c.to == null ? '' : String(c.to),
                       fromPort: c.fromPort || 'bottom',
                       toPort: c.toPort || 'top',
+                      route: c.route === 'elbow' ? 'elbow' : undefined,
+                      routeHint: c.route === 'elbow' ? c.routeHint : undefined,
                     }
                   : null,
               )
@@ -14513,6 +15368,9 @@ notify pgrst, 'reload schema';</textarea
               to: c.to,
               fromPort: c.fromPort,
               toPort: c.toPort,
+              // 折线兜底标记（JSON 序列化会丢弃 undefined，不落脏数据）
+              route: c.route === 'elbow' ? 'elbow' : undefined,
+              routeHint: c.route === 'elbow' ? c.routeHint : undefined,
             })),
             // 涂鸦跟节点一样是**每张画布自己的内容**，所以跟 nodes 一起存。
             // 导出/导入/复制画布/撤销都会带上它。
@@ -14813,6 +15671,8 @@ notify pgrst, 'reload schema';</textarea
                 to: c.to,
                 fromPort: c.fromPort || 'bottom',
                 toPort: c.toPort || 'top',
+                route: c.route === 'elbow' ? 'elbow' : undefined,
+                routeHint: c.route === 'elbow' ? c.routeHint : undefined,
                 id: 'conn-' + ++AppState.connIdCounter,
               }))
               AppState.connIdCounter = Math.max(AppState.connIdCounter, snap.connIdCounter || 0)
@@ -15523,6 +16383,8 @@ notify pgrst, 'reload schema';</textarea
                 to: c.to,
                 fromPort: c.fromPort || 'bottom',
                 toPort: c.toPort || 'top',
+                route: c.route === 'elbow' ? 'elbow' : undefined,
+                routeHint: c.route === 'elbow' ? c.routeHint : undefined,
                 id: 'conn-' + ++AppState.connIdCounter,
               }))
 
@@ -15939,7 +16801,13 @@ notify pgrst, 'reload schema';</textarea
                 UIManager.resetView()
                 break
               case 'autoLayout':
-                CanvasManager.autoLayout()
+                CanvasManager.autoLayout('smart')
+                break
+              case 'autoLayoutLayered':
+                CanvasManager.autoLayout('layered')
+                break
+              case 'autoLayoutForce':
+                CanvasManager.autoLayout('force')
                 break
               case 'fitView':
                 CanvasManager.fitView()
@@ -16900,6 +17768,8 @@ notify pgrst, 'reload schema';</textarea
                   to: c.to,
                   fromPort: c.fromPort || 'bottom',
                   toPort: c.toPort || 'top',
+                  route: c.route === 'elbow' ? 'elbow' : undefined,
+                  routeHint: c.route === 'elbow' ? c.routeHint : undefined,
                   id: 'conn-' + ++AppState.connIdCounter,
                 }))
                 if (sane.dropped) {
