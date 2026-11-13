@@ -5682,7 +5682,8 @@ notify pgrst, 'reload schema';</textarea
           ctxLeftStartY: 0,
           portDrag: null,
           tempLine: null,
-          autoSaveTimer: null,
+          // 防抖定时器统一归 Persistence._timer 管，别在这里再放一份，
+          // 两处各存一个句柄是「清不干净的在途写入」的常见来源。
           wheelSaveTimer: null,
           notifyTimer: null,
           confirmResolve: null,
@@ -6896,6 +6897,10 @@ notify pgrst, 'reload schema';</textarea
 
           // 用云端/导入的数据整体覆盖本地。index 也一并写入，
           // 这样 activeId / order / meta 和正文永远是一致的。
+          //
+          // 覆盖前做一次「连线保全」：云端快照可能来自旧版本或异常写入，
+          // connections 是空的。这类空数据绝不能盖掉本地还活着的连线，
+          // 否则一次同步就能把整张画布的线全抹了。
           async writeLibrary(payload) {
             if (!payload || typeof payload !== 'object') return false
             const docs = payload.docs && typeof payload.docs === 'object' ? payload.docs : null
@@ -6904,11 +6909,58 @@ notify pgrst, 'reload schema';</textarea
               (id) => docs[id],
             )
             if (!order.length) return false
+
+            const safeDocs = {}
+            for (const id of order) {
+              const cloud = docs[id] || {}
+              const nodes = Array.isArray(cloud.nodes) ? cloud.nodes : []
+              const nodeIds = new Set(nodes.map((n) => n && n.id).filter(Boolean))
+              const usable = (list) =>
+                (Array.isArray(list) ? list : []).filter(
+                  (c) =>
+                    c &&
+                    nodeIds.has(String(c.from)) &&
+                    nodeIds.has(String(c.to)) &&
+                    String(c.from) !== String(c.to),
+                )
+              let local = null
+              try {
+                local = await this.readDoc(id)
+              } catch (_) {}
+              const next = Object.assign({}, cloud)
+              next.nodes = nodes
+              next.connections = Array.isArray(next.connections) ? next.connections : []
+              // 本地明确清空过连线 -> 尊重它，不让云端旧数据复活
+              if (local && local.connClearedAt && !next.connClearedAt) {
+                next.connClearedAt = local.connClearedAt
+              }
+              if (!next.connections.length && !next.connClearedAt) {
+                const localConns = local && Array.isArray(local.connections) ? local.connections : []
+                const backup = Array.isArray(next.connBackup)
+                  ? next.connBackup
+                  : local && Array.isArray(local.connBackup)
+                    ? local.connBackup
+                    : []
+                const restored = usable(localConns.length ? localConns : backup)
+                if (restored.length) {
+                  console.warn('[ZenWriter] cloud write kept local connections', id, restored.length)
+                  next.connections = restored
+                  next.connBackup = restored
+                }
+              }
+              if (!Array.isArray(next.connBackup) || !next.connBackup.length) {
+                const localBackup = local && Array.isArray(local.connBackup) ? local.connBackup : []
+                next.connBackup = localBackup.length ? localBackup : next.connections
+              }
+              if (!next.connClearedAt) next.connClearedAt = 0
+              safeDocs[id] = next
+            }
+
             const db = await this.open()
             await new Promise((resolve, reject) => {
               const tx = db.transaction([this.S.docs, this.S.index, this.S.settings], 'readwrite')
               const ds = tx.objectStore(this.S.docs)
-              order.forEach((id) => ds.put(docs[id], id))
+              order.forEach((id) => ds.put(safeDocs[id], id))
               tx.objectStore(this.S.index).put(
                 {
                   v: 2,
@@ -7015,6 +7067,8 @@ notify pgrst, 'reload schema';</textarea
                 view: null,
                 nodes: auto.nodes,
                 connections: conns,
+                connBackup: conns,
+                connClearedAt: 0,
               })
               await ZWStore.writeIndex({
                 v: 2,
@@ -7051,6 +7105,11 @@ notify pgrst, 'reload schema';</textarea
             } catch (_) {}
             if (!doc || !Array.isArray(doc.nodes)) continue
             try {
+              // 迁移时也把保险库建起来，旧备份里的连线不至于裸奔
+              if (!Array.isArray(doc.connBackup) && Array.isArray(doc.connections)) {
+                doc.connBackup = doc.connections
+              }
+              if (!doc.connClearedAt) doc.connClearedAt = 0
               await ZWStore.writeDoc(id, doc)
               order.push(id)
               count++
@@ -14120,6 +14179,330 @@ notify pgrst, 'reload schema';</textarea
         }
 
         // ================================================================
+        // 13.9 PERSISTENCE — 唯一的持久化内核
+        //
+        // 旧的写法把「能不能落盘」交给十几个布尔闸门（switchingCanvas /
+        // History.applying / _switchDepth）自觉判断，同时存在三条互不同步的
+        // 写链（saveCurrent 的 _writeQueue、open 的 _lock、直接调 ZWStore）。
+        // 只要有一个入口漏判，或者两条链交错，半张画布就会被写进别人的槽位，
+        // 连线随之消失。这里把三件事收成一条不可绕过的结构：
+        //
+        //   1) 唯一串行链 _tail：正文 / 索引 / 删除 / 画布切换全部排队，
+        //      切换事务本身占着这条链，物理上不可能与落盘交错。
+        //   2) DOM 世代令牌 (docId, epoch)：任何提交都带着「这份 DOM 属于
+        //      哪张画布、第几代」。epoch 在重建前同步自增，旧世代的提交
+        //      即使排到队首也会被丢弃 —— 定时器、在飞的 Promise、页面隐藏
+        //      冲刷再也写不进新画布的槽位。
+        //   3) 冻结事务 _frozen：重建 DOM 期间连排队都不允许，从源头杜绝
+        //      「节点逐个建出来、connections 还是 []」的半张快照。
+        //
+        // 除此之外还有一层数据保险：每篇画布落盘时附带 connBackup（最近
+        // 一次非空连线）。任何来源（旧代码、云同步覆盖、导入、手工改库）
+        // 把 connections 写成空时，read() 能自动救回来。
+        // ================================================================
+        const Persistence = {
+          _tail: Promise.resolve(),
+          _epoch: 0,
+          _docId: null,
+          _frozen: 0,
+          _timer: null,
+          _dirty: false,
+          _lastConnCount: 0,
+          _explicitClear: false,
+
+          epoch() {
+            return this._epoch
+          },
+          docId() {
+            return this._docId
+          },
+          frozen() {
+            return this._frozen > 0
+          },
+
+          // 把「当前 DOM」正式绑定到一张画布槽位
+          bind(id) {
+            this._docId = id
+            this._lastConnCount = AppState.connections.length
+            this._explicitClear = false
+          },
+          invalidate() {
+            this._epoch++
+          },
+          suspend() {
+            this._frozen++
+            AppState.switchingCanvas = true
+          },
+          resume() {
+            this._frozen = Math.max(0, this._frozen - 1)
+            AppState.switchingCanvas = this._frozen > 0
+          },
+          valid(docId, epoch) {
+            return !!docId && !this._frozen && epoch === this._epoch && docId === this._docId
+          },
+
+          // 所有持久化动作的唯一入口。fn 抛错不能拖死队列。
+          enqueue(fn) {
+            const run = this._tail.then(fn, fn)
+            this._tail = run.then(
+              () => {},
+              () => {},
+            )
+            return run
+          },
+          async flush() {
+            try {
+              await this._tail
+            } catch (_) {}
+          },
+
+          cancelTimer() {
+            if (this._timer) clearTimeout(this._timer)
+            this._timer = null
+          },
+          // 同步作废所有在途写入（删除画布 / 云端覆盖前用）
+          discard() {
+            this.cancelTimer()
+            this.invalidate()
+            this._dirty = false
+          },
+
+          // 用户把连线删到 0 时要放行，否则保险库会把「主动清空」复活。
+          // 重建期由 frozen 挡住，不会走到这里，所以这个信号只会来自真实编辑。
+          _noteConnections() {
+            if (AppState.connections.length === 0 && this._lastConnCount > 0) {
+              this._explicitClear = true
+            }
+          },
+
+          _cloneConns(list) {
+            return (Array.isArray(list) ? list : [])
+              .map((c) =>
+                c
+                  ? {
+                      from: c.from == null ? '' : String(c.from),
+                      to: c.to == null ? '' : String(c.to),
+                      fromPort: c.fromPort || 'bottom',
+                      toPort: c.toPort || 'top',
+                    }
+                  : null,
+              )
+              .filter((c) => c && c.from && c.to && c.from !== c.to)
+          },
+          _usable(list, data) {
+            const ids = new Set((data.nodes || []).map((n) => n && n.id).filter(Boolean))
+            return this._cloneConns(list).filter((c) => ids.has(c.from) && ids.has(c.to))
+          },
+
+          // 连线保险库：返回本篇画布该随正文一起写下的备份与清空标记。
+          // 若检测到「没有任何用户清空动作、连线却突然全没了」，
+          // 直接用备份把这次写入补回来 —— 磁盘永远不会出现空连线。
+          _vault(docId, data, prev) {
+            const conns = Array.isArray(data.connections) ? data.connections : []
+            let backup = this._cloneConns(prev && (prev.connBackup || prev.connections))
+            let clearedAt = (prev && Number(prev.connClearedAt)) || 0
+            if (conns.length) {
+              backup = this._cloneConns(conns)
+              clearedAt = 0
+            } else if (this._explicitClear) {
+              backup = []
+              clearedAt = Date.now()
+            } else if (backup.length) {
+              const restored = this._usable(backup, data)
+              if (restored.length) {
+                console.warn(
+                  '[ZenWriter] blocked an empty-connection write, restored from vault',
+                  docId,
+                  restored.length,
+                )
+                data.connections = restored
+              }
+            }
+            return { connBackup: backup, connClearedAt: clearedAt }
+          },
+
+          // 读画布（带自愈）。只在打开画布 / 导出时用，不参与写队列。
+          async read(id) {
+            if (!id) return null
+            let d = null
+            try {
+              d = await ZWStore.readDoc(id)
+            } catch (e) {
+              console.warn('[ZenWriter] doc read failed', id, e)
+            }
+            // 只有 IndexedDB 整个不可用时才退回 LocalStorage 旧键
+            if (!d && !ZWStore.available()) {
+              try {
+                const raw = localStorage.getItem(DOC_PREFIX + id)
+                if (raw) d = JSON.parse(raw)
+              } catch (_) {}
+            }
+            if (!d || !Array.isArray(d.nodes)) return null
+            if (!Array.isArray(d.connections)) d.connections = []
+            if (!d.connections.length && !d.connClearedAt && Array.isArray(d.connBackup)) {
+              const restored = this._usable(d.connBackup, d)
+              if (restored.length) {
+                console.warn('[ZenWriter] restored connections from vault', id, restored.length)
+                d.connections = restored
+              }
+            }
+            return d
+          },
+
+          // 唯一的内容写入口。dataFn 在队列内执行，保证读到的是提交那一刻
+          // 的完整 DOM；force 只给「切换前的最后一次保存」用。
+          commit(docId, epoch, dataFn, opts) {
+            const o = opts || {}
+            return this.enqueue(async () => {
+              if (!o.force && !this.valid(docId, epoch)) return null
+              const data = typeof dataFn === 'function' ? dataFn() : dataFn
+              if (!data || !Array.isArray(data.nodes)) return null
+              const idx = DocManager._idx
+              // 画布已经被删掉就不再写回，免得复活一个孤儿槽位
+              if (!idx || idx.order.indexOf(docId) < 0) return null
+              let prev = null
+              try {
+                prev = await ZWStore.readDoc(docId)
+              } catch (_) {}
+              const vault = this._vault(docId, data, prev)
+              const meta = idx.meta[docId] || {}
+              const now = Date.now()
+              const payload = {
+                name: meta.name || DocManager.defaultName(),
+                createdAt: meta.createdAt || now,
+                updatedAt: now,
+                view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
+                nodes: data.nodes,
+                connections: this._cloneConns(data.connections),
+                doodles: Array.isArray(data.doodles) ? data.doodles : [],
+                connBackup: vault.connBackup,
+                connClearedAt: vault.connClearedAt,
+              }
+              try {
+                await ZWStore.writeDoc(docId, payload)
+                idx.meta[docId] = {
+                  name: meta.name || DocManager.defaultName(),
+                  createdAt: meta.createdAt || now,
+                  updatedAt: now,
+                  nodes: data.nodes.length,
+                  view: meta.view,
+                }
+                await ZWStore.writeIndex(idx)
+                this._lastConnCount = payload.connections.length
+                this._explicitClear = false
+                this._dirty = false
+                return data
+              } catch (e) {
+                console.warn('[ZenWriter] canvas persist failed', e)
+                try {
+                  notify(t('notify.storageWriteFailed'))
+                } catch (_) {}
+                return null
+              }
+            })
+          },
+
+          // 写索引。_raw 版本只在已持有队列的切换事务内部调用，
+          // 再排一次队会自己等自己（死锁）。
+          _writeIndexRaw(idx) {
+            const clean = DocManager._setIndex(idx)
+            if (!clean) return Promise.resolve()
+            return ZWStore.writeIndex(clean)
+          },
+          writeIndex(idx) {
+            return this.enqueue(() => this._writeIndexRaw(idx)).catch((e) => {
+              console.warn('[ZenWriter] index write failed', e)
+            })
+          },
+
+          // ---- 调度 ----
+          schedule(immediate) {
+            History.record()
+            this.cancelTimer()
+            if (this.frozen()) return
+            this._noteConnections()
+            this._dirty = true
+            const docId = this._docId
+            const epoch = this._epoch
+            const run = () => {
+              this._timer = null
+              AppState.persistPromise = this.commit(docId, epoch, buildCanvasData)
+                .then((data) => {
+                  if (data) OutlineManager.render()
+                })
+                .catch((e) => console.warn('[ZenWriter] persist failed', e))
+              return AppState.persistPromise
+            }
+            if (immediate) {
+              run()
+              return
+            }
+            this._timer = setTimeout(run, CONFIG.AUTO_SAVE_DELAY)
+          },
+
+          // 页面隐藏 / 离开前冲刷
+          flushPending() {
+            if (this.frozen()) {
+              this.cancelTimer()
+              return
+            }
+            if (!this._timer && !this._dirty) return
+            this.cancelTimer()
+            const docId = this._docId
+            const epoch = this._epoch
+            AppState.persistPromise = this.commit(docId, epoch, buildCanvasData).catch(() => {})
+            return AppState.persistPromise
+          },
+
+          // 撤销回放之后用：只落盘，不碰撤销栈（不调 History.record）
+          commitQuiet() {
+            if (this.frozen()) return Promise.resolve(null)
+            this.cancelTimer()
+            return this.commit(this._docId, this._epoch, buildCanvasData)
+          },
+
+          // 立即提交并返回快照（导出 / 云同步 / 新建画布前用）
+          async persistNow() {
+            this.cancelTimer()
+            if (this.frozen()) {
+              await this.flush()
+              return buildCanvasData()
+            }
+            if (!this._docId) return buildCanvasData()
+            const data = await this.commit(this._docId, this._epoch, buildCanvasData)
+            return data || buildCanvasData()
+          },
+
+          // ---- 画布切换事务 ----
+          // 同步部分：先把未落盘的改动以「当前世代」排进队列（force），
+          // 紧接着自增世代并冻结。之后任何 stray 提交的世代都不一样，
+          // 排到了也会被丢掉。切换事务排在这个 force 提交之后。
+          prepareSwitch() {
+            const docId = this._docId
+            const epoch = this._epoch
+            const hadDirty = this._dirty
+            this.cancelTimer()
+            if (hadDirty && docId && !this.frozen()) {
+              this.enqueue(() => this.commit(docId, epoch, buildCanvasData, { force: true }))
+            }
+            this.invalidate()
+            this._dirty = false
+            this.suspend()
+          },
+          finishSwitch(id) {
+            this.bind(id)
+            this.resume()
+          },
+          // 切换失败且原画布已不存在：宁可暂时禁止落盘，也不能把旧 DOM
+          // 写进邻近画布的槽位
+          failSwitch() {
+            this.invalidate()
+            this.bind(null)
+            this.resume()
+          },
+        }
+
+        // ================================================================
         // 14. AUTO SAVE
         // ================================================================
         function buildCanvasData() {
@@ -14181,85 +14564,35 @@ notify pgrst, 'reload schema';</textarea
           return data
         }
 
-        // 立即落盘：把当前 DOM 写进 IndexedDB。
-        // 结构性的改动（新建/删除/连线/拖完/撤销…）都走这里，不等防抖。
+        // 立即落盘。所有调用方都经 Persistence，目标槽位由世代令牌决定，
+        // 不再依赖「写盘那一刻的 activeId」。
         async function persistCanvasData() {
-          // 切换画布期间 DOM 正在重建，绝不能落盘。
-          // 否则那个「半张画布」会被写进 outgoing 画布的槽位 ——
-          // 这正是多张画布内容互相污染、连线消失的根源。
-          if (AppState.switchingCanvas) {
-            try {
-              if (AppState.switchPromise) await AppState.switchPromise
-            } catch (_) {}
-            // 切换完成后也不补写：刚读进来的内容本来就是对的
-            return buildCanvasData()
+          let docId = Persistence.docId() || DocManager.activeId()
+          if (!docId) {
+            // 还没有任何画布（比如首次打开就是空的）-> 先建一个并绑定世代
+            docId = await DocManager.createDoc()
+            Persistence.bind(docId)
+            await Persistence.flush()
           }
-          clearTimeout(AppState.autoSaveTimer)
-          AppState.autoSaveTimer = null
-          const data = buildCanvasData()
-          // 目标槽位必须和这份 DOM 快照在同一时刻锁定。
-          // saveCurrent 是排队异步写的，等它真正落盘时 activeId 可能已被
-          // 删除/切换流程改掉；那时再取 idx.activeId 就会把内容串到别的画布。
-          let targetId = DocManager.activeId()
-          try {
-            if (!targetId) {
-              // 还没有任何画布（比如首次打开就是空的）-> 先建一个
-              targetId = await DocManager.createDoc()
-            }
-            await DocManager.saveCurrent(data, targetId)
-          } catch (e) {
-            console.warn('[ZenWriter] canvas persist failed', e)
-            notify(t('notify.storageWriteFailed'))
-          }
-          // 注意：不再写 zc-autosave / zc-connections / zc-doc:*。
-          // 它们是迁移前的一次性备份，留着不动；继续写只会
-          // 在画布变大后重新撞上 LocalStorage 的 5MB 上限。
-          return data
+          return Persistence.persistNow()
         }
 
         // immediate = true 时不等待，立即落盘。
-        // 打字这种高频场景走防抖（几百毫秒，人感知不到）；
-        // 结构改动传 true，保证「操作完就已经存好了」。
+        // 打字这种高频场景走防抖；结构改动传 true。
         function debouncedAutoSave(immediate) {
-          // 每次改动都会走到这里，所以撤销栈的提交点就挂在这里
-          History.record()
-          clearTimeout(AppState.autoSaveTimer)
-          AppState.autoSaveTimer = null
-          // 批量重建 DOM（切换画布 / 启动载入 / 撤销回放）时，
-          // 节点是逐个 createNodeAt 建出来的，每个建完都会调到这里，
-          // 而此时 AppState.connections 往往还没恢复（仍是 []）。
-          // 一旦落盘就会把「半张画布 + 空连线」写回当前槽位，
-          // 刷新后整张画布的连线就没了 —— 正是「一打开就没连线」的根源。
-          // 载入/回放完成后由各自的提交点统一落盘（或盘上本来就是对的）。
-          if (AppState.switchingCanvas || History.applying) return
-          if (immediate) {
-            AppState.persistPromise = persistCanvasData()
-              .then(() => OutlineManager.render())
-              .catch((e) => console.warn('[ZenWriter] persist failed', e))
-            return
-          }
-          AppState.autoSaveTimer = setTimeout(() => {
-            AppState.persistPromise = persistCanvasData()
-              .then(() => OutlineManager.render())
-              .catch((e) => console.warn('[ZenWriter] persist failed', e))
-          }, CONFIG.AUTO_SAVE_DELAY)
+          Persistence.schedule(immediate)
         }
 
-        // 关页面 / 切后台前强制冲刷，保证最后一次改动一定写进去
+        // 关页面 / 切后台前强制冲刷
         function flushPendingSave() {
-          if (!AppState.autoSaveTimer) return
-          clearTimeout(AppState.autoSaveTimer)
-          AppState.autoSaveTimer = null
-          // 切换/删除/载入期间 DOM 与 activeId 可能不一致，冲下去只会写错画布
-          if (AppState.switchingCanvas || History.applying) return
-          AppState.persistPromise = persistCanvasData().catch(() => {})
+          return Persistence.flushPending()
         }
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'hidden') flushPendingSave()
         })
         window.addEventListener('pagehide', flushPendingSave)
         window.addEventListener('beforeunload', () => {
-          clearTimeout(AppState.autoSaveTimer)
+          Persistence.cancelTimer()
           clearTimeout(Settings._writeTimer)
           Settings._write()
         })
@@ -14436,8 +14769,11 @@ notify pgrst, 'reload schema';</textarea
             const prevNodes = getNodes().length
             const prevConns = AppState.connections.length
             this.applying = true
+            // 回放同样是「逐个建节点」的批量重建：整段冻结写队列，
+            // 否则每建一个节点就排一次落盘，空连线会被写回磁盘。
+            Persistence.suspend()
             try {
-              clearTimeout(AppState.autoSaveTimer)
+              Persistence.cancelTimer()
               // 撤一半时可能正拖着端口，先把临时状态收干净
               if (AppState.tempLine) {
                 AppState.tempLine.remove()
@@ -14488,10 +14824,6 @@ notify pgrst, 'reload schema';</textarea
               // 回放会重建整个 DOM，大纲必须跟着重画
               OutlineManager.currentId = null
               SearchManager.refresh()
-              // 落盘放最后：等 DOM 和大纲都就位再写
-              persistCanvasData().catch((e) =>
-                console.warn('[ZenWriter] post-replay persist failed', e),
-              )
 
               // 回放过程中可能被聚焦到某个节点上，退回后别留一个野生光标
               const a = document.activeElement
@@ -14504,7 +14836,12 @@ notify pgrst, 'reload schema';</textarea
               return false
             } finally {
               this.applying = false
+              Persistence.resume()
             }
+            // 解冻之后、DOM 已完整，才做一次权威落盘（不进撤销栈）
+            Persistence.commitQuiet().catch((e) =>
+              console.warn('[ZenWriter] post-replay persist failed', e),
+            )
             // 公式/Markdown 排版完高度会变，连线要再画一次
             setTimeout(() => {
               ConnectionManager.renderAll()
@@ -14632,6 +14969,7 @@ notify pgrst, 'reload schema';</textarea
             }
             try {
               if (AppState.persistPromise) await AppState.persistPromise
+              await Persistence.flush()
             } catch (_) {}
             try {
               await Settings.save(true)
@@ -14879,8 +15217,7 @@ notify pgrst, 'reload schema';</textarea
         //     键迁移后只读不写，原样保留当一次性备份，绝不删。
         // ================================================================
         const DocManager = {
-          _idx: null, // 内存里的索引副本
-          _writeQueue: Promise.resolve(),
+          _idx: null, // 内存里的索引副本（唯一权威；只有 bootstrap 和云端覆盖后才重读）
 
           normalizeIndex(p) {
             if (!p || !Array.isArray(p.order)) return null
@@ -14900,7 +15237,10 @@ notify pgrst, 'reload schema';</textarea
             return DocManager._idx
           },
 
-          // 异步：从 IndexedDB 载入索引到内存
+          // 异步：从 IndexedDB 载入索引到内存。
+          // 只允许在 bootstrap 和「云端整库覆盖」之后调用 ——
+          // 正常流程一律以 _idx 为准，反复重读会把别的写操作刚更新的
+          // activeId / meta 用磁盘旧值冲掉。
           async loadIndex() {
             let p = null
             try {
@@ -14918,46 +15258,26 @@ notify pgrst, 'reload schema';</textarea
             return DocManager._setIndex(p)
           },
 
+          // 内存副本优先；只有还没初始化时才回源读一次
+          async indexAsync() {
+            return DocManager._idx || (await DocManager.loadIndex())
+          },
+
           writeIndex(p) {
-            const clean = DocManager._setIndex(p)
-            if (!clean) return Promise.resolve()
-            return ZWStore.writeIndex(clean).catch((e) => {
-              console.warn('[ZenWriter] index write failed', e)
-              notify(t('notify.storageWriteFailed'))
-            })
+            return Persistence.writeIndex(p)
           },
 
-          // 串行化写，避免两次连续写互相覆盖
+          // 串行化写：接上 Persistence 的唯一事务链
           _enqueue(fn) {
-            DocManager._writeQueue = DocManager._writeQueue.then(fn, fn)
-            return DocManager._writeQueue
+            return Persistence.enqueue(fn)
           },
 
-          async readDoc(id) {
-            if (!id) return null
-            let d = null
-            try {
-              d = await ZWStore.readDoc(id)
-            } catch (e) {
-              console.warn('[ZenWriter] doc read failed', id, e)
-            }
-            // 只有 IndexedDB 整个不可用时才退回 LocalStorage。
-            // 绝不能在「IndexedDB 里没这张画布」时也去读旧键 ——
-            // 那是迁移时的一次性备份，内容早已过期，
-            // 拿它兜底会让已删除/损坏的画布凭空复活成旧内容。
-            if (!d && !ZWStore.available()) {
-              try {
-                const raw = localStorage.getItem(DOC_PREFIX + id)
-                if (raw) d = JSON.parse(raw)
-              } catch (_) {}
-            }
-            if (!d || !Array.isArray(d.nodes)) return null
-            if (!Array.isArray(d.connections)) d.connections = []
-            return d
+          readDoc(id) {
+            return Persistence.read(id)
           },
 
           writeDoc(id, doc) {
-            return ZWStore.writeDoc(id, doc).catch((e) => {
+            return Persistence.enqueue(() => ZWStore.writeDoc(id, doc)).catch((e) => {
               console.warn('[ZenWriter] doc write failed', id, e)
               notify(t('notify.storageWriteFailed'))
               return false
@@ -14965,7 +15285,7 @@ notify pgrst, 'reload schema';</textarea
           },
 
           deleteDoc(id) {
-            return ZWStore.deleteDoc(id).catch(() => false)
+            return Persistence.enqueue(() => ZWStore.deleteDoc(id)).catch(() => false)
           },
 
           newId() {
@@ -15064,7 +15384,7 @@ notify pgrst, 'reload schema';</textarea
           saveView() {
             const idx = DocManager._idx
             if (!idx || !idx.activeId) return Promise.resolve()
-            if (AppState.switchingCanvas) return Promise.resolve()
+            if (Persistence.frozen()) return Promise.resolve()
             const id = idx.activeId
             const meta = idx.meta[id] || (idx.meta[id] = {})
             const view = {
@@ -15081,45 +15401,17 @@ notify pgrst, 'reload schema';</textarea
               return Promise.resolve()
             }
             meta.view = view
-            return DocManager._enqueue(() => ZWStore.writeIndex(idx)).catch((e) => {
+            return DocManager.writeIndex(idx).catch((e) => {
               console.warn('[ZenWriter] view save failed', e)
             })
           },
 
-          // 保存当前画布到它自己的存储槽（不切画布）
-          // targetId：调用方在读 DOM 的同时锁定的画布 id。
-          // 不传时退回当前 activeId（切画布前的 pre-open save 走这条）。
+          // 保存当前画布到它自己的存储槽（不切画布）。
+          // 唯一的实际写入在 Persistence.commit，这里只是转交 + 等待。
           saveCurrent(data, targetId) {
-            const idx = DocManager._idx
-            if (!idx) return Promise.resolve()
-            const id = targetId || idx.activeId
-            if (!id) return Promise.resolve()
-            const prevMeta = idx.meta[id] || {}
-            const now = Date.now()
-            const payload = {
-              name: prevMeta.name || DocManager.defaultName(),
-              createdAt: prevMeta.createdAt || now,
-              updatedAt: now,
-              view: { panX: AppState.panX, panY: AppState.panY, scale: AppState.scale },
-              nodes: data.nodes,
-              connections: data.connections,
-              doodles: Array.isArray(data.doodles) ? data.doodles : [],
-            }
-            // 注意：这里是**整个替换** meta[id]，不是合并。
-            // 所以 prevMeta 上的每个字段都必须显式搬过来，
-            // 漏一个（比如下面的 view）就会在下一次内容编辑时被抹掉 ——
-            // 那正是「适应 / 自动排布后一刷新就跳回去」的成因之一。
-            idx.meta[id] = {
-              name: prevMeta.name || DocManager.defaultName(),
-              createdAt: prevMeta.createdAt || now,
-              updatedAt: now,
-              nodes: data.nodes.length,
-              view: prevMeta.view,
-            }
-            return DocManager._enqueue(async () => {
-              await ZWStore.writeDoc(id, payload)
-              await ZWStore.writeIndex(idx)
-            })
+            const id = targetId || DocManager.activeId()
+            if (!id) return Promise.resolve(null)
+            return Persistence.commit(id, Persistence.epoch(), data)
           },
 
           async createDoc(rawData) {
@@ -15129,92 +15421,76 @@ notify pgrst, 'reload schema';</textarea
             const data = rawData || { nodes: [], connections: [] }
             const base = (data && data.name) || DocManager.defaultName()
             const name = DocManager.uniqueName(base)
-            await ZWStore.writeDoc(id, {
-              name: name,
-              createdAt: now,
-              updatedAt: now,
-              view: null,
-              nodes: Array.isArray(data.nodes) ? data.nodes : [],
-              connections: Array.isArray(data.connections) ? data.connections : [],
-              doodles: Array.isArray(data.doodles) ? data.doodles : [],
+            const conns = Persistence._cloneConns(data.connections)
+            await Persistence.enqueue(async () => {
+              await ZWStore.writeDoc(id, {
+                name: name,
+                createdAt: now,
+                updatedAt: now,
+                view: null,
+                nodes: Array.isArray(data.nodes) ? data.nodes : [],
+                connections: conns,
+                doodles: Array.isArray(data.doodles) ? data.doodles : [],
+                connBackup: conns,
+                connClearedAt: 0,
+              })
+              if (idx.order.indexOf(id) < 0) idx.order.push(id)
+              idx.meta[id] = {
+                name: name,
+                createdAt: now,
+                updatedAt: now,
+                nodes: (data.nodes || []).length,
+              }
+              await Persistence._writeIndexRaw(idx)
             })
-            if (idx.order.indexOf(id) < 0) idx.order.push(id)
-            idx.meta[id] = {
-              name: name,
-              createdAt: now,
-              updatedAt: now,
-              nodes: (data.nodes || []).length,
-            }
-            await DocManager.writeIndex(idx)
             return id
           },
 
-          // 把某个画布渲染到 DOM，并设为当前画布
-          // 切换画布必须串行执行。
-          // 两个 open() 并发时，第二个会在第一个重建 DOM 的过程中
-          // 把「半张画布」存进错误的槽位，画布内容就会互相污染。
-          _lock: Promise.resolve(),
-          _withLock(fn) {
-            const run = DocManager._lock.then(fn, fn)
-            // 锁本身不能被 reject 拖死，后面的切换还得能进
-            DocManager._lock = run.then(
-              () => {},
-              () => {},
-            )
-            return run
-          },
-
+          // 把某个画布渲染到 DOM，并设为当前画布。
+          // 切换本身就是 Persistence 事务链上的一个任务：它前面是切换前
+          // 的最后一次保存，后面是所有被作废的旧世代提交，天然串行。
           open(id) {
-            // 闸门必须在**调用时**同步关上。_openInner 是排在 Promise 锁
-            // 队列里的，等它真正跑起来才关，会留下一个微任务窗口：
-            // 删除画布时 activeId 已指向新画布、DOM 却还是旧画布，
-            // 这期间任何落盘都会把旧内容写进新画布的槽位。
-            // 计数是为了并发 open —— 先完成的那次不能提前开闸。
-            AppState.switchingCanvas = true
-            AppState._switchDepth = (AppState._switchDepth || 0) + 1
-            const p = DocManager._withLock(() => DocManager._openInner(id))
-            AppState.switchPromise = p
-            return p
+            // 同步关闸（不能在任务里做，那会留一个微任务窗口）
+            Persistence.prepareSwitch()
+            const prev = Persistence.docId()
+            const idx = DocManager._idx
+            const prevAlive = !!prev && !!idx && idx.order.indexOf(prev) >= 0
+            const settle = (ok) => {
+              if (ok) Persistence.finishSwitch(id)
+              else if (prevAlive) Persistence.finishSwitch(prev)
+              else Persistence.failSwitch() // 原画布已删，禁止把旧 DOM 写进邻画布
+              AppState.switchPromise = null
+            }
+            const p = Persistence.enqueue(() => DocManager._openInner(id))
+              .then((ok) => {
+                settle(ok)
+                return ok
+              })
               .catch((e) => {
                 console.error('[ZenWriter] canvas open failed', id, e)
+                settle(false)
                 return false
               })
-              .finally(() => {
-                AppState._switchDepth = Math.max(0, (AppState._switchDepth || 0) - 1)
-                if (AppState._switchDepth === 0) {
-                  AppState.switchingCanvas = false
-                  AppState.switchPromise = null
-                }
-              })
+            AppState.switchPromise = p
+            return p
           },
 
           async _openInner(id) {
-            // 从这里开始，任何落盘都会写错槽位（DOM 要被清空重建，
-            // 而 activeId 在重建结束前还指向 outgoing 画布）。
-            // 所以第一件事就是上锁，落盘闸门同步关闭。
-            AppState.switchingCanvas = true
             try {
-              let idx = await DocManager.loadIndex()
+              // 用内存权威索引，绝不在这里重读磁盘覆盖掉别的写操作刚更新的
+              // activeId / meta（旧实现正是这样把索引写回了旧值）。
+              const idx = await DocManager.indexAsync()
               if (!idx || idx.order.indexOf(id) < 0) return false
-              // 先把正在编辑的画布落盘，避免丢改动。
-              // 这里直接调 DocManager.saveCurrent（不受落盘闸门影响），
-              // 因为此刻 DOM 还是完整的 outgoing 画布。
-              if (idx.activeId !== id) {
-                try {
-                  await DocManager.saveCurrent(buildCanvasData())
-                  idx = DocManager._idx || idx
-                } catch (e) {
-                  console.warn('[ZenWriter] pre-open save failed', e)
-                }
-              }
-              const doc = await DocManager.readDoc(id)
+              // 切换前的最后一次保存已由 prepareSwitch 排队完成，
+              // 这里只负责把目标画布读进来重建，全程不做任何内容写入。
+              const doc = await Persistence.read(id)
               if (!doc) {
                 notify(t('notify.invalidFile'))
                 return false
               }
               // 清场
               History.applying = true
-              clearTimeout(AppState.autoSaveTimer)
+              Persistence.cancelTimer()
               // 浮层持有的是即将被删掉的节点引用，必须先关掉，
               // 否则关浮层时会对一个已经不在 DOM 里的节点写样式。
               NodeBorder.close()
@@ -15251,7 +15527,8 @@ notify pgrst, 'reload schema';</textarea
               }))
 
               idx.activeId = id
-              await DocManager.writeIndex(idx)
+              // 已在 Persistence 事务链内部，直接写索引（再排队会死锁）
+              await Persistence._writeIndexRaw(idx)
               // 先刷画布列表：选中态只跟索引有关，
               // 必须保证就算后面出问题也一定更新到
               UIManager.renderDocList()
@@ -15282,9 +15559,9 @@ notify pgrst, 'reload schema';</textarea
               OutlineManager.collapsed.clear()
               SearchManager.refresh()
             } finally {
+              // 撤销栈闸门在这里复位；落盘冻结由 open() 统一收尾，
+              // 并发切换时先完成的那次不能提前解冻。
               History.applying = false
-              // 闸门 / switchPromise 由 open() 统一复位（支持并发 open），
-              // 这里不能提前清，否则排在后面的切换会失去保护。
             }
 
             setTimeout(() => {
@@ -15301,7 +15578,7 @@ notify pgrst, 'reload schema';</textarea
           // 铁律：一张都不能丢。传入的 id 只做「重排」，
           // 任何没出现在列表里的画布都会追加回末尾，绝不静默消失。
           async reorder(ids) {
-            let idx = await DocManager.loadIndex()
+            const idx = await DocManager.indexAsync()
             if (!idx || !Array.isArray(idx.order) || !idx.order.length) return false
             const known = new Set(idx.order)
             const next = []
@@ -15321,7 +15598,7 @@ notify pgrst, 'reload schema';</textarea
           },
 
           async rename(id, name) {
-            const idx = await DocManager.loadIndex()
+            const idx = await DocManager.indexAsync()
             if (!idx || idx.order.indexOf(id) < 0) return false
             const clean = String(name || '').trim() || DocManager.defaultName()
             idx.meta[id] = Object.assign({}, idx.meta[id], { name: clean })
@@ -15336,49 +15613,38 @@ notify pgrst, 'reload schema';</textarea
           },
 
           async remove(id) {
-            let idx = await DocManager.loadIndex()
+            const idx = await DocManager.indexAsync()
             if (!idx || idx.order.indexOf(id) < 0) return false
             const wasActive = idx.activeId === id
             const pos = idx.order.indexOf(id)
-            idx.order = idx.order.filter((x) => x !== id)
-            delete idx.meta[id]
-            await DocManager.deleteDoc(id)
-            if (!idx.order.length) {
-              await DocManager.writeIndex(idx)
-              const fresh = await DocManager.createDoc()
-              return DocManager.open(fresh)
-            }
-            if (wasActive) {
-              const nextId = idx.order[Math.min(pos, idx.order.length - 1)]
-              // 改 activeId 之前先收干净所有待落盘/在飞的写入，并同步关闸：
-              // 从这里到 open() 重建 DOM 之间，DOM 仍是被删画布，
-              // 而 activeId 马上要指向 nextId，一次 stray persist 就会
-              // 把旧内容（含它的连线集合）覆盖到邻近画布上。
-              clearTimeout(AppState.autoSaveTimer)
-              AppState.autoSaveTimer = null
-              try {
-                if (AppState.persistPromise) await AppState.persistPromise
-                await DocManager._writeQueue
-              } catch (_) {}
-              AppState.switchingCanvas = true
-              let opening = false
-              try {
-                // 先把 activeId 切过去，避免 open() 又把已删除的画布存回来
+
+            // 删除是唯一会让「DOM 仍是被删画布、activeId 却已指向邻画布」
+            // 的流程。这里同步作废在途写入并冻结，直到 open() 完成解冻。
+            // 任何防抖定时器、pagehide 冲刷、云同步 snapshot 在此期间
+            // 都排不进写队列；切换事务结束后它们的世代令牌也已失效。
+            Persistence.discard()
+            Persistence.suspend()
+            try {
+              idx.order = idx.order.filter((x) => x !== id)
+              delete idx.meta[id]
+              await DocManager.deleteDoc(id)
+              if (!idx.order.length) {
+                await DocManager.writeIndex(idx)
+                const fresh = await DocManager.createDoc()
+                return await DocManager.open(fresh)
+              }
+              if (wasActive) {
+                const nextId = idx.order[Math.min(pos, idx.order.length - 1)]
                 idx.activeId = nextId
                 await DocManager.writeIndex(idx)
-                opening = true
                 return await DocManager.open(nextId)
-              } finally {
-                // 正常路径由 open() 复位；这里只兜住「open 没能启动」的情况
-                if (!opening && !AppState._switchDepth) {
-                  AppState.switchingCanvas = false
-                  AppState.switchPromise = null
-                }
               }
+              await DocManager.writeIndex(idx)
+              UIManager.renderDocList()
+              return true
+            } finally {
+              Persistence.resume()
             }
-            await DocManager.writeIndex(idx)
-            UIManager.renderDocList()
-            return true
           },
 
           async deleteDocFlow(id) {
@@ -15400,7 +15666,7 @@ notify pgrst, 'reload schema';</textarea
           },
 
           async duplicate(id) {
-            let idx = await DocManager.loadIndex()
+            const idx = await DocManager.indexAsync()
             if (!idx || idx.order.indexOf(id) < 0) return false
             const doc = await DocManager.readDoc(id)
             if (!doc) return false
@@ -15417,12 +15683,13 @@ notify pgrst, 'reload schema';</textarea
 
           // 导出全部画布成一个 .zwlib 包
           async exportAll() {
-            let idx = await DocManager.loadIndex()
+            const idx = await DocManager.indexAsync()
             if (!idx) return
             try {
               await DocManager.saveCurrent(buildCanvasData())
-              idx = DocManager._idx || idx
             } catch (_) {}
+            // 等整条事务链排空再读整库，否则可能读到写了一半的索引
+            await Persistence.flush()
             const lib = await ZWStore.library()
             const payload = {
               format: 'zenwriter-library',
@@ -15444,7 +15711,7 @@ notify pgrst, 'reload schema';</textarea
             if (obj.format === 'zenwriter-library' && obj.docs && typeof obj.docs === 'object') {
               let added = 0
               let firstNewId = null
-              const idx = (await DocManager.loadIndex()) || {
+              const idx = (await DocManager.indexAsync()) || {
                 v: 2,
                 activeId: null,
                 order: [],
@@ -15457,15 +15724,20 @@ notify pgrst, 'reload schema';</textarea
                 const name = DocManager.uniqueName(baseName)
                 const id = DocManager.newId()
                 const now = Date.now()
-                await ZWStore.writeDoc(id, {
-                  name: name,
-                  createdAt: now,
-                  updatedAt: now,
-                  view: null,
-                  nodes: src.nodes,
-                  connections: Array.isArray(src.connections) ? src.connections : [],
-                  doodles: Array.isArray(src.doodles) ? src.doodles : [],
-                })
+                const conns = Persistence._cloneConns(src.connections)
+                await Persistence.enqueue(() =>
+                  ZWStore.writeDoc(id, {
+                    name: name,
+                    createdAt: now,
+                    updatedAt: now,
+                    view: null,
+                    nodes: src.nodes,
+                    connections: conns,
+                    doodles: Array.isArray(src.doodles) ? src.doodles : [],
+                    connBackup: conns,
+                    connClearedAt: 0,
+                  }),
+                )
                 idx.order.push(id)
                 // 把源 meta 里的镜头带过来：.zwlib / 云同步往返之后，
                 // 每张画布应该还停在自己上次被看到的位置，
@@ -16592,16 +16864,24 @@ notify pgrst, 'reload schema';</textarea
           }
 
           // 4) 打开当前画布
+          if (!DocManager.activeId()) {
+            // bootstrap 万一失败也要有个槽位，否则世代令牌没有目标
+            await DocManager.createDoc()
+          }
           const activeId = DocManager.activeId()
+          // 把「当前 DOM」绑定到这张画布：之后所有提交都以它为准，
+          // 不再在异步写盘时重读 activeId。
+          Persistence.bind(activeId)
           if (activeId) {
-            const doc = await DocManager.readDoc(activeId)
+            const doc = await Persistence.read(activeId)
             if (doc) {
+              // 启动重建整段冻结写队列：期间节点是逐个建出来的，
+              // AppState.connections 仍是 []，任何一次落盘都会把空连线
+              // 写回磁盘 —— 旧版「一打开就没连线」正源于此。
+              Persistence.suspend()
               try {
                 History.applying = true // 载入历史数据不进撤销栈
-                // 启动重建同样要关落盘闸门：期间 AppState.connections
-                // 还是 []，任何一次 persist 都会把空连线写回磁盘。
-                AppState.switchingCanvas = true
-                clearTimeout(AppState.autoSaveTimer)
+                Persistence.cancelTimer()
                 ;(doc.nodes || []).forEach((n) => {
                   const nx = parseFloat(n.x)
                   const ny = parseFloat(n.y)
@@ -16636,7 +16916,8 @@ notify pgrst, 'reload schema';</textarea
                 console.warn('[ZenWriter] active doc load failed', e)
               } finally {
                 History.applying = false
-                AppState.switchingCanvas = false
+                // 重建完成：解冻并重新绑定（顺便同步连线基线）
+                Persistence.finishSwitch(activeId)
               }
             }
           }
@@ -16721,15 +17002,14 @@ notify pgrst, 'reload schema';</textarea
           // 顺序很重要：不冲的话云端拿到的可能是 300ms 之前的旧状态。
           async snapshot() {
             let data = null
-            // 切换/启动重建期间 DOM 是半张画布，persistCanvasData 也会被
-            // 闸门挡下；这时直接读盘即可，别把半张快照当兜底数据，
-            // 也别把等待切换的时间算进同步轮询里。
-            if (!AppState.switchingCanvas && !History.applying) {
-              try {
-                data = await persistCanvasData()
-              } catch (e) {
-                console.warn('[ZenWriter] snapshot flush failed', e)
-              }
+            // 一律经持久化内核：先让当前世代的提交落盘，再等整条事务链
+            // 排空。重建期它自己会等待切换完成并跳过半张快照，
+            // 不会把「空连线」推到云端。
+            try {
+              data = await Persistence.persistNow()
+              await Persistence.flush()
+            } catch (e) {
+              console.warn('[ZenWriter] snapshot flush failed', e)
             }
             const settings = Settings.collect()
             try {
@@ -16777,15 +17057,24 @@ notify pgrst, 'reload schema';</textarea
             }
             return lib
           },
-          // 云端数据落盘后，把当前画布重新载入 DOM
+          // 云端数据落盘后，把当前画布重新载入 DOM。
+          // 返回 Promise：调用方要能等到重建结束再进行下一步同步。
           reload() {
             const id = DocManager.activeId()
-            if (!id) return
-            DocManager.open(id).catch((err) => console.warn('[ZenWriter] reload failed', err))
+            if (!id) return Promise.resolve(false)
+            return DocManager.open(id).catch((err) => {
+              console.warn('[ZenWriter] reload failed', err)
+              return false
+            })
           },
-          // 云同步把索引覆盖掉之后，作废内存副本，让下一次读取走 IndexedDB
-          invalidateIndex() {
+          // 云同步整库覆盖之后：作废所有在途写入、重读索引、重绑世代。
+          // 只清 _idx 会让 activeId() 暂时返回 null，reload() 直接失效。
+          async invalidateIndex() {
+            Persistence.discard()
             DocManager._idx = null
+            const idx = await DocManager.loadIndex()
+            Persistence.bind(DocManager.activeId())
+            return idx
           },
           usage: () => ZWStore.estimate(),
         }
@@ -17595,7 +17884,7 @@ notify pgrst, 'reload schema';</textarea
               // 内存里的索引副本要作废，让 DocManager 下次重新读
               try {
                 if (window.ZCCloudStore && window.ZCCloudStore.invalidateIndex) {
-                  window.ZCCloudStore.invalidateIndex()
+                  await window.ZCCloudStore.invalidateIndex()
                 }
               } catch (_) {}
               // zc-settings 镜像继续维护（几百字节，纯给 tr() 读语言）
