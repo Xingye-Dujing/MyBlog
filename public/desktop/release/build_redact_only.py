@@ -49,6 +49,11 @@ def main() -> None:
     catalog["redact_only_release"] = True
     base = "https://gitee.com/Xingye-Dujing/my-blog/releases/download/%s" % TAG
     latest = "https://gitee.com/Xingye-Dujing/my-blog/releases/download/latest"
+    # The full hub executable is ~64 MB, larger than Gitee's free-tier
+    # per-file attachment limit (~50 MB), so it is hosted on GitHub while the
+    # smaller framework zip and plugin stay on Gitee.
+    github_base = "https://github.com/Xingye-Dujing/MyBlog/releases/download/%s" % TAG
+    github_latest = "https://github.com/Xingye-Dujing/MyBlog/releases/latest/download"
 
     for plugin in catalog.get("plugins", []):
         if plugin.get("id") != "redact":
@@ -91,6 +96,11 @@ def main() -> None:
         if not local.is_file():
             print("skip   %s (not built for this release)" % bundle)
             continue
+        # Hub is too large for Gitee's free tier; host it on GitHub.
+        if bundle == "OMM-ZEN.exe":
+            b, l = github_base, github_latest
+        else:
+            b, l = base, latest
         node = catalog
         for part in entry_key.split(":"):
             node = node.setdefault(part, {})
@@ -98,8 +108,8 @@ def main() -> None:
             {
                 "version": REDACT_VERSION,
                 "bundle": bundle,
-                "url": base + "/" + bundle,
-                "latest_url": latest + "/" + bundle,
+                "url": b + "/" + bundle,
+                "latest_url": l + "/" + bundle,
                 "sha256": sha256(local),
                 "size": local.stat().st_size,
             }
