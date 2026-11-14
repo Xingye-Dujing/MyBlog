@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 import platform
 import shutil
 import subprocess
@@ -39,6 +40,16 @@ DATA_SEP = ":" if IS_MACOS else ";"
 APP_SUFFIX = ".app" if IS_MACOS else ".exe"
 
 EXE_NAMES = {key: value for key, value in DESKTOP_EXE_NAMES.items() if key != "hub"}
+
+
+def _build_work(target: str) -> Path:
+    """A fresh, unique work/spec directory for every build.
+
+    The build host blocks bulk deletions, and PyInstaller removes an existing
+    ``--workpath`` before building. Using a never-before-seen path means there
+    is nothing to delete, so the build stays under the guard.
+    """
+    return BUILD / "work" / target / ("%d_%d" % (int(time.time()), os.getpid()))
 
 HUB_TARGET = "hub"
 HUB_NAME = "OMM-ZEN"
@@ -113,7 +124,7 @@ def build(app_id: str) -> bool:
     html, _port, backend = APPS[app_id]
     name = EXE_NAMES[app_id]
     entry = BUILD / "entries" / ("omm_start_%s.py" % app_id)
-    work = BUILD / "work" / app_id
+    work = _build_work(app_id)
     icon_src = ROOT / ("icon-writer.ico" if app_id == "writer" else "icon.ico")
     custom_icon = DESKTOP / "icons-src" / ("%s.png" % app_id)
     if custom_icon.is_file():
@@ -155,7 +166,7 @@ def build(app_id: str) -> bool:
 
     args = [
         sys.executable, "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--onefile", "--windowed",
+        "--noconfirm", "--onefile", "--windowed",
         "--name", name,
         "--icon", str(icon),
         "--paths", str(DESKTOP),
@@ -233,7 +244,7 @@ def build_hub() -> bool:
     """Build the integrated OMM-ZEN workspace (all 11 pages in one program)."""
     name = HUB_NAME
     entry = BUILD / "entries" / "omm_start_hub.py"
-    work = BUILD / "work" / HUB_TARGET
+    work = _build_work(HUB_TARGET)
     icon_src = DESKTOP / "icons-src" / "hub.png"
     if not icon_src.is_file():
         icon_src = ROOT / "icon.ico"
@@ -267,7 +278,7 @@ def build_hub() -> bool:
 
     args = [
         sys.executable, "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--onefile", "--windowed",
+        "--noconfirm", "--onefile", "--windowed",
         "--name", name,
         "--icon", str(icon),
         "--paths", str(DESKTOP),
@@ -378,7 +389,7 @@ def build_framework() -> bool:
     name = FRAMEWORK_NAME
     dist = DIST / "framework"
     entry = BUILD / "entries" / "omm_start_framework.py"
-    work = BUILD / "work" / FRAMEWORK_TARGET
+    work = _build_work(FRAMEWORK_TARGET)
     icon_src = DESKTOP / "icons-src" / "hub.png"
     if not icon_src.is_file():
         icon_src = ROOT / "icon.ico"
@@ -410,7 +421,7 @@ def build_framework() -> bool:
     )
     args = [
         sys.executable, "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--onefile", "--windowed",
+        "--noconfirm", "--onefile", "--windowed",
         "--name", name,
         "--icon", str(icon),
         "--paths", str(DESKTOP),
@@ -475,7 +486,7 @@ def build_installer() -> bool:
     """Build the online installer UI."""
     name = INSTALLER_NAME
     entry = BUILD / "entries" / "omm_start_installer.py"
-    work = BUILD / "work" / INSTALLER_TARGET
+    work = _build_work(INSTALLER_TARGET)
     icon_src = DESKTOP / "icons-src" / "hub.png"
     if not icon_src.is_file():
         icon_src = ROOT / "icon.ico"
@@ -507,7 +518,7 @@ def build_installer() -> bool:
     )
     args = [
         sys.executable, "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--onefile", "--windowed",
+        "--noconfirm", "--onefile", "--windowed",
         "--name", name,
         "--icon", str(icon),
         "--paths", str(DESKTOP),

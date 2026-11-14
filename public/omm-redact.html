@@ -6492,8 +6492,29 @@
           host.innerHTML = html
         }
 
+        function _desktopApiAvailable() {
+          // The desktop API only exists when this page is served by the OMM
+          // desktop loopback server (http/https). Opening it directly via
+          // file://, or from a plain web host, means /__omm/fs/* does not
+          // exist, so every desktop feature (DOCX→PDF, PDF tools) is absent.
+          return location.protocol === 'http:' || location.protocol === 'https:'
+        }
+
         async function refreshDocxPdfStatus(force) {
           if (docxPdfStatusCache && !force) return docxPdfStatusCache
+          if (!_desktopApiAvailable()) {
+            docxPdfStatusCache = {
+              ok: false,
+              available: false,
+              engines: [],
+              error:
+                '本页面是以本地文件方式打开的（file://），未连接桌面服务。' +
+                '请通过「OMM-Redact」桌面程序启动本页面，不要直接双击 HTML 或用浏览器打开本地文件。',
+            }
+            updateDocxRenderModeUI()
+            renderDocxPdfEngineList()
+            return docxPdfStatusCache
+          }
           try {
             var res = await fetch('/__omm/fs/docx2pdf?app=redact', { cache: 'no-store' })
             if (!res.ok) throw new Error('HTTP ' + res.status)
@@ -6503,7 +6524,10 @@
               ok: false,
               available: false,
               engines: [],
-              error: '当前环境未提供本机转换接口（需要桌面版）',
+              error:
+                '无法连接桌面转换接口（' +
+                (err && err.message ? err.message : '网络错误') +
+                '）。请确认你是经 OMM-Redact 桌面程序打开本页面，而非网页版或本地文件。',
             }
           }
           updateDocxRenderModeUI()
@@ -6631,13 +6655,28 @@
 
         async function refreshPdfToolStatus(force) {
           if (pdfToolStatusCache && !force) return pdfToolStatusCache
+          if (!_desktopApiAvailable()) {
+            pdfToolStatusCache = {
+              ok: false,
+              available: false,
+              error:
+                '本页面是以本地文件方式打开的（file://），未连接桌面服务。' +
+                'PDF 工具需在 OMM-Redact 桌面程序中运行。',
+            }
+            updatePdfToolUI()
+            return pdfToolStatusCache
+          }
           try {
             var res = await fetch('/__omm/fs/pdf/tool?app=redact', { cache: 'no-store' })
             pdfToolStatusCache = res.ok
               ? await res.json()
               : { ok: false, available: false, error: 'HTTP ' + res.status }
           } catch (err) {
-            pdfToolStatusCache = { ok: false, available: false, error: '未连接桌面接口' }
+            pdfToolStatusCache = {
+              ok: false,
+              available: false,
+              error: '未连接桌面接口（' + (err && err.message ? err.message : '网络错误') + '）',
+            }
           }
           updatePdfToolUI()
           return pdfToolStatusCache

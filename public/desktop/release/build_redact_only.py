@@ -27,8 +27,8 @@ import offline  # noqa: E402
 from build_plugins import OUT, DIST, sha256, zip_dir  # noqa: E402
 from plugin_specs import PLUGIN_BY_ID  # noqa: E402
 
-TAG = "v1.0.14"
-REDACT_VERSION = "1.0.14"
+TAG = "v1.0.15"
+REDACT_VERSION = "1.0.15"
 
 
 def main() -> None:
@@ -77,6 +77,34 @@ def main() -> None:
             "size": exe.stat().st_size,
         }
     )
+
+    # The full hub executable (OMM-ZEN.exe) and the framework zip both embed
+    # the redact page AND the /__omm/fs/docx2pdf route. The "当前环境不可用"
+    # report is caused by an old hub build that predates that route, so the
+    # hub must be rebuilt and published in this release, not just the plugin.
+    # Rebuild them with:  desktop/build_exes.py hub framework
+    for entry_key, bundle in (
+        ("apps:hub", "OMM-ZEN.exe"),
+        ("frameworks:win64", "OMM-ZEN-Framework-win64.zip"),
+    ):
+        local = DIST / bundle
+        if not local.is_file():
+            print("skip   %s (not built for this release)" % bundle)
+            continue
+        node = catalog
+        for part in entry_key.split(":"):
+            node = node.setdefault(part, {})
+        node.update(
+            {
+                "version": REDACT_VERSION,
+                "bundle": bundle,
+                "url": base + "/" + bundle,
+                "latest_url": latest + "/" + bundle,
+                "sha256": sha256(local),
+                "size": local.stat().st_size,
+            }
+        )
+        print("catalog %-16s -> %s (%.1f MB)" % (entry_key, bundle, local.stat().st_size / 1048576))
     catalog_path.write_text(
         json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

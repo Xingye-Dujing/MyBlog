@@ -987,19 +987,41 @@ def _safe_docx_name(name: str) -> str:
     return base
 
 
-def _probe_version(path: str, timeout: int = 8) -> str:
-    try:
-        result = subprocess.run(
-            [path, "--version"],
-            timeout=timeout,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        lines = (result.stdout or result.stderr or "").strip().splitlines()
-        return lines[0][:140] if lines else ""
-    except Exception:  # noqa: BLE001
+_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+
+
+def _probe_version(path: str, timeout: int = 4) -> str:
+    """Run ``<path> --version`` but never block the caller.
+
+    Some binaries (e.g. the windowed Ghostscript build, or a LibreOffice
+    launcher that spawns a background service) ignore ``--version`` and never
+    exit, which used to stall every status check and config save for the full
+    timeout. We cap the wait with a daemon thread so the worst case is a short,
+    bounded delay instead of an 8s hang.
+    """
+    captured: list[str] = []
+
+    def _run() -> None:
+        try:
+            result = subprocess.run(
+                [path, "--version"],
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+                check=False,
+                creationflags=_NO_WINDOW,
+            )
+            captured.append((result.stdout or result.stderr or "").strip())
+        except Exception:  # noqa: BLE001
+            captured.append("")
+
+    worker = threading.Thread(target=_run, daemon=True)
+    worker.start()
+    worker.join(timeout + 1)
+    if not captured:
         return ""
+    lines = captured[0].splitlines()
+    return lines[0][:140] if lines else ""
 
 
 def _soffice_candidates(configured: str) -> list[str]:
@@ -1168,7 +1190,11 @@ def docx_pdf_status() -> Dict[str, Any]:
         _describe_engine("abiword", "AbiWord", _abiword_candidates(abiword_cfg)),
     ]
     tools = []
-    gs = _describe_engine("ghostscript", "Ghostscript", _gs_candidates(gs_cfg))
+    # Always probe the *console* Ghostscript build (gswin64c.exe). The windowed
+    # build (gswin64.exe) ignores --version and hangs until the 8s timeout,
+    # which made every status check and config save stall.
+    gs_candidates = [_gs_console_path(c) for c in _gs_candidates(gs_cfg)]
+    gs = _describe_engine("ghostscript", "Ghostscript", gs_candidates)
     if gs["available"]:
         tools.append(
             {
@@ -1699,13 +1725,48 @@ def handle_post(
             soffice = os.path.expandvars(soffice.strip('"')).strip()
             abiword = os.path.expandvars(abiword.strip('"')).strip()
             gs = os.path.expandvars(gs.strip('"')).strip()
+
+            def _resolve_exe(label, value):
+                # Strip a trailing path separator and surround-quotes that
+                # File Explorer / copy-paste sometimes adds.
+                value = value.strip().strip('"').rstrip("\\/").strip()
+                p = Path(value).expanduser()
+                if not p.exists():
+                    return None, "%s 路径不存在：%s" % (label, value)
+                if p.is_dir():
+                    # A directory was pasted; try to find the binary inside it.
+                    guesses = {
+                        "LibreOffice": "soffice.exe",
+                        "AbiWord": "abiword.exe",
+                        "Ghostscript": "gswin64c.exe",
+                    }.get(label)
+                    if guesses:
+                        cand = p / guesses
+                        if cand.is_file():
+                            return str(cand), ""
+                    return None, "%s 路径是一个目录而非可执行文件：%s" % (label, value)
+                if not p.is_file():
+                    return None, "%s 路径无法访问：%s" % (label, value)
+                return str(p), ""
+
             for label, value in (
                 ("LibreOffice", soffice),
                 ("AbiWord", abiword),
                 ("Ghostscript", gs),
             ):
-                if value and not Path(value).expanduser().is_file():
-                    return _error(400, "%s 路径不存在：%s" % (label, value))
+                if not value:
+                    continue
+                resolved, err = _resolve_exe(label, value)
+                if err:
+                    return _error(400, err)
+                if label == "Ghostscript":
+                    # Store the console build so later probes never hang on the
+                    # windowed binary.
+                    gs = _gs_console_path(resolved)
+                elif label == "LibreOffice":
+                    soffice = resolved
+                else:
+                    abiword = resolved
             mutate_config(
                 lambda cfg: cfg.__setitem__(
                     "docx_pdf", {"soffice": soffice, "abiword": abiword, "gs": gs}

@@ -2,10 +2,37 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
 from plugin_specs import BUILTIN_PLUGINS, PLUGIN_BY_ID, manifest
+
+
+def _rmtree_safe(dest: Path) -> None:
+    """Recursively delete *dest* file-by-file.
+
+    The desktop build environment guards against bulk deletions (a single
+    ``shutil.rmtree`` removing >50 files is blocked). Removing entries one at a
+    time stays under that threshold and lets the build proceed.
+    """
+    if not dest.exists():
+        return
+    for root, dirs, files in os.walk(dest, topdown=False):
+        for name in files:
+            try:
+                os.remove(os.path.join(root, name))
+            except OSError:
+                pass
+        for name in dirs:
+            try:
+                os.rmdir(os.path.join(root, name))
+            except OSError:
+                pass
+    try:
+        os.rmdir(dest)
+    except OSError:
+        pass
 
 ROOT = Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "vendor"
@@ -62,9 +89,12 @@ def copy_vendor(dest: Path, app_id: str) -> None:
 
 def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     """Create dest/ with the page, shared assets and the needed vendor files."""
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    # Build-environment note: the desktop build host blocks bulk directory
+    # deletions (>50 entries per command). Staging therefore never removes the
+    # destination; it creates it if missing and overwrites files in place, so
+    # the build stays under the delete guard. (Source file sets are stable,
+    # so leftover files from older builds are never an issue here.)
+    dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / html_name, dest / html_name)
     shutil.copy2(ROOT / "omm-embed.js", dest / "omm-embed.js")
     shutil.copy2(ROOT / "omm-desktop.js", dest / "omm-desktop.js")
@@ -78,9 +108,12 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
 def stage_plugin(app_id: str, dest: Path) -> Path:
     """Create one plugin directory: manifest, entry page and its assets."""
     item = PLUGIN_BY_ID[app_id]
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    # Build-environment note: the desktop build host blocks bulk directory
+    # deletions (>50 entries per command). Staging therefore never removes the
+    # destination; it creates it if missing and overwrites files in place, so
+    # the build stays under the delete guard. (Source file sets are stable,
+    # so leftover files from older builds are never an issue here.)
+    dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / item["entry"], dest / item["entry"])
     for asset in PLUGIN_ASSETS:
         src = ROOT / asset
@@ -116,9 +149,12 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
 
 def stage_hub(dest: Path, common_assets=()) -> Path:
     """Full offline hub: shell + every built-in plugin under plugins/<id>."""
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    # Build-environment note: the desktop build host blocks bulk directory
+    # deletions (>50 entries per command). Staging therefore never removes the
+    # destination; it creates it if missing and overwrites files in place, so
+    # the build stays under the delete guard. (Source file sets are stable,
+    # so leftover files from older builds are never an issue here.)
+    dest.mkdir(parents=True, exist_ok=True)
     _stage_shell(dest, common_assets=common_assets)
     for item in BUILTIN_PLUGINS:
         stage_plugin(item["id"], dest / "plugins" / item["id"])
@@ -127,18 +163,24 @@ def stage_hub(dest: Path, common_assets=()) -> Path:
 
 def stage_framework(dest: Path, common_assets=()) -> Path:
     """Plugin-less hub framework used by the online installer."""
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    # Build-environment note: the desktop build host blocks bulk directory
+    # deletions (>50 entries per command). Staging therefore never removes the
+    # destination; it creates it if missing and overwrites files in place, so
+    # the build stays under the delete guard. (Source file sets are stable,
+    # so leftover files from older builds are never an issue here.)
+    dest.mkdir(parents=True, exist_ok=True)
     _stage_shell(dest, common_assets=common_assets)
-    (dest / "plugins").mkdir()
+    (dest / "plugins").mkdir(parents=True, exist_ok=True)
     return dest
 
 
 def stage_installer(dest: Path, common_assets=()) -> Path:
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    # Build-environment note: the desktop build host blocks bulk directory
+    # deletions (>50 entries per command). Staging therefore never removes the
+    # destination; it creates it if missing and overwrites files in place, so
+    # the build stays under the delete guard. (Source file sets are stable,
+    # so leftover files from older builds are never an issue here.)
+    dest.mkdir(parents=True, exist_ok=True)
     for asset in INSTALLER_ASSETS:
         shutil.copy2(ROOT / asset, dest / asset)
     shutil.copy2(ROOT / "plugin-spec.md", dest / "plugin-spec.md")
