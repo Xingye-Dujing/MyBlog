@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.9"
+VERSION = "1.0.10"
 
 # Release asset name for each desktop program (without the platform suffix).
 DESKTOP_EXE_NAMES = {
@@ -152,12 +152,12 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "id": "redact",
         "name": "文档脱敏工具",
         "glyph": "脱",
-        "description": "PDF / Office 脱敏导出",
+        "description": "PDF / Office 脱敏导出 · 原生 DOCX 版式",
         "entry": "omm-redact.html",
         "port": 8319,
         "runtime": "static",
         "vendor": [
-            "pdfjs", "pdf-lib", "jszip", "pptxviewjs", "mammoth",
+            "pdfjs", "pdf-lib", "jszip", "pptxviewjs", "mammoth", "docx-preview",
             "chartjs/4.4.1", "jspdf/2.5.1", "html2canvas", "mupdf",
         ],
         "order": 90,
