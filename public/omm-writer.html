@@ -2217,6 +2217,78 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      /* 基准选择面板：从任意节点里挑基准，不再绑死「最后点选」 */
+      .zw-base-menu {
+        position: fixed;
+        display: none;
+        z-index: 2000;
+        min-width: 180px;
+        max-width: 300px;
+        max-height: 280px;
+        overflow-y: auto;
+        padding: 4px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+      }
+      .zw-base-menu.open {
+        display: block;
+      }
+      .zw-base-menu::-webkit-scrollbar {
+        width: 0;
+      }
+      .zw-base-menu-label {
+        padding: 3px 8px 5px;
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        color: var(--text-faint);
+      }
+      .zw-base-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+        padding: 5px 8px;
+        font: inherit;
+        font-size: 10px;
+        line-height: 1.4;
+        text-align: left;
+        color: var(--text-dim);
+        background: transparent;
+        border: 0;
+        border-radius: var(--radius);
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .zw-base-item:hover {
+        color: var(--text);
+        background: var(--hover);
+      }
+      .zw-base-item.current {
+        color: var(--text);
+      }
+      .zw-base-item .zw-base-dot {
+        width: 6px;
+        height: 6px;
+        flex-shrink: 0;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+      }
+      .zw-base-item.current .zw-base-dot {
+        background: currentColor;
+      }
+      .zw-base-item .zw-base-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .zw-base-sep {
+        height: 1px;
+        margin: 4px 6px;
+        background: var(--border-dim);
+      }
       .zw-align-sep {
         width: 1px;
         height: 16px;
@@ -6035,7 +6107,9 @@ notify pgrst, 'reload schema';</textarea
             // ---- Multi-selection align / distribute ----
             'align.base': 'BASE',
             'align.baseTitle':
-              'Use the primary selected node as the alignment base; click again to clear',
+              'Base stays fixed; click to pick any node as base. Alt+click a node sets or clears it',
+            'align.baseMenu': 'SELECT BASE',
+            'align.baseClear': 'Clear base',
             'notify.alignBaseSet': 'Alignment base set',
             'notify.alignBaseCleared': 'Alignment base cleared',
             'notify.alignBaseNeedNode': 'Select a node first',
@@ -6046,8 +6120,10 @@ notify pgrst, 'reload schema';</textarea
             'align.top': 'Align top edges',
             'align.vcenter': 'Align vertical centers',
             'align.bottom': 'Align bottom edges',
-            'align.distributeH': 'Distribute horizontally (equal gaps)',
-            'align.distributeV': 'Distribute vertically (equal gaps)',
+            'align.distributeH':
+              'Distribute horizontally (with a base: equal gaps on both sides of it)',
+            'align.distributeV':
+              'Distribute vertically (with a base: equal gaps above and below it)',
             'align.matchWidth': 'Match width (to the widest)',
             'align.matchHeight': 'Match height (to the tallest)',
             'align.needTwo': 'Select at least 2 nodes first',
@@ -6404,7 +6480,9 @@ notify pgrst, 'reload schema';</textarea
             'stats.text': '{0} 个节点 · {2} 条连接',
             // ---- 多选对齐 / 分布 ----
             'align.base': '基准',
-            'align.baseTitle': '以主选中节点作为对齐基准；再点一次清除',
+            'align.baseTitle': '基准固定不动；点击可从任意节点里选基准，Alt + 点击节点直接设为基准 / 取消',
+            'align.baseMenu': '选择基准',
+            'align.baseClear': '清除基准',
             'notify.alignBaseSet': '已设为对齐基准',
             'notify.alignBaseCleared': '已清除对齐基准',
             'notify.alignBaseNeedNode': '请先选中一个节点',
@@ -6415,8 +6493,8 @@ notify pgrst, 'reload schema';</textarea
             'align.top': '顶部对齐',
             'align.vcenter': '竖直居中对齐',
             'align.bottom': '底部对齐',
-            'align.distributeH': '水平等距分布',
-            'align.distributeV': '竖直等距分布',
+            'align.distributeH': '水平等距分布（有基准时以它为中心向两侧等距）',
+            'align.distributeV': '竖直等距分布（有基准时以它为中心向上下等距）',
             'align.matchWidth': '统一宽度（按最宽）',
             'align.matchHeight': '统一高度（按最高）',
             'align.needTwo': '请先选中至少 2 个节点',
@@ -10513,6 +10591,12 @@ notify pgrst, 'reload schema';</textarea
                 node.classList.contains('locked')
               )
                 return
+              // 按住 Alt：把这个节点设为 / 取消对齐基准，不改变当前多选
+              if (e.altKey) {
+                AlignBase.toggleNode(node)
+                e.preventDefault()
+                return
+              }
               // 按住 Shift / Ctrl / Cmd：只做加选/减选，不进入拖动
               if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 SelectionManager.toggle(node)
@@ -16142,9 +16226,15 @@ notify pgrst, 'reload schema';</textarea
         // 也放了同一组按钮。两边共用 data-action="zwAlign:<mode>"，
         // 由全局 click 委托统一派发，不在 switch 里堆十个 case。
         //
-        // 基准一律是「选中节点的包围盒」，不是画布、也不是某个主节点：
-        //   左/右/上/下 = 贴包围盒对应边；水平/竖直居中 = 贴包围盒中线。
-        // 分布 = 保持首尾两个节点不动，其余按中心点等距插值。
+        // 两种基准：
+        //   1) 未设基准时 = 选中节点的包围盒：
+        //      左/右/上/下贴包围盒边，居中贴包围盒中线；
+        //      分布保持首尾不动，中间按中心点等距插值。
+        //   2) 设了基准节点时 = 以该节点为唯一参照，它本身一个像素都不动：
+        //      左/右/上/下 = 全部贴基准对应的边；
+        //      水平/竖直居中 = 全部取基准的中线；
+        //      统一宽高 = 全部取基准的尺寸；
+        //      分布 = 以基准为原点，按现有左右（上下）顺序向两侧等边距展开。
         // 只移动选中的节点；锁定节点不参与，也不会被移动。分组节点的
         // 连接子节点不跟着走（对齐是逐个节点的位置操作，连线会自动重绘）。
         // 落盘 + 撤销都走 debouncedAutoSave(true)：History 挂在那里。
@@ -16154,6 +16244,8 @@ notify pgrst, 'reload schema';</textarea
         // 基准用单色内框 + BASE 标记（不使用紫色）。
         // ================================================================
         const AlignBase = {
+          _menu: null,
+          _menuOpen: false,
           validate() {
             const id = AppState.alignBaseId
             if (id && !getNodeById(id)) {
@@ -16168,35 +16260,137 @@ notify pgrst, 'reload schema';</textarea
               notify(t('notify.alignBaseNeedNode'))
               return false
             }
-            AppState.alignBaseId = node.id
-            // 设基准时顺便选中它，后面继续加选别的节点即可
-            if (!AppState.selectedNodeIds.has(node.id)) {
-              AppState.selectedNodeIds.add(node.id)
-              node.classList.add('selected')
-              AppState.selectionPrimaryId = node.id
+            if (AppState.alignBaseId === node.id) {
+              this.closeMenu()
+              return true
             }
+            AppState.alignBaseId = node.id
             this.refresh()
             notify(t('notify.alignBaseSet') + ' · ' + (getTitleText(node) || node.id))
             return true
           },
-          toggleFromSelection() {
-            // 已有基准时，点悬浮条上的基准按钮 = 清除；没有基准时用主选中节点
-            if (AppState.alignBaseId) {
-              this.clear()
+          // Alt + 点击节点：直接设成基准；已经是它则取消。不动当前多选。
+          toggleNode(node) {
+            if (!node || !node.id) return
+            if (AppState.alignBaseId === node.id) this.clear()
+            else this.set(node.id)
+          },
+          _initMenu() {
+            if (this._menu) return
+            const menu = document.createElement('div')
+            menu.className = 'zw-base-menu'
+            menu.addEventListener('mousedown', (e) => e.preventDefault())
+            menu.addEventListener('click', (e) => {
+              const item = e.target.closest && e.target.closest('.zw-base-item')
+              if (!item) return
+              e.stopPropagation()
+              if (item.dataset.baseAction === 'clear') this.clear()
+              else if (item.dataset.id) this.set(item.dataset.id)
+              this.closeMenu()
+            })
+            document.body.appendChild(menu)
+            this._menu = menu
+            // 点空白 / 点别处 / Esc 都收起；点基准按钮本身交给 click 切换
+            document.addEventListener('mousedown', (e) => {
+              if (!this._menuOpen) return
+              if (menu.contains(e.target)) return
+              if (e.target.closest && e.target.closest('.zw-align-base')) return
+              this.closeMenu()
+            })
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && this._menuOpen) this.closeMenu()
+            })
+            document.addEventListener(
+              'wheel',
+              (e) => {
+                if (!this._menuOpen) return
+                if (menu.contains(e.target)) return
+                this.closeMenu()
+              },
+              { passive: true },
+            )
+          },
+          // 面板列表：选中的节点排前面，其余节点按画布顺序跟在后面，
+          // 所以基准可以是任意一个节点，而不只是最后点选的那个。
+          _buildMenu() {
+            if (!this._menu) return
+            this._initMenu()
+            const menu = this._menu
+            menu.innerHTML = ''
+            const label = document.createElement('div')
+            label.className = 'zw-base-menu-label'
+            label.textContent = t('align.baseMenu')
+            menu.appendChild(label)
+
+            const baseId = this.validate()
+            const all = Array.from(getNodes())
+            const selected = Array.from(AppState.selectedNodeIds)
+              .map((id) => all.find((n) => n.id === id))
+              .filter(Boolean)
+            const rest = all.filter((n) => !AppState.selectedNodeIds.has(n.id))
+            const addItem = (node) => {
+              const b = document.createElement('button')
+              b.type = 'button'
+              b.className = 'zw-base-item' + (node.id === baseId ? ' current' : '')
+              b.dataset.id = node.id
+              const dot = document.createElement('span')
+              dot.className = 'zw-base-dot'
+              const name = document.createElement('span')
+              name.className = 'zw-base-name'
+              name.textContent = getTitleText(node) || node.id
+              b.appendChild(dot)
+              b.appendChild(name)
+              b.title = name.textContent
+              menu.appendChild(b)
+            }
+            selected.forEach(addItem)
+            if (rest.length) {
+              const sep = document.createElement('div')
+              sep.className = 'zw-base-sep'
+              menu.appendChild(sep)
+              rest.forEach(addItem)
+            }
+            if (baseId) {
+              const sep = document.createElement('div')
+              sep.className = 'zw-base-sep'
+              menu.appendChild(sep)
+              const b = document.createElement('button')
+              b.type = 'button'
+              b.className = 'zw-base-item'
+              b.dataset.baseAction = 'clear'
+              b.textContent = t('align.baseClear')
+              menu.appendChild(b)
+            }
+          },
+          toggleMenu(anchor) {
+            if (this._menuOpen) {
+              this.closeMenu()
               return
             }
-            const id =
-              AppState.selectionPrimaryId ||
-              (AppState.selectedNodeIds.size
-                ? AppState.selectedNodeIds.values().next().value
-                : null)
-            if (!id) {
-              notify(t('notify.alignBaseNeedNode'))
-              return
-            }
-            this.set(id)
+            const btn = anchor || document.querySelector('.zw-align-base')
+            if (!btn) return
+            this._initMenu()
+            this._buildMenu()
+            const menu = this._menu
+            menu.classList.add('open')
+            this._menuOpen = true
+            const r = btn.getBoundingClientRect()
+            const mw = menu.offsetWidth || 180
+            const mh = menu.offsetHeight || 200
+            let left = r.left
+            let top = r.bottom + 4
+            if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8
+            if (top + mh > window.innerHeight - 8) top = r.top - mh - 4
+            menu.style.left = Math.round(Math.max(8, left)) + 'px'
+            menu.style.top = Math.round(Math.max(8, top)) + 'px'
+          },
+          closeMenu() {
+            if (!this._menu || !this._menuOpen) return
+            this._menuOpen = false
+            this._menu.classList.remove('open')
           },
           clear() {
+            this.closeMenu()
             if (!AppState.alignBaseId) return
             AppState.alignBaseId = null
             this.refresh()
@@ -16409,6 +16603,70 @@ notify pgrst, 'reload schema';</textarea
             }))
           },
 
+          // 有基准时，分布只需要「基准 + 1 个节点」就能贴出标准间距；
+          // 没有基准仍要求至少 3 个，否则首尾固定没有意义。
+          _minFor(mode) {
+            if (
+              (mode.key === 'distributeH' || mode.key === 'distributeV') &&
+              AlignBase.validate()
+            )
+              return 2
+            return mode.min
+          },
+
+          // 沿单轴分布。out 是 nx / ny，只写这一个轴，另一轴保持原样。
+          // 无基准：首尾节点钉住，其余按中心点等距插值（原来的行为）。
+          // 有基准：基准钉住，其余按当前在基准哪一侧分两列，向两侧以同一
+          // 边距展开；边距取现有相邻边距的中位数（限制在 20–240），
+          // 这样是用户原本的疏密，不会突然被拉得很散或挤在一起。
+          _distribute(items, baseItem, posKey, sizeKey, out) {
+            const centerOf = (it) => it[posKey] + it[sizeKey] / 2
+            if (!baseItem) {
+              const sorted = items.slice().sort((a, b) => centerOf(a) - centerOf(b))
+              if (sorted.length < 2) return
+              const c0 = centerOf(sorted[0])
+              const c1 = centerOf(sorted[sorted.length - 1])
+              const step = (c1 - c0) / (sorted.length - 1)
+              sorted.forEach((it, idx) => out.set(it.el, c0 + step * idx - it[sizeKey] / 2))
+              return
+            }
+
+            const baseC = centerOf(baseItem)
+            const rest = items.filter((it) => it.el !== baseItem.el)
+            // 近 → 远，靠近基准的先排，离得远的不动顺序继续往外
+            const left = rest
+              .filter((it) => centerOf(it) < baseC)
+              .sort((a, b) => centerOf(b) - centerOf(a))
+            const right = rest
+              .filter((it) => centerOf(it) >= baseC)
+              .sort((a, b) => centerOf(a) - centerOf(b))
+
+            // 现成的相邻边距（左远→左近→基准→右近→右远）取正间距的中位数，
+            // 已经叠在一起的负间距不参与，免得把整排压到最小间距
+            const chain = left.slice().reverse().concat([baseItem], right)
+            const gaps = []
+            for (let i = 1; i < chain.length; i++) {
+              const prev = chain[i - 1]
+              const cur = chain[i]
+              const g = cur[posKey] - (prev[posKey] + prev[sizeKey])
+              if (isFinite(g) && g > 0) gaps.push(g)
+            }
+            gaps.sort((a, b) => a - b)
+            const median = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 48
+            const gap = Math.max(20, Math.min(240, Math.round(median)))
+
+            let cursor = baseItem[posKey] + baseItem[sizeKey] + gap
+            right.forEach((it) => {
+              out.set(it.el, cursor)
+              cursor += it[sizeKey] + gap
+            })
+            cursor = baseItem[posKey] - gap
+            left.forEach((it) => {
+              out.set(it.el, cursor - it[sizeKey])
+              cursor -= it[sizeKey] + gap
+            })
+          },
+
           apply(key) {
             const mode = this.MODES.find((m) => m.key === key)
             if (!mode) return false
@@ -16417,8 +16675,9 @@ notify pgrst, 'reload schema';</textarea
               notify(t('align.needTwo'))
               return false
             }
-            if (nodes.length < mode.min) {
-              notify(t('align.needThree'))
+            const need = this._minFor(mode)
+            if (nodes.length < need) {
+              notify(t(need > 2 ? 'align.needThree' : 'align.needTwo'))
               return false
             }
             const items = this._measure(nodes)
@@ -16470,23 +16729,11 @@ notify pgrst, 'reload schema';</textarea
                 )
                 break
               case 'distributeH': {
-                const sorted = items.slice().sort((a, b) => a.x + a.w / 2 - (b.x + b.w / 2))
-                const first = sorted[0]
-                const last = sorted[sorted.length - 1]
-                const c0 = first.x + first.w / 2
-                const c1 = last.x + last.w / 2
-                const step = (c1 - c0) / (sorted.length - 1)
-                sorted.forEach((it, idx) => nx.set(it.el, c0 + step * idx - it.w / 2))
+                this._distribute(items, baseItem, 'x', 'w', nx)
                 break
               }
               case 'distributeV': {
-                const sorted = items.slice().sort((a, b) => a.y + a.h / 2 - (b.y + b.h / 2))
-                const first = sorted[0]
-                const last = sorted[sorted.length - 1]
-                const c0 = first.y + first.h / 2
-                const c1 = last.y + last.h / 2
-                const step = (c1 - c0) / (sorted.length - 1)
-                sorted.forEach((it, idx) => ny.set(it.el, c0 + step * idx - it.h / 2))
+                this._distribute(items, baseItem, 'y', 'h', ny)
                 break
               }
               case 'matchWidth': {
@@ -16495,7 +16742,8 @@ notify pgrst, 'reload schema';</textarea
                 break
               }
               case 'matchHeight': {
-                const h = baseItem ? baseItem.h : Math.max(...items.map((i) => i.h))
+                const baseOk = baseItem && !baseItem.el.classList.contains('minimized')
+                const h = baseOk ? baseItem.h : Math.max(...items.map((i) => i.h))
                 // minimized 节点只有 32px 的 header，撑高只会得到一个空框
                 items.forEach((i) => {
                   if (!i.el.classList.contains('minimized')) nh.set(i.el, h)
@@ -16515,6 +16763,7 @@ notify pgrst, 'reload schema';</textarea
               baseEl.style.left = Math.round(baseItem.x) + 'px'
               baseEl.style.top = Math.round(baseItem.y) + 'px'
             }
+            AlignBase.closeMenu()
             ConnectionManager.renderAll()
             // 提交点唯一：这里一调用，落盘 + 撤销栈就都记上了
             debouncedAutoSave(true)
@@ -16540,11 +16789,14 @@ notify pgrst, 'reload schema';</textarea
               const label = t('align.' + mode.key)
               el.title = label
               el.setAttribute('aria-label', label)
-              const off = nodes.length < mode.min
+              const off = nodes.length < this._minFor(mode)
               el.classList.toggle('disabled', off)
               el.setAttribute('aria-disabled', off ? 'true' : 'false')
             })
-            if (!visible) return
+            if (!visible) {
+              AlignBase.closeMenu()
+              return
+            }
             if (this._count) this._count.textContent = t('align.selected', nodes.length)
             if (this._baseBtn) {
               const baseId = AlignBase.validate()
@@ -20273,8 +20525,8 @@ notify pgrst, 'reload schema';</textarea
               if (next.indexOf(id) < 0) next.push(id)
             })
             if (next.length !== idx.order.length) return false // 理论上不可能，兜底
-            const before = idx.order.join(' ')
-            if (before === next.join(' ')) return true
+            const before = idx.order.join('\u0000')
+            if (before === next.join('\u0000')) return true
             idx.order = next
             await DocManager.writeIndex(idx)
             UIManager.renderDocList()
@@ -21434,7 +21686,7 @@ notify pgrst, 'reload schema';</textarea
                 CanvasManager.autoLayout('timeline')
                 break
               case 'alignBase':
-                AlignBase.toggleFromSelection()
+                AlignBase.toggleMenu()
                 break
               case 'fitView':
                 CanvasManager.fitView()
