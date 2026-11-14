@@ -20,6 +20,501 @@
  * document that owns the origin.  The hub therefore *asks* a product to take a
  * snapshot instead of reading the iframe from outside.
  */
+
+/* ====================================================================== *
+ * OMM-ZEN UI kit
+ * --------------
+ * Everything that used to be a browser-native popup is rendered here instead:
+ * confirm / alert / prompt dialogs, select candidate lists and title
+ * tooltips.  The surfaces live in a shadow root so product CSS cannot leak
+ * in, and they inherit the shell's --radius / --accent / --ink variables so
+ * they always follow the current OMM-ZEN appearance.
+ *
+ * Exposed as window.OMMUI and loaded first, so omm-share.js and omm-hub.js
+ * can use it too.
+ * ====================================================================== */
+;(function () {
+  'use strict';
+  if (window.OMMUI) return;
+
+  var HOST_ID = 'omm-ui-host';
+  var LIGHT_STYLE_ID = 'omm-ui-light-style';
+  var host = null, shadow = null;
+  var veil = null, headTitle = null, bodyEl = null, inputEl = null;
+  var cancelBtn = null, okBtn = null, closeBtn = null, menu = null, tip = null;
+  var pending = null;        /* { resolve, kind, danger } */
+  var activeSelect = null;   /* { select, trigger, sync, index } */
+  var tipTarget = null, tipTimer = 0;
+
+  var SHADOW_CSS = [
+    ':host{position:fixed;inset:0;z-index:2147483600;pointer-events:none;',
+    '  --oui-radius:var(--radius,0px);--oui-accent:var(--accent,#e3a400);',
+    '  --oui-accent-soft:var(--accent-soft,rgba(227,164,0,.16));',
+    '  --oui-ink:var(--ink,#26231f);--oui-paper:var(--paper,#fff);',
+    '  --oui-soft:var(--soft,#f7f5ef);--oui-line:var(--line,#26231f);',
+    '  --oui-line-soft:var(--line-soft,rgba(38,35,31,.16));',
+    '  --oui-line-faint:var(--line-faint,rgba(38,35,31,.07));',
+    '  --oui-dim:var(--dim,rgba(38,35,31,.48));--oui-danger:var(--danger,#b34a3c);',
+    '  --oui-shadow:var(--shadow-deep,rgba(38,35,31,.24));',
+    '  font-family:"Literata","Songti SC","SimSun",serif;color:var(--oui-ink)}',
+    '*{box-sizing:border-box}',
+    'button{font:inherit;color:inherit;border:0;background:transparent;cursor:pointer}',
+    'button:focus{outline:none}',
+    'button:focus-visible{outline:1px solid var(--oui-accent);outline-offset:1px}',
+    '.oui-veil{position:fixed;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;',
+    '  padding:18px;background:var(--overlay,rgba(38,35,31,.22));pointer-events:auto;',
+    '  opacity:0;transition:opacity .14s ease}',
+    '.oui-veil[hidden]{display:none}',
+    '.oui-veil.on{opacity:1}',
+    '.oui-card{width:min(430px,100%);max-height:calc(100vh - 36px);display:flex;flex-direction:column;',
+    '  background:var(--oui-paper);color:var(--oui-ink);border:1px solid var(--oui-line);',
+    '  border-radius:var(--oui-radius);box-shadow:0 24px 70px var(--oui-shadow);',
+    '  overflow:hidden;transform:translateY(8px);transition:transform .14s ease}',
+    '.oui-veil.on .oui-card{transform:translateY(0)}',
+    '.oui-head{display:flex;align-items:center;gap:9px;padding:10px 13px;',
+    '  border-bottom:1px solid var(--oui-line-soft);background:var(--oui-soft)}',
+    '.oui-head::before{content:"";width:3px;height:14px;flex:0 0 auto;',
+    '  background:var(--oui-accent);border-radius:var(--oui-radius)}',
+    '.oui-head b{font-size:13px;letter-spacing:.05em;font-weight:600}',
+    '.oui-x{margin-left:auto;width:24px;height:24px;font-size:16px;color:var(--oui-dim);',
+    '  border-radius:var(--oui-radius)}',
+    '.oui-x:hover{background:var(--oui-accent-soft);color:var(--oui-ink)}',
+    '.oui-body{padding:15px 14px;font-size:11.5px;line-height:1.8;white-space:pre-wrap;',
+    '  word-break:break-word;overflow:auto;min-height:0}',
+    '.oui-input{width:calc(100% - 28px);margin:0 14px 13px;padding:7px 9px;',
+    '  border:1px solid var(--oui-line-soft);background:var(--oui-paper);color:var(--oui-ink);',
+    '  font:inherit;font-size:11.5px;border-radius:var(--oui-radius)}',
+    '.oui-input:focus{outline:none;border-color:var(--oui-accent)}',
+    '.oui-input[hidden]{display:none}',
+    '.oui-foot{display:flex;justify-content:flex-end;gap:7px;padding:11px 14px;',
+    '  border-top:1px solid var(--oui-line-faint)}',
+    '.oui-btn{border:1px solid var(--oui-line-soft);background:var(--oui-paper);',
+    '  color:var(--oui-ink);font:inherit;font-size:11px;padding:5px 14px;',
+    '  border-radius:var(--oui-radius)}',
+    '.oui-btn:hover{background:var(--oui-soft);border-color:var(--oui-line)}',
+    '.oui-btn.primary{background:var(--oui-accent-soft);border-color:var(--oui-accent);font-weight:600}',
+    '.oui-btn.danger{color:var(--oui-danger);border-color:var(--oui-danger)}',
+    '.oui-btn.danger:hover{background:var(--danger-soft,rgba(179,74,60,.12))}',
+    '.oui-menu{position:fixed;z-index:3;min-width:140px;max-height:min(320px,60vh);overflow:auto;',
+    '  padding:3px;background:var(--oui-paper);border:1px solid var(--oui-line);',
+    '  border-radius:var(--oui-radius);box-shadow:0 16px 40px var(--oui-shadow);',
+    '  pointer-events:auto}',
+    '.oui-menu[hidden]{display:none}',
+    '.oui-option{display:flex;align-items:center;width:100%;padding:6px 9px;text-align:left;',
+    '  font:inherit;font-size:11px;color:var(--oui-ink);border-radius:var(--oui-radius)}',
+    '.oui-option:hover,.oui-option.active{background:var(--oui-accent-soft)}',
+    '.oui-option[aria-selected="true"]::after{content:"✓";margin-left:auto;',
+    '  color:var(--oui-accent);font-weight:700}',
+    '.oui-tip{position:fixed;z-index:4;max-width:260px;padding:5px 9px;',
+    '  font-size:10px;line-height:1.55;white-space:pre-wrap;word-break:break-word;',
+    '  background:var(--oui-paper);color:var(--oui-ink);border:1px solid var(--oui-line);',
+    '  border-radius:var(--oui-radius);box-shadow:0 8px 22px var(--oui-shadow);',
+    '  pointer-events:none}',
+    '.oui-tip[hidden]{display:none}'
+  ].join('');
+
+  /* Styles for the light-DOM trigger of custom selects.  Kept in the page so
+     the wrapper inherits the surrounding font/label layout. */
+  var LIGHT_CSS = [
+    '.oui-select{display:inline-flex;align-items:center;min-width:0;vertical-align:middle}',
+    'button.oui-select-trigger{display:flex;align-items:center;justify-content:space-between;',
+    '  gap:10px;min-width:104px;padding:4px 8px;',
+    '  border:1px solid var(--line-soft,rgba(38,35,31,.16));',
+    '  background:var(--paper,#fff);color:var(--ink,#26231f);',
+    '  font-family:inherit;font-size:10.5px;line-height:1.5;cursor:pointer;',
+    '  border-radius:var(--radius,0px);white-space:nowrap}',
+    'button.oui-select-trigger::after{content:"▾";color:var(--dim,rgba(38,35,31,.48));font-size:9px}',
+    'button.oui-select-trigger:hover{border-color:var(--accent,#e3a400)}',
+    'button.oui-select-trigger[aria-expanded="true"]{border-color:var(--accent,#e3a400);',
+    '  background:var(--accent-soft,rgba(227,164,0,.16))}',
+    'button.oui-select-trigger:focus{outline:none}',
+    'button.oui-select-trigger:focus-visible{outline:1px solid var(--accent,#e3a400);outline-offset:1px}',
+    'select[data-omm-select]{display:none!important}',
+    'button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible){outline:none}'
+  ].join('');
+
+  var DIALOG_HTML = [
+    '<div class="oui-veil" hidden>',
+    '  <div class="oui-card" role="dialog" aria-modal="true">',
+    '    <div class="oui-head"><b class="oui-title">OMM-ZEN</b>',
+    '      <button class="oui-x" type="button" aria-label="关闭">×</button></div>',
+    '    <div class="oui-body"></div>',
+    '    <input class="oui-input" type="text" hidden spellcheck="false" />',
+    '    <div class="oui-foot">',
+    '      <button class="oui-btn oui-cancel" type="button">取消</button>',
+    '      <button class="oui-btn primary oui-ok" type="button">确定</button>',
+    '    </div>',
+    '  </div>',
+    '</div>',
+    '<div class="oui-menu" role="listbox" hidden></div>',
+    '<div class="oui-tip" hidden></div>'
+  ].join('');
+
+  function ensure() {
+    if (host) return;
+    host = document.createElement('div');
+    host.id = HOST_ID;
+    host.setAttribute('data-omm-ui-layer', '1');
+    shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<style>' + SHADOW_CSS + '</style>' + DIALOG_HTML;
+    (document.documentElement || document.body).appendChild(host);
+    veil = shadow.querySelector('.oui-veil');
+    headTitle = shadow.querySelector('.oui-title');
+    bodyEl = shadow.querySelector('.oui-body');
+    inputEl = shadow.querySelector('.oui-input');
+    cancelBtn = shadow.querySelector('.oui-cancel');
+    okBtn = shadow.querySelector('.oui-ok');
+    closeBtn = shadow.querySelector('.oui-x');
+    menu = shadow.querySelector('.oui-menu');
+    tip = shadow.querySelector('.oui-tip');
+
+    if (!document.getElementById(LIGHT_STYLE_ID)) {
+      var style = document.createElement('style');
+      style.id = LIGHT_STYLE_ID;
+      style.textContent = LIGHT_CSS;
+      document.head.appendChild(style);
+    }
+
+    veil.addEventListener('click', function (event) {
+      if (event.target === veil) finish(false);
+    });
+    cancelBtn.addEventListener('click', function () { finish(false); });
+    closeBtn.addEventListener('click', function () { finish(false); });
+    okBtn.addEventListener('click', function () { finish(true); });
+    inputEl.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+    });
+    menu.addEventListener('click', function (event) {
+      var option = event.target.closest('.oui-option');
+      if (!option) return;
+      chooseOption(Number(option.dataset.index));
+    });
+    menu.addEventListener('pointerover', function (event) {
+      var option = event.target.closest('.oui-option');
+      if (!option || !activeSelect) return;
+      activeSelect.index = Number(option.dataset.index);
+      paintMenu();
+    });
+  }
+
+  function blurAll() {
+    try { if (shadow && shadow.activeElement && shadow.activeElement.blur) shadow.activeElement.blur(); } catch (e) { /* ignore */ }
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* ignore */ }
+  }
+
+  function normalizeOptions(opts) {
+    var out = typeof opts === 'string' ? { title: opts } : (opts || {});
+    return {
+      title: out.title || 'OMM-ZEN',
+      ok: out.ok || '确定',
+      cancel: out.cancel || '取消',
+      danger: !!out.danger,
+      kind: out.kind || 'confirm',
+      value: out.value == null ? '' : String(out.value)
+    };
+  }
+
+  function openDialog(message, opts) {
+    ensure();
+    var o = normalizeOptions(opts);
+    if (pending) finish(false);
+    closeMenu();
+    hideTip(true);
+    return new Promise(function (resolve) {
+      pending = { resolve: resolve, kind: o.kind, danger: o.danger };
+      headTitle.textContent = o.title;
+      bodyEl.textContent = String(message == null ? '' : message);
+      cancelBtn.textContent = o.cancel;
+      cancelBtn.hidden = o.kind === 'alert';
+      okBtn.textContent = o.ok;
+      okBtn.classList.toggle('danger', o.danger);
+      okBtn.classList.toggle('primary', !o.danger);
+      inputEl.hidden = o.kind !== 'prompt';
+      inputEl.value = o.value;
+      veil.hidden = false;
+      /* Do not leave a focus ring behind once the choice has been made. */
+      window.requestAnimationFrame(function () {
+        veil.classList.add('on');
+        var focusTarget = o.kind === 'prompt' ? inputEl : okBtn;
+        try { focusTarget.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+        if (o.kind === 'prompt' && inputEl.select) inputEl.select();
+      });
+    });
+  }
+
+  function finish(confirmed) {
+    if (!pending) return;
+    var job = pending;
+    pending = null;
+    var value = null;
+    if (job.kind === 'prompt') value = confirmed ? inputEl.value : null;
+    else if (job.kind === 'alert') value = true;
+    else value = !!confirmed;
+    veil.classList.remove('on');
+    veil.hidden = true;
+    blurAll();
+    job.resolve(value);
+  }
+
+  function confirm(message, opts) { return openDialog(message, opts); }
+  function alertBox(message, opts) {
+    var o = normalizeOptions(opts);
+    o.kind = 'alert';
+    return openDialog(message, o);
+  }
+  function promptBox(message, value, opts) {
+    var o = normalizeOptions(opts);
+    o.kind = 'prompt';
+    o.value = value;
+    return openDialog(message, o);
+  }
+
+  /* -------------------------------------------------------- custom selects */
+
+  function currentLabel(select) {
+    var opt = select.options[select.selectedIndex];
+    return opt ? opt.textContent : '';
+  }
+
+  function paintMenu() {
+    if (!activeSelect) return;
+    var options = menu.querySelectorAll('.oui-option');
+    Array.prototype.forEach.call(options, function (el, i) {
+      el.classList.toggle('active', i === activeSelect.index);
+    });
+    var active = options[activeSelect.index];
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  function positionMenu() {
+    if (!activeSelect) return;
+    var rect = activeSelect.trigger.getBoundingClientRect();
+    var width = Math.max(rect.width, 140);
+    var height = Math.min(menu.scrollHeight || 200, 320);
+    var top = rect.bottom + 3;
+    if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 3);
+    menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px';
+    menu.style.top = top + 'px';
+    menu.style.minWidth = width + 'px';
+  }
+
+  function openMenu(select, trigger, sync) {
+    ensure();
+    if (activeSelect && activeSelect.select === select) { closeMenu(); return; }
+    closeMenu();
+    var html = '';
+    Array.prototype.forEach.call(select.options, function (opt, i) {
+      html += '<button class="oui-option" type="button" role="option" data-index="' + i +
+        '" aria-selected="' + (opt.value === select.value ? 'true' : 'false') + '">' +
+        String(opt.textContent || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '</button>';
+    });
+    menu.innerHTML = html || '<button class="oui-option" type="button" disabled>无选项</button>';
+    activeSelect = {
+      select: select, trigger: trigger, sync: sync,
+      index: Math.max(0, select.selectedIndex)
+    };
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    positionMenu();
+    paintMenu();
+  }
+
+  function closeMenu() {
+    if (!activeSelect) return;
+    try { activeSelect.trigger.setAttribute('aria-expanded', 'false'); } catch (e) { /* ignore */ }
+    activeSelect = null;
+    if (menu) menu.hidden = true;
+    blurAll();
+  }
+
+  function chooseOption(index) {
+    if (!activeSelect) return;
+    var select = activeSelect.select;
+    var sync = activeSelect.sync;
+    var opt = select.options[index];
+    if (!opt || opt.disabled) return;
+    select.value = opt.value;
+    try { select.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* ignore */ }
+    if (sync) sync();
+    closeMenu();
+    /* A choice must never leave the control in a focused / selected state. */
+    window.setTimeout(blurAll, 0);
+  }
+
+  function enhanceSelect(root) {
+    ensure();
+    var scope = root || document;
+    var list = scope.querySelectorAll('select[data-omm-select]');
+    Array.prototype.forEach.call(list, function (select) {
+      if (select.dataset.ommEnhanced === '1') return;
+      select.dataset.ommEnhanced = '1';
+      var wrap = document.createElement('span');
+      wrap.className = 'oui-select';
+      var trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'oui-select-trigger';
+      trigger.setAttribute('aria-haspopup', 'listbox');
+      trigger.setAttribute('aria-expanded', 'false');
+      var label = document.createElement('span');
+      trigger.appendChild(label);
+      wrap.appendChild(trigger);
+      select.parentNode.insertBefore(wrap, select);
+      wrap.appendChild(select);
+      select.setAttribute('aria-hidden', 'true');
+      select.tabIndex = -1;
+      function sync() { label.textContent = currentLabel(select); }
+      sync();
+      select.addEventListener('change', sync);
+      trigger.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openMenu(select, trigger, sync);
+      });
+      trigger.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openMenu(select, trigger, sync);
+        }
+      });
+      var ownerLabel = wrap.closest('label');
+      if (ownerLabel) {
+        ownerLabel.removeAttribute('for');
+        ownerLabel.addEventListener('click', function (event) {
+          if (event.target.closest('.oui-select-trigger')) return;
+          openMenu(select, trigger, sync);
+        });
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------- tooltips */
+
+  function showTip(node, text) {
+    ensure();
+    tip.textContent = text;
+    var rect = node.getBoundingClientRect();
+    tip.hidden = false;
+    var width = Math.min(260, Math.max(120, tip.offsetWidth));
+    var left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    var top = rect.bottom + 6;
+    if (top + tip.offsetHeight > window.innerHeight - 8) top = Math.max(8, rect.top - tip.offsetHeight - 6);
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  }
+
+  function hideTip(restore) {
+    window.clearTimeout(tipTimer);
+    if (restore && tipTarget) {
+      var text = tipTarget.getAttribute('data-omm-tip') || '';
+      tipTarget.setAttribute('title', text);
+      tipTarget.removeAttribute('data-omm-tip');
+    }
+    tipTarget = null;
+    if (tip) tip.hidden = true;
+  }
+
+  function bindGlobal() {
+    /* Mouse-activated controls must not keep a visible focus ring. Keyboard
+       activation (event.detail === 0) keeps its focus for accessibility. */
+    document.addEventListener('click', function (event) {
+      if (event.detail === 0) return;
+      var path = event.composedPath ? event.composedPath() : [event.target];
+      for (var i = 0; i < path.length; i++) {
+        var node = path[i];
+        if (!node || !node.tagName) continue;
+        if (node.tagName === 'BUTTON' || node.getAttribute('role') === 'button') {
+          var target = node;
+          window.setTimeout(function () {
+            try { if (target.blur) target.blur(); } catch (e) { /* ignore */ }
+          }, 0);
+          break;
+        }
+      }
+    }, true);
+
+    document.addEventListener('pointerdown', function (event) {
+      if (!activeSelect) return;
+      var path = event.composedPath ? event.composedPath() : [event.target];
+      if (path.indexOf(menu) >= 0 || path.indexOf(activeSelect.trigger) >= 0) return;
+      closeMenu();
+    }, true);
+
+    window.addEventListener('resize', function () { hideTip(true); closeMenu(); }, true);
+    window.addEventListener('scroll', function () { hideTip(true); if (activeSelect) positionMenu(); }, true);
+    window.addEventListener('keydown', function (event) {
+      if (pending) {
+        /* A modal surface owns the keyboard while it is open. */
+        event.stopImmediatePropagation();
+        if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+        else if (event.key === 'Enter' && shadow.activeElement !== inputEl) {
+          event.preventDefault(); finish(true);
+        }
+        return;
+      }
+      if (activeSelect) {
+        if (event.key === 'Escape') {
+          event.preventDefault(); event.stopImmediatePropagation(); closeMenu(); return;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault(); event.stopImmediatePropagation();
+          var count = activeSelect.select.options.length;
+          activeSelect.index = (activeSelect.index + (event.key === 'ArrowDown' ? 1 : -1) + count) % count;
+          paintMenu();
+          return;
+        }
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault(); event.stopImmediatePropagation();
+          chooseOption(activeSelect.index);
+          return;
+        }
+      }
+    }, true);
+
+    /* Replace native title tooltips with an OMM-ZEN surface. The attribute is
+       only removed while the pointer is over the element and restored as soon
+       as it leaves, so any code reading title still sees the original value. */
+    document.addEventListener('pointerover', function (event) {
+      var node = event.target && event.target.closest ? event.target.closest('[title]') : null;
+      if (!node || node === tipTarget) return;
+      hideTip(true);
+      var text = node.getAttribute('title') || '';
+      if (!text.trim()) return;
+      tipTarget = node;
+      node.setAttribute('data-omm-tip', text);
+      node.removeAttribute('title');
+      var target = node;
+      tipTimer = window.setTimeout(function () {
+        if (tipTarget === target) showTip(target, text);
+      }, 380);
+    }, true);
+    document.addEventListener('pointerout', function (event) {
+      if (!tipTarget) return;
+      var leaving = event.target === tipTarget ||
+        (event.target && event.target.closest && event.target.closest('[data-omm-tip]') === tipTarget);
+      if (!leaving) return;
+      var next = event.relatedTarget;
+      if (next && tipTarget.contains && tipTarget.contains(next)) return;
+      hideTip(true);
+    }, true);
+    document.addEventListener('pointerdown', function () { hideTip(true); }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindGlobal, { once: true });
+  } else {
+    bindGlobal();
+  }
+
+  window.OMMUI = {
+    confirm: confirm,
+    alert: alertBox,
+    prompt: promptBox,
+    enhanceSelect: enhanceSelect,
+    close: function () { finish(false); closeMenu(); hideTip(true); }
+  };
+})();
+
 ;(function () {
   'use strict'
   if (window.__ommDesktopLoaded) return
@@ -49,6 +544,13 @@
   var originalRevokeObjectURL = URL.revokeObjectURL
   var originalAnchorClick = HTMLAnchorElement.prototype.click
   var blobUrls = new Map()
+
+  /* All confirmation dialogs go through the OMM-ZEN UI kit (never the
+     browser's native confirm). Returns a Promise<boolean>. */
+  function ask(message, opts) {
+    if (window.OMMUI && window.OMMUI.confirm) return window.OMMUI.confirm(message, opts)
+    return Promise.resolve(window.confirm(message))
+  }
 
   /* ----------------------------------------------------------------- model */
 
@@ -941,27 +1443,126 @@
     '  font:12px/1.5 "Literata","Songti SC","SimSun",serif;white-space:pre-wrap;opacity:0;transition:.18s}',
     '.omm-toast.show{opacity:1;transform:translate(-50%,0)}',
     '.omm-toast[data-kind="error"]{background:#fdf0ee;border-color:#8f2f27;color:#8f2f27}',
+    /* ---------------------------------------------------------------- *
+     * Appearance overrides. Accent, radius and focus are all derived from
+     * the shell variables above, so no surface keeps a hard-coded hue.
+     * This also styles the share panel (.osh-*) injected into this shadow
+     * root by omm-share.js.
+     * ---------------------------------------------------------------- */
+    '.omm-panel{border-color:var(--omm-accent-line);overflow:hidden;',
+    '  box-shadow:0 22px 60px var(--omm-shadow),inset 0 3px 0 var(--omm-accent)}',
+    '.omm-btn{border-color:var(--omm-accent);',
+    '  box-shadow:0 3px 10px var(--omm-shadow),inset 0 -2px 0 var(--omm-accent)}',
+    '.omm-btn:hover{background:var(--omm-accent-soft)}',
+    '.omm-head{border-bottom:1px solid var(--omm-accent-line);background:var(--omm-accent-wash)}',
+    '.omm-head b::before{content:"";display:inline-block;width:3px;height:13px;margin-right:7px;',
+    '  vertical-align:-2px;background:var(--omm-accent);border-radius:var(--omm-radius)}',
+    '.omm-tabs{border-bottom:1px solid var(--omm-accent-line)}',
+    '.omm-tabs button:hover{background:var(--omm-accent-wash)}',
+    '.omm-tabs button[aria-selected="true"]{border-color:var(--omm-accent);',
+    '  background:var(--omm-accent-soft);color:var(--omm-ink)}',
+    '.omm-label{color:var(--omm-accent)}',
+    '.omm-input{border-color:var(--omm-accent-line)}',
+    '.omm-input:focus{outline:1px solid var(--omm-accent-line);border-color:var(--omm-accent)}',
+    '.omm-input:disabled{background:var(--omm-soft);color:var(--omm-dim)}',
+    '.omm-row label[data-disabled="1"]{color:var(--omm-dim)}',
+    '.omm-row input[type="checkbox"]:checked,.omm-row input[type="radio"]:checked{',
+    '  background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
+    '.omm-row input[type="checkbox"]:checked::after{border-color:var(--omm-accent)}',
+    '.omm-row input[type="radio"]:checked::after{background:var(--omm-accent)}',
+    '.omm-primary{background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
+    '.omm-secondary{border-color:var(--omm-accent-line)}',
+    '.omm-primary:hover,.omm-secondary:hover{background:var(--omm-accent-soft)}',
+    '.omm-lead,.omm-help{border-left:2px solid var(--omm-accent);background:var(--omm-accent-wash)}',
+    '.omm-section{border-top:1px solid var(--omm-accent-line)}',
+    '.omm-chips button{border-color:var(--omm-accent-line)}',
+    '.omm-chips button[aria-pressed="true"]{background:var(--omm-accent);',
+    '  border-color:var(--omm-accent);color:var(--omm-accent-contrast)}',
+    '.omm-list{border-color:var(--omm-accent-line)}',
+    '.omm-item{border-bottom:1px solid var(--omm-line-soft)}',
+    '.omm-item:hover{background:var(--omm-accent-wash)}',
+    '.omm-actions button{border-color:var(--omm-accent-line)}',
+    '.omm-actions button:hover{background:var(--omm-accent-wash);border-color:var(--omm-accent)}',
+    '.omm-actions button.danger:hover{background:var(--omm-danger-soft);',
+    '  border-color:var(--omm-danger);color:var(--omm-danger)}',
+    '.omm-badge,.omm-kind{border-color:var(--omm-accent-line)}',
+    '.omm-kind[data-kind="snapshot"]{background:var(--omm-accent-soft)}',
+    '.omm-info{border-color:var(--omm-accent-line)}',
+    '.omm-info:hover{border-color:var(--omm-accent);color:var(--omm-accent)}',
+    '.omm-detail{border:1px dashed var(--omm-accent-line);background:var(--omm-accent-wash)}',
+    '.omm-rename input{border-color:var(--omm-accent)}',
+    '.omm-toast{border-color:var(--omm-accent);border-left:3px solid var(--omm-accent);',
+    '  box-shadow:0 10px 34px var(--omm-shadow)}',
+    '.omm-toast[data-kind="error"]{background:var(--omm-danger-soft);',
+    '  border-color:var(--omm-danger);color:var(--omm-danger)}',
+    '.omm-search button{color:var(--omm-accent)}',
+    '.osh-lead{border-left:2px solid var(--omm-accent);background:var(--omm-accent-wash)}',
+    '.osh-chip{border-color:var(--omm-accent-line)}',
+    '.osh-chip[aria-pressed="true"]{background:var(--omm-accent);',
+    '  border-color:var(--omm-accent);color:var(--omm-accent-contrast)}',
+    '.osh-chip:hover{border-color:var(--omm-accent)}',
+    '.osh-list,.osh-rule,.osh-preview,.osh-batch{border-color:var(--omm-accent-line)}',
+    '.osh-batch{background:var(--omm-accent-wash)}',
+    '.osh-batch button,.osh-member input[type="checkbox"]{border-color:var(--omm-accent-line)}',
+    '.osh-batch button:hover{border-color:var(--omm-accent)}',
+    '.osh-batch button.danger,.osh-item button.danger{color:var(--omm-danger)}',
+    '.osh-item:hover{background:var(--omm-accent-wash)}',
+    '.osh-member input[type="checkbox"]:checked{background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
+    /* Every bordered element inside the archive panel follows --radius. */
+    '.omm-panel,.omm-head,.omm-x,.omm-tabs,.omm-tabs button,.omm-body,.omm-pane,.omm-label,',
+    '.omm-input,.omm-row,.omm-primary,.omm-secondary,.omm-note,.omm-section,.omm-lead,',
+    '.omm-scope,.omm-help,.omm-search,.omm-chips,.omm-chips button,.omm-list,.omm-item,',
+    '.omm-item-main,.omm-item-head,.omm-meta,.omm-actions,.omm-actions button,.omm-empty,',
+    '.omm-badge,.omm-kind,.omm-detail,.omm-rename,.omm-rename input,.omm-rename button,',
+    '.omm-foot,.omm-toast,.omm-content-hits,.omm-content-head,.omm-content-snippet,',
+    '.omm-compare,.omm-compare-out,.omm-btn,.osh-lead,.osh-bar,.osh-summary,.osh-chips,',
+    '.osh-chip,.osh-list,.osh-empty,.osh-foot,.osh-rules,.osh-rule,.osh-rule-head,',
+    '.osh-member,.osh-note,.osh-target,.osh-item,.osh-preview,.osh-batch,.osh-batch button',
+    '{border-radius:var(--omm-radius)}',
+    '.omm-tabs button{border-radius:var(--omm-radius) var(--omm-radius) 0 0}',
+    'button:focus:not(:focus-visible),input:focus:not(:focus-visible){outline:none}',
+    'button:focus-visible{outline:1px solid var(--omm-accent);outline-offset:1px}',
+    'input[type="search"]::-webkit-search-cancel-button,',
+    'input[type="search"]::-webkit-search-decoration{-webkit-appearance:none;appearance:none}'
   ].join('')
 
   /* ------------------------------------------------------------------ html */
 
   var PANEL_VARS =
-    ':host{--omm-ink:#26231f;--omm-paper:#ffffff;--omm-soft:#f2eee7;--omm-dim:#6d6559;' +
-    '--omm-line-soft:#d9d3c8;--omm-accent-soft:#f2eee7}' +
+    /* Accent, radius and shadows are inherited from the shell document, so the
+       archive panel (and the share panel inside it) always follows the current
+       OMM-ZEN theme. Fallbacks keep standalone product pages readable. */
+    ':host{--omm-radius:var(--radius,0px);' +
+    '--omm-accent:var(--accent,#e3a400);' +
+    '--omm-accent-soft:var(--accent-soft,rgba(227,164,0,.16));' +
+    '--omm-accent-wash:var(--accent-wash,rgba(227,164,0,.08));' +
+    '--omm-accent-line:var(--accent-line,rgba(227,164,0,.5));' +
+    '--omm-accent-contrast:var(--accent-contrast,#ffffff);' +
+    '--omm-danger:var(--danger,#8f2f27);' +
+    '--omm-danger-soft:var(--danger-soft,#f7e4e1);' +
+    '--omm-shadow:var(--shadow-deep,rgba(38,35,31,.24));' +
+    /* Base colours are inherited too, so light/dark switching works in the
+       hub without waiting for a postMessage. Fallbacks serve product pages
+       that have no shell stylesheet. */
+    '--omm-ink:var(--ink,#26231f);' +
+    '--omm-paper:var(--paper,#ffffff);' +
+    '--omm-soft:var(--soft,#f2eee7);' +
+    '--omm-dim:var(--dim,#6d6559);' +
+    '--omm-line-soft:var(--line-soft,#d9d3c8)}' +
     ':host(.omm-dark){--omm-ink:#e9e5dd;--omm-paper:#292622;--omm-soft:#37332d;--omm-dim:#a89f90;' +
-    '--omm-line-soft:#4a443c;--omm-accent-soft:#3d3423}' +
-    ':host(.omm-dark) .omm-panel{box-shadow:0 22px 60px rgba(0,0,0,.5)}' +
-    ':host(.omm-dark) .omm-toast{box-shadow:0 10px 34px rgba(0,0,0,.5)}' +
-    '.omm-content-hits{border:1px solid var(--omm-line-soft,#d9d3c8);border-radius:var(--omm-radius,0px);margin-bottom:6px;background:var(--omm-paper,#ffffff)}' +
-    '.omm-content-head{padding:6px 8px;border-bottom:1px solid var(--omm-line-soft,#d9d3c8);font-size:11px}' +
+    '--omm-line-soft:#4a443c;--omm-shadow:rgba(0,0,0,.5)}' +
+    ':host(.omm-dark) .omm-panel{box-shadow:0 22px 60px var(--omm-shadow)}' +
+    ':host(.omm-dark) .omm-toast{box-shadow:0 10px 34px var(--omm-shadow)}' +
+    '.omm-content-hits{border:1px solid var(--omm-accent-line);border-radius:var(--omm-radius);margin-bottom:6px;background:var(--omm-paper)}' +
+    '.omm-content-head{padding:6px 8px;border-bottom:1px solid var(--omm-accent-line);font-size:11px}' +
     '.omm-content-head b{font-weight:700}' +
-    '.omm-content-snippet{margin-top:3px;font-size:10.5px;line-height:1.5;color:var(--omm-dim,#6d6559);word-break:break-all}' +
-    '.omm-hit{border:0;border-bottom:1px solid var(--omm-line-soft,#d9d3c8);border-radius:0}' +
+    '.omm-content-snippet{margin-top:3px;font-size:10.5px;line-height:1.5;color:var(--omm-dim);word-break:break-all}' +
+    '.omm-hit{border:0;border-bottom:1px solid var(--omm-line-soft);border-radius:0}' +
     '.omm-hit:last-child{border-bottom:0}' +
-    '.omm-compare{border:1px solid var(--omm-line-soft,#d9d3c8);background:var(--omm-soft,#faf7f1);color:var(--omm-ink,#26231f);font:inherit;font-size:10.5px;padding:2px 6px;cursor:pointer;border-radius:var(--omm-radius,0px)}' +
-    '.omm-compare:hover{border-color:var(--omm-ink,#26231f)}' +
+    '.omm-compare{border:1px solid var(--omm-accent-line);background:var(--omm-accent-soft);color:var(--omm-ink);font:inherit;font-size:10.5px;padding:2px 6px;cursor:pointer;border-radius:var(--omm-radius)}' +
+    '.omm-compare:hover{border-color:var(--omm-accent)}' +
     '.omm-compare:disabled{opacity:.55;cursor:default}' +
-    '.omm-compare-out{margin-left:6px;color:var(--omm-dim,#6d6559);font-size:10px;word-break:break-all}';
+    '.omm-compare-out{margin-left:6px;color:var(--omm-dim);font-size:10px;word-break:break-all}';
 
   var PANEL_HTML = [
     '<button class="omm-btn" id="omm-open" type="button" title="保存路径、历史快照与跨产品共享">▣ 存档</button>',
@@ -1102,15 +1703,20 @@
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') closePanel()
     })
-    /* The floating panel closes on an outside click.  In the hub it stays
-       open: changing tabs is exactly how the list follows the focused app. */
+    /* The floating panel closes on any outside click — in the hub too.  The
+       toggle button and the OMM-ZEN UI layer are excluded so a click on them
+       does not close the panel right before their own handler opens/uses it. */
     document.addEventListener('pointerdown', function (event) {
-      if (isHub()) return
       var panel = byId('omm-panel')
       if (!panel || !panel.classList.contains('open')) return
       var path = event.composedPath ? event.composedPath() : [event.target]
       if (path.indexOf(panel) >= 0) return
       if (path.indexOf(byId('omm-open')) >= 0) return
+      for (var i = 0; i < path.length; i++) {
+        var node = path[i]
+        if (!node || !node.closest) continue
+        if (node.id === 'omm-ui-host' || node.closest('[data-omm-archive-toggle], [data-omm-ui-layer]')) return
+      }
       closePanel()
     }, true)
 
@@ -1155,7 +1761,7 @@
         if (!data || !data.type) return
         if (data.type === 'omm:create-snapshot') onSnapshotRequest(data)
         else if (data.type === 'omm:restore-snapshot') onRestoreRequest(data)
-        else if (data.type === 'omm:theme') setPanelTheme(data.theme)
+        else if (data.type === 'omm:theme') { setPanelTheme(data.theme); applyShellAppearance(data) }
         else if (data.type === 'omm:state-info') onStateInfoRequest(data)
       })
     }
@@ -1213,6 +1819,23 @@
   function setPanelTheme(theme) {
     model.theme = theme === 'dark' ? 'dark' : 'light'
     if (model.host) model.host.classList.toggle('omm-dark', model.theme === 'dark')
+  }
+
+  /* Embedded products have no shell stylesheet, so mirror the hub's palette
+     onto the shadow host. Custom properties then cascade into the panel. */
+  function applyShellAppearance(data) {
+    if (!model.host || !data) return
+    var map = {
+      '--accent': data.accent,
+      '--accent-soft': data.accentSoft,
+      '--accent-wash': data.accentWash,
+      '--accent-line': data.accentLine,
+      '--accent-contrast': data.accentContrast,
+      '--radius': (Number(data.radius) || 0) + 'px'
+    }
+    Object.keys(map).forEach(function (key) {
+      if (map[key] != null) model.host.style.setProperty(key, String(map[key]))
+    })
   }
 
   /* Live counters used by the archive panel's snapshot compare feature. */
@@ -1849,23 +2472,26 @@
       var warning = isHub()
         ? '恢复快照会覆盖「' + target + '」当前的应用数据，确定继续？'
         : '恢复快照会覆盖当前应用数据，确定继续？'
-      if (!confirm(warning + '\n' + fmtTime(entry.time) + ' · ' + entry.title)) return
-      if (isHub()) {
-        toast('正在「' + target + '」中恢复…')
-        bridgeDispatch('omm:restore-snapshot', {
-          app: entry.app,
-          app_name: target,
-          path: entry.path,
-          name: entry.name,
-          label: entry.label,
+      ask(warning + '\n' + fmtTime(entry.time) + ' · ' + entry.title,
+        { title: '恢复快照', ok: '恢复', danger: true }).then(function (ok) {
+        if (!ok) return
+        if (isHub()) {
+          toast('正在「' + target + '」中恢复…')
+          bridgeDispatch('omm:restore-snapshot', {
+            app: entry.app,
+            app_name: target,
+            path: entry.path,
+            name: entry.name,
+            label: entry.label,
+          })
+          return
+        }
+        toast('正在恢复快照…')
+        apiGet('/snapshot', { app: ENV.appId, path: entry.path }).then(function (data) {
+          return applyState(data.snapshot)
+        }).catch(function (err) {
+          toast('恢复失败：' + (err && err.message ? err.message : err), 'error')
         })
-        return
-      }
-      toast('正在恢复快照…')
-      apiGet('/snapshot', { app: ENV.appId, path: entry.path }).then(function (data) {
-        return applyState(data.snapshot)
-      }).catch(function (err) {
-        toast('恢复失败：' + (err && err.message ? err.message : err), 'error')
       })
     }
     return button
@@ -1884,15 +2510,18 @@
     button.type = 'button'
     button.title = '永久删除这条快照文件'
     button.onclick = function () {
-      if (!confirm('删除这个快照文件？此操作不可撤销。\n' + entry.title)) return
-      apiPost('/snapshot/delete', { app: entry.app || effectiveApp(), path: entry.path })
-        .then(function () {
-          toast('快照已删除')
-          loadArchive()
-        })
-        .catch(function (err) {
-          toast('删除失败：' + (err && err.message ? err.message : err), 'error')
-        })
+      ask('删除这个快照文件？此操作不可撤销。\n' + entry.title,
+        { title: '删除快照', ok: '删除', danger: true }).then(function (ok) {
+        if (!ok) return
+        apiPost('/snapshot/delete', { app: entry.app || effectiveApp(), path: entry.path })
+          .then(function () {
+            toast('快照已删除')
+            loadArchive()
+          })
+          .catch(function (err) {
+            toast('删除失败：' + (err && err.message ? err.message : err), 'error')
+          })
+      })
     }
     return button
   }
@@ -2017,6 +2646,42 @@
     var newPath = pathInput.value.trim()
     var oldPath = model.config.path || model.config.defaultPath || ''
     var scope = byId('omm-all').checked ? 'all' : 'app'
+
+    function commit() {
+      var modeInput = model.shadow.querySelector('input[name="omm-mode"]:checked')
+      var payload = {
+        app: app,
+        path: newPath,
+        mode: modeInput ? modeInput.value : model.config.mode,
+        auto_snapshot: byId('omm-auto').checked,
+        auto_share: byId('omm-auto-share').checked,
+        scope: scope,
+      }
+      var button = byId('omm-save-config')
+      button.disabled = true
+      apiPost('/config', payload).then(function (data) {
+        applyConfig(data)
+        renderConfig()
+        var message = '保存设置已更新：' + model.config.path
+        var migrated = data.migrated_save
+        if (migrated) {
+          message += '\n已迁移 ' + (migrated.moved || 0) + ' 个文件'
+          if (migrated.old && migrated.old.length) message += '，旧目录已删除'
+          if (migrated.partial) message += '\n旧目录未删除：仍被其它产品使用，或不是 OMM 专用目录'
+          if (migrated.leftover && migrated.leftover.length) {
+            message += '\n旧目录仍有文件未能删除：' + migrated.leftover.join('；')
+          }
+        }
+        toast(message)
+        loadArchive()
+      }).catch(function (err) {
+        toast('保存设置失败：' + (err && err.message ? err.message : err), 'error')
+        renderConfig()
+      }).finally(function () {
+        button.disabled = false
+      })
+    }
+
     if (newPath !== oldPath) {
       var target = newPath || '默认目录'
       var message =
@@ -2024,43 +2689,13 @@
         oldPath + '\n→ ' + target + '\n\n' +
         (scope === 'all' ? '所有产品' : '当前应用') +
         '的文件与快照都会迁移过去；成功后旧目录（含空文件夹）会被删除。继续？'
-      if (!confirm(message)) {
-        pathInput.value = oldPath
-        return
-      }
+      ask(message, { title: '迁移保存目录', ok: '迁移并保存', danger: true }).then(function (ok) {
+        if (!ok) { pathInput.value = oldPath; return }
+        commit()
+      })
+      return
     }
-    var modeInput = model.shadow.querySelector('input[name="omm-mode"]:checked')
-    var payload = {
-      app: app,
-      path: newPath,
-      mode: modeInput ? modeInput.value : model.config.mode,
-      auto_snapshot: byId('omm-auto').checked,
-      auto_share: byId('omm-auto-share').checked,
-      scope: scope,
-    }
-    var button = byId('omm-save-config')
-    button.disabled = true
-    apiPost('/config', payload).then(function (data) {
-      applyConfig(data)
-      renderConfig()
-      var message = '保存设置已更新：' + model.config.path
-      var migrated = data.migrated_save
-      if (migrated) {
-        message += '\n已迁移 ' + (migrated.moved || 0) + ' 个文件'
-        if (migrated.old && migrated.old.length) message += '，旧目录已删除'
-        if (migrated.partial) message += '\n旧目录未删除：仍被其它产品使用，或不是 OMM 专用目录'
-        if (migrated.leftover && migrated.leftover.length) {
-          message += '\n旧目录仍有文件未能删除：' + migrated.leftover.join('；')
-        }
-      }
-      toast(message)
-      loadArchive()
-    }).catch(function (err) {
-      toast('保存设置失败：' + (err && err.message ? err.message : err), 'error')
-      renderConfig()
-    }).finally(function () {
-      button.disabled = false
-    })
+    commit()
   }
 
   function saveSharePath() {
@@ -2076,36 +2711,40 @@
       '共享空间的全部内容会立即迁移到：\n' +
       (next || '默认目录') + '\n\n' +
       '成功后旧目录（含空文件夹）会被删除，正在使用的“在应用中打开”等操作不受影响。继续？'
-    if (!confirm(message)) {
-      input.value = old
-      return
-    }
-    var button = byId('omm-save-share-path')
-    button.disabled = true
-    button.textContent = '迁移中…'
-    apiPost('/config', {
-      app: effectiveApp() || ENV.appId,
-      share_path: next,
-    }).then(function (data) {
-      applyConfig(data)
-      renderConfig()
-      var migrated = data.migrated_share
-      var text = '共享目录已更新：' + model.config.sharePath
-      if (migrated) {
-        text += '\n已迁移 ' + (migrated.moved || 0) + ' 个文件'
-        if (migrated.old && !migrated.leftover.length) text += '，旧目录已删除'
-        if (migrated.leftover && migrated.leftover.length) {
-          text += '\n旧目录仍有文件未能删除：' + migrated.leftover.join('；')
+
+    function commit() {
+      var button = byId('omm-save-share-path')
+      button.disabled = true
+      button.textContent = '迁移中…'
+      apiPost('/config', {
+        app: effectiveApp() || ENV.appId,
+        share_path: next,
+      }).then(function (data) {
+        applyConfig(data)
+        renderConfig()
+        var migrated = data.migrated_share
+        var text = '共享目录已更新：' + model.config.sharePath
+        if (migrated) {
+          text += '\n已迁移 ' + (migrated.moved || 0) + ' 个文件'
+          if (migrated.old && !migrated.leftover.length) text += '，旧目录已删除'
+          if (migrated.leftover && migrated.leftover.length) {
+            text += '\n旧目录仍有文件未能删除：' + migrated.leftover.join('；')
+          }
         }
-      }
-      toast(text)
-      if (window.OMMShare && window.OMMShare.refresh) window.OMMShare.refresh()
-    }).catch(function (err) {
-      toast('共享目录迁移失败：' + (err && err.message ? err.message : err), 'error')
-      renderConfig()
-    }).finally(function () {
-      button.disabled = false
-      button.textContent = '保存并迁移共享目录'
+        toast(text)
+        if (window.OMMShare && window.OMMShare.refresh) window.OMMShare.refresh()
+      }).catch(function (err) {
+        toast('共享目录迁移失败：' + (err && err.message ? err.message : err), 'error')
+        renderConfig()
+      }).finally(function () {
+        button.disabled = false
+        button.textContent = '保存并迁移共享目录'
+      })
+    }
+
+    ask(message, { title: '迁移共享目录', ok: '迁移', danger: true }).then(function (ok) {
+      if (!ok) { input.value = old; return }
+      commit()
     })
   }
 

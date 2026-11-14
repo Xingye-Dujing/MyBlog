@@ -10,8 +10,14 @@
   --line-faint: rgba(38, 35, 31, 0.07);
   --dim: rgba(38, 35, 31, 0.48);
   --faint: rgba(38, 35, 31, 0.1);
+  /* Palette values are published by the JS accent table (applyAccentPalette).
+     These are only first-paint fallbacks for a browser without JS. */
   --accent: #e3a400;
   --accent-soft: rgba(227, 164, 0, 0.16);
+  --accent-wash: rgba(227, 164, 0, 0.08);
+  --accent-line: rgba(227, 164, 0, 0.5);
+  --accent-glow: rgba(227, 164, 0, 0.24);
+  --accent-contrast: #ffffff;
   --danger: #b34a3c;
   --danger-soft: #fff0f0;
   --overlay: rgba(38, 35, 31, 0.22);
@@ -31,21 +37,8 @@
   --sans: var(--font-en), var(--font-cn);
   --mono: var(--font-en), var(--font-cn);
 }
-:root[data-accent='olive'] {
-  --accent: #7c7f42;
-  --accent-soft: rgba(124, 127, 66, 0.16);
-}
-
-:root[data-accent='rust'] {
-  --accent: #b56545;
-  --accent-soft: rgba(181, 101, 69, 0.15);
-}
-
-:root[data-accent='blue'] {
-  --accent: #5b7692;
-  --accent-soft: rgba(91, 118, 146, 0.16);
-}
-
+/* The active accent always comes from --accent* above; deep/light variants are
+   derived from the same palette entry, so no tone is hard-coded per theme. */
 :root[data-theme='dark'] {
   --ink: #e9e5dd;
   --paper: #292622;
@@ -58,8 +51,6 @@
   --line-faint: rgba(233, 229, 221, 0.08);
   --dim: rgba(233, 229, 221, 0.52);
   --faint: rgba(233, 229, 221, 0.1);
-  --accent: #e8ad10;
-  --accent-soft: rgba(232, 173, 16, 0.24);
   --danger: #d0685a;
   --danger-soft: rgba(208, 104, 90, 0.16);
   --overlay: rgba(12, 10, 8, 0.45);
@@ -695,7 +686,7 @@ body.resizing iframe {
   position: absolute;
   display: none;
   border: 2px dashed var(--accent);
-  background: rgba(240, 180, 0, 0.13);
+  background: var(--accent-wash);
   z-index: 41;
   align-items: center;
   justify-content: center;
@@ -708,7 +699,7 @@ body.resizing iframe {
 
 #drop-hint span {
   background: var(--paper);
-  border: 1px solid var(--line);
+  border: 1px solid var(--accent-line);
   padding: 4px 9px;
   font-size: 11px;
   color: var(--ink);
@@ -833,7 +824,7 @@ body.dragging-tab {
   z-index: 60;
   background: var(--paper);
   border: 1px solid var(--line);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 0 var(--shadow-soft), inset 0 2px 0 var(--accent);
   padding: 12px;
 }
 
@@ -1102,7 +1093,7 @@ body.dragging-tab {
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.06);
+  box-shadow: 0 12px 40px var(--shadow-soft), inset 0 3px 0 var(--accent);
 }
 .pp-head {
   flex: 0 0 auto;
@@ -1132,15 +1123,16 @@ body.dragging-tab {
   border: 1px solid transparent;
   border-bottom: 0;
   margin-bottom: -1px;
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
-.pp-tab:hover { color: var(--ink); background: var(--soft); }
+.pp-tab:hover { color: var(--ink); background: var(--accent-wash); }
 .pp-tab.active {
   color: var(--ink);
   font-weight: 600;
-  background: var(--soft);
+  background: var(--accent-soft);
   border-color: var(--line-soft);
-  border-bottom-color: var(--paper);
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: -2px;
 }
 .pp-body {
   flex: 0 1 auto;
@@ -1229,9 +1221,9 @@ body.dragging-tab {
   font-size: 10px;
   white-space: nowrap;
 }
-.pp-btn:hover { background: var(--soft); }
-.pp-btn.primary { background: var(--soft); color: var(--ink); border-color: var(--ink); }
-.pp-btn.primary:hover { background: var(--soft-strong); }
+.pp-btn:hover { background: var(--accent-wash); border-color: var(--accent-line); }
+.pp-btn.primary { background: var(--accent-soft); color: var(--ink); border-color: var(--accent); font-weight: 600; }
+.pp-btn.primary:hover { background: var(--accent-soft); border-color: var(--ink); }
 .pp-btn.danger:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
 .pp-btn[disabled] { opacity: 0.45; cursor: default; }
 .pp-version { font-size: 9px; color: var(--dim); font-family: var(--mono, monospace); }
@@ -1413,6 +1405,7 @@ body.dragging-tab {
 .swatches {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .swatches button {
@@ -1431,14 +1424,11 @@ body.dragging-tab {
   border-radius: var(--radius);
 }
 
-.swatches button[data-hub-accent='amber'] { --swatch: #e3a400; }
-.swatches button[data-hub-accent='olive'] { --swatch: #7c7f42; }
-.swatches button[data-hub-accent='rust'] { --swatch: #b56545; }
-.swatches button[data-hub-accent='blue'] { --swatch: #5b7692; }
-
+/* --swatch is published per button by the JS accent palette, so the picker
+   never contains hard-coded colour values. */
 .swatches button.active {
-  border-color: var(--ink);
-  box-shadow: inset 0 0 0 2px var(--paper);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--paper), 0 0 0 1px var(--accent);
 }
 
 .switch-line {
@@ -2211,3 +2201,367 @@ body.no-motion *::after {
   padding: 8px 10px;
   font-size: 10px;
 }
+
+/* ====================================================================== *
+ * Unified appearance layer
+ * ----------------------------------------------------------------------
+ *  - every tinted surface derives from --accent* (no hard-coded hues)
+ *  - every border / corner inside the "all products", "archive" and
+ *    "settings" surfaces follows --radius
+ *  - pointer-driven choices never leave a focus ring behind
+ * ====================================================================== */
+
+/* -------------------------------------------------- accent drives more UI */
+#topbar { box-shadow: inset 0 -2px 0 var(--accent-wash); }
+.brand:hover,
+.tab:hover,
+.tab-add:hover,
+.tool:hover,
+#tabs-overflow:hover,
+.pane-btn:hover,
+.dock-app:hover,
+.recent-file:hover { background: var(--accent-wash); }
+
+.tool.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tab.active { box-shadow: inset 0 2px 0 var(--accent-wash); }
+.pane.active { border-color: var(--accent); }
+.pane.active .pane-head { background: var(--accent-soft); }
+.pane.active::before { background: var(--accent); }
+.app-tile:hover { background: var(--accent-wash); border-color: var(--accent-line); }
+.retry-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+.splitter:hover::after, .splitter.dragging::after { background: var(--accent); }
+
+#dock {
+  box-shadow: 0 12px 34px var(--shadow-soft), 0 1px 0 var(--glass-inset) inset,
+    inset 0 2px 0 var(--accent);
+}
+.dock-app.active .glyph { background: var(--accent-soft); border-color: var(--accent); }
+.tab-dot, .dock-app.has-share::after, .notify-dot { background: var(--accent); }
+
+.launcher-app:hover { background: var(--accent-wash); border-color: var(--accent-line); }
+.launcher-app.active { background: var(--accent-soft); border-color: var(--accent); }
+.launcher-chip:hover { background: var(--accent-wash); border-color: var(--accent); }
+.launcher-pin:hover, .launcher-pin.on { color: var(--accent); }
+.launcher-section, .setting-label { color: var(--accent); }
+.setting-label-note {
+  color: var(--dim);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.launcher-search:focus, .pp-input:focus, .settings-select:focus,
+.cmdk-input:focus, .ws-save input:focus {
+  outline: 1px solid var(--accent-line);
+  border-color: var(--accent);
+}
+.menu-item:hover { background: var(--accent-wash); }
+.menu-item .check { color: var(--accent); }
+.menu-sep { background: var(--accent-line); }
+.notify-head { border-bottom: 1px solid var(--accent-line); }
+.notify-item:hover, .notify-clear:hover { background: var(--accent-wash); }
+.notify-empty { color: var(--dim); }
+
+.cmdk-card {
+  border-color: var(--accent);
+  box-shadow: 0 24px 70px var(--shadow-deep), 0 0 0 3px var(--accent-wash);
+}
+.cmdk-input { border-bottom: 1px solid var(--accent-line); }
+.cmdk-item.active { background: var(--accent-soft); border-color: var(--accent-line); }
+.cmdk-item .glyph { border-color: var(--accent-line); }
+.cmdk-foot { border-top: 1px solid var(--accent-line); }
+
+#toast {
+  border-color: var(--accent);
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 6px 24px var(--shadow-soft), 0 0 0 1px var(--accent-wash);
+}
+#drop-hint span { border-color: var(--accent-line); }
+
+.pp-head { border-bottom: 1px solid var(--accent-line); background: var(--accent-wash); }
+.pp-close:hover { background: var(--accent-soft); color: var(--ink); }
+.pp-tabs { border-bottom: 1px solid var(--accent-line); }
+.pp-row:hover { border-color: var(--accent-line); background: var(--accent-wash); }
+.pp-card-item:hover { border-color: var(--accent-line); }
+.pp-dir { border-color: var(--accent-line); }
+.pp-import { border: 2px dashed var(--accent-line); }
+.pp-import.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.pp-spec { border-color: var(--accent-line); }
+.pp-note code { background: var(--accent-soft); }
+.pp-badge.user { border-color: var(--accent); background: var(--accent-soft); }
+.pp-row.pp-highlight { background: var(--accent-soft); outline: 1px solid var(--accent); }
+.pp-version, .pp-status { color: var(--dim); }
+
+.segmented { border-color: var(--accent-line); }
+.segmented button.active {
+  background: var(--accent-soft);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.switches button:hover { border-color: var(--accent); }
+.switch-track { border-color: var(--accent-line); }
+.switch[aria-checked='true'] .switch-track { background: var(--accent-soft); border-color: var(--accent); }
+.switch[aria-checked='true'] .switch-track::after { background: var(--accent); }
+.settings-select { border-color: var(--accent-line); }
+.settings-foot { border-top: 1px solid var(--accent-line); }
+.storage-grid, .usage-list, .shortcut-list { border-color: var(--accent-line); }
+.storage-grid, .usage-list, .shortcut-list { background: var(--accent-wash); }
+.topbar-reveal { border-color: var(--accent-line); }
+.topbar-reveal:hover { background: var(--accent-soft); color: var(--ink); }
+.ws-save button:hover { background: var(--accent-wash); }
+.pp-empty, .pp-foot { color: var(--dim); }
+
+/* --------------------------------------- radius: every border of the panels */
+.plugin-panel .pp-card { overflow: hidden; }
+.pp-head,
+.pp-tabs,
+.pp-tab,
+.pp-close,
+.pp-body,
+.settings-body,
+.settings-foot,
+.pp-dir,
+.pp-input,
+.pp-row,
+.pp-card-item,
+.pp-btn,
+.pp-glyph,
+.pp-badge,
+.pp-import,
+.pp-spec,
+.pp-note code,
+.segmented,
+.segmented button,
+.swatches,
+.swatches button,
+.swatches button::after,
+.switch-track,
+.settings-select,
+.setting-inline,
+.setting-hint,
+.shortcut-list,
+.storage-grid,
+.usage-list,
+.popover,
+#launcher,
+#layout-menu,
+#ctx-menu,
+#tabs-more,
+#notify-panel,
+.launcher-head,
+.launcher-app,
+.launcher-app .glyph,
+.launcher-app .key,
+.launcher-search,
+.launcher-chip,
+.launcher-chip .glyph,
+.launcher-pin,
+.launcher-foot,
+.launcher-section,
+.launcher-empty,
+.launcher-grid,
+.launcher-recent,
+.menu-item,
+.menu-sep,
+.notify-head,
+.notify-clear,
+.notify-item,
+.notify-empty,
+.notify-list,
+.cmdk-card,
+.cmdk-input,
+.cmdk-item,
+.cmdk-item .glyph,
+.cmdk-foot,
+.recent-files,
+.recent-file,
+.ws-save input,
+.ws-save button,
+.ws-del,
+#toast,
+#drop-hint,
+#drop-hint span,
+.topbar-reveal,
+.oui-select-trigger {
+  border-radius: var(--radius);
+}
+.pane.active::before { border-radius: var(--radius) var(--radius) 0 0; }
+.pp-tab { border-radius: var(--radius) var(--radius) 0 0; }
+.topbar-reveal { border-radius: 0 0 var(--radius) var(--radius); }
+
+/* Native-looking focus rings must disappear after a mouse choice; keyboard
+   navigation keeps a visible, accent-coloured ring. */
+button:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible),
+[role='button']:focus:not(:focus-visible) {
+  outline: none;
+}
+button:focus-visible,
+[tabindex]:focus-visible,
+.oui-select-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Custom select wrapper (rendered by the OMM-ZEN UI kit) */
+.setting-inline .oui-select { flex: 0 0 auto; }
+.setting-inline .oui-select-trigger { min-width: 108px; }
+.setting-label-note { margin-left: 4px; font-size: 9px; }
+.swatches button { width: 30px; height: 30px; }
+
+/* ------------------------------------------- 更新标签：框架 + 插件版本汇报 */
+.upd-section { margin-bottom: 14px; }
+.upd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+  border: 1px solid var(--accent-line);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-wash);
+  border-radius: var(--radius);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.upd-meta { font-size: 9px; font-weight: 400; color: var(--dim); }
+.upd-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line-faint);
+  background: var(--accent-wash);
+  border-radius: var(--radius);
+  font-size: 10px;
+  color: var(--dim);
+}
+.upd-summary b { color: var(--accent); }
+.upd-status {
+  font-size: 8px;
+  font-weight: 400;
+  border: 1px solid var(--line-faint);
+  padding: 1px 4px;
+  border-radius: var(--radius);
+  color: var(--dim);
+}
+.upd-status.upd-new {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.upd-status.upd-none { opacity: 0.7; }
+.upd-version {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--dim);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.pp-body .upd-section .pp-row { background: var(--paper); }
+
+/* Search fields use their own OMM-ZEN clear button, never the native one. */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* ------------------------------------------- 自定义十六进制主题色输入 */
+.accent-custom {
+  margin-top: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-wash);
+  border-radius: var(--radius);
+}
+.accent-hex-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+.accent-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+button.accent-hex-preview {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-soft);
+  background: var(--paper);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+button.accent-hex-preview::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  background: var(--swatch, var(--accent));
+  border-radius: var(--radius);
+}
+button.accent-hex-preview:hover { border-color: var(--accent); }
+.accent-hex-field {
+  display: flex;
+  align-items: center;
+  flex: 1 1 130px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  background: var(--paper);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.accent-hex-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-line);
+}
+.accent-hex-hash {
+  padding-left: 8px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.accent-hex-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 5px 8px 5px 2px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--radius);
+}
+.accent-hex-input::placeholder { color: var(--dim); opacity: 0.72; letter-spacing: 0.04em; }
+.accent-hex-row .pp-btn { flex: 0 0 auto; }
+.accent-hex-hint { margin-top: 6px; font-size: 9.5px; line-height: 1.5; color: var(--dim); }
+.accent-hex-hint.error { color: var(--danger); }
+.swatches button.swatch-custom::before {
+  content: '+';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: var(--accent-contrast);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.35);
+}
+.swatches button.swatch-custom::after { inset: 3px; }

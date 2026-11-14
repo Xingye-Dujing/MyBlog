@@ -14,7 +14,10 @@
   var PLUGIN_INFO = [];
   var pluginPanelTab = 'installed';
   var catalogCache = null;
+  var catalogError = '';
+  var catalogLoading = false;
   var updateInfo = null;
+  var updateChecking = false;
   var pluginLoadError = '';
   var PLUGIN_DIR = '';
   var pluginDirEditing = false;
@@ -22,9 +25,12 @@
   var PIN_KEY = 'omm.hub.pins.v1';
   var RECENT_KEY = 'omm.hub.recent.v1';
   var WORKSPACE_KEY = 'omm.hub.workspaces.v1';
+  var DEFAULT_CUSTOM_HEX = '#FF8FC8';
+  var ACCENT_HEX_HINT = '支持 #RGB / #RRGGBB，例如 #FF8FC8；深色主题会自动提亮。';
   var hubAppearance = {
     radius: 0,
     accent: 'amber',
+    accentHex: '',
     theme: 'light',
     motion: true,
     topbar: true,
@@ -33,6 +39,141 @@
     snap: 0,
     dockSort: 'fixed',
   };
+
+  /* Single source of truth for the accent palette.  Every tinted surface reads
+     the --accent* variables derived from here, so UI colours are never
+     hard-coded in the stylesheet.  Young / lively tones were added alongside
+     the four original earthy ones. */
+  var ACCENTS = [
+    { id: 'amber',   name: '琥珀',   light: '#e3a400', dark: '#f2b81c' },
+    { id: 'olive',   name: '橄榄',   light: '#7c7f42', dark: '#aab060' },
+    { id: 'rust',    name: '赭石',   light: '#b56545', dark: '#dd8e6b' },
+    { id: 'blue',    name: '雾蓝',   light: '#5b7692', dark: '#84b0da' },
+    { id: 'coral',   name: '珊瑚',   light: '#f2605a', dark: '#ff7d76' },
+    { id: 'peach',   name: '蜜桃',   light: '#f2914f', dark: '#ffb57c' },
+    { id: 'mint',    name: '薄荷',   light: '#2fb79d', dark: '#55dfc3' },
+    { id: 'sky',     name: '天青',   light: '#359be0', dark: '#6cc2ff' },
+    { id: 'violet',  name: '紫罗兰', light: '#8a6cf0', dark: '#ac91ff' },
+    { id: 'pink',    name: '樱粉',   light: '#f472b6', dark: '#ff9ed2' },
+    { id: 'lime',    name: '青柠',   light: '#86c23c', dark: '#aee465' },
+    { id: 'indigo',  name: '靛蓝',   light: '#4f5bd5', dark: '#7d89ff' },
+  ];
+
+  function normalizeHex(value) {
+    var s = String(value == null ? '' : value).trim().replace(/^#/, '');
+    if (/^[0-9a-fA-F]{3}$/.test(s)) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+    if (!/^[0-9a-fA-F]{6}$/.test(s)) return '';
+    return '#' + s.toUpperCase();
+  }
+
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(function (v) {
+      var n = Math.max(0, Math.min(255, Math.round(v)));
+      return ('0' + n.toString(16)).slice(-2);
+    }).join('').toUpperCase();
+  }
+
+  /* A custom colour only needs one hex value: the dark variant is derived so
+     it stays legible on the dark shell without a second input. */
+  function accentForDark(hex) {
+    var c = hexToRgb(hex);
+    return rgbToHex(
+      c.r + (255 - c.r) * 0.3,
+      c.g + (255 - c.g) * 0.3,
+      c.b + (255 - c.b) * 0.3
+    );
+  }
+
+  function accentById(id) {
+    if (id === 'custom') {
+      var hex = normalizeHex(hubAppearance.accentHex) || DEFAULT_CUSTOM_HEX;
+      return { id: 'custom', name: '自定义', light: hex, dark: accentForDark(hex) };
+    }
+    for (var i = 0; i < ACCENTS.length; i++) {
+      if (ACCENTS[i].id === id) return ACCENTS[i];
+    }
+    return ACCENTS[0];
+  }
+
+  function hexToRgb(hex) {
+    var s = String(hex || '').replace('#', '');
+    if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+    var n = parseInt(s, 16) || 0;
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function accentRgba(hex, alpha) {
+    var c = hexToRgb(hex);
+    return 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + alpha + ')';
+  }
+
+  function accentContrast(hex) {
+    var c = hexToRgb(hex);
+    var lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
+    return lum > 0.66 ? '#26231f' : '#ffffff';
+  }
+
+  /* Publish the whole accent scale as CSS variables.  Both the shell and the
+     shadow-DOM archive panel inherit them automatically. */
+  function applyAccentPalette() {
+    var tone = accentById(hubAppearance.accent);
+    var dark = effectiveTheme() === 'dark';
+    var base = dark ? tone.dark : tone.light;
+    var root = document.documentElement;
+    root.style.setProperty('--accent', base);
+    root.style.setProperty('--accent-soft', accentRgba(base, dark ? 0.26 : 0.16));
+    root.style.setProperty('--accent-wash', accentRgba(base, dark ? 0.13 : 0.08));
+    root.style.setProperty('--accent-line', accentRgba(base, dark ? 0.62 : 0.5));
+    root.style.setProperty('--accent-glow', accentRgba(base, dark ? 0.34 : 0.24));
+    root.style.setProperty('--accent-contrast', accentContrast(base));
+  }
+
+  /* Keep the custom hex field in sync without overwriting what the user is
+     currently typing. */
+  function syncAccentHexControls() {
+    var input = document.getElementById('hub-accent-hex');
+    var preview = document.getElementById('hub-accent-hex-preview');
+    var hex = normalizeHex(hubAppearance.accentHex) || DEFAULT_CUSTOM_HEX;
+    if (input && document.activeElement !== input) {
+      input.value = hubAppearance.accent === 'custom' ? hex.slice(1) : '';
+    }
+    if (preview) {
+      preview.style.setProperty('--swatch', hex);
+      preview.setAttribute('aria-label', '使用这个自定义颜色（' + hex + '）');
+    }
+  }
+
+  function buildAccentSwatches() {
+    var box = document.getElementById('hub-accent-options');
+    if (!box || box.dataset.built === '1') return;
+    box.dataset.built = '1';
+    ACCENTS.concat([{ id: 'custom', name: '自定义颜色', light: '', dark: '' }]).forEach(function (tone) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.hubAccent = tone.id;
+      btn.title = tone.id === 'custom' ? '使用自定义的颜色' : tone.name;
+      btn.setAttribute('aria-label', tone.id === 'custom' ? '使用自定义的颜色' : '主题色：' + tone.name);
+      if (tone.id === 'custom') btn.classList.add('swatch-custom');
+      if (tone.light) btn.style.setProperty('--swatch-light', tone.light);
+      if (tone.dark) btn.style.setProperty('--swatch-dark', tone.dark);
+      box.appendChild(btn);
+    });
+  }
+
+  function accentBroadcastPayload(theme) {
+    var tone = accentById(hubAppearance.accent);
+    var dark = (theme || effectiveTheme()) === 'dark';
+    var base = dark ? tone.dark : tone.light;
+    return {
+      theme: dark ? 'dark' : 'light',
+      accent: base,
+      accentSoft: accentRgba(base, dark ? 0.26 : 0.16),
+      accentWash: accentRgba(base, dark ? 0.13 : 0.08),
+      accentLine: accentRgba(base, dark ? 0.62 : 0.5),
+      accentContrast: accentContrast(base),
+      radius: hubAppearance.radius,
+    };
+  }
   var launcherQuery = '';
   var launcherIndex = 0;
   var launcherComposing = false;
@@ -152,6 +293,13 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /* All shell confirmations go through the OMM-ZEN UI kit instead of the
+     browser's native dialog. Returns Promise<boolean>. */
+  function ommConfirm(message, opts) {
+    if (window.OMMUI && window.OMMUI.confirm) return window.OMMUI.confirm(message, opts);
+    return Promise.resolve(window.confirm(message));
   }
 
   function appIconHTML(app) {
@@ -1170,7 +1318,8 @@
       hubAppearance.radius = [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0
         ? Number(data.radius)
         : 0;
-      hubAppearance.accent = ['amber', 'olive', 'rust', 'blue'].indexOf(data.accent) >= 0
+      hubAppearance.accentHex = normalizeHex(data.accentHex) || '';
+      hubAppearance.accent = (data.accent === 'custom' || ACCENTS.some(function (tone) { return tone.id === data.accent; }))
         ? data.accent
         : 'amber';
       hubAppearance.motion = data.motion !== false;
@@ -1280,7 +1429,12 @@
       fetch('/__omm/fs/appearance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ radius: hubAppearance.radius, theme: hubAppearance.theme }),
+        body: JSON.stringify({
+          radius: hubAppearance.radius,
+          theme: hubAppearance.theme,
+          accent: hubAppearance.accent,
+          accentHex: hubAppearance.accentHex || '',
+        }),
       }).catch(function () {});
     } catch (e) {
       /* ignore */
@@ -1299,9 +1453,10 @@
   }
 
   function broadcastTheme(theme) {
+    var payload = Object.assign({ type: 'omm:theme' }, accentBroadcastPayload(theme));
     frames.forEach(function (frame) {
       try {
-        frame.contentWindow.postMessage({ type: 'omm:theme', theme: theme }, '*');
+        frame.contentWindow.postMessage(payload, '*');
       } catch (e) {
         /* frame not ready yet */
       }
@@ -1311,6 +1466,7 @@
   function applyTheme() {
     var theme = effectiveTheme();
     document.documentElement.dataset.theme = theme;
+    applyAccentPalette();
     broadcastTheme(theme);
   }
 
@@ -1325,6 +1481,15 @@
     document.documentElement.style.setProperty('--radius', hubAppearance.radius + 'px');
     document.documentElement.dataset.accent = hubAppearance.accent;
     document.documentElement.dataset.theme = effectiveTheme();
+    applyAccentPalette();
+    var tone = accentById(hubAppearance.accent);
+    var accentName = document.getElementById('hub-accent-name');
+    if (accentName) {
+      accentName.textContent = hubAppearance.accent === 'custom'
+        ? '· 自定义 ' + tone.light
+        : '· ' + tone.name;
+    }
+    syncAccentHexControls();
     var themeSelect = document.getElementById('hub-theme');
     if (themeSelect) themeSelect.value = hubAppearance.theme;
     var snapSelect = document.getElementById('hub-snap');
@@ -1340,11 +1505,14 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-hub-accent]'), function (btn) {
       btn.classList.toggle('active', btn.dataset.hubAccent === hubAppearance.accent);
+      var swatch = accentById(btn.dataset.hubAccent);
+      btn.style.setProperty('--swatch', effectiveTheme() === 'dark' ? swatch.dark : swatch.light);
     });
     var motion = document.getElementById('hub-motion');
     if (motion) motion.setAttribute('aria-checked', String(hubAppearance.motion));
     var topbar = document.getElementById('hub-topbar');
     if (topbar) topbar.setAttribute('aria-checked', String(hubAppearance.topbar));
+    broadcastTheme(effectiveTheme());
   }
 
   function openHubSettings() {
@@ -1361,8 +1529,85 @@
     els.hubSettings.hidden = true;
   }
 
+  /* Custom hex accent: OMM-ZEN styled, no native colour picker popup. */
+  function bindAccentCustom() {
+    var input = document.getElementById('hub-accent-hex');
+    var applyBtn = document.getElementById('hub-accent-apply');
+    var clearBtn = document.getElementById('hub-accent-clear');
+    var preview = document.getElementById('hub-accent-hex-preview');
+    var hint = document.getElementById('hub-accent-hex-hint');
+    if (!input || !applyBtn || !hint) return;
+
+    function setHint(text, isError) {
+      hint.textContent = text;
+      hint.classList.toggle('error', !!isError);
+    }
+    function currentHex() {
+      return normalizeHex(input.value) || normalizeHex(hubAppearance.accentHex) || DEFAULT_CUSTOM_HEX;
+    }
+    function useHex(hex, message) {
+      hubAppearance.accent = 'custom';
+      hubAppearance.accentHex = hex;
+      input.value = hex.slice(1);
+      saveHubAppearance();
+      applyHubAppearance();
+      setHint('已应用 ' + hex + '；深色主题自动提亮为 ' + accentForDark(hex) + '。', false);
+      if (message) toast(message);
+      /* A finished choice must not leave the control focused. */
+      if (input.blur) input.blur();
+      if (applyBtn.blur) applyBtn.blur();
+      if (preview && preview.blur) preview.blur();
+    }
+    function applyCustom() {
+      var hex = normalizeHex(input.value);
+      if (!hex) {
+        setHint('请输入 3 位或 6 位十六进制色值，例如 #FF8FC8。', true);
+        if (input.focus) input.focus();
+        return;
+      }
+      useHex(hex, '主题色已设为 ' + hex);
+    }
+
+    applyBtn.addEventListener('click', applyCustom);
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyCustom();
+      }
+    });
+    input.addEventListener('input', function () {
+      var hex = normalizeHex(input.value);
+      if (hex && preview) preview.style.setProperty('--swatch', hex);
+      if (hint.classList.contains('error')) setHint(ACCENT_HEX_HINT, false);
+    });
+    if (preview) {
+      preview.addEventListener('click', function () {
+        var hex = currentHex();
+        useHex(hex, '主题色已设为 ' + hex);
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        hubAppearance.accent = 'amber';
+        hubAppearance.accentHex = '';
+        input.value = '';
+        saveHubAppearance();
+        applyHubAppearance();
+        setHint(ACCENT_HEX_HINT, false);
+        toast('已清除自定义颜色');
+        if (clearBtn.blur) clearBtn.blur();
+      });
+    }
+  }
+
   function bindHubSettings() {
     if (!els.hubSettings) return;
+    /* Build the palette and replace every native select before binding, so the
+       click handlers below see the real controls. */
+    buildAccentSwatches();
+    if (window.OMMUI && window.OMMUI.enhanceSelect) window.OMMUI.enhanceSelect(document);
+    applyHubAppearance();
+    bindAccentCustom();
     document.getElementById('hub-settings-close').addEventListener('click', closeHubSettings);
     document.getElementById('hub-settings-done').addEventListener('click', closeHubSettings);
     els.hubSettings.addEventListener('click', function (event) {
@@ -1383,6 +1628,14 @@
       function (btn) {
         btn.addEventListener('click', function () {
           hubAppearance.accent = btn.dataset.hubAccent;
+          if (hubAppearance.accent === 'custom' && !normalizeHex(hubAppearance.accentHex)) {
+            hubAppearance.accentHex = DEFAULT_CUSTOM_HEX;
+          }
+          var hint = document.getElementById('hub-accent-hex-hint');
+          if (hint) {
+            hint.textContent = ACCENT_HEX_HINT;
+            hint.classList.remove('error');
+          }
           saveHubAppearance();
           applyHubAppearance();
         });
@@ -1513,6 +1766,7 @@
       hubAppearance = {
         radius: 0,
         accent: 'amber',
+        accentHex: '',
         theme: 'light',
         motion: true,
         topbar: true,
@@ -1523,6 +1777,11 @@
       };
       saveHubAppearance();
       applyHubAppearance();
+      var accentHint = document.getElementById('hub-accent-hex-hint');
+      if (accentHint) {
+        accentHint.textContent = ACCENT_HEX_HINT;
+        accentHint.classList.remove('error');
+      }
       scheduleLayout();
       toast('外观与偏好已恢复默认');
     });
@@ -1648,7 +1907,10 @@
     var data = raw && typeof raw === 'object' ? raw : {};
     return {
       radius: [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0 ? Number(data.radius) : 0,
-      accent: ['amber', 'olive', 'rust', 'blue'].indexOf(data.accent) >= 0 ? data.accent : 'amber',
+      accentHex: normalizeHex(data.accentHex) || '',
+      accent: (data.accent === 'custom' || ACCENTS.some(function (tone) { return tone.id === data.accent; }))
+        ? data.accent
+        : 'amber',
       theme: ['light', 'dark', 'system'].indexOf(data.theme) >= 0 ? data.theme : 'light',
       motion: data.motion !== false,
       topbar: data.topbar !== false,
@@ -1673,63 +1935,81 @@
         toast('不是 OMM-ZEN 设置备份', 'error');
         return;
       }
-      if (!window.confirm(
+      ommConfirm(
         '恢复会覆盖当前的保存路径、快照/共享设置与频道规则。\n' +
-        '不会删除已有文件或插件，恢复前会自动备份当前配置。继续？'
-      )) return;
-      fetch('/api/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shared: data.shared, policy: data.policy }),
-      })
-        .then(function (response) {
-          return response.json().then(function (result) {
-            if (!response.ok || !result.ok) throw new Error((result && result.error) || '恢复失败');
-            return result;
+        '不会删除已有文件或插件，恢复前会自动备份当前配置。继续？',
+        { title: '恢复备份', ok: '恢复', danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
+        fetch('/api/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shared: data.shared, policy: data.policy }),
+        })
+          .then(function (response) {
+            return response.json().then(function (result) {
+              if (!response.ok || !result.ok) throw new Error((result && result.error) || '恢复失败');
+              return result;
+            });
+          })
+          .then(function () {
+            if (data.appearance) {
+              hubAppearance = normalizeAppearance(data.appearance);
+              saveHubAppearance();
+            }
+            if (Array.isArray(data.workspaces)) {
+              workspaces = data.workspaces.filter(function (item) {
+                return item && typeof item.id === 'string' && typeof item.name === 'string' && item.state;
+              }).slice(0, 8);
+              saveWorkspaces();
+            }
+            if (data.launcher && typeof data.launcher === 'object') {
+              if (Array.isArray(data.launcher.pinned)) launcherPinned = data.launcher.pinned.slice(0, 8);
+              if (Array.isArray(data.launcher.recent)) launcherRecent = data.launcher.recent.slice(0, 8);
+              saveLauncherPrefs();
+            }
+            toast('设置已恢复，正在重新加载…');
+            setTimeout(function () { location.reload(); }, 900);
+          })
+          .catch(function (error) {
+            toast('恢复失败：' + (error && error.message ? error.message : error), 'error');
           });
-        })
-        .then(function () {
-          if (data.appearance) {
-            hubAppearance = normalizeAppearance(data.appearance);
-            saveHubAppearance();
-          }
-          if (Array.isArray(data.workspaces)) {
-            workspaces = data.workspaces.filter(function (item) {
-              return item && typeof item.id === 'string' && typeof item.name === 'string' && item.state;
-            }).slice(0, 8);
-            saveWorkspaces();
-          }
-          if (data.launcher && typeof data.launcher === 'object') {
-            if (Array.isArray(data.launcher.pinned)) launcherPinned = data.launcher.pinned.slice(0, 8);
-            if (Array.isArray(data.launcher.recent)) launcherRecent = data.launcher.recent.slice(0, 8);
-            saveLauncherPrefs();
-          }
-          toast('设置已恢复，正在重新加载…');
-          setTimeout(function () { location.reload(); }, 900);
-        })
-        .catch(function (error) {
-          toast('恢复失败：' + (error && error.message ? error.message : error), 'error');
-        });
+      });
     };
     reader.onerror = function () { toast('读取备份失败', 'error'); };
     reader.readAsText(file);
   }
 
-  function resetLayout(ask) {
-    if (ask && !window.confirm('关闭所有标签并恢复为单个空窗格？工作区与设置不受影响。')) return;
-    closeMany(state.open.slice(), { remember: false });
-    state.tree = { type: 'leaf', id: 'p1' };
-    state.panes = { p1: null };
-    state.focused = 'p1';
-    state.maximized = null;
-    activeWorkspaceId = '';
-    renderAll();
-    save();
-    toast('布局已重置');
+  function resetLayout(askConfirm) {
+    function commit() {
+      closeMany(state.open.slice(), { remember: false });
+      state.tree = { type: 'leaf', id: 'p1' };
+      state.panes = { p1: null };
+      state.focused = 'p1';
+      state.maximized = null;
+      activeWorkspaceId = '';
+      renderAll();
+      save();
+      toast('布局已重置');
+    }
+    if (askConfirm) {
+      ommConfirm('关闭所有标签并恢复为单个空窗格？工作区与设置不受影响。',
+        { title: '重置布局', ok: '重置', danger: true }).then(function (ok) {
+        if (ok) commit();
+      });
+      return;
+    }
+    commit();
   }
 
-  function closeAllTabs(ask) {
-    if (ask && !window.confirm('关闭所有标签？未保存的应用状态请先在应用内保存。')) return;
+  function closeAllTabs(askConfirm) {
+    if (askConfirm) {
+      ommConfirm('关闭所有标签？未保存的应用状态请先在应用内保存。',
+        { title: '关闭所有标签', ok: '全部关闭', danger: true }).then(function (ok) {
+        if (ok) closeMany(state.open.slice());
+      });
+      return;
+    }
     closeMany(state.open.slice());
   }
 
@@ -1738,18 +2018,28 @@
     closePopovers();
     if (els.hubSettings) els.hubSettings.hidden = true;
     if (tab) pluginPanelTab = tab;
+    if (pluginPanelTab === 'update') {
+      /* Always report fresh framework + plugin versions on entry. */
+      updateInfo = null;
+      catalogCache = null;
+      catalogError = '';
+      els.ppStatus.textContent = '框架与插件版本检查';
+    } else {
+      els.ppStatus.textContent = '按需安装产品，或导入自己的插件';
+    }
     els.pluginPanel.hidden = false;
-    els.ppStatus.textContent = '按需安装产品，或导入自己的插件';
     renderPluginPanel();
   }
 
   function closePluginPanel() {
     els.pluginPanel.hidden = true;
     catalogCache = null;
+    catalogError = '';
   }
 
   function setPluginTab(tab) {
     pluginPanelTab = tab;
+    if (tab === 'update') catalogError = '';
     if (tab !== 'installed') pluginDirEditing = false;
     Array.prototype.forEach.call(
       els.pluginPanel.querySelectorAll('[data-pp-tab]'),
@@ -1859,53 +2149,58 @@
       '把插件安装目录改为：\n' + path + '\n\n' +
       (count ? '已安装的 ' + count + ' 个用户插件会自动迁移过去。\n' : '') +
       '迁移成功后旧目录（含空文件夹）会被删除，已打开的产品会重新加载。继续？';
-    if (!window.confirm(message)) return;
-    var button = document.querySelector('[data-pp-action="save-dir"]');
-    if (button) {
-      button.disabled = true;
-      button.textContent = '迁移中…';
-    }
-    fetch('/api/settings/plugin-dir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: path }),
-    })
-      .then(function (response) {
-        return response.json().then(function (data) {
-          if (!response.ok || !data.ok) {
-            throw new Error((data && data.error) || '修改失败');
-          }
-          return data;
-        });
+    function commit() {
+      var button = document.querySelector('[data-pp-action="save-dir"]');
+      if (button) {
+        button.disabled = true;
+        button.textContent = '迁移中…';
+      }
+      fetch('/api/settings/plugin-dir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: path }),
       })
-      .then(function (data) {
-        pluginDirEditing = false;
-        PLUGIN_DIR = data.plugin_dir || path;
-        if (els.pluginPanel) els.pluginPanel.dataset.dir = PLUGIN_DIR;
-        toast(
-          data.unchanged
-            ? '目录未变：' + PLUGIN_DIR
-            : '已迁移 ' + (data.moved || 0) + ' 项到 ' + PLUGIN_DIR +
-              (data.leftover ? '（旧目录仍有文件未能删除）' : '，旧目录已删除')
-        );
-        /* Plugin servers were restarted from the new location, so every open
-           app has to be mounted again. */
-        var open = state.open.slice();
-        open.forEach(function (appId) {
-          invalidateApp(appId);
-        });
-        return loadPlugins(false).then(function () {
-          open.forEach(function (appId) {
-            if (APP_BY_ID[appId]) reloadApp(appId);
+        .then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok || !data.ok) {
+              throw new Error((data && data.error) || '修改失败');
+            }
+            return data;
           });
+        })
+        .then(function (data) {
+          pluginDirEditing = false;
+          PLUGIN_DIR = data.plugin_dir || path;
+          if (els.pluginPanel) els.pluginPanel.dataset.dir = PLUGIN_DIR;
+          toast(
+            data.unchanged
+              ? '目录未变：' + PLUGIN_DIR
+              : '已迁移 ' + (data.moved || 0) + ' 项到 ' + PLUGIN_DIR +
+                (data.leftover ? '（旧目录仍有文件未能删除）' : '，旧目录已删除')
+          );
+          /* Plugin servers were restarted from the new location, so every open
+             app has to be mounted again. */
+          var open = state.open.slice();
+          open.forEach(function (appId) {
+            invalidateApp(appId);
+          });
+          return loadPlugins(false).then(function () {
+            open.forEach(function (appId) {
+              if (APP_BY_ID[appId]) reloadApp(appId);
+            });
+            renderPluginPanel();
+          });
+        })
+        .catch(function (error) {
+          toast((error && error.message) || '目录修改失败');
+          pluginDirEditing = true;
           renderPluginPanel();
         });
-      })
-      .catch(function (error) {
-        toast((error && error.message) || '目录修改失败');
-        pluginDirEditing = true;
-        renderPluginPanel();
-      });
+    }
+
+    ommConfirm(message, { title: '迁移插件目录', ok: '迁移', danger: true }).then(function (ok) {
+      if (ok) commit();
+    });
   }
 
   function versionKey(value) {
@@ -1927,68 +2222,139 @@
     return false;
   }
 
-  function renderUpdatePanel() {
+  /* Framework update: the shell itself. */
+  function frameworkUpdateHtml() {
+    if (!updateInfo) return '<div class="pp-empty">正在检查框架更新…</div>';
     var info = updateInfo;
-    if (!info) {
-      els.ppBody.innerHTML =
-        '<div class="pp-empty">正在检查更新…</div>' +
-        '<div class="pp-foot"><button class="pp-btn" type="button" data-pp-action="check-update">重新检查</button></div>';
-      checkHubUpdate();
-      return;
+    if (info.error) {
+      return '<div class="pp-empty">检查更新失败：' + esc(info.error) + '</div>';
     }
     var latest = info.latest || '';
     var current = info.current || '';
-    var newer = isNewerVersion(latest, current);
-    var html =
-      '<p class="pp-note">工作台与产品都可以在这里检查更新；有新版本时直接替换当前程序，重启后生效。</p>';
-    if (info.error) {
-      html +=
-        '<div class="pp-empty">检查更新失败：' +
-        esc(info.error) +
-        '<br><br><button class="pp-btn" type="button" data-pp-action="check-update">重试</button></div>';
-    } else if (newer) {
-      html +=
-        '<div class="pp-list">' +
-        '<div class="pp-row"><span class="pp-meta"><span class="pp-name">发现新版本 ' +
-        esc(latest) +
-        '<span class="pp-badge">可用</span></span>' +
-        '<span class="pp-desc">当前 ' +
-        esc(current) +
-        (info.size ? ' · ' + (info.size / 1048576).toFixed(1) + ' MB' : '') +
-        (info.url ? '' : ' · 仅支持下载后手动替换') +
-        '</span></span><span class="pp-actions">' +
-        (info.can_self_update
-          ? '<button class="pp-btn primary" type="button" data-pp-action="apply-update">立即更新</button>'
-          : '<button class="pp-btn primary" type="button" data-pp-action="download-update">下载</button>') +
-        '</span></div></div>';
-    } else {
-      html +=
-        '<div class="pp-empty">当前已是最新版本（' +
-        esc(current || '未知') +
-        '）。</div>';
+    if (!isNewerVersion(latest, current)) {
+      return '<div class="pp-empty">工作台框架已是最新版本（' + esc(current || '未知') + '）。</div>';
     }
-    html +=
-      '<div class="pp-foot"><span>版本：' +
-      esc(current) +
-      ' → ' +
-      esc(latest || current) +
-      '</span><button class="pp-btn" type="button" data-pp-action="check-update">重新检查</button></div>';
+    return (
+      '<div class="pp-list"><div class="pp-row">' +
+      '<span class="pp-meta"><span class="pp-name">发现新版本 ' + esc(latest) +
+      '<span class="pp-badge">可用</span></span>' +
+      '<span class="pp-desc">当前 ' + esc(current) +
+      (info.size ? ' · ' + (info.size / 1048576).toFixed(1) + ' MB' : '') +
+      (info.url ? '' : ' · 仅支持下载后手动替换') +
+      '</span></span><span class="pp-actions">' +
+      (info.can_self_update
+        ? '<button class="pp-btn primary" type="button" data-pp-action="apply-update">立即更新</button>'
+        : '<button class="pp-btn primary" type="button" data-pp-action="download-update">下载</button>') +
+      '</span></div></div>'
+    );
+  }
+
+  /* Plugin update: report every plugin's local vs. catalog version. */
+  function pluginUpdateHtml() {
+    if (!catalogCache) {
+      if (catalogError) {
+        return (
+          '<div class="pp-empty">插件版本目录读取失败：' + esc(catalogError) +
+          '<br><br><button class="pp-btn" type="button" data-pp-action="reload-catalog">重试</button></div>'
+        );
+      }
+      return '<div class="pp-empty">正在读取插件版本目录…</div>';
+    }
+    var items = catalogCache.plugins || [];
+    if (!items.length) return '<div class="pp-empty">在线目录暂时没有插件版本信息。</div>';
+    var installedCount = 0;
+    var updatable = 0;
+    var rows = items.map(function (item) {
+      var local = APP_BY_ID[item.id];
+      var installedVersion = item.installed_version || (local && local.version) || '';
+      var latest = item.version || '';
+      var installed = !!item.installed || !!local;
+      if (installed) installedCount++;
+      var canUpdate = installed && isNewerVersion(latest, installedVersion);
+      if (canUpdate) updatable++;
+      var localIsNewer = installed && installedVersion && latest && !canUpdate &&
+        isNewerVersion(installedVersion, latest);
+      var status = !installed
+        ? '<span class="upd-status upd-none">未安装</span>'
+        : canUpdate
+          ? '<span class="upd-status upd-new">有更新</span>'
+          : localIsNewer
+            ? '<span class="upd-status upd-none">本地较新</span>'
+            : '<span class="upd-status upd-ok">已是最新</span>';
+      var busy = !!pluginBusy[item.id];
+      var label = busy ? '处理中…' : canUpdate ? '更新' : installed ? '重装' : '安装';
+      return (
+        '<div class="pp-row">' +
+        '<span class="pp-glyph' + appIconClass(item) + '">' + appIconHTML(item) + '</span>' +
+        '<span class="pp-meta"><span class="pp-name">' + esc(item.name || item.id) + status + '</span>' +
+        '<span class="pp-desc">' + esc(item.description || '') + '</span></span>' +
+        '<span class="upd-version">' + esc(installedVersion || '—') + ' → ' + esc(latest || '—') + '</span>' +
+        '<span class="pp-actions"><button class="pp-btn' + (canUpdate ? ' primary' : '') +
+        '" type="button" data-pp-action="install" data-id="' + esc(item.id) + '"' +
+        (busy ? ' disabled' : '') + '>' + esc(label) + '</button></span></div>'
+      );
+    }).join('');
+    return (
+      '<div class="upd-summary">共 ' + items.length + ' 个插件 · 已安装 ' + installedCount +
+      ' 个 · <b>' + updatable + ' 个可更新</b> · 目录版本 ' + esc(catalogCache.version || '—') +
+      '</div><div class="pp-list">' + rows + '</div>'
+    );
+  }
+
+  function renderUpdatePanel() {
+    if (!updateInfo && !updateChecking) checkHubUpdate();
+    if (!catalogCache && !catalogLoading && !catalogError) loadCatalogForUpdate();
+    var html =
+      '<p class="pp-note">分别汇报工作台框架与每个插件的版本；有新版本时可直接替换当前程序或插件，重启后生效。</p>' +
+      '<div class="upd-section"><div class="upd-head"><span>工作台框架</span>' +
+      '<span class="upd-meta">' + esc((updateInfo && updateInfo.current) || '检测中…') + '</span></div>' +
+      frameworkUpdateHtml() + '</div>' +
+      '<div class="upd-section"><div class="upd-head"><span>插件版本</span>' +
+      '<span class="upd-meta">在线目录 / 本地安装</span></div>' +
+      pluginUpdateHtml() + '</div>' +
+      '<div class="pp-foot"><span>框架 ' +
+      esc((updateInfo && (updateInfo.latest || updateInfo.current)) || '—') +
+      ' · 插件目录 ' + esc((catalogCache && catalogCache.version) || '—') +
+      '</span><button class="pp-btn" type="button" data-pp-action="check-update">重新检查全部</button></div>';
     els.ppBody.innerHTML = html;
   }
 
+  function loadCatalogForUpdate() {
+    if (catalogLoading) return;
+    catalogLoading = true;
+    fetch('/api/catalog', { cache: 'no-store' })
+      .then(function (response) {
+        if (!response.ok) throw new Error('在线目录加载失败（' + response.status + '）');
+        return response.json();
+      })
+      .then(function (data) {
+        catalogCache = data;
+        catalogError = '';
+        if (pluginPanelTab === 'update') renderUpdatePanel();
+      })
+      .catch(function (error) {
+        catalogError = (error && error.message) || '网络不可用';
+        if (pluginPanelTab === 'update') renderUpdatePanel();
+      })
+      .finally(function () { catalogLoading = false; });
+  }
+
   function checkHubUpdate() {
+    if (updateChecking) return;
+    updateChecking = true;
     fetch('/__omm/update/check', { cache: 'no-store' })
       .then(function (response) {
         return response.json();
       })
       .then(function (data) {
-        updateInfo = data || null;
+        updateInfo = data || { error: '没有返回版本信息' };
         if (pluginPanelTab === 'update') renderUpdatePanel();
       })
       .catch(function (error) {
         updateInfo = { error: (error && error.message) || '检查更新失败' };
         if (pluginPanelTab === 'update') renderUpdatePanel();
-      });
+      })
+      .finally(function () { updateChecking = false; });
   }
 
   function applyHubUpdate() {
@@ -2160,7 +2526,10 @@
   function installOnlinePlugin(pluginId) {
     if (pluginBusy[pluginId]) return;
     pluginBusy[pluginId] = true;
-    renderOnlinePlugins();
+    /* Keep the current tab; the "update" tab must not jump to the online
+       catalogue just because a plugin update was started there. */
+    if (pluginPanelTab === 'online') renderOnlinePlugins();
+    else renderPluginPanel();
     var wasOpen = !!findPaneByApp(pluginId);
     fetch('/api/plugins/install', {
       method: 'POST',
@@ -2194,43 +2563,48 @@
       })
       .finally(function () {
         pluginBusy[pluginId] = false;
-        if (pluginPanelTab === 'online') renderPluginPanel();
+        if (pluginPanelTab === 'online' || pluginPanelTab === 'update') renderPluginPanel();
       });
   }
 
   function removePlugin(pluginId) {
     var app = appOf(pluginId);
     if (!app) return;
-    if (!window.confirm('卸载「' + app.name + '」？本地数据会保留。')) return;
-    pluginBusy[pluginId] = true;
-    closeTab(pluginId);
-    fetch('/api/plugins/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: pluginId }),
-    })
-      .then(function (response) {
-        return response.json().then(function (data) {
-          if (!response.ok || data.ok === false) throw new Error(data.error || '卸载失败');
-          return data;
+    function commit() {
+      pluginBusy[pluginId] = true;
+      closeTab(pluginId);
+      fetch('/api/plugins/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pluginId }),
+      })
+        .then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok || data.ok === false) throw new Error(data.error || '卸载失败');
+            return data;
+          });
+        })
+        .then(function (data) {
+          toast(data.bundled_remains ? '已移除用户版本，内置版本仍可用' : '插件已卸载');
+          pushNotify(
+            data.bundled_remains ? '已移除用户版本' : '插件已卸载',
+            app.name,
+            { kind: 'plugin' }
+          );
+          return refreshPluginsAfterChange();
+        })
+        .catch(function (error) {
+          toast(error.message || '卸载失败');
+        })
+        .finally(function () {
+          pluginBusy[pluginId] = false;
+          renderPluginPanel();
         });
-      })
-      .then(function (data) {
-        toast(data.bundled_remains ? '已移除用户版本，内置版本仍可用' : '插件已卸载');
-        pushNotify(
-          data.bundled_remains ? '已移除用户版本' : '插件已卸载',
-          app.name,
-          { kind: 'plugin' }
-        );
-        return refreshPluginsAfterChange();
-      })
-      .catch(function (error) {
-        toast(error.message || '卸载失败');
-      })
-      .finally(function () {
-        pluginBusy[pluginId] = false;
-        renderPluginPanel();
-      });
+    }
+    ommConfirm('卸载「' + app.name + '」？本地数据会保留。',
+      { title: '卸载插件', ok: '卸载', danger: true }).then(function (ok) {
+      if (ok) commit();
+    });
   }
 
   function importPluginFile(file) {
@@ -4190,9 +4564,13 @@
           activateApp(id);
         } else if (name === 'reload-catalog') {
           catalogCache = null;
+          catalogError = '';
           renderPluginPanel();
         } else if (name === 'check-update') {
+          /* Re-check both the framework and every plugin version. */
           updateInfo = null;
+          catalogCache = null;
+          catalogError = '';
           renderUpdatePanel();
         } else if (name === 'apply-update') {
           applyHubUpdate();
@@ -4481,8 +4859,8 @@
         return;
       }
       if (data.type === 'omm:pointerdown') {
-        /* Clicking inside a product closes the shell's own popovers.  The
-           archive panel stays open on purpose: it follows the focused tab. */
+        /* A click anywhere outside the archive panel dismisses it, including
+           clicks inside a product iframe (they never reach this document). */
         if (
           !els.launcher.hidden ||
           !els.layoutMenu.hidden ||
@@ -4491,6 +4869,7 @@
         ) {
           closePopovers();
         }
+        window.dispatchEvent(new CustomEvent('omm:archive', { detail: { action: 'close' } }));
         return;
       }
       if (data.type !== 'omm:shortcut') return;
