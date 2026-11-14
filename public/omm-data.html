@@ -328,6 +328,76 @@
         border-top: 1px solid var(--border-faint);
         border-bottom: 1px solid var(--border-faint);
       }
+      /* 排序 / 筛选：固定宽度，列名或单元格内容再长也不会把菜单撑宽 */
+      #dd-sort {
+        width: 296px;
+        min-width: 296px;
+      }
+      #dd-filter {
+        width: 340px;
+        min-width: 340px;
+      }
+      #dd-sort,
+      #dd-filter {
+        max-width: calc(100vw - 24px);
+      }
+      #dd-sort .dd-scroll .dd-item,
+      #dd-filter .dd-item {
+        gap: 8px;
+      }
+      #dd-sort .dd-scroll .dd-item > span:first-child,
+      #dd-filter .dd-item > span:first-child {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #dd-sort .dd-scroll .dd-item .hint {
+        flex: none;
+        max-width: 40%;
+        margin-left: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* 筛选条件行：列 / 操作一行，值一行，窄菜单里不挤 */
+      .fcond {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 5px 8px;
+      }
+      .fcond-top {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .fcond-top .csel {
+        flex: 1;
+        min-width: 0;
+      }
+      .fcond-top .csel .csel-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fcond-top .settings-btn {
+        flex: none;
+      }
+      .fcond .fval {
+        width: 100%;
+      }
+      #fsel-pop {
+        z-index: 1002;
+        max-width: min(320px, calc(100vw - 24px));
+      }
+      #fsel-pop .dd-item > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .dd-empty {
         padding: 12px 10px;
         text-align: center;
@@ -959,6 +1029,144 @@
       .gh-res:hover {
         background: var(--border-dim);
       }
+      /* 行号格底边的行高拖拽手柄：与列宽手柄对称 */
+      .gr-res {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 6px;
+        cursor: row-resize;
+        z-index: 4;
+      }
+      .gr-res:hover,
+      .gr-res.on {
+        background: var(--border-dim);
+        box-shadow: inset 0 -2px 0 var(--text-dim);
+      }
+      /* 拖拽过程中统一光标，避免鼠标划过的单元格把手感抢走 */
+      body.row-resizing,
+      body.row-resizing * {
+        cursor: row-resize !important;
+        user-select: none !important;
+      }
+      body.col-resizing,
+      body.col-resizing * {
+        cursor: col-resize !important;
+        user-select: none !important;
+      }
+      /* 行被拉高后让单元格内容换行，而不是把一行字悬在中间。
+         垂直对齐用 --al-v：拉高的行默认顶对齐，单元格若设了对齐则 inline 变量覆盖 */
+      .grow.tall {
+        --al-v: flex-start;
+      }
+      .grow.tall > .gc {
+        padding-top: 5px;
+      }
+      .grow.tall > .gc > span.cv {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 100%;
+      }
+      /* 九宫格对齐浮层 */
+      #dd-align {
+        min-width: 0;
+        padding: 6px;
+      }
+      .al-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 30px);
+        gap: 3px;
+        padding: 4px 2px 6px;
+      }
+      .al-cell {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        flex-direction: column;
+        padding: 5px 4px;
+        box-sizing: border-box;
+        border: 1px solid var(--border-faint);
+        border-radius: var(--radius);
+        background: transparent;
+        cursor: pointer;
+      }
+      .al-cell:hover {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .al-cell.on {
+        border-color: var(--text);
+        background: var(--hover);
+      }
+      .al-cell i {
+        display: block;
+        height: 2px;
+        margin: 1px 0;
+        border-radius: 1px;
+        background: var(--text-dim);
+      }
+      .al-cell.on i {
+        background: var(--text);
+      }
+      .al-cell.al-l {
+        align-items: flex-start;
+      }
+      .al-cell.al-c {
+        align-items: center;
+      }
+      .al-cell.al-r {
+        align-items: flex-end;
+      }
+      .al-cell.al-t {
+        justify-content: flex-start;
+      }
+      .al-cell.al-m {
+        justify-content: center;
+      }
+      .al-cell.al-b {
+        justify-content: flex-end;
+      }
+      .al-tip {
+        padding: 0 4px 4px;
+        font-size: calc(9px * var(--fscale));
+        color: var(--text-faint);
+        letter-spacing: 0.4px;
+      }
+      /* 拖拽时跟随光标的尺寸提示 */
+      #res-tip {
+        position: fixed;
+        z-index: 3000;
+        display: none;
+        padding: 3px 7px;
+        font: 11px/1.4 var(--font-mono);
+        color: var(--active-text);
+        background: var(--active-bg);
+        border-radius: var(--radius);
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      /* 悬停时的单元格全文预览：比浏览器原生 title 即时，且跟随主题 */
+      #cell-preview {
+        position: fixed;
+        z-index: 2500;
+        display: none;
+        max-width: min(420px, 60vw);
+        max-height: 60vh;
+        overflow: auto;
+        padding: 6px 9px;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+        font-family: var(--font-mono);
+        font-size: calc(12px * var(--cell-fscale));
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        pointer-events: none;
+      }
       /* 定位（Ctrl+G）子菜单 */
       .goto-tip {
         padding: 0 2px 6px;
@@ -971,7 +1179,7 @@
       }
       .gc {
         display: flex;
-        align-items: center;
+        align-items: var(--al-v, center);
         height: var(--rowh);
         padding: 0 8px;
         border-right: 1px solid var(--border-faint);
@@ -984,23 +1192,25 @@
         user-select: none;
         min-width: 0;
       }
-      .gc > span {
+      /* 内容 span 用 .cv 限定，避免 .gr-res 行高手柄被当成内容处理 */
+      .gc > span.cv {
+        width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-align: var(--al-h, left);
       }
-      .gc.num > span {
-        width: 100%;
-        text-align: right;
+      .gc.num > span.cv {
         font-variant-numeric: tabular-nums;
       }
-      .gc.nil > span {
+      .gc.nil > span.cv {
         color: var(--text-faint);
       }
       .gc.rn {
         position: sticky;
         left: 0;
-        z-index: 2;
+        /* 高于 .gc.sel(3)，横向滚动时行号格及其行高手柄始终可点 */
+        z-index: 5;
         background: var(--bg);
         color: var(--text-faint);
         font-size: calc(10px * var(--fscale));
@@ -1033,14 +1243,32 @@
         color: var(--text);
         box-shadow: inset 0 -1px 0 var(--text);
       }
-      .gc.hit > span {
+      .gc.hit > span.cv {
         box-shadow: inset 0 -1px 0 var(--text-dim);
       }
       .gc.hit.cur {
         background: var(--hover);
       }
-      .gc.hit.cur > span {
+      .gc.hit.cur > span.cv {
         box-shadow: inset 0 -1px 0 var(--text);
+      }
+      /* 点击单元格以外的空白区域时挂上 .sel-off：只隐藏选区高亮，
+         不动 S.sel / S.sel2，菜单与快捷键仍可作用于刚才的选区 */
+      #grid-scroll.sel-off .gh.act {
+        color: var(--text-dim);
+        background: transparent;
+      }
+      #grid-scroll.sel-off .gc.rn.act {
+        color: var(--text-faint);
+        background: var(--bg);
+      }
+      #grid-scroll.sel-off .gc.inrange,
+      #grid-scroll.sel-off .gc.rowline,
+      #grid-scroll.sel-off .gc.colline {
+        background: transparent;
+      }
+      #grid-scroll.sel-off .gc.sel {
+        box-shadow: none;
       }
       #cell-editor {
         position: fixed;
@@ -2213,7 +2441,10 @@
         #m-sheet,
         #ctx-bar,
         .dropdown,
-        .gh-res {
+        .gh-res,
+        .gr-res,
+        #res-tip,
+        #cell-preview {
           display: none !important;
         }
         #main {
@@ -2809,6 +3040,29 @@
         ></div>
       </div>
       <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.layout">排版</span>
+        <div
+          class="menu-btn"
+          data-action="showAlign"
+          data-i18n="menu.align"
+          data-i18n-title="align.openTip"
+          title="单元格对齐（Alt+1…9）"
+        ></div>
+        <div
+          class="menu-btn"
+          data-action="fitCells"
+          data-i18n="menu.fit"
+          data-i18n-title="fit.openTip"
+          title="一键适应内容（Alt+F）"
+        ></div>
+        <div
+          class="menu-btn"
+          data-action="selectAll"
+          data-i18n="menu.selectAll"
+          title="全选 (Ctrl+A)"
+        ></div>
+      </div>
+      <div class="menu-group">
         <span class="menu-label" data-i18n="menu.data">数据</span>
         <div class="menu-btn" data-action="showSort" data-i18n="menu.sort"></div>
         <div class="menu-btn" data-action="showFilter" data-i18n="menu.filter"></div>
@@ -3200,7 +3454,11 @@
           ><span class="settings-btn" data-action="cellFontUp">+</span>
         </div>
       </div>
-      <div class="dd-item-row">
+      <div
+        class="dd-item-row"
+        data-i18n-title="dd.settings.colwTip"
+        title="默认列宽；拖动列头右边界可单独调整某一列"
+      >
         <span data-i18n="dd.settings.colw">列宽</span>
         <div class="settings-control">
           <span class="settings-value" id="sv-colw">150</span
@@ -3208,7 +3466,11 @@
           ><span class="settings-btn" data-action="colwUp">+</span>
         </div>
       </div>
-      <div class="dd-item-row">
+      <div
+        class="dd-item-row"
+        data-i18n-title="dd.settings.rowhTip"
+        title="默认行高；拖动行号下边界可单独调整某一行，双击恢复默认"
+      >
         <span data-i18n="dd.settings.rowh">行高</span>
         <div class="settings-control">
           <span class="settings-value" id="sv-rowh">30</span
@@ -3221,6 +3483,15 @@
       <div class="dd-item" data-action="settingsToggleStatusbar">
         <span data-i18n="dd.settings.statusbar">状态栏</span
         ><span class="hint" id="sv-statusbar">开</span>
+      </div>
+      <div
+        class="dd-item"
+        data-action="settingsToggleCellPreview"
+        data-i18n-title="dd.settings.cellpreviewTip"
+        title="悬停单元格时显示完整内容"
+      >
+        <span data-i18n="dd.settings.cellpreview">悬停预览单元格全文</span
+        ><span class="hint" id="sv-cellpreview">开</span>
       </div>
       <div class="dd-item" data-action="settingsToggleLang">
         <span data-i18n="dd.settings.lang">语言</span><span class="hint" id="sv-lang">中文</span>
@@ -3247,8 +3518,24 @@
     <!-- ===== Context Menu ===== -->
     <div class="dropdown" id="dd-ctx"></div>
 
+    <!-- ===== 单元格九方向对齐浮层 ===== -->
+    <div class="dropdown" id="dd-align">
+      <div class="dd-label" data-i18n="align.title">单元格对齐</div>
+      <div class="al-grid" id="al-grid"></div>
+      <div class="al-tip" data-i18n="align.tip">Alt + 1…9 · Alt + 0 恢复</div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-al=""><span data-i18n="align.reset">恢复默认对齐</span
+        ><span class="hint">Alt+0</span></div>
+    </div>
+
+    <!-- ===== 悬停单元格时的全文预览 ===== -->
+    <div id="cell-preview"></div>
+
     <!-- ===== Custom Select Popup（列类型等，替代浏览器内置 select 的候选区） ===== -->
     <div class="dropdown csel-pop" id="csel-pop"></div>
+
+    <!-- ===== 筛选条件的列 / 操作候选区（同样是自定义样式，不用原生 select） ===== -->
+    <div class="dropdown csel-pop" id="fsel-pop"></div>
 
     <!-- ===== Main ===== -->
     <div id="main">
@@ -3426,6 +3713,15 @@
         </button>
         <button type="button" class="ms-item" data-action="clipTsv">
           <span class="ic" data-ico="clip"></span><span data-i18n="m.copyTsv">复制</span>
+        </button>
+        <button type="button" class="ms-item" data-action="showAlign">
+          <span class="ic" data-ico="grid"></span><span data-i18n="menu.align">对齐</span>
+        </button>
+        <button type="button" class="ms-item" data-action="fitCells">
+          <span class="ic" data-ico="grid"></span><span data-i18n="menu.fit">适应内容</span>
+        </button>
+        <button type="button" class="ms-item" data-action="selectAll">
+          <span class="ic" data-ico="grid"></span><span data-i18n="menu.selectAll">全选</span>
         </button>
         <button type="button" class="ms-item" data-action="addCol">
           <span class="ic" data-ico="coladd"></span><span data-i18n="menu.addCol">插列</span>
@@ -3761,8 +4057,16 @@ notify pgrst, 'reload schema';</textarea
           MAX_ZOOM: 1.6,
           NOTIFY_DURATION: 1900,
           HEAD_H: 34,
+          /* 列宽 / 行高不设上限，只留一个极小下限：拖成 0 会连手柄一起消失，没法再拖回来 */
+          MIN_COL_W: 8,
+          MIN_ROW_H: 6,
+          /* 「一键适应内容」自己用的合理上限（只约束自动计算，不约束手动拖拽） */
+          FIT_MAX_COL_W: 900,
+          FIT_MAX_ROW_H: 600,
           MAX_UNDO: 80,
         }
+        /* 九方向对齐：第 1 位 = 垂直 t/m/b，第 2 位 = 水平 l/c/r；Alt+1…9 与此顺序一致 */
+        var AL_CODES = ['tl', 'tc', 'tr', 'ml', 'mc', 'mr', 'bl', 'bc', 'br']
 
         /* 修饰键字形跟随平台：处理器同时接受 Ctrl 与 ⌘，标签不该只写 Ctrl */
         var HK_MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
@@ -3784,6 +4088,10 @@ notify pgrst, 'reload schema';</textarea
             'menu.addCol': '插列',
             'menu.delRow': '删行',
             'menu.delCol': '删列',
+            'menu.layout': '排版',
+            'menu.align': '对齐',
+            'menu.fit': '适应内容',
+            'menu.selectAll': '全选',
             'menu.data': '数据',
             'menu.sort': '排序',
             'menu.filter': '筛选',
@@ -3994,8 +4302,13 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.cellfont': '单元格字体',
             'dd.settings.colw': '列宽',
             'dd.settings.rowh': '行高',
+            'dd.settings.colwTip': '默认列宽；在表格里拖动列头右边界可单独调整某一列',
+            'dd.settings.rowhTip': '默认行高；在表格里拖动行号下边界可单独调整某一行，双击恢复默认',
+            'grid.rowResTip': '拖动调整行高 · 双击恢复默认 · 选中多行可统一调整',
             'dd.settings.display': '显示',
             'dd.settings.statusbar': '状态栏',
+            'dd.settings.cellpreview': '悬停预览单元格全文',
+            'dd.settings.cellpreviewTip': '悬停单元格时即时显示完整内容（含换行）；关闭后不再预览',
             'dd.settings.lang': '语言',
             'dd.settings.help': '使用说明',
             'dd.settings.resetStyles': '重置样式',
@@ -4065,6 +4378,11 @@ notify pgrst, 'reload schema';</textarea
             'msg.copyFail': '复制失败',
             'msg.pasted': '已粘贴',
             'msg.cleared': '已清空选中单元格',
+            'msg.rowHReset': '已恢复默认行高',
+            'msg.alignSet': '已设置对齐方式',
+            'msg.alignReset': '已恢复默认对齐',
+            'msg.fitDone': '已按内容调整尺寸',
+            'msg.saved': '已保存到本地',
             'msg.addedRow': '已插入行',
             'msg.addedCol': '已插入列',
             'msg.deletedRow': '已删除行',
@@ -4096,12 +4414,23 @@ notify pgrst, 'reload schema';</textarea
             'msg.dupRemoved': '已删除重复行',
             'msg.help': '使用说明',
             'hk.rows':
-              '全局§撤销|{M} Z|重做|{M} ⇧ Z|查找|{M} F|定位到单元格（表格视图）|{M} G|删除选中的整行 / 整列（表格视图）|{M} Delete 或 {M} Backspace|打开 / 重新载入本说明|?|依次关闭弹窗、右键菜单与下拉菜单|Esc~~表格视图里、未在编辑时§上下左右移动选格|← → ↑ ↓|按住 Shift 扩展选区|Shift + ← → ↑ ↓|进入单元格编辑|Enter 或 F2|右移一格 / 左移一格|Tab 或 Shift + Tab|清空选区内容|Delete 或 Backspace|直接开始录入（自动进入编辑）|任意可打印字符~~单元格编辑框里§确认并下移一行|Enter|确认并右移一格|Tab|确认并按方向移动（仅当编辑框为空时）|← → ↑ ↓|放弃本次修改|Esc~~查找框里§跳到下一个命中|Enter~~替换框里§替换当前这一个|Enter~~候选词浮层里§下一项 / 上一项|↓ / ↑|采用选中的候选词|Enter 或 Tab|关闭候选词浮层|Esc~~SQL 控制台里§运行这条语句|{M} Enter~~焦点在顶栏云同步按钮上时§打开云同步弹窗|Enter 或 Space|在弹窗内登录|Enter|关闭云同步弹窗|Esc',
+              '全局§撤销|{M} Z|重做|{M} ⇧ Z|查找|{M} F|定位到单元格（表格视图）|{M} G|删除选中的整行 / 整列（表格视图）|{M} Delete 或 {M} Backspace|打开 / 重新载入本说明|?|依次关闭弹窗、右键菜单与下拉菜单|Esc~~表格视图里、未在编辑时§上下左右移动选格|← → ↑ ↓|按住 Shift 扩展选区|Shift + ← → ↑ ↓|进入单元格编辑|Enter 或 F2|右移一格 / 左移一格|Tab 或 Shift + Tab|清空选区内容|Delete 或 Backspace|直接开始录入（自动进入编辑）|任意可打印字符~~单元格编辑框里§确认并下移一行|Enter|确认并右移一格|Tab|确认并按方向移动（仅当编辑框为空时）|← → ↑ ↓|放弃本次修改|Esc~~查找框里§跳到下一个命中|Enter~~替换框里§替换当前这一个|Enter~~候选词浮层里§下一项 / 上一项|↓ / ↑|采用选中的候选词|Enter 或 Tab|关闭候选词浮层|Esc~~SQL 控制台里§运行这条语句|{M} Enter~~焦点在顶栏云同步按钮上时§打开云同步弹窗|Enter 或 Space|在弹窗内登录|Enter|关闭云同步弹窗|Esc~~选区与排版§全选整张表|{M} A|取消选区，只保留当前格|{M} ⇧ A|跳到首格 / 末格|{M} Home / {M} End|立即保存到本地|{M} S|九方向对齐（上左 → 下右）|Alt 1…9|左 / 中 / 右对齐|Alt L / E / R|恢复默认对齐|Alt 0|一键撑开选中单元格|Alt F|只按内容加宽列|Alt W|只按内容加高行|Alt H',
             'hk.note':
               '带 {M} 的键位在输入框里同样生效；方向键、Tab、Delete 与「直接录入」只在表格视图且未处于编辑态时生效。\n{M} C / {M} V 在表格视图下复制、粘贴选区（按 Tab 分隔），输入框内仍是浏览器原生的复制粘贴。',
             'ctx.insRow': '在下方插入行',
             'ctx.delRow': '删除行',
             'ctx.dupRow': '复制行',
+            'ctx.resetRowH': '恢复默认行高',
+            'ctx.align': '单元格对齐…',
+            'ctx.fitCells': '一键撑开选中单元格',
+            'ctx.fitWidth': '按内容加宽列',
+            'ctx.fitHeight': '按内容加高行',
+            'align.title': '单元格对齐',
+            'align.tip': 'Alt + 1…9 · Alt + 0 恢复默认',
+            'align.reset': '恢复默认对齐（跟随列类型）',
+            'align.openTip': '九方向对齐；选中一片区域后统一应用',
+            'align.names': '上左,上中,上右,中左,居中,中右,下左,下中,下右',
+            'fit.openTip': '按内容自动设置列宽与行高；列宽到上限后改为加高行',
             'ctx.insCol': '在右侧插入列',
             'ctx.delCol': '删除列',
             'ctx.dupCol': '复制列',
@@ -4151,6 +4480,10 @@ notify pgrst, 'reload schema';</textarea
             'menu.addCol': '+Col',
             'menu.delRow': '-Row',
             'menu.delCol': '-Col',
+            'menu.layout': 'Layout',
+            'menu.align': 'Align',
+            'menu.fit': 'Fit content',
+            'menu.selectAll': 'Select all',
             'menu.data': 'Data',
             'menu.sort': 'Sort',
             'menu.filter': 'Filter',
@@ -4372,8 +4705,13 @@ notify pgrst, 'reload schema';</textarea
             'dd.settings.cellfont': 'Cell font',
             'dd.settings.colw': 'Col width',
             'dd.settings.rowh': 'Row height',
+            'dd.settings.colwTip': 'Default width; drag the right edge of a column header to resize one column',
+            'dd.settings.rowhTip': 'Default height; drag the bottom edge of a row number to resize one row, double-click to reset',
+            'grid.rowResTip': 'Drag to resize row · Double-click to reset · Select multiple rows to resize together',
             'dd.settings.display': 'Display',
             'dd.settings.statusbar': 'Status bar',
+            'dd.settings.cellpreview': 'Hover to preview full cell',
+            'dd.settings.cellpreviewTip': 'Show full cell content instantly on hover (line breaks included); turn off to disable',
             'dd.settings.lang': 'Language',
             'dd.settings.help': 'Help',
             'dd.settings.resetStyles': 'Reset styles',
@@ -4443,6 +4781,11 @@ notify pgrst, 'reload schema';</textarea
             'msg.copyFail': 'Copy failed',
             'msg.pasted': 'Pasted',
             'msg.cleared': 'Selection cleared',
+            'msg.rowHReset': 'Row height reset',
+            'msg.alignSet': 'Alignment applied',
+            'msg.alignReset': 'Alignment reset',
+            'msg.fitDone': 'Cells resized to fit content',
+            'msg.saved': 'Saved locally',
             'msg.addedRow': 'Row inserted',
             'msg.addedCol': 'Column inserted',
             'msg.deletedRow': 'Row deleted',
@@ -4474,12 +4817,24 @@ notify pgrst, 'reload schema';</textarea
             'msg.dupRemoved': 'Duplicates removed',
             'msg.help': 'Help',
             'hk.rows':
-              'General§Undo|{M} Z|Redo|{M} ⇧ Z|Find|{M} F|Go to a cell (Grid view)|{M} G|Delete the selected rows / columns (Grid view)|{M} Delete or {M} Backspace|Open this panel|?|Close the modal, context menu or dropdowns, in that order|Esc~~In Grid view, not editing§Move the selection|← → ↑ ↓|Extend the selection|Shift + ← → ↑ ↓|Open the cell editor|Enter or F2|Move one cell right / left|Tab or Shift + Tab|Clear the selected cells|Delete or Backspace|Start typing straight into the cell|any printable character~~In the cell editor§Commit and move down|Enter|Commit and move right|Tab|Commit and move in that direction (only while the editor is empty)|← → ↑ ↓|Discard this edit|Esc~~In the find box§Jump to the next hit|Enter~~In the replace box§Replace this one hit|Enter~~With the suggestion popup open§Next / previous candidate|↓ / ↑|Accept the selected candidate|Enter or Tab|Close the popup|Esc~~In the SQL console§Run this statement|{M} Enter~~With a top-bar cloud button focused§Open the cloud-sync dialog|Enter or Space|Sign in inside the dialog|Enter|Close the cloud-sync dialog|Esc',
+              'General§Undo|{M} Z|Redo|{M} ⇧ Z|Find|{M} F|Go to a cell (Grid view)|{M} G|Delete the selected rows / columns (Grid view)|{M} Delete or {M} Backspace|Open this panel|?|Close the modal, context menu or dropdowns, in that order|Esc~~In Grid view, not editing§Move the selection|← → ↑ ↓|Extend the selection|Shift + ← → ↑ ↓|Open the cell editor|Enter or F2|Move one cell right / left|Tab or Shift + Tab|Clear the selected cells|Delete or Backspace|Start typing straight into the cell|any printable character~~In the cell editor§Commit and move down|Enter|Commit and move right|Tab|Commit and move in that direction (only while the editor is empty)|← → ↑ ↓|Discard this edit|Esc~~In the find box§Jump to the next hit|Enter~~In the replace box§Replace this one hit|Enter~~With the suggestion popup open§Next / previous candidate|↓ / ↑|Accept the selected candidate|Enter or Tab|Close the popup|Esc~~In the SQL console§Run this statement|{M} Enter~~With a top-bar cloud button focused§Open the cloud-sync dialog|Enter or Space|Sign in inside the dialog|Enter|Close the cloud-sync dialog|Esc~~Selection & layout§Select the whole sheet|{M} A|Collapse the selection to the active cell|{M} ⇧ A|Jump to the first / last cell|{M} Home / {M} End|Save to local storage now|{M} S|Nine alignment positions (top-left → bottom-right)|Alt 1…9|Align left / center / right|Alt L / E / R|Reset alignment|Alt 0|Auto-fit selected cells|Alt F|Widen columns only|Alt W|Heighten rows only|Alt H',
             'hk.note':
               'The {M} combinations also fire while you are typing in a field. Arrows, Tab, Delete and type-to-edit only apply in Grid view when no cell is being edited.\n{M} C / {M} V copy and paste the Grid selection (Tab separated); inside a text field the browser handles them as usual.',
             'ctx.insRow': 'Insert row below',
             'ctx.delRow': 'Delete row',
             'ctx.dupRow': 'Duplicate row',
+            'ctx.resetRowH': 'Reset row height',
+            'ctx.align': 'Cell alignment…',
+            'ctx.fitCells': 'Auto-fit selected cells',
+            'ctx.fitWidth': 'Widen columns to fit',
+            'ctx.fitHeight': 'Heighten rows to fit',
+            'align.title': 'Cell alignment',
+            'align.tip': 'Alt + 1…9 · Alt + 0 resets',
+            'align.reset': 'Reset to default (follow column type)',
+            'align.openTip': 'Nine alignment positions; applies to the whole selection',
+            'align.names':
+              'Top left,Top center,Top right,Middle left,Center,Middle right,Bottom left,Bottom center,Bottom right',
+            'fit.openTip': 'Auto-size columns and rows; taller rows once max column width is reached',
             'ctx.insCol': 'Insert column right',
             'ctx.delCol': 'Delete column',
             'ctx.dupCol': 'Duplicate column',
@@ -4532,6 +4887,8 @@ notify pgrst, 'reload schema';</textarea
           rowH: 30,
           statusBarVisible: true,
           menuPinned: true,
+          /* 悬停单元格时显示全文预览浮层（样式 → 显示 里可关） */
+          cellPreview: true,
           view: 'grid',
           /* 方向键：走到边界自动加行/列；离开末尾空行/空列时删掉它 */
           autoGrow: true,
@@ -4539,6 +4896,8 @@ notify pgrst, 'reload schema';</textarea
           sel: { r: 0, c: 0 },
           sel2: null,
           editing: null,
+          /* 正在拖拽行高的行索引，仅用于渲染时高亮手柄（不持久化） */
+          resizeRows: null,
           filter: { on: false, mode: 'and', cs: false, conds: [], rows: null },
           find: null,
           sort: { dim: 'row', by: 0, crit: 'text', crit2: 'auto', dir: 'asc', nulls: 'last' },
@@ -4852,6 +5211,7 @@ notify pgrst, 'reload schema';</textarea
                 rowH: S.rowH,
                 statusBarVisible: S.statusBarVisible,
                 menuPinned: S.menuPinned,
+                cellPreview: S.cellPreview !== false,
                 view: S.view,
                 autoGrow: S.autoGrow,
                 trimEmpty: S.trimEmpty,
@@ -4906,6 +5266,7 @@ notify pgrst, 'reload schema';</textarea
               'rowH',
               'statusBarVisible',
               'menuPinned',
+              'cellPreview',
               'view',
               'autoGrow',
               'trimEmpty',
@@ -4914,12 +5275,14 @@ notify pgrst, 'reload schema';</textarea
             })
             S.autoGrow = S.autoGrow !== false
             S.trimEmpty = S.trimEmpty !== false
+            S.cellPreview = S.cellPreview !== false
             S.zoom = clamp(+S.zoom || 1, CONFIG.MIN_ZOOM, CONFIG.MAX_ZOOM)
             S.radius = clamp(+S.radius || 0, 0, 12)
             S.fontSize = clamp(+S.fontSize || 13, 11, 20)
             S.cellFont = clamp(+S.cellFont || 13, 11, 22)
-            S.colW = clamp(+S.colW || 150, 80, 340)
-            S.rowH = clamp(+S.rowH || 30, 24, 52)
+            /* 默认尺寸同样不设上限，只挡住 0 / NaN / 负数 */
+            S.colW = Math.max(CONFIG.MIN_COL_W, +S.colW || 150)
+            S.rowH = Math.max(CONFIG.MIN_ROW_H, +S.rowH || 30)
 
             /* ---- 工作台状态（随云同步一起过来） ---- */
             if (o.filter && typeof o.filter === 'object') {
@@ -5038,6 +5401,7 @@ notify pgrst, 'reload schema';</textarea
             sv('sv-colw', S.colW)
             sv('sv-rowh', S.rowH)
             sv('sv-statusbar', S.statusBarVisible ? T('on') : T('off'))
+            sv('sv-cellpreview', S.cellPreview !== false ? T('on') : T('off'))
             sv('sv-autogrow', S.autoGrow ? T('on') : T('off'))
             sv('sv-trimempty', S.trimEmpty ? T('on') : T('off'))
             sv('sv-lang', S.lang === 'zh' ? T('lang.zh') : T('lang.en'))
@@ -5081,6 +5445,9 @@ notify pgrst, 'reload schema';</textarea
             cols: cols || [{ name: 'A', type: 'text' }],
             rows: rows || [[]],
             colW: [],
+            /* 逐行拖拽出来的行高，按数据行索引存放；空值 = 用全局默认行高 */
+            rowH: [],
+            align: {},
           }
         }
 
@@ -5145,6 +5512,14 @@ notify pgrst, 'reload schema';</textarea
           },
         })
 
+        function normAlign(a) {
+          var out = {}
+          Object.keys(a).forEach(function (k) {
+            if (/^\d+:\d+$/.test(k) && AL_CODES.indexOf(a[k]) >= 0) out[k] = a[k]
+          })
+          return out
+        }
+
         function normTable(x) {
           var t = {
             id: String(x.id || uid()),
@@ -5152,6 +5527,18 @@ notify pgrst, 'reload schema';</textarea
             cols: [],
             rows: [],
             colW: Array.isArray(x.colW) ? x.colW : [],
+            /* 从存储 / 云端 / 撤销快照恢复逐行行高，只清脏值、不设上限 */
+            rowH: Array.isArray(x.rowH)
+              ? x.rowH.map(function (h) {
+                  h = +h
+                  return isFinite(h) && h >= CONFIG.MIN_ROW_H ? Math.round(h) : null
+                })
+              : [],
+            /* 单元格对齐：{"行:列": "tl"…"br"}，随表一起存 */
+            align:
+              x.align && typeof x.align === 'object' && !Array.isArray(x.align)
+                ? normAlign(x.align)
+                : {},
           }
           var cs = Array.isArray(x.cols) ? x.cols : []
           for (var i = 0; i < cs.length; i++) {
@@ -5176,6 +5563,7 @@ notify pgrst, 'reload schema';</textarea
           for (var m = 0; m < t.rows.length; m++)
             while (t.rows[m].length < maxc) t.rows[m].push(null)
           if (!t.rows.length) t.rows.push(new Array(maxc).fill(null))
+          if (t.rowH.length > t.rows.length) t.rowH.length = t.rows.length
           /* 只推断“没有类型”的列：保留在「结构」页手动设置过的列类型，
              否则每次加载（包括从云端拉取）都会把列类型重算回去 */
           inferTypes(t, true)
@@ -5205,6 +5593,8 @@ notify pgrst, 'reload schema';</textarea
               [8, '叶蓁', '技术部', 90, '2020-04-22'],
             ],
             colW: [],
+            rowH: [],
+            align: {},
           }
           return tt
         }
@@ -5261,6 +5651,116 @@ notify pgrst, 'reload schema';</textarea
         function colW(t, i) {
           if (t.colW && t.colW[i]) return t.colW[i]
           return S.colW
+        }
+
+        /* ---- 行高 ---------------------------------------------------------
+           S.rowH 是「全局默认行高」（设置里 +/- 调的那个）；用户拖动某一行
+           下边界得到的高度单独存在 t.rowH[r]，随表格一起持久化 / 撤销 / 云同步。
+           ------------------------------------------------------------------ */
+        function rowH(t, r) {
+          var h = t && t.rowH ? +t.rowH[r] : 0
+          return isFinite(h) && h >= CONFIG.MIN_ROW_H ? h : S.rowH
+        }
+        function setRowH(t, r, h) {
+          if (!t || !t.rows[r]) return
+          if (!Array.isArray(t.rowH)) t.rowH = []
+          t.rowH[r] =
+            h === null || h === undefined || !isFinite(h)
+              ? null
+              : Math.round(Math.max(CONFIG.MIN_ROW_H, h))
+          if (t.rowH.length > t.rows.length) t.rowH.length = t.rows.length
+        }
+        /* 行高按「行对象身份」跟随数据：排序 / 筛选 / 插行 / 删行之后自动重映射，
+           不必在十几处行操作里逐一搬运。换表 / 撤销 / 外部同步时直接采信存储里的
+           rowH（它本身就随 JSON 一起持久化和撤销），不做重映射。 */
+        var rowHSnap = { table: null, rows: null }
+        function reconcileRowH(t) {
+          if (!t) return
+          if (rowHSnap.table !== t) {
+            rowHSnap.table = t
+            rowHSnap.rows = t.rows.slice()
+            return
+          }
+          var prev = rowHSnap.rows,
+            cur = t.rows,
+            same = prev.length === cur.length,
+            i
+          if (same)
+            for (i = 0; i < cur.length; i++)
+              if (prev[i] !== cur[i]) {
+                same = false
+                break
+              }
+          if (same) return
+          var byRow = new Map()
+          for (i = 0; i < prev.length; i++) {
+            var h = t.rowH && +t.rowH[i]
+            if (h >= CONFIG.MIN_ROW_H) byRow.set(prev[i], h)
+          }
+          var next = []
+          for (i = 0; i < cur.length; i++) {
+            var v = byRow.get(cur[i])
+            next[i] = v || null
+          }
+          t.rowH = next
+          rowHSnap.rows = cur.slice()
+        }
+
+        /* ---- 单元格对齐 ---------------------------------------------------
+           t.align 是稀疏字典 {"行:列": "tl"…"br"}；行列重排时按「行对象 +
+           列对象」身份重映射，和行高一样不需要改动每一处数据操作。
+           ------------------------------------------------------------------ */
+        function cellAlign(t, r, c) {
+          return t && t.align ? t.align[r + ':' + c] || null : null
+        }
+        var alignSnap = { table: null, rows: null, cols: null }
+        function reconcileAlign(t) {
+          if (!t) return
+          if (alignSnap.table !== t) {
+            alignSnap.table = t
+            alignSnap.rows = t.rows.slice()
+            alignSnap.cols = t.cols.slice()
+            return
+          }
+          var pr = alignSnap.rows,
+            pc = alignSnap.cols,
+            cr = t.rows,
+            cc = t.cols,
+            sameR = pr.length === cr.length,
+            sameC = pc.length === cc.length,
+            i
+          if (sameR)
+            for (i = 0; i < cr.length; i++)
+              if (pr[i] !== cr[i]) {
+                sameR = false
+                break
+              }
+          if (sameC)
+            for (i = 0; i < cc.length; i++)
+              if (pc[i] !== cc[i]) {
+                sameC = false
+                break
+              }
+          if (sameR && sameC) return
+          var rowNew = new Map(),
+            colNew = new Map()
+          for (i = 0; i < cr.length; i++) if (!rowNew.has(cr[i])) rowNew.set(cr[i], i)
+          for (i = 0; i < cc.length; i++) if (!colNew.has(cc[i])) colNew.set(cc[i], i)
+          var out = {},
+            a = t.align || {}
+          Object.keys(a).forEach(function (k) {
+            var p = k.split(':'),
+              nr = rowNew.get(pr[+p[0]]),
+              nc = colNew.get(pc[+p[1]])
+            if (nr !== undefined && nc !== undefined) out[nr + ':' + nc] = a[k]
+          })
+          t.align = out
+          alignSnap.rows = cr.slice()
+          alignSnap.cols = cc.slice()
+        }
+        function reconcileTable(t) {
+          reconcileRowH(t)
+          reconcileAlign(t)
         }
 
         /* ---- undo ---- */
@@ -6889,6 +7389,31 @@ notify pgrst, 'reload schema';</textarea
           return a
         }
 
+        /* 行高可逐行不同，虚拟滚动不能再用「行号 × 固定行高」。
+           pref[p] = 可见视图中前 p 行的总高度；at(y) 二分出 y 落在第几行。 */
+        function rowMetrics() {
+          var t = Store.active()
+          var idx = viewIdx()
+          var pref = [0]
+          for (var p = 0; p < idx.length; p++) pref[p + 1] = pref[p] + rowH(t, idx[p])
+          return {
+            t: t,
+            idx: idx,
+            pref: pref,
+            total: idx.length,
+            at: function (y) {
+              var lo = 0,
+                hi = idx.length
+              while (lo < hi) {
+                var mid = (lo + hi) >> 1
+                if (pref[mid + 1] > y) hi = mid
+                else lo = mid + 1
+              }
+              return lo
+            },
+          }
+        }
+
         function rng() {
           var a = S.sel,
             b = S.sel2 || S.sel
@@ -6928,7 +7453,10 @@ notify pgrst, 'reload schema';</textarea
             DOM.gridRows.innerHTML = ''
             return
           }
-          var idx = viewIdx()
+          /* 行数据可能在别处被排序 / 增删过，先把逐行行高、单元格对齐重映射回当前行列序 */
+          reconcileTable(t)
+          var mm = rowMetrics()
+          var idx = mm.idx
           var nc = t.cols.length
           var tc = '56px'
           for (var i = 0; i < nc; i++) tc += ' ' + colW(t, i) + 'px'
@@ -6974,13 +7502,15 @@ notify pgrst, 'reload schema';</textarea
           DOM.gridHead.style.gridTemplateColumns = tc
           DOM.gridHead.innerHTML = hh
 
-          /* virtual rows */
-          var rh = S.rowH
+          /* virtual rows —— 每行高度可以不同，按前缀和定位可见区间 */
+          var pref = mm.pref
+          var total = mm.total
           var vh = gs.clientHeight || 400
-          var total = idx.length
-          var start = Math.floor((gs.scrollTop - CONFIG.HEAD_H) / rh) - 6
+          var top = gs.scrollTop - CONFIG.HEAD_H
+          if (top < 0) top = 0
+          var start = mm.at(top) - 6
           if (start < 0) start = 0
-          var end = Math.ceil((gs.scrollTop - CONFIG.HEAD_H + vh) / rh) + 6
+          var end = mm.at(top + vh) + 6
           if (end > total) end = total
           if (start > end) start = end
           if (S.editing) {
@@ -6990,8 +7520,8 @@ notify pgrst, 'reload schema';</textarea
               end = Math.min(total, vp + 3)
             }
           }
-          DOM.gsTop.style.height = start * rh + 'px'
-          DOM.gsBot.style.height = Math.max(0, (total - end) * rh) + 'px'
+          DOM.gsTop.style.height = pref[start] + 'px'
+          DOM.gsBot.style.height = Math.max(0, pref[total] - pref[end]) + 'px'
 
           var fullRow = r.c1 === 0 && r.c2 >= nc - 1
           var hits = S.find && S.find.hits ? S.find.hits : null
@@ -7004,13 +7534,18 @@ notify pgrst, 'reload schema';</textarea
           var body = ''
           for (var j = start; j < end; j++) {
             var ri = idx[j]
+            var rh = pref[j + 1] - pref[j]
             var row = t.rows[ri] || []
             var rowAct = ri >= r.r1 && ri <= r.r2
             var rowLine = rowAct && fullRow
             body +=
-              '<div class="grow" style="grid-template-columns:' +
+              '<div class="grow' +
+              (rh > S.rowH + 8 ? ' tall' : '') +
+              '" style="grid-template-columns:' +
               tc +
               ';height:' +
+              rh +
+              'px;--rowh:' +
               rh +
               'px">' +
               '<div class="gc rn' +
@@ -7019,7 +7554,13 @@ notify pgrst, 'reload schema';</textarea
               ri +
               '">' +
               (ri + 1) +
-              '</div>'
+              '<span class="gr-res' +
+              (S.resizeRows && S.resizeRows.indexOf(ri) >= 0 ? ' on' : '') +
+              '" data-rres="' +
+              ri +
+              '" title="' +
+              esc(T('grid.rowResTip')) +
+              '"></span></div>'
             for (var cc = 0; cc < nc; cc++) {
               var v = row[cc]
               var nil = isNil(v)
@@ -7037,6 +7578,17 @@ notify pgrst, 'reload schema';</textarea
               if (curHit && curHit.r === ri && curHit.c === cc) cls += ' cur'
               if (S.editing && S.editing.r === ri && S.editing.c === cc) cls += ' editing'
               var inner = nil ? '' : hiText(String(v))
+              /* 九方向对齐：--al-h 控制水平，--al-v 只在单元格自定义过时才覆盖
+                 （否则用 .gc 默认居中 / .grow.tall 的顶对齐） */
+              var al = cellAlign(t, ri, cc)
+              var alStyle =
+                '--al-h:' + alignH(al, t, ri, cc) + (al ? ';--al-v:' + alignV(al) : '')
+              /* 悬停预览：开关打开时把全文存进 data-full，交给自定义浮层即时显示。
+                 不再用浏览器原生 title —— 延迟长、样式不可控，也没法随开关关闭。 */
+              var fullAttr =
+                !nil && S.cellPreview !== false
+                  ? ' data-full="' + esc(String(v)) + '"'
+                  : ''
               body +=
                 '<div class="' +
                 cls +
@@ -7044,15 +7596,190 @@ notify pgrst, 'reload schema';</textarea
                 ri +
                 '" data-c="' +
                 cc +
-                '" title="' +
-                (nil ? '' : esc(String(v))) +
-                '"><span>' +
+                '" style="' +
+                alStyle +
+                '"' +
+                fullAttr +
+                '><span class="cv">' +
                 inner +
                 '</span></div>'
             }
             body += '</div>'
           }
           DOM.gridRows.innerHTML = body
+        }
+
+        /* ============================================================
+           7b. CELL FORMAT —— 九方向对齐 / 一键适应内容
+           ============================================================ */
+        var lastCtxPos = { x: 0, y: 0 }
+        function alignH(code, t, r, c) {
+          if (code) return code[1] === 'l' ? 'left' : code[1] === 'c' ? 'center' : 'right'
+          return t.cols[c] && t.cols[c].type === 'number' ? 'right' : 'left'
+        }
+        function alignV(code) {
+          return !code
+            ? null
+            : code[0] === 't'
+              ? 'flex-start'
+              : code[0] === 'm'
+                ? 'center'
+                : 'flex-end'
+        }
+        function applyAlign(code) {
+          var t = Store.active()
+          if (!t) return
+          var r = rng()
+          var r2 = Math.min(r.r2, t.rows.length - 1),
+            c2 = Math.min(r.c2, t.cols.length - 1)
+          pushUndo()
+          if (!t.align || typeof t.align !== 'object') t.align = {}
+          for (var i = Math.max(0, r.r1); i <= r2; i++)
+            for (var j = Math.max(0, r.c1); j <= c2; j++) {
+              var k = i + ':' + j
+              if (!code) delete t.align[k]
+              else t.align[k] = code
+            }
+          afterChange()
+          notify(code ? T('msg.alignSet') : T('msg.alignReset'))
+        }
+        /* 快捷水平对齐：保留已设的垂直方向，未设过则用居中 */
+        function alignQuick(h) {
+          var t = Store.active()
+          var cur = cellAlign(t, S.sel.r, S.sel.c)
+          applyAlign((cur ? cur[0] : 'm') + h)
+        }
+        function renderAlignPop() {
+          var grid = document.getElementById('al-grid')
+          if (!grid) return
+          var t = Store.active()
+          var cur = cellAlign(t, S.sel.r, S.sel.c)
+          var names = T('align.names').split(',')
+          grid.innerHTML = AL_CODES.map(function (code, i) {
+            return (
+              '<button type="button" class="al-cell al-' +
+              code[0] +
+              ' al-' +
+              code[1] +
+              (cur === code ? ' on' : '') +
+              '" data-al="' +
+              code +
+              '" title="' +
+              esc(i + 1 + ' · ' + (names[i] || code)) +
+              '"><i style="width:100%"></i><i style="width:70%"></i><i style="width:85%"></i></button>'
+            )
+          }).join('')
+        }
+        function openAlignPop(x, y) {
+          UIMgr.closeDropdowns()
+          renderAlignPop()
+          var dd = document.getElementById('dd-align')
+          dd.classList.add('open')
+          var w = dd.offsetWidth || 150,
+            h = dd.offsetHeight || 170
+          dd.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 10)) + 'px'
+          dd.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 10)) + 'px'
+        }
+
+        /* ---- 文本量测：用 canvas 按单元格字体估算宽度与折行数 ---- */
+        var fitMeasureCtx = null
+        function fitMeasure() {
+          if (!fitMeasureCtx) fitMeasureCtx = document.createElement('canvas').getContext('2d')
+          fitMeasureCtx.font = S.cellFont + 'px "Literata", "SimSun", serif'
+          return fitMeasureCtx
+        }
+        /* maxW <= 0 时只按显式换行拆行，用来量「不换行时最宽的一行」 */
+        function cellLines(text, maxW) {
+          var ctx = fitMeasure()
+          var src = String(text).split(/\r?\n/),
+            out = []
+          for (var p = 0; p < src.length; p++) {
+            var s = src[p],
+              cur = ''
+            if (maxW <= 0 || !s) {
+              out.push(s)
+              continue
+            }
+            for (var i = 0; i < s.length; i++) {
+              var ch = s.charAt(i)
+              if (cur && ctx.measureText(cur + ch).width > maxW) {
+                out.push(cur)
+                cur = ch
+              } else cur += ch
+            }
+            out.push(cur)
+          }
+          return out
+        }
+        function cellMaxW(lines) {
+          var ctx = fitMeasure(),
+            m = 0
+          for (var i = 0; i < lines.length; i++) m = Math.max(m, ctx.measureText(lines[i]).width)
+          return m
+        }
+        /* mode: 'both' 智能撑开 / 'width' 只加宽列 / 'height' 只加高行。
+           both 的策略：列宽最多扩到 FIT_MAX_COL_W，仍放不下的文本换行 → 加高行。 */
+        function autoFit(mode) {
+          var t = Store.active()
+          if (!t) return
+          var r = rng()
+          var r1 = Math.max(0, Math.min(r.r1, t.rows.length - 1)),
+            r2 = Math.max(0, Math.min(r.r2, t.rows.length - 1))
+          var c1 = Math.max(0, Math.min(r.c1, t.cols.length - 1)),
+            c2 = Math.max(0, Math.min(r.c2, t.cols.length - 1))
+          var PADX = 18,
+            PADY = 14,
+            LINE_H = Math.round(S.cellFont * 1.4) || 18
+          pushUndo()
+          if (!Array.isArray(t.colW)) t.colW = []
+          /* 每个单元格只量一次「不换行时的最宽行」；能放下就不必逐字折行 */
+          var cache = {}
+          function info(i, c) {
+            var k = i + ':' + c
+            if (Object.prototype.hasOwnProperty.call(cache, k)) return cache[k]
+            var v = t.rows[i] && t.rows[i][c]
+            if (isNil(v)) return (cache[k] = null)
+            var lines0 = cellLines(String(v), 0)
+            return (cache[k] = { text: String(v), lines0: lines0, w: cellMaxW(lines0) })
+          }
+          var c, i
+          if (mode !== 'height') {
+            for (c = c1; c <= c2; c++) {
+              var widest = 0
+              for (i = r1; i <= r2; i++) {
+                var inf = info(i, c)
+                if (inf) widest = Math.max(widest, inf.w)
+              }
+              var need = Math.min(CONFIG.FIT_MAX_COL_W, Math.ceil(widest + PADX))
+              if (need > colW(t, c)) t.colW[c] = need
+            }
+          }
+          if (mode !== 'width') {
+            for (i = r1; i <= r2; i++) {
+              var maxLines = 1
+              for (c = c1; c <= c2; c++) {
+                var it = info(i, c)
+                if (!it) continue
+                var avail = Math.max(20, colW(t, c) - PADX)
+                var lines = it.w <= avail ? it.lines0.length : cellLines(it.text, avail).length
+                maxLines = Math.max(maxLines, lines)
+              }
+              var needH = Math.min(CONFIG.FIT_MAX_ROW_H, maxLines * LINE_H + PADY)
+              /* 单行本来就放得下时不要给每一行都写一个 32px 的自定义高度 */
+              if (needH > rowH(t, i) + 2) setRowH(t, i, needH)
+            }
+          }
+          afterChange()
+          notify(T('msg.fitDone'))
+        }
+        function selectAllCells() {
+          var t = Store.active()
+          if (!t) return
+          activateSelection()
+          S.sel = { r: 0, c: 0 }
+          S.sel2 = { r: t.rows.length - 1, c: t.cols.length - 1 }
+          renderGrid()
+          renderStatus()
         }
 
         function renderHead() {
@@ -7212,7 +7939,9 @@ notify pgrst, 'reload schema';</textarea
           var t = Store.active()
           if (!t) return
           var r = rng()
-          var selN = (r.r2 - r.r1 + 1) * (r.c2 - r.c1 + 1)
+          var selN = DOM.gridScroll.classList.contains('sel-off')
+            ? 1
+            : (r.r2 - r.r1 + 1) * (r.c2 - r.c1 + 1)
           var parts = [
             (S.lang === 'zh' ? '表' : 'table') + ' <b>' + esc(t.name) + '</b>',
             (S.lang === 'zh' ? '行' : 'rows') + ' <b>' + t.rows.length + '</b>',
@@ -7234,7 +7963,48 @@ notify pgrst, 'reload schema';</textarea
           DOM.statLeft.innerHTML = parts.join(' &nbsp; ')
         }
 
+        /* ---- 悬停全文预览 ------------------------------------------------ */
+        var cellPreviewKey = ''
+        function hideCellPreview() {
+          cellPreviewKey = ''
+          var el = document.getElementById('cell-preview')
+          if (el) el.style.display = 'none'
+        }
+
+        /* ---- 选中态显示开关 ----------------------------------------------
+           点单元格以外的区域时隐藏高亮。内部始终保留 S.sel 锚点；
+           点空白会连范围选区一起折叠，点功能性控件（菜单 / 按钮 / 下拉项）
+           则保留 S.sel2，否则会先清掉选区、再执行依赖 rng() 的动作。 */
+        /* 只靠 CSS 隐藏是不够的：DOM 里旧格子的 .sel / .inrange 等 class 还在，
+           下次点单元格、mousedown 一摘掉 sel-off 就会先闪一下旧高亮。
+           清除与重新激活时都把这些残留 class 摘干净，等 click 里的 renderGrid()
+           按新选区重新生成，就不会出现「旧的闪一下再换新的」。 */
+        function clearSelectionMarks() {
+          var xs = DOM.gridScroll.querySelectorAll(
+            '.gh.act, .gc.rn.act, .gc.sel, .gc.inrange, .gc.rowline, .gc.colline',
+          )
+          for (var i = 0; i < xs.length; i++)
+            xs[i].classList.remove('act', 'sel', 'inrange', 'rowline', 'colline')
+        }
+        function activateSelection() {
+          DOM.gridScroll.classList.remove('sel-off')
+        }
+        function deactivateSelection(keepRange) {
+          if (S.view !== 'grid' || S.editing) return
+          if (DOM.gridScroll.classList.contains('sel-off')) return
+          /* 纯隐藏高亮靠 CSS 即可，不必重建网格；只有折叠选区时才重画 */
+          if (!keepRange) {
+            S.sel2 = null
+            renderGrid()
+          }
+          DOM.gridScroll.classList.add('sel-off')
+          clearSelectionMarks()
+          renderStatus()
+        }
+
         function renderAll() {
+          /* 换表 / 换视图 / 数据变更后重新显示选区，避免一直停在无高亮状态 */
+          activateSelection()
           /* 渲染前先以 localStorage 为准对齐设置与工作台状态：
              外部改动（清空 / 别的标签页 / DevTools）在这里被采纳 */
           Settings.hydrate()
@@ -7293,6 +8063,8 @@ notify pgrst, 'reload schema';</textarea
           try {
             localStorage.removeItem(CONFIG.LS_SEED)
           } catch (e) {}
+          /* 行数据若有增删/重排，写盘前先把逐行行高、单元格对齐重映射到新的行列序 */
+          reconcileTable(Store.active())
           Store.persist()
           renderAll()
         }
@@ -7330,6 +8102,8 @@ notify pgrst, 'reload schema';</textarea
           el.style.top = rc.top + 'px'
           el.style.width = Math.max(rc.width, 90) + 'px'
           el.style.height = Math.max(rc.height, 24) + 'px'
+          /* 编辑框沿用该格的水平对齐，右对齐的数字不会突然跳到左边 */
+          el.style.textAlign = alignH(cellAlign(t, ri, ci), t, ri, ci)
           var v = t.rows[ri][ci]
           el.value = initial !== undefined && initial !== null ? initial : isNil(v) ? '' : String(v)
           el.focus()
@@ -7371,19 +8145,22 @@ notify pgrst, 'reload schema';</textarea
 
         function scrollToCell(ri, ci) {
           var gs = DOM.gridScroll
-          var pos = viewIdx().indexOf(ri)
+          var mm = rowMetrics()
+          var pos = mm.idx.indexOf(ri)
           if (pos < 0) {
             /* 筛选视图下该行不在结果集（例如刚自动补出的空行被条件过滤）：
                退化为滚到底部，避免选区彻底离开视野 */
             gs.scrollTop = gs.scrollHeight
           } else {
-            var y = pos * S.rowH
+            /* 行高可变，纵向偏移取前缀和而不是行号 × 固定行高 */
+            var y = mm.pref[pos]
+            var h = mm.pref[pos + 1] - y
             if (y < gs.scrollTop) gs.scrollTop = y
-            else if (y + S.rowH > gs.scrollTop + gs.clientHeight - CONFIG.HEAD_H)
-              gs.scrollTop = y + S.rowH - gs.clientHeight + CONFIG.HEAD_H + 2
+            else if (y + h > gs.scrollTop + gs.clientHeight - CONFIG.HEAD_H)
+              gs.scrollTop = y + h - gs.clientHeight + CONFIG.HEAD_H + 2
           }
           if (ci >= 0) {
-            var t = Store.active()
+            var t = mm.t
             var x = 56,
               i
             for (i = 0; i < ci; i++) x += colW(t, i)
@@ -7710,58 +8487,52 @@ notify pgrst, 'reload schema';</textarea
             document.getElementById('filter-hits').textContent = ''
             return
           }
-          var colOpts = t.cols
-            .map(function (c, i) {
-              return '<option value="' + i + '">' + idxToCol(i) + ' · ' + esc(c.name) + '</option>'
-            })
-            .join('')
-          var opOpts = OPS.map(function (o) {
-            return '<option value="' + o + '">' + T('op.' + o) + '</option>'
-          }).join('')
           var h = ''
           S.filter.conds.forEach(function (c, i) {
             var noVal = c.op === 'empty' || c.op === 'nempty'
+            var ci = c.col === undefined || c.col === null ? 0 : +c.col
+            var col = t.cols[ci] || { name: '' }
+            var colLabel = idxToCol(ci) + ' · ' + col.name
+            var opLabel = T('op.' + c.op)
+            /* 列 / 操作使用与「结构」页一致的自定义下拉（.csel + #fsel-pop），
+               不用浏览器原生 select：原生候选区无法跟随主题，宽度也会被最长选项撑开 */
             h +=
-              '<div class="dd-item-row" style="padding:4px 6px;gap:4px">' +
-              '<select class="dd-select" data-fi="' +
+              '<div class="fcond">' +
+              '<div class="fcond-top">' +
+              '<div class="csel" tabindex="0" role="button" data-fsel="' +
               i +
-              '" data-ff="col" style="flex:1.1;min-width:0">' +
-              colOpts +
-              '</select>' +
-              '<select class="dd-select" data-fi="' +
+              ':col" data-val="' +
+              ci +
+              '" title="' +
+              esc(colLabel) +
+              '"><span class="csel-label">' +
+              esc(colLabel) +
+              '</span><span class="csel-caret"></span></div>' +
+              '<div class="csel" tabindex="0" role="button" data-fsel="' +
               i +
-              '" data-ff="op" style="flex:1;min-width:0">' +
-              opOpts +
-              '</select>' +
-              '<input class="dd-select dd-text mono-sm" autocomplete="off" spellcheck="false" data-fi="' +
+              ':op" data-val="' +
+              esc(c.op) +
+              '" title="' +
+              esc(opLabel) +
+              '"><span class="csel-label">' +
+              esc(opLabel) +
+              '</span><span class="csel-caret"></span></div>' +
+              '<span class="settings-btn" data-fdel="' +
+              i +
+              '">×</span>' +
+              '</div>' +
+              '<input class="dd-select dd-text mono-sm fval" autocomplete="off" spellcheck="false" data-fi="' +
               i +
               '" data-ff="val" value="' +
               esc(c.val === undefined ? '' : c.val) +
               '" placeholder="' +
               (S.lang === 'zh' ? '值' : 'value') +
-              '" style="flex:1;min-width:0;' +
-              (noVal ? 'opacity:.3;' : '') +
               '"' +
-              (noVal ? ' disabled' : '') +
+              (noVal ? ' style="opacity:.3" disabled' : '') +
               '>' +
-              '<span class="settings-btn" data-fdel="' +
-              i +
-              '" style="flex:none">×</span></div>'
+              '</div>'
           })
           el.innerHTML = h
-          /* sync selected values */
-          Array.prototype.forEach.call(
-            el.querySelectorAll('select[data-ff="col"]'),
-            function (s, i) {
-              s.value = String(S.filter.conds[i].col)
-            },
-          )
-          Array.prototype.forEach.call(
-            el.querySelectorAll('select[data-ff="op"]'),
-            function (s, i) {
-              s.value = S.filter.conds[i].op
-            },
-          )
           document.getElementById('filter-count').textContent = S.filter.conds.length
         }
 
@@ -8760,8 +9531,10 @@ notify pgrst, 'reload schema';</textarea
               if (['btn-grid', 'btn-sql', 'btn-schema'].indexOf(b.id) < 0)
                 b.classList.remove('active')
             })
-            /* 自定义下拉（列类型）同步收起：只摘 .open 会残留 trigger 上的高亮与内部状态 */
+            /* 自定义下拉（列类型 / 筛选条件）同步收起：
+               只摘 .open 会残留 trigger 上的高亮与内部状态 */
             if (typeof Csel !== 'undefined' && Csel.close) Csel.close()
+            if (typeof Fsel !== 'undefined' && Fsel.close) Fsel.close()
           },
           showDropdown: function (id, btn) {
             var dd = document.getElementById(id)
@@ -8881,6 +9654,86 @@ notify pgrst, 'reload schema';</textarea
             /* 重绘后焦点会丢，把焦点还给同一个字段的类型下拉，键盘操作能接着用 */
             var nt = DOM.schemaList.querySelector('.csel[data-ctype="' + key + '"]')
             if (nt) nt.focus()
+          },
+        }
+
+        /* ============================================================
+           15a-2. FILTER SELECT（筛选条件的列 / 操作候选区）
+           与列类型下拉共用 .csel 触发器与 .dd-item 候选区的视觉，
+           只是候选项和落点不同，因此单独成一个小模块，
+           避免把浏览器原生 select 的候选区带进这套界面。
+           ============================================================ */
+        var Fsel = {
+          trigger: null,
+          isOpen: function () {
+            return DOM.fselPop.classList.contains('open')
+          },
+          open: function (trigger) {
+            var t = Store.active()
+            if (!t) return
+            var parts = String(trigger.dataset.fsel || '').split(':')
+            var field = parts[1]
+            var cur = trigger.dataset.val || ''
+            var opts = []
+            if (field === 'col') {
+              t.cols.forEach(function (c, i) {
+                opts.push({ v: String(i), label: idxToCol(i) + ' · ' + c.name })
+              })
+            } else {
+              OPS.forEach(function (o) {
+                opts.push({ v: o, label: T('op.' + o) })
+              })
+            }
+            if (!opts.length) return
+            var h = ''
+            opts.forEach(function (o) {
+              h +=
+                '<div class="dd-item' +
+                (o.v === cur ? ' selected' : '') +
+                '" data-fval="' +
+                esc(o.v) +
+                '"><span>' +
+                esc(o.label) +
+                '</span></div>'
+            })
+            var pop = DOM.fselPop
+            pop.innerHTML = h
+            Fsel.trigger = trigger
+            trigger.classList.add('open')
+            pop.classList.add('open')
+            Fsel.position()
+          },
+          position: function () {
+            var pop = DOM.fselPop
+            var trg = Fsel.trigger
+            if (!trg) return
+            var r = trg.getBoundingClientRect()
+            var w = pop.offsetWidth || 120
+            var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 10))
+            var top = r.bottom + 4
+            if (top + pop.offsetHeight > window.innerHeight - 8)
+              top = Math.max(8, r.top - pop.offsetHeight - 4)
+            pop.style.left = left + 'px'
+            pop.style.top = top + 'px'
+          },
+          close: function () {
+            DOM.fselPop.classList.remove('open')
+            DOM.fselPop.style.left = '-9999px'
+            if (Fsel.trigger) Fsel.trigger.classList.remove('open')
+            Fsel.trigger = null
+          },
+          apply: function (val) {
+            var trg = Fsel.trigger
+            if (!trg) return
+            var parts = String(trg.dataset.fsel || '').split(':')
+            var c = S.filter.conds[+parts[0]]
+            Fsel.close()
+            if (!c) return
+            if (parts[1] === 'col') c.col = +val
+            else if (parts[1] === 'op') c.op = val
+            renderFilterConds()
+            var hits = document.getElementById('filter-hits')
+            if (hits) hits.textContent = recomputeFilter(true).length + ''
           },
         }
 
@@ -9251,8 +10104,10 @@ notify pgrst, 'reload schema';</textarea
           $$('.mt-item[data-mview]').forEach(function (b) {
             b.classList.toggle('active', b.dataset.mview === v)
           })
-          if (v === 'grid') renderGrid()
-          else if (v === 'schema') renderSchema()
+          if (v === 'grid') {
+            activateSelection()
+            renderGrid()
+          } else if (v === 'schema') renderSchema()
           Settings.save()
         }
 
@@ -9727,6 +10582,22 @@ notify pgrst, 'reload schema';</textarea
             ['筛选', '支持包含、等于、正则、比较与空值判断，多条件可按「全部 / 任一」组合。'],
             ['查找', '支持正则、整格匹配与区分大小写；可逐个或全部替换。'],
             [
+              '尺寸',
+              '拖动列头右边界改列宽、拖动行号下边界改行高，两者都不设上限；双击行高手柄或在右键菜单里可恢复默认行高。',
+            ],
+            [
+              '悬停预览',
+              '鼠标停在单元格上会即时浮出完整内容（含换行、跟随主题）。可在「样式 → 显示 → 悬停预览单元格全文」中关闭；关闭后不再显示任何预览。',
+            ],
+            [
+              '对齐',
+              '「排版 → 对齐」的九宫格提供上 / 中 / 下 × 左 / 中 / 右共九种对齐，作用于整个选区；默认文本左对齐、数字右对齐，未设置过的单元格自动跟随列类型。',
+            ],
+            [
+              '适应内容',
+              '一键撑开：先把列宽扩到能放下一行文本（最多 900px），文本更长时按该宽度换行并加高行（最多 600px）；也可只加宽列或只加高行。',
+            ],
+            [
               '转换',
               'CSV / TSV / XLSX / SQLite(.db) / SQL / JSON / Markdown 互转，可下载或复制到剪贴板。',
             ],
@@ -9758,6 +10629,22 @@ notify pgrst, 'reload schema';</textarea
                 'Contains, equals, regex, comparison and null tests, combined with ALL / ANY.',
               ],
               ['Find', 'Regex, whole-cell and case-sensitive options; replace one or all.'],
+              [
+                'Sizing',
+                'Drag a column header edge for width and a row-number edge for height; neither has an upper limit. Double-click the row handle or use the context menu to reset a row height.',
+              ],
+              [
+                'Hover preview',
+                'Hovering a cell shows its full content instantly (line breaks included, theme-aware). Turn it off in Style → Display → Hover to preview full cell.',
+              ],
+              [
+                'Alignment',
+                'Layout → Align offers nine positions (top / middle / bottom × left / center / right) for the whole selection. By default text is left-aligned and numbers right-aligned.',
+              ],
+              [
+                'Auto-fit',
+                'Widen columns until a line fits (up to 900px); anything longer wraps and the row grows (up to 600px). You can also widen columns or heighten rows independently.',
+              ],
               [
                 'Convert',
                 'CSV / TSV / XLSX / SQLite(.db) / SQL / JSON / Markdown — download or copy to clipboard.',
@@ -9818,6 +10705,28 @@ notify pgrst, 'reload schema';</textarea
             setTimeout(function () {
               DOM.splash.style.display = 'none'
             }, 600)
+          },
+          /* ---- 排版 ---- */
+          showAlign: function (a) {
+            var dd = document.getElementById('dd-align')
+            if (dd.classList.contains('open')) {
+              UIMgr.closeDropdowns()
+              return
+            }
+            var r = a && a.getBoundingClientRect ? a.getBoundingClientRect() : null
+            openAlignPop(r ? r.left : window.innerWidth / 2 - 80, r ? r.bottom + 6 : 60)
+          },
+          fitCells: function () {
+            autoFit('both')
+          },
+          fitWidth: function () {
+            autoFit('width')
+          },
+          fitHeight: function () {
+            autoFit('height')
+          },
+          selectAll: function () {
+            selectAllCells()
           },
           viewGrid: function () {
             setView('grid')
@@ -10579,6 +11488,15 @@ notify pgrst, 'reload schema';</textarea
             S.statusBarVisible = !S.statusBarVisible
             Settings.apply()
           },
+          settingsToggleCellPreview: function () {
+            S.cellPreview = S.cellPreview === false
+            hideCellPreview()
+            Settings.save()
+            Settings.syncUI()
+            /* 开关决定渲染时要不要输出 data-full，关掉后不再产生预览数据 */
+            renderGrid()
+            notify(T('dd.settings.cellpreview') + '：' + (S.cellPreview ? T('on') : T('off')))
+          },
           settingsToggleAutoGrow: function () {
             S.autoGrow = !S.autoGrow
             Settings.save()
@@ -10610,6 +11528,7 @@ notify pgrst, 'reload schema';</textarea
             S.cellFont = 13
             S.colW = 150
             S.rowH = 30
+            S.cellPreview = true
             Settings.apply()
             renderAll()
             notify(T('msg.resetStyles'))
@@ -10653,22 +11572,22 @@ notify pgrst, 'reload schema';</textarea
             renderGrid()
           },
           colwUp: function () {
-            S.colW = clamp(S.colW + 10, 80, 340)
+            S.colW = Math.max(CONFIG.MIN_COL_W, S.colW + 10)
             Settings.apply()
             renderGrid()
           },
           colwDown: function () {
-            S.colW = clamp(S.colW - 10, 80, 340)
+            S.colW = Math.max(CONFIG.MIN_COL_W, S.colW - 10)
             Settings.apply()
             renderGrid()
           },
           rowhUp: function () {
-            S.rowH = clamp(S.rowH + 2, 24, 52)
+            S.rowH = Math.max(CONFIG.MIN_ROW_H, S.rowH + 2)
             Settings.apply()
             renderGrid()
           },
           rowhDown: function () {
-            S.rowH = clamp(S.rowH - 2, 24, 52)
+            S.rowH = Math.max(CONFIG.MIN_ROW_H, S.rowH - 2)
             Settings.apply()
             renderGrid()
           },
@@ -10703,6 +11622,7 @@ notify pgrst, 'reload schema';</textarea
            18. CONTEXT MENU
            ============================================================ */
         function openCtx(x, y, type, ref) {
+          lastCtxPos = { x: x, y: y }
           var items = []
           if (type === 'cell') {
             items = [
@@ -10716,6 +11636,7 @@ notify pgrst, 'reload schema';</textarea
               ['-'],
               ['ctx.rename', 'ctxRename'],
               ['ctx.clear', 'ctxClearSel'],
+              ['ctx.resetRowH', 'ctxResetRowH'],
               ['-'],
               ['ctx.copy', 'ctxCopy'],
               ['ctx.paste', 'ctxPaste'],
@@ -10735,10 +11656,21 @@ notify pgrst, 'reload schema';</textarea
               ['ctx.insRow', 'ctxInsRow'],
               ['ctx.dupRow', 'ctxDupRow'],
               ['ctx.delRow', 'ctxDelRow'],
+              ['ctx.resetRowH', 'ctxResetRowH'],
               ['-'],
               ['ctx.copy', 'ctxCopy'],
             ]
           }
+          /* 排版类命令三种右键场景都给，选区范围由 S.sel / S.sel2 决定 */
+          items = items.concat(
+            ['-'],
+            [
+              ['ctx.align', 'ctxAlign'],
+              ['ctx.fitCells', 'ctxFitCells'],
+              ['ctx.fitWidth', 'ctxFitWidth'],
+              ['ctx.fitHeight', 'ctxFitHeight'],
+            ],
+          )
           var h = ''
           items.forEach(function (it) {
             if (it[0] === '-') {
@@ -10753,11 +11685,24 @@ notify pgrst, 'reload schema';</textarea
           dd.dataset.ref = ref || ''
           dd.classList.add('open')
           var w = dd.offsetWidth || 200
-          dd.style.top = Math.min(y, window.innerHeight - 260) + 'px'
-          dd.style.left = Math.min(x, window.innerWidth - w - 10) + 'px'
+          var hh = dd.offsetHeight || 260
+          dd.style.top = Math.max(6, Math.min(y, window.innerHeight - hh - 10)) + 'px'
+          dd.style.left = Math.max(6, Math.min(x, window.innerWidth - w - 10)) + 'px'
         }
 
         var CTX = {
+          ctxAlign: function () {
+            openAlignPop(lastCtxPos.x, lastCtxPos.y)
+          },
+          ctxFitCells: function () {
+            autoFit('both')
+          },
+          ctxFitWidth: function () {
+            autoFit('width')
+          },
+          ctxFitHeight: function () {
+            autoFit('height')
+          },
           ctxInsRow: function () {
             ACTIONS.addRow()
           },
@@ -10814,6 +11759,15 @@ notify pgrst, 'reload schema';</textarea
               for (var j = r.c1; j <= r.c2; j++) if (t.rows[i]) t.rows[i][j] = null
             afterChange()
             notify(T('msg.cleared'))
+          },
+          /* 恢复选中行的默认行高（清空逐行自定义值） */
+          ctxResetRowH: function () {
+            var t = Store.active()
+            var r = rng()
+            pushUndo()
+            for (var i = r.r1; i <= r.r2; i++) setRowH(t, i, null)
+            afterChange()
+            notify(T('msg.rowHReset'))
           },
           ctxCopy: function () {
             var txt = selToText('\t')
@@ -10901,6 +11855,7 @@ notify pgrst, 'reload schema';</textarea
             c: clamp(p.c, 0, t.cols.length - 1),
           }
           S.sel2 = null
+          activateSelection()
           if (grew) afterChange()
           scrollToCell(S.sel.r, S.sel.c)
           renderGrid()
@@ -11113,6 +12068,8 @@ notify pgrst, 'reload schema';</textarea
           DOM.resMeta = document.getElementById('res-meta')
           DOM.ddCtx = document.getElementById('dd-ctx')
           DOM.cselPop = document.getElementById('csel-pop')
+          DOM.fselPop = document.getElementById('fsel-pop')
+          DOM.filterList = document.getElementById('filter-list')
           DOM.mMask = document.getElementById('m-mask')
           DOM.mSheet = document.getElementById('m-sheet')
 
@@ -11140,6 +12097,84 @@ notify pgrst, 'reload schema';</textarea
             if (S.view === 'grid') renderGrid()
           })
 
+          /* 点击单元格以外的区域 → 隐藏选中高亮。
+             用捕获阶段判断目标：网格 click 会重建 DOM，事件冒泡到 document 时
+             e.target 已变成游离节点，closest('#grid-scroll') 会失效。
+             功能性控件只隐藏高亮、保留 S.sel2，避免先清选区再执行依赖 rng() 的动作。 */
+          document.addEventListener(
+            'mousedown',
+            function (e) {
+              if (e.button !== 0 || !e.target || !e.target.closest) return
+              var el = e.target
+              /* 点在滚动容器本身多半是在拖滚动条，不算「点外部」 */
+              if (el === DOM.gridScroll) return
+              var inGrid = el.closest('#grid-scroll')
+              /* 单元格 / 行号 / 列头 / 拖拽手柄本身就是在设置选区或调整尺寸。
+                 先摘掉 DOM 里残留的旧高亮 class，再移除 sel-off：
+                 否则 mousedown 到 click 之间会先露出旧格子的选中框，形成闪烁。
+                 滚动等重画也可能在隐藏期间重新生成这些 class，所以这里每次都清。 */
+              if (inGrid && el.closest('.gc, .gh, .gh-res, .gr-res')) {
+                clearSelectionMarks()
+                activateSelection()
+                return
+              }
+              var functional = !!el.closest(
+                'button, input, textarea, select, a, label, [data-action], [data-cact], [data-al], [data-tid], [data-mview], [data-ico], .dropdown, .dd-item, .menu-btn, .mn-btn, .mt-item, .ms-item, .settings-btn, .chip, .csel, .sug, #modal, #custom-confirm, #splash, #cell-editor, #sheet-tabs, #m-sheet, #m-mask',
+              )
+              deactivateSelection(functional)
+            },
+            true,
+          )
+
+          /* 悬停单元格 → 即时显示全文预览浮层（开关在「样式 → 显示」里） */
+          var cpEl = document.getElementById('cell-preview')
+          var cpW = 0,
+            cpH = 0
+          DOM.gridScroll.addEventListener('mousemove', function (e) {
+            if (
+              S.cellPreview === false ||
+              S.view !== 'grid' ||
+              S.editing ||
+              document.body.classList.contains('col-resizing') ||
+              document.body.classList.contains('row-resizing') ||
+              /* 弹层打开时别让预览盖在菜单上面 */
+              document.querySelector('.dropdown.open') ||
+              DOM.modal.classList.contains('open')
+            ) {
+              hideCellPreview()
+              return
+            }
+            var cell = e.target.closest && e.target.closest('.gc[data-r][data-c]')
+            if (!cell) {
+              hideCellPreview()
+              return
+            }
+            var txt = cell.dataset.full || ''
+            if (!txt) {
+              hideCellPreview()
+              return
+            }
+            var key = cell.dataset.r + ':' + cell.dataset.c + ':' + txt
+            if (key !== cellPreviewKey) {
+              cpEl.textContent = txt
+              cpEl.style.display = 'block'
+              cpW = cpEl.offsetWidth
+              cpH = cpEl.offsetHeight
+              cellPreviewKey = key
+            }
+            var x = e.clientX + 14,
+              y = e.clientY + 16
+            if (x + cpW > window.innerWidth - 8) x = e.clientX - cpW - 14
+            if (y + cpH > window.innerHeight - 8) y = e.clientY - cpH - 12
+            /* 翻转之后再夹一次，鼠标贴边时浮层不会溢出视口 */
+            cpEl.style.left = Math.max(8, Math.min(x, window.innerWidth - cpW - 8)) + 'px'
+            cpEl.style.top = Math.max(8, Math.min(y, window.innerHeight - cpH - 8)) + 'px'
+          })
+          DOM.gridScroll.addEventListener('mouseleave', hideCellPreview)
+          DOM.gridScroll.addEventListener('scroll', hideCellPreview)
+          /* 点下去之后网格会重画，先收起浮层，免得停在旧内容上 */
+          document.addEventListener('mousedown', hideCellPreview, true)
+
           /* grid interactions */
           DOM.gridScroll.addEventListener('mousedown', function (e) {
             var res = e.target.closest('.gh-res')
@@ -11147,10 +12182,16 @@ notify pgrst, 'reload schema';</textarea
               startResize(res.dataset.res, e)
               return
             }
+            /* 行号格底边：拖动调整该行（或选中多行）的行高 */
+            var rres = e.target.closest('.gr-res')
+            if (rres) {
+              startRowResize(+rres.dataset.rres, e)
+              return
+            }
           })
           var lastCellClick = null
           DOM.gridScroll.addEventListener('click', function (e) {
-            if (e.target.closest('.gh-res')) return
+            if (e.target.closest('.gh-res') || e.target.closest('.gr-res')) return
             /* 列头上的排序手柄：升 → 降 → 取消 */
             var so = e.target.closest('.gh .gs[data-sort]')
             if (so) {
@@ -11202,6 +12243,18 @@ notify pgrst, 'reload schema';</textarea
             renderStatus()
           })
           DOM.gridScroll.addEventListener('dblclick', function (e) {
+            /* 双击行高手柄 = 恢复默认行高 */
+            var rr = e.target.closest('.gr-res')
+            if (rr) {
+              var t0 = Store.active()
+              rowsForResize(+rr.dataset.rres).forEach(function (x) {
+                setRowH(t0, x, null)
+              })
+              renderGrid()
+              Store.persist()
+              notify(T('msg.rowHReset'))
+              return
+            }
             /* 双击列头也能排序（沿用旧习惯） */
             var gh = e.target.closest('.gh[data-c]')
             if (gh && !e.target.closest('.gs')) {
@@ -11214,6 +12267,8 @@ notify pgrst, 'reload schema';</textarea
           })
           DOM.gridScroll.addEventListener('contextmenu', function (e) {
             e.preventDefault()
+            /* 右键本身就是在选区上做操作，恢复选中高亮 */
+            activateSelection()
             var gh = e.target.closest('.gh[data-c]')
             var cell = e.target.closest('.gc[data-r]')
             if (gh) {
@@ -11237,24 +12292,91 @@ notify pgrst, 'reload schema';</textarea
             return false
           })
 
-          function startResize(ci, e0) {
-            var t = Store.active()
-            var startX = e0.clientX
-            var startW = colW(t, ci)
-            var move = function (ev) {
-              var w = clamp(startW + (ev.clientX - startX), 48, 600)
-              t.colW[ci] = w
-              renderGrid()
+          /* ---- 列宽 / 行高拖拽：共用尺寸提示与拖拽生命周期 ---- */
+          function resizeTip(text, x, y) {
+            var tip = document.getElementById('res-tip')
+            if (!tip) {
+              tip = document.createElement('div')
+              tip.id = 'res-tip'
+              document.body.appendChild(tip)
             }
+            tip.textContent = text
+            tip.style.display = 'block'
+            tip.style.left = Math.min(x + 14, window.innerWidth - 80) + 'px'
+            tip.style.top = Math.max(4, y - 28) + 'px'
+          }
+          function bindDrag(e0, axis, move, done) {
+            document.body.classList.add(axis + '-resizing')
             var up = function () {
               document.removeEventListener('mousemove', move)
               document.removeEventListener('mouseup', up)
-              Store.persist()
+              window.removeEventListener('blur', up)
+              var tip = document.getElementById('res-tip')
+              if (tip) tip.style.display = 'none'
+              document.body.classList.remove('col-resizing', 'row-resizing')
+              S.resizeRows = null
+              /* 只摘掉高亮 class，不重建 DOM：否则双击手柄复位会因节点被替换而丢事件 */
+              ;[].forEach.call(document.querySelectorAll('.gr-res.on'), function (el) {
+                el.classList.remove('on')
+              })
+              done()
             }
             document.addEventListener('mousemove', move)
             document.addEventListener('mouseup', up)
+            /* 鼠标在窗口外松开时也能收尾，否则光标会一直卡在拖拽态 */
+            window.addEventListener('blur', up)
             e0.preventDefault()
             e0.stopPropagation()
+          }
+          /* 选中了多行时，拖一条边界就统一设置这些行的行高 */
+          function rowsForResize(ri) {
+            var r = rng(),
+              out = [],
+              i
+            if (S.sel2 && r.r2 > r.r1 && ri >= r.r1 && ri <= r.r2) {
+              for (i = r.r1; i <= r.r2; i++) out.push(i)
+            } else out.push(ri)
+            return out
+          }
+          function startResize(ci, e0) {
+            var t = Store.active()
+            pushUndo()
+            var startX = e0.clientX
+            var startW = colW(t, ci)
+            var move = function (ev) {
+              var w = Math.round(
+                Math.max(CONFIG.MIN_COL_W, startW + (ev.clientX - startX)),
+              )
+              if (!Array.isArray(t.colW)) t.colW = []
+              t.colW[ci] = w
+              resizeTip(w + ' px', ev.clientX, ev.clientY)
+              renderGrid()
+            }
+            bindDrag(e0, 'col', move, function () {
+              Store.persist()
+            })
+          }
+          function startRowResize(ri, e0) {
+            var t = Store.active()
+            if (!t.rows[ri]) return
+            pushUndo()
+            var rows = rowsForResize(ri)
+            S.resizeRows = rows
+            var startY = e0.clientY
+            var startH = rowH(t, ri)
+            var move = function (ev) {
+              var h = Math.round(
+                Math.max(CONFIG.MIN_ROW_H, startH + (ev.clientY - startY)),
+              )
+              rows.forEach(function (x) {
+                setRowH(t, x, h)
+              })
+              resizeTip(h + ' px', ev.clientX, ev.clientY)
+              renderGrid()
+            }
+            bindDrag(e0, 'row', move, function () {
+              Store.persist()
+            })
           }
 
           /* cell editor */
@@ -11546,7 +12668,15 @@ notify pgrst, 'reload schema';</textarea
           })
 
           /* filter dropdown */
-          document.getElementById('filter-list').addEventListener('click', function (e) {
+          DOM.filterList.addEventListener('click', function (e) {
+            /* 列 / 操作：自定义下拉开关（与列类型下拉同一套 .csel 视觉） */
+            var trg = e.target.closest('.csel[data-fsel]')
+            if (trg) {
+              if (Fsel.isOpen() && Fsel.trigger === trg) Fsel.close()
+              else Fsel.open(trg)
+              return
+            }
+            if (Fsel.isOpen()) Fsel.close()
             var x = e.target.closest('[data-fdel]')
             if (x) {
               S.filter.conds.splice(+x.dataset.fdel, 1)
@@ -11554,15 +12684,31 @@ notify pgrst, 'reload schema';</textarea
               document.getElementById('filter-hits').textContent = recomputeFilter(true).length + ''
             }
           })
-          document.getElementById('filter-list').addEventListener('change', function (e) {
+          DOM.fselPop.addEventListener('click', function (e) {
+            var it = e.target.closest('[data-fval]')
+            if (!it) return
+            Fsel.apply(it.dataset.fval)
+          })
+          DOM.filterList.addEventListener('keydown', function (e) {
+            var trg = e.target.closest('.csel[data-fsel]')
+            if (!trg) return
+            var open = Fsel.isOpen() && Fsel.trigger === trg
+            if (e.key === 'Escape' && open) {
+              e.preventDefault()
+              e.stopPropagation()
+              Fsel.close()
+            } else if ((e.key === 'Enter' || e.key === ' ') && !open) {
+              e.preventDefault()
+              e.stopPropagation()
+              Fsel.open(trg)
+            }
+          })
+          DOM.filterList.addEventListener('change', function (e) {
             var el = e.target
             if (!el.dataset || el.dataset.fi === undefined) return
-            var i = +el.dataset.fi
-            var c = S.filter.conds[i]
+            var c = S.filter.conds[+el.dataset.fi]
             if (!c) return
-            if (el.dataset.ff === 'col') c.col = +el.value
-            else if (el.dataset.ff === 'op') c.op = el.value
-            else if (el.dataset.ff === 'val') c.val = el.value
+            if (el.dataset.ff === 'val') c.val = el.value
             document.getElementById('filter-hits').textContent = recomputeFilter(true).length + ''
           })
           document.getElementById('filter-list').addEventListener('input', function (e) {
@@ -11641,6 +12787,14 @@ notify pgrst, 'reload schema';</textarea
             DOM.ddCtx.classList.remove('open')
             var fn = CTX[it.dataset.cact]
             if (fn) setTimeout(fn, 10)
+          })
+
+          /* 九宫格对齐浮层：点一个方向就把整个选区设成该对齐 */
+          document.getElementById('dd-align').addEventListener('click', function (e) {
+            var b = e.target.closest('[data-al]')
+            if (!b) return
+            applyAlign(b.dataset.al || null)
+            UIMgr.closeDropdowns()
           })
 
           /* global action routing */
@@ -11724,6 +12878,8 @@ notify pgrst, 'reload schema';</textarea
             var typing = tag === 'input' || tag === 'textarea' || tag === 'select'
             if (e.key === 'Escape') {
               if (DOM.modal.classList.contains('open')) UIMgr.closeModal()
+              else if (document.getElementById('dd-align').classList.contains('open'))
+                UIMgr.closeDropdowns()
               else if (DOM.ddCtx.classList.contains('open')) DOM.ddCtx.classList.remove('open')
               else UIMgr.closeDropdowns()
               return
@@ -11753,6 +12909,14 @@ notify pgrst, 'reload schema';</textarea
               ACTIONS.showGoto()
               return
             }
+            /* Ctrl+S：挡掉浏览器的「保存网页」，立刻把当前内容写进本地存储 */
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+              e.preventDefault()
+              Store.persist()
+              Settings.save()
+              notify(T('msg.saved'))
+              return
+            }
             /* Ctrl+Delete / Ctrl+Backspace：删除选中的整行 / 整列
                （整行选区删行，整列选区删列，否则按范围更大的那一维处理） */
             if (
@@ -11766,7 +12930,55 @@ notify pgrst, 'reload schema';</textarea
             }
             if (typing) return
             if (S.view !== 'grid' || S.editing) return
+            /* 一旦开始用键盘操作表格，选中高亮立即回来 */
+            if (DOM.gridScroll.classList.contains('sel-off')) {
+              activateSelection()
+              renderGrid()
+            }
             var t = Store.active()
+            /* ---- 选区 / 排版快捷键 ---- */
+            var mod = e.ctrlKey || e.metaKey
+            if (mod && !e.altKey && e.key.toLowerCase() === 'a') {
+              e.preventDefault()
+              if (e.shiftKey) {
+                S.sel2 = null
+                renderGrid()
+                renderStatus()
+              } else selectAllCells()
+              return
+            }
+            if (mod && !e.altKey && (e.key === 'Home' || e.key === 'End')) {
+              e.preventDefault()
+              S.sel =
+                e.key === 'Home'
+                  ? { r: 0, c: 0 }
+                  : { r: t.rows.length - 1, c: t.cols.length - 1 }
+              S.sel2 = null
+              renderGrid()
+              renderStatus()
+              scrollToCell(S.sel.r, S.sel.c)
+              /* 滚动事件是异步的，这里立即重画一次，选中的格子不会晚一帧才出现 */
+              renderGrid()
+              return
+            }
+            if (e.altKey && !mod && /^[0-9]$/.test(e.key)) {
+              e.preventDefault()
+              applyAlign(e.key === '0' ? null : AL_CODES[+e.key - 1])
+              return
+            }
+            if (e.altKey && !mod && e.key.length === 1) {
+              var ak = e.key.toLowerCase()
+              if (ak === 'l' || ak === 'e' || ak === 'r') {
+                e.preventDefault()
+                alignQuick(ak === 'l' ? 'l' : ak === 'e' ? 'c' : 'r')
+                return
+              }
+              if (ak === 'f' || ak === 'w' || ak === 'h') {
+                e.preventDefault()
+                autoFit(ak === 'f' ? 'both' : ak === 'w' ? 'width' : 'height')
+                return
+              }
+            }
             if (e.key === 'ArrowDown') {
               e.preventDefault()
               moveSel(1, 0, e.shiftKey)
