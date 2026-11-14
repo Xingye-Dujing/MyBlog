@@ -37,6 +37,7 @@ FILES = {
     "chartjs/4.4.1/chart.umd.min.js": ["chart.js@4.4.1/dist/chart.umd.min.js"],
     "chartjs/4.5.1/chart.umd.min.js": ["chart.js@4.5.1/dist/chart.umd.min.js"],
     "mammoth/1.6.0/mammoth.browser.min.js": ["mammoth@1.6.0/mammoth.browser.min.js"],
+    "docx-preview/0.4.1/docx-preview.min.js": ["docx-preview@0.4.1/dist/docx-preview.min.js"],
     "mathjax/3/tex-svg.js": ["mathjax@3/es5/tex-svg.js"],
     "apexcharts/7.4.0/apexcharts.min.js": ["apexcharts@7.4.0/dist/apexcharts.min.js"],
     "echarts/6.1.0/echarts.min.js": ["echarts@6.1.0/dist/echarts.min.js"],

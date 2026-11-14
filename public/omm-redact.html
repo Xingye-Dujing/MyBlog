@@ -42,6 +42,8 @@
     <script src="vendor/pptxviewjs/1.1.9/dist/PptxViewJS.min.js"></script>
     <script src="vendor/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="vendor/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- docx-preview: native OOXML renderer (Word/WPS page geometry, styles, tables, headers) -->
+    <script src="vendor/docx-preview/0.4.1/docx-preview.min.js"></script>
     <script src="vendor/html2canvas/1.4.1/html2canvas.min.js"></script>
     <link rel="stylesheet" href="vendor/fonts/literata-sub.css" />
     <style>
@@ -1868,6 +1870,262 @@
         box-shadow: var(--page-shadow) !important;
       }
 
+      /* ===== NATIVE DOCX (OOXML / Word layout) =====
+         docx-preview owns everything inside .docx-container. The app must not
+         restyle the document content, otherwise Word fonts, paragraph spacing,
+         tables and colours would be silently lost. Only the page frame and the
+         redaction overlay are controlled here. */
+      .docx-native-page {
+        color: #000000;
+      }
+      .docx-native-page .docx-container {
+        font-size: initial;
+        line-height: initial;
+        color: initial;
+      }
+      .docx-native-page .docx-container section.docx {
+        overflow: hidden;
+      }
+      .docx-native-page .docx-container img {
+        max-width: none;
+        max-height: none;
+      }
+      /* WPS / Word "line grid" (w:docGrid). Only used when the section actually
+         declares a grid, and never overrides a paragraph's own inline spacing. */
+      .docx-native-page section.docx.zr-doc-grid p {
+        line-height: max(var(--zr-grid-line, 1.2em), 1.2em);
+      }
+      /* Word's default table cell margins (w:tblCellMar 108 twips). Explicit
+         cell margins from the document are inline and still win. */
+      .docx-native-page section.docx td,
+      .docx-native-page section.docx th {
+        padding-left: 5.4pt;
+        padding-right: 5.4pt;
+      }
+      /* Numbering is frozen to literal text: CSS counters keep advancing when
+         the page DOM is cloned/measured, which used to shift list numbers. */
+      .docx-native-page p.zr-num-frozen::before {
+        content: var(--zr-num-before, "") !important;
+      }
+      .docx-native-page .redact-canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* ===== NATIVE DOCX ZOOM ===== */
+      .docx-zoom-shell {
+        position: relative;
+        flex: 0 0 auto;
+        display: block;
+        margin: 0 auto 20px;
+        box-sizing: border-box;
+      }
+      .docx-zoom-shell .docx-native-page {
+        transform-origin: top left;
+        will-change: transform;
+        margin: 0;
+        box-sizing: border-box;
+      }
+
+      /* ===== DOCX IMPORT / PDF ENGINE DIALOGS ===== */
+      #docx-import,
+      #pdf-tools,
+      #docx-pdf-settings {
+        position: fixed;
+        inset: 0;
+        z-index: 100002;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(0, 0, 0, 0.36);
+      }
+      #docx-import.active,
+      #pdf-tools.active,
+      #docx-pdf-settings.active {
+        display: flex;
+      }
+      .di-box,
+      .dps-box {
+        width: min(560px, 94vw);
+        max-height: calc(100vh - 40px);
+        overflow: auto;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
+        padding: 20px 20px 16px;
+        font-size: 12px;
+      }
+      .di-title,
+      .dps-title {
+        font-size: 15px;
+        letter-spacing: 0.06em;
+        margin-bottom: 4px;
+      }
+      .di-sub,
+      .dps-sub {
+        font-size: 10px;
+        color: var(--text-dim);
+        margin-bottom: 14px;
+        line-height: 1.6;
+        word-break: break-all;
+      }
+      .di-choice {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 12px 14px;
+        margin-bottom: 9px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .di-choice:hover {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .di-choice[disabled] {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .di-choice b {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 600;
+        margin-bottom: 3px;
+      }
+      .di-choice span {
+        display: block;
+        font-size: 10px;
+        line-height: 1.55;
+        color: var(--text-dim);
+      }
+      .di-remember {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 10px 0 14px;
+        font-size: 10.5px;
+        color: var(--text-dim);
+        cursor: pointer;
+      }
+      .di-actions,
+      .dps-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .di-actions button,
+      .dps-actions button {
+        padding: 6px 16px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .di-actions button:hover,
+      .dps-actions button:hover {
+        border-color: var(--border);
+        background: var(--hover);
+      }
+      .dps-actions button.primary {
+        border-color: var(--border);
+        background: var(--active-bg);
+        color: var(--active-text);
+      }
+      .dps-engine {
+        border: 1px solid var(--border-faint);
+        padding: 9px 11px;
+        margin-bottom: 8px;
+        border-radius: var(--radius);
+        line-height: 1.55;
+      }
+      .dps-engine b {
+        font-size: 11.5px;
+      }
+      .dps-engine .ok {
+        color: #1f7a3d;
+      }
+      .dps-engine .bad {
+        color: #b34a3c;
+      }
+      body.theme-dark .dps-engine .ok {
+        color: #6fce8e;
+      }
+      .dps-engine code {
+        display: block;
+        font-size: 9.5px;
+        color: var(--text-dim);
+        word-break: break-all;
+        margin-top: 2px;
+      }
+      .dps-field {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 10.5px;
+        color: var(--text-dim);
+      }
+      .dps-field input {
+        display: block;
+        width: 100%;
+        margin-top: 4px;
+        padding: 7px 9px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 11px;
+        outline: none;
+      }
+      .dps-field input:focus,
+      .dps-field select:focus {
+        border-color: var(--border);
+      }
+      .dps-field select {
+        display: block;
+        width: 100%;
+        margin-top: 4px;
+        padding: 7px 9px;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        background: var(--bg);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 11px;
+        outline: none;
+      }
+      .pdf-opt {
+        display: none;
+      }
+      .pdf-opt.show {
+        display: block;
+      }
+      .pdf-opt-inline {
+        display: flex;
+        gap: 8px;
+      }
+      .pdf-opt-inline .dps-field {
+        flex: 1;
+      }
+      .dps-note {
+        font-size: 9.5px;
+        color: var(--text-faint);
+        line-height: 1.6;
+        margin-top: 6px;
+      }
+
       /* ===== UTILITY ===== */
       .bg-void {
         background: var(--bg);
@@ -2040,12 +2298,14 @@
         <span class="menu-label">工具</span>
         <div class="menu-btn" data-action="applyAllRedacts">全部应用</div>
         <div class="menu-btn" data-action="clearAll">清除全部</div>
+        <div class="menu-btn" data-action="openPdfTools">PDF 工具</div>
       </div>
       <div class="menu-group">
         <span class="menu-label">导出</span>
         <div class="menu-btn" data-action="exportPDF">导出 PDF</div>
         <div class="menu-btn" data-action="exportImage">导出图片</div>
         <div class="menu-btn" data-action="exportPPTX">导出 PPTX</div>
+        <div class="menu-btn" data-action="exportDOCX">导出脱敏 DOCX</div>
       </div>
       <div class="menu-group">
         <span class="menu-label">设置</span>
@@ -2088,6 +2348,17 @@
         title="循环切换 75%、80%、85%、90%、95%、关闭（越高越少过滤）"
       >
         <span>过滤整页大图</span><span class="hint" id="sv-image-filter">90%</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-label">DOCX 版式</div>
+      <div class="dd-item" data-action="toggleDocxRenderMode" title="原生 Word：保留纸张、页边距、字体、表格、页眉页脚；简化 HTML：仅保留文字结构">
+        <span>渲染引擎</span><span class="hint" id="sv-docx-mode">原生 Word</span>
+      </div>
+      <div class="dd-item" data-action="cycleDocxImportMode" title="打开 DOCX 时询问 / 固定使用网页版式 / 固定转 PDF 导入">
+        <span>DOCX 导入</span><span class="hint" id="sv-docx-import">每次询问</span>
+      </div>
+      <div class="dd-item" data-action="openDocxPdfSettings" title="设置 LibreOffice / AbiWord 路径并检测可用性">
+        <span>PDF 转换引擎</span><span class="hint" id="sv-docx-pdf">检测中</span>
       </div>
       <div class="dd-divider"></div>
       <div class="dd-label">背景</div>
@@ -2172,7 +2443,7 @@
                       line-height: 1.3;
                     "
                   >
-                    TXT、DOCX 按当前阅读区尺寸自动拆分为多页。
+                    TXT / 简化 HTML 版式自动拆分为多页；原生 Word 版式沿用文档自身纸张与分页。
                   </div>
                 </div>
                 <div
@@ -2355,6 +2626,7 @@
           <div class="tool-btn" data-action="exportPDF">导出 PDF</div>
           <div class="tool-btn" data-action="exportImage">导出图片</div>
           <div class="tool-btn" data-action="exportPPTX">导出 PPTX</div>
+          <div class="tool-btn" data-action="exportDOCX" title="导出不可逆脱敏 DOCX（逐页位图，Word / WPS 可直接打开）">导出 DOCX</div>
         </div>
 
         <div id="doc-viewport">
@@ -2502,7 +2774,134 @@
       </div>
     </div>
 
+    <!-- PDF TOOLS -->
+    <div id="pdf-tools" role="dialog" aria-modal="true" aria-labelledby="pdf-tools-title">
+      <div class="dps-box">
+        <div class="dps-title" id="pdf-tools-title">PDF 工具</div>
+        <div class="dps-sub" id="pdf-tool-source">未选择文件</div>
+        <label class="dps-field"
+          >操作
+          <select id="pdf-tool-op">
+            <option value="compress">压缩 PDF</option>
+            <option value="repair">修复 PDF</option>
+            <option value="pdfa">转为 PDF/A</option>
+            <option value="pages">提取页码范围</option>
+            <option value="render">导出页面图片</option>
+            <option value="merge">合并多个 PDF</option>
+          </select>
+        </label>
+
+        <div class="pdf-opt" data-for="compress">
+          <label class="dps-field"
+            >压缩等级
+            <select id="pdf-opt-quality">
+              <option value="screen">屏幕（最小体积，72dpi）</option>
+              <option value="ebook" selected>电子书（推荐，150dpi）</option>
+              <option value="printer">打印（300dpi）</option>
+              <option value="prepress">预印（高质量）</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="pdf-opt" data-for="pages render">
+          <div class="pdf-opt-inline">
+            <label class="dps-field">起始页<input type="number" id="pdf-opt-first" min="1" value="1" /></label>
+            <label class="dps-field">结束页<input type="number" id="pdf-opt-last" min="1" value="1" /></label>
+          </div>
+        </div>
+
+        <div class="pdf-opt" data-for="render">
+          <div class="pdf-opt-inline">
+            <label class="dps-field"
+              >分辨率
+              <select id="pdf-opt-dpi">
+                <option value="96">96 dpi</option>
+                <option value="150" selected>150 dpi</option>
+                <option value="300">300 dpi</option>
+                <option value="600">600 dpi</option>
+              </select>
+            </label>
+            <label class="dps-field"
+              >格式
+              <select id="pdf-opt-format">
+                <option value="png" selected>PNG</option>
+                <option value="jpg">JPEG</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="pdf-opt" data-for="merge">
+          <div class="dps-note" style="margin-top: 0">
+            合并需要选择至少 2 个 PDF；点击下方“选择 PDF…”可多选。处理结果按选择顺序合并。
+          </div>
+        </div>
+
+        <div class="dps-note" id="pdf-tool-status">正在检测 Ghostscript…</div>
+        <div class="dps-actions">
+          <button type="button" data-action="pdfToolChoose">选择 PDF…</button>
+          <button type="button" data-action="pdfToolClose">关闭</button>
+          <button type="button" class="primary" data-action="pdfToolRun">运行</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCX IMPORT MODE -->
+    <div id="docx-import" role="dialog" aria-modal="true" aria-labelledby="di-title">
+      <div class="di-box">
+        <div class="di-title" id="di-title">导入 DOCX</div>
+        <div class="di-sub" id="di-file"></div>
+        <button type="button" class="di-choice" data-docx-mode="native">
+          <b>网页版式</b>
+          <span>内置 OOXML 渲染，离线可用；保留纸张、页边距、字体、图片、表格与页眉页脚。</span>
+        </button>
+        <button type="button" class="di-choice" id="di-pdf-choice" data-docx-mode="pdf">
+          <b>转 PDF 导入</b>
+          <span id="di-pdf-hint">调用本机 LibreOffice / AbiWord 生成 PDF，版式与原文件一致。</span>
+        </button>
+        <label class="di-remember"
+          ><input type="checkbox" id="di-remember" /> 记住此选择（可在“设置 → DOCX 导入”中修改）</label
+        >
+        <div class="di-actions">
+          <button type="button" data-docx-mode="cancel" id="di-cancel">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF CONVERTER SETTINGS -->
+    <div id="docx-pdf-settings" role="dialog" aria-modal="true" aria-labelledby="dps-title">
+      <div class="dps-box">
+        <div class="dps-title" id="dps-title">PDF 转换引擎</div>
+        <div class="dps-sub">
+          使用开源软件把 DOCX 转成 PDF，以获得与 WPS / Word 一致的版式。留空则自动检测常见安装位置。
+        </div>
+        <div id="dps-engines"></div>
+        <label class="dps-field"
+          >LibreOffice（soffice）路径
+          <input type="text" id="dps-soffice" placeholder="例如 C://Program Files\LibreOffice\program\soffice.exe" />
+        </label>
+        <label class="dps-field"
+          >AbiWord 路径（可选）
+          <input type="text" id="dps-abiword" placeholder="例如 C://Program Files\AbiWord\bin\abiword.exe" />
+        </label>
+        <label class="dps-field"
+          >Ghostscript 路径（可选，仅 PDF 工具）
+          <input type="text" id="dps-gs" placeholder="例如 D://gs10.06.0//bin//gswin64c.exe" />
+        </label>
+        <div class="dps-note">
+          支持 Windows / macOS / Linux。保存后会立即重新检测；导入 DOCX 时选择“转 PDF 导入”即可使用。
+        </div>
+        <div class="dps-actions">
+          <button type="button" data-action="dpsClose">关闭</button>
+          <button type="button" data-action="dpsDetect">重新检测</button>
+          <button type="button" data-action="dpsTest">测试转换</button>
+          <button type="button" class="primary" data-action="dpsSave">保存并检测</button>
+        </div>
+      </div>
+    </div>
+
     <input type="file" id="file-input" accept=".txt,.docx,.pdf,.pptx" />
+    <input type="file" id="pdf-tool-input" accept=".pdf,application/pdf" multiple />
     <input type="file" id="image-file-input" accept="image/*" multiple />
     <input
       type="file"
@@ -2591,6 +2990,15 @@
           pdfBytes: null,
           viewScale: 1,
           docxHtml: null,
+          // Native OOXML rendering (docx-preview) state.
+          docxRenderMode: 'native', // 'native' | 'simple'
+          docxNativeActive: false,
+          docxNative: null,
+          docxArrayBuffer: null,
+          docxImportMode: 'ask', // ask | native | pdf
+          docxPdfEngine: '',
+          docxViaPdf: false,
+          docxPdfEngineName: '',
           sidebarCollapsed: false,
           rightSidebarCollapsed: false,
           lazyRenderQueue: [],
@@ -3100,6 +3508,9 @@
                 imageNavEnabled: imageNavState.enabled,
                 pdfImageLargeFilter: imageNavState.filterLargeImages,
                 pdfImageLargeRatio: imageNavState.largeImageRatio,
+                docxRenderMode: S.docxRenderMode,
+                docxImportMode: S.docxImportMode,
+                docxPdfEngine: S.docxPdfEngine,
               }),
             )
           } catch (_) {}
@@ -3112,6 +3523,12 @@
             S.bg = d.bg || 'bg-void'
             S.tool = d.tool || 'rect'
             if (S.tool === 'mosaic' || S.tool === 'pixel') S.tool = 'rect'
+            S.docxRenderMode = d.docxRenderMode === 'simple' ? 'simple' : 'native'
+            S.docxImportMode =
+              d.docxImportMode === 'native' || d.docxImportMode === 'pdf'
+                ? d.docxImportMode
+                : 'ask'
+            S.docxPdfEngine = String(d.docxPdfEngine || '')
             S.pinned = d.pinned === false ? false : true
             S.radius = d.radius || 0
             S.sidebarCollapsed = d.sidebarCollapsed || false
@@ -3153,6 +3570,7 @@
               document.documentElement.style.setProperty('--sidebar-w', d.sidebarW + 'px')
             }
           } catch (_) {}
+          updateDocxRenderModeUI()
           applyTheme()
           applyBg()
           applyRadius()
@@ -3269,7 +3687,19 @@
           // cannot overwrite the newly selected pagination mode.
           if (S.fileType === 'txt' || (!S.pdfMode && !S.docxHtml)) S.textPageBuildId++
           saveSettings()
-          if (S.docxHtml && S.fileType === 'docx') {
+          if (S.fileType === 'docx' && isNativeDocxActive()) {
+            // Page geometry changes with the pagination mode. Old normalised
+            // mask coordinates would no longer point at the original words.
+            if (S.redacts.length) {
+              S.redacts = []
+              S.undoStack = []
+              S.redoStack = []
+              updateRedactCount()
+              notify('分页方式已改变，原有遮罩坐标失效并已清除')
+            }
+            computeNativeDocxPages()
+            renderDocument()
+          } else if (S.docxHtml && S.fileType === 'docx') {
             renderDocxPaginated()
           } else if (S.text) {
             rebuildPages()
@@ -4220,7 +4650,8 @@
             if (S.pdfMode && !S.renderedPages[pageIdx]) continue
             var root = S.pdfMode
               ? pageEl.querySelector('.pdf-text-layer')
-              : pageEl.querySelector('.doc-page-text')
+              : (pageEl.querySelector('.doc-page-text') ||
+                 pageEl.querySelector('.docx-container'))
             if (!root) continue
             var wrap = S.pdfMode ? pageEl.querySelector('.doc-page-img-wrap') : pageEl
             if (!wrap) continue
@@ -5152,7 +5583,10 @@
             S.imageSourceNames = []
             S.imageSourceFiles = []
             S.pdfMode = false
+            disposeNativeDocx()
             S.docxHtml = null
+            S.docxViaPdf = false
+            S.docxPdfEngineName = ''
             S.pptxMode = false
             S.pptxSlideCount = 0
             S.pptxRenderedFiles = []
@@ -5167,7 +5601,36 @@
               S.fileType = 'pptx'
               S.pptxMode = true
             } else if (ext === 'docx' || ext === 'doc') {
-              await loadDOCX(file)
+              var importMode = await resolveDocxImportMode(file)
+              if (importMode === 'cancel') {
+                hideProgress()
+                hideLoadingPopup()
+                DOM.statusLeft.textContent = '已取消导入'
+                log('已取消 DOCX 导入')
+                return
+              }
+              if (importMode === 'pdf') {
+                try {
+                  setProgress(30)
+                  setLoadingInfo('正在调用本机转换引擎生成 PDF…')
+                  var converted = await convertDocxWithLocalEngine(file)
+                  setProgress(60)
+                  setLoadingInfo('读取转换后的 PDF…')
+                  await loadPDF(converted.file)
+                  S.docxViaPdf = true
+                  S.docxPdfEngineName = converted.engine || ''
+                  S.fileType = 'docx'
+                  S.docxHtml = null
+                  S.docxNativeActive = false
+                  log('DOCX 已由 ' + (converted.engine || '本机引擎') + ' 转换为 PDF')
+                } catch (convErr) {
+                  log('DOCX→PDF 失败：' + convErr.message, true)
+                  notify('PDF 转换失败，已回退网页版式：' + convErr.message, 6000)
+                  await loadDOCX(file)
+                }
+              } else {
+                await loadDOCX(file)
+              }
             } else {
               await loadTextFile(file)
             }
@@ -5178,6 +5641,7 @@
             DOM.fname.textContent = file.name
             DOM.fileTypeInfo.textContent =
               '格式: ' + ext.toUpperCase() + ' · ' + formatSize(file.size)
+            updateDocxRenderModeUI()
 
             hideProgress()
             hideLoadingPopup()
@@ -5902,33 +6366,1577 @@
         }
 
         /* ============================================================
-               DOCX LOADING
+               DOCX LOADING + NATIVE OOXML RENDERING
+               ------------------------------------------------------------
+               Two engines are available:
+
+               * native (default) - docx-preview parses the OOXML package and
+                 rebuilds the real Word/WPS layout: paper size, margins,
+                 fonts/colours, paragraph styles, tables, images, numbering,
+                 headers/footers, footnotes and saved page breaks.
+               * simple           - Mammoth's semantic HTML (legacy fallback).
+
+               Both engines feed the SAME page framework: one .doc-page per
+               physical page, each with a .docx-container and a .redact-canvas.
+               That is what makes every redaction tool (box drawing, text
+               selection, sensitive-word auto mask, undo, zoom, export) work
+               unchanged on native DOCX content.
                ============================================================ */
-        async function loadDOCX(file) {
-          if (!window.mammoth) throw new Error('Mammoth 库未加载 (DOCX 解析需要)')
+        function isNativeDocxActive() {
+          return S.fileType === 'docx' && S.docxNativeActive === true && !!S.docxNative
+        }
+
+        function disposeNativeDocx() {
+          if (S.docxNative && S.docxNative.host && S.docxNative.host.parentNode) {
+            S.docxNative.host.parentNode.removeChild(S.docxNative.host)
+          }
+          S.docxNative = null
+          S.docxNativeActive = false
+          S.docxArrayBuffer = null
+        }
+
+        var docxPdfStatusCache = null
+
+        function updateDocxRenderModeUI() {
+          var el = document.getElementById('sv-docx-mode')
+          if (el) el.textContent = S.docxRenderMode === 'native' ? '原生 Word' : '简化 HTML'
+          var imp = document.getElementById('sv-docx-import')
+          if (imp) {
+            imp.textContent =
+              S.docxImportMode === 'native'
+                ? '网页版式'
+                : S.docxImportMode === 'pdf'
+                  ? '转 PDF'
+                  : '每次询问'
+          }
+          var pdf = document.getElementById('sv-docx-pdf')
+          if (pdf) {
+            if (!docxPdfStatusCache) pdf.textContent = '检测中'
+            else if (!docxPdfStatusCache.ok) pdf.textContent = '不可用'
+            else if (!docxPdfStatusCache.available) pdf.textContent = '未安装'
+            else pdf.textContent =
+              (docxPdfStatusCache.engines || []).filter(function (e) {
+                return e.available
+              }).map(function (e) {
+                return e.name
+              }).join(' / ') || '可用'
+          }
+          if (DOM.fileTypeInfo && S.fileType === 'docx') {
+            DOM.fileTypeInfo.textContent =
+              '格式: DOCX · ' + formatSize(S.fileSize || 0) + ' · ' +
+              (S.docxViaPdf
+                ? 'PDF 渲染' + (S.docxPdfEngineName ? '（' + S.docxPdfEngineName + '）' : '')
+                : isNativeDocxActive()
+                  ? '原生 Word 版式'
+                  : '简化 HTML 版式')
+          }
+        }
+
+        function arrayBufferToBase64(buffer) {
+          var bytes = new Uint8Array(buffer)
+          var out = ''
+          var chunk = 0x8000
+          for (var i = 0; i < bytes.length; i += chunk) {
+            out += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
+          }
+          return btoa(out)
+        }
+
+        function base64ToUint8Array(value) {
+          var bin = atob(String(value || ''))
+          var out = new Uint8Array(bin.length)
+          for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+          return out
+        }
+
+        function renderDocxPdfEngineList() {
+          var host = document.getElementById('dps-engines')
+          if (!host) return
+          var st = docxPdfStatusCache
+          if (!st) {
+            host.innerHTML = '<div class="dps-engine">正在检测本机转换器…</div>'
+            return
+          }
+          if (!st.ok) {
+            host.innerHTML =
+              '<div class="dps-engine"><b>当前环境不可用</b><code>' +
+              escapeHtml(st.error || '未连接桌面接口') + '</code></div>'
+            return
+          }
+          var html = ''
+          ;(st.engines || []).forEach(function (e) {
+            html +=
+              '<div class="dps-engine"><b>' + escapeHtml(e.name) + '</b> ' +
+              (e.available
+                ? '<span class="ok">可用</span>'
+                : '<span class="bad">未检测到</span>') +
+              (e.version ? '<span style="color:var(--text-dim)"> · ' + escapeHtml(e.version) + '</span>' : '') +
+              (e.path ? '<code>' + escapeHtml(e.path) + '</code>' : '') +
+              '</div>'
+          })
+          if (!(st.engines || []).some(function (e) { return e.available })) {
+            html +=
+              '<div class="dps-engine" style="color:var(--text-dim)">' +
+              '未找到可用 DOCX 转换引擎。请安装 LibreOffice（推荐）或 AbiWord，或在下方填写可执行文件路径。' +
+              '</div>'
+          }
+          ;(st.tools || []).forEach(function (tool) {
+            html +=
+              '<div class="dps-engine" style="opacity:.85"><b>' + escapeHtml(tool.name) + '</b> ' +
+              '<span class="ok">已检测</span>' +
+              (tool.version ? '<span style="color:var(--text-dim)"> · ' + escapeHtml(tool.version) + '</span>' : '') +
+              (tool.note ? '<code>' + escapeHtml(tool.note) + '</code>' : '') +
+              (tool.path ? '<code>' + escapeHtml(tool.path) + '</code>' : '') +
+              '</div>'
+          })
+          host.innerHTML = html
+        }
+
+        async function refreshDocxPdfStatus(force) {
+          if (docxPdfStatusCache && !force) return docxPdfStatusCache
+          try {
+            var res = await fetch('/__omm/fs/docx2pdf?app=redact', { cache: 'no-store' })
+            if (!res.ok) throw new Error('HTTP ' + res.status)
+            docxPdfStatusCache = await res.json()
+          } catch (err) {
+            docxPdfStatusCache = {
+              ok: false,
+              available: false,
+              engines: [],
+              error: '当前环境未提供本机转换接口（需要桌面版）',
+            }
+          }
+          updateDocxRenderModeUI()
+          renderDocxPdfEngineList()
+          return docxPdfStatusCache
+        }
+
+        async function openDocxPdfSettings() {
+          var box = document.getElementById('docx-pdf-settings')
+          if (!box) return
+          box.classList.add('active')
+          renderDocxPdfEngineList()
+          var st = await refreshDocxPdfStatus(true)
+          var cfg = (st && st.config) || {}
+          var s = document.getElementById('dps-soffice')
+          var a = document.getElementById('dps-abiword')
+          var g = document.getElementById('dps-gs')
+          if (s && !s.value) s.value = cfg.soffice || ''
+          if (a && !a.value) a.value = cfg.abiword || ''
+          if (g && !g.value) g.value = cfg.gs || ''
+        }
+
+        function closeDocxPdfSettings() {
+          var box = document.getElementById('docx-pdf-settings')
+          if (box) box.classList.remove('active')
+        }
+
+        async function saveDocxPdfSettings() {
+          var s = document.getElementById('dps-soffice')
+          var a = document.getElementById('dps-abiword')
+          var g = document.getElementById('dps-gs')
+          try {
+            var res = await fetch('/__omm/fs/docx2pdf/config?app=redact', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                app: 'redact',
+                soffice: s ? s.value.trim() : '',
+                abiword: a ? a.value.trim() : '',
+                gs: g ? g.value.trim() : '',
+              }),
+            })
+            var json = await res.json()
+            if (!json.ok) throw new Error(json.error || '保存失败')
+            docxPdfStatusCache = json
+            renderDocxPdfEngineList()
+            updateDocxRenderModeUI()
+            notify(
+              json.available
+                ? '转换引擎已保存：' +
+                    (json.engines || []).filter(function (e) { return e.available }).map(function (e) { return e.name }).join(' / ')
+                : '已保存路径，但仍未检测到可用引擎',
+              4000,
+            )
+            log('PDF 转换引擎设置已更新')
+          } catch (err) {
+            notify('保存转换引擎失败：' + err.message, 5000)
+          }
+        }
+
+        async function buildProbeDocxBlob() {
+          var zip = new JSZip()
+          var W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+          var R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+          zip.file(
+            '[Content_Types].xml',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+              '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+              '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+              '<Default Extension="xml" ContentType="application/xml"/>' +
+              '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+              '</Types>',
+          )
+          zip.file(
+            '_rels/.rels',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+              '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+              '<Relationship Id="rId1" Type="' + R + '/officeDocument" Target="word/document.xml"/>' +
+              '</Relationships>',
+          )
+          zip.file(
+            'word/document.xml',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+              '<w:document xmlns:w="' + W + '"><w:body>' +
+              '<w:p><w:r><w:t>OMM PDF conversion probe</w:t></w:r></w:p>' +
+              '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
+              '<w:pgMar w:top="1440" w:right="1800" w:bottom="1440" w:left="1800" w:header="851" w:footer="992" w:gutter="0"/>' +
+              '</w:sectPr></w:body></w:document>',
+          )
+          return await zip.generateAsync({ type: 'blob' })
+        }
+
+        async function testDocxPdfConversion() {
+          try {
+            notify('正在测试转换器…')
+            var blob = await buildProbeDocxBlob()
+            var ab = await blob.arrayBuffer()
+            var res = await fetch('/__omm/fs/docx2pdf?app=redact', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                app: 'redact',
+                name: 'omm-probe.docx',
+                engine: S.docxPdfEngine || '',
+                data: arrayBufferToBase64(ab),
+              }),
+            })
+            var json = await res.json()
+            if (!json.ok) {
+              var detail = (json.attempts || [])
+                .map(function (a) { return a.engine + ': ' + a.error })
+                .join('; ')
+              throw new Error((json.error || '转换失败') + (detail ? '（' + detail + '）' : ''))
+            }
+            notify('转换测试成功：' + (json.engine || '本机引擎'), 4000)
+            log('PDF 转换测试成功：' + (json.engine || ''))
+          } catch (err) {
+            notify('转换测试失败：' + err.message, 7000)
+            log('PDF 转换测试失败：' + err.message, true)
+          }
+        }
+
+        var pdfToolStatusCache = null
+        var pdfToolState = { bytes: null, name: '', files: [] }
+
+        async function refreshPdfToolStatus(force) {
+          if (pdfToolStatusCache && !force) return pdfToolStatusCache
+          try {
+            var res = await fetch('/__omm/fs/pdf/tool?app=redact', { cache: 'no-store' })
+            pdfToolStatusCache = res.ok
+              ? await res.json()
+              : { ok: false, available: false, error: 'HTTP ' + res.status }
+          } catch (err) {
+            pdfToolStatusCache = { ok: false, available: false, error: '未连接桌面接口' }
+          }
+          updatePdfToolUI()
+          return pdfToolStatusCache
+        }
+
+        function updatePdfToolUI() {
+          var opEl = document.getElementById('pdf-tool-op')
+          var op = opEl ? opEl.value : 'compress'
+          $$('#pdf-tools .pdf-opt').forEach(function (row) {
+            var allowed = (row.dataset.for || '').split(/\s+/)
+            row.classList.toggle('show', allowed.indexOf(op) >= 0)
+          })
+          var source = document.getElementById('pdf-tool-source')
+          if (source) {
+            if (pdfToolState.files.length) {
+              source.textContent =
+                pdfToolState.files.length +
+                ' 个文件：' +
+                pdfToolState.files.map(function (f) { return f.name }).join('、')
+            } else if (pdfToolState.bytes) {
+              source.textContent =
+                '当前文档：' + (pdfToolState.name || 'document.pdf') +
+                (S.totalPages ? '（' + S.totalPages + ' 页）' : '')
+            } else {
+              source.textContent = '未选择文件，请点击“选择 PDF…”'
+            }
+          }
+          var status = document.getElementById('pdf-tool-status')
+          var st = pdfToolStatusCache
+          if (status) {
+            if (!st) status.textContent = '正在检测 Ghostscript…'
+            else if (st.available)
+              status.textContent =
+                '引擎：Ghostscript ' + (st.version || '') + '　' + (st.path || '')
+            else
+              status.textContent =
+                '未检测到 Ghostscript，请先在“设置 → PDF 转换引擎”中填写路径。'
+          }
+          var run = document.querySelector('#pdf-tools [data-action="pdfToolRun"]')
+          if (run) run.disabled = !(st && st.available)
+        }
+
+        function openPdfTools() {
+          pdfToolState = {
+            bytes: S.pdfBytes ? new Uint8Array(S.pdfBytes.slice(0)) : null,
+            name: S.fileName || '',
+            files: [],
+          }
+          var box = document.getElementById('pdf-tools')
+          if (box) box.classList.add('active')
+          updatePdfToolUI()
+          refreshPdfToolStatus(true)
+        }
+
+        function closePdfTools() {
+          var box = document.getElementById('pdf-tools')
+          if (box) box.classList.remove('active')
+        }
+
+        function choosePdfToolFiles() {
+          var input = document.getElementById('pdf-tool-input')
+          if (input) input.click()
+        }
+
+        async function runPdfTool() {
+          var st = await refreshPdfToolStatus()
+          if (!st || !st.available) {
+            notify('未检测到 Ghostscript，请先设置路径')
+            return
+          }
+          var opEl = document.getElementById('pdf-tool-op')
+          var op = opEl ? opEl.value : 'compress'
+          var status = document.getElementById('pdf-tool-status')
+          var run = document.querySelector('#pdf-tools [data-action="pdfToolRun"]')
+          try {
+            if (run) run.disabled = true
+            if (status) status.textContent = '正在处理，请稍候…'
+            var payload = { app: 'redact', op: op, name: '', options: {} }
+            if (op === 'merge') {
+              if (pdfToolState.files.length < 2) throw new Error('合并至少需要 2 个 PDF')
+              var items = []
+              for (var i = 0; i < pdfToolState.files.length; i++) {
+                var fb = await pdfToolState.files[i].arrayBuffer()
+                items.push({ name: pdfToolState.files[i].name, data: arrayBufferToBase64(fb) })
+              }
+              payload.files = items
+              payload.name = pdfToolState.files[0].name
+            } else {
+              var bytes = pdfToolState.bytes
+              if (!bytes && pdfToolState.files.length) {
+                bytes = new Uint8Array(await pdfToolState.files[0].arrayBuffer())
+                pdfToolState.name = pdfToolState.files[0].name
+              }
+              if (!bytes) throw new Error('请先选择 PDF 文件')
+              payload.data = arrayBufferToBase64(bytes.buffer)
+              payload.name = pdfToolState.name || 'document.pdf'
+            }
+            if (op === 'compress') {
+              var q = document.getElementById('pdf-opt-quality')
+              payload.options.quality = q ? q.value : 'ebook'
+            } else if (op === 'pages' || op === 'render') {
+              var first = parseInt(document.getElementById('pdf-opt-first').value, 10) || 1
+              var last = parseInt(document.getElementById('pdf-opt-last').value, 10) || first
+              payload.options.first = first
+              payload.options.last = last
+            }
+            if (op === 'render') {
+              payload.options.dpi = parseInt(document.getElementById('pdf-opt-dpi').value, 10) || 150
+              payload.options.format = document.getElementById('pdf-opt-format').value
+            }
+            var res = await fetch('/__omm/fs/pdf/tool?app=redact', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+            var json = await res.json()
+            if (!json.ok) throw new Error(json.error || '处理失败')
+            if (json.pdf) {
+              var pdfBytes = base64ToUint8Array(json.pdf)
+              downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), json.name || 'output.pdf')
+            } else if (json.zip) {
+              var zipBytes = base64ToUint8Array(json.zip)
+              downloadBlob(new Blob([zipBytes], { type: 'application/zip' }), json.name || 'output.zip')
+            }
+            var summary = json.bytes ? formatSize(json.bytes) : ''
+            if (json.originalBytes) {
+              summary =
+                formatSize(json.originalBytes) + ' → ' + formatSize(json.bytes) +
+                '（' + Math.round((1 - json.bytes / json.originalBytes) * 100) + '% 减少）'
+            }
+            if (status) status.textContent = '完成：' + (json.name || '') + '　' + summary
+            notify('PDF 处理完成：' + (json.name || ''), 4000)
+            log('PDF 工具 ' + op + ' 完成：' + (json.name || '') + ' ' + summary)
+          } catch (err) {
+            if (status) status.textContent = '失败：' + err.message
+            notify('PDF 处理失败：' + err.message, 6000)
+            log('PDF 工具失败：' + err.message, true)
+          } finally {
+            if (run) run.disabled = false
+          }
+        }
+
+        function cycleDocxImportMode() {
+          S.docxImportMode =
+            S.docxImportMode === 'ask'
+              ? 'native'
+              : S.docxImportMode === 'native'
+                ? 'pdf'
+                : 'ask'
+          saveSettings()
+          updateDocxRenderModeUI()
+          notify(
+            S.docxImportMode === 'ask'
+              ? '打开 DOCX 时询问导入方式'
+              : S.docxImportMode === 'native'
+                ? 'DOCX 固定使用网页版式'
+                : 'DOCX 固定转 PDF 导入',
+          )
+        }
+
+        function showDocxImportDialog(file) {
+          return new Promise(function (resolve) {
+            var box = document.getElementById('docx-import')
+            if (!box) {
+              resolve('native')
+              return
+            }
+            var fileEl = document.getElementById('di-file')
+            if (fileEl) fileEl.textContent = file.name + ' · ' + formatSize(file.size)
+            var pdfBtn = document.getElementById('di-pdf-choice')
+            var hint = document.getElementById('di-pdf-hint')
+            var remember = document.getElementById('di-remember')
+            if (remember) remember.checked = false
+            box.classList.add('active')
+
+            function done(mode) {
+              box.classList.remove('active')
+              box.removeEventListener('click', onClick)
+              if (remember && remember.checked && (mode === 'native' || mode === 'pdf')) {
+                S.docxImportMode = mode
+                saveSettings()
+                updateDocxRenderModeUI()
+              }
+              resolve(mode)
+            }
+            function onClick(e) {
+              var btn = e.target.closest ? e.target.closest('[data-docx-mode]') : null
+              if (!btn) return
+              if (btn.disabled) return
+              // PDF engine not ready: send the user straight to path settings.
+              if (
+                btn.dataset.docxMode === 'pdf' &&
+                (!docxPdfStatusCache || !docxPdfStatusCache.available)
+              ) {
+                openDocxPdfSettings()
+                return
+              }
+              done(btn.dataset.docxMode)
+            }
+            box.addEventListener('click', onClick)
+
+            refreshDocxPdfStatus().then(function (st) {
+              if (!pdfBtn) return
+              var names = (st.engines || [])
+                .filter(function (e) { return e.available })
+                .map(function (e) { return e.name })
+              if (hint) {
+                hint.textContent = st.available
+                  ? '使用本机 ' + names.join(' / ') + ' 生成 PDF，版式与原文件一致。'
+                  : '未检测到 LibreOffice / AbiWord。点击此项可直接配置转换器路径。'
+              }
+            })
+          })
+        }
+
+        async function resolveDocxImportMode(file) {
+          if (S.docxImportMode === 'native' || S.docxImportMode === 'pdf') {
+            return S.docxImportMode
+          }
+          return await showDocxImportDialog(file)
+        }
+
+        async function convertDocxWithLocalEngine(file) {
+          var ab = await file.arrayBuffer()
+          setLoadingInfo('正在调用本机转换引擎生成 PDF…')
+          var res = await fetch('/__omm/fs/docx2pdf?app=redact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              app: 'redact',
+              name: file.name,
+              engine: S.docxPdfEngine || '',
+              data: arrayBufferToBase64(ab),
+            }),
+          })
+          var json = await res.json()
+          if (!json.ok) {
+            var err = new Error(json.error || '转换失败')
+            err.detail = json
+            throw err
+          }
+          var bytes = base64ToUint8Array(json.pdf)
+          var pdfName = file.name.replace(/\.docx?$/i, '.pdf')
+          return {
+            file: new File([bytes], pdfName, { type: 'application/pdf' }),
+            engine: json.engine || '',
+          }
+        }
+
+        async function toggleDocxRenderMode() {
+          var next = S.docxRenderMode === 'native' ? 'simple' : 'native'
+          var hasDoc = S.fileType === 'docx' && !!(S.docxHtml || S.docxNative)
+          if (hasDoc && S.redacts.length) {
+            var ok = await showConfirm(
+              '切换 DOCX 渲染引擎会重新分页，已有的 ' + S.redacts.length +
+              ' 个遮罩坐标将失效并被清除。确定继续吗？',
+            )
+            if (!ok) return
+          }
+          S.docxRenderMode = next
+          saveSettings()
+          if (!hasDoc) {
+            updateDocxRenderModeUI()
+            notify(next === 'native' ? '已设为原生 Word 版式，打开 DOCX 时生效' : '已设为简化 HTML 版式')
+            return
+          }
+          S.redacts = []
+          S.undoStack = []
+          S.redoStack = []
+          S.redactIdCounter = 0
+          updateRedactCount()
           try {
             showProgress()
-            setProgress(10)
+            setLoadingInfo(next === 'native' ? '正在还原 Word 原版版式…' : '正在生成简化版式…')
+            if (next === 'native') {
+              if (!S.docxNative && S.docxArrayBuffer) await parseNativeDOCX(S.docxArrayBuffer)
+              if (S.docxNative) {
+                computeNativeDocxPages()
+                S.docxNativeActive = true
+              } else {
+                S.docxRenderMode = 'simple'
+                saveSettings()
+                notify('原生版式不可用，已回退简化版式')
+              }
+            } else {
+              S.docxNativeActive = false
+            }
+            renderDocument()
+            requestAnimationFrame(function () {
+              setTool(S.tool, false)
+              refreshSearchAfterDocumentChange()
+            })
+            updateStats()
+            updateDocxRenderModeUI()
+            log('DOCX 渲染引擎：' + (S.docxRenderMode === 'native' ? '原生 Word 版式' : '简化 HTML 版式'))
+          } catch (err) {
+            handleError('切换 DOCX 渲染引擎失败', err)
+          } finally {
+            hideProgress()
+          }
+        }
+
+        /* Fix OOXML constructs that docx-preview cannot express:
+           - w:cr (soft carriage return) is not parsed at all -> w:br
+           - w:fldSimple drops its cached field result -> unwrap the children
+             so TOC entries / page numbers stay visible
+           - border elements without w:color render as "solid null" -> add black */
+        async function prepareDocxForRender(ab) {
+          if (!window.JSZip || !ab) return ab
+          try {
+            var zip = await JSZip.loadAsync(ab)
+            var names = []
+            zip.forEach(function (path) {
+              if (/^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(path)) {
+                names.push(path)
+              }
+            })
+            var changed = false
+            for (var i = 0; i < names.length; i++) {
+              var file = zip.file(names[i])
+              if (!file) continue
+              var xml = await file.async('string')
+              var before = xml
+              xml = xml.replace(/<w:fldSimple\b[^>]*\/>/g, '')
+              xml = xml.replace(/<w:fldSimple\b[^>]*>/g, '').replace(/<\/w:fldSimple>/g, '')
+              xml = xml.replace(/<w:cr\s*\/>/g, '<w:br/>')
+              xml = xml.replace(/<w:(top|left|bottom|right|insideH|insideV|start|end)\b([^>]*?)\/>/g,
+                function (match, tag, attrs) {
+                  if (!/w:val=/.test(attrs) || /w:color=|w:themeColor=/.test(attrs)) return match
+                  return '<w:' + tag + attrs + ' w:color="000000"/>'
+                })
+              if (xml !== before) {
+                zip.file(names[i], xml)
+                changed = true
+              }
+            }
+            if (!changed) return ab
+            return await zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' })
+          } catch (err) {
+            if (window.console && console.warn) console.warn('prepare DOCX failed', err)
+            return ab
+          }
+        }
+
+        function extractDocxPlainText(root) {
+          var parts = []
+          function walk(node) {
+            if (!node) return
+            if (node.nodeType === 3) {
+              parts.push(node.nodeValue || '')
+              return
+            }
+            if (node.nodeType !== 1) return
+            var tag = node.tagName
+            if (tag === 'BR') {
+              parts.push('\n')
+              return
+            }
+            for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i])
+            if (tag === 'TD' || tag === 'TH') parts.push('\t')
+            else if (tag === 'P' || tag === 'DIV' || tag === 'LI' || /^H[1-6]$/.test(tag) || tag === 'TR') {
+              parts.push('\n')
+            }
+          }
+          walk(root)
+          return parts
+            .join('')
+            .replace(/[ \t]+\n/g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/^\n+|\n+$/g, '')
+        }
+
+        async function parseNativeDOCX(ab) {
+          if (!window.docx || !window.docx.renderAsync)
+            throw new Error('原生 DOCX 渲染库未加载 (docx-preview)')
+          if (S.docxNative && S.docxNative.host && S.docxNative.host.parentNode) {
+            S.docxNative.host.parentNode.removeChild(S.docxNative.host)
+          }
+          S.docxNative = null
+          S.docxNativeActive = false
+
+          // Off-screen, but fully laid out: docx-preview measures tab stops and
+          // the pagination pass below needs real client rects / scroll heights.
+          var host = document.createElement('div')
+          host.id = 'docx-native-source-host'
+          host.style.cssText =
+            'position:fixed;left:-200000px;top:0;opacity:0;pointer-events:none;z-index:-1;width:auto;'
+          var styleHost = document.createElement('div')
+          styleHost.id = 'docx-native-style-host'
+          var bodyHost = document.createElement('div')
+          bodyHost.className = 'docx-native-source'
+          host.appendChild(styleHost)
+          host.appendChild(bodyHost)
+          document.body.appendChild(host)
+
+          try {
+            var renderBuffer = await prepareDocxForRender(ab)
+            await window.docx.renderAsync(renderBuffer, bodyHost, styleHost, {
+              className: 'docx',
+              inWrapper: false,
+              ignoreWidth: false,
+              ignoreHeight: false,
+              ignoreFonts: false,
+              breakPages: true,
+              // Word/WPS store their own page breaks in lastRenderedPageBreak;
+              // honouring them reproduces the original page boundaries.
+              ignoreLastRenderedPageBreak: false,
+              renderHeaders: true,
+              renderFooters: true,
+              renderFootnotes: true,
+              renderEndnotes: true,
+              renderComments: false,
+              renderAltChunks: true,
+              // IMPORTANT: the host app replaces window.FileReader with a
+              // bridge class that only exposes readAsArrayBuffer(). docx-preview's
+              // base64 image path calls readAsDataURL and silently fails, which
+              // leaves every <img> without a src. Object URLs avoid FileReader
+              // entirely and work for blobs with an empty MIME type too.
+              useBase64URL: false,
+              experimental: true,
+              trimXmlDeclaration: true,
+              debug: false,
+            })
+          } catch (err) {
+            if (host.parentNode) host.parentNode.removeChild(host)
+            throw err
+          }
+
+          if (document.fonts && document.fonts.ready) {
+            try {
+              await document.fonts.ready
+            } catch (_) {}
+          }
+          await new Promise(function (r) {
+            requestAnimationFrame(r)
+          })
+
+          var sections = Array.prototype.slice.call(bodyHost.children).filter(function (el) {
+            return el.tagName === 'SECTION' && el.classList.contains('docx')
+          })
+          if (!sections.length) {
+            if (host.parentNode) host.parentNode.removeChild(host)
+            throw new Error('DOCX 中没有可渲染的页面内容')
+          }
+          var layoutMeta = await extractDocxLayoutMeta(ab)
+          applyDocxDefaultFonts(bodyHost, layoutMeta)
+          applyNativeDocxLayout(bodyHost, layoutMeta)
+          applyDocxDocGrid(sections, layoutMeta)
+          freezeDocxNumbering(bodyHost, styleHost)
+
+          S.docxNative = {
+            host: host,
+            styleHost: styleHost,
+            bodyHost: bodyHost,
+            sections: sections,
+            pageDefs: [],
+          }
+          computeNativeDocxPages()
+          S.docxNativeActive = true
+          return S.docxNative
+        }
+
+        function nativeDocxPx(value, fallback) {
+          var n = parseFloat(value)
+          return Number.isFinite(n) && n > 0 ? n : fallback
+        }
+
+        var DOCX_EMU_PER_PX = 9525
+
+        function decodeCssString(value) {
+          return String(value || '').replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, function (m, hex, ch) {
+            if (hex) {
+              try {
+                return String.fromCodePoint(parseInt(hex, 16))
+              } catch (_) {
+                return ''
+              }
+            }
+            return ch === 'n' ? '\n' : ch
+          })
+        }
+
+        function cssStringLiteral(value) {
+          return '"' + String(value == null ? '' : value)
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\r?\n/g, '\\a ') + '"'
+        }
+
+        function formatDocxCounter(n, style) {
+          var s = String(style || 'decimal').toLowerCase()
+          var digits = '一二三四五六七八九'
+          function zh(num) {
+            if (num <= 0) return String(num)
+            if (num < 10) return digits.charAt(num - 1)
+            if (num < 20) return '十' + (num % 10 ? digits.charAt((num % 10) - 1) : '')
+            if (num < 100) {
+              var t = Math.floor(num / 10), r = num % 10
+              return digits.charAt(t - 1) + '十' + (r ? digits.charAt(r - 1) : '')
+            }
+            if (num < 1000) {
+              var h = Math.floor(num / 100), rr = num % 100
+              return digits.charAt(h - 1) + '百' + (rr ? (rr < 10 ? '零' + zh(rr) : zh(rr)) : '')
+            }
+            return String(num)
+          }
+          function roman(num, upper) {
+            if (num <= 0 || num > 3999) return String(num)
+            var map = [[1000,'m'],[900,'cm'],[500,'d'],[400,'cd'],[100,'c'],[90,'xc'],[50,'l'],[40,'xl'],[10,'x'],[9,'ix'],[5,'v'],[4,'iv'],[1,'i']]
+            var out = ''
+            map.forEach(function (pair) { while (num >= pair[0]) { out += pair[1]; num -= pair[0] } })
+            return upper ? out.toUpperCase() : out
+          }
+          function letters(num, upper) {
+            var out = ''
+            while (num > 0) {
+              var r = (num - 1) % 26
+              out = String.fromCharCode(97 + r) + out
+              num = Math.floor((num - 1) / 26)
+            }
+            return upper ? out.toUpperCase() : out
+          }
+          if (s === 'decimal' || s === '') return String(n)
+          if (s === 'decimalzero') return n < 10 ? '0' + n : String(n)
+          if (s === 'simp-chinese-informal' || s === 'chinesecounting' || s === 'chinesecountingthousand' || s === 'japaneseCounting'.toLowerCase()) return zh(n)
+          if (s === 'simp-chinese-formal' || s === 'chineselegalsimplified') {
+            var formal = '壹贰叁肆伍陆柒捌玖'
+            if (n >= 1 && n <= 9) return formal.charAt(n - 1)
+            if (n === 10) return '拾'
+            return zh(n)
+          }
+          if (s === 'upperroman') return roman(n, true)
+          if (s === 'lowerroman') return roman(n, false)
+          if (s === 'upperletter') return letters(n, true)
+          if (s === 'lowerletter') return letters(n, false)
+          if (s === 'decimalenclosedcircle' || s === 'decimalenclosedcirclechinese') {
+            return n >= 1 && n <= 20 ? String.fromCharCode(0x2460 + n - 1) : String(n)
+          }
+          return String(n)
+        }
+
+        /* docx-preview renders list numbers with CSS counters. Counters are
+           document-global: every measurement clone and every export clone keeps
+           incrementing them, so numbers drift (a exported page could show
+           "七、" instead of "一、"). Freeze each paragraph's number into a CSS
+           variable once, from a single canonical render. */
+        function freezeDocxNumbering(bodyHost, styleHost) {
+          if (!bodyHost || !styleHost) return
+          var css = Array.prototype.map.call(styleHost.querySelectorAll('style'), function (s) {
+            return s.textContent || ''
+          }).join('\n')
+          var rules = Object.create(null)
+          var ruleRe = /p\.(docx-num-\d+-\d+):before\s*\{([^}]*)\}/g
+          var m
+          while ((m = ruleRe.exec(css))) {
+            var cls = m[1]
+            var contentMatch = /content\s*:\s*([^;]+);/.exec(m[2])
+            if (!contentMatch) continue
+            var raw = contentMatch[1].trim()
+            var parts = []
+            var tokenRe = /counter\(([^,)]+)(?:,\s*([^)]+))?\)|"((?:[^"\\]|\\.)*)"/g
+            var t
+            while ((t = tokenRe.exec(raw))) {
+              if (t[1]) parts.push({ counter: t[1].trim(), style: (t[2] || 'decimal').trim() })
+              else parts.push({ text: decodeCssString(t[3] || '') })
+            }
+            if (parts.length) rules[cls] = parts
+          }
+          var counters = Object.create(null)
+          var nodes = bodyHost.querySelectorAll('article p[class*="docx-num-"]')
+          var applied = 0
+          Array.prototype.forEach.call(nodes, function (p) {
+            var mm = /docx-num-(\d+)-(\d+)/.exec(p.className || '')
+            if (!mm) return
+            var seq = mm[1], level = parseInt(mm[2], 10)
+            if (!Number.isFinite(level)) return
+            // A higher level increment restarts all deeper levels of the sequence.
+            for (var l = level + 1; l < 9; l++) delete counters['n' + seq + '-' + l]
+            var key = 'n' + seq + '-' + level
+            counters[key] = (counters[key] || 0) + 1
+            var parts = rules['docx-num-' + seq + '-' + level]
+            if (!parts) return
+            var text = ''
+            parts.forEach(function (part) {
+              if (part.text != null) text += part.text
+              else {
+                var name = part.counter.replace(/^docx-num-/, 'n')
+                text += formatDocxCounter(counters[name] || 1, part.style)
+              }
+            })
+            p.classList.add('zr-num-frozen')
+            p.style.setProperty('--zr-num-before', cssStringLiteral(text))
+            applied++
+          })
+          return applied
+        }
+
+        /* docx-preview drops wp:positionH/positionV posOffset for anchored
+           images: everything with an offset becomes float:left. Real Word/WPS
+           files (especially Chinese ones) place pictures on the right half of
+           the text column that way, so we read the OOXML ourselves and put the
+           floating pictures back where the author placed them. */
+        async function extractDocxLayoutMeta(ab) {
+          var meta = { anchors: [], grid: null }
+          if (!window.JSZip || !ab) return meta
+          try {
+            var zip = await JSZip.loadAsync(ab)
+            var f = zip.file('word/document.xml')
+            if (!f) return meta
+            var xml = await f.async('string')
+            var W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+            var WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+            var A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+            var doc = new DOMParser().parseFromString(xml, 'application/xml')
+            if (!doc || doc.getElementsByTagName('parsererror').length) return meta
+
+            var stylesFile = zip.file('word/styles.xml')
+            if (stylesFile) {
+              var stylesXml = await stylesFile.async('string')
+              var sdoc = new DOMParser().parseFromString(stylesXml, 'application/xml')
+              var rprDefault = sdoc.getElementsByTagNameNS(W, 'rPrDefault')[0]
+              var rfonts = rprDefault && rprDefault.getElementsByTagNameNS(W, 'rFonts')[0]
+              if (rfonts) {
+                meta.fonts = {
+                  ascii: rfonts.getAttributeNS(W, 'ascii') || '',
+                  eastAsia: rfonts.getAttributeNS(W, 'eastAsia') || '',
+                }
+              }
+            }
+
+            var grids = doc.getElementsByTagNameNS(W, 'docGrid')
+            if (grids.length) {
+              var pitch = parseInt(grids[0].getAttributeNS(W, 'linePitch') || '', 10)
+              if (Number.isFinite(pitch) && pitch > 0) {
+                meta.grid = {
+                  linePitch: pitch,
+                  type: grids[0].getAttributeNS(W, 'type') || '',
+                }
+              }
+            }
+
+            function offsetOf(parent, tag) {
+              var el = parent.getElementsByTagNameNS(WP, tag)[0]
+              if (!el) return null
+              return {
+                rel: el.getAttribute('relativeFrom') || '',
+                offset: (function () {
+                  var o = el.getElementsByTagNameNS(WP, 'posOffset')[0]
+                  return o ? (parseFloat(o.textContent) || 0) : 0
+                })(),
+                align: (function () {
+                  var a = el.getElementsByTagNameNS(WP, 'align')[0]
+                  return a ? (a.textContent || '').trim() : ''
+                })(),
+              }
+            }
+
+            // Both wp:anchor and wp:inline must be visited in document order:
+            // mixing them up would shift every following picture by one slot.
+            var walker = doc.createTreeWalker(doc.documentElement, NodeFilter.SHOW_ELEMENT, null)
+            var node
+            while ((node = walker.nextNode())) {
+              if (node.namespaceURI !== WP) continue
+              if (node.localName !== 'anchor' && node.localName !== 'inline') continue
+              var a = node
+              if (!a.getElementsByTagNameNS(A, 'blip').length) continue
+              var ext = a.getElementsByTagNameNS(WP, 'extent')[0]
+              var ph = offsetOf(a, 'positionH')
+              var pv = offsetOf(a, 'positionV')
+              var rec = {
+                inline: a.localName === 'inline',
+                cx: ext ? (parseInt(ext.getAttribute('cx'), 10) || 0) / DOCX_EMU_PER_PX : 0,
+                cy: ext ? (parseInt(ext.getAttribute('cy'), 10) || 0) / DOCX_EMU_PER_PX : 0,
+                relH: ph ? ph.rel || 'page' : 'page',
+                offH: ph ? ph.offset / DOCX_EMU_PER_PX : 0,
+                alignH: ph ? ph.align : '',
+                relV: pv ? pv.rel || 'page' : 'page',
+                offV: pv ? pv.offset / DOCX_EMU_PER_PX : 0,
+                alignV: pv ? pv.align : '',
+                wrap: 'wrapNone',
+                wrapText: '',
+                distL: (parseInt(a.getAttribute('distL'), 10) || 0) / DOCX_EMU_PER_PX,
+                distR: (parseInt(a.getAttribute('distR'), 10) || 0) / DOCX_EMU_PER_PX,
+                distT: (parseInt(a.getAttribute('distT'), 10) || 0) / DOCX_EMU_PER_PX,
+                distB: (parseInt(a.getAttribute('distB'), 10) || 0) / DOCX_EMU_PER_PX,
+                behind: a.getAttribute('behindDoc') === '1',
+              }
+              for (var k = 0; k < a.children.length; k++) {
+                var ln = a.children[k].localName || ''
+                if (ln.indexOf('wrap') === 0) {
+                  rec.wrap = ln
+                  rec.wrapText = a.children[k].getAttribute('wrapText') || ''
+                }
+              }
+              meta.anchors.push(rec)
+            }
+          } catch (err) {
+            if (window.console && console.warn) console.warn('DOCX layout meta failed', err)
+          }
+          return meta
+        }
+
+        /* Word distinguishes the Latin font (w:rFonts ascii/hAnsi) from the East
+           Asian font (eastAsia). docx-preview collapses them into one family, so
+           digits and Latin words render with 宋体 and line widths drift. Put the
+           Latin face first; CJK characters still fall back to the East Asian one. */
+        function applyDocxDefaultFonts(bodyHost, meta) {
+          if (!bodyHost || !meta || !meta.fonts || !meta.fonts.ascii) return
+          var ascii = meta.fonts.ascii
+          var eastAsia = meta.fonts.eastAsia
+          Array.prototype.forEach.call(bodyHost.querySelectorAll('section.docx'), function (section) {
+            section.style.fontFamily = eastAsia
+              ? '"' + ascii + '", "' + eastAsia + '"'
+              : '"' + ascii + '"'
+            Array.prototype.forEach.call(section.querySelectorAll('span[style*="font-family"]'), function (span) {
+              if (!/[A-Za-z0-9]/.test(span.textContent || '')) return
+              var fam = span.style.fontFamily
+              if (!fam || fam.indexOf(',') >= 0) return
+              span.style.fontFamily = '"' + ascii + '", ' + fam
+            })
+          })
+        }
+
+        function applyNativeDocxLayout(bodyHost, meta) {
+          if (!bodyHost) return
+          var article = bodyHost.querySelector('article')
+          var colW = (article && article.clientWidth) || 0
+          if (!colW) colW = CONFIG.A4_PAGE_WIDTH - 240
+          var imgs = Array.prototype.slice.call(bodyHost.querySelectorAll('article img'))
+          var anchors = (meta && meta.anchors) || []
+          var n = Math.min(imgs.length, anchors.length)
+          var blockGroups = []
+          for (var i = 0; i < n; i++) {
+            var img = imgs[i]
+            var a = anchors[i]
+            if (!a || a.inline) continue
+            var wrap = img.parentElement
+            if (!wrap || wrap.tagName !== 'DIV') continue
+            var p = wrap.closest('p')
+            var w = a.cx || wrap.offsetWidth || img.offsetWidth || 120
+            var h = a.cy || wrap.offsetHeight || img.offsetHeight || 90
+
+            wrap.style.width = w + 'px'
+            wrap.style.height = h + 'px'
+            wrap.style.boxSizing = 'border-box'
+            wrap.style.textIndent = '0px'
+            wrap.style.position = 'relative'
+
+            var textWrap =
+              a.wrap === 'wrapSquare' || a.wrap === 'wrapTight' || a.wrap === 'wrapThrough'
+            if (textWrap) {
+              // Place the float on the paragraph's first line so the vertical
+              // offset behaves like Word's paragraph-relative anchor.
+              if (p && wrap.parentElement !== p) {
+                p.insertBefore(wrap, p.firstChild)
+              }
+              var pLeft = 0
+              if (p) {
+                var pcs = getComputedStyle(p)
+                pLeft = parseFloat(pcs.marginInlineStart || pcs.marginLeft) || 0
+              }
+              var rightSide =
+                a.alignH === 'right' ||
+                (a.alignH !== 'left' && a.offH > Math.max(24, (colW - w) * 0.45))
+              if (a.wrapText === 'left') rightSide = true
+              else if (a.wrapText === 'right') rightSide = false
+              wrap.style.display = 'block'
+              wrap.style.margin = '0'
+              wrap.style.marginTop = Math.max(0, Math.round((a.offV || 0) + (a.distT || 0))) + 'px'
+              wrap.style.marginBottom = Math.max(0, Math.round(6 + (a.distB || 0))) + 'px'
+              if (rightSide) {
+                wrap.style.float = 'right'
+                // Keep every picture on the right rail even when the previous
+                // anchor's float is still occupying the current line box.
+                wrap.style.clear = 'right'
+                wrap.style.marginLeft = Math.max(8, Math.round(a.distL || 0)) + 'px'
+                wrap.style.marginRight =
+                  Math.max(0, Math.round(colW - a.offH - w - (a.distR || 0))) + 'px'
+              } else {
+                wrap.style.float = 'left'
+                wrap.style.clear = 'left'
+                wrap.style.marginRight = Math.max(8, Math.round(a.distR || 0)) + 'px'
+                wrap.style.marginLeft =
+                  Math.max(0, Math.round(a.offH - pLeft - (a.distL || 0))) + 'px'
+              }
+            } else {
+              // No text wrapping: pictures in one paragraph are positioned by
+              // their real offsets after the loop, so order and gaps match Word.
+              wrap.style.float = 'none'
+              wrap.style.display = 'inline-block'
+              wrap.style.verticalAlign = 'middle'
+              wrap.style.margin = '2px 6px'
+              if (p) {
+                var group = null
+                for (var gi = 0; gi < blockGroups.length; gi++) {
+                  if (blockGroups[gi].p === p) { group = blockGroups[gi]; break }
+                }
+                if (!group) {
+                  group = { p: p, items: [] }
+                  blockGroups.push(group)
+                }
+                group.items.push({ wrap: wrap, a: a })
+                if (a.alignH === 'center') p.style.textAlign = 'center'
+                else if (a.alignH === 'right') p.style.textAlign = 'right'
+              }
+            }
+            if (a.behind) wrap.style.zIndex = '-1'
+            img.style.width = '100%'
+            img.style.height = '100%'
+            img.style.objectFit = 'contain'
+          }
+
+          // Paragraphs that only hold non-wrapping pictures: honour the real
+          // horizontal offsets so side-by-side order and spacing match Word.
+          blockGroups.forEach(function (group) {
+            if (!group.p || !group.items.length) return
+            var p = group.p
+            if (group.items.length === 1) return
+            var pLeft = parseFloat(getComputedStyle(p).marginInlineStart || getComputedStyle(p).marginLeft) || 0
+            p.style.position = 'relative'
+            var maxBottom = 0
+            group.items.forEach(function (item) {
+              var wrap = item.wrap
+              var a = item.a
+              wrap.style.position = 'absolute'
+              wrap.style.left = Math.max(0, Math.round(a.offH - pLeft)) + 'px'
+              wrap.style.top = Math.max(0, Math.round(a.offV || 0)) + 'px'
+              wrap.style.margin = '0'
+              wrap.style.display = 'block'
+              maxBottom = Math.max(maxBottom, (a.offV || 0) + (a.cy || wrap.offsetHeight || 0))
+            })
+            p.style.minHeight = Math.ceil(maxBottom + 4) + 'px'
+          })
+        }
+
+        function applyDocxDocGrid(sections, meta) {
+          if (!meta || !meta.grid) return
+          var linePt = meta.grid.linePitch / 20
+          if (!(linePt > 0)) return
+          ;(sections || []).forEach(function (section) {
+            section.classList.add('zr-doc-grid')
+            section.style.setProperty('--zr-grid-line', linePt.toFixed(2) + 'pt')
+          })
+        }
+
+        /* ONE page skeleton for both measurement and live rendering.
+           Word line wrapping is extremely sensitive to the content width and
+           inherited font metrics. Two slightly different frames (a 2px border,
+           body 13px vs .docx-container 16px) would paginate at different
+           places and clip content on the real page. */
+        function createNativeDocxFrame(o) {
+          var pageEl = document.createElement('div')
+          pageEl.className = 'doc-page docx-native-page'
+          pageEl.style.cssText =
+            'position:relative;box-sizing:border-box;width:' + o.pageW +
+            'px;min-width:' + o.pageW + 'px;max-width:none;height:' + o.pageH +
+            'px;padding:0;margin:0 auto 20px;background:#ffffff;color:#000000;' +
+            'border:1px solid var(--border);border-radius:var(--radius);' +
+            'box-shadow:var(--page-shadow);overflow:hidden;flex:0 0 auto;align-self:center;'
+
+          var container = document.createElement('div')
+          container.className = 'docx-container'
+          container.style.cssText =
+            'box-sizing:border-box;width:100%;height:100%;margin:0;padding:0;' +
+            'background:#ffffff;overflow:hidden;user-select:text;-webkit-user-select:text;' +
+            'cursor:' + (S.textSelect ? 'text' : 'default') + ';'
+
+          var sectionEl = o.sectionTpl.cloneNode(false)
+          sectionEl.style.width = '100%'
+          sectionEl.style.maxWidth = 'none'
+          sectionEl.style.height = '100%'
+          sectionEl.style.minHeight = '0'
+          sectionEl.style.background = '#ffffff'
+          sectionEl.style.boxShadow = 'none'
+          sectionEl.style.margin = '0'
+
+          var article = o.articleTpl.cloneNode(false)
+          article.style.flex = '1 1 auto'
+          article.style.minHeight = '0'
+          article.style.marginBottom = '0'
+          article.style.overflow = 'hidden'
+
+          ;(o.headerEls || []).forEach(function (h) { sectionEl.appendChild(h.cloneNode(true)) })
+          sectionEl.appendChild(article)
+          ;(o.footerEls || []).forEach(function (f) { sectionEl.appendChild(f.cloneNode(true)) })
+          container.appendChild(sectionEl)
+          pageEl.appendChild(container)
+          return { pageEl: pageEl, container: container, sectionEl: sectionEl, article: article }
+        }
+
+        /* Split a docx-preview section into physical paper pages.
+           Word only stores explicit breaks, so sections without them still need
+           a layout-accurate pagination pass. Measurement happens in a frame
+           with the exact same paper size, margins, header and footer. */
+        function computeNativeDocxPages() {
+          if (!S.docxNative) return
+          // The simplified engine injects global .docx-container paragraph
+          // rules; they must not influence the native measurement frame.
+          var stale = document.getElementById('docx-pagination-runtime-style')
+          if (stale) stale.remove()
+          var defs = []
+          var measureHost = document.createElement('div')
+          measureHost.style.cssText =
+            'position:fixed;left:-200000px;top:0;opacity:0;pointer-events:none;z-index:-1;width:auto;'
+          document.body.appendChild(measureHost)
+
+          try {
+            ;(S.docxNative.sections || []).forEach(function (section) {
+              var cs = getComputedStyle(section)
+              var pageW = nativeDocxPx(cs.width, CONFIG.A4_PAGE_WIDTH)
+              var pageH = nativeDocxPx(cs.minHeight, CONFIG.A4_PAGE_HEIGHT)
+              var headerEls = [], footerEls = [], article = null
+              Array.prototype.slice.call(section.children).forEach(function (child) {
+                if (child.tagName === 'HEADER') headerEls.push(child)
+                else if (child.tagName === 'FOOTER') footerEls.push(child)
+                else if (child.tagName === 'ARTICLE' && !article) article = child
+              })
+              var sectionTpl = section.cloneNode(false)
+              var articleTpl = article ? article.cloneNode(false) : document.createElement('article')
+              var contentNodes = article ? Array.prototype.slice.call(article.childNodes) : []
+
+              var frame = createNativeDocxFrame({
+                pageW: pageW,
+                pageH: pageH,
+                sectionTpl: sectionTpl,
+                articleTpl: articleTpl,
+                headerEls: headerEls,
+                footerEls: footerEls,
+              })
+              measureHost.appendChild(frame.pageEl)
+              var mArticle = frame.article
+
+              // 1) The fixed-height article gives the real content box of the paper.
+              var contentH = Math.max(60, Math.floor(mArticle.clientHeight || (pageH - 80)))
+              // 2) Grow it to its natural height so scrollHeight reports the true
+              //    content height instead of being clamped to clientHeight.
+              mArticle.style.flex = '0 0 auto'
+              mArticle.style.height = 'auto'
+
+              function measureGroup(nodes) {
+                mArticle.innerHTML = ''
+                nodes.forEach(function (n) { mArticle.appendChild(n) })
+                return mArticle.scrollHeight
+              }
+
+              // Cut one oversized block while keeping inline runs / formatting:
+              // cloneContents() preserves partial spans, bold, colours, etc.
+              function splitOnce(node, availH) {
+                var tag = (node.tagName || '').toLowerCase()
+                mArticle.innerHTML = ''
+                mArticle.appendChild(node)
+
+                if (tag === 'table') {
+                  var rows = Array.prototype.slice.call(node.querySelectorAll('tr'))
+                  if (rows.length > 1) {
+                    var thead = node.querySelector('thead')
+                    var pieces = [], chunk = []
+                    rows.forEach(function (row) {
+                      var test = chunk.concat([row])
+                      var t = node.cloneNode(false)
+                      if (thead && !chunk.length) t.appendChild(thead.cloneNode(true))
+                      var tb = document.createElement('tbody')
+                      test.forEach(function (r) { tb.appendChild(r.cloneNode(true)) })
+                      t.appendChild(tb)
+                      if (chunk.length && measureGroup([t]) > availH + 1) {
+                        var out = node.cloneNode(false)
+                        if (thead && chunk[0] !== rows[0]) out.appendChild(thead.cloneNode(true))
+                        var ob = document.createElement('tbody')
+                        chunk.forEach(function (r) { ob.appendChild(r.cloneNode(true)) })
+                        out.appendChild(ob)
+                        pieces.push(out)
+                        chunk = [row]
+                      } else {
+                        chunk = test
+                      }
+                    })
+                    if (chunk.length) {
+                      var last = node.cloneNode(false)
+                      if (thead && chunk[0] !== rows[0]) last.appendChild(thead.cloneNode(true))
+                      var lb = document.createElement('tbody')
+                      chunk.forEach(function (r) { lb.appendChild(r.cloneNode(true)) })
+                      last.appendChild(lb)
+                      pieces.push(last)
+                    }
+                    if (pieces.length > 1) return pieces
+                  }
+                }
+
+                if (tag === 'table' || tag === 'tr' || tag === 'td' || tag === 'th') return [node]
+
+                mArticle.innerHTML = ''
+                mArticle.appendChild(node)
+                var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null)
+                var textNodes = [], total = 0, tn
+                while ((tn = walker.nextNode())) {
+                  var len = (tn.nodeValue || '').length
+                  if (!len) continue
+                  textNodes.push({ node: tn, start: total, len: len })
+                  total += len
+                }
+                if (!total) return [node]
+
+                var limit = node.getBoundingClientRect().top + availH
+                function bottomAt(offset) {
+                  var info = null
+                  for (var k = 0; k < textNodes.length; k++) {
+                    var e = textNodes[k]
+                    if (offset >= e.start && offset <= e.start + e.len) { info = e; break }
+                  }
+                  if (!info) return null
+                  var rg = document.createRange()
+                  try {
+                    rg.setStart(node, 0)
+                    rg.setEnd(info.node, offset - info.start)
+                  } catch (_) { return null }
+                  var rects = rg.getClientRects(), bottom = -Infinity
+                  for (var q = 0; q < rects.length; q++) bottom = Math.max(bottom, rects[q].bottom)
+                  return Number.isFinite(bottom) ? bottom : null
+                }
+
+                var lo = 1, hi = total, best = 0
+                while (lo <= hi) {
+                  var mid = (lo + hi) >> 1
+                  var b = bottomAt(mid)
+                  if (b === null || b <= limit) { best = mid; lo = mid + 1 }
+                  else hi = mid - 1
+                }
+                if (best < 1 || best >= total) return [node]
+
+                var cut = null
+                for (var z = 0; z < textNodes.length; z++) {
+                  if (best >= textNodes[z].start && best <= textNodes[z].start + textNodes[z].len) {
+                    cut = textNodes[z]
+                    break
+                  }
+                }
+                if (!cut) return [node]
+                var cutOffset = best - cut.start
+                var r1 = document.createRange(), r2 = document.createRange()
+                try {
+                  r1.setStart(node, 0)
+                  r1.setEnd(cut.node, cutOffset)
+                  r2.setStart(cut.node, cutOffset)
+                  r2.setEnd(node, node.childNodes.length)
+                  var f1 = r1.cloneContents(), f2 = r2.cloneContents()
+                  var a = node.cloneNode(false), c = node.cloneNode(false)
+                  a.appendChild(f1)
+                  c.appendChild(f2)
+                  return [a, c]
+                } catch (_) {
+                  return [node]
+                }
+              }
+
+              function fitPieces(node, availH, depth) {
+                if (depth > 24) return [node]
+                if (measureGroup([node]) <= availH + 1) return [node]
+                var parts = splitOnce(node, availH)
+                if (parts.length < 2) return [node]
+                var out = []
+                parts.forEach(function (part) {
+                  out = out.concat(fitPieces(part, availH, depth + 1))
+                })
+                return out
+              }
+
+              function makeDef(h, nodes) {
+                return {
+                  pageW: pageW,
+                  pageH: h,
+                  sectionTpl: sectionTpl,
+                  articleTpl: articleTpl,
+                  headerEls: headerEls,
+                  footerEls: footerEls,
+                  nodes: nodes,
+                }
+              }
+
+              var allNodes = contentNodes.map(function (n) { return n.cloneNode(true) })
+              if (!S.autoPage) {
+                // Single continuous page per Word section: grow the paper so
+                // nothing is clipped, just like "print to one long page".
+                var naturalH = measureGroup(allNodes)
+                var grownH = Math.max(pageH, Math.ceil(naturalH + (pageH - contentH)))
+                defs.push(makeDef(grownH, allNodes))
+              } else {
+                var groups = [], cur = []
+                allNodes.forEach(function (clone) {
+                  var test = cur.concat([clone])
+                  if (cur.length && measureGroup(test) > contentH + 1) {
+                    groups.push(cur)
+                    cur = []
+                    if (measureGroup([clone]) > contentH + 1) {
+                      var pieces = fitPieces(clone, contentH, 0)
+                      for (var pi = 0; pi < pieces.length - 1; pi++) groups.push([pieces[pi]])
+                      cur = pieces.length ? [pieces[pieces.length - 1]] : []
+                    } else {
+                      cur = [clone]
+                    }
+                  } else {
+                    cur = test
+                  }
+                })
+                if (cur.length || !groups.length) groups.push(cur)
+                groups.forEach(function (g) { defs.push(makeDef(pageH, g)) })
+              }
+
+              mArticle.innerHTML = ''
+              if (frame.pageEl.parentNode) frame.pageEl.parentNode.removeChild(frame.pageEl)
+            })
+          } finally {
+            if (measureHost.parentNode) measureHost.parentNode.removeChild(measureHost)
+          }
+
+          S.docxNative.pageDefs = defs
+          S.totalPages = defs.length || 1
+        }
+
+        /* Floats do not contribute to the article's scrollHeight, so a picture
+           anchored near the bottom of a page can be clipped by the fixed page
+           frame. Pull those pictures up just enough to stay on the paper. */
+        function clampNativeDocxImages() {
+          $$('.docx-native-page').forEach(function (pageEl) {
+            var sectionEl = pageEl.querySelector('section.docx')
+            if (!sectionEl) return
+            var cs = getComputedStyle(sectionEl)
+            var padBottom = parseFloat(cs.paddingBottom) || 0
+            var pageRect = pageEl.getBoundingClientRect()
+            var limit = pageRect.bottom - padBottom - 1
+            Array.prototype.slice.call(sectionEl.querySelectorAll('article img')).forEach(function (img) {
+              var wrap = img.parentElement
+              if (!wrap) return
+              var f = getComputedStyle(wrap).float
+              if (f !== 'left' && f !== 'right') return
+              var rect = wrap.getBoundingClientRect()
+              var over = rect.bottom - limit
+              if (over <= 1) return
+              var mt = parseFloat(wrap.style.marginTop) || 0
+              wrap.style.marginTop = Math.max(0, Math.round(mt - over)) + 'px'
+            })
+          })
+        }
+
+        function updateDocxNativeZoomLayout() {
+          if (S.pdfMode) return
+          var scale = S.viewScale || 1
+          $$('.docx-zoom-shell').forEach(function (shell) {
+            var page = shell.querySelector('.docx-native-page')
+            if (!page) return
+            var bw = parseFloat(page.dataset.baseW) || page.offsetWidth || CONFIG.A4_PAGE_WIDTH
+            var bh = parseFloat(page.dataset.baseH) || page.offsetHeight || CONFIG.A4_PAGE_HEIGHT
+            page.style.width = bw + 'px'
+            page.style.minWidth = bw + 'px'
+            page.style.maxWidth = 'none'
+            page.style.transform = 'scale(' + scale + ')'
+            shell.style.width = Math.max(1, Math.round(bw * scale)) + 'px'
+            shell.style.height = Math.max(1, Math.round(bh * scale)) + 'px'
+            shell.style.marginBottom = Math.max(20, Math.round(20 * scale)) + 'px'
+            var idx = parseInt(page.dataset.pageIdx, 10)
+            if (S.pages[idx]) {
+              S.pages[idx].displayW = bw
+              S.pages[idx].displayH = bh
+            }
+          })
+        }
+
+        function renderDocxNative() {
+          if (!isNativeDocxActive()) return
+          // The simplified engine injects global .docx-container rules that
+          // would overwrite the real Word styles. Drop them for native mode.
+          var stale = document.getElementById('docx-pagination-runtime-style')
+          if (stale) stale.remove()
+
+          var keepScrollTop = DOM.docViewport ? DOM.docViewport.scrollTop : 0
+          DOM.docPages.innerHTML = ''
+          var defs = (S.docxNative && S.docxNative.pageDefs) || []
+          S.pages = []
+
+          defs.forEach(function (def, pageIdx) {
+            var frame = createNativeDocxFrame(def)
+            var pageEl = frame.pageEl
+            pageEl.dataset.pageIdx = pageIdx
+
+            if (S.showPageNum) {
+              var badge = document.createElement('div')
+              badge.className = 'page-num'
+              badge.textContent = '第 ' + (pageIdx + 1) + ' 页'
+              pageEl.appendChild(badge)
+            }
+
+            def.nodes.forEach(function (n) { frame.article.appendChild(n.cloneNode(true)) })
+
+            var canvasOverlay = document.createElement('canvas')
+            canvasOverlay.className = 'redact-canvas'
+            canvasOverlay.style.cssText =
+              'position:absolute;top:0;left:0;width:100%;height:100%;cursor:' +
+              getToolCursor() + ';z-index:5;pointer-events:' +
+              (S.textSelect ? 'none' : 'auto') + ';'
+            canvasOverlay.dataset.pageIdx = pageIdx
+            canvasOverlay.addEventListener('mousedown', onCanvasMouseDown)
+            canvasOverlay.addEventListener('mousemove', onCanvasMouseMove)
+            canvasOverlay.addEventListener('mouseup', onCanvasMouseUp)
+            canvasOverlay.addEventListener('mouseleave', onCanvasMouseUp)
+            canvasOverlay.addEventListener('dblclick', onCanvasDblClick)
+            canvasOverlay.addEventListener('mouseover', onCanvasMouseOver)
+            canvasOverlay.addEventListener('mouseout', onCanvasMouseLeave)
+            pageEl.appendChild(canvasOverlay)
+            pageEl.dataset.baseW = String(def.pageW)
+            pageEl.dataset.baseH = String(def.pageH)
+            var zoomShell = document.createElement('div')
+            zoomShell.className = 'docx-zoom-shell'
+            zoomShell.style.width = def.pageW + 'px'
+            zoomShell.style.height = def.pageH + 'px'
+            zoomShell.appendChild(pageEl)
+            DOM.docPages.appendChild(zoomShell)
+
+            S.pages.push({ pageNum: pageIdx, lines: [], displayW: def.pageW, displayH: def.pageH })
+          })
+
+          S.totalPages = defs.length || 1
+          requestAnimationFrame(function () {
+            updateDocxNativeZoomLayout()
+            clampNativeDocxImages()
+            setTool(S.tool, false)
+            $$('.redact-canvas').forEach(function (c) {
+              c.classList.toggle('select-mode', S.textSelect)
+              drawExistingRedacts(c)
+            })
+            if (DOM.docViewport) {
+              DOM.docViewport.scrollTop = Math.min(
+                keepScrollTop,
+                Math.max(0, DOM.docViewport.scrollHeight - DOM.docViewport.clientHeight),
+              )
+            }
+          })
+          updateStats()
+          updatePageJumpInfo()
+        }
+
+        async function loadDOCX(file) {
+          try {
+            showProgress()
+            setProgress(5)
             setLoadingInfo('读取 DOCX 文件…')
             var ab = await loadFileReadAsArrayBuffer(file)
-            setProgress(40)
+            S.docxArrayBuffer = ab
+            setProgress(25)
             setLoadingInfo('解析文档内容…')
 
-            var result = await mammoth.convertToHtml({ arrayBuffer: ab })
-            var html = result.value
+            // Mammoth remains the fallback engine and supplies plain text for
+            // the statistics / search panels.
+            var html = null, rawText = ''
+            if (window.mammoth) {
+              try {
+                var result = await mammoth.convertToHtml({ arrayBuffer: ab })
+                html = result.value || ''
+                var rawResult = await mammoth.extractRawText({ arrayBuffer: ab })
+                rawText = rawResult.value || ''
+              } catch (e) {
+                log('简化版式解析失败：' + e.message, true)
+              }
+            }
             S.docxHtml = html
-            var rawResult = await mammoth.extractRawText({ arrayBuffer: ab })
-            var rawText = rawResult.value
 
-            S.text = rawText || ''
+            var nativeOk = false
+            if (S.docxRenderMode === 'native') {
+              setProgress(50)
+              setLoadingInfo('正在还原 Word 原版版式（纸张 / 页边距 / 字体 / 表格 / 页眉页脚）…')
+              try {
+                await parseNativeDOCX(ab)
+                nativeOk = isNativeDocxActive()
+              } catch (err) {
+                log('原生 DOCX 渲染失败，自动回退简化版式：' + err.message, true)
+                notify('原生版式解析失败，已自动回退简化版式', 4000)
+              }
+            }
+            if (!nativeOk) {
+              S.docxNativeActive = false
+              if (!html) {
+                if (!window.mammoth) throw new Error('Mammoth 库未加载 (DOCX 解析需要)')
+                throw new Error('DOCX 内容为空或无法解析')
+              }
+            } else if (S.docxNative && S.docxNative.bodyHost) {
+              var nativeText = extractDocxPlainText(S.docxNative.bodyHost)
+              if (nativeText.length > rawText.length) rawText = nativeText
+            }
+
             S.fileType = 'docx'
-            processText()
-            setProgress(90)
-            DOM.fmeta.textContent =
-              formatSize(file.size) + ' · ' + S.charCount + ' 字符 · ' + S.lines.length + ' 行'
-            log('DOCX 加载成功')
-            S.docxHtml = html
-            renderDocument()
+            S.text = rawText || ''
+            S.lines = S.text.split(/\r\n|\r|\n/).map(function (line, i) {
+              return { text: line, index: i, length: line.length }
+            })
+            S.charCount = S.text.length
+            S.totalPages = nativeOk && S.docxNative
+              ? (S.docxNative.pageDefs.length || 1)
+              : (S.totalPages || 1)
+            setProgress(95)
+            setLoadingInfo(nativeOk ? 'Word 原版版式解析完成' : '简化版式解析完成')
+            log(nativeOk ? 'DOCX 原生版式加载成功' : 'DOCX 简化版式加载成功')
           } catch (err) {
             throw new Error('DOCX解析失败: ' + err.message)
           }
@@ -6852,6 +8860,11 @@
         function renderDocument() {
           DOM.docPages.innerHTML = ''
 
+          if (isNativeDocxActive()) {
+            renderDocxNative()
+            return
+          }
+
           if (S.docxHtml && S.fileType === 'docx') {
             renderDocxPaginated()
             return
@@ -7109,6 +9122,7 @@
           updateZoomLabel()
           updatePdfSelectMode()
           updateTxtPageZoomLayout()
+          updateDocxNativeZoomLayout()
         }
 
         function updateZoomLabel() {
@@ -7147,6 +9161,7 @@
             // and text layout stay frozen, so redactions remain in one stable
             // coordinate system regardless of how far the zoom jumps.
             updateTxtPageZoomLayout()
+            updateDocxNativeZoomLayout()
             void DOM.docPages.offsetHeight
             $$('.doc-page').forEach(function (pe) {
               var idx = parseInt(pe.dataset.pageIdx, 10)
@@ -7227,12 +9242,13 @@
 
         var docxPaginationTimer = null
         function scheduleDocxPagination(delay) {
-          if (!S.docxHtml || S.fileType !== 'docx') return
+          if (S.fileType !== 'docx' || (!isNativeDocxActive() && !S.docxHtml)) return
           clearTimeout(docxPaginationTimer)
           docxPaginationTimer = setTimeout(
             function () {
               docxPaginationTimer = null
-              renderDocxPaginated()
+              if (isNativeDocxActive()) renderDocxNative()
+              else renderDocxPaginated()
             },
             delay == null ? 80 : delay,
           )
@@ -7796,8 +9812,8 @@
         async function createDocxExportPageCanvas(pageIdx) {
           var sourcePage = getPageEl(pageIdx)
           if (!sourcePage) return null
-          var logicalW = sourcePage.offsetWidth || 794
-          var logicalH = sourcePage.offsetHeight || 800
+          var logicalW = parseFloat(sourcePage.dataset.baseW) || sourcePage.offsetWidth || 794
+          var logicalH = parseFloat(sourcePage.dataset.baseH) || sourcePage.offsetHeight || 800
           var stage = document.createElement('div')
           stage.className = 'export-stage'
           stage.style.cssText =
@@ -7807,6 +9823,7 @@
             logicalH +
             'px;background:#fff;overflow:hidden;'
           var clone = sourcePage.cloneNode(true)
+          clone.style.transform = 'none'
           clone.style.margin = '0'
           clone.style.width = logicalW + 'px'
           clone.style.height = logicalH + 'px'
@@ -8193,6 +10210,15 @@
               await new Promise(function (r) {
                 requestAnimationFrame(r)
               })
+            }
+          } else if (S.docxViaPdf && S.pdfMode) {
+            for (var vpi = 0; vpi < count; vpi++) {
+              var vpc = await createPdfImageCanvas(vpi)
+              if (!vpc) throw new Error('第 ' + (vpi + 1) + ' 页渲染失败')
+              canvases.push(vpc)
+              setProgress(Math.round(((vpi + 1) / Math.max(1, count)) * 85))
+              setExportProgress(vpi + 1, count, '正在渲染第 ' + (vpi + 1) + ' 页', '正在生成脱敏图片')
+              await new Promise(function (r) { requestAnimationFrame(r) })
             }
           } else if (S.fileType === 'docx') {
             var docxPageCount = S.totalPages || 0
@@ -8700,6 +10726,180 @@
           } catch (err) {
             DOM.exportOverlay.classList.remove('active')
             handleError('PPTX导出失败', err)
+          }
+        }
+
+        /* ============================================================
+               IRREVERSIBLE REDACTED DOCX EXPORT
+               ------------------------------------------------------------
+               Each rendered page (already carrying the applied masks) is
+               rasterised and embedded as a full-page picture in a minimal,
+               valid OOXML package. Word / WPS open it like any other DOCX,
+               but the original text layer no longer exists - masks cannot be
+               removed and hidden text cannot be copied out of the file.
+               ============================================================ */
+        function buildDocxImageParagraph(rId, index, cx, cy) {
+          return (
+            '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="1" w:lineRule="exact"/></w:pPr>' +
+            '<w:r><w:drawing>' +
+            '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="' +
+            index + '" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">' +
+            '<wp:simplePos x="0" y="0"/>' +
+            '<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>' +
+            '<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>' +
+            '<wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+            '<wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+            '<wp:wrapNone/>' +
+            '<wp:docPr id="' + index + '" name="Redacted page ' + index + '"/>' +
+            '<wp:cNvGraphicFramePr/>' +
+            '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+            '<pic:pic>' +
+            '<pic:nvPicPr><pic:cNvPr id="0" name="page' + index + '.jpg"/><pic:cNvPicPr/></pic:nvPicPr>' +
+            '<pic:blipFill><a:blip r:embed="' + rId + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+            '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy +
+            '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+            '</pic:pic></a:graphicData></a:graphic>' +
+            '</wp:anchor></w:drawing></w:r></w:p>'
+          )
+        }
+
+        async function exportDOCX() {
+          var appliedCount = S.redacts.filter(function (r) { return r.applied }).length
+          if (!appliedCount) {
+            notify('没有已应用的脱敏遮罩，请先应用遮罩后再导出')
+            return
+          }
+          if (!window.JSZip) {
+            notify('DOCX 打包库未加载')
+            return
+          }
+          DOM.exportOverlay.classList.add('active')
+          try {
+            var base = (S.fileName || 'document').replace(/\.[^.]+$/, '') || 'document'
+            resetExportProgress('正在生成不可逆脱敏 DOCX', '准备渲染页面…')
+            var canvases = await renderAllPagesForImageExport()
+            if (!canvases.length) throw new Error('没有可导出的页面')
+
+            var zip = new JSZip()
+            var imageRels = [], paragraphs = []
+            var firstW = CONFIG.A4_PAGE_WIDTH, firstH = CONFIG.A4_PAGE_HEIGHT
+            for (var i = 0; i < canvases.length; i++) {
+              var cv = canvases[i]
+              var pageEl = getPageEl(i)
+              var lw = pageEl
+                ? pageEl.offsetWidth || CONFIG.A4_PAGE_WIDTH
+                : (S.pages[i] && S.pages[i].displayW) || CONFIG.A4_PAGE_WIDTH
+              var lh = pageEl
+                ? pageEl.offsetHeight || CONFIG.A4_PAGE_HEIGHT
+                : (S.pages[i] && S.pages[i].displayH) || CONFIG.A4_PAGE_HEIGHT
+              if (i === 0) { firstW = lw; firstH = lh }
+              var ratio = cv.height / Math.max(1, cv.width)
+              var cx = Math.round(lw * 9525)
+              var cy = Math.round(lw * ratio * 9525)
+              var rId = 'rIdImg' + (i + 1)
+              var dataUri = cv.toDataURL('image/jpeg', 0.92)
+              zip.file(
+                'word/media/page' + (i + 1) + '.jpg',
+                dataUri.slice(dataUri.indexOf(',') + 1),
+                { base64: true },
+              )
+              imageRels.push(
+                '<Relationship Id="' + rId +
+                '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/page' +
+                (i + 1) + '.jpg"/>',
+              )
+              paragraphs.push(buildDocxImageParagraph(rId, i + 1, cx, cy))
+              if (i < canvases.length - 1) {
+                paragraphs.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+              }
+              cv.width = 1
+              cv.height = 1
+              setProgress(Math.round(((i + 1) / canvases.length) * 85))
+              setExportProgress(
+                i + 1,
+                canvases.length,
+                '正在写入第 ' + (i + 1) + ' 页',
+                '正在生成不可逆脱敏 DOCX',
+              )
+              await new Promise(function (r) { requestAnimationFrame(r) })
+            }
+
+            var xmlHead = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            zip.file(
+              '[Content_Types].xml',
+              xmlHead +
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                '<Default Extension="xml" ContentType="application/xml"/>' +
+                '<Default Extension="jpg" ContentType="image/jpeg"/>' +
+                '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+                '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+                '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+                '</Types>',
+            )
+            zip.file(
+              '_rels/.rels',
+              xmlHead +
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+                '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+                '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+                '</Relationships>',
+            )
+            zip.file(
+              'word/_rels/document.xml.rels',
+              xmlHead +
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                imageRels.join('') +
+                '</Relationships>',
+            )
+            zip.file(
+              'word/document.xml',
+              xmlHead +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+                'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
+                'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+                'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+                '<w:body>' + paragraphs.join('') +
+                '<w:sectPr><w:pgSz w:w="' + Math.round(firstW * 15) + '" w:h="' +
+                Math.round(firstH * 15) + '"/>' +
+                '<w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>' +
+                '</w:sectPr></w:body></w:document>',
+            )
+            zip.file(
+              'docProps/core.xml',
+              xmlHead +
+                '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+                'xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+                '<dc:title>' + xmlEscape(base) + '（脱敏）</dc:title>' +
+                '<dc:creator>ZENREDACT</dc:creator>' +
+                '<cp:lastModifiedBy>ZENREDACT</cp:lastModifiedBy>' +
+                '</cp:coreProperties>',
+            )
+            zip.file(
+              'docProps/app.xml',
+              xmlHead +
+                '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">' +
+                '<Application>ZENREDACT</Application><Pages>' + canvases.length +
+                '</Pages></Properties>',
+            )
+
+            setExportProgress(100, 100, '正在打包 DOCX…', '正在生成不可逆脱敏 DOCX')
+            var blob = await zip.generateAsync({
+              type: 'blob',
+              mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              compression: 'DEFLATE',
+              compressionOptions: { level: 6 },
+            })
+            downloadBlob(blob, base + '_脱敏.docx')
+            notify('不可逆脱敏 DOCX 已导出（逐页位图，原文不可恢复）', 4000)
+            log('不可逆脱敏 DOCX 导出成功：' + canvases.length + ' 页')
+            DOM.statusLeft.textContent = '脱敏 DOCX 导出完成'
+          } catch (err) {
+            handleError('脱敏 DOCX 导出失败', err)
+          } finally {
+            DOM.exportOverlay.classList.remove('active')
           }
         }
 
@@ -9517,14 +11717,59 @@
               else if (a === 'loadImageFolder' && DOM.imageFolderInput) DOM.imageFolderInput.click()
               else if (a === 'loadSample') loadSample()
               else if (a === 'applyAllRedacts') applyAllRedacts()
+              else if (a === 'openPdfTools') openPdfTools()
               else if (a === 'clearAll') clearAllRedacts()
               else if (a === 'exportPDF') exportPDF()
               else if (a === 'exportImage') exportImage()
               else if (a === 'exportPPTX') exportPPTX()
+              else if (a === 'exportDOCX') exportDOCX()
               else if (a === 'showSettings') toggleSettingsDropdown()
               else if (a === 'togglePin') togglePin()
             })
           })
+
+          // PDF tools dialog
+          $$('#pdf-tools [data-action]').forEach(function (el) {
+            el.addEventListener('click', function () {
+              var a = el.dataset.action
+              if (a === 'pdfToolClose') closePdfTools()
+              else if (a === 'pdfToolChoose') choosePdfToolFiles()
+              else if (a === 'pdfToolRun') runPdfTool()
+            })
+          })
+          var pdfToolsBox = document.getElementById('pdf-tools')
+          if (pdfToolsBox) {
+            pdfToolsBox.addEventListener('click', function (e) {
+              if (e.target === pdfToolsBox) closePdfTools()
+            })
+          }
+          var pdfToolOp = document.getElementById('pdf-tool-op')
+          if (pdfToolOp) pdfToolOp.addEventListener('change', updatePdfToolUI)
+          var pdfToolInput = document.getElementById('pdf-tool-input')
+          if (pdfToolInput) {
+            pdfToolInput.addEventListener('change', function () {
+              pdfToolState.files = Array.prototype.slice.call(pdfToolInput.files || [])
+              pdfToolInput.value = ''
+              updatePdfToolUI()
+            })
+          }
+
+          // PDF converter settings dialog
+          $$('#docx-pdf-settings [data-action]').forEach(function (el) {
+            el.addEventListener('click', function () {
+              var a = el.dataset.action
+              if (a === 'dpsClose') closeDocxPdfSettings()
+              else if (a === 'dpsDetect') refreshDocxPdfStatus(true)
+              else if (a === 'dpsTest') testDocxPdfConversion()
+              else if (a === 'dpsSave') saveDocxPdfSettings()
+            })
+          })
+          var dpsBox = document.getElementById('docx-pdf-settings')
+          if (dpsBox) {
+            dpsBox.addEventListener('click', function (e) {
+              if (e.target === dpsBox) closeDocxPdfSettings()
+            })
+          }
 
           // Tool buttons
           $$('[data-tool]').forEach(function (el) {
@@ -9622,6 +11867,7 @@
               else if (a === 'exportPDF') exportPDF()
               else if (a === 'exportImage') exportImage()
               else if (a === 'exportPPTX') exportPPTX()
+              else if (a === 'exportDOCX') exportDOCX()
               else if (a === 'undoRedact') undoRedact()
               else if (a === 'redoRedact') redoRedact()
               else if (a === 'zoomIn') setPdfViewScale((S.viewScale || 1) + 0.2)
@@ -9980,7 +12226,9 @@
           // collapsing/expanding, and browser resizing therefore trigger reflow.
           if (window.ResizeObserver && DOM.docViewport) {
             var docViewportObserver = new ResizeObserver(function () {
-              if (S.docxHtml && S.fileType === 'docx' && S.autoPage) {
+              // Native DOCX pages have their own fixed paper geometry; a
+              // viewport resize (e.g. zooming) must not rebuild them.
+              if (!isNativeDocxActive() && S.docxHtml && S.fileType === 'docx' && S.autoPage) {
                 scheduleDocxPagination(100)
               }
             })
@@ -10010,7 +12258,21 @@
             var item = e.target.closest('.dropdown .dd-item, .dropdown .settings-btn')
             if (!item) return
             var a = item.dataset.action
-            if (a === 'settingsToggleTheme') {
+            if (a === 'toggleDocxRenderMode') {
+              toggleDocxRenderMode()
+              $$('.dropdown.open').forEach(function (d) {
+                d.classList.remove('open')
+              })
+              document.body.classList.remove('submenu-open')
+            } else if (a === 'cycleDocxImportMode') {
+              cycleDocxImportMode()
+            } else if (a === 'openDocxPdfSettings') {
+              $$('.dropdown.open').forEach(function (d) {
+                d.classList.remove('open')
+              })
+              document.body.classList.remove('submenu-open')
+              openDocxPdfSettings()
+            } else if (a === 'settingsToggleTheme') {
               toggleTheme()
               $$('.dropdown.open').forEach(function (d) {
                 d.classList.remove('open')
@@ -10209,6 +12471,8 @@
           var open = dd.classList.toggle('open')
           document.body.classList.toggle('submenu-open', open)
           $('#sv-theme').textContent = S.theme === 'dark' ? '深色' : '浅色'
+          updateDocxRenderModeUI()
+          refreshDocxPdfStatus()
           if (open) {
             var btn = document.querySelector('#top-menu [data-action="showSettings"]')
             var r = btn.getBoundingClientRect()

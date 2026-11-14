@@ -152,7 +152,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "id": "redact",
         "name": "文档脱敏工具",
         "glyph": "脱",
-        "description": "PDF / Office 脱敏导出 · 原生 DOCX 版式",
+        "description": "PDF / Office 脱敏导出 · 原生 DOCX / PDF 导入 · PDF 工具",
         "entry": "omm-redact.html",
         "port": 8319,
         "runtime": "static",

@@ -17,6 +17,7 @@ programs can write to it at the same time.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import mimetypes
 import os
@@ -24,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -159,6 +161,7 @@ def _empty_config() -> Dict[str, Any]:
         },
         "ui": {"zoom": {}},
         "share": {"path": ""},
+        "docx_pdf": {"soffice": "", "abiword": "", "gs": ""},
         "apps": {},
     }
 
@@ -179,6 +182,12 @@ def _normalize_config(raw: Any) -> Dict[str, Any]:
     cfg["updated"] = str(raw.get("updated") or "")
     share = raw.get("share") if isinstance(raw.get("share"), dict) else {}
     cfg["share"] = {"path": str(share.get("path") or "").strip()}
+    docx_pdf = raw.get("docx_pdf") if isinstance(raw.get("docx_pdf"), dict) else {}
+    cfg["docx_pdf"] = {
+        "soffice": str(docx_pdf.get("soffice") or "").strip(),
+        "abiword": str(docx_pdf.get("abiword") or "").strip(),
+        "gs": str(docx_pdf.get("gs") or "").strip(),
+    }
     apps = raw.get("apps") if isinstance(raw.get("apps"), dict) else {}
     clean_apps: Dict[str, Any] = {}
     for key, value in apps.items():
@@ -964,6 +973,522 @@ def open_folder(app: str) -> Dict[str, Any]:
     return {"ok": True, "path": str(folder)}
 
 
+# ------------------------------------------------------- docx -> pdf bridge
+
+DOCX_PDF_TIMEOUT = 180
+_DOCX_ENGINE_NAMES = {"soffice": "LibreOffice", "abiword": "AbiWord"}
+
+
+def _safe_docx_name(name: str) -> str:
+    base = Path(str(name or "document.docx")).name
+    base = re.sub(r"[^0-9A-Za-z._\-\u4e00-\u9fff]+", "_", base) or "document.docx"
+    if not base.lower().endswith(".docx"):
+        base += ".docx"
+    return base
+
+
+def _probe_version(path: str, timeout: int = 8) -> str:
+    try:
+        result = subprocess.run(
+            [path, "--version"],
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        lines = (result.stdout or result.stderr or "").strip().splitlines()
+        return lines[0][:140] if lines else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _soffice_candidates(configured: str) -> list[str]:
+    found: list[str] = []
+    if configured:
+        found.append(str(Path(os.path.expandvars(configured.strip('"'))).expanduser()))
+    for cmd in ("soffice", "libreoffice", "soffice.exe"):
+        hit = shutil.which(cmd)
+        if hit:
+            found.append(hit)
+    if os.name == "nt":
+        for env in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+            base = os.environ.get(env)
+            if base:
+                found.append(str(Path(base) / "LibreOffice" / "program" / "soffice.exe"))
+        try:
+            import winreg
+
+            for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                for exe in ("soffice.exe", "libreoffice.exe"):
+                    try:
+                        key = winreg.OpenKey(
+                            hive,
+                            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\\" + exe,
+                        )
+                        value, _ = winreg.QueryValueEx(key, "")
+                        winreg.CloseKey(key)
+                        if value:
+                            found.append(str(value).strip('"'))
+                    except OSError:
+                        continue
+        except Exception:  # noqa: BLE001
+            pass
+    elif sys.platform == "darwin":
+        found.extend(
+            [
+                "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+                str(Path.home() / "Applications/LibreOffice.app/Contents/MacOS/soffice"),
+            ]
+        )
+    else:
+        found.extend(
+            [
+                "/usr/bin/soffice",
+                "/usr/bin/libreoffice",
+                "/usr/lib/libreoffice/program/soffice",
+                "/snap/bin/libreoffice",
+                "/opt/libreoffice/program/soffice",
+            ]
+        )
+    seen, unique = set(), []
+    for item in found:
+        key = os.path.normcase(os.path.abspath(item)) if item else ""
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
+def _abiword_candidates(configured: str) -> list[str]:
+    found: list[str] = []
+    if configured:
+        found.append(str(Path(os.path.expandvars(configured.strip('"'))).expanduser()))
+    for cmd in ("abiword", "abiword.exe"):
+        hit = shutil.which(cmd)
+        if hit:
+            found.append(hit)
+    if os.name == "nt":
+        for env in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+            base = os.environ.get(env)
+            if base:
+                found.append(str(Path(base) / "AbiWord" / "bin" / "abiword.exe"))
+    elif sys.platform == "darwin":
+        found.append("/Applications/AbiWord.app/Contents/MacOS/AbiWord")
+    else:
+        found.extend(["/usr/bin/abiword", "/usr/local/bin/abiword"])
+    seen, unique = set(), []
+    for item in found:
+        key = os.path.normcase(os.path.abspath(item)) if item else ""
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
+def _describe_engine(engine_id: str, name: str, candidates: list[str]) -> Dict[str, Any]:
+    seen, checked = set(), []
+    for candidate in candidates:
+        path = Path(candidate)
+        try:
+            exists = path.is_file()
+        except OSError:
+            exists = False
+        key = os.path.normcase(str(path))
+        if key in seen:
+            continue
+        seen.add(key)
+        checked.append(str(path))
+        if exists:
+            return {
+                "id": engine_id,
+                "name": name,
+                "path": str(path),
+                "available": True,
+                "version": _probe_version(str(path)),
+            }
+    return {
+        "id": engine_id,
+        "name": name,
+        "path": "",
+        "available": False,
+        "version": "",
+        "checked": checked[:6],
+    }
+
+
+def _gs_candidates(configured: str) -> list[str]:
+    found: list[str] = []
+    if configured:
+        found.append(str(Path(os.path.expandvars(configured.strip('"'))).expanduser()))
+    for cmd in ("gswin64c", "gswin64", "gswin32c", "gs"):
+        hit = shutil.which(cmd)
+        if hit:
+            found.append(hit)
+    if os.name == "nt":
+        roots: list[Path] = []
+        for env in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+            base = os.environ.get(env)
+            if base:
+                roots.append(Path(base) / "gs")
+        # Common manual installs: C://gs10.06.0, D://gs10.06.0, ...
+        for drive in ("C:", "D:", "E:", "F:"):
+            try:
+                for candidate in Path(drive + "/").glob("gs*"):
+                    if candidate.is_dir():
+                        roots.append(candidate)
+            except OSError:
+                continue
+        for root in roots:
+            for pattern in ("*/bin/gswin64c.exe", "*/bin/gswin64.exe", "*/bin/gswin32c.exe"):
+                try:
+                    for exe in sorted(root.glob(pattern), reverse=True):
+                        found.append(str(exe))
+                except OSError:
+                    pass
+    elif sys.platform == "darwin":
+        found.extend(["/usr/local/bin/gs", "/opt/homebrew/bin/gs"])
+    else:
+        found.extend(["/usr/bin/gs", "/usr/local/bin/gs"])
+    seen, unique = set(), []
+    for item in found:
+        key = os.path.normcase(os.path.abspath(item)) if item else ""
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
+def docx_pdf_status() -> Dict[str, Any]:
+    cfg = load_config().get("docx_pdf") or {}
+    soffice_cfg = str(cfg.get("soffice") or "").strip()
+    abiword_cfg = str(cfg.get("abiword") or "").strip()
+    gs_cfg = str(cfg.get("gs") or "").strip()
+    engines = [
+        _describe_engine("soffice", "LibreOffice", _soffice_candidates(soffice_cfg)),
+        _describe_engine("abiword", "AbiWord", _abiword_candidates(abiword_cfg)),
+    ]
+    tools = []
+    gs = _describe_engine("ghostscript", "Ghostscript", _gs_candidates(gs_cfg))
+    if gs["available"]:
+        tools.append(
+            {
+                "id": "ghostscript",
+                "name": "Ghostscript",
+                "path": gs["path"],
+                "version": gs["version"],
+                "available": True,
+                "role": "pdf",
+                "note": "仅用于 PDF 压缩 / 转图，不能解析 DOCX",
+            }
+        )
+    return {
+        "ok": True,
+        "available": any(e["available"] for e in engines),
+        "engines": engines,
+        "tools": tools,
+        "config": {"soffice": soffice_cfg, "abiword": abiword_cfg, "gs": gs_cfg},
+    }
+
+
+def _run_soffice(path: str, src: Path, folder: Path) -> Path:
+    profile = folder / "lo-profile"
+    produced = folder / (src.stem + ".pdf")
+    if produced.exists():
+        produced.unlink()
+    cmd = [
+        path,
+        "--headless",
+        "--norestore",
+        "--invisible",
+        "--nodefault",
+        "--nolockcheck",
+        "-env:UserInstallation=" + profile.resolve().as_uri(),
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(folder),
+        str(src),
+    ]
+    subprocess.run(cmd, timeout=DOCX_PDF_TIMEOUT, capture_output=True, check=False)
+    return produced
+
+
+def _run_abiword(path: str, src: Path, folder: Path) -> Path:
+    produced = folder / "abiword-output.pdf"
+    if produced.exists():
+        produced.unlink()
+    cmd = [path, "--to=pdf", "--to-name", str(produced), str(src)]
+    subprocess.run(
+        cmd,
+        timeout=DOCX_PDF_TIMEOUT,
+        capture_output=True,
+        check=False,
+        cwd=str(folder),
+    )
+    return produced
+
+
+def _gs_console_path(path: str) -> str:
+    """Prefer the console build (gswin64c.exe) so no window is opened."""
+    candidate = Path(path)
+    if candidate.name.lower() in ("gswin64.exe", "gswin32.exe"):
+        console = candidate.with_name(
+            candidate.stem + "c" + candidate.suffix
+        )
+        if console.is_file():
+            return str(console)
+    return path
+
+
+def _gs_binary() -> Optional[str]:
+    cfg = load_config().get("docx_pdf") or {}
+    gs = _describe_engine("ghostscript", "Ghostscript", _gs_candidates(str(cfg.get("gs") or "")))
+    return _gs_console_path(gs["path"]) if gs["available"] else None
+
+
+def _run_gs(args: list[str], inputs: list[str], output: str, timeout: int = 180) -> str:
+    binary = _gs_binary()
+    if not binary:
+        raise ValueError("未检测到 Ghostscript，请先在“PDF 转换引擎”中设置路径")
+    cmd = [binary] + args + ["-sOutputFile=" + output] + inputs
+    result = subprocess.run(cmd, timeout=timeout, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        raise ValueError("Ghostscript 处理失败：" + (" | ".join(detail[-3:]) if detail else str(result.returncode)))
+    return binary
+
+
+def _zip_folder(folder: Path, prefix: str) -> tuple[bytes, list[str]]:
+    import zipfile
+
+    files = sorted(p for p in folder.iterdir() if p.is_file() and p.name != "out.pdf")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for item in files:
+            zf.write(item, item.name)
+    return buffer.getvalue(), [p.name for p in files]
+
+
+def pdf_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
+    op = str(payload.get("op") or "").strip().lower()
+    name = str(payload.get("name") or "document.pdf")
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+
+    def read_bytes(raw: Any) -> bytes:
+        try:
+            return base64.b64decode(str(raw or ""), validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("PDF 内容不是有效的 base64") from exc
+
+    stem = re.sub(r"[^\w\u4e00-\u9fff.-]+", "_", Path(name).stem) or "document"
+
+    with tempfile.TemporaryDirectory(prefix="omm-pdf-") as tmp:
+        folder = Path(tmp)
+        if op == "merge":
+            items = payload.get("files")
+            if not isinstance(items, list) or len(items) < 2:
+                raise ValueError("合并至少需要 2 个 PDF")
+            inputs = []
+            for index, item in enumerate(items):
+                data = read_bytes(item.get("data") if isinstance(item, dict) else item)
+                path = folder / ("merge-%03d.pdf" % index)
+                path.write_bytes(data)
+                inputs.append(str(path))
+            output = folder / "out.pdf"
+            binary = _run_gs(
+                ["-sDEVICE=pdfwrite", "-dNOPAUSE", "-dQUIET", "-dBATCH"],
+                inputs,
+                str(output),
+            )
+            return {
+                "ok": True,
+                "engine": "Ghostscript",
+                "path": binary,
+                "name": stem + "_合并.pdf",
+                "pdf": base64.b64encode(output.read_bytes()).decode("ascii"),
+                "bytes": output.stat().st_size,
+            }
+
+        data = read_bytes(payload.get("data"))
+        src = folder / "input.pdf"
+        src.write_bytes(data)
+        output = folder / "out.pdf"
+        base = ["-dNOPAUSE", "-dQUIET", "-dBATCH", "-dCompatibilityLevel=1.7"]
+
+        if op == "compress":
+            quality = str(options.get("quality") or "ebook").lower()
+            if quality not in ("screen", "ebook", "printer", "prepress", "default"):
+                quality = "ebook"
+            args = ["-sDEVICE=pdfwrite", "-dPDFSETTINGS=/" + quality] + base
+            args += ["-dDetectDuplicateImages=true", "-dCompressFonts=true", "-dSubsetFonts=true"]
+            binary = _run_gs(args, [str(src)], str(output))
+            return {
+                "ok": True,
+                "engine": "Ghostscript",
+                "path": binary,
+                "name": stem + "_压缩.pdf",
+                "pdf": base64.b64encode(output.read_bytes()).decode("ascii"),
+                "bytes": output.stat().st_size,
+                "originalBytes": len(data),
+            }
+
+        if op == "repair":
+            args = ["-sDEVICE=pdfwrite", "-dPDFSTOPONERROR=false"] + base
+            binary = _run_gs(args, [str(src)], str(output))
+            return {
+                "ok": True,
+                "engine": "Ghostscript",
+                "path": binary,
+                "name": stem + "_修复.pdf",
+                "pdf": base64.b64encode(output.read_bytes()).decode("ascii"),
+                "bytes": output.stat().st_size,
+                "originalBytes": len(data),
+            }
+
+        if op == "pdfa":
+            args = [
+                "-sDEVICE=pdfwrite",
+                "-dPDFA=2",
+                "-dPDFACompatibilityPolicy=1",
+                "-sColorConversionStrategy=RGB",
+            ] + base
+            binary = _run_gs(args, [str(src)], str(output))
+            return {
+                "ok": True,
+                "engine": "Ghostscript",
+                "path": binary,
+                "name": stem + "_PDFA.pdf",
+                "pdf": base64.b64encode(output.read_bytes()).decode("ascii"),
+                "bytes": output.stat().st_size,
+                "originalBytes": len(data),
+            }
+
+        if op == "pages":
+            try:
+                first = int(options.get("first") or 1)
+                last = int(options.get("last") or first)
+            except (TypeError, ValueError):
+                raise ValueError("页码范围无效")
+            if first < 1 or last < first:
+                raise ValueError("页码范围无效")
+            args = [
+                "-sDEVICE=pdfwrite",
+                "-dFirstPage=%d" % first,
+                "-dLastPage=%d" % last,
+            ] + base
+            binary = _run_gs(args, [str(src)], str(output))
+            return {
+                "ok": True,
+                "engine": "Ghostscript",
+                "path": binary,
+                "name": "%s_第%d-%d页.pdf" % (stem, first, last),
+                "pdf": base64.b64encode(output.read_bytes()).decode("ascii"),
+                "bytes": output.stat().st_size,
+                "originalBytes": len(data),
+            }
+
+        if op == "render":
+            try:
+                dpi = int(options.get("dpi") or 150)
+            except (TypeError, ValueError):
+                dpi = 150
+            dpi = max(72, min(dpi, 600))
+            fmt = str(options.get("format") or "png").lower()
+            ext = "jpg" if fmt in ("jpg", "jpeg") else "png"
+            device = "jpeg" if ext == "jpg" else "png16m"
+            args = ["-sDEVICE=" + device, "-r%d" % dpi]
+            if ext == "jpg":
+                args += ["-dJPEGQ=92"]
+            try:
+                first = int(options.get("first") or 1)
+                last = int(options.get("last") or 0)
+            except (TypeError, ValueError):
+                first, last = 1, 0
+            if first > 1:
+                args.append("-dFirstPage=%d" % first)
+            if last >= first:
+                args.append("-dLastPage=%d" % last)
+            pattern = str(folder / ("page-%03d." + ext))
+            binary = _run_gs(args + base, [str(src)], pattern)
+            # -sOutputFile with %03d is written by Ghostscript itself.
+            files = sorted(folder.glob("page-*." + ext))
+            if not files:
+                raise ValueError("Ghostscript 没有生成图片")
+            import zipfile
+
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                for item in files:
+                    zf.write(item, item.name)
+            return {
+                "ok": True,
+                "engine": "Ghostscript",
+                "path": binary,
+                "name": stem + "_图片.zip",
+                "zip": base64.b64encode(buffer.getvalue()).decode("ascii"),
+                "bytes": buffer.tell(),
+                "files": [p.name for p in files],
+            }
+
+        raise ValueError("未知的 PDF 操作：" + op)
+
+
+def convert_docx_to_pdf(
+    data: bytes, name: str, engine: str = ""
+) -> Dict[str, Any]:
+    """Convert a DOCX buffer to PDF with a local open-source converter."""
+    status = docx_pdf_status()
+    if not status["available"]:
+        return {
+            "ok": False,
+            "error": "未检测到 LibreOffice / AbiWord，请先在“PDF 转换引擎”中设置路径",
+            "engines": status["engines"],
+        }
+
+    wanted = str(engine or "").strip().lower()
+    attempts: list[tuple[str, str, str]] = []
+    for item in status["engines"]:
+        if not item["available"]:
+            continue
+        if wanted and item["id"] not in wanted and item["name"].lower() not in wanted:
+            continue
+        attempts.append((item["id"], item["name"], item["path"]))
+    if not attempts:
+        attempts = [
+            (item["id"], item["name"], item["path"])
+            for item in status["engines"]
+            if item["available"]
+        ]
+
+    errors: list[Dict[str, str]] = []
+    with tempfile.TemporaryDirectory(prefix="omm-docx2pdf-") as tmp:
+        folder = Path(tmp)
+        src = folder / _safe_docx_name(name)
+        src.write_bytes(data)
+        for engine_id, engine_name, path in attempts:
+            try:
+                if engine_id == "soffice":
+                    produced = _run_soffice(path, src, folder)
+                else:
+                    produced = _run_abiword(path, src, folder)
+                if produced.exists() and produced.stat().st_size > 0:
+                    return {
+                        "ok": True,
+                        "engine": engine_name,
+                        "engine_path": path,
+                        "pdf": produced.read_bytes(),
+                    }
+                errors.append({"engine": engine_name, "path": path, "error": "未生成 PDF"})
+            except Exception as exc:  # noqa: BLE001
+                errors.append({"engine": engine_name, "path": path, "error": str(exc)})
+    return {
+        "ok": False,
+        "error": "转换失败，请检查转换器路径或文件是否损坏",
+        "engines": status["engines"],
+        "attempts": errors,
+    }
+
+
 # --------------------------------------------------------------------- routes
 
 
@@ -1063,6 +1588,19 @@ def handle_get(
         return _json(200, {"ok": True, "snapshot": snapshot})
     if path == "/__omm/fs/appearance":
         return _json(200, {"ok": True, "appearance": get_appearance()})
+    if path == "/__omm/fs/docx2pdf":
+        return _json(200, docx_pdf_status())
+    if path == "/__omm/fs/pdf/tool":
+        binary = _gs_binary()
+        return _json(
+            200,
+            {
+                "ok": True,
+                "available": bool(binary),
+                "path": binary or "",
+                "version": _probe_version(binary) if binary else "",
+            },
+        )
     if path == "/__omm/fs/file":
         raw = (query.get("path") or [""])[0]
         try:
@@ -1123,6 +1661,57 @@ def handle_post(
             )
         if path == "/__omm/fs/snapshot/delete":
             return _json(200, delete_snapshot(str(payload.get("path") or "")))
+        if path == "/__omm/fs/pdf/tool":
+            try:
+                result = pdf_tool(payload)
+            except ValueError as exc:
+                return _error(400, str(exc))
+            return _json(200, result)
+        if path == "/__omm/fs/docx2pdf":
+            raw = str(payload.get("data") or "")
+            if not raw:
+                raise ValueError("缺少 DOCX 内容")
+            try:
+                data = base64.b64decode(raw, validate=True)
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError("DOCX 内容不是有效的 base64") from exc
+            if len(data) > MAX_BODY:
+                raise ValueError("DOCX 文件过大")
+            result = convert_docx_to_pdf(
+                data,
+                str(payload.get("name") or "document.docx"),
+                str(payload.get("engine") or ""),
+            )
+            if not result.get("ok"):
+                return _json(400, result)
+            return _json(
+                200,
+                {
+                    "ok": True,
+                    "engine": result.get("engine") or "",
+                    "pdf": base64.b64encode(result["pdf"]).decode("ascii"),
+                },
+            )
+        if path == "/__omm/fs/docx2pdf/config":
+            soffice = str(payload.get("soffice") or "").strip()
+            abiword = str(payload.get("abiword") or "").strip()
+            gs = str(payload.get("gs") or "").strip()
+            soffice = os.path.expandvars(soffice.strip('"')).strip()
+            abiword = os.path.expandvars(abiword.strip('"')).strip()
+            gs = os.path.expandvars(gs.strip('"')).strip()
+            for label, value in (
+                ("LibreOffice", soffice),
+                ("AbiWord", abiword),
+                ("Ghostscript", gs),
+            ):
+                if value and not Path(value).expanduser().is_file():
+                    return _error(400, "%s 路径不存在：%s" % (label, value))
+            mutate_config(
+                lambda cfg: cfg.__setitem__(
+                    "docx_pdf", {"soffice": soffice, "abiword": abiword, "gs": gs}
+                )
+            )
+            return _json(200, docx_pdf_status())
         if path == "/__omm/fs/open":
             return _json(200, open_folder(payload_app))
         if path == "/__omm/fs/appearance":
