@@ -264,6 +264,40 @@
         opacity: 0.28;
         pointer-events: none;
       }
+      /* 基准：已设置时用一道底线亮起，和「对齐基准」的单色风格一致 */
+      .menu-btn.baseline-on {
+        color: var(--text);
+        border-color: var(--border);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .menu-btn .zw-baseline-star {
+        margin-left: 4px;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .menu-btn.baseline-on .zw-baseline-star {
+        opacity: 1;
+      }
+      .zw-baseline-note {
+        font-size: 9px;
+        color: var(--text-faint);
+        letter-spacing: 0.2px;
+        padding: 0 2px;
+        max-width: 130px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dd-item .dd-hint {
+        margin-left: auto;
+        font-size: 9px;
+        color: var(--text-faint);
+        padding-left: 10px;
+      }
+      .dd-item.disabled {
+        opacity: 0.3;
+        pointer-events: none;
+      }
       .pin-btn {
         width: 28px;
         height: 28px;
@@ -346,6 +380,17 @@
         font-size: 10px;
         color: var(--text-faint);
         margin-left: 12px;
+      }
+      .dd-item.danger-item:hover {
+        color: var(--danger, #c5524a);
+      }
+      .dd-item.dd-empty {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .dd-item.dd-empty:hover {
+        background: transparent;
+        color: var(--text-dim);
       }
       .dd-item-sub {
         padding-left: 20px;
@@ -4535,6 +4580,34 @@
           title="重做"
         ></div>
       </div>
+      <div class="menu-group" id="zw-baseline-group">
+        <span class="menu-label" data-i18n="menu.baselineLabel">基准</span>
+        <div
+          class="menu-btn"
+          id="btn-baseline-set"
+          data-action="setBaseline"
+          data-i18n="menu.baselineSet"
+          data-i18n-title="menu.baselineSetTitle"
+          title="把当前布局存成基准"
+        ><span class="zw-baseline-star">★</span></div>
+        <div
+          class="menu-btn disabled"
+          id="btn-baseline-restore"
+          data-action="restoreBaseline"
+          data-i18n="menu.baselineRestore"
+          data-i18n-title="menu.baselineRestoreTitle"
+          title="一键恢复到基准（可撤销）"
+        ></div>
+        <span class="zw-baseline-note" id="zw-baseline-note"></span>
+        <div
+          class="menu-btn"
+          id="btn-baseline-more"
+          data-action="showBaselineMenu"
+          data-i18n="menu.baselineMore"
+          data-i18n-title="menu.baselineMoreTitle"
+          title="更多基准操作"
+        ></div>
+      </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.mode">模式</span>
         <div
@@ -4628,6 +4701,31 @@
     </div>
 
     <!-- ===== Dropdowns ===== -->
+    <div class="dropdown" id="dd-baseline">
+      <div class="dd-label" data-i18n="dd.baseline.label">BASELINE · QUICK RESTORE</div>
+      <div class="dd-item" data-action="setBaseline">
+        <span data-i18n="dd.baseline.set"></span><span class="dd-hint">★</span>
+      </div>
+      <div class="dd-item" data-action="restoreBaseline" id="dd-baseline-restore">
+        <span data-i18n="dd.baseline.restore"></span><span class="dd-hint">Ctrl+Alt+B</span>
+      </div>
+      <div class="dd-item" data-action="pickBaselineArchive" id="dd-baseline-pick">
+        <span data-i18n="dd.baseline.pick"></span>
+      </div>
+      <div class="dd-item" data-action="baselineArchiveNow" id="dd-baseline-archive">
+        <span data-i18n="dd.baseline.archive"></span>
+      </div>
+      <div class="dd-item danger-item" data-action="clearBaseline" id="dd-baseline-clear">
+        <span data-i18n="dd.baseline.clear"></span>
+      </div>
+      <div class="dd-item dd-item-sub" data-action="baselineInfo">
+        <span data-i18n="dd.baseline.info"></span>
+      </div>
+    </div>
+    <div class="dropdown" id="dd-baseline-picker">
+      <div class="dd-label" data-i18n="dd.baseline.pickerLabel">CHOOSE AN ARCHIVE AS BASELINE</div>
+      <div class="dd-item dd-item-sub dd-empty" data-i18n="dd.baseline.pickerEmpty"></div>
+    </div>
     <div class="dropdown" id="dd-layout">
       <div class="dd-label" data-i18n="dd.layout.label">Layout Strategy</div>
       <div class="dd-item dd-item-sub" data-action="autoLayout">
@@ -5795,6 +5893,41 @@ notify pgrst, 'reload schema';</textarea
             'notify.nothingToUndo': 'Nothing to undo',
             'notify.nothingToRedo': 'Nothing to redo',
             'notify.historyRestored': 'Restored {0} nodes · {1} connections',
+            // ---- Baseline: pin one snapshot, restore it in a single click ----
+            'menu.baselineLabel': 'BASE',
+            'menu.baselineSet': 'SET BASE',
+            'menu.baselineSetTitle':
+              'Save this canvas as the baseline (layout + content + camera). Creates a ★BASE archive in the workbench when available',
+            'menu.baselineRestore': 'TO BASE',
+            'menu.baselineRestoreTitle':
+              'One-click restore to the baseline. Reversible with Undo (Ctrl+Z)',
+            'menu.baselineMore': '···',
+            'menu.baselineMoreTitle': 'More baseline actions',
+            'dd.baseline.label': 'BASELINE · QUICK RESTORE',
+            'dd.baseline.set': 'Save current as baseline',
+            'dd.baseline.restore': 'Restore baseline (one click)',
+            'dd.baseline.pick': 'Choose an archive as baseline…',
+            'dd.baseline.archive': 'Create ★BASE archive now',
+            'dd.baseline.clear': 'Clear baseline',
+            'dd.baseline.info': 'What is a baseline?',
+            'dd.baseline.pickerLabel': 'CHOOSE AN ARCHIVE AS BASELINE',
+            'dd.baseline.pickerEmpty': 'No workbench archives found',
+            'notify.baselineSaved': 'Baseline saved · {0} (Ctrl+Alt+B to restore)',
+            'notify.baselineRestored': 'Restored baseline · {0}. Undo with Ctrl+Z',
+            'notify.baselineNone': 'No baseline yet — set one first',
+            'notify.baselineCleared': 'Baseline cleared',
+            'notify.baselineArchiveDone': '★BASE archive created',
+            'notify.baselineArchiveFail': 'Workbench archive failed: {0} (local baseline kept)',
+            'notify.baselinePickNone': 'No restorable archives for this app',
+            'notify.baselinePickSet': 'Baseline set from archive · {0}',
+            'notify.baselineFromArchive': 'Restoring baseline from workbench archive…',
+            'notify.baselineInfo':
+              'Baseline is a quick history marker for this canvas: it remembers node layout, connections, doodles and the camera. "TO BASE" restores it in one click and can be undone. When the workbench is available, a ★BASE archive is created too, so the same state survives across sessions.',
+            'confirm.baselineRestoreFromArchive':
+              'Restore this baseline from the workbench archive?\nThis overwrites the current app data and reloads the page.\n{0}',
+            'confirm.baselineClear': 'Clear the baseline for this canvas?',
+            'baseline.time': 'Set {0}',
+            'baseline.layoutOnly': 'layout only',
             'menu.mode': 'MODE',
             'menu.bg': 'BG',
             'menu.themeLight': 'LIGHT',
@@ -6173,6 +6306,40 @@ notify pgrst, 'reload schema';</textarea
             'notify.nothingToUndo': '没有可撤销的操作',
             'notify.nothingToRedo': '没有可重做的操作',
             'notify.historyRestored': '已恢复 {0} 个节点 · {1} 条连接',
+            // ---- 基准：钉住一份快照，一键回滚 ----
+            'menu.baselineLabel': '基准',
+            'menu.baselineSet': '设基准',
+            'menu.baselineSetTitle':
+              '把当前画布存为基准（布局 + 内容 + 镜头）。工作台可用时同时生成一份 ★基准 存档',
+            'menu.baselineRestore': '回基准',
+            'menu.baselineRestoreTitle': '一键恢复到基准，可用撤销（Ctrl+Z）回退',
+            'menu.baselineMore': '···',
+            'menu.baselineMoreTitle': '更多基准操作',
+            'dd.baseline.label': '基准 · 快速恢复',
+            'dd.baseline.set': '把当前布局存为基准',
+            'dd.baseline.restore': '一键恢复到基准',
+            'dd.baseline.pick': '从存档中选择基准…',
+            'dd.baseline.archive': '立即生成 ★基准 存档',
+            'dd.baseline.clear': '清除基准',
+            'dd.baseline.info': '什么是基准？',
+            'dd.baseline.pickerLabel': '选择一份存档作为基准',
+            'dd.baseline.pickerEmpty': '没有可恢复的工作台存档',
+            'notify.baselineSaved': '基准已保存 · {0}（Ctrl+Alt+B 一键恢复）',
+            'notify.baselineRestored': '已恢复到基准 · {0}，可按 Ctrl+Z 撤销',
+            'notify.baselineNone': '还没有基准，请先设置一个',
+            'notify.baselineCleared': '已清除基准',
+            'notify.baselineArchiveDone': '★基准 存档已生成',
+            'notify.baselineArchiveFail': '工作台存档失败：{0}（本地基准已保留）',
+            'notify.baselinePickNone': '没有这个应用的可恢复存档',
+            'notify.baselinePickSet': '已从存档设为基准 · {0}',
+            'notify.baselineFromArchive': '正在从工作台存档恢复基准…',
+            'notify.baselineInfo':
+              '基准是这张画布的快速历史标记：记住节点布局、连线、涂鸦和镜头位置。「回基准」一键恢复，并且可以撤销。工作台可用时还会生成一份 ★基准 存档，让这份状态跨会话保留。',
+            'confirm.baselineRestoreFromArchive':
+              '从工作台存档恢复这份基准？\n这会覆盖当前应用数据并重新载入页面。\n{0}',
+            'confirm.baselineClear': '清除这张画布的基准吗？',
+            'baseline.time': '设置于 {0}',
+            'baseline.layoutOnly': '仅布局',
             'menu.mode': '模式',
             'menu.bg': '背景',
             'menu.themeLight': '浅色',
@@ -6730,6 +6897,9 @@ notify pgrst, 'reload schema';</textarea
             UIManager.updateStats()
             UIManager.renderDocList()
             updateUndoRedoUI()
+            try {
+              BaselineManager.refreshUI()
+            } catch (_) {}
             OutlineManager.render()
             if (window.ZWCloudSync && typeof window.ZWCloudSync.refreshI18n === 'function') {
               window.ZWCloudSync.refreshI18n()
@@ -19795,6 +19965,425 @@ notify pgrst, 'reload schema';</textarea
         }
 
         // ================================================================
+        // 14.85 BASELINE MANAGER — 基准 / 一键历史恢复（布局记忆）
+        //
+        // 一条「基准」= 某张画布在某个时刻的完整快照（节点 + 连线 + 涂鸦 +
+        // 镜头）+ 可选的一份工作台存档引用。和撤销栈不同，它跨会话保留、
+        // 只有一条、随时一键回退，专门用来记住「这个布局很好，别再让我在一堆
+        // 存档里翻它」。工作台可用时（OMMDesktop）设基准会同时写一份
+        // ★基准 存档，本地快照则保证零加载、无刷新的一键恢复。
+        // ================================================================
+        const BaselineManager = {
+          PREFIX: 'zw-baseline:',
+          VERSION: 1,
+
+          key(id) {
+            return this.PREFIX + id
+          },
+
+          // 当前画布的基准记录（同步读，localStorage 极小）
+          get(id) {
+            id = id || DocManager.activeId()
+            if (!id) return null
+            try {
+              const raw = localStorage.getItem(this.key(id))
+              if (!raw) return null
+              const rec = JSON.parse(raw)
+              if (!rec || rec.v !== this.VERSION || !rec.data) return null
+              return rec
+            } catch (_) {
+              return null
+            }
+          },
+
+          put(id, rec) {
+            return localStorage.setItem(this.key(id), JSON.stringify(rec))
+          },
+
+          clear(id) {
+            id = id || DocManager.activeId()
+            if (id) localStorage.removeItem(this.key(id))
+            this.refreshUI()
+          },
+
+          // 只留布局字段：本地存储配额爆掉时的降级方案。
+          // 恢复时按 id 把位置贴回现存节点，绝不覆盖正文。
+          stripToLayout(data) {
+            const keep = [
+              'id', 'type', 'x', 'y', 'w', 'h', 'title', 'locked', 'minimized',
+              'collapsed', 'fontSize', 'lh', 'borderColor', 'srcMode', 'assetId',
+              'imgW', 'imgH', 'imgRatio', 'ref',
+            ]
+            return {
+              nodes: (data.nodes || []).map((n) => {
+                const o = {}
+                keep.forEach((k) => {
+                  if (n[k] !== undefined) o[k] = n[k]
+                })
+                return o
+              }),
+              connections: data.connections || [],
+              doodles: [],
+            }
+          },
+
+          // 抓当前现场。先落盘再抓，保证基准和磁盘上的画布一致。
+          capture() {
+            const data = History.snapshot()
+            return {
+              v: this.VERSION,
+              savedAt: Date.now(),
+              docId: DocManager.activeId(),
+              docName: DocManager.activeName(),
+              layoutOnly: false,
+              data: data,
+              view: {
+                panX: AppState.panX,
+                panY: AppState.panY,
+                scale: AppState.scale,
+              },
+              archive: null,
+            }
+          },
+
+          // 工作台存档（静书房）是否可用
+          desktop() {
+            return window.OMMDesktop && window.OMMDesktop.enabled ? window.OMMDesktop : null
+          },
+
+          archiveLabel(name) {
+            return '★基准 · ' + (name || DocManager.activeName() || '画布')
+          },
+
+          // 设基准：本地立即写；工作台可用时再加一份 ★基准 存档。
+          async setBaseline() {
+            const id = DocManager.activeId()
+            if (!id) {
+              notify(t('notify.baselineNone'))
+              return
+            }
+            // 把还没落盘的改动先写下去，快照才对得上磁盘
+            try {
+              await persistCanvasData()
+            } catch (_) {}
+            const rec = this.capture()
+            let warn = ''
+            try {
+              this.put(id, rec)
+            } catch (e) {
+              // 配额不够：退而求其次只记布局，正文/图片交给工作台存档
+              try {
+                const small = Object.assign({}, rec, {
+                  layoutOnly: true,
+                  data: this.stripToLayout(rec.data),
+                })
+                this.put(id, small)
+                warn = t('notify.baselineArchiveFail', 'local storage full, layout only')
+              } catch (_) {
+                notify(t('notify.baselineArchiveFail', 'local storage full'))
+                return
+              }
+            }
+
+            const dk = this.desktop()
+            if (dk && typeof dk.snapshot === 'function') {
+              try {
+                const result = await dk.snapshot(this.archiveLabel(rec.docName))
+                if (result && result.path) {
+                  const stored = this.get(id)
+                  if (stored) {
+                    stored.archive = {
+                      path: result.path,
+                      name: result.name || '',
+                      label: this.archiveLabel(rec.docName),
+                      app: dk.app || '',
+                      takenAt: result.taken_at || new Date().toISOString(),
+                    }
+                    this.put(id, stored)
+                  }
+                }
+              } catch (e) {
+                warn = warn || t('notify.baselineArchiveFail', (e && e.message) || e)
+              }
+            }
+            this.refreshUI()
+            notify(
+              t('notify.baselineSaved', (this.get(id) || rec).layoutOnly ? t('baseline.layoutOnly') : rec.docName) +
+                (warn ? '\n' + warn : ''),
+            )
+          },
+
+          // 创建 / 刷新 ★基准 存档（不改动本地基准本体）
+          async archiveNow() {
+            const dk = this.desktop()
+            if (!dk || typeof dk.snapshot !== 'function') {
+              notify(t('notify.baselineArchiveFail', 'workbench unavailable'))
+              return
+            }
+            const id = DocManager.activeId()
+            try {
+              await persistCanvasData()
+            } catch (_) {}
+            const name = DocManager.activeName()
+            const result = await dk.snapshot(this.archiveLabel(name))
+            if (result && result.path && id) {
+              const rec = this.get(id)
+              if (rec) {
+                rec.archive = {
+                  path: result.path,
+                  name: result.name || '',
+                  label: this.archiveLabel(name),
+                  app: dk.app || '',
+                  takenAt: result.taken_at || new Date().toISOString(),
+                }
+                this.put(id, rec)
+              }
+            }
+            this.refreshUI()
+            notify(t('notify.baselineArchiveDone'))
+          },
+
+          // 一键恢复。默认走本地快照：不刷新、可撤销。
+          async restoreBaseline() {
+            const id = DocManager.activeId()
+            const rec = this.get(id)
+            if (!rec) {
+              notify(t('notify.baselineNone'))
+              return
+            }
+            if (rec.layoutOnly && rec.archiveBacked && rec.archive) {
+              this.restoreFromArchive(rec, id)
+              return
+            }
+            if (rec.layoutOnly) {
+              this.applyLayout(rec)
+              notify(t('notify.baselineRestored', t('baseline.layoutOnly')))
+              return
+            }
+
+            // 把「恢复前」的现场压进撤销栈 —— 一键恢复也随时可 Ctrl+Z 回退
+            const before = History.present
+            const after = JSON.stringify(rec.data)
+            if (before && before !== after && !History.applying) {
+              History.past.push(before)
+              if (History.past.length > History.LIMIT) History.past.shift()
+              History.future.length = 0
+            }
+            if (rec.view && Number.isFinite(rec.view.panX)) {
+              AppState.panX = rec.view.panX
+              AppState.panY = rec.view.panY
+              AppState.scale = rec.view.scale > 0 ? rec.view.scale : 1
+              try {
+                CanvasManager.applyTransform()
+              } catch (_) {}
+            }
+            const ok = History._replay(after)
+            if (ok) {
+              History.present = after
+              updateUndoRedoUI()
+              notify(t('notify.baselineRestored', rec.docName || ''))
+            } else if (rec.archive) {
+              this.restoreFromArchive(rec, id)
+            }
+          },
+
+          // 布局模式：按 id 贴回位置，保留正文 —— 纯「布局记忆」回滚
+          applyLayout(rec) {
+            const byId = new Map()
+            ;(rec.data.nodes || []).forEach((n) => {
+              if (n && n.id) byId.set(n.id, n)
+            })
+            getNodes().forEach((node) => {
+              const n = byId.get(node.id)
+              if (!n) return
+              if (n.x !== undefined) node.style.left = n.x
+              if (n.y !== undefined) node.style.top = n.y
+              if (n.w !== undefined) node.style.width = n.w
+              if (n.h !== undefined) node.style.height = n.h
+            })
+            if (rec.view && Number.isFinite(rec.view.panX)) {
+              AppState.panX = rec.view.panX
+              AppState.panY = rec.view.panY
+              AppState.scale = rec.view.scale > 0 ? rec.view.scale : 1
+              try {
+                CanvasManager.applyTransform()
+              } catch (_) {}
+            }
+            ConnectionManager.renderAll()
+            debouncedAutoSave(true)
+          },
+
+          // 兜底：本地快照丢了（比如清过浏览器数据），用工作台存档恢复。
+          // 这一路会整体覆盖应用状态并刷新页面，所以先二次确认。
+          async restoreFromArchive(rec, id) {
+            if (!rec.archive || !rec.archive.path) {
+              notify(t('notify.baselineNone'))
+              return
+            }
+            const ok = await showConfirm(
+              t('confirm.baselineRestoreFromArchive', rec.archive.label || rec.docName || ''),
+            )
+            if (!ok) return
+            const dk = this.desktop()
+            notify(t('notify.baselineFromArchive'))
+            if (dk && typeof dk.restore === 'function') {
+              try {
+                const res = await fetch(
+                  '/__omm/fs/snapshot?app=' +
+                    encodeURIComponent(rec.archive.app || (dk.app || '')) +
+                    '&path=' +
+                    encodeURIComponent(rec.archive.path),
+                  { cache: 'no-store' },
+                )
+                if (!res.ok) throw new Error('HTTP ' + res.status)
+                const data = await res.json()
+                await dk.restore(data.snapshot)
+                return
+              } catch (e) {
+                console.warn('[ZenWriter] baseline archive restore failed', e)
+              }
+            }
+            // 没有桌面桥（纯网页）时，走工作台的中继协议
+            try {
+              window.parent.postMessage(
+                {
+                  type: 'omm:restore-snapshot',
+                  app: rec.archive.app || 'writer',
+                  path: rec.archive.path,
+                  name: rec.archive.name,
+                  label: rec.archive.label,
+                },
+                '*',
+              )
+            } catch (_) {}
+          },
+
+          normalizeArchiveList(data) {
+            let raw = null
+            if (Array.isArray(data)) {
+              raw = data
+            } else if (data && typeof data === 'object') {
+              raw = data.items || data.entries || data.snapshots || data.files || null
+              if (!raw) {
+                const arrays = Object.keys(data)
+                  .map((k) => data[k])
+                  .filter(Array.isArray)
+                if (arrays.length) raw = arrays[0]
+              }
+            }
+            return (raw || [])
+              .filter((x) => x && (x.kind === undefined || x.kind === 'snapshot') && x.path)
+              .map((x) => ({
+                path: x.path,
+                name: x.name || x.file || '',
+                label: x.label || x.title || x.name || x.file || x.path,
+                time: x.taken_at || x.mtime || x.time || '',
+              }))
+          },
+
+          // 从工作台已有存档里挑一份当基准
+          async pickArchive() {
+            const dk = this.desktop()
+            if (!dk || typeof dk.listSnapshots !== 'function') {
+              notify(t('notify.baselinePickNone'))
+              return
+            }
+            let list = []
+            try {
+              list = this.normalizeArchiveList(await dk.listSnapshots())
+            } catch (e) {
+              console.warn('[ZenWriter] list snapshots failed', e)
+            }
+            const others = list.filter((x) => !/★基准/.test(x.label))
+            if (others.length) list = others
+            if (!list.length) {
+              notify(t('notify.baselinePickNone'))
+              return
+            }
+            const menu = document.getElementById('dd-baseline-picker')
+            if (!menu) return
+            menu.querySelectorAll('[data-archive-pick]').forEach((x) => x.remove())
+            list.slice(0, 40).forEach((item) => {
+              const row = document.createElement('div')
+              row.className = 'dd-item'
+              row.setAttribute('data-action', 'pickBaselineEntry')
+              row.setAttribute('data-archive-path', item.path)
+              row.setAttribute('data-archive-name', item.name)
+              row.setAttribute('data-archive-label', item.label)
+              row.setAttribute('data-archive-app', dk.app || '')
+              row.setAttribute('data-archive-time', item.time)
+              const span = document.createElement('span')
+              span.textContent = (item.label || item.name || '存档').slice(0, 34)
+              const hint = document.createElement('span')
+              hint.className = 'hint'
+              hint.textContent = item.time ? String(item.time).slice(5, 16) : ''
+              row.appendChild(span)
+              row.appendChild(hint)
+              row.setAttribute('data-archive-pick', '1')
+              menu.appendChild(row)
+            })
+            showDropdown('dd-baseline-picker', document.getElementById('btn-baseline-more'))
+          },
+
+          async setFromArchive(row) {
+            const id = DocManager.activeId()
+            if (!id) return
+            try {
+              await persistCanvasData()
+            } catch (_) {}
+            const rec = this.capture()
+            rec.layoutOnly = true // 本地没有这份内容，恢复走存档；布局只做参考
+            rec.archiveBacked = true
+            rec.archive = {
+              path: row.dataset.archivePath,
+              name: row.dataset.archiveName || '',
+              label: row.dataset.archiveLabel || '存档',
+              app: row.dataset.archiveApp || (this.desktop() && this.desktop().app) || '',
+              takenAt: row.dataset.archiveTime || '',
+            }
+            try {
+              this.put(id, rec)
+            } catch (_) {}
+            closeAllDropdowns()
+            this.refreshUI()
+            notify(t('notify.baselinePickSet', rec.archive.label))
+          },
+
+          info() {
+            showConfirm(t('notify.baselineInfo'), { title: t('dd.baseline.label') }).then(() => {})
+          },
+
+          // 顶部工具条状态：设有基准时点亮，显示设置时间；恢复按钮可用
+          refreshUI() {
+            const rec = this.get()
+            const setBtn = document.getElementById('btn-baseline-set')
+            const restoreBtn = document.getElementById('btn-baseline-restore')
+            const restoreItem = document.getElementById('dd-baseline-restore')
+            const clearItem = document.getElementById('dd-baseline-clear')
+            const note = document.getElementById('zw-baseline-note')
+            if (setBtn) setBtn.classList.toggle('baseline-on', !!rec)
+            if (restoreBtn) restoreBtn.classList.toggle('disabled', !rec)
+            if (restoreItem) restoreItem.classList.toggle('disabled', !rec)
+            if (clearItem) clearItem.classList.toggle('disabled', !rec)
+            if (note) {
+              if (rec && rec.savedAt) {
+                const d = new Date(rec.savedAt)
+                note.textContent = t(
+                  'baseline.time',
+                  isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, {
+                    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+                  }),
+                )
+                note.title = rec.docName || ''
+              } else {
+                note.textContent = ''
+                note.title = ''
+              }
+            }
+          },
+        }
+
+        // ================================================================
         // 14.9 GUARD MANAGER — 「是否保存」+ 二次确认
         //
         // 重要平台限制：关闭标签页/刷新/跳外链这条路，网页**无法**显示
@@ -20484,6 +21073,8 @@ notify pgrst, 'reload schema';</textarea
               Settings.save(true)
               // 撤销栈按画布独立：换画布就清空，避免跨文档撤销
               History.reset()
+              // 基准也是按画布独立的一条记录
+              BaselineManager.refreshUI()
               // 切画布后旧的基准节点 id 不再有效
               AppState.alignBaseId = null
               AppState.selectionPrimaryId = null
@@ -21561,6 +22152,38 @@ notify pgrst, 'reload schema';</textarea
               case 'undo':
                 History.undo()
                 break
+              case 'setBaseline':
+                closeAllDropdowns()
+                await BaselineManager.setBaseline()
+                break
+              case 'restoreBaseline':
+                closeAllDropdowns()
+                await BaselineManager.restoreBaseline()
+                break
+              case 'showBaselineMenu':
+                showDropdown('dd-baseline', target)
+                break
+              case 'clearBaseline': {
+                closeAllDropdowns()
+                const yes = await showConfirm(t('confirm.baselineClear'))
+                if (yes) BaselineManager.clear(DocManager.activeId())
+                break
+              }
+              case 'pickBaselineArchive':
+                closeAllDropdowns()
+                await BaselineManager.pickArchive()
+                break
+              case 'pickBaselineEntry':
+                await BaselineManager.setFromArchive(target)
+                break
+              case 'baselineArchiveNow':
+                closeAllDropdowns()
+                await BaselineManager.archiveNow()
+                break
+              case 'baselineInfo':
+                closeAllDropdowns()
+                BaselineManager.info()
+                break
               case 'toggleOutline':
                 OutlineManager.toggle()
                 break
@@ -22220,6 +22843,21 @@ notify pgrst, 'reload schema';</textarea
                 return
               }
             }
+            // 基准：Ctrl/⌘+Alt+B 一键恢复（布局记忆），Ctrl/⌘+Alt+S 存基准。
+            // 放在撤销分支之前 —— 那个分支刻意排除了 Alt。
+            if ((e.ctrlKey || e.metaKey) && e.altKey) {
+              const k = (e.key || '').toLowerCase()
+              if (k === 'b') {
+                e.preventDefault()
+                BaselineManager.restoreBaseline()
+                return
+              }
+              if (k === 's') {
+                e.preventDefault()
+                BaselineManager.setBaseline()
+                return
+              }
+            }
             // 撤销 / 重做：接管浏览器的原生 undo（否则和画布历史打架），
             // 输入框里的文本编辑也一起走画布历史，所以任何位置都触发。
             if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -22753,6 +23391,8 @@ notify pgrst, 'reload schema';</textarea
           }
           // 以当前画布为撤销栈的起点
           History.reset()
+          // 基准按钮跟随当前画布
+          BaselineManager.refreshUI()
 
           CanvasManager.initPanZoom()
           TouchManager.init()
