@@ -8,10 +8,33 @@ installer, and the in-app plugin manager.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.15"
+VERSION = "1.0.16"
+
+
+def version_key(value: Any) -> tuple:
+    """Numeric comparison key for a dotted version string.
+
+    ``v1.2.3`` -> ``(1, 2, 3)``.  Leading text (``v``/``release-``) and any
+    suffix are ignored; all update decisions go through this helper so a
+    higher version can never be compared as if it were lower.
+    """
+    parts = re.findall(r"\d+", str(value or ""))
+    return tuple(int(part) for part in parts[:4]) or (0,)
+
+
+def is_newer(latest: Any, current: Any = VERSION) -> bool:
+    """True only when ``latest`` is strictly greater than ``current``.
+
+    This is the single source of truth for "is there an update".  Being strict
+    (``>``, not ``!=``) is what prevents a downgrade from ever being presented
+    as an update, e.g. a 1.0.15 built-in build being told to install a 1.0.9
+    artifact from a stale catalog field.
+    """
+    return version_key(latest) > version_key(current)
 
 # Release asset name for each desktop program (without the platform suffix).
 DESKTOP_EXE_NAMES = {

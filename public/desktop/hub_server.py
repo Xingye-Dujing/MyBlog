@@ -35,7 +35,7 @@ from omm_launcher import (
     port_open,
     resource_root,
 )
-from plugin_specs import VERSION
+from plugin_specs import VERSION, is_newer
 from plugin_manager import (
     PluginError,
     PluginRegistry,
@@ -358,8 +358,11 @@ class HubServer:
                 item["installed"] = bool(local)
                 item["installed_version"] = local["version"] if local else ""
                 item["installed_source"] = local["source"] if local else ""
+                # Strict numeric comparison, shared with the updater: a lower
+                # or equal remote version must never be flagged as an update
+                # (otherwise a built-in 1.0.15 would be "updatable" to 1.0.9).
                 item["update_available"] = bool(
-                    local and str(item.get("version", "")) != str(local.get("version", ""))
+                    local and is_newer(item.get("version", ""), local.get("version", ""))
                 )
             return data
 

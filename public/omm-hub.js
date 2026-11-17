@@ -27,6 +27,16 @@
   var WORKSPACE_KEY = 'omm.hub.workspaces.v1';
   var DEFAULT_CUSTOM_HEX = '#FF8FC8';
   var ACCENT_HEX_HINT = '支持 #RGB / #RRGGBB，例如 #FF8FC8；深色主题会自动提亮。';
+  /* Allowed values for the "定时快照" interval (in minutes). Shared by the
+     settings dropdown, the persisted-appearance whitelist and backup restore.
+     Keep in sync with the <option> list in omm-hub.html. */
+  var SNAP_INTERVALS = [0, 5, 10, 15, 30, 45, 60, 120, 240, 360, 720, 1440];
+  function snapIntervalLabel(minutes) {
+    minutes = Number(minutes) || 0;
+    if (minutes < 60) return '每 ' + minutes + ' 分钟';
+    if (minutes < 1440) return '每 ' + (minutes / 60) + ' 小时';
+    return '每 ' + (minutes / 1440) + ' 天';
+  }
   var hubAppearance = {
     radius: 0,
     accent: 'amber',
@@ -1331,7 +1341,7 @@
       hubAppearance.theme = ['light', 'dark', 'system'].indexOf(data.theme) >= 0
         ? data.theme
         : 'light';
-      hubAppearance.snap = [0, 5, 10, 30].indexOf(Number(data.snap)) >= 0
+      hubAppearance.snap = SNAP_INTERVALS.indexOf(Number(data.snap)) >= 0
         ? Number(data.snap)
         : 0;
       hubAppearance.dockSort = data.dockSort === 'usage' ? 'usage' : 'fixed';
@@ -1708,7 +1718,9 @@
         lastAutoSnapAt = Date.now();
         saveHubAppearance();
         applyHubAppearance();
-        toast(hubAppearance.snap ? '每 ' + hubAppearance.snap + ' 分钟为当前产品自动快照' : '已关闭定时快照');
+        toast(hubAppearance.snap
+          ? snapIntervalLabel(hubAppearance.snap) + '为当前产品自动快照'
+          : '已关闭定时快照');
       });
     }
     var resetLayoutBtn = document.getElementById('hub-reset-layout');
@@ -1916,7 +1928,7 @@
       topbar: data.topbar !== false,
       restore: data.restore !== false,
       sleep: [0, 5, 15, 30].indexOf(Number(data.sleep)) >= 0 ? Number(data.sleep) : 15,
-      snap: [0, 5, 10, 30].indexOf(Number(data.snap)) >= 0 ? Number(data.snap) : 0,
+      snap: SNAP_INTERVALS.indexOf(Number(data.snap)) >= 0 ? Number(data.snap) : 0,
       dockSort: data.dockSort === 'usage' ? 'usage' : 'fixed',
     };
   }
@@ -2418,7 +2430,11 @@
       .map(function (item) {
         var installed = item.installed;
         var busy = pluginBusy[item.id];
-        var label = busy ? '处理中…' : installed ? (item.update_available ? '更新' : '重新安装') : '安装';
+        /* Compare numerically against the locally installed version so a
+           built-in build newer than the catalog is never offered as an
+           "update" (which would really be a downgrade). */
+        var canUpdate = installed && isNewerVersion(item.version, item.installed_version);
+        var label = busy ? '处理中…' : canUpdate ? '更新' : installed ? '重新安装' : '安装';
         return (
           '<div class="pp-card-item">' +
           '<div class="pp-card-top"><span class="pp-glyph' + appIconClass(item) + '">' +

@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import os
 import platform
-import re
 import subprocess
 import sys
 import threading
@@ -32,7 +31,7 @@ try:  # Older installs may be updated before omm_share.py arrives.
 except Exception:  # pragma: no cover
     omm_share = None  # type: ignore
 
-from plugin_specs import DESKTOP_EXE_NAMES, VERSION
+from plugin_specs import DESKTOP_EXE_NAMES, VERSION, is_newer, version_key
 
 try:
     from plugin_manager import (
@@ -58,15 +57,9 @@ UPDATE_JS_PATH = "/__omm/update.js"
 
 # ------------------------------------------------------------------ versioning
 
-
-def version_key(value: Any) -> tuple:
-    parts = re.findall(r"\d+", str(value or ""))
-    return tuple(int(part) for part in parts[:4]) or (0,)
-
-
-def is_newer(latest: Any, current: Any = VERSION) -> bool:
-    return version_key(latest) > version_key(current)
-
+# ``version_key`` / ``is_newer`` now live in plugin_specs so every layer
+# (updater, hub, frontend payload) compares versions the same way.  Re-export
+# them here for callers that import from this module.
 
 def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
@@ -134,15 +127,13 @@ def update_info(catalog: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         if fetch_catalog is None:
             return info
         catalog = fetch_catalog(os.environ.get("OMM_CATALOG_URL") or CATALOG_URL)
-    latest = str(catalog.get("version") or "")
-    info["latest"] = latest or current
-    if not latest or not is_newer(latest, current):
-        return info
-    info["available"] = True
-    info["kind"] = "direct"
+    # Resolve the exact artifact that would be installed first, then compare
+    # ITS version with the built-in one.  Comparing the catalog's top-level tag
+    # version is what let stale / cross-product fields produce an "update"
+    # prompt that would actually downgrade the running program.
     entry: Optional[Dict[str, Any]] = None
-
-    if platform_key() == "win64":
+    plat = platform_key()
+    if plat == "win64":
         if app == "hub" and bundled_plugins() == 0:
             # The framework build ships no plugins: it updates itself by
             # downloading the framework archive and taking the new exe out
@@ -153,6 +144,26 @@ def update_info(catalog: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
                 info["kind"] = "framework"
         else:
             entry = (catalog.get("apps") or {}).get(app)
+    else:
+        entry = {"bundle": mac_asset_name(app)}
+
+    # Prefer the concrete artifact's own version; fall back to the catalog's
+    # top-level tag version only when that artifact carries no version.
+    artifact_version = str((entry or {}).get("version") or "")
+    catalog_version = str(catalog.get("version") or "")
+    latest = artifact_version or catalog_version
+    info["latest"] = latest or current
+
+    # Strict numeric comparison.  Never offer an update when the remote build
+    # is not genuinely newer than the one already installed - that is how a
+    # high built-in version ended up being told to install a lower artifact.
+    if not latest or not is_newer(latest, current):
+        return info
+    info["available"] = True
+    if not info["kind"]:
+        info["kind"] = "direct"
+
+    if plat == "win64":
         if entry:
             info["url"] = asset_url(catalog, entry)
             info["size"] = int(entry.get("size") or 0)
@@ -161,10 +172,7 @@ def update_info(catalog: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
             if not is_frozen():
                 info["note"] = "源码运行模式，下载后请手动替换程序。"
     else:
-        info["url"] = asset_url(
-            catalog,
-            {"bundle": mac_asset_name(app)},
-        )
+        info["url"] = asset_url(catalog, entry or {})
         info["note"] = "macOS 版本请下载 DMG 后覆盖安装。"
     return info
 

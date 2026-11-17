@@ -581,6 +581,7 @@
 
     entries: [],
     apps: [],
+    selected: {}, // keyed by entry.key -> true, for batch archive management
     filters: { query: '', kind: 'all' },
     loading: false,
     error: '',
@@ -1443,6 +1444,21 @@
     '  font:12px/1.5 "Literata","Songti SC","SimSun",serif;white-space:pre-wrap;opacity:0;transition:.18s}',
     '.omm-toast.show{opacity:1;transform:translate(-50%,0)}',
     '.omm-toast[data-kind="error"]{background:#fdf0ee;border-color:#8f2f27;color:#8f2f27}',
+    /* Batch selection: a checkbox per archive row plus a contextual action bar. */
+    '.omm-item input[data-archive-pick]{flex:0 0 auto;width:13px;height:13px;margin:1px 6px 0 0;',
+    '  accent-color:var(--omm-ink,#26231f);cursor:pointer;vertical-align:-2px}',
+    '.omm-batch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;margin:6px 0 0;',
+    '  border:1px solid var(--omm-ink,#26231f);background:var(--omm-soft,#faf7f1);font-size:10.5px}',
+    '.omm-batch[hidden]{display:none}',
+    '.omm-batch .omm-batch-count{margin-right:auto;color:var(--omm-dim,#6d6559)}',
+    '.omm-batch button{border:1px solid var(--omm-line-soft,#d9d3c8);background:var(--omm-paper,#ffffff);',
+    '  padding:2px 8px;font:inherit;font-size:10.5px;cursor:pointer;color:var(--omm-ink,#26231f);',
+    '  border-radius:var(--omm-radius,0px)}',
+    '.omm-batch button:hover{border-color:var(--omm-ink,#26231f)}',
+    '.omm-batch button.danger{color:#8f2f27}',
+    '.omm-batch button:disabled{opacity:.45;cursor:default}',
+    '.omm-pick-all{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--omm-dim,#6d6559)}',
+    '.omm-pick-all input{width:13px;height:13px;margin:0;accent-color:var(--omm-ink,#26231f);cursor:pointer}',
     /* ---------------------------------------------------------------- *
      * Appearance overrides. Accent, radius and focus are all derived from
      * the shell variables above, so no surface keeps a hard-coded hue.
@@ -1508,6 +1524,11 @@
     '.osh-batch button.danger,.osh-item button.danger{color:var(--omm-danger)}',
     '.osh-item:hover{background:var(--omm-accent-wash)}',
     '.osh-member input[type="checkbox"]:checked{background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
+    '.omm-item input[data-archive-pick],.omm-pick-all input{accent-color:var(--omm-accent)}',
+    '.omm-batch{border-color:var(--omm-accent-line);background:var(--omm-accent-wash)}',
+    '.omm-batch button{border-color:var(--omm-accent-line)}',
+    '.omm-batch button:hover{border-color:var(--omm-accent)}',
+    '.omm-batch button.danger{color:var(--omm-danger)}',
     /* Every bordered element inside the archive panel follows --radius. */
     '.omm-panel,.omm-head,.omm-x,.omm-tabs,.omm-tabs button,.omm-body,.omm-pane,.omm-label,',
     '.omm-input,.omm-row,.omm-primary,.omm-secondary,.omm-note,.omm-section,.omm-lead,',
@@ -1517,7 +1538,8 @@
     '.omm-foot,.omm-toast,.omm-content-hits,.omm-content-head,.omm-content-snippet,',
     '.omm-compare,.omm-compare-out,.omm-btn,.osh-lead,.osh-bar,.osh-summary,.osh-chips,',
     '.osh-chip,.osh-list,.osh-empty,.osh-foot,.osh-rules,.osh-rule,.osh-rule-head,',
-    '.osh-member,.osh-note,.osh-target,.osh-item,.osh-preview,.osh-batch,.osh-batch button',
+    '.osh-member,.osh-note,.osh-target,.osh-item,.osh-preview,.osh-batch,.osh-batch button,',
+    '.omm-batch,.omm-batch button',
     '{border-radius:var(--omm-radius)}',
     '.omm-tabs button{border-radius:var(--omm-radius) var(--omm-radius) 0 0}',
     'button:focus:not(:focus-visible),input:focus:not(:focus-visible){outline:none}',
@@ -1607,7 +1629,9 @@
     '        <button type="button" data-kind="file" aria-pressed="false">文档</button>',
     '        <button type="button" data-kind="snapshot" aria-pressed="false">快照</button>',
     '      </div>',
-    '      <div class="omm-help">快照记录的是<b>应用状态</b>：本地存储、会话存储与 IndexedDB 数据，可恢复到任意时间点；文档是磁盘上的文件，可在对应应用中重新打开。点快照右侧的 ⓘ 可查看它具体包含什么。</div>',
+    '      <div class="omm-help">快照记录的是<b>应用状态</b>：本地存储、会话存储与 IndexedDB 数据，可恢复到任意时间点；文档是磁盘上的文件，可在对应应用中重新打开。点快照右侧的 ⓘ 可查看它具体包含什么。勾选条目后可批量删除。</div>',
+    '      <div class="omm-row" id="omm-pick-row"><label class="omm-pick-all"><input type="checkbox" id="omm-pick-all" /> 全选当前列表</label></div>',
+    '      <div class="omm-batch" id="omm-batch-bar" hidden></div>',
     '      <div class="omm-list" id="omm-archive-list"><div class="omm-empty">读取中…</div></div>',
     '      <div class="omm-foot" id="omm-archive-foot"></div>',
     '    </div>',
@@ -1662,6 +1686,19 @@
       createSnapshot().catch(function () {})
     })
     byId('omm-refresh-archive').addEventListener('click', function () { loadArchive() })
+    /* Batch selection: one delegated change handler for all row checkboxes. */
+    model.shadow.addEventListener('change', function (event) {
+      var input = event.target
+      if (!input || !input.matches || !input.matches('input[data-archive-pick]')) return
+      if (input.checked) model.selected[input.dataset.archivePick] = true
+      else delete model.selected[input.dataset.archivePick]
+      syncSelectAll()
+      renderBatchBar()
+    })
+    var pickAll = byId('omm-pick-all')
+    if (pickAll) pickAll.addEventListener('change', function () {
+      toggleSelectAll(pickAll.checked)
+    })
     byId('omm-all-snaps').addEventListener('change', function () {
       model.scope.mode = byId('omm-all-snaps').checked ? 'all' : 'app'
       renderScope()
@@ -2092,12 +2129,15 @@
 
   function normalizeEntry(raw) {
     var kind = raw.kind === 'snapshot' ? 'snapshot' : 'file'
+    var path = raw.path || ''
     return {
       kind: kind,
+      /* Stable identity across refreshes; path is unique per archive entry. */
+      key: path ? (kind + '|' + path) : (kind + '|' + String(raw.sort || raw.name || raw.label || '')),
       title: String(kind === 'snapshot' ? raw.label || raw.name || '快照' : raw.name || raw.file || '未命名文件'),
       app: raw.app || '',
       appName: raw.app_name || '',
-      path: raw.path || '',
+      path: path,
       name: raw.name || raw.file || '',
       label: raw.label || '',
       mime: raw.mime || '',
@@ -2261,11 +2301,106 @@
     list.appendChild(box)
   }
 
+  /* ------------------------------------------------------- batch selection */
+
+  function visibleEntries() {
+    return model.entries.filter(matchesFilters)
+  }
+
+  function selectedEntries() {
+    return model.entries.filter(function (entry) { return !!model.selected[entry.key] })
+  }
+
+  function pruneSelection() {
+    var live = {}
+    model.entries.forEach(function (entry) { live[entry.key] = true })
+    Object.keys(model.selected).forEach(function (key) {
+      if (!live[key]) delete model.selected[key]
+    })
+  }
+
+  function syncSelectAll() {
+    var box = byId('omm-pick-all')
+    if (!box) return
+    var visible = visibleEntries()
+    var picked = visible.filter(function (entry) { return !!model.selected[entry.key] }).length
+    box.checked = visible.length > 0 && picked === visible.length
+    box.indeterminate = picked > 0 && picked < visible.length
+    box.disabled = !visible.length
+  }
+
+  function toggleSelectAll(checked) {
+    visibleEntries().forEach(function (entry) {
+      if (checked) model.selected[entry.key] = true
+      else delete model.selected[entry.key]
+    })
+    renderArchive()
+  }
+
+  function renderBatchBar() {
+    var bar = byId('omm-batch-bar')
+    if (!bar) return
+    clear(bar)
+    var chosen = selectedEntries()
+    if (!chosen.length) {
+      bar.hidden = true
+      return
+    }
+    bar.hidden = false
+    var snaps = chosen.filter(function (entry) { return entry.kind === 'snapshot' })
+    var files = chosen.length - snaps.length
+    var parts = ['已选 ' + chosen.length + ' 项']
+    if (snaps.length) parts.push('快照 ' + snaps.length)
+    if (files) parts.push('文档 ' + files)
+    bar.appendChild(el('span', 'omm-batch-count', parts.join(' · ')))
+
+    if (snaps.length) {
+      var del = el('button', 'danger', '删除选中的 ' + snaps.length + ' 个快照')
+      del.type = 'button'
+      del.title = '只删除勾选的快照文件；勾选的文档不会被删除'
+      del.onclick = batchDeleteSelected
+      bar.appendChild(del)
+    }
+    var clearBtn = el('button', '', '取消选择')
+    clearBtn.type = 'button'
+    clearBtn.onclick = function () {
+      model.selected = {}
+      renderArchive()
+    }
+    bar.appendChild(clearBtn)
+  }
+
+  function batchDeleteSelected() {
+    var snaps = selectedEntries().filter(function (entry) { return entry.kind === 'snapshot' })
+    if (!snaps.length) return
+    ask('删除选中的 ' + snaps.length + ' 个快照？此操作不可撤销。' +
+      (snaps.length < selectedEntries().length ? '\n勾选的文档文件不会被删除。' : ''),
+      { title: '批量删除快照', ok: '删除 ' + snaps.length + ' 个', danger: true }).then(function (ok) {
+      if (!ok) return
+      var done = 0
+      var failed = 0
+      var chain = Promise.resolve()
+      snaps.forEach(function (entry) {
+        chain = chain.then(function () {
+          return apiPost('/snapshot/delete', { app: entry.app || effectiveApp(), path: entry.path })
+            .then(function () { done += 1 }, function () { failed += 1 })
+        })
+      })
+      chain.then(function () {
+        model.selected = {}
+        toast('已删除 ' + done + ' 个快照' + (failed ? '，失败 ' + failed + ' 个' : ''),
+          failed ? 'error' : '')
+        loadArchive()
+      })
+    })
+  }
+
   function renderArchive() {
     var list = byId('omm-archive-list')
     if (!list) return
     var entries = model.entries
     var visible = entries.filter(matchesFilters)
+    pruneSelection()
     clear(list)
 
     var querying = (model.filters.query || '').trim().length >= 2
@@ -2283,6 +2418,8 @@
     }
     renderFoot(entries.length, visible.length)
     renderScope()
+    syncSelectAll()
+    renderBatchBar()
   }
 
   function renderFoot(total, shown) {
@@ -2322,6 +2459,13 @@
     var row = el('div', 'omm-item')
     var main = el('div', 'omm-item-main')
     var head = el('div', 'omm-item-head')
+    var pick = el('input')
+    pick.type = 'checkbox'
+    pick.checked = !!model.selected[entry.key]
+    pick.dataset.archivePick = entry.key
+    pick.title = '勾选后可批量删除'
+    pick.setAttribute('aria-label', '选择：' + entry.title)
+    head.appendChild(pick)
     var title = el('b', '', entry.title)
     title.title = entry.path || entry.title
     head.appendChild(title)
