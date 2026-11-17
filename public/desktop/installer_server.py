@@ -180,7 +180,7 @@ def _create_shortcut(exe: Path) -> None:
             "$s.TargetPath = $env:OMM_HUB_EXE; "
             "$s.WorkingDirectory = $env:OMM_HUB_DIR; "
             "$s.IconLocation = $env:OMM_HUB_EXE; "
-            "$s.Description = 'OMM-ZEN 工作台'; "
+            "$s.Description = '静书房'; "
             "$s.Save() }"
         )
         env = dict(os.environ)

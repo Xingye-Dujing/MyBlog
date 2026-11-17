@@ -674,8 +674,6 @@
           cls +
           '" type="button" role="tab" draggable="true" data-app="' +
           esc(appId) +
-          '" title="' +
-          esc(app.name) +
           '">' +
           '<span class="tab-glyph' + appIconClass(app) + '">' +
           appIconHTML(app) +
@@ -1944,7 +1942,7 @@
         return;
       }
       if (!data || typeof data !== 'object' || !data.shared) {
-        toast('不是 OMM-ZEN 设置备份', 'error');
+        toast('不是静书房设置备份', 'error');
         return;
       }
       ommConfirm(
@@ -2461,7 +2459,7 @@
       })
       .join('');
     els.ppBody.innerHTML =
-      '<p class="pp-note">在线插件来自 OMM-ZEN Release，下载后安装到本地，之后离线可用。</p>' +
+      '<p class="pp-note">在线插件来自静书房官方发布，下载后安装到本地，之后离线可用。</p>' +
       '<div class="pp-grid">' +
       cards +
       '</div>' +

@@ -369,13 +369,13 @@ def optional_extras(window, app_id: str, icon_path: Path, enabled: bool = True) 
         image = Image.open(str(icon_path))
         menu = pystray.Menu(
             pystray.MenuItem(
-                "OMM-ZEN 工作台" if app_id == "hub" else "打开窗口",
+                "静书房" if app_id == "hub" else "打开窗口",
                 lambda *_: restore(),
                 default=True,
             ),
             pystray.MenuItem("退出", lambda *_: window.destroy()),
         )
-        tray = pystray.Icon("OMM-ZEN", image, "OMM-ZEN 工作台", menu)
+        tray = pystray.Icon("OMM-ZEN", image, "静书房", menu)
         threading.Thread(target=tray.run, daemon=True).start()
         status["tray"] = tray
     except Exception:
@@ -505,7 +505,7 @@ def run_hub(
 
     url = "http://127.0.0.1:%d/%s" % (port, HUB_HTML)
     window = webview.create_window(
-        "OMM-ZEN 工作台",
+        "静书房",
         url,
         width=1600,
         height=1000,

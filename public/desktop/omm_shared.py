@@ -65,7 +65,7 @@ APP_NAMES = {
     "redact": "文档脱敏工具",
     "visualization": "可视化图表",
     "writer": "所思所想",
-    "hub": "OMM-ZEN 工作台",
+    "hub": "静书房",
 }
 
 _KIND_BY_EXT = {
