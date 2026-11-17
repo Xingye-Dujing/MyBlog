@@ -210,7 +210,6 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
     },
     {
         "id": "writer",
-        "version": "1.0.12",
         "name": "所思所想",
         "glyph": "写",
         "description": "长文写作与排版",
