@@ -3133,6 +3133,9 @@
         if (appStatus[appId] === 'error') return;
         var frame = frames.get(appId) || createFrame(appId);
         var join = url.indexOf('?') >= 0 ? '&' : '?';
+        /* Size the frame before navigation so the page's first layout reads the
+           real viewport width; otherwise it boots in the ≤720px mobile layout. */
+        sizeFrameBeforeLoad(frame, appId);
         frame.dataset.url = url;
         frame.src = url + join + 'omm_embed=1';
       },
@@ -3164,6 +3167,24 @@
     delete appStatus[appId];
     mountApp(appId);
     renderLayout();
+  }
+
+  /* Give a freshly created iframe its final pane geometry *before* navigating
+     to the real URL.  syncFrames only sizes frames once appStatus === 'ready'
+     (i.e. after load), which left the first paint happening at the browser's
+     default ~300px viewport.  Width-sensitive pages (e.g. planner) then painted
+     the mobile layout — the "更多" affordance — and kept it until a view switch
+     forced a re-render.  Sizing up front makes the first layout see the real
+     innerWidth. */
+  function sizeFrameBeforeLoad(frame, appId) {
+    var paneId = findPaneByApp(appId);
+    if (!paneId) return;
+    var rect = computeRects().panes.get(paneId);
+    if (!rect) return;
+    frame.style.left = rect.x + 1 + 'px';
+    frame.style.top = rect.y + HEAD + 1 + 'px';
+    frame.style.width = Math.max(0, rect.w - 2) + 'px';
+    frame.style.height = Math.max(0, rect.h - HEAD - 2) + 'px';
   }
 
   function syncFrames(rects) {
