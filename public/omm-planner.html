@@ -1575,6 +1575,10 @@
         display: block;
         animation: ddIn 0.16s ease;
       }
+      /* 从倒数记录弹窗里选日期时，让选择器盖过弹窗 */
+      body:has(#modal.open) .picker-pop.open {
+        z-index: 9500;
+      }
       .pk-head {
         display: flex;
         justify-content: space-between;
@@ -1786,6 +1790,354 @@
         background: var(--hover);
         color: var(--text);
       }
+      /* ---- 天数视图（独立倒数 / 正计时记录）----
+         两种布局：.layout-grid 方形卡片墙 / .layout-list 长方形横向列表 */
+      .v-count {
+        height: 100%;
+        width: 100%;
+        max-width: 1180px;
+        margin: 0 auto;
+        overflow-y: auto;
+        padding: 2em 3em 3.4em;
+        align-content: start;
+        scrollbar-width: none;
+      }
+      .v-count::-webkit-scrollbar {
+        display: none;
+      }
+      /* 网格布局 */
+      .v-count.layout-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, 18em);
+        justify-content: center;
+        gap: 1.45em;
+        align-items: start;
+      }
+      /* 列表布局：更窄、更往中间靠 */
+      .v-count.layout-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1em;
+        max-width: 880px;
+      }
+      .cd-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3em;
+        padding: 1.3em 1em;
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius);
+        text-align: center;
+        cursor: pointer;
+        overflow: hidden;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+      .layout-grid .cd-card {
+        height: 18em;
+      }
+      .cd-card:hover {
+        background: var(--hover);
+        border-color: var(--border);
+      }
+      .cd-num {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 0.22em;
+      }
+      .cd-val {
+        font-size: 3.1em;
+        line-height: 1;
+        font-weight: 500;
+        letter-spacing: -1px;
+      }
+      .cd-unit {
+        font-size: 0.66em;
+        letter-spacing: 1px;
+        color: var(--text-dim);
+      }
+      .cd-main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.28em;
+        max-width: 100%;
+        min-width: 0;
+      }
+      .cd-kind {
+        font-size: 0.56em;
+        letter-spacing: 1.5px;
+        color: var(--text-dim);
+        opacity: 0.8;
+      }
+      .cd-today {
+        font-size: 1.7em;
+        line-height: 1;
+        letter-spacing: 2px;
+      }
+      .cd-card.past .cd-val {
+        color: var(--text-dim);
+      }
+      .cd-title {
+        font-size: 1em;
+        font-weight: 500;
+        line-height: 1.3;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .cd-date {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 0.45em;
+        flex-wrap: wrap;
+        font-size: 0.7em;
+        color: var(--text-dim);
+      }
+      .cd-dstr {
+        letter-spacing: 1px;
+      }
+      .cd-wk {
+        font-size: 0.95em;
+        color: var(--text-dim);
+      }
+      .cd-lunar {
+        font-size: 0.95em;
+        color: var(--text-dim);
+        opacity: 0.75;
+      }
+      .cd-lunar.fest {
+        color: var(--accent-red);
+      }
+      .cd-lunar.term {
+        color: var(--accent-green);
+      }
+      .cd-note {
+        font-size: 0.68em;
+        color: var(--text-dim);
+        opacity: 0.85;
+        line-height: 1.4;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .cd-x {
+        position: absolute;
+        top: 0.2em;
+        right: 0.4em;
+        font-size: 1em;
+        line-height: 1;
+        color: var(--text-faint);
+        cursor: pointer;
+        padding: 0.2em 0.35em;
+        opacity: 0;
+        transition:
+          opacity 0.15s,
+          color 0.15s;
+      }
+      .cd-card:hover .cd-x {
+        opacity: 1;
+      }
+      .cd-x:hover {
+        color: var(--accent-red);
+      }
+      body.is-touch .cd-x {
+        opacity: 1;
+      }
+
+      /* ---- 列表布局：横条，左侧大数字，右侧内容左对齐 ---- */
+      .layout-list .cd-card {
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+        gap: 1.8em;
+        padding: 1.2em 1.7em;
+      }
+      .layout-list .cd-num {
+        flex: 0 0 5.8em;
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: center;
+        border-right: 1px solid var(--border-dim);
+        padding-right: 1.5em;
+      }
+      .layout-list .cd-val {
+        font-size: 2.7em;
+      }
+      .layout-list .cd-main {
+        display: grid;
+        flex: 1;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto auto;
+        align-items: baseline;
+        column-gap: 1.2em;
+        row-gap: 0.22em;
+        text-align: left;
+      }
+      .layout-list .cd-title {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: 1.15em;
+        -webkit-line-clamp: 1;
+      }
+      .layout-list .cd-kind {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        white-space: nowrap;
+      }
+      .layout-list .cd-date {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-content: flex-start;
+      }
+      .layout-list .cd-note {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        text-align: left;
+        -webkit-line-clamp: 1;
+      }
+      .layout-list .cd-x {
+        top: 50%;
+        transform: translateY(-50%);
+        right: 1em;
+      }
+
+      .cd-empty {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.4em;
+        min-height: 46vh;
+        text-align: center;
+      }
+      .cd-empty-hint {
+        color: var(--text-dim);
+        font-size: 0.9em;
+        line-height: 1.7;
+        max-width: 26em;
+      }
+      .cd-new-btn {
+        display: inline-block;
+        background: transparent;
+        border: 1px solid var(--border-dim);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: calc(11px * var(--fscale));
+        letter-spacing: 2px;
+        padding: 0.75em 1.5em;
+        cursor: pointer;
+        border-radius: var(--radius);
+        transition: all 0.15s;
+      }
+      .cd-new-btn:hover {
+        border-color: var(--text);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .cd-new-bottom {
+        grid-column: 1 / -1;
+        justify-self: center;
+        margin-top: 0.6em;
+      }
+      .layout-list .cd-new-bottom {
+        align-self: center;
+      }
+
+      /* 头部布局切换按钮 */
+      .cd-lay {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .cd-lay-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 23px;
+        height: 23px;
+        padding: 0;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        color: var(--text-faint);
+        cursor: pointer;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .cd-lay-btn svg {
+        width: 13px;
+        height: 13px;
+        display: block;
+      }
+      .cd-lay-btn:hover {
+        color: var(--text);
+      }
+      .cd-lay-btn.active {
+        color: var(--text);
+        border-color: var(--border-dim);
+      }
+
+      /* 天数视图没有日期概念：收起整个“导航”组、移动端导航条与聚焦按钮 */
+      body.view-count #menu-nav-group,
+      body.view-count #m-nav,
+      body.view-count #focus-btn {
+        display: none !important;
+      }
+      @media (max-width: 720px) {
+        .v-count {
+          padding: 1.2em 1em 2.6em;
+          max-width: none;
+        }
+        .v-count.layout-grid {
+          grid-template-columns: repeat(auto-fill, 11.2em);
+          gap: 0.75em;
+        }
+        .layout-grid .cd-card {
+          height: 11.2em;
+          padding: 0.8em 0.5em;
+        }
+        .cd-val {
+          font-size: 2.2em;
+        }
+        .layout-list .cd-card {
+          gap: 1em;
+          padding: 1em 1.1em;
+        }
+        .layout-list .cd-num {
+          flex-basis: 4.4em;
+          padding-right: 0.9em;
+        }
+        .layout-list .cd-val {
+          font-size: 2em;
+        }
+        /* 手机上隐藏统计数字与副标题，只保留布局切换按钮 */
+        body.view-count #ch-right {
+          display: flex;
+          margin-left: auto;
+        }
+        body.view-count #ch-right .cd-stat {
+          display: none;
+        }
+        body.view-count #ch-sub {
+          display: none;
+        }
+      }
+
       .v-focus {
         height: 100%;
         display: flex;
@@ -3703,7 +4055,8 @@
         }
       }
       @media print and (orientation: portrait) {
-        .v-list {
+        .v-list,
+        .v-count {
           height: auto !important;
           overflow: visible !important;
         }
@@ -4267,8 +4620,9 @@
         <div class="menu-btn" id="btn-month" data-action="viewMonth" data-i18n="menu.month"></div>
         <div class="menu-btn" id="btn-week" data-action="viewWeek" data-i18n="menu.week"></div>
         <div class="menu-btn" id="btn-list" data-action="viewList" data-i18n="menu.list"></div>
+        <div class="menu-btn" id="btn-count" data-action="viewCount" data-i18n="menu.count"></div>
       </div>
-      <div class="menu-group">
+      <div class="menu-group" id="menu-nav-group">
         <span class="menu-label" data-i18n="menu.nav">导航</span>
         <div
           class="menu-btn"
@@ -5012,7 +5366,7 @@ notify pgrst, 'reload schema';</textarea
     <div id="m-nav">
       <button
         type="button"
-        class="mn-btn"
+        class="mn-btn mn-prev"
         data-proxy='#top-menu [data-action="prev"]'
         title="上一页"
       >
@@ -5020,7 +5374,7 @@ notify pgrst, 'reload schema';</textarea
       </button>
       <button
         type="button"
-        class="mn-btn"
+        class="mn-btn mn-next"
         data-proxy='#top-menu [data-action="next"]'
         title="下一页"
       >
@@ -5041,6 +5395,9 @@ notify pgrst, 'reload schema';</textarea
       </button>
       <button type="button" class="mt-item" data-mview="list" data-proxy="#btn-list">
         <span class="ic" data-ico="list"></span><span>列表</span>
+      </button>
+      <button type="button" class="mt-item" data-mview="count" data-proxy="#btn-count">
+        <span class="ic" data-ico="count"></span><span>天数</span>
       </button>
       <button type="button" class="mt-item" data-action="mMore">
         <span class="ic" data-ico="dots"></span><span>更多</span>
@@ -5116,6 +5473,7 @@ notify pgrst, 'reload schema';</textarea
           LS_EVENTS: 'zp-events-v1',
           LS_SETTINGS: 'zp-settings-v1',
           LS_DATA: 'zp-data-v2',
+          LS_COUNT: 'zp-count-v1',
         }
 
         // ================================================================
@@ -5242,10 +5600,34 @@ notify pgrst, 'reload schema';</textarea
             'menu.month': '月',
             'menu.week': '周',
             'menu.list': '列表',
+            'menu.count': '天数',
             'menu.nav': '导航',
             'menu.prevTitle': '上一个月 / 周（←）',
             'menu.nextTitle': '下一个月 / 周（→）',
             'menu.today': '今天',
+            'count.title': '倒数天数',
+            'count.sub': '记录重要事项 · 自动计算还有 / 已过多少天',
+            'count.unitDay': '天',
+            'count.today': '今天',
+            'count.countdown': '倒计时',
+            'count.countup': '正计时',
+            'count.empty': '还没有倒数记录 — 点击下方按钮，添加第一个重要事项',
+            'count.stat': '记录',
+            'count.newBtn': '＋ 新建倒数记录',
+            'count.layoutGrid': '网格排列',
+            'count.layoutList': '列表排列',
+            'count.newTitle': '新建倒数记录',
+            'count.editTitle': '编辑倒数记录',
+            'count.fTitle': '事项名称',
+            'count.fTitlePh': '例如：考试、生日、纪念日',
+            'count.fDate': '目标日期',
+            'count.fNote': '备注',
+            'count.fNotePh': '可选',
+            'count.needTitle': '请填写事项名称',
+            'count.added': '已添加倒数记录',
+            'count.updated': '已更新倒数记录',
+            'count.deleted': '已删除倒数记录',
+            'count.confirmDel': '确定删除这条倒数记录吗？',
             'menu.newLabel': '新建',
             'menu.todo': '待办',
             'menu.event': '日程',
@@ -5328,6 +5710,7 @@ notify pgrst, 'reload schema';</textarea
             'type.event': '日程',
             'type.note': '备注',
             'btn.save': '保存',
+            'btn.edit': '编辑',
             'btn.delete': '删除',
             'ed.copy': '复制',
             'confirm.cancel': '取消',
@@ -5367,7 +5750,7 @@ notify pgrst, 'reload schema';</textarea
             'notify.fontsize': '界面字体：{0}px',
             'notify.cellfont': '单元格字体：{0}px',
             'notify.stylesReset': '样式已重置',
-            'notify.listReadonly': '列表视图仅供查看 · 请切换到月/周视图新建',
+            'notify.listReadonly': '列表 / 天数视图仅供查看 · 请切换到月/周视图新建',
             'status.streak': '连续打卡 {0} 天',
             'status.todayItems': '今日待办 {0}/{1}',
             'status.noneToday': '今日无安排',
@@ -5403,7 +5786,7 @@ notify pgrst, 'reload schema';</textarea
             'touch.hintCell': '轻点选中 · 双击空白处新建条目',
             'touch.hintMenu': '点此展开顶部菜单',
             'hk.rows':
-              '全局§移动选格（月 / 周视图）|← → ↑ ↓|上 / 下一期|A D|切换视图（月 → 周 → 列表）|W S|回到今天|T|新建待办（月 / 周视图）|N|打开搜索|/|放大 / 缩小|+ = 与 −|打开 / 重新载入本说明|?|依次关闭：确认框 → 日期选择器 → 弹窗 → 条目编辑 → 聚焦模式 → 多选 → 下拉菜单|Esc~~多选之后§进入聚焦 / 时间线模式|Enter|聚焦当前格，再按一次返回|F~~列表视图§只读，方向键与新建待办均不生效|—~~焦点在搜索框上时§跳到第一条结果并打开它|Enter|关闭全部下拉菜单|Esc~~焦点在条目编辑面板里时§保存并关闭|{M} Enter 或标题框内 Enter|关闭面板不保存|Esc|在子任务标题框内回车：新增一条子任务|Enter~~双击计划本标签改名时§确认改名|Enter|放弃改名|Esc~~启动页上§进入应用|Enter~~焦点在顶栏云同步按钮上时§打开云同步弹窗|Enter 或 Space|在弹窗内登录|Enter',
+              '全局§移动选格（月 / 周视图）|← → ↑ ↓|上 / 下一期|A D|切换视图（月 → 周 → 列表 → 天数）|W S|回到今天|T|新建待办（月 / 周视图）|N|打开搜索|/|放大 / 缩小|+ = 与 −|打开 / 重新载入本说明|?|依次关闭：确认框 → 日期选择器 → 弹窗 → 条目编辑 → 聚焦模式 → 多选 → 下拉菜单|Esc~~多选之后§进入聚焦 / 时间线模式|Enter|聚焦当前格，再按一次返回|F~~列表视图§只读，方向键与新建待办均不生效|—~~焦点在搜索框上时§跳到第一条结果并打开它|Enter|关闭全部下拉菜单|Esc~~焦点在条目编辑面板里时§保存并关闭|{M} Enter 或标题框内 Enter|关闭面板不保存|Esc|在子任务标题框内回车：新增一条子任务|Enter~~双击计划本标签改名时§确认改名|Enter|放弃改名|Esc~~启动页上§进入应用|Enter~~焦点在顶栏云同步按钮上时§打开云同步弹窗|Enter 或 Space|在弹窗内登录|Enter',
             'hk.note':
               '焦点在任何输入框里时，除 Esc 外的键位都不响应；带 {M} / Ctrl / Alt 的组合一律交还给浏览器。\n下面这些是鼠标与滚轮操作，不算快捷键：{M} 滚轮缩放、滚轮翻上下期、{M}+点击 或 鼠标右键点击多选日期、Shift+点击范围多选、拖拽条目到其他日期、拖拽条目改上下顺序。列表视图是只读的，滚动查看即可。',
             'help.keys': '快捷键',
@@ -5416,6 +5799,7 @@ notify pgrst, 'reload schema';</textarea
             'help.views.month': '月视图 — 按月展示，可查看每天的条目',
             'help.views.week': '周视图 — 按周展示，每天一列，空间更大',
             'help.views.list': '列表视图 — 按时间线展示所有条目',
+            'help.views.count': '天数视图 — 以今天为基准显示每个日期的倒计时 / 正计时天数，按远近排列',
             'help.items': '条目操作',
             'help.items.new': '点击日期格子右上角 + 号新建条目',
             'help.items.edit': '点击条目可编辑详情',
@@ -5568,10 +5952,34 @@ notify pgrst, 'reload schema';</textarea
             'menu.month': 'MONTH',
             'menu.week': 'WEEK',
             'menu.list': 'LIST',
+            'menu.count': 'DAYS',
             'menu.nav': 'NAV',
             'menu.prevTitle': 'Previous period (←)',
             'menu.nextTitle': 'Next period (→)',
             'menu.today': 'TODAY',
+            'count.title': 'Days Countdown',
+            'count.sub': 'Track important dates · countdown / count-up in days',
+            'count.unitDay': 'days',
+            'count.today': 'Today',
+            'count.countdown': 'Countdown',
+            'count.countup': 'Count-up',
+            'count.empty': 'No countdown records yet — tap the button below to add your first one',
+            'count.stat': 'Records',
+            'count.newBtn': '＋ New countdown',
+            'count.layoutGrid': 'Grid layout',
+            'count.layoutList': 'List layout',
+            'count.newTitle': 'New countdown',
+            'count.editTitle': 'Edit countdown',
+            'count.fTitle': 'Title',
+            'count.fTitlePh': 'e.g. Exam, Birthday, Anniversary',
+            'count.fDate': 'Target date',
+            'count.fNote': 'Note',
+            'count.fNotePh': 'Optional',
+            'count.needTitle': 'Please enter a title',
+            'count.added': 'Countdown added',
+            'count.updated': 'Countdown updated',
+            'count.deleted': 'Countdown deleted',
+            'count.confirmDel': 'Delete this countdown record?',
             'menu.newLabel': 'NEW',
             'menu.todo': 'TODO',
             'menu.event': 'EVENT',
@@ -5654,6 +6062,7 @@ notify pgrst, 'reload schema';</textarea
             'type.event': 'EVENT',
             'type.note': 'NOTE',
             'btn.save': 'SAVE',
+            'btn.edit': 'EDIT',
             'btn.delete': 'DELETE',
             'ed.copy': 'COPY',
             'confirm.cancel': 'Cancel',
@@ -5693,7 +6102,7 @@ notify pgrst, 'reload schema';</textarea
             'notify.fontsize': 'UI font: {0}px',
             'notify.cellfont': 'Cell font: {0}px',
             'notify.stylesReset': 'Styles reset',
-            'notify.listReadonly': 'List view is read-only · switch to Month/Week to add entries',
+            'notify.listReadonly': 'List / Days view is read-only · switch to Month/Week to add entries',
             'status.streak': 'Streak {0}d',
             'status.todayItems': 'Todos today {0}/{1}',
             'status.noneToday': 'Nothing today',
@@ -5730,7 +6139,7 @@ notify pgrst, 'reload schema';</textarea
             'touch.hintCell': 'Tap to select · double-tap empty space to create',
             'touch.hintMenu': 'Tap to open the top menu',
             'hk.rows':
-              'General§Move the selection (month / week view)|← → ↑ ↓|Previous / next period|A D|Cycle the view (month → week → list)|W S|Jump to today|T|New todo (month / week view)|N|Open search|/|Zoom in / out|+ = and −|Open this panel|?|Close, in order: confirm box → date picker → modal → item editor → focus mode → multi-selection → dropdowns|Esc~~After a multi-selection§Enter focus / timeline mode|Enter|Focus the selected day, press again to leave|F~~List view§Read-only — arrows and new-todo do nothing|—~~While focused in the search box§Jump to the first result and open it|Enter|Close every dropdown|Esc~~While focused in the item editor panel§Save and close|{M} Enter, or Enter in the title field|Close without saving|Esc|In a subtask title field: add a subtask|Enter~~While renaming a planner tab§Confirm the new name|Enter|Discard the rename|Esc~~On the splash screen§Enter the app|Enter~~With a top-bar cloud button focused§Open the cloud-sync dialog|Enter or Space|Sign in inside the dialog|Enter',
+              'General§Move the selection (month / week view)|← → ↑ ↓|Previous / next period|A D|Cycle the view (month → week → list → days)|W S|Jump to today|T|New todo (month / week view)|N|Open search|/|Zoom in / out|+ = and −|Open this panel|?|Close, in order: confirm box → date picker → modal → item editor → focus mode → multi-selection → dropdowns|Esc~~After a multi-selection§Enter focus / timeline mode|Enter|Focus the selected day, press again to leave|F~~List view§Read-only — arrows and new-todo do nothing|—~~While focused in the search box§Jump to the first result and open it|Enter|Close every dropdown|Esc~~While focused in the item editor panel§Save and close|{M} Enter, or Enter in the title field|Close without saving|Esc|In a subtask title field: add a subtask|Enter~~While renaming a planner tab§Confirm the new name|Enter|Discard the rename|Esc~~On the splash screen§Enter the app|Enter~~With a top-bar cloud button focused§Open the cloud-sync dialog|Enter or Space|Sign in inside the dialog|Enter',
             'hk.note':
               'While focus is in any text field, every key except Esc is ignored. Anything with {M} / Ctrl / Alt is always left to the browser.\nThese are mouse and wheel gestures, not shortcuts: {M}+wheel to zoom, wheel to page between periods, {M}+click or right-click to multi-select days, Shift+click for a range, drag an item to another date, drag an item to reorder it within a day. The list view is read-only — just scroll.',
             'help.keys': 'Shortcuts',
@@ -5743,6 +6152,7 @@ notify pgrst, 'reload schema';</textarea
             'help.views.month': 'Month — overview of the entire month',
             'help.views.week': 'Week — one column per day, more space',
             'help.views.list': 'List — timeline of all entries',
+            'help.views.count': 'Days view — countdown / count-up in days from today for every date, sorted by distance',
             'help.items': 'Item Operations',
             'help.items.new': 'Click + in a date cell to create',
             'help.items.edit': 'Click an item to edit details',
@@ -5787,6 +6197,7 @@ notify pgrst, 'reload schema';</textarea
           statusBarVisible: true,
           menuPinned: true,
           view: 'month',
+          countLayout: 'grid',
           cursor: new Date(),
           selDate: null,
           lastSelDs: null,
@@ -6478,6 +6889,7 @@ notify pgrst, 'reload schema';</textarea
                   statusBarVisible: S.statusBarVisible,
                   menuPinned: S.menuPinned,
                   view: S.view,
+                  countLayout: S.countLayout,
                   lastType: S.lastType,
                   tagFilter: S.tagFilter,
                   cursor: S.cursor instanceof Date ? S.cursor.toISOString() : '',
@@ -6509,10 +6921,12 @@ notify pgrst, 'reload schema';</textarea
                 'statusBarVisible',
                 'menuPinned',
                 'view',
+                'countLayout',
                 'lastType',
               ].forEach(function (k) {
                 if (o[k] !== undefined) S[k] = o[k]
               })
+              if (S.countLayout !== 'grid' && S.countLayout !== 'list') S.countLayout = 'grid'
               if (Array.isArray(o.tagFilter)) S.tagFilter = o.tagFilter
               else S.tagFilter = []
               if (o.newItemPos === 'first' || o.newItemPos === 'last') S.newItemPos = o.newItemPos
@@ -6554,8 +6968,13 @@ notify pgrst, 'reload schema';</textarea
             DOM.topMenu.classList.toggle('pinned', S.menuPinned)
             DOM.pinBtn.classList.toggle('pinned', S.menuPinned)
             document.body.classList.toggle('menu-pinned', S.menuPinned)
-            const btnMap = { month: 'btn-month', week: 'btn-week', list: 'btn-list' }
-            ;['btn-month', 'btn-week', 'btn-list'].forEach(function (id) {
+            const btnMap = {
+              month: 'btn-month',
+              week: 'btn-week',
+              list: 'btn-list',
+              count: 'btn-count',
+            }
+            ;['btn-month', 'btn-week', 'btn-list', 'btn-count'].forEach(function (id) {
               const el = document.getElementById(id)
               if (el) el.classList.remove('active')
             })
@@ -6930,6 +7349,196 @@ notify pgrst, 'reload schema';</textarea
           },
         }
 
+        /* 独立倒数 / 正计时记录存储（与日程条目、计划本完全无关）
+           每条记录：{ id, title, date, color, note, created, order } */
+        function normCount(o) {
+          return {
+            id: String(o.id || uid()),
+            title: String(o.title || ''),
+            date: /^\d{4}-\d{2}-\d{2}$/.test(o.date || '') ? o.date : todayDS(),
+            color: CONFIG.COLORS.indexOf(o.color) >= 0 ? o.color : CONFIG.COLORS[2],
+            note: String(o.note || ''),
+            created: o.created || 0,
+            order: typeof o.order === 'number' ? o.order : o.created || 0,
+          }
+        }
+
+        const CountStore = {
+          records: [],
+          load() {
+            this.records = []
+            try {
+              const raw = localStorage.getItem(CONFIG.LS_COUNT)
+              const d = raw ? JSON.parse(raw) : null
+              if (d && Array.isArray(d.records)) {
+                this.records = d.records
+                  .filter(function (x) {
+                    return x && x.title
+                  })
+                  .map(normCount)
+              }
+            } catch (_) {}
+          },
+          persist() {
+            try {
+              localStorage.setItem(CONFIG.LS_COUNT, JSON.stringify({ records: this.records }))
+            } catch (_) {}
+          },
+          find(id) {
+            for (let i = 0; i < this.records.length; i++) {
+              if (this.records[i].id === id) return this.records[i]
+            }
+            return null
+          },
+          nextOrder() {
+            let m = 0
+            this.records.forEach(function (r) {
+              if (r.order > m) m = r.order
+            })
+            return m + 1
+          },
+          add(rec) {
+            rec.id = rec.id || uid()
+            rec.created = rec.created || Date.now()
+            rec.order = typeof rec.order === 'number' ? rec.order : this.nextOrder()
+            this.records.push(normCount(rec))
+            this.persist()
+          },
+          update(id, patch) {
+            const r = this.find(id)
+            if (!r) return
+            const next = normCount(Object.assign({}, r, patch, { id: id }))
+            this.records[this.records.indexOf(r)] = next
+            this.persist()
+          },
+          remove(id) {
+            const r = this.find(id)
+            if (r) {
+              this.records.splice(this.records.indexOf(r), 1)
+              this.persist()
+            }
+          },
+          sorted() {
+            const t = todayDS()
+            const cat = function (r) {
+              return r.date > t ? 0 : r.date === t ? 1 : 2
+            }
+            return this.records.slice().sort(function (a, b) {
+              const ca = cat(a),
+                cb = cat(b)
+              if (ca !== cb) return ca - cb
+              if (ca === 0) return a.date < b.date ? -1 : a.date > b.date ? 1 : a.order - b.order
+              if (ca === 2) return a.date > b.date ? -1 : a.date < b.date ? 1 : a.order - b.order
+              return a.order - b.order
+            })
+          },
+        }
+
+        /* 倒数 / 正计时记录的独立编辑器（复用系统弹窗与日期选择器） */
+        const CountEditor = {
+          id: null,
+          date: '',
+          open(rec) {
+            const editing = !!rec
+            this.id = editing ? rec.id : null
+            this.date = editing ? rec.date : todayDS()
+            const title = editing ? t('count.editTitle') : t('count.newTitle')
+            let html = '<div class="ed-body">'
+            html +=
+              '<div class="ed-field">' +
+              '<span class="ed-label">' +
+              esc(t('count.fTitle')) +
+              '</span>' +
+              '<input class="ed-input" id="cd-title" type="text" maxlength="80" autocomplete="off" value="' +
+              esc(editing ? rec.title : '') +
+              '" placeholder="' +
+              esc(t('count.fTitlePh')) +
+              '" />' +
+              '</div>'
+            html +=
+              '<div class="ed-field">' +
+              '<span class="ed-label">' +
+              esc(t('count.fDate')) +
+              '</span>' +
+              '<div class="ed-input fake-input" data-picker="countdate" id="cd-date">' +
+              esc(this.date) +
+              '</div>' +
+              '</div>'
+            html +=
+              '<div class="ed-field">' +
+              '<span class="ed-label">' +
+              esc(t('count.fNote')) +
+              '</span>' +
+              '<textarea class="ed-area" id="cd-note" rows="3" placeholder="' +
+              esc(t('count.fNotePh')) +
+              '">' +
+              esc(editing ? rec.note : '') +
+              '</textarea>' +
+              '</div>'
+            html += '</div>'
+            html += '<div class="ed-foot">'
+            html +=
+              '<button type="button" class="ed-btn primary" id="cd-save">' +
+              esc(t('btn.save')) +
+              '</button>'
+            if (editing)
+              html +=
+                '<button type="button" class="ed-btn danger" id="cd-delete">' +
+                esc(t('btn.delete')) +
+                '</button>'
+            html += '</div>'
+            UIMgr.showModal(title, html)
+
+            const self = this
+            document.getElementById('cd-save').addEventListener('click', function () {
+              self.save()
+            })
+            const del = document.getElementById('cd-delete')
+            if (del)
+              del.addEventListener('click', function () {
+                self.remove()
+              })
+            setTimeout(function () {
+              const inp = document.getElementById('cd-title')
+              if (inp) inp.focus()
+            }, 30)
+          },
+          setDate(v) {
+            this.date = v
+            const el = document.getElementById('cd-date')
+            if (el) el.textContent = v
+          },
+          save() {
+            const title = (document.getElementById('cd-title').value || '').trim()
+            if (!title) {
+              notify(t('count.needTitle'))
+              return
+            }
+            const note = (document.getElementById('cd-note').value || '').trim()
+            const patch = { title: title, date: this.date, note: note }
+            if (this.id) {
+              CountStore.update(this.id, patch)
+              notify(t('count.updated'))
+            } else {
+              CountStore.add(patch)
+              notify(t('count.added'))
+            }
+            UIMgr.closeModal()
+            Render.all()
+          },
+          remove() {
+            const id = this.id
+            if (!id) return
+            showConfirm(t('count.confirmDel'), t('btn.delete')).then(function (ok) {
+              if (!ok) return
+              CountStore.remove(id)
+              UIMgr.closeModal()
+              Render.all()
+              notify(t('count.deleted'))
+            })
+          },
+        }
+
         function debounce(fn, ms) {
           let timer = null
           return function () {
@@ -7201,8 +7810,8 @@ notify pgrst, 'reload schema';</textarea
             Render.header()
             Render.status()
             const cal = DOM.calendar
-            /* 列表视图会整体重建，记住原来的滚动位置，避免任何重绘都跳回顶部 */
-            const prevList = cal.querySelector('.v-list')
+            /* 列表 / 天数视图会整体重建，记住原来的滚动位置，避免任何重绘都跳回顶部 */
+            const prevList = cal.querySelector('.v-list,.v-count')
             const prevListTop = prevList ? prevList.scrollTop : 0
             const prevListMonth = prevList ? prevList.dataset.month : ''
             cal.innerHTML = ''
@@ -7210,6 +7819,7 @@ notify pgrst, 'reload schema';</textarea
             if (S.view === 'month') cal.appendChild(Render.month())
             else if (S.view === 'week') cal.appendChild(Render.week())
             else if (S.view === 'focus') cal.appendChild(Render.focus())
+            else if (S.view === 'count') cal.appendChild(Render.count())
             else cal.appendChild(Render.list())
             if (S.multiSel.length && !S.focusMode) {
               DOM.calendar.querySelectorAll('.cell,.wcol').forEach(function (z) {
@@ -7234,12 +7844,12 @@ notify pgrst, 'reload schema';</textarea
                 setTimeout(jump, 340)
                 return
               }
-              if (S.view === 'list') {
-                const list = cal.querySelector('.v-list')
+              if (S.view === 'list' || S.view === 'count') {
+                const list = cal.querySelector('.v-list,.v-count')
                 if (list) {
                   /* 同一个月内重绘 → 恢复原滚动位置；换月则回到顶部 */
                   list.scrollTop =
-                    list.dataset.month === prevListMonth ? prevListTop : 0
+                    S.view === 'count' || list.dataset.month === prevListMonth ? prevListTop : 0
                   return
                 }
               }
@@ -7298,6 +7908,57 @@ notify pgrst, 'reload schema';</textarea
                 e6.getDate(),
               )
               DOM.chSub.textContent = c.getFullYear()
+            } else if (S.view === 'count') {
+              const recs = CountStore.sorted()
+              const tdsCount = todayDS()
+              let upCount = 0,
+                pastCount = 0
+              recs.forEach(function (r) {
+                if (r.date > tdsCount) upCount++
+                else if (r.date < tdsCount) pastCount++
+              })
+              DOM.chTitle.textContent = t('count.title')
+              DOM.chSub.textContent = t('count.sub')
+              DOM.gotoDate.textContent = ''
+              let sum =
+                '<span class="cd-stat">' +
+                esc(t('count.stat')) +
+                ' <b>' +
+                recs.length +
+                '</b></span>'
+              if (upCount)
+                sum +=
+                  '<span class="cd-stat">' +
+                  esc(t('count.countdown')) +
+                  ' <b>' +
+                  upCount +
+                  '</b></span>'
+              if (pastCount)
+                sum +=
+                  '<span class="cd-stat">' +
+                  esc(t('count.countup')) +
+                  ' <b>' +
+                  pastCount +
+                  '</b></span>'
+              sum +=
+                '<span class="cd-lay">' +
+                '<button type="button" class="cd-lay-btn' +
+                (S.countLayout !== 'list' ? ' active' : '') +
+                '" data-action="countLayout" data-layout="grid" title="' +
+                esc(t('count.layoutGrid')) +
+                '">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7.5" height="7.5"/><rect x="13.5" y="3" width="7.5" height="7.5"/><rect x="3" y="13.5" width="7.5" height="7.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5"/></svg>' +
+                '</button>' +
+                '<button type="button" class="cd-lay-btn' +
+                (S.countLayout === 'list' ? ' active' : '') +
+                '" data-action="countLayout" data-layout="list" title="' +
+                esc(t('count.layoutList')) +
+                '">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>' +
+                '</button>' +
+                '</span>'
+              DOM.chRight.innerHTML = sum
+              return
             } else {
               DOM.chTitle.textContent =
                 S.lang === 'zh'
@@ -7682,6 +8343,92 @@ notify pgrst, 'reload schema';</textarea
                 '</div>'
             }
             if (!any) html = '<div class="list-placeholder">' + esc(t('view.emptyMonth')) + '</div>'
+            wrap.innerHTML = html
+            return wrap
+          },
+          /* 天数视图：展示用户独立创建的倒计时 / 正计时记录 */
+          count() {
+            const wrap = document.createElement('div')
+            wrap.className = 'v-count layout-' + (S.countLayout === 'list' ? 'list' : 'grid')
+            const t0 = pd(todayDS())
+            const wdn = t('wd.row').split('|')
+            const recs = CountStore.sorted()
+
+            let html = ''
+            if (!recs.length) {
+              html +=
+                '<div class="cd-empty">' +
+                '<div class="cd-empty-hint">' +
+                esc(t('count.empty')) +
+                '</div>' +
+                '<button type="button" class="cd-new-btn" data-action="countAdd">' +
+                esc(t('count.newBtn')) +
+                '</button></div>'
+              wrap.innerHTML = html
+              return wrap
+            }
+
+            recs.forEach(function (r) {
+              const diff = Math.round((pd(r.date) - t0) / 86400000)
+              const isToday = diff === 0
+              const cls = isToday ? 'today' : diff > 0 ? 'future' : 'past'
+              const kind = isToday
+                ? ''
+                : diff > 0
+                  ? t('count.countdown')
+                  : t('count.countup')
+              const numHTML = isToday
+                ? '<span class="cd-today">' + esc(t('count.today')) + '</span>'
+                : '<span class="cd-val">' +
+                  Math.abs(diff) +
+                  '</span><span class="cd-unit">' +
+                  esc(t('count.unitDay')) +
+                  '</span>'
+              const d = pd(r.date)
+              const info = dayInfo(r.date)
+              const lunCls =
+                info.tagType === 'fest' ? ' fest' : info.tagType === 'term' ? ' term' : ''
+              const lunTxt = info.tag || info.lunarText || ''
+              html +=
+                '<div class="cd-card ' +
+                cls +
+                '" data-id="' +
+                r.id +
+                '" data-action="countEdit">' +
+                '<span class="cd-x" data-action="countDelete" data-id="' +
+                r.id +
+                '" title="' +
+                esc(t('btn.delete')) +
+                '">×</span>' +
+                '<div class="cd-num">' +
+                numHTML +
+                '</div>' +
+                '<div class="cd-main">' +
+                (kind ? '<div class="cd-kind">' + esc(kind) + '</div>' : '') +
+                '<div class="cd-title">' +
+                esc(r.title) +
+                '</div>' +
+                '<div class="cd-date">' +
+                '<span class="cd-dstr">' +
+                (d.getMonth() + 1) +
+                '.' +
+                pad(d.getDate()) +
+                '</span>' +
+                '<span class="cd-wk">' +
+                esc(wdn[(d.getDay() + 6) % 7]) +
+                '</span>' +
+                (lunTxt
+                  ? '<span class="cd-lunar' + lunCls + '">' + esc(lunTxt) + '</span>'
+                  : '') +
+                '</div>' +
+                (r.note ? '<div class="cd-note">' + esc(r.note) + '</div>' : '') +
+                '</div>' +
+                '</div>'
+            })
+            html +=
+              '<button type="button" class="cd-new-btn cd-new-bottom" data-action="countAdd">' +
+              esc(t('count.newBtn')) +
+              '</button>'
             wrap.innerHTML = html
             return wrap
           },
@@ -8311,16 +9058,20 @@ notify pgrst, 'reload schema';</textarea
         // 10. NAVIGATION & VIEW OPTIONS
         // ================================================================
         function syncViewButtons() {
-          const map = { month: 'btn-month', week: 'btn-week', list: 'btn-list' }
+          const map = { month: 'btn-month', week: 'btn-week', list: 'btn-list', count: 'btn-count' }
           const cur = map[S.focusMode ? S.savedView : S.view]
-          ;['btn-month', 'btn-week', 'btn-list'].forEach(function (id) {
+          ;['btn-month', 'btn-week', 'btn-list', 'btn-count'].forEach(function (id) {
             const el = document.getElementById(id)
             if (el) el.classList.toggle('active', id === cur)
           })
+          /* 天数视图没有日期切换：隐藏顶栏与移动端的上一期 / 下一期 / 跳转日期 */
+          document.body.classList.toggle('view-count', cur === 'btn-count')
         }
 
         const Nav = {
           go(delta) {
+            /* 天数视图是一整面记录墙，没有“上一期 / 下一期” */
+            if (S.view === 'count') return
             const c = S.cursor
             S.cursor =
               S.view === 'week'
@@ -8389,7 +9140,7 @@ notify pgrst, 'reload schema';</textarea
             }, 'back')
           },
           cycle(dir) {
-            const order = ['month', 'week', 'list']
+            const order = ['month', 'week', 'list', 'count']
             const cur = S.focusMode ? S.savedView : S.view
             let i = order.indexOf(cur)
             i = (i + dir + order.length) % order.length
@@ -8398,7 +9149,7 @@ notify pgrst, 'reload schema';</textarea
         }
 
         function moveSel(dc, dr) {
-          if (S.view === 'list') return
+          if (S.view === 'list' || S.view === 'count') return
           if (!S.selDate && !S.lastSelDs) S.lastSelDs = todayDS()
           const cur = pd(S.selDate || S.lastSelDs)
           const step = dc + dr * 7
@@ -8971,6 +9722,7 @@ notify pgrst, 'reload schema';</textarea
             html += '<div class="hk-row"><span>' + esc(t('help.views.month')) + '</span></div>'
             html += '<div class="hk-row"><span>' + esc(t('help.views.week')) + '</span></div>'
             html += '<div class="hk-row"><span>' + esc(t('help.views.list')) + '</span></div>'
+            html += '<div class="hk-row"><span>' + esc(t('help.views.count')) + '</span></div>'
             html += '</div>'
 
             html += section('help.items')
@@ -9018,6 +9770,7 @@ notify pgrst, 'reload schema';</textarea
               activeId: Store.activeId,
               eventsBy: Store.eventsBy,
               recursBy: Store.recursBy,
+              counts: CountStore.records,
             }
             download('zenplan-backup.json', JSON.stringify(data, null, 2), 'application/json')
             UIMgr.closeDropdowns()
@@ -9147,6 +9900,21 @@ notify pgrst, 'reload schema';</textarea
                       })
                     }
                   })
+                  if (Array.isArray(data.counts)) {
+                    data.counts.forEach(function (raw) {
+                      if (!raw || !raw.title) return
+                      const c = normCount(raw)
+                      if (
+                        CountStore.records.some(function (x) {
+                          return x.id === c.id
+                        })
+                      )
+                        return
+                      CountStore.records.push(c)
+                      added++
+                    })
+                    CountStore.persist()
+                  }
                 } else {
                   const incoming = data.events || data
                   if (typeof incoming !== 'object' || Array.isArray(incoming) || !incoming) {
@@ -9259,7 +10027,7 @@ notify pgrst, 'reload schema';</textarea
             })
             document.body.classList.remove('submenu-open')
             document.querySelectorAll('.menu-btn.active').forEach(function (b) {
-              if (['btn-month', 'btn-week', 'btn-list'].indexOf(b.id) < 0)
+              if (['btn-month', 'btn-week', 'btn-list', 'btn-count'].indexOf(b.id) < 0)
                 b.classList.remove('active')
             })
           },
@@ -9347,6 +10115,36 @@ notify pgrst, 'reload schema';</textarea
           viewList() {
             Nav.setView('list')
           },
+          viewCount() {
+            Nav.setView('count')
+          },
+          countAdd() {
+            CountEditor.open(null)
+          },
+          countLayout(el) {
+            const lay = el && el.dataset.layout === 'list' ? 'list' : 'grid'
+            if (S.countLayout === lay) return
+            S.countLayout = lay
+            Settings.save()
+            Render.all()
+          },
+          countEdit(el) {
+            const host = el && el.closest('[data-id]')
+            const id = host ? host.dataset.id : el && el.dataset.id
+            const rec = id ? CountStore.find(id) : null
+            if (rec) CountEditor.open(rec)
+          },
+          countDelete(el) {
+            const host = el && el.closest('[data-id]')
+            const id = host ? host.dataset.id : el && el.dataset.id
+            if (!id) return
+            showConfirm(t('count.confirmDel'), t('btn.delete')).then(function (ok) {
+              if (!ok) return
+              CountStore.remove(id)
+              Render.all()
+              notify(t('count.deleted'))
+            })
+          },
           prev() {
             Nav.go(-1)
           },
@@ -9398,7 +10196,13 @@ notify pgrst, 'reload schema';</textarea
             DOM.fileInput.click()
           },
           printView() {
-            document.body.classList.remove('print-month', 'print-week', 'print-list', 'print-focus')
+            document.body.classList.remove(
+              'print-month',
+              'print-week',
+              'print-list',
+              'print-count',
+              'print-focus',
+            )
             document.body.classList.add('print-' + S.view)
             var ps = document.getElementById('print-style')
             if (!ps) {
@@ -9406,7 +10210,7 @@ notify pgrst, 'reload schema';</textarea
               ps.id = 'print-style'
               document.head.appendChild(ps)
             }
-            if (S.view === 'list') {
+            if (S.view === 'list' || S.view === 'count') {
               ps.textContent = '@media print { @page { size: A4 portrait; margin: 10mm; } }'
             } else {
               ps.textContent = '@media print { @page { size: A4 landscape; margin: 8mm; } }'
@@ -9417,6 +10221,7 @@ notify pgrst, 'reload schema';</textarea
                 'print-month',
                 'print-week',
                 'print-list',
+                'print-count',
                 'print-focus',
               )
               ps.textContent = ''
@@ -9568,7 +10373,7 @@ notify pgrst, 'reload schema';</textarea
           },
           /* 平板/触控：把当前选中的日期直接展开成时间线 */
           focusCurrent() {
-            if (S.view === 'list') return
+            if (S.view === 'list' || S.view === 'count') return
             const ds = S.selDate || S.lastSelDs || todayDS()
             S.selDate = ds
             S.lastSelDs = ds
@@ -9674,7 +10479,7 @@ notify pgrst, 'reload schema';</textarea
           },
           /* ---- 手势开始 ---- */
           down(e) {
-            if (!this.hasTouch || S.view === 'list') return
+            if (!this.hasTouch || S.view === 'list' || S.view === 'count') return
             if (e.pointerType === 'mouse') return
             if (e.button != null && e.button > 0) return
             const target = e.target
@@ -10015,6 +10820,10 @@ notify pgrst, 'reload schema';</textarea
                 Picker.open('date', pk, fmt(S.cursor), function (v) {
                   Nav.goTo(v)
                 })
+              } else if (kind === 'countdate') {
+                Picker.open('date', pk, CountEditor.date, function (v) {
+                  CountEditor.setDate(v)
+                })
               } else if (kind === 'enddate') {
                 Picker.open('enddate', pk, S.edEndVal, function (v) {
                   S.edEndVal = v
@@ -10230,7 +11039,7 @@ notify pgrst, 'reload schema';</textarea
           })
 
           cal.addEventListener('dragstart', function (e) {
-            if (S.view === 'list') {
+            if (S.view === 'list' || S.view === 'count') {
               e.preventDefault()
               return
             }
@@ -10756,7 +11565,7 @@ notify pgrst, 'reload schema';</textarea
               if (DOM.editor.classList.contains('open') || DOM.modal.classList.contains('open'))
                 return
               const el = e.target.closest(
-                '.cell-items, .wcol-items, .v-list, .fcard-items, .ed-body, .pk-col',
+                '.cell-items, .wcol-items, .v-list, .v-count, .fcard-items, .ed-body, .pk-col',
               )
               if (el) {
                 const dy = e.deltaY
@@ -10857,7 +11666,7 @@ notify pgrst, 'reload schema';</textarea
                 break
               case 'n':
               case 'N':
-                if (S.view === 'list') {
+                if (S.view === 'list' || S.view === 'count') {
                   notify(t('notify.listReadonly'))
                   break
                 }
@@ -10909,6 +11718,7 @@ notify pgrst, 'reload schema';</textarea
         function boot() {
           Settings.load()
           Store.load()
+          CountStore.load()
           document.documentElement.lang = S.lang === 'zh' ? 'zh-CN' : 'en'
           /* 触屏标记：常驻显示 hover 才出现的控件，并启用长按手势 */
           TouchUI.applyBody()
@@ -10955,6 +11765,7 @@ notify pgrst, 'reload schema';</textarea
             '<rect x="3" y="4" width="18" height="17" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>',
           week: '<rect x="3" y="4" width="18" height="17" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/><line x1="12" y1="2" x2="12" y2="6"/>',
           list: '<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/>',
+          count: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 4 4 5 4 9s-4 5-4 9"/><path d="M16 3c0 4-4 5-4 9s4 5 4 9"/>',
           dots: '<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
           search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/>',
           tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
@@ -11043,14 +11854,15 @@ notify pgrst, 'reload schema';</textarea
 
         var CHROME = {
           nav:
-            '<button type="button" class="mn-btn" data-proxy="#top-menu [data-action=&quot;prev&quot;]" title="上一页"><span class="ic" data-ico="chevL"></span></button>' +
-            '<button type="button" class="mn-btn" data-proxy="#top-menu [data-action=&quot;next&quot;]" title="下一页"><span class="ic" data-ico="chevR"></span></button>' +
+            '<button type="button" class="mn-btn mn-prev" data-proxy="#top-menu [data-action=&quot;prev&quot;]" title="上一页"><span class="ic" data-ico="chevL"></span></button>' +
+            '<button type="button" class="mn-btn mn-next" data-proxy="#top-menu [data-action=&quot;next&quot;]" title="下一页"><span class="ic" data-ico="chevR"></span></button>' +
             '<span id="m-goto-slot"></span>' +
             '<button type="button" class="mn-btn mn-today" data-proxy="#top-menu [data-action=&quot;today&quot;]">今天</button>',
           tabs:
             '<button type="button" class="mt-item" data-mview="month" data-proxy="#btn-month"><span class="ic" data-ico="month"></span><span>月</span></button>' +
             '<button type="button" class="mt-item" data-mview="week" data-proxy="#btn-week"><span class="ic" data-ico="week"></span><span>周</span></button>' +
             '<button type="button" class="mt-item" data-mview="list" data-proxy="#btn-list"><span class="ic" data-ico="list"></span><span>列表</span></button>' +
+            '<button type="button" class="mt-item" data-mview="count" data-proxy="#btn-count"><span class="ic" data-ico="count"></span><span>天数</span></button>' +
             '<button type="button" class="mt-item" data-action="mMore"><span class="ic" data-ico="dots"></span><span>更多</span></button>',
           sheet:
             '<div id="m-mask" data-action="mClose"></div>' +
@@ -11152,6 +11964,7 @@ notify pgrst, 'reload schema';</textarea
           { id: 'btn-month', tab: '#m-tabs [data-mview="month"]' },
           { id: 'btn-week', tab: '#m-tabs [data-mview="week"]' },
           { id: 'btn-list', tab: '#m-tabs [data-mview="list"]' },
+          { id: 'btn-count', tab: '#m-tabs [data-mview="count"]' },
         ]
 
         function syncTabs() {
