@@ -170,15 +170,20 @@
         border-bottom: 1px solid var(--ink);
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: safe center;
         gap: 2px;
         padding: 0 10px;
-        overflow: auto;
-        scrollbar-width: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
         transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       }
       #top-menu::-webkit-scrollbar {
-        display: none;
+        height: 6px;
+      }
+      #top-menu::-webkit-scrollbar-thumb {
+        background: var(--line);
+        border-radius: 3px;
       }
       #menu-trigger:hover ~ #top-menu,
       #top-menu:hover,
@@ -1995,6 +2000,29 @@
           row-gap: 4px;
         }
       }
+
+/* ---- rules carried over from the CaiXiHui stylesheet (shared shell needs them) ---- */
+#property-import-input {
+  display: none;
+}
+.data-meta {
+  display: flex;
+  gap: 11px;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.data-meta b {
+  color: var(--ink);
+  font-weight: 500;
+}
+.legend-grid {
+  display: grid;
+  align-items: center;
+  justify-items: start;
+}
     </style>
   </head>
   <body class="body-grid">
@@ -2173,6 +2201,91 @@
       </div>
     </div>
 
+    <script>
+/* Paste-parsing for the studio's data panel.
+ *
+ * It lives in its own file so the parser can be run by a test: the studio app is one 14k-line IIFE
+ * whose scope a harness cannot enter, and this is the one piece of it that turns untrusted text into
+ * the table every chart is drawn from — worth measuring directly.
+ *
+ * Quoting follows RFC 4180. The lookup it replaced said `line.split(delim)`, so a quoted field
+ * containing the delimiter was cut in half ("Beijing, China" became two cells) and every column
+ * after it shifted by one: the pasted table loaded with each value under its neighbour's header and
+ * nothing said so, because the grid still looked plausible. A doubled quote inside a quoted field is
+ * one literal quote.
+ */
+(function (root) {
+    'use strict';
+
+    function delimiterOf(headerLine) {
+        if (headerLine.includes('\t')) return '\t';
+        if (headerLine.includes(',')) return ',';
+        if (headerLine.includes(';')) return ';';
+        if (/\s{2,}/.test(headerLine)) return 'whitespace';
+        return ' ';
+    }
+
+    /* One line, split on `delim`, honouring quotes. Quoting only means anything for a character
+       delimiter: the "two or more spaces" shape has no quote character to honour. */
+    function splitLine(line, delim) {
+        if (delim === 'whitespace') return line.trim().split(/\s{2,}/);
+        var out = [];
+        var cell = '';
+        var quoted = false;
+        for (var i = 0; i < line.length; i += 1) {
+            var ch = line.charAt(i);
+            if (quoted) {
+                if (ch === '"') {
+                    if (line.charAt(i + 1) === '"') {
+                        cell += '"';
+                        i += 1;
+                    } else {
+                        quoted = false;
+                    }
+                } else {
+                    cell += ch;
+                }
+            } else if (ch === '"' && cell.trim() === '') {
+                quoted = true;
+                cell = '';
+            } else if (ch === delim) {
+                out.push(cell.trim());
+                cell = '';
+            } else {
+                cell += ch;
+            }
+        }
+        out.push(cell.trim());
+        return out;
+    }
+
+    function textData(raw) {
+        var lines = String(raw == null ? '' : raw)
+            .split(/\r?\n/)
+            .filter(function (line) {
+                return line.trim();
+            });
+        if (!lines.length) return { headers: [], rows: [] };
+        var delim = delimiterOf(lines[0]);
+        var headers = splitLine(lines[0], delim);
+        var rows = lines.slice(1).map(function (line) {
+            return splitLine(line, delim);
+        });
+        var max = headers.length;
+        rows.forEach(function (row) {
+            if (row.length > max) max = row.length;
+        });
+        while (headers.length < max) headers.push('列' + (headers.length + 1));
+        rows = rows.map(function (row) {
+            while (row.length < max) row.push('');
+            return row;
+        });
+        return { headers: headers, rows: rows };
+    }
+
+    root.ZenvizParse = { textData: textData, delimiterOf: delimiterOf, splitLine: splitLine };
+})(typeof window !== 'undefined' ? window : globalThis);
+    </script>
     <script>
       ;(function () {
         'use strict'
@@ -11287,142 +11400,211 @@
           }
         }
 
-        // 图例项较多时的自动换行/换列：
-        // - 横排：一行放不下时自动换成多行，每行数量尽可能均分；
-        // - 竖排：一列放不下时自动换成多列，每列数量尽可能均分；
-        // 只固定“排列方向”上的轨道，另一方向交给 CSS Grid 自动落位，整体居中。
-        // 三条硬性要求：
-        // 1. 不再逐项写 grid-row / grid-column。手动落位一旦与分组不一致，
-        //    就会出现空轨道，图例左侧凭空留出一整块空白。
-        // 2. 算出的行数 / 列数必须能在可用宽高内放下；放不下时取最窄的一档，
-        //    而不是强行摊开，避免首列被挤出容器。
-        // 3. 落位后若仍然超出容器，立刻从居中改为从头对齐：居中 + 溢出时
-        //    起始侧无法滚到，图例左边会整块空白。
-        function balanceLegendLayout(legend, items, isVertical) {
-          if (!legend || !items.length || legend.classList.contains('stream')) return
-          const host = legend.parentElement
-          if (!host) return
-          const gap = 7
-          const colGap = 14
-          const rowGap = 5
-          const pad = (v) => Math.max(0, Math.min(180, Number(v) || 0))
-          const pt = pad(state.paddingTop)
-          const pr = pad(state.paddingRight)
-          const pb = pad(state.paddingBottom)
-          const pl = pad(state.paddingLeft)
-          // 图例容器自身 border + padding 的近似占位
-          const boxW = 14
-          const boxH = 10
-          const availW = Math.max(80, host.clientWidth - 24 - pl - pr - boxW)
-          const availH = Math.max(60, host.clientHeight - 24 - pt - pb - boxH)
-          // 先还原为 flex 单行/单列，确保测量到的是每个图例项自身的宽度
+        const LEGEND_GAP_X = 7
+        const LEGEND_GAP_Y = 3
+
+        /* Drop the grid a previous pass may have left behind, so what is measured
+           next is the plain single line. The plain layout's gap is 7px and the
+           grid's is 3px, so mistaking one for the other is how a vertical legend
+           ends up taller than the chart it belongs to. */
+        function resetLegendLayout(legend) {
+          if (!legend.classList.contains('legend-grid')) return
+          legend.classList.remove('legend-grid')
           legend.style.display = ''
-          legend.style.gridTemplateRows = ''
-          legend.style.gridTemplateColumns = ''
+          legend.style.gap = ''
           legend.style.gridAutoFlow = ''
+          legend.style.gridTemplateColumns = ''
+          legend.style.gridTemplateRows = ''
           legend.style.justifyContent = ''
           legend.style.alignContent = ''
-          legend.style.rowGap = ''
-          legend.style.columnGap = ''
-          items.forEach((it) => {
-            it.style.gridRow = ''
-            it.style.gridColumn = ''
-            it.style.justifySelf = ''
-          })
-          const widths = items.map((it) => it.offsetWidth || 0)
-          const itemH = items.reduce((max, it) => Math.max(max, it.offsetHeight || 0), 0) || 18
-          const n = items.length
-          // 把 n 个图例项均分成 g 组：前 (n % g) 组各多 1 个，返回每组的 [start, end)
-          const groups = (g) => {
-            const q = Math.floor(n / g)
-            const rem = n % g
-            const list = []
-            let idx = 0
-            for (let i = 0; i < g; i++) {
-              const count = q + (i < rem ? 1 : 0)
-              list.push([idx, idx + count])
-              idx += count
-            }
-            return list
-          }
-          if (!isVertical) {
-            let oneRow = 0
-            widths.forEach((w, i) => {
-              oneRow += w + (i ? gap : 0)
-            })
-            if (oneRow <= availW) return // 单行放得下，保持原样
-            // 找最少的行数，使均分后每一行都不超宽
-            let chosen = 0
-            for (let rows = 2; rows <= n; rows++) {
-              const segs = groups(rows)
-              let ok = true
-              for (const [a, b] of segs) {
-                let w = 0
-                for (let i = a; i < b; i++) w += widths[i] + (i > a ? gap : 0)
-                if (w > availW) {
-                  ok = false
-                  break
-                }
-              }
-              if (ok) {
-                chosen = rows
-                break
-              }
-            }
-            if (!chosen) chosen = n
-            // 横排：行数决定列数（自动落位后每行最多 chosen 项）
-            applyLegendGrid(legend, Math.ceil(n / chosen), 'row', gap)
-          } else {
-            const rowsFit = Math.max(1, Math.floor((availH + rowGap) / (itemH + rowGap)))
-            if (n <= rowsFit) return // 单列放得下，保持原样
-            // 从“每列最多 rowsFit 个”的最少列数开始，逐列增加直到总宽不超
-            let chosen = 0
-            for (let cols = Math.ceil(n / rowsFit); cols <= n; cols++) {
-              let w = colGap * (cols - 1)
-              for (const [a, b] of groups(cols)) {
-                let cw = 0
-                for (let i = a; i < b; i++) cw = Math.max(cw, widths[i])
-                w += cw
-              }
-              if (w <= availW) {
-                chosen = cols
-                break
-              }
-            }
-            // 宽度实在放不下时保留“最窄”的列数，宁可横向溢出也不要摊成超宽的一排
-            if (!chosen) chosen = Math.max(1, Math.ceil(n / rowsFit))
-            // 竖排：列数决定每列行数（自动落位后每列最多这么多项）
-            applyLegendGrid(legend, Math.ceil(n / chosen), 'column', colGap)
-          }
-          // 兜底：内容仍然超出容器时改为从头对齐，保证每一项都完整可见
-          if (
-            legend.scrollWidth > legend.clientWidth + 1 ||
-            legend.scrollHeight > legend.clientHeight + 1
-          ) {
-            legend.style.justifyContent = 'flex-start'
-            legend.style.alignContent = 'flex-start'
-          }
         }
-        function applyLegendGrid(legend, tracks, flow, gap) {
-          const n = Math.max(1, Math.floor(Number(tracks)) || 1)
+
+        /* `perLine` items per line — columns of that many rows for a vertical
+           legend (filled top to bottom, the reading order of a legend stacked
+           downwards), rows of that many items for a horizontal one. */
+        function applyLegendGrid(legend, perLine, vertical) {
+          legend.classList.add('legend-grid')
           legend.style.display = 'grid'
-          legend.style.gridTemplateColumns = ''
-          legend.style.gridTemplateRows = ''
-          legend.style.gridAutoFlow = flow === 'column' ? 'column' : 'row'
-          if (flow === 'column') legend.style.gridTemplateRows = `repeat(${n}, max-content)`
-          else legend.style.gridTemplateColumns = `repeat(${n}, max-content)`
+          legend.style.gap = `${LEGEND_GAP_Y}px ${vertical ? 10 : LEGEND_GAP_X}px`
+          /* 居中 + 溢出时起始侧无法滚到（这里已不是滚动容器），
+             下面 fitLegendLayout 会在放不下时改回 flex-start。 */
           legend.style.justifyContent = 'center'
           legend.style.alignContent = 'center'
-          legend.style.rowGap = flow === 'column' ? '5px' : '3px'
-          legend.style.columnGap = gap + 'px'
+          if (vertical) {
+            legend.style.gridAutoFlow = 'column'
+            legend.style.gridTemplateColumns = ''
+            legend.style.gridTemplateRows = `repeat(${perLine}, max-content)`
+          } else {
+            legend.style.gridAutoFlow = 'row'
+            legend.style.gridTemplateRows = ''
+            legend.style.gridTemplateColumns = `repeat(${perLine}, max-content)`
+          }
+        }
+
+        function fitLegendLayout(legend, host) {
+          if (!legend || !host || !host.clientWidth) return false
+          /* Stream legend items are positioned absolutely along the bands. */
+          if (legend.classList.contains('stream')) return false
+          const items = []
+          legend.childNodes.forEach((node) => {
+            if (
+              node.nodeType === 1 &&
+              node.classList.contains('layout-legend-item')
+            )
+              items.push(node)
+          })
+          if (items.length < 2) return false
+
+          /* Measure from the plain single line: an earlier pass may have left a
+             grid in place, and the reset is what makes 'how big is it really?'
+             an honest question. */
+          resetLegendLayout(legend)
+
+          const cs = getComputedStyle(host)
+          const pad = (name) => parseFloat(cs.getPropertyValue(name)) || 0
+          /* The same box the CSS `max-width` gives the legend, minus the
+             legend's own padding and border. */
+          const boxW = Math.max(
+            80,
+            host.clientWidth -
+              24 -
+              pad('--layout-pad-left') -
+              pad('--layout-pad-right'),
+          )
+          const boxH = Math.max(
+            60,
+            host.clientHeight -
+              24 -
+              pad('--layout-pad-top') -
+              pad('--layout-pad-bottom'),
+          )
+          const innerW = Math.max(60, boxW - 12)
+          const innerH = Math.max(40, boxH - 8)
+
+          const widths = items.map((el) => el.offsetWidth || 0)
+          const heights = items.map((el) => el.offsetHeight || 0)
+          if (widths.some((w) => w <= 0)) return false
+          const itemH = Math.max.apply(null, heights) || 0
+
+          const vertical = legend.classList.contains('vertical')
+          const total = items.length
+
+          /* One line already fits — leave the plain row/column alone, where the
+             items sit tight against each other. Measured, never counted: the
+             plain gap is not the grid gap, so tallying rows against the
+             available height is what lets a column run off the chart. */
+          if (
+            vertical
+              ? legend.scrollHeight <= innerH
+              : legend.scrollWidth <= innerW
+          )
+            return false
+
+          const lcs = getComputedStyle(legend)
+          const num = (v) => parseFloat(v) || 0
+          const chromeY =
+            num(lcs.paddingTop) +
+            num(lcs.paddingBottom) +
+            num(lcs.borderTopWidth) +
+            num(lcs.borderBottomWidth)
+
+          /* Items per line. First how many the box takes, then even them out so
+             every line carries a similar share. */
+          let perLine
+          if (vertical) {
+            /* Rows a single column can hold, then the fewest columns that fit —
+               plus the next couple, in case one more column is what it takes to
+               stop the last one trailing a single lonely item. */
+            const rowH = itemH + LEGEND_GAP_Y
+            const roomH = Math.max(rowH, innerH - chromeY)
+            const fitRows = Math.max(
+              2,
+              Math.floor((roomH + LEGEND_GAP_Y) / rowH),
+            )
+            const base = Math.max(2, Math.ceil(total / fitRows))
+            let best = null
+            for (let c = base; c <= Math.min(total, base + 2); c++) {
+              const rows = Math.ceil(total / c)
+              const cols = Math.ceil(total / rows)
+              if (cols > c) continue
+              const spread = rows - (total - rows * (cols - 1))
+              if (!best || spread < best.spread) best = { rows, spread }
+            }
+            perLine = best ? best.rows : total
+          } else {
+            const avg =
+              widths.reduce((a, b) => a + b, 0) / total + LEGEND_GAP_X
+            const roomW = Math.max(avg, innerW)
+            const n = Math.max(
+              1,
+              Math.min(total, Math.floor((roomW + LEGEND_GAP_X) / avg)),
+            )
+            const lines = Math.ceil(total / n)
+            perLine = Math.ceil(total / lines)
+          }
+
+          /* A single item per line is not a wrap, it is a stack that would be
+             worse than the scrolling row this replaces. */
+          if (perLine < 2 || perLine >= total) return false
+
+          /* The count above is arithmetic; the box is the truth. A column is as
+             wide as its widest cell and a row as tall as its tallest, so a split
+             that looks even on paper can still overshoot: follow the overshoot
+             one line at a time until the measured block fits. */
+          applyLegendGrid(legend, perLine, vertical)
+          const fitsNow = () =>
+            legend.scrollWidth <= innerW + 1 &&
+            (!vertical || legend.scrollHeight <= innerH + 1)
+          /* A legend that fits across but stands too tall is still the better of
+             two bad options — worth keeping in case no split fits both ways. */
+          let fallback =
+            vertical && legend.scrollWidth <= innerW + 1 ? perLine : 0
+          let lines = Math.ceil(total / perLine)
+          const seen = { [perLine]: true }
+          for (let step = 0; step < 8; step++) {
+            const overW = legend.scrollWidth > innerW + 1
+            const overH = vertical && legend.scrollHeight > innerH + 1
+            if (!overW && !overH) break
+            if (!overW && !fallback) fallback = perLine
+            /* One axis too big wants longer lines and the other wants shorter
+               ones: a vertical legend is where those two pull apart, and with
+               both over the edge no split can satisfy either. */
+            if (overW === overH) break
+            const next = vertical ? (overW ? lines - 1 : lines + 1) : lines + 1
+            if (next < 2) break
+            const rows = Math.ceil(total / next)
+            if (rows < 2 || rows >= total || seen[rows]) break
+            seen[rows] = true
+            perLine = rows
+            lines = Math.ceil(total / rows)
+            applyLegendGrid(legend, perLine, vertical)
+          }
+          if (!fitsNow()) {
+            if (fallback) {
+              applyLegendGrid(legend, fallback, vertical)
+              alignLegendToStart(legend)
+              return true
+            }
+            /* Nothing fits — better the plain, single line than a grid
+               clipped on both axes. */
+            resetLegendLayout(legend)
+            return false
+          }
+          alignLegendToStart(legend)
+          return true
+        }
+
+        /* 居中 + 溢出时起始侧无法滚到（图例已不是滚动容器），
+           落位后仍然超宽 / 超高就改为从头对齐，保证起始侧的图例项完整可见。 */
+        function alignLegendToStart(legend) {
+          legend.style.justifyContent = 'flex-start'
+          legend.style.alignContent = 'flex-start'
         }
         function rebalanceOverlayLegend() {
           const legend = document.querySelector('#chart-overlay .layout-legend')
           if (!legend || legend.classList.contains('stream')) return
-          const items = Array.from(legend.querySelectorAll('.layout-legend-item'))
-          if (!items.length) return
           try {
-            balanceLegendLayout(legend, items, legend.classList.contains('vertical'))
+            fitLegendLayout(legend, legend.parentElement)
           } catch (e) {}
         }
 
@@ -11477,11 +11659,7 @@
                 legend.appendChild(item)
               })
               host.appendChild(legend)
-              balanceLegendLayout(
-                legend,
-                Array.from(legend.querySelectorAll('.layout-legend-item')),
-                state.legendOrientation === 'vertical',
-              )
+              fitLegendLayout(legend, host)
             }
           }
         }
@@ -14756,29 +14934,12 @@
           }
         }
         function parseTextData(raw) {
-          const lines = raw.split(/\r?\n/).filter((x) => x.trim())
-          const delim = lines[0].includes('\t')
-            ? '\t'
-            : lines[0].includes(',')
-              ? ','
-              : lines[0].includes(';')
-                ? ';'
-                : /\s{2,}/.test(lines[0])
-                  ? 'whitespace'
-                  : ' '
-          const split = (l) =>
-            delim === 'whitespace' ? l.trim().split(/\s{2,}/) : l.split(delim).map((x) => x.trim())
-          let headers = split(lines[0])
-          let rows = lines.slice(1).map(split)
-          const max = Math.max(headers.length, ...rows.map((r) => r.length))
-          if (headers.length < max)
-            while (headers.length < max) headers.push('列' + (headers.length + 1))
-          rows = rows.map((r) => {
-            while (r.length < max) r.push('')
-            return r
-          })
-          return { headers, rows }
+          if (!window.ZenvizParse || typeof window.ZenvizParse.textData !== 'function') {
+            throw new Error('zenviz-parse.js 未加载：无法解析粘贴的数据')
+          }
+          return window.ZenvizParse.textData(raw)
         }
+
         $('#import-btn').onclick = () => $('#file-input').click()
         $('#file-input').onchange = async (e) => {
           const f = e.target.files?.[0]
@@ -16260,6 +16421,8 @@
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
         else init()
       })()
+    
     </script>
+
   </body>
 </html>
