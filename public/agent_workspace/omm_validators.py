@@ -1,0 +1,895 @@
+# -*- coding: utf-8 -*-
+"""OMM-ZEN 导入/导出格式校验器（纯 Python，无第三方依赖）。
+
+AI 只需要从 omm_format_template 拿骨架、填好内容，再交给 omm_format_validate 校验；
+错误按“路径 + 原因”返回，AI 据此自行修正，不必自己写校验逻辑。
+
+校验规则取自各产品源码（zen-card.js / zen-backup.js / zen-flow.js / json-specs /
+MDFORGE AI 规范），只卡真正会导致导入失败的硬约束；可恢复的偏差给 warning。
+"""
+from __future__ import annotations
+
+import json
+import re
+import struct
+from datetime import date, datetime
+from typing import Any, Dict, List, Tuple
+
+from .omm_data import ALL, PRODUCTS, product
+
+# ── 通用工具 ─────────────────────────────────────────────────────────────────
+
+
+def _dump(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def _base36(number: int) -> str:
+    digits = '0123456789abcdefghijklmnopqrstuvwxyz'
+    if number == 0:
+        return '0'
+    out = ''
+    while number:
+        number, rem = divmod(number, 36)
+        out = digits[rem] + out
+    return out
+
+
+def js_checksum(value: Any) -> str:
+    """与 zen-backup.js 完全一致的 FNV-1a（UTF-16 码元）——用于校验 checksum 字段。"""
+    text = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+    h = 2166136261
+    for (unit,) in struct.iter_unpack('<H', text.encode('utf-16-le')):
+        h ^= unit
+        h = (h * 16777619) & 0xffffffff
+    return _base36(h)
+
+
+def _parse(text: str) -> Tuple[Any, str]:
+    try:
+        return json.loads(text), ''
+    except Exception as exc:
+        return None, 'JSON 解析失败：%s（不要包代码围栏，不要加注释或尾随逗号）' % exc
+
+
+def _is_date(value: Any) -> bool:
+    try:
+        date.fromisoformat(str(value))
+        return True
+    except Exception:
+        return False
+
+
+def _is_iso(value: Any) -> bool:
+    try:
+        datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        return True
+    except Exception:
+        return False
+
+
+def _is_ts(value: Any) -> bool:
+    return bool(re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$', str(value or '')))
+
+
+def _is_num(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+class Report:
+    def __init__(self) -> None:
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+
+    def error(self, message: str) -> None:
+        self.errors.append(message)
+
+    def warn(self, message: str) -> None:
+        self.warnings.append(message)
+
+    def require(self, obj: Any, key: str, path: str, kind: type | None = None) -> Any:
+        if not isinstance(obj, dict) or key not in obj:
+            self.error('%s.%s 缺失' % (path, key))
+            return None
+        value = obj[key]
+        if kind is not None and not isinstance(value, kind):
+            self.error('%s.%s 类型应为 %s' % (path, key, kind.__name__))
+            return None
+        return value
+
+    def array(self, obj: Any, key: str, path: str) -> list:
+        value = self.require(obj, key, path, list)
+        return value if isinstance(value, list) else []
+
+
+# ── 各产品校验器 ─────────────────────────────────────────────────────────────
+
+CARD_KINDS = ('quote', 'note', 'word', 'sentence', 'idea', 'todo', 'fact', 'image')
+CARD_SOURCES = ('manual', 'writer', 'annotate', 'corpus', 'english', 'search', 'data', 'web', 'clip')
+PLANNER_COLORS = ('#888888', '#cc3333', '#3366cc', '#339933', '#cc6600')
+VIZ_ENGINES = ('echarts', 'chartjs', 'apexcharts', 'zen')
+FLOW_ACTIONS = ('addTag', 'setKind', 'send', 'publish', 'notify', 'highlight')
+
+
+def _bridge(obj: Any, r: Report, path: str = '') -> None:
+    if r.require(obj, 'omm', path) != 'bridge':
+        r.error('%s.omm 必须是 "bridge"' % path)
+    if r.require(obj, 'v', path) != 1:
+        r.error('%s.v 必须是数字 1' % path)
+    items = r.array(obj, 'items', path)
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            r.error('%s.items[%d] 必须是对象' % (path, index))
+            continue
+        if not str(item.get('t') or item.get('kind') or '').strip():
+            r.error('%s.items[%d].t 不能为空（word/sentence/template/phrase/doc）' % (path, index))
+
+
+def _card(obj: Any, r: Report, path: str, *, strict_format: bool = True) -> None:
+    if not isinstance(obj, dict):
+        r.error('%s 必须是对象' % path)
+        return
+    if strict_format and obj.get('format') != 'zen-card':
+        r.error('%s.format 必须是 "zen-card"' % path)
+    if strict_format and obj.get('v') != 1:
+        r.error('%s.v 必须是数字 1' % path)
+    if not str(obj.get('id') or '').strip():
+        r.error('%s.id 不能为空' % path)
+    if obj.get('kind', 'note') not in CARD_KINDS:
+        r.error('%s.kind 非法，只能是 %s' % (path, '/'.join(CARD_KINDS)))
+    if obj.get('source', 'manual') not in CARD_SOURCES:
+        r.error('%s.source 非法，只能是 %s' % (path, '/'.join(CARD_SOURCES)))
+    if not str(obj.get('content') or '').strip():
+        r.error('%s.content 不能为空' % path)
+    if 'tags' in obj and not isinstance(obj['tags'], list):
+        r.error('%s.tags 必须是数组' % path)
+    for key in ('createdAt', 'updatedAt'):
+        if obj.get(key) and not _is_iso(obj[key]):
+            r.error('%s.%s 不是合法 ISO 时间' % (path, key))
+    if 'links' in obj:
+        if not isinstance(obj['links'], list):
+            r.error('%s.links 必须是数组' % path)
+        else:
+            for index, link in enumerate(obj['links']):
+                if not isinstance(link, dict) or not str(link.get('id') or '').strip():
+                    r.error('%s.links[%d].id 不能为空' % (path, index))
+
+
+def v_annotate(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, dict) and obj.get('omm') == 'bridge':
+        _bridge(obj, r)
+        return 'bridge'
+    if isinstance(obj, dict) and isinstance(obj.get('project'), dict):
+        project = obj['project']
+        if obj.get('app') != 'zenmark':
+            r.error('app 必须是 "zenmark"')
+        if obj.get('version') != 1:
+            r.error('version 必须是数字 1')
+        if obj.get('exportedAt') and not _is_ts(obj['exportedAt']):
+            r.warn('exportedAt 建议为 "YYYY-MM-DD HH:mm" 字符串')
+        codes = r.array(project, 'codes', 'project')
+        if not codes:
+            r.error('project.codes 不能为空 —— 这是标注项目导入的硬门槛')
+        docs = r.array(project, 'docs', 'project')
+        ids = set()
+        for group in ('docs', 'codes', 'anns', 'rels', 'memos', 'marks', 'notes'):
+            for index, item in enumerate(r.array(project, group, 'project')):
+                if not isinstance(item, dict):
+                    r.error('project.%s[%d] 必须是对象' % (group, index))
+                    continue
+                if not str(item.get('id') or '').strip():
+                    r.error('project.%s[%d].id 不能为空' % (group, index))
+                elif item['id'] in ids:
+                    r.error('id 重复：%s（id 必须全局唯一）' % item['id'])
+                else:
+                    ids.add(item['id'])
+        doc_map = {str(d.get('id')): str(d.get('text') or '') for d in docs if isinstance(d, dict)}
+        code_ids = {str(c.get('id')) for c in codes if isinstance(c, dict)}
+        for index, ann in enumerate(r.array(project, 'anns', 'project')):
+            if not isinstance(ann, dict):
+                continue
+            if ann.get('doc') not in doc_map:
+                r.error('project.anns[%d].doc 指向不存在的文档 id' % index)
+            if ann.get('code') and ann['code'] not in code_ids:
+                r.error('project.anns[%d].code 指向不存在的编码 id' % index)
+            start, end = ann.get('start'), ann.get('end')
+            if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end < start:
+                r.error('project.anns[%d].start/end 必须是非负整数且 start <= end' % index)
+            elif ann.get('doc') in doc_map:
+                expected = doc_map[ann['doc']][start:end]
+                if str(ann.get('quote') or '') != expected:
+                    r.error('project.anns[%d].quote 必须等于 doc.text.slice(start,end)：应为 %r' % (index, expected))
+        return 'backup'
+    if not text.strip():
+        r.error('纯文本导入不能为空')
+    return 'text'
+
+
+def v_corpus(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, dict) and obj.get('omm') == 'bridge':
+        _bridge(obj, r)
+        return 'bridge'
+    if not isinstance(obj, dict):
+        r.error('语料库恢复文件必须是对象')
+        return 'restore'
+    entries = r.array(obj, 'entries', '')
+    categories = r.array(obj, 'categories', '')
+    if not entries:
+        r.error('entries 不能为空 —— 恢复文件的硬门槛')
+    if not categories:
+        r.error('categories 不能为空 —— 恢复文件的硬门槛')
+    cat_ids = set()
+    for index, category in enumerate(categories):
+        if not isinstance(category, dict) or not str(category.get('id') or '').strip():
+            r.error('categories[%d].id 不能为空' % index)
+        else:
+            cat_ids.add(category['id'])
+    entry_ids = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            r.error('entries[%d] 必须是对象' % index)
+            continue
+        if not str(entry.get('en') or '').strip():
+            r.error('entries[%d].en 不能为空' % index)
+        if entry.get('categoryId') not in cat_ids:
+            r.error('entries[%d].categoryId 不在 categories 中' % index)
+        if 'tags' in entry and not isinstance(entry['tags'], list):
+            r.error('entries[%d].tags 必须是数组' % index)
+        identifier = entry.get('id')
+        if identifier in entry_ids:
+            r.error('entries[%d].id 重复' % index)
+        entry_ids.add(identifier)
+    return 'restore'
+
+
+def _rows(obj: Any, r: Report) -> None:
+    if isinstance(obj, dict):
+        rows = obj.get('rows')
+        if not isinstance(rows, list):
+            r.error('缺少 rows[] —— 不要提交 {tables:[…]} 整库结构，它不能作为文件导入')
+            return
+        if 'tables' in obj:
+            r.error('不允许 tables 字段：文件导入只接受行数据')
+    elif isinstance(obj, list):
+        rows = obj
+    else:
+        r.error('数据文件必须是行对象数组、二维数组或 {rows:[…]}')
+        return
+    if not rows:
+        r.error('rows 不能为空')
+    if all(isinstance(row, dict) for row in rows):
+        return
+    if all(isinstance(row, list) for row in rows):
+        widths = {len(row) for row in rows}
+        if len(widths) > 1:
+            r.warn('二维数组各行列数不一致：%s' % sorted(widths))
+        return
+    r.error('行数据混用了对象与数组，会导致导入失败')
+
+
+def v_data(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, (dict, list)):
+        _rows(obj, r)
+        return 'rows'
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        r.error('CSV/TSV 内容不能为空')
+        return 'csv'
+    delim = '\t' if lines[0].count('\t') >= lines[0].count(',') else ','
+    widths = [len(line.split(delim)) for line in lines]
+    if len(set(widths)) > 1:
+        r.error('CSV/TSV 每行列数不一致：%s' % widths)
+    if not str(lines[0].split(delim)[0]).strip():
+        r.error('首列（表头）不能为空')
+    return 'csv'
+
+
+def v_english(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, dict) and obj.get('omm') == 'bridge':
+        _bridge(obj, r)
+        return 'bridge'
+    if isinstance(obj, dict) and isinstance(obj.get('drawings'), dict):
+        words = set()
+        for word, payload in obj['drawings'].items():
+            if str(word) != str(word).lower():
+                r.error('drawings 的键 "%s" 必须小写' % word)
+            words.add(str(word))
+            if not isinstance(payload, dict) or not isinstance(payload.get('strokes'), list):
+                r.error('drawings["%s"].strokes 必须是数组' % word)
+                continue
+            for index, stroke in enumerate(payload['strokes']):
+                if not isinstance(stroke, dict):
+                    continue
+                for pindex, point in enumerate(stroke.get('points') or []):
+                    if not isinstance(point, dict):
+                        continue
+                    x, y, pressure = point.get('x'), point.get('y'), point.get('p')
+                    if not _is_num(x) or not 0 <= x <= 1200:
+                        r.error('drawings["%s"].strokes[%d].points[%d].x 超出 [0,1200]' % (word, index, pindex))
+                    if not _is_num(y) or not 0 <= y <= 800:
+                        r.error('drawings["%s"].strokes[%d].points[%d].y 超出 [0,800]' % (word, index, pindex))
+                    if not _is_num(pressure) or not 0.15 <= pressure <= 1:
+                        r.error('drawings["%s"].strokes[%d].points[%d].p 超出 [0.15,1]' % (word, index, pindex))
+        return 'doodles'
+    if isinstance(obj, dict) and 'books' in obj and 'prog' in obj:
+        if not isinstance(obj['books'], dict) or not isinstance(obj['prog'], dict):
+            r.error('完整备份的 books 与 prog 必须都是对象')
+        for book_id, book in (obj['books'] or {}).items():
+            if str(book_id).startswith('u'):
+                if not isinstance(book, dict) or 'w' not in book:
+                    r.error('books["%s"] 缺少 w 词表' % book_id)
+        if not obj['books']:
+            r.warn('books 为空：恢复后自定义词库将为空')
+        return 'backup'
+    words = obj.get('words') if isinstance(obj, dict) else obj
+    if not isinstance(words, list):
+        r.error('词库必须是数组或 {words:[…]}（也可是涂鸦/完整备份/桥接包）')
+        return 'wordbook'
+    for index, word in enumerate(words):
+        if isinstance(word, list):
+            if len(word) < 3:
+                r.error('words[%d] 数组至少需要 [word, ph, meaning]' % index)
+            if not str(word[0] or '').strip():
+                r.error('words[%d][0] 不能为空' % index)
+        elif isinstance(word, dict):
+            if not str(word.get('w') or '').strip():
+                r.error('words[%d].w 不能为空' % index)
+        else:
+            r.error('words[%d] 必须是对象或四元数组' % index)
+    return 'wordbook'
+
+
+def v_latex(obj: Any, text: str, r: Report) -> str:
+    if not text.strip():
+        r.error('.tex 内容不能为空')
+        return 'tex'
+    if '\\documentclass' not in text:
+        r.error('缺少 \\documentclass：请输出完整单文件文档')
+    if '\\begin{document}' not in text or '\\end{document}' not in text:
+        r.error('\\begin{document} 与 \\end{document} 必须成对出现')
+    for forbidden in ('\\input', '\\include{', '\\write18', '\\usepackage'):
+        if forbidden in text:
+            r.error('不允许 %s —— 文档必须自包含' % forbidden)
+    if '\\includegraphics' in text:
+        r.warn('\\includegraphics 引用本地路径在跨设备时不可用，建议改用 TikZ/pgfplots')
+    if text.count('$') % 2:
+        r.warn('行内公式 $ 数量为奇数，请检查是否成对闭合')
+    if text.count('$$') % 2:
+        r.warn('行间公式 $$ 数量为奇数，请检查是否成对闭合')
+    begins = len(re.findall(r'\\begin\{', text))
+    ends = len(re.findall(r'\\end\{', text))
+    if begins != ends:
+        r.warn('\\begin{...} 与 \\end{...} 数量不一致（%d / %d）' % (begins, ends))
+    return 'tex'
+
+
+def v_mdforge(obj: Any, text: str, r: Report) -> str:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != '---':
+        r.error('第一行必须是 YAML frontmatter 起始符 ---')
+        return 'markdown'
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == '---'), -1)
+    if end < 0:
+        r.error('frontmatter 缺少结束符 ---')
+        return 'markdown'
+    front = '\n'.join(lines[1:end])
+    if not re.search(r'(?m)^title:\s*\S', front):
+        r.error('frontmatter 必须包含非空 title')
+    if not re.search(r'(?m)^template:\s*academic\s*$', front):
+        r.error('frontmatter 必须包含 template: academic')
+    body = '\n'.join(lines[end + 1:])
+    if body.lstrip().startswith('```'):
+        r.error('整篇正文不要用代码围栏包裹 —— 只输出 Markdown 纯文本')
+    if re.search(r'(?m)^#{5,}\s', body):
+        r.error('标题不能超过 H4')
+    if re.search(r'\]\(\s*https?://', body):
+        r.error('不允许远程图片，图片路径应为 images/...')
+    for match in re.finditer(r'!\[[^\]]*\]\(([^)]+)\)', body):
+        path = match.group(1).split()[0]
+        if not path.startswith('images/'):
+            r.warn('图片路径 %s 建议使用 images/... 相对路径' % path)
+    for block in re.findall(r'```latex-figure[^\n]*\n([\s\S]*?)```', body):
+        if '\\begin{figure}' in block and '\\end{figure}' not in block:
+            r.error('latex-figure 的 figure 环境未闭合')
+        for forbidden in ('\\input', '\\include', '\\write18', '\\usepackage'):
+            if forbidden in block:
+                r.error('latex-figure 内禁止 %s' % forbidden)
+    open_fences = len(re.findall(r'(?m)^```', body))
+    if open_fences % 2:
+        r.warn('代码围栏数量为奇数，请检查是否成对闭合')
+    tables = [line for line in body.splitlines() if line.lstrip().startswith('|')]
+    for line in tables:
+        if line.count('|') - 1 > 6:
+            r.error('GFM 表格不能超过 6 列')
+            break
+    refs = [index for index, line in enumerate(lines) if line.strip() == '# 参考文献']
+    if len(refs) > 1:
+        r.error('# 参考文献 只能出现一次')
+    elif refs and any(str(line).strip() for line in lines[refs[0] + 1:]):
+        r.error('# 参考文献 必须是正文最后一段，之后不再写内容')
+    return 'markdown'
+
+
+def v_message(obj: Any, text: str, r: Report) -> str:
+    r.error('消息同步没有文件导入入口：不能在生成文件里恢复加密消息')
+    r.warn('只能产出 zmsg-supabase-config-v1 / zmsg-ui-v1 / zmsg-message-cache-v1 等 localStorage 配置，且不得包含密码或 API Key')
+    return 'unsupported'
+
+
+def v_planner(obj: Any, text: str, r: Report) -> str:
+    if not isinstance(obj, dict):
+        r.error('日程备份必须是对象')
+        return 'backup'
+    if obj.get('app') != 'zenplan':
+        r.error('app 必须是 "zenplan"')
+    if not isinstance(obj.get('version'), int) or obj['version'] != 2:
+        r.error('version 必须是数字 2（字符串 "2" 会走旧版兼容分支）')
+    planners = r.array(obj, 'planners', '')
+    planner_ids = set()
+    for index, planner in enumerate(planners):
+        if not isinstance(planner, dict) or not str(planner.get('id') or '').strip():
+            r.error('planners[%d].id 不能为空' % index)
+        else:
+            planner_ids.add(planner['id'])
+    events_by = r.require(obj, 'eventsBy', '', dict)
+    recurs_by = r.require(obj, 'recursBy', '', dict)
+    for group, mapping in (('eventsBy', events_by), ('recursBy', recurs_by)):
+        if not isinstance(mapping, dict):
+            continue
+        for key in mapping:
+            if key not in planner_ids:
+                r.error('%s 的键 "%s" 未在 planners 中声明，数据会被静默丢弃' % (group, key))
+    for pid, days in (events_by or {}).items():
+        if not isinstance(days, dict):
+            r.error('eventsBy["%s"] 必须是 {日期: 事件数组}' % pid)
+            continue
+        for day, events in days.items():
+            if not _is_date(day):
+                r.error('eventsBy["%s"] 的日期键 "%s" 必须是 YYYY-MM-DD' % (pid, day))
+            for index, event in enumerate(events or []):
+                path = 'eventsBy["%s"]["%s"][%d]' % (pid, day, index)
+                if not isinstance(event, dict):
+                    r.error('%s 必须是对象' % path)
+                    continue
+                if not str(event.get('id') or '').strip():
+                    r.error('%s.id 不能为空' % path)
+                if not str(event.get('title') or '').strip():
+                    r.error('%s.title 不能为空' % path)
+                if 'color' in event and event['color'] not in PLANNER_COLORS:
+                    r.error('%s.color 必须是五种内置色之一：%s' % (path, '/'.join(PLANNER_COLORS)))
+                if 'time' in event and event['time'] and not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', str(event['time'])):
+                    r.error('%s.time 必须是 "" 或 HH:MM' % path)
+                if 'done' in event and not (isinstance(event['done'], bool) or event['done'] == 'failed'):
+                    r.error('%s.done 必须是 true/false/"failed"' % path)
+    return 'backup'
+
+
+def v_redact(obj: Any, text: str, r: Report) -> str:
+    r.error('文档脱敏工具不接受 JSON 文件导入（.json 在白名单中被拒绝）')
+    r.warn('只能产出 zr-settings 这类 UI 配置供手动注入 localStorage，未知字段会回退默认值')
+    return 'unsupported'
+
+
+def v_search(obj: Any, text: str, r: Report) -> str:
+    if not isinstance(obj, dict):
+        r.error('智能搜索导出文件必须是对象')
+        return 'export'
+    for key in ('settings', 'history'):
+        if key in obj and not isinstance(obj[key], (dict, list)):
+            r.error('%s 类型不正确' % key)
+    if 'history' in obj and not isinstance(obj['history'], list):
+        r.error('history 必须是数组')
+    return 'export'
+
+
+def v_visualization(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, dict) and obj.get('kind') == 'zenviz-right-properties':
+        if obj.get('version') != 1:
+            r.error('version 必须是数字 1')
+        engines = r.require(obj, 'engines', '', dict)
+        for name, payload in (engines or {}).items():
+            if name not in VIZ_ENGINES:
+                r.error('engines 的键 "%s" 非法，只能是 %s' % (name, '/'.join(VIZ_ENGINES)))
+                continue
+            if not isinstance(payload, dict):
+                r.error('engines["%s"] 必须是对象' % name)
+                continue
+            for field in ('typeStates', 'chartProps'):
+                if field in payload and not isinstance(payload[field], dict):
+                    r.error('engines["%s"].%s 必须是对象' % (name, field))
+            if 'data' in payload or 'dataSelections' in payload:
+                r.error('属性 JSON 不能包含数据；数据请用 CSV/TSV/XLSX 单独提供')
+            if 'version' in payload and payload['version'] != 4:
+                r.warn('engines["%s"].version 建议为数字 4' % name)
+        return 'properties'
+    if isinstance(obj, (dict, list)):
+        r.error('缺少 kind:"zenviz-right-properties"：这不是可导入的右侧属性文件')
+        return 'properties'
+    lines = [line for line in text.splitlines() if line.strip()]
+    widths = [len(line.split(',')) for line in lines]
+    if len(set(widths)) > 1:
+        r.error('CSV 每行列数不一致：%s' % widths)
+    return 'csv'
+
+
+def v_writer(obj: Any, text: str, r: Report) -> str:
+    if not isinstance(obj, dict):
+        r.error('画布文件必须是对象')
+        return 'canvas'
+    if obj.get('format') == 'zenwriter-library':
+        if not isinstance(obj.get('docs'), dict):
+            r.error('zenwriter-library.docs 必须是对象')
+        return 'library'
+    if obj.get('format') != 'zenwriter-canvas':
+        r.error('format 必须是 "zenwriter-canvas"')
+    if obj.get('v') != 2:
+        r.error('v 必须是数字 2')
+    nodes = r.array(obj, 'nodes', '')
+    node_ids = set()
+    for index, node in enumerate(nodes):
+        path = 'nodes[%d]' % index
+        if not isinstance(node, dict):
+            r.error('%s 必须是对象' % path)
+            continue
+        identifier = str(node.get('id') or '')
+        if not re.match(r'^node-\d+$', identifier):
+            r.error('%s.id 必须形如 node-<数字>' % path)
+        if identifier in node_ids:
+            r.error('%s.id 重复' % path)
+        node_ids.add(identifier)
+        for axis, limit in (('x', 1500), ('y', 1000)):
+            value = node.get(axis)
+            if not _is_num(value) or value == 0 or abs(value) > limit:
+                r.error('%s.%s 必须在 [-%d,%d] 且不为 0' % (path, axis, limit, limit))
+        for key in ('w', 'h'):
+            if key in node and not str(node[key]).endswith('px'):
+                r.warn('%s.%s 建议使用 "…px" 字符串' % (path, key))
+        if node.get('type') == 'image':
+            if node.get('srcMode') != 'url':
+                r.error('%s 图片节点必须 srcMode:"url"' % path)
+            src = str(node.get('src') or '')
+            if not (src.startswith('https://') or src.startswith('data:')):
+                r.error('%s 图片必须是 https/data URL，禁止 link 模式、assetId 或 blob:' % path)
+        if node.get('type') == 'group' and 'children' in node:
+            r.warn('%s group 节点没有 children 字段，成员关系靠连线表达' % path)
+    for index, connection in enumerate(r.array(obj, 'connections', '')):
+        path = 'connections[%d]' % index
+        if not isinstance(connection, dict):
+            r.error('%s 必须是对象' % path)
+            continue
+        endpoints = [connection.get('from'), connection.get('to')]
+        if all(not value for value in endpoints):
+            endpoints = [connection.get('source'), connection.get('target')]
+        if any(value not in node_ids for value in endpoints):
+            r.error('%s 的端点必须指向真实存在的节点 id' % path)
+        if endpoints[0] == endpoints[1]:
+            r.error('%s 的两端不能是同一个节点' % path)
+    return 'canvas'
+
+
+def v_zencard(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, dict) and obj.get('format') == 'zen-card-pack':
+        if obj.get('v') != 1:
+            r.error('v 必须是数字 1')
+        cards = r.array(obj, 'cards', '')
+        if not cards:
+            r.error('cards 不能为空')
+        for index, card in enumerate(cards):
+            _card(card, r, 'cards[%d]' % index)
+        return 'pack'
+    if isinstance(obj, list):
+        for index, card in enumerate(obj):
+            _card(card, r, '[%d]' % index)
+        return 'pack'
+    _card(obj, r, '')
+    return 'card'
+
+
+def v_zenflow(obj: Any, text: str, r: Report) -> str:
+    rules = obj.get('rules') if isinstance(obj, dict) else obj
+    if not isinstance(rules, list):
+        r.error('规则文件必须是规则数组或 {rules:[…]}')
+        return 'rules'
+    if not rules:
+        r.warn('规则数组为空，运行后不会产生任何效果')
+    for index, rule in enumerate(rules):
+        path = 'rules[%d]' % index
+        if not isinstance(rule, dict):
+            r.error('%s 必须是对象' % path)
+            continue
+        if not str(rule.get('name') or '').strip():
+            r.error('%s.name 不能为空' % path)
+        if 'priority' in rule and not _is_num(rule['priority']):
+            r.error('%s.priority 必须是数字（越小越先执行）' % path)
+        if 'enabled' in rule and not isinstance(rule['enabled'], bool):
+            r.error('%s.enabled 必须是布尔值' % path)
+        when = rule.get('when')
+        if when is not None and not isinstance(when, dict):
+            r.error('%s.when 必须是对象' % path)
+        for action_index, action in enumerate(rule.get('actions') or []):
+            apath = '%s.actions[%d]' % (path, action_index)
+            if not isinstance(action, dict):
+                r.error('%s 必须是对象' % apath)
+                continue
+            if action.get('type') not in FLOW_ACTIONS:
+                r.error('%s.type 非法，只能是 %s' % (apath, '/'.join(FLOW_ACTIONS)))
+            if action.get('type') == 'send' and not str(action.get('to') or '').strip():
+                r.error('%s.to 不能为空（必须是真实产品 id）' % apath)
+            if action.get('type') == 'publish' and not str(action.get('channel') or '').strip():
+                r.error('%s.channel 不能为空（必须是真实频道 id）' % apath)
+    return 'rules'
+
+
+def v_zenclip(obj: Any, text: str, r: Report) -> str:
+    return v_zencard(obj, text, r)
+
+
+def v_zenreview(obj: Any, text: str, r: Report) -> str:
+    if isinstance(obj, list):
+        for index, row in enumerate(obj):
+            if not isinstance(row, dict):
+                r.error('[%d] 必须是对象' % index)
+                continue
+            if 'ts' in row and not _is_iso(row['ts']):
+                r.error('[%d].ts 必须是合法时间' % index)
+            if 'app' in row and str(row['app']) not in ALL:
+                r.warn('[%d].app "%s" 不是已知产品 id' % (index, row['app']))
+        return 'timeline'
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if not isinstance(value, list):
+                r.error('%s 必须是数组（时间线与完成项分别粘贴）' % key)
+        return 'inputs'
+    if not text.strip():
+        r.error('报告内容不能为空')
+    return 'markdown'
+
+
+def v_zenbackup(obj: Any, text: str, r: Report) -> str:
+    if not isinstance(obj, dict):
+        r.error('备份清单必须是对象')
+        return 'manifest'
+    if obj.get('format') != 'zen-backup':
+        r.error('format 必须是 "zen-backup"')
+    if obj.get('v') != 1:
+        r.error('v 必须是数字 1')
+    products = r.array(obj, 'products', '')
+    if not products:
+        r.error('products 不能为空')
+    seen = set()
+    for index, entry in enumerate(products):
+        path = 'products[%d]' % index
+        if not isinstance(entry, dict):
+            r.error('%s 必须是对象' % path)
+            continue
+        key = str(entry.get('id') or '')
+        if not key:
+            r.error('%s.id 不能为空（id 就是 localStorage 键）' % path)
+        elif key in seen:
+            r.error('%s.id 重复，恢复会互相覆盖' % path)
+        seen.add(key)
+        expected = js_checksum(entry.get('data'))
+        if str(entry.get('checksum') or '') != expected:
+            r.error('%s.checksum 不匹配：应为 "%s"（data 的 FNV-1a base36）' % (path, expected))
+    return 'manifest'
+
+
+def v_hub(obj: Any, text: str, r: Report) -> str:
+    if not isinstance(obj, dict):
+        r.error('AI 配置必须是对象')
+        return 'ai-config'
+    if str(obj.get('apiKey') or '').strip():
+        r.error('AI 配置中不允许写入 apiKey：请只在静书房设置界面填写，生成物里必须留空')
+    if obj.get('provider') not in ('deepseek', 'openai', 'openrouter', 'zhipu', 'custom', 'ollama', 'complete', ''):
+        r.warn('provider "%s" 不是静书房内置选项' % obj.get('provider'))
+    for key in ('apiBase', 'apiModel', 'system'):
+        if key in obj and not isinstance(obj[key], str):
+            r.error('%s 必须是字符串' % key)
+    return 'ai-config'
+
+
+VALIDATORS = {
+    'annotate': v_annotate, 'corpus': v_corpus, 'data': v_data, 'english': v_english,
+    'latex': v_latex, 'mdforge': v_mdforge, 'message': v_message, 'planner': v_planner,
+    'redact': v_redact, 'search': v_search, 'visualization': v_visualization,
+    'writer': v_writer, 'zencard': v_zencard, 'zenflow': v_zenflow,
+    'zenclip': v_zenclip, 'zenreview': v_zenreview, 'zenbackup': v_zenbackup,
+    'hub': v_hub,
+}
+
+
+def detect_kind(identifier: str, obj: Any, text: str) -> str:
+    """根据内容自动判断导入类型；显式指定 kind 时跳过。"""
+    if identifier == 'annotate':
+        if isinstance(obj, dict) and obj.get('omm') == 'bridge':
+            return 'bridge'
+        if isinstance(obj, dict) and isinstance(obj.get('project'), dict):
+            return 'backup'
+        return 'text'
+    if identifier == 'corpus':
+        if isinstance(obj, dict) and obj.get('omm') == 'bridge':
+            return 'bridge'
+        return 'restore'
+    if identifier == 'data':
+        return 'rows' if isinstance(obj, (dict, list)) else 'csv'
+    if identifier == 'english':
+        if isinstance(obj, dict) and obj.get('omm') == 'bridge':
+            return 'bridge'
+        if isinstance(obj, dict) and isinstance(obj.get('drawings'), dict):
+            return 'doodles'
+        if isinstance(obj, dict) and 'books' in obj and 'prog' in obj:
+            return 'backup'
+        return 'wordbook'
+    if identifier == 'latex':
+        return 'tex'
+    if identifier == 'mdforge':
+        return 'markdown'
+    if identifier in ('message', 'redact'):
+        return 'unsupported'
+    if identifier == 'search':
+        return 'export'
+    if identifier == 'visualization':
+        if isinstance(obj, dict) and obj.get('kind') == 'zenviz-right-properties':
+            return 'properties'
+        return 'csv'
+    if identifier == 'writer':
+        if isinstance(obj, dict) and obj.get('format') == 'zenwriter-library':
+            return 'library'
+        return 'canvas'
+    if identifier == 'zencard':
+        if isinstance(obj, dict) and obj.get('format') == 'zen-card-pack':
+            return 'pack'
+        return 'card'
+    if identifier == 'zenclip':
+        return 'pack'
+    if identifier == 'zenflow':
+        return 'rules'
+    if identifier == 'zenreview':
+        if isinstance(obj, list):
+            return 'timeline'
+        if isinstance(obj, dict):
+            return 'inputs'
+        return 'markdown'
+    if identifier == 'zenbackup':
+        return 'manifest'
+    if identifier == 'hub':
+        return 'ai-config'
+    return 'auto'
+
+
+def validate(identifier: str, content: Any, kind: str | None = None) -> dict:
+    """校验一份生成内容。content 可为字符串（JSON/TeX/Markdown/CSV）或已解析对象。"""
+    item = product(identifier)
+    if not item:
+        return {'ok': False, 'product': identifier, 'kind': kind or '',
+                'errors': ['未知产品：%s' % identifier], 'warnings': []}
+    key = item['id']
+    if isinstance(content, str):
+        text = content
+        obj, parse_error = _parse(text.strip())
+        if parse_error and kind not in ('tex', 'markdown', 'csv', 'text', 'unsupported'):
+            # JSON 类格式解析失败：仍交给校验器给出更具体的字段错误不可行，直接回报。
+            return {'ok': False, 'product': key, 'kind': kind or detect_kind(key, None, text),
+                    'errors': [parse_error], 'warnings': []}
+    else:
+        obj = content
+        text = _dump(content) if content is not None else ''
+    chosen = str(kind or '').strip() or detect_kind(key, obj, text)
+    report = Report()
+    handler = VALIDATORS.get(key)
+    if handler is None:
+        report.error('该产品暂不支持自动校验')
+    else:
+        handler(obj, text, report)
+    def clean(messages: List[str]) -> List[str]:
+        return [message if not message.startswith('.') else '(根)' + message for message in messages]
+
+    return {
+        'ok': not report.errors,
+        'product': key,
+        'product_name': item['name'],
+        'kind': chosen,
+        'errors': clean(report.errors),
+        'warnings': clean(report.warnings),
+        'tip': '按 errors 的“路径: 原因”逐条修正；warnings 不阻止导入，但建议一并处理。',
+    }
+
+
+# ── 可直接粘贴给 AI 的生成模板 ───────────────────────────────────────────────
+
+TEMPLATES: Dict[str, Dict[str, Any]] = {
+    'annotate': {
+        'backup': {'app': 'zenmark', 'version': 1, 'exportedAt': '2026-01-01 00:00',
+                   'project': {'docs': [{'id': 'd1', 'text': '原文…'}],
+                               'codes': [{'id': 'c1', 'name': '开放编码', 'level': 'open'}],
+                               'anns': [{'id': 'a1', 'doc': 'd1', 'code': 'c1', 'start': 0, 'end': 2, 'quote': '原文'}],
+                               'rels': [], 'memos': [], 'marks': [], 'notes': []}},
+        'bridge': {'omm': 'bridge', 'v': 1, 'kind': 'notes', 'items': [{'t': 'sentence', 'en': '…', 'zh': '…'}]},
+    },
+    'corpus': {
+        'restore': {'version': 2, 'categories': [{'id': 'cat1', 'name': '写作'}],
+                    'entries': [{'id': 'e1', 'en': 'A natural sentence.', 'zh': '译文', 'type': 'sentence',
+                                 'categoryId': 'cat1', 'tags': ['写作'], 'favorite': False, 'source': 'ai'}]},
+        'bridge': {'omm': 'bridge', 'v': 1, 'kind': 'notes', 'items': [{'t': 'sentence', 'en': '…', 'zh': '…'}]},
+    },
+    'data': {'rows': [{'列一': '值', '列二': 1}], 'csv': '列一,列二\n值,1\n'},
+    'english': {
+        'wordbook': [{'w': 'word', 'ph': '/wɜːd/', 'm': '单词', 'ex': 'Example sentence.'}],
+        'doodles': {'drawings': {'word': {'strokes': [
+            {'color': '#000', 'width': 3, 'erase': False, 'points': [{'x': 100, 'y': 100, 'p': 0.8}]}]}}},
+        'backup': {'books': {'cet6': {'w': []}, 'u1': {'w': [['word', '/wɜːd/', '单词', 'Example', '例句']]}},
+                   'prog': {}},
+        'bridge': {'omm': 'bridge', 'v': 1, 'items': [{'t': 'word', 'w': 'word', 'm': '单词'}]},
+    },
+    'latex': {'tex': '\\documentclass[UTF8]{ctexart}\n\\begin{document}\n标题与正文。\n\\end{document}\n'},
+    'mdforge': {'markdown': '---\ntitle: 标题\ntemplate: academic\n---\n\n# 正文标题\n\n段落……\n\n# 参考文献\n'},
+    'message': {'unsupported': {'note': '本产品没有文件导入；只可产出 localStorage 配置，且不含密钥'}},
+    'planner': {'backup': {'app': 'zenplan', 'version': 2, 'exportedAt': '2026-01-01T00:00:00Z',
+                           'planners': [{'id': 'p1', 'name': '默认'}], 'activeId': 'p1',
+                           'eventsBy': {'p1': {'2026-01-01': [{'id': 'ev1', 'title': '任务',
+                                                                'color': '#888888', 'time': '09:00', 'done': False}]}},
+                           'recursBy': {'p1': []}}},
+    'redact': {'unsupported': {'note': '本产品拒绝 .json 导入；只可产出 zr-settings 用于 localStorage'}},
+    'search': {'export': {'settings': {'apiBase': 'https://api.deepseek.com', 'apiModel': 'deepseek-chat'}, 'history': []}},
+    'visualization': {
+        'properties': {'kind': 'zenviz-right-properties', 'version': 1,
+                       'engines': {'echarts': {'typeStates': {'bar': {}}, 'chartProps': {'bar': {}}}}},
+        'csv': '类别,数值\nA,1\nB,2\n',
+    },
+    'writer': {
+        'canvas': {'format': 'zenwriter-canvas', 'v': 2, 'name': '画布', 'nodes': [
+            {'id': 'node-1', 'type': 'text', 'x': 100, 'y': 100, 'w': '240px', 'h': '80px',
+             'content': '正文'}], 'connections': []},
+        'library': {'format': 'zenwriter-library', 'docs': {}},
+    },
+    'zencard': {
+        'card': {'format': 'zen-card', 'v': 1, 'id': 'zc-1', 'kind': 'note', 'source': 'manual',
+                 'content': '卡片正文', 'tags': [], 'createdAt': '2026-01-01T00:00:00Z',
+                 'updatedAt': '2026-01-01T00:00:00Z'},
+        'pack': {'format': 'zen-card-pack', 'v': 1, 'name': '卡片包', 'cards': [
+            {'format': 'zen-card', 'v': 1, 'id': 'zc-1', 'kind': 'note', 'source': 'manual',
+             'content': '卡片正文', 'tags': [], 'createdAt': '2026-01-01T00:00:00Z',
+             'updatedAt': '2026-01-01T00:00:00Z'}]},
+    },
+    'zenclip': {'pack': {'format': 'zen-card-pack', 'v': 1, 'name': '剪藏', 'cards': [
+        {'format': 'zen-card', 'v': 1, 'id': 'zc-clip-1', 'kind': 'quote', 'source': 'clip',
+         'content': '摘录', 'tags': [], 'createdAt': '2026-01-01T00:00:00Z',
+         'updatedAt': '2026-01-01T00:00:00Z'}]}},
+    'zenflow': {'rules': [{'name': '示例规则', 'priority': 1, 'enabled': True,
+                           'when': {'source': 'manual', 'kind': 'note', 'tag': '待整理', 'text': ''},
+                           'actions': [{'type': 'addTag', 'value': '已整理'}]}]},
+    'zenreview': {'timeline': [{'app': 'writer', 'ts': '2026-01-01T00:00:00Z', 'title': '完成事项'}],
+                  'inputs': {'timeline': [], 'planner': []}},
+    'zenbackup': {'manifest': {'format': 'zen-backup', 'v': 1,
+                               'createdAt': '2026-01-01T00:00:00Z', 'name': '备份',
+                               'products': [{'id': 'zen.cards.v1', 'name': '间隔复习', 'version': '1',
+                                             'savedAt': '2026-01-01T00:00:00Z',
+                                             # checksum 是 data 的 FNV-1a base36；data 改了就必须重算。
+                                             'checksum': js_checksum([]),
+                                             'data': []}]}},
+    'hub': {'ai-config': {'provider': 'deepseek', 'apiBase': 'https://api.deepseek.com',
+                          'apiModel': 'deepseek-chat', 'apiKey': '', 'system': ''}},
+}
+
+
+def formats_for(identifier: str) -> dict:
+    item = product(identifier)
+    if not item:
+        return {'ok': False, 'error': '未知产品：%s' % identifier}
+    key = item['id']
+    templates = TEMPLATES.get(key, {})
+    return {
+        'ok': True,
+        'product': key,
+        'product_name': item['name'],
+        'formats': [
+            {
+                'kind': kind,
+                'template': value if isinstance(value, str) else _dump(value),
+                'is_json': not isinstance(value, str),
+            }
+            for kind, value in templates.items()
+        ],
+        'formats_from_spec': item.get('formats', []),
+        'best_practices': item.get('best_practices', []),
+    }

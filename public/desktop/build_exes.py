@@ -62,6 +62,17 @@ TARGETS = sorted(EXE_NAMES) + [HUB_TARGET, FRAMEWORK_TARGET, INSTALLER_TARGET]
 COMMON_ASSETS = ["APL385.ttf", "icon.ico", "icon-writer.ico"]
 
 
+def _ai_backend_args() -> list:
+    """agent-workspace 后端与 OMM-ZEN 知识随 EXE 一起打包。"""
+    knowledge = ROOT / "agent_workspace" / "omm_knowledge"
+    return [
+        "--paths", str(ROOT),
+        "--hidden-import", "agent_workspace.omm_server",
+        "--collect-submodules", "agent_workspace",
+        "--add-data", "%s%s%s" % (knowledge, DATA_SEP, "agent_workspace/omm_knowledge"),
+    ]
+
+
 def _square_image(source: Path):
     from PIL import Image, ImageOps
 
@@ -188,6 +199,8 @@ def build(app_id: str) -> bool:
             "--add-data", "%s%s%s" % (ROOT / "mdforge" / "templates", DATA_SEP, "mdforge/templates"),
             "--add-data", "%s%s%s" % (ROOT / "mdforge" / "docs", DATA_SEP, "mdforge/docs"),
         ]
+    if backend == "ai":
+        args += _ai_backend_args()
 
     if IS_MACOS:
         args += [
@@ -303,6 +316,7 @@ def build_hub() -> bool:
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "templates", DATA_SEP, "mdforge/templates"),
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "docs", DATA_SEP, "mdforge/docs"),
     ]
+    args += _ai_backend_args()
 
     if IS_MACOS:
         args += [
@@ -445,6 +459,7 @@ def build_framework() -> bool:
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "templates", DATA_SEP, "mdforge/templates"),
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "docs", DATA_SEP, "mdforge/docs"),
     ]
+    args += _ai_backend_args()
     args += _webview_args(FRAMEWORK_TARGET)
     args.append(str(entry))
     print("\n=== framework -> %s%s ===" % (name, APP_SUFFIX), flush=True)

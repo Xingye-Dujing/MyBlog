@@ -115,6 +115,7 @@ MODES = (MODE_OVERWRITE, MODE_VERSIONED)
 DEFAULT_MODE = MODE_VERSIONED
 
 APP_NAMES = {
+    "ai": "AI 工作区",
     "annotate": "文本标注",
     "corpus": "英语语料库",
     "data": "数据工作台",

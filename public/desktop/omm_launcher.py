@@ -103,6 +103,25 @@ def start_mdforge(port: int) -> int:
     return port
 
 
+def start_ai(port: int) -> int:
+    """静书房 AI 工作区：在独立回环端口启动 agent-workspace 后端。"""
+    root = resource_root()
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    def run():
+        try:
+            import agent_workspace.omm_server as ai_server
+            ai_server.create_app(root).run(
+                host="127.0.0.1", port=port, debug=False, threaded=True, use_reloader=False
+            )
+        except Exception as exc:  # 启动失败要让 wait_ready 超时并给出提示
+            print("AI workspace backend failed: %s" % exc, file=sys.stderr)
+
+    threading.Thread(target=run, daemon=True).start()
+    return port
+
+
 def start_latex(port: int) -> int:
     script = resource_root() / "latex-serve.py"
     spec = importlib.util.spec_from_file_location("omm_latex_backend", str(script))
@@ -410,6 +429,10 @@ def run(app_id: str, debug: bool = False, extras: bool = True) -> None:
         port = start_mdforge(wanted_port)
         if not wait_ready(wanted_port):
             raise SystemExit("mdforge backend did not start on port %d" % wanted_port)
+    elif backend == "ai":
+        port = start_ai(wanted_port)
+        if not wait_ready(wanted_port, seconds=30):
+            raise SystemExit("AI workspace backend did not start on port %d" % wanted_port)
     elif backend == "latex":
         port = start_latex(wanted_port)
         if not wait_ready(wanted_port, seconds=30):

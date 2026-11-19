@@ -38,6 +38,7 @@ def is_newer(latest: Any, current: Any = VERSION) -> bool:
 
 # Release asset name for each desktop program (without the platform suffix).
 DESKTOP_EXE_NAMES = {
+    "ai": "OMM-AI",
     "annotate": "OMM-Annotate",
     "corpus": "OMM-Corpus",
     "data": "OMM-Data",
@@ -60,6 +61,24 @@ DESKTOP_EXE_NAMES = {
 
 # id, display name, glyph, description, page, preferred port, runtime, vendor subset
 BUILTIN_PLUGINS: List[Dict[str, Any]] = [
+    {
+        "id": "ai",
+        "name": "AI 工作区",
+        "glyph": "智",
+        "description": "静书房专属 Agent · 17 产品技能与最佳实践",
+        "entry": "omm-ai.html",
+        "port": 8328,
+        "runtime": "ai",
+        "vendor": [],
+        "order": 5,
+        "share": {
+            "channels": [
+                {"id": "documents", "role": "both"},
+                {"id": "notes.english", "role": "both"},
+                {"id": "data.tables", "role": "both"},
+            ]
+        },
+    },
     {
         "id": "annotate",
         "name": "文本标注",

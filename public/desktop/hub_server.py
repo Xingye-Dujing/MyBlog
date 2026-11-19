@@ -168,6 +168,19 @@ class HubServer:
         _serve(server)
         return server
 
+    def _start_ai(self, port: int, plugin_dir: Path):
+        """AI 工作区：内置 Python 后端（agent-workspace + OMM-ZEN 知识）。"""
+        os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
+        if str(self.root) not in sys.path:
+            sys.path.insert(0, str(self.root))
+        import agent_workspace.omm_server as ai_server  # noqa: WPS433
+        from werkzeug.serving import make_server
+
+        app = ai_server.create_app(plugin_dir.resolve())
+        server = make_server("127.0.0.1", port, app, threaded=True)
+        _serve(server)
+        return server
+
     def _start_latex(self, port: int, plugin_dir: Path):
         os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
         script = self.root / "latex-serve.py"
@@ -219,6 +232,8 @@ class HubServer:
             def start(port: int):
                 if runtime == "mdforge":
                     return self._start_mdforge(port, plugin_dir)
+                if runtime == "ai":
+                    return self._start_ai(port, plugin_dir)
                 if runtime == "latex":
                     return self._start_latex(port, plugin_dir)
                 return self._start_static(port, plugin_dir)
