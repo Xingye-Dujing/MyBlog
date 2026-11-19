@@ -8,6 +8,7 @@ import io
 import json
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
+from unittest import mock
 
 import product_guard as g
 
@@ -148,6 +149,38 @@ class DebugCheckTests(unittest.TestCase):
         self.assertEqual(g.check_debug(files, lambda t: True), [])
 
 
+class SpecSyncCheckTests(unittest.TestCase):
+    def _files(self):
+        files = g.snapshot()
+        for path in (g.PUB / "json-specs").glob("*.md"):
+            mirror = g.SPEC_MIRROR_DIR + "/" + g._mirror_name(path.name)
+            disk = g.ROOT / mirror
+            if disk.exists():
+                files[mirror] = disk.read_text(encoding="utf-8")
+        return files
+
+    def test_real_knowledge_copies_match_every_spec(self):
+        self.assertEqual(g.check_spec_sync(g.snapshot(), lambda t: True), [])
+
+    def test_drifted_copy_is_reported(self):
+        files = self._files()
+        mirror = g.SPEC_MIRROR_DIR + "/zencard.md"
+        files[mirror] = files[mirror].replace("zen-card", "zen-card-OLD")
+        issues = g.check_spec_sync(files, lambda t: True)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("zencard.md", issues[0].message)
+
+    def test_missing_copy_is_reported(self):
+        files = self._files()
+        files[g.SPEC_MIRROR_DIR + "/zenpack.md"] = None
+        issues = g.check_spec_sync(files, lambda t: True)
+        self.assertTrue(any("zenpack.md" in i.message for i in issues))
+
+    def test_readme_alias_is_used(self):
+        self.assertEqual(g._mirror_name("README.md"), "json-specs-README.md")
+        self.assertEqual(g._mirror_name("zencard.md"), "zencard.md")
+
+
 class FormatCheckTests(unittest.TestCase):
     def _files(self):
         files = {"public/json-specs/README.md": "总表 " + " ".join(
@@ -180,6 +213,48 @@ class FormatCheckTests(unittest.TestCase):
         files["public/json-specs/README.md"] = "空"
         issues = g.check_format(files, lambda t: True)
         self.assertEqual(len(issues), len(g.FORMAT_CONTRACTS))
+
+
+class RuntimeCheckTests(unittest.TestCase):
+    def _files(self):
+        return {
+            "public/desktop/plugin_manager.py": 'RUNTIMES = ("static", "mdforge", "latex", "ai")',
+        }
+
+    def test_real_tree_keeps_ai_runtime_exclusive(self):
+        self.assertEqual(g.check_runtime(g.snapshot(), lambda t: True), [])
+
+    def test_other_product_cannot_declare_ai_runtime(self):
+        plugins = [
+            {"id": "ai", "runtime": "ai", "entry": "omm-ai.html"},
+            {"id": "writer", "runtime": "static", "entry": "omm-writer.html"},
+        ]
+        with mock.patch.object(g.product_registry, "BUILTIN_PLUGINS", plugins):
+            issues = g.check_runtime(self._files(), lambda t: True)
+        self.assertEqual(issues, [])
+
+        plugins[1]["runtime"] = "ai"
+        with mock.patch.object(g.product_registry, "BUILTIN_PLUGINS", plugins):
+            issues = g.check_runtime(self._files(), lambda t: True)
+        self.assertTrue(any("writer" in i.message for i in issues))
+
+    def test_third_party_plugin_json_cannot_opt_in(self):
+        files = self._files()
+        files["public/plugins/evil/plugin.json"] = '{"id":"evil","runtime":"ai"}'
+        files["public/build/stage/evil/plugin.json"] = '{"id":"evil","runtime":"ai"}'
+        issues = g.check_runtime(files, lambda t: True)
+        messages = [i.message for i in issues]
+        self.assertTrue(any("第三方插件" in m for m in messages))
+        self.assertEqual(sum("第三方插件" in m for m in messages), 1)  # build copies ignored
+
+    def test_missing_ai_runtime_and_missing_registry_are_reported(self):
+        plugins = [{"id": "writer", "runtime": "static", "entry": "omm-writer.html"}]
+        with mock.patch.object(g.product_registry, "BUILTIN_PLUGINS", plugins):
+            issues = g.check_runtime(self._files(), lambda t: True)
+        self.assertTrue(any("未声明 ai 运行时" in i.message for i in issues))
+
+        issues = g.check_runtime({}, lambda t: True)
+        self.assertTrue(any("运行时注册表缺少 ai" in i.message for i in issues))
 
 
 class VersionCheckTests(unittest.TestCase):

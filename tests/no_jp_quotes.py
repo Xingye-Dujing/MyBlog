@@ -51,14 +51,25 @@ SKIP_DIRS = {
     ".git", "node_modules", "dist", "build", "coverage",
     "vendor", "__pycache__", ".vite", ".cache",
     # Local-only tooling / virtualenv (gitignored, not product source).
-    ".venv", ".workbuddy", ".idea", ".vscode", "agent_workspace",
+    ".venv", ".workbuddy", ".idea", ".vscode",
 }
+
+# The AI workspace is a vendored framework plus OMM-authored ``omm_*.py``
+# adapters. Only those adapters are our source: the upstream framework tree is
+# left byte-identical so it can be synced from ai-agent-framework unchanged.
+AI_PACKAGE = "agent_workspace"
 
 
 def iter_files():
     """Yield every candidate text file under the workspace root."""
     for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        rel = os.path.relpath(dirpath, ROOT).replace("\\", "/")
+        if rel == AI_PACKAGE:
+            dirnames[:] = []  # never descend into vendored framework subpackages
+            filenames = [f for f in filenames
+                         if f.startswith("omm_") and f.endswith(".py")]
+        else:
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for name in filenames:
             yield Path(dirpath) / name
 

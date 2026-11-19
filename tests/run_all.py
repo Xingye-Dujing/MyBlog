@@ -36,10 +36,16 @@ def venv_python() -> Path | None:
 
 def main() -> int:
     failures = 0
+    vp = venv_python()
     failures += run("Backend hardening (Python unittest)",
                     [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
-    failures += run("Unified product guard (quotes / links / imports / bridge / specs / debug / resources / xss / a11y / registry / version)",
+    failures += run("Unified product guard (quotes / links / imports / bridge / specs / spec_sync / debug / resources / xss / a11y / registry / runtime / version)",
                     [sys.executable, "tests/product_guard.py", "--check"])
+    if vp:
+        failures += run("AI workspace (pytest, includes framework quote gate)",
+                        [str(vp), "-m", "pytest", "public/tests", "-q"])
+    else:
+        print("\nAI workspace pytest SKIPPED (repo virtualenv not found)")
     failures += run("postMessage protocol (Node)",
                     ["node", "tests/test_message_security.mjs"])
     zen_tests = [
@@ -61,12 +67,12 @@ def main() -> int:
         "test_cmdk.mjs",
         "test_cmdk_upgrade.mjs",
         "test_json_specs.mjs",
+        "test_golden_formats.mjs",
         "test_today_panel.mjs",
         "test_zenpack.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])
-    vp = venv_python()
     if vp:
         failures += run("E2E browser chain (Playwright)",
                         [str(vp), "-m", "unittest", "discover", "-s", "tests/e2e", "-v"])

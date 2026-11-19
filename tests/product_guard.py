@@ -11,6 +11,8 @@ LINK   local href/src and Markdown links that point to a missing file
 IMPORT relative ES-module import specifiers that do not resolve
 BRIDGE canonical consumer products must load ``zen-link.js`` as a module
 SPEC   every JSON spec document is indexed from ``json-specs/README.md``
+SPEC_SYNC the AI workspace's mirrored knowledge docs stay byte-identical to
+       ``public/json-specs`` — otherwise the assistant teaches stale formats
 FORMAT every JSON spec's format tokens also appear in the product source that
        implements it — the spec and the code cannot silently drift apart
 DEBUG  no ``debugger`` statement may ship in a product page or module
@@ -19,6 +21,8 @@ XSS    no unescaped dynamic value is concatenated into innerHTML
 A11Y   images have alt and clickable controls have an accessible name
 REGISTRY product ids / entry pages / release catalog stay in sync with the
        single source of truth (``plugin_specs.BUILTIN_PLUGINS``)
+RUNTIME only the official ``ai`` product may declare the local-code-execution
+       runtime; third-party plugin.json files can never opt into it
 VERSION layered version model: suite version strict across release surfaces,
        product versions compared only within the same product, and content
        fingerprints flag changes that forgot to bump a version
@@ -58,6 +62,8 @@ from plugin_specs import DESKTOP_EXE_NAMES, VERSION, version_key  # noqa: E402
 
 BASELINE = "tests/version_baseline.json"
 CATALOG = "public/dist/catalog.json"
+SPEC_MIRROR_DIR = "public/agent_workspace/omm_knowledge"
+SPEC_MIRROR_ALIAS = {"README.md": "json-specs-README.md"}
 LAUNCHER = "public/desktop/omm_launcher.py"
 
 # (spec doc, implementing sources, tokens required in BOTH doc and sources)
@@ -355,6 +361,39 @@ def check_format(files, exists) -> list[Issue]:
     return issues
 
 
+def _mirror_name(name: str) -> str:
+    return SPEC_MIRROR_ALIAS.get(name, name)
+
+
+def check_spec_sync(files, exists) -> list[Issue]:
+    """Keep the AI workspace's copied specs byte-identical to the real source.
+
+    ``agent_workspace/omm_knowledge`` is a mirror of ``public/json-specs`` used
+    by the assistant's retrieval tools. It is deliberately a copy (the framework
+    ships its own data directory), so without this check a spec edit would leave
+    the assistant teaching an obsolete format with no failing test.
+    """
+    issues = []
+    for path in sorted((PUB / "json-specs").glob("*.md")):
+        rel = "public/json-specs/" + path.name
+        mirror = SPEC_MIRROR_DIR + "/" + _mirror_name(path.name)
+        source = files.get(rel)
+        if source is None:
+            source = path.read_text(encoding="utf-8")
+        if mirror in files:
+            copy = files[mirror]  # a None value explicitly simulates a missing copy
+        else:
+            disk = ROOT / mirror
+            copy = disk.read_text(encoding="utf-8") if disk.exists() else None
+        if copy is None:
+            issues.append(Issue("SPEC_SYNC", mirror, 0,
+                                "AI 知识库缺少规范副本: %s" % path.name))
+        elif copy != source:
+            issues.append(Issue("SPEC_SYNC", mirror, 0,
+                                "AI 知识副本与规范真源不一致: %s" % path.name))
+    return issues
+
+
 def _in_asset_scope(rel: str) -> bool:
     """Owned HTML/CSS only: no third-party bundles, builds or dist output."""
     if not rel.startswith("public/") or "/vendor/" in "/" + rel:
@@ -600,6 +639,45 @@ def record_baseline() -> str:
     return BASELINE
 
 
+def check_runtime(files, exists) -> list[Issue]:
+    """Keep local code execution confined to the official AI workspace.
+
+    ``runtime='ai'`` starts a Python backend on the user's machine. A typo or a
+    malicious plugin.json must never be able to opt into that capability: only
+    the built-in ``ai`` product may, and imported third-party plugins stay
+    ``static``.
+    """
+    issues = []
+    declared = {
+        item["id"] for item in product_registry.BUILTIN_PLUGINS
+        if item.get("runtime") == "ai"
+    }
+    for pid in sorted(declared - {"ai"}):
+        issues.append(Issue("RUNTIME", "public/desktop/plugin_specs.py", 0,
+                            "非官方产品声明了 ai 运行时: %s" % pid))
+    if "ai" not in declared:
+        issues.append(Issue("RUNTIME", "public/desktop/plugin_specs.py", 0,
+                            "官方 AI 工作区未声明 ai 运行时"))
+
+    for rel, text in files.items():
+        if not rel.endswith("plugin.json") or rel.startswith("public/build/") \
+                or rel.startswith("public/dist/"):
+            continue
+        try:
+            data = json.loads(text)
+        except (TypeError, ValueError):
+            continue
+        if data.get("runtime") == "ai" and data.get("id") != "ai":
+            issues.append(Issue("RUNTIME", rel, 0, "第三方插件声明了 ai 运行时"))
+
+    manager = files.get("public/desktop/plugin_manager.py", "")
+    if "public/desktop/plugin_manager.py" not in files or \
+            not re.search(r'RUNTIMES\s*=\s*\([^)]*\bai\b', manager, re.S):
+        issues.append(Issue("RUNTIME", "public/desktop/plugin_manager.py", 0,
+                            "运行时注册表缺少 ai"))
+    return issues
+
+
 def _tracked_paths():
     """Paths known to git, or None when git is unavailable.
 
@@ -694,12 +772,14 @@ CHECKS: list[Check] = [
     Check("IMPORT", "ES 模块导入解析", False, check_imports),
     Check("BRIDGE", "产品桥接注入", False, check_bridge),
     Check("SPEC", "JSON 规范索引同步", False, check_specs),
+    Check("SPEC_SYNC", "AI 知识副本与规范同步", False, check_spec_sync),
     Check("FORMAT", "JSON 格式契约同步", False, check_format),
     Check("DEBUG", "调试语句残留", False, check_debug),
     Check("RESOURCE", "静态资源可达性", False, check_resources),
     Check("XSS", "HTML 拼接转义", False, check_xss),
     Check("A11Y", "可访问名称", False, check_a11y),
     Check("REGISTRY", "产品注册表一致性", False, check_registry),
+    Check("RUNTIME", "ai 运行时仅官方可用", False, check_runtime),
     Check("VERSION", "分层版本与内容指纹", False, check_version),
 ]
 
