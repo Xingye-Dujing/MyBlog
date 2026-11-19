@@ -43,6 +43,7 @@
         <div class="panel">
           <div class="row tight">
             <button class="btn primary" id="gen-btn">生成报告</button>
+            <button class="btn" id="pull-btn">从工作台拉取</button>
             <button class="btn" id="copy-btn">复制 Markdown</button>
             <button class="btn" id="download-btn">下载 .md</button>
             <button class="btn" id="tocards-btn">导出为知识卡片</button>
@@ -67,6 +68,59 @@
       }
       function data() { return { timeline: parseArr('tl-json'), planner: parseArr('pl-json'), cards: cards() } }
       function range() { return { from: $('range-from').value, to: $('range-to').value } }
+
+      /* 从工作台拉取时间线与待办：复用 omm:live-data-request 快照协议（与 AI 工作区
+       * 同一条链路）。独立运行或 Hub 未响应时提示用户仍可用下方粘贴框。 */
+      let pullToken = ''
+      let pullResolve = null
+      const hubOrigin = (function () {
+        try {
+          const raw = new URLSearchParams(location.search).get('omm_hub_origin')
+          if (raw) {
+            const u = new URL(raw)
+            if ((u.protocol === 'http:' || u.protocol === 'https:') &&
+                ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) return u.origin
+          }
+        } catch (e) { /* ignore */ }
+        return location.origin
+      })()
+      function trustedParent(origin) {
+        try {
+          const u = new URL(String(origin || ''))
+          return (u.protocol === 'http:' || u.protocol === 'https:') &&
+            ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
+        } catch (e) { return false }
+      }
+      window.addEventListener('message', (event) => {
+        if (event.source !== window.parent || !trustedParent(event.origin)) return
+        const d = event.data
+        if (d && d.type === 'omm:live-data-reply' && d.token === pullToken && pullResolve) {
+          const resolve = pullResolve; pullResolve = null; pullToken = ''
+          resolve(d.data || null)
+        }
+      })
+      function pullFromHub() {
+        if (window.parent === window) { toast('请在静书房工作台内打开以拉取'); return }
+        if (pullResolve) return
+        const token = 'review-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6)
+        pullToken = token
+        const timer = setTimeout(() => {
+          if (pullResolve) { pullResolve = null; pullToken = ''; toast('工作台未响应，请手动粘贴') }
+        }, 1800)
+        pullResolve = (data) => {
+          clearTimeout(timer)
+          if (!data) { toast('没有可拉取的数据'); return }
+          const tl = Array.isArray(data.timeline) ? data.timeline : []
+          const pl = Array.isArray(data.planner) ? data.planner : []
+          $('tl-json').value = JSON.stringify(tl, null, 2)
+          $('pl-json').value = JSON.stringify(pl, null, 2)
+          if (!tl.length && !pl.length) toast('工作台暂无时间线/待办数据')
+          else toast(`已拉取 ${tl.length} 条动态 · ${pl.length} 项待办`)
+        }
+        try { window.parent.postMessage({ type: 'omm:live-data-request', token: token }, hubOrigin) }
+        catch (e) { pullResolve = null; pullToken = ''; clearTimeout(timer); toast('拉取失败') }
+      }
+
       function bind() {
         $('theme-btn').addEventListener('click', () => { document.body.classList.toggle('theme-dark'); localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light') })
         $('gen-btn').addEventListener('click', () => {
@@ -76,6 +130,7 @@
           $('status-text').textContent = `${s.events} 条动态 · ${s.cards} 张卡片 · ${s.done} 项完成`
           toast('报告已生成')
         })
+        $('pull-btn').addEventListener('click', pullFromHub)
         $('copy-btn').addEventListener('click', async () => { if (!last) return toast('先生成报告'); try { await navigator.clipboard.writeText(last); toast('已复制') } catch { toast('复制失败') } })
         $('download-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([last], { type: 'text/markdown' })); a.download = 'review.md'; a.click(); URL.revokeObjectURL(a.href) })
         $('tocards-btn').addEventListener('click', () => {

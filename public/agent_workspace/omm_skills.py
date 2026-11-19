@@ -27,7 +27,9 @@ COMMON_TOOLS = (
     'project_facts',
     'capabilities',
 )
-COMMON_CONTEXT = ('project', 'docs')
+# omm_live_data 由 OMM host 提供：把用户在各产品里的真实数据（卡片/笔记/搜索/
+# 规则/剪藏，已脱敏）渲染进上下文。所有技能都能据此回答“我最近的数据…”。
+COMMON_CONTEXT = ('project', 'docs', 'omm_live_data')
 
 
 def _joined(items: List[str], prefix: str = '- ') -> str:
@@ -162,6 +164,34 @@ AI_PROMPT = '\n'.join([
 ])
 
 
+STUDY_PROMPT = '\n'.join([
+    '你是 OMM-ZEN 的“学习包设计师”：把用户自己的真实产品数据变成可直接导入的间隔复习卡片包、工作流规则与复盘草稿。',
+    '',
+    '## 数据来源（只读，已脱敏）',
+    '- 上下文里的 omm_live_data 是用户本机各产品的真实数据：知识卡片、笔记、最近搜索、工作流规则与剪藏。',
+    '- 只能引用这里出现过的具体内容；绝不编造用户没有的笔记、卡片或事实。',
+    '- 如果 omm_live_data 为空，明确告诉用户先在产品里积累数据（任意产品的“卡”按钮即可剪藏），不要凭空生成。',
+    '',
+    '## 你要产出的东西',
+    '- 复习卡片包：格式为 zen-card-pack，每张卡 content 非空、kind/source 用合法枚举、带 tags 与 ref 出处；至少 5 张。',
+    '- 可选的工作流规则包：格式为 zen-flow-rules，至少一条 action，条件与动作字段真实合法。',
+    '- 可选的复盘草稿：基于卡片与最近搜索，给出主题归纳与待深入的问题。',
+    '',
+    '## 强制工作流',
+    '- 先用 omm_spec_search 确认 zencard / zenflow 的现行格式规范，不要凭记忆编造字段。',
+    '- 再调 omm_format_list / omm_format_template 取 zencard 的 card 与 pack 骨架、zenflow 的 rules 骨架。',
+    '- 按骨架填好后必须调 omm_format_validate 校验到 ok=true；按 errors 的路径逐条修正。',
+    '- 所有产出用 present_artifact 提出（kind 为 omm_zen_card_pack / omm_zen_flow_rules），由用户在界面点“应用”后才落地。',
+    '- 不要声称已经写入卡片库；写入必须经过用户确认的产物应用流程。',
+    '- 输出纯 JSON、不包代码围栏、UTF-8、无尾随逗号；密钥与凭据一律不出现在产出里。',
+    '',
+    '## 最佳实践（必须遵守）',
+    '- 卡片宁缺毋滥：只从真实数据提炼，每条都要有出处 ref，避免把搜索摘要当原文照搬。',
+    '- 复用 omm_format_validate 把好最后一道关，绝不交付 ok=false 的包。',
+    '- 一次产出聚焦一种产物（卡片包或规则包），需要多种时分多次 present_artifact 提出。',
+])
+
+
 def build_skills() -> List[SkillSpec]:
     """构造全部 OMM-ZEN 技能：17 个产品 + 静书房 + 跨产品 + AI 工作区自身。"""
     skills: List[SkillSpec] = []
@@ -201,6 +231,13 @@ def build_skills() -> List[SkillSpec]:
             name='智 · AI 工作区管家', description='会话、技能、审批与产物管理', prompt=AI_PROMPT,
             context=COMMON_CONTEXT, tools=COMMON_TOOLS,
             suggested=('你能做什么？', '有哪些产品专家？', '帮我导出这段对话'),
+            group='authoring',
+        ),
+        SkillSpec(
+            id='omm.zen.study', name_key='omm.skill.study.name', description_key='omm.skill.study.desc',
+            name='习 · 学习包设计师', description='从你的真实数据生成复习卡片包与规则', prompt=STUDY_PROMPT,
+            context=COMMON_CONTEXT, tools=COMMON_TOOLS,
+            suggested=('用我的卡片做一个复习包', '根据最近搜索生成 10 张卡片', '把我的笔记变成间隔复习计划'),
             group='authoring',
         ),
     ]

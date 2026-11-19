@@ -82,10 +82,10 @@ def test_product_lookup_by_name_and_glyph():
 # ── 2. 每个产品的技能 ────────────────────────────────────────────────────────
 def test_skill_coverage_and_depth():
     ids = [skill.id for skill in SKILLS]
-    assert len(ids) == len(set(ids)) == 20
+    assert len(ids) == len(set(ids)) == 21
     for identifier in PRODUCT_IDS:
         assert 'omm.zen.' + identifier in ids
-    for extra in ('omm.zen.hub', 'omm.zen.cross', 'omm.zen.ai'):
+    for extra in ('omm.zen.hub', 'omm.zen.cross', 'omm.zen.ai', 'omm.zen.study'):
         assert extra in ids
     for skill in SKILLS:
         assert SKILL_ID_RE.match(skill.id)
@@ -94,13 +94,13 @@ def test_skill_coverage_and_depth():
         assert 'omm_spec_search' in skill.prompt, skill.id
         assert 'present_artifact' in skill.prompt, skill.id
         assert skill.name and skill.description
-        assert skill.tools and skill.context == ('project', 'docs')
+        assert skill.tools and 'omm_live_data' in skill.context
 
 
 def test_skills_available_in_workspace(ws):
     rows = ws.skills.list('default')
     omm_rows = [row for row in rows if row['id'].startswith('omm.zen.')]
-    assert len(omm_rows) == 20
+    assert len(omm_rows) == 21
     assert all(row['available'] for row in omm_rows), [
         (row['id'], row.get('reason')) for row in omm_rows if not row['available']
     ]
@@ -216,12 +216,12 @@ def test_provider_mapping_registers_custom_catalog(ws):
 # ── 6. Flask 路由 ─────────────────────────────────────────────────────────────
 def test_flask_meta_routes(client):
     env = client.get('/api/omm/env').get_json()
-    assert env['ok'] and env['products'] == 17 and env['skills'] == 20
+    assert env['ok'] and env['products'] == 17 and env['skills'] == 21
     assert 'AI_MD_SPEC.md' in env['knowledge'] and 'PRODUCTS.md' in env['knowledge']
     products = client.get('/api/omm/products').get_json()
     assert len(products['products']) == 17 and 'documents' in products['channels']
     skills = client.get('/api/omm/skills').get_json()
-    assert len(skills['skills']) == 20 and all(row['available'] for row in skills['skills'])
+    assert len(skills['skills']) == 21 and all(row['available'] for row in skills['skills'])
     bootstrap = client.get('/api/ai/bootstrap').get_json()
     assert bootstrap['ok'] and bootstrap['default_provider'] == 'complete'
     assert client.get('/api/ai/health').get_json()['ok']

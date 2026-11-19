@@ -61,18 +61,22 @@ test('Hub 处理产品回传的卡片', () => {
 
 /* ------------------------------------------- AI 实时数据快照 */
 
+function liveData(store, flowEvents) {
+  const localStorage = { getItem: (k) => (k in store ? store[k] : null) }
+  const { collectLiveLocalData } = load(hub, ['collectLiveLocalData'],
+    { localStorage, JSON, Date, flowEvents: flowEvents || [] })
+  return collectLiveLocalData()
+}
+
 test('Hub 聚合各产品的同源 localStorage 键', () => {
-  const store = {
+  const snap = liveData({
     'zen.cards.v1': JSON.stringify([{ content: 'SM-2 算法', kind: 'fact', tags: ['学习'] }]),
     'zen.inbox.v1': JSON.stringify([{ content: '收件箱条目' }]),
     'zc-docs': JSON.stringify([{ title: '我的笔记', content: '正文' }]),
     'omm-search-v1': JSON.stringify([{ query: '卡片盒', answer: '笔记方法' }]),
     'zen.flow.rules.v1': JSON.stringify([{ name: '归档规则', enabled: true }]),
     'zen.clip.v1': JSON.stringify([{ content: '剪藏内容' }]),
-  }
-  const localStorage = { getItem: (k) => (k in store ? store[k] : null) }
-  const { collectLiveLocalData } = load(hub, ['collectLiveLocalData'], { localStorage, JSON })
-  const snap = collectLiveLocalData()
+  })
   assert.equal(snap.cards.length, 2)
   assert.equal(snap.cards[0].content, 'SM-2 算法')
   assert.equal(snap.cards[0].tags.join(','), '学习')
@@ -83,12 +87,28 @@ test('Hub 聚合各产品的同源 localStorage 键', () => {
 })
 
 test('Hub 损坏的 localStorage 数据被安全忽略', () => {
-  const localStorage = { getItem: () => '{not-json' }
-  const { collectLiveLocalData } = load(hub, ['collectLiveLocalData'], { localStorage, JSON })
-  const snap = collectLiveLocalData()
-  for (const key of ['cards', 'notes', 'searches', 'rules', 'clips']) {
+  const snap = liveData({ anything: '{not-json' })
+  for (const key of ['cards', 'notes', 'searches', 'rules', 'clips', 'planner']) {
     assert.equal(snap[key].length, 0)
   }
+})
+
+test('Hub 快照包含 timeline 与 Planner 完成项', () => {
+  const snap = liveData({
+    'zp-data-v2': JSON.stringify([{ days: {
+      '2026-01-01': [{ title: '写周报', done: true }, { title: '未完', done: false }],
+    } }]),
+  }, [
+    { kind: 'card', text: '收到 3 张卡片', at: 1767225600000 },
+    { kind: 'snapshot', text: '保存了文档', at: 1767312000000 },
+  ])
+  assert.equal(snap.timeline.length, 2)
+  assert.equal(snap.timeline[0].app, 'card')
+  assert.ok(snap.timeline[0].ts)
+  assert.equal(snap.planner.length, 2)
+  assert.equal(snap.planner[0].title, '写周报')
+  assert.equal(snap.planner[0].done, true)
+  assert.equal(snap.planner[1].done, false)
 })
 
 test('live-data 请求用明确 origin、无通配符，并复用卡片协议', () => {

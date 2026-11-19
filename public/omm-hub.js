@@ -5163,6 +5163,26 @@
       clips: arr('zen.clip.v1').slice(0, 100).map(function (c) {
         return { content: text(c.content, 1200), source: text(c.source, 40) };
       }),
+      // Timeline + Planner are what ZenReview asks for. Same-origin (web build)
+      // reads them directly; on isolated desktop ports they degrade to empty and
+      // the product falls back to its manual paste boxes.
+      timeline: (flowEvents || []).slice(0, 60).map(function (ev) {
+        return { app: text(ev.kind, 40), ts: ev.at ? new Date(ev.at).toISOString() : '', title: text(ev.text, 300) };
+      }),
+      planner: (function () {
+        var out = [];
+        var data = arr('zp-data-v2')[0];
+        if (!data || typeof data !== 'object') return out;
+        var days = data.days || data.eventsBy || {};
+        Object.keys(days).slice(0, 60).forEach(function (day) {
+          var list = Array.isArray(days[day]) ? days[day] : (days[day] && days[day].events) || [];
+          list.slice(0, 40).forEach(function (e) {
+            if (!e || typeof e !== 'object') return;
+            out.push({ title: text(e.title, 300), done: e.done === true || e.done === 'failed', day: text(day, 40) });
+          });
+        });
+        return out.slice(0, 100);
+      })(),
     };
   }
 
