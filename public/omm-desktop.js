@@ -1647,7 +1647,7 @@
     '      <div class="omm-note">文件与快照都会写进上面的目录。</div>',
     '    </div>',
     '    <div class="omm-pane" data-pane="archive">',
-    '      <div class="omm-lead">每个产品自己的完整历史：磁盘文件 + 可回滚的状态快照。工作台里可切换查看所有产品；只有共享出去的副本才会进入「跨产品共享」。</div>',
+    '      <div class="omm-lead">每个产品自己的完整历史：磁盘文件 + 可回滚的状态快照。工作台里可切换查看所有产品；只有共享出去的副本才会进入“跨产品共享”。</div>',
     '      <div class="omm-row"><button class="omm-primary" id="omm-snap-now" type="button" title="记录当前应用此刻的本地数据">立即创建快照</button>',
     '        <label id="omm-all-label"><input type="checkbox" id="omm-all-snaps" /> 显示所有产品</label>',
     '        <button class="omm-secondary" id="omm-refresh-archive" type="button">刷新</button></div>',
@@ -2229,11 +2229,11 @@
 
   function archiveEmptyText() {
     var query = model.filters.query.trim()
-    if (query) return '没有匹配「' + query + '」的存档。\n换个关键词，或点搜索框右侧的 × 清空。'
+    if (query) return '没有匹配“' + query + '”的存档。\n换个关键词，或点搜索框右侧的 × 清空。'
     if (model.filters.kind === 'snapshot') return '还没有快照。点“立即创建快照”记录当前应用的状态。'
     if (model.filters.kind === 'file') return '还没有保存过文档。在应用里保存或导出后会出现在这里。'
     if (!scopeShowsAll()) {
-      return '「' + (effectiveAppName() || '当前应用') + '」还没有存档。\n勾选“显示所有产品”可以查看其它产品的存档。'
+      return '“' + (effectiveAppName() || '当前应用') + '”还没有存档。\n勾选“显示所有产品”可以查看其它产品的存档。'
     }
     return '还没有存档。保存文件或点“立即创建快照”即可。'
   }
@@ -2565,7 +2565,7 @@
     button.title = !entry.exists
       ? '文件已不在磁盘上'
       : isHub()
-        ? '在「' + (entry.appName || entry.app || '对应应用') + '」中打开这份文件'
+        ? '在“' + (entry.appName || entry.app || '对应应用') + '”中打开这份文件'
         : '把这份文件载入当前应用'
     button.onclick = function () {
       if (isHub()) {
@@ -2640,20 +2640,20 @@
       button.title = '请在该产品中恢复这条快照'
     } else {
       button.title =
-        '恢复「' + (entry.appName || appNameOf(entry.app) || entry.app || '当前应用') +
-        '」的状态（会覆盖它当前的数据）'
+        '恢复“' + (entry.appName || appNameOf(entry.app) || entry.app || '当前应用') +
+        '”的状态（会覆盖它当前的数据）'
     }
     button.onclick = function () {
       if (button.disabled) return
       var target = entry.appName || appNameOf(entry.app) || entry.app || '当前应用'
       var warning = isHub()
-        ? '恢复快照会覆盖「' + target + '」当前的应用数据，确定继续？'
+        ? '恢复快照会覆盖“' + target + '”当前的应用数据，确定继续？'
         : '恢复快照会覆盖当前应用数据，确定继续？'
       ask(warning + '\n' + fmtTime(entry.time) + ' · ' + entry.title,
         { title: '恢复快照', ok: '恢复', danger: true }).then(function (ok) {
         if (!ok) return
         if (isHub()) {
-          toast('正在「' + target + '」中恢复…')
+          toast('正在“' + target + '”中恢复…')
           bridgeDispatch('omm:restore-snapshot', {
             app: entry.app,
             app_name: target,
@@ -3061,7 +3061,7 @@
       .catch(function (err) {
         var message = '恢复失败：' + (err && err.message ? err.message : err)
         toast(message, 'error')
-        // restore-accepted 只代表「收到请求」，真正的成功/失败要回执给工作台，
+        // restore-accepted 只代表“收到请求”，真正的成功/失败要回执给工作台，
         // 否则工作台会一直以为恢复成功。
         if (token) window.parent.postMessage({ type: 'omm:restore-done', token: token, ok: false, error: message }, parentTargetOrigin())
         delete restoreTokens[token]
@@ -3132,7 +3132,7 @@
     openPanel: openPanel,
     openFolder: function () { return apiPost('/open', { app: effectiveApp() }) },
     config: function () { return apiGet('/config', { app: effectiveApp() }) },
-    // 全产品共用的 AI 配置：在工作台「设置 → AI 服务」一处填写，所有产品读取。
+    // 全产品共用的 AI 配置：在工作台“设置 → AI 服务”一处填写，所有产品读取。
     aiConfig: function () { return apiGet('/ai-config') },
     setAIConfig: function (ai) { return apiPost('/ai-config', { ai: ai || {} }) },
     shared: function () { return apiGet('/shared') },

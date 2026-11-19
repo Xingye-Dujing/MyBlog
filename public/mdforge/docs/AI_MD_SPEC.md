@@ -4,7 +4,7 @@
 - 适用模板：`academic`（DOCX / TeX）
 - 用途：让 AI 生成可直接由 MdForge 排版为学术 DOCX / TeX / PDF 的 Markdown 纯文本。
 
-> 你负责写 Markdown。版式、字体、页边距、目录、页眉页脚与参考文献样式由 MdForge 模板负责。平台另有「格式」微调与目录选项，不需要也不允许写进 Markdown。不要试图用空格、HTML 或手工分页模拟版式。
+> 你负责写 Markdown。版式、字体、页边距、目录、页眉页脚与参考文献样式由 MdForge 模板负责。平台另有“格式”微调与目录选项，不需要也不允许写进 Markdown。不要试图用空格、HTML 或手工分页模拟版式。
 
 ---
 
@@ -20,7 +20,7 @@
 8. 不要使用脚注、HTML 块、任务列表、嵌套引用、嵌套表格、远程图片、H5/H6、内联图片。
 9. 不要在正文里写 LaTeX 导言区或自定义宏，只允许数学模式。
 10. 标题、正文、图表题注、参考文献均使用本规范列出的语法。
-11. 不要在 Markdown 中表达页边距、字号、行距、首行缩进、字体等版式微调；这些由平台「格式」面板、API 的 `format_overrides` 或 CLI 的 `--format-config` 控制。
+11. 不要在 Markdown 中表达页边距、字号、行距、首行缩进、字体等版式微调；这些由平台“格式”面板、API 的 `format_overrides` 或 CLI 的 `--format-config` 控制。
 
 ---
 
@@ -218,7 +218,7 @@ $$
 
 ### 4.1 LaTeX 原生图表（仅 TeX 重绘时使用）
 
-如果用户明确要求「用 LaTeX 重绘图表」，不要插入图片，改用 `latex-figure` 围栏：
+如果用户明确要求“用 LaTeX 重绘图表”，不要插入图片，改用 `latex-figure` 围栏：
 
 ````markdown
 ```latex-figure fallback="images/chart.png"
@@ -395,7 +395,7 @@ $$
 
 页边距、正文字体/字号/行距/首行缩进、标题字体与字号属于**平台格式微调**，不写入 Markdown，也不写入 frontmatter。
 
-- 网页端：「格式」标签在模板默认值上微调，按「格式 + 模板」自动保存到 Local Storage；支持「另存为」JSON、「导入」与「恢复模板」。
+- 网页端：“格式”标签在模板默认值上微调，按“格式 + 模板”自动保存到 Local Storage；支持“另存为”JSON、“导入”与“恢复模板”。
 - API：`POST /api/convert` 接受 `format_overrides`（对象，或 multipart 中的 JSON 字符串）。
 - CLI：`convert ... --format-config <file.json>`。
 - Python：`convert_file(..., tuning={...})`。
@@ -413,7 +413,7 @@ $$
 
 - `font` 取值：`songti`、`fangsong`、`heiti`、`kaiti`，控制中文正文/标题字体；西文仍按模板。`body.font` 为正文，`fonts.heading` 为标题。
 - 单位：页边距 `cm`，字号 `pt`，行距为倍数，首行缩进为字符数。
-- 如果用户提出版式要求，仍然只输出合格的 Markdown 正文；提醒用户在平台「格式」面板中调整，不要用空格、全角空格、HTML 或 LaTeX 命令模拟。
+- 如果用户提出版式要求，仍然只输出合格的 Markdown 正文；提醒用户在平台“格式”面板中调整，不要用空格、全角空格、HTML 或 LaTeX 命令模拟。
 - 目录由 `toc`、`toc_title`、`toc_levels`、`toc_include_references` 控制，不属于微调配置。
 
 ---
@@ -434,7 +434,7 @@ $$
 9. 标题层级连续不跳级；标题默认不编号。
 10. 如果用户没有提供图片文件，请仍然写出确定性的 images/ 路径，并提醒用户上传同名图片。
 11. 只有用户明确要求 LaTeX 重绘图表时，才使用 latex-figure 围栏；普通图片继续使用 PNG/JPG。
-12. 不要在 Markdown 中写页边距、字号、行距、缩进或字体；这些由平台的「格式」微调负责。
+12. 不要在 Markdown 中写页边距、字号、行距、缩进或字体；这些由平台的“格式”微调负责。
 
 输出仅包含 Markdown 原文。
 ```

@@ -120,7 +120,7 @@ export function useSections(chat, messagesContainer) {
     const messageElements = container.querySelectorAll('.message-wrapper')
     if (!messageElements.length) return
     const containerRect = container.getBoundingClientRect()
-    // 取「顶部已越过阅读线」的最后一条消息：即便某条消息很高、顶部在线上方，
+    // 取“顶部已越过阅读线”的最后一条消息：即便某条消息很高、顶部在线上方，
     // 也能稳定映射到它所属分区，避免导览高亮短暂消失。
     const readingLine = containerRect.top + Math.min(120, containerRect.height / 3)
     let activeMsgIndex = -1
@@ -141,7 +141,7 @@ export function useSections(chat, messagesContainer) {
         : sections.value.find(
             (s) => s.headingMsgIndex !== null && msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex,
           )
-    // 回退到最近的上一个带标题的分区，保证「开头」之前的消息也有高亮。
+    // 回退到最近的上一个带标题的分区，保证“开头”之前的消息也有高亮。
     let currentActiveId = section?.id ?? null
     if (!currentActiveId && msgIndex > -1) {
       const previous = [...sections.value]

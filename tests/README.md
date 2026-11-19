@@ -13,7 +13,9 @@ python tests/run_all.py
 或分别运行：
 
 ```bash
-python -m unittest discover -s tests -v   # Python 后端安全/健壮性
+python -m unittest discover -s tests -v   # Python 后端安全/健壮性与引号守卫
+python tests/no_jp_quotes.py              # 每次改完就运行：发现日式/繁体角引号即原地修正并复核
+python tests/no_jp_quotes.py --check      # 只检查、绝不改文件（回归套件使用，违规退出码 1）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
   tests/test_review.mjs tests/test_backup.mjs tests/test_products.mjs \
@@ -34,6 +36,18 @@ npm run build                             # 前端生产构建
 - 共享资源授权：注册文件只允许按精确路径读取，不再把整个父目录加入白名单。
 - mdforge 多实例隔离：两个 `create_app(root)` 实例各自提供自己的静态文件，不串目录。
 - 签名错误脱敏：`CalledProcessError` 中的 `/p <password>` 不会被打印。
+
+**`no_jp_quotes.py` / `test_no_jp_quotes.py`**（引号守卫，3 项）
+
+- OMM-ZEN 全部产品源码、样式、规范文档与数据文件里禁止出现日式/繁体角引号：
+  U+300C / U+300D、U+300E / U+300F、U+FE41–U+FE44、U+301D–U+301F，统一改为中文引号
+  U+201C“ / U+201D”。
+- 扫描范围覆盖整个仓库的自身源码与文档，自动跳过第三方依赖（`vendor`、`.venv`、
+  `node_modules`）、构建产物、缓存以及被 git 忽略的本地工具目录（`.workbuddy`）。
+- `python tests/no_jp_quotes.py` 默认即在发现时立即原地替换并自动复核；`--check` 只检查、
+  不改文件，违规时以退出码 1 失败。脚本按字节读写以保留 CRLF/LF 原样。该守卫已作为
+  独立步骤（`--check` 模式）接入 `run_all.py`，每次全量回归都会强制执行。
+- 单元测试验证替换映射、幂等性与"源码中零违规"。
 
 **`test_message_security.mjs`**（20 项）
 

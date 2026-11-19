@@ -431,7 +431,7 @@ def visible_channels(policy: Dict[str, Any], app: str) -> List[str]:
 def pick_channel(policy: Dict[str, Any], app: str, mime: str, requested: str = "") -> str:
     if requested and requested != "auto":
         if not channel_allows(policy, requested, app, "publish"):
-            raise ValueError("「%s」不允许写入频道 %s" % (app, requested))
+            raise ValueError("“%s”不允许写入频道 %s" % (app, requested))
         channel = policy["channels"][requested]
         if not _type_match(channel.get("types"), mime):
             raise ValueError("频道 %s 不接受类型 %s" % (requested, mime))
@@ -708,9 +708,9 @@ def send(from_app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if not channel_id:
         raise ValueError("缺少频道")
     if not channel_allows(policy, channel_id, from_app, "publish"):
-        raise ValueError("「%s」不能向频道 %s 发送" % (from_app, channel_id))
+        raise ValueError("“%s”不能向频道 %s 发送" % (from_app, channel_id))
     if not channel_allows(policy, channel_id, to_app, "consume"):
-        raise ValueError("「%s」不能从频道 %s 接收" % (to_app, channel_id))
+        raise ValueError("“%s”不能从频道 %s 接收" % (to_app, channel_id))
 
     message: Dict[str, Any] = {
         "id": _new_id("msg"),

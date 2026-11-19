@@ -615,7 +615,7 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data || !data.ok) throw new Error('detach failed');
-        toast('已在新窗口打开「' + (app ? app.name : appId) + '」');
+        toast('已在新窗口打开“' + (app ? app.name : appId) + '”');
       })
       .catch(function () {
         var url = 'omm-hub.html?detach=' + encodeURIComponent(appId);
@@ -1311,7 +1311,7 @@
     workspaces = workspaces.slice(0, 8);
     saveWorkspaces();
     renderWorkspaceList();
-    toast(existing ? '已更新工作区「' + text + '」' : '已保存工作区「' + text + '」');
+    toast(existing ? '已更新工作区“' + text + '”' : '已保存工作区“' + text + '”');
     return true;
   }
 
@@ -1352,7 +1352,7 @@
     renderAll();
     mountVisible();
     save();
-    toast('已切换到工作区「' + workspace.name + '」');
+    toast('已切换到工作区“' + workspace.name + '”');
   }
 
   function deleteWorkspace(workspaceId) {
@@ -1481,7 +1481,7 @@
         ? '<div class="launcher-grid">' + filtered.map(function (app, index) {
             return launcherApp(app, index);
           }).join('') + '</div>'
-        : '<div class="launcher-empty">没有匹配「' + esc(query) + '」的应用。<br>试试名称、描述或拼音首字母。</div>';
+        : '<div class="launcher-empty">没有匹配“' + esc(query) + '”的应用。<br>试试名称、描述或拼音首字母。</div>';
     } else {
       var pinned = launcherPinned.map(appOf).filter(Boolean);
       var recent = launcherRecent.map(appOf).filter(function (app) {
@@ -1735,7 +1735,7 @@
         btn.setAttribute('aria-label', btn.getAttribute('title'));
       });
     } else {
-      // 关闭「无障碍标签」时移除之前由 title 复制而来的 aria-label，
+      // 关闭“无障碍标签”时移除之前由 title 复制而来的 aria-label，
       // 否则该开关在本次会话里没有任何可见效果。
       Array.prototype.forEach.call(document.querySelectorAll('button[title][aria-label]'), function (btn) {
         if (btn.getAttribute('aria-label') === btn.getAttribute('title')) {
@@ -2892,7 +2892,7 @@
         : '—') + '</dd></div>' +
       '</dl>' +
       '<h3 class="pp-detail-h3">共享权限声明</h3>' + channelHtml +
-      '<p class="setting-hint">声明只代表插件申请的能力；实际连接规则由「存档 → 跨产品共享」决定，随时可以撤销。</p>' +
+      '<p class="setting-hint">声明只代表插件申请的能力；实际连接规则由“存档 → 跨产品共享”决定，随时可以撤销。</p>' +
       '<div class="setting-actions">' +
       '<button class="pp-btn primary" type="button" data-pp-action="open" data-id="' + esc(app.id) + '">打开插件</button>' +
       (app.rollback
@@ -2929,7 +2929,7 @@
   function renderInstalledPlugins() {
     if (!APP_LIST.length) {
       els.ppBody.innerHTML =
-        '<div class="pp-empty">还没有安装插件。<br>切换到「在线插件」选择产品，或「导入插件」安装自己的页面。</div>';
+        '<div class="pp-empty">还没有安装插件。<br>切换到“在线插件”选择产品，或“导入插件”安装自己的页面。</div>';
       return;
     }
     var rows = APP_LIST.map(function (app) {
@@ -3058,7 +3058,7 @@
   }
 
   /* 是否有框架更新：按钮渲染与实际操作必须共用这一判断，避免出现
-     「显示立即更新，点击却说没有可用更新」的矛盾。后端给出 available 时
+     “显示立即更新，点击却说没有可用更新”的矛盾。后端给出 available 时
      以后端为准；旧后端没有该字段时回退到本地版本比较。 */
   function frameworkUpdateAvailable(info) {
     if (!info || info.error) return false;
@@ -3355,7 +3355,7 @@
       .then(function (text) {
         if (pluginPanelTab !== 'spec') return;
         els.ppBody.innerHTML =
-          '<p class="pp-note">把页面打包成 zip，即可在「导入插件」中安装；完整字段说明如下。</p>' +
+          '<p class="pp-note">把页面打包成 zip，即可在“导入插件”中安装；完整字段说明如下。</p>' +
           '<pre class="pp-spec">' +
           esc(text) +
           '</pre>';
@@ -3453,7 +3453,7 @@
           renderPluginPanel();
         });
     }
-    ommConfirm('卸载「' + app.name + '」？本地数据会保留。',
+    ommConfirm('卸载“' + app.name + '”？本地数据会保留。',
       { title: '卸载插件', ok: '卸载', danger: true }).then(function (ok) {
       if (ok) commit();
     });
@@ -3487,7 +3487,7 @@
       })
       .then(function (data) {
         var id = data.plugin && data.plugin.id;
-        toast('已导入「' + (data.plugin ? data.plugin.name : file.name) + '」');
+        toast('已导入“' + (data.plugin ? data.plugin.name : file.name) + '”');
         els.ppStatus.textContent = '插件导入成功';
         return refreshPluginsAfterChange().then(function () {
           /* Restart the imported plugin so it is usable right away. */
@@ -3579,7 +3579,7 @@
       tries += 1;
       var frame = frames.get(appId);
       // 必须等 iframe 真正载入了产品页（dataset.ready），否则 contentWindow
-      // 仍指向 about:blank，消息会在导航中丢失，用户却被告知「已交给…载入」。
+      // 仍指向 about:blank，消息会在导航中丢失，用户却被告知“已交给…载入”。
       if (frame && frame.dataset.ready === '1' && frame.contentWindow) {
         window.clearInterval(timer);
         try {
@@ -3592,7 +3592,7 @@
             },
             frameTargetOrigin(frame)
           );
-          toast('已交给「' + APP_BY_ID[appId].name + '」载入');
+          toast('已交给“' + APP_BY_ID[appId].name + '”载入');
         } catch (e) {
           toast('载入失败');
         }
@@ -3792,16 +3792,16 @@
     }
     if (status === 'loading' || status === 'idle') {
       return (
-        '<div class="loading-box"><span class="spinner"></span><span>正在启动「' +
+        '<div class="loading-box"><span class="spinner"></span><span>正在启动“' +
         esc(app.name) +
-        '」…</span></div>'
+        '”…</span></div>'
       );
     }
     if (status === 'sleeping') {
       return (
-        '<div class="loading-box"><span class="sleep-glyph">◌</span><span>「' +
+        '<div class="loading-box"><span class="sleep-glyph">◌</span><span>“' +
         esc(app.name) +
-        '」已休眠，内存已释放</span>' +
+        '”已休眠，内存已释放</span>' +
         '<button class="retry-btn" type="button" data-act="wake" data-app="' +
         esc(app.id) +
         '">唤醒</button></div>'
@@ -3809,9 +3809,9 @@
     }
     if (status === 'error') {
       return (
-        '<div class="error-box"><strong>无法启动「' +
+        '<div class="error-box"><strong>无法启动“' +
         esc(app.name) +
-        '」</strong><span>' +
+        '”</strong><span>' +
         esc(appErrors[app.id] || '本地服务没有响应') +
         '</span>' +
         '<div class="error-actions">' +
@@ -4179,7 +4179,7 @@
       var appId = closedStack.pop();
       if (APP_BY_ID[appId]) {
         activateApp(appId);
-        toast('已重新打开「' + APP_BY_ID[appId].name + '」');
+        toast('已重新打开“' + APP_BY_ID[appId].name + '”');
         return;
       }
     }
@@ -4208,7 +4208,7 @@
     delete appMountedAt[appId];
     renderAll();
     save();
-    toast('已休眠「' + APP_BY_ID[appId].name + '」，点击标签可唤醒');
+    toast('已休眠“' + APP_BY_ID[appId].name + '”，点击标签可唤醒');
     return true;
   }
 
@@ -4541,7 +4541,7 @@
       window.OMMShare.openArtifact(payload.data, target);
       return;
     }
-    toast('这个内容不能拖放，请使用行内的「发送」按钮', 'error');
+    toast('这个内容不能拖放，请使用行内的“发送”按钮', 'error');
   }
 
   /* ---------------------------------------------------------------- context ui */
@@ -4993,7 +4993,7 @@
       ctx.fillStyle = '#888';
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('没有卡片：在任意产品的右下角「卡」按钮剪藏内容后即可看到关系图。', W / 2, H / 2);
+      ctx.fillText('没有卡片：在任意产品的右下角“卡”按钮剪藏内容后即可看到关系图。', W / 2, H / 2);
       ctx.textAlign = 'left';
       if (els.kgStatus) els.kgStatus.textContent = '暂无卡片';
       if (els.kgList) els.kgList.innerHTML = '';
@@ -5177,7 +5177,7 @@
       renderGlobalSearch(null, '输入关键词，检索全部产品中已保存的文档内容。');
       return;
     }
-    renderGlobalSearch(null, '正在检索「' + gsearchEscape(q) + '」…', true);
+    renderGlobalSearch(null, '正在检索“' + gsearchEscape(q) + '”…', true);
     gsearchTimer = window.setTimeout(function () {
       fetch('/__omm/fs/search?q=' + encodeURIComponent(q) + '&all=1&limit=60', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
@@ -5209,7 +5209,7 @@
     }
     if (!gsearchResults.length) {
       els.gsearchList.innerHTML = '<div class="cmdk-empty">' +
-        (needle ? '没有找到与「' + gsearchEscape(needle) + '」相关的内容' : '输入关键词开始检索') +
+        (needle ? '没有找到与“' + gsearchEscape(needle) + '”相关的内容' : '输入关键词开始检索') +
         '</div>';
       return;
     }
@@ -5612,13 +5612,13 @@
       .then(function (response) { return response.json(); })
       .then(function (data) {
         if (!data || !data.ok) throw new Error((data && data.error) || '打开失败');
-        toast('已在浏览器窗口打开「' + name + '」');
+        toast('已在浏览器窗口打开“' + name + '”');
       })
       .catch(function () {
         appUrlFor(appId)
           .then(function (url) {
             window.open(url, '_blank', 'noopener,width=1280,height=860');
-            toast('已在新窗口打开「' + name + '」');
+            toast('已在新窗口打开“' + name + '”');
           })
           .catch(function (error) {
             toast('打开失败：' + (error && error.message ? error.message : error));
@@ -6548,7 +6548,7 @@
         renderDock();
         pushNotify(
           '收到共享内容',
-          '「' + targetName + '」收到：' + (data.title || '共享项目'),
+          '“' + targetName + '”收到：' + (data.title || '共享项目'),
           { app: targetApp, kind: 'share' }
         );
         pushFlowEvent('share', sourceApp + ' → ' + targetApp + '：' + (data.title || '共享项目'));

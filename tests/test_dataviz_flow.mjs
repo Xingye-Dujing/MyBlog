@@ -20,7 +20,7 @@ test('Data 引入出图模块与桥接', () => {
   assert.ok(data.includes('src="viz-bridge.js"'))
 })
 
-test('Data 有「一键出图」菜单与动作', () => {
+test('Data 有“一键出图”菜单与动作', () => {
   assert.ok(data.includes('data-action="sendToViz"'))
   assert.ok(data.includes('sendToViz: function ()'))
   assert.ok(data.includes('window.DataViz.toPayload(t, { name: t.name })'))

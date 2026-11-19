@@ -31,6 +31,8 @@ def main() -> int:
     failures = 0
     failures += run("Backend hardening (Python unittest)",
                     [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
+    failures += run("Quote style guard (no Japanese corner brackets)",
+                    [sys.executable, "tests/no_jp_quotes.py", "--check"])
     failures += run("postMessage protocol (Node)",
                     ["node", "tests/test_message_security.mjs"])
     zen_tests = [

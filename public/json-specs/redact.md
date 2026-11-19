@@ -1,7 +1,7 @@
 # ZenRedact 文件格式与持久化数据说明 (omm-redact.html)
 
 > 用途：说清楚这个脱敏/打码 App **真正接受什么、能导出什么、内部把状态存成什么**。
-> 让 AI 在「想生成一个能被 App 读取的 JSON 文件」时不要瞎猜。
+> 让 AI 在“想生成一个能被 App 读取的 JSON 文件”时不要瞎猜。
 >
 > 本文所有字段名、默认值、容错行为都是从 `omm-redact.html` 的
 > `loadFile()`（文档输入，~5070）、`readAsText`/`loadFileStreaming`（~5216/5256）、
@@ -12,18 +12,18 @@
 
 ## 0. 一句话规则
 
-**这个 App 不接受任何 JSON 文件导入。它根本没有「导入 / 恢复 / 打开项目 / 加载备份」这类入口。**
+**这个 App 不接受任何 JSON 文件导入。它根本没有“导入 / 恢复 / 打开项目 / 加载备份”这类入口。**
 
-- 输入只有**文档**：`.txt / .docx / .pdf / .pptx`（外加单独的「图片 / 图片文件夹」入口，`image/*`）。
-  `.json` 文件会被直接拒绝，提示「仅支持 TXT、DOCX、PDF、PPTX 文件」。
-- 输出只有**视觉成品**：PDF、图片 ZIP、PPTX（还有「不可逆脱敏 PDF」）。
+- 输入只有**文档**：`.txt / .docx / .pdf / .pptx`（外加单独的“图片 / 图片文件夹”入口，`image/*`）。
+  `.json` 文件会被直接拒绝，提示“仅支持 TXT、DOCX、PDF、PPTX 文件”。
+- 输出只有**视觉成品**：PDF、图片 ZIP、PPTX（还有“不可逆脱敏 PDF”）。
   **没有任何把脱敏区域 / 工程 / 设置导出成 JSON 的功能。**
-- App 唯一「读」的一段 JSON，是它存在浏览器 **localStorage** 里的界面设置
+- App 唯一“读”的一段 JSON，是它存在浏览器 **localStorage** 里的界面设置
   （键名 `zr-settings`，见第 3 节）。它**不是从文件读的**，也没有按钮让你贴一个文件进去。
 - 脱敏记录 `S.redacts`（见第 4 节）**从不落盘、从不导出**，只在内存里 + 撤销/重做栈里活着；
   一加载新文档就被清空。
 
-所以：**无法「生成一个 JSON 文件让 App 直接导入」。** 任何声称能导入 `.zr`/`.json` 工程文件的做法都是臆造的。
+所以：**无法“生成一个 JSON 文件让 App 直接导入”。** 任何声称能导入 `.zr`/`.json` 工程文件的做法都是臆造的。
 
 ---
 
@@ -38,23 +38,23 @@
 - 所有 `Blob` / `a.download` 产出的都是 `application/pdf`、`application/zip` 等二进制，
   没有任何 `application/json` 的导出。
 
-因此**本文不提供「给 AI 的导入文件提示词模板」**（没有可导入的 JSON 可言）。
+因此**本文不提供“给 AI 的导入文件提示词模板”**（没有可导入的 JSON 可言）。
 
 AI 真正能做的只有两件事：
 
 1. **产出一段符合第 3 节结构的 `zr-settings` JSON**，由用户用浏览器控制台
-   `localStorage.setItem('zr-settings', <json 字符串>)` 手动写入后刷新页面生效——这是「还原设置」，
-   **不是「导入文件」**，且是用户级操作，App 自身没有对应 UI。
-2. **产出第 1 节支持的文档（尤其纯 `.txt`）**，让用户用正常的「打开文档」加载后再在 App 里手工打码。
+   `localStorage.setItem('zr-settings', <json 字符串>)` 手动写入后刷新页面生效——这是“还原设置”，
+   **不是“导入文件”**，且是用户级操作，App 自身没有对应 UI。
+2. **产出第 1 节支持的文档（尤其纯 `.txt`）**，让用户用正常的“打开文档”加载后再在 App 里手工打码。
 
-> ⚠️ 想「批量预置脱敏区域」也走不通：`S.redacts` 没有落盘格式、没有读取入口，
+> ⚠️ 想“批量预置脱敏区域”也走不通：`S.redacts` 没有落盘格式、没有读取入口，
 > 只能由用户在 App 内框选/划选/命中敏感词来生成。
 
 ---
 
 ## 1. 真实输入格式（文档）
 
-打开文档只有一条通道：菜单「打开文档 / 拖拽 / 文件选择框」（`#file-input`，
+打开文档只有一条通道：菜单“打开文档 / 拖拽 / 文件选择框”（`#file-input`，
 `accept=".txt,.docx,.pdf,.pptx"`）。
 
 ```
@@ -82,7 +82,7 @@ if (!allowed[ext]) -> notify('仅支持 TXT、DOCX、PDF、PPTX 文件'); 直接
 
 ## 2. 真实输出格式（导出）
 
-导出按钮只有三个（外加一个不可逆脱敏 PDF）；**没有「导出 JSON / 导出工程 / 导出脱敏清单」**：
+导出按钮只有三个（外加一个不可逆脱敏 PDF）；**没有“导出 JSON / 导出工程 / 导出脱敏清单”**：
 
 | 动作 | 产物 | MIME / 实现 |
 |---|---|---|
@@ -95,7 +95,7 @@ if (!allowed[ext]) -> notify('仅支持 TXT、DOCX、PDF、PPTX 文件'); 直接
 `opacity = 100`（不透明）= **脱敏模式**，导出永久抹除；
 `opacity < 100`（半透明）= **高亮模式**，导出保留原文并以透明度覆盖。
 
-> 结论：想拿到机器可读的「脱敏结果清单」，本 App 给不了——它只吐给人看的 PDF/图片/PPTX。
+> 结论：想拿到机器可读的“脱敏结果清单”，本 App 给不了——它只吐给人看的 PDF/图片/PPTX。
 
 ---
 
@@ -195,7 +195,7 @@ if (!allowed[ext]) -> notify('仅支持 TXT、DOCX、PDF、PPTX 文件'); 直接
 }
 ```
 
-> 上面两段是**给 localStorage 用的设置数据**，不是「可导入文件」。
+> 上面两段是**给 localStorage 用的设置数据**，不是“可导入文件”。
 > 用法只能：控制台执行 `localStorage.setItem('zr-settings', JSON.stringify(<对象>))` 后刷新。
 
 ---
@@ -218,7 +218,7 @@ if (!allowed[ext]) -> notify('仅支持 TXT、DOCX、PDF、PPTX 文件'); 直接
   "ny2": 0.28,
   "type": "rect",                // 当前所有创建点固定传 'rect'（mosaic/pixel 已从工具里移除）
   "wordMatch": null,             // 自动敏感词命中时记录命中词；手动框选/划选为 null
-  "applied": false,              // 创建时 false，需「应用」或点击遮罩才转 true
+  "applied": false,              // 创建时 false，需“应用”或点击遮罩才转 true
   "timestamp": 1760000000000,    // Date.now() 毫秒
   "style": {                     // 从当时的 S.redactStyle 拷贝而来
     "color": "#000000",
@@ -286,15 +286,15 @@ if (!allowed[ext]) -> notify('仅支持 TXT、DOCX、PDF、PPTX 文件'); 直接
 
 ## 6. 给生成方的硬性检查清单
 
-1. **不要**声称能生成 `.json/.zr` 让 App「导入脱敏工程/备份」——本 App 无此功能。
-2. 若目标是「还原界面设置」：产出第 3 节结构的对象即可，并**明确告诉用户**
+1. **不要**声称能生成 `.json/.zr` 让 App“导入脱敏工程/备份”——本 App 无此功能。
+2. 若目标是“还原界面设置”：产出第 3 节结构的对象即可，并**明确告诉用户**
    这是写入 `localStorage['zr-settings']`（控制台执行后刷新），**不是导入文件**。
    校验：`theme∈{light,dark}`、`bg∈{4 个 bg-*}`、`tool∈{rect,select,move,eraser}`、
    `redactStyle.opacity∈[10,100]`、`pdfImageLargeRatio∈[0.5,0.95]`、
    `sensitiveWords` 为**字符串数组**。
-3. 若目标是「给用户一段可脱敏的文本」：产出**纯 `.txt`**（UTF-8）即可，让用户正常「打开文档」。
+3. 若目标是“给用户一段可脱敏的文本”：产出**纯 `.txt`**（UTF-8）即可，让用户正常“打开文档”。
    别包装成 JSON。
-4. 若需要「脱敏区域清单」：如实说明**无法生成导入文件**，只能在 App 内手工/自动遮罩，
+4. 若需要“脱敏区域清单”：如实说明**无法生成导入文件**，只能在 App 内手工/自动遮罩，
    结果只能导出 PDF/图片/PPTX（非 JSON）。
 5. 任何 JSON 必须是 **UTF-8 合法 JSON**：无注释、无尾逗号；写进 localStorage 时再 `JSON.stringify`。
 
@@ -304,10 +304,10 @@ if (!allowed[ext]) -> notify('仅支持 TXT、DOCX、PDF、PPTX 文件'); 直接
 
 | 情况 | 结果 |
 |---|---|
-| 拖入/选择 `.json` | 拒绝，提示「仅支持 TXT、DOCX、PDF、PPTX 文件」 |
+| 拖入/选择 `.json` | 拒绝，提示“仅支持 TXT、DOCX、PDF、PPTX 文件” |
 | 打开任意新文档 | 清空 `S.redacts`、撤销/重做栈、id 计数器 |
-| 找不到「导入 / 恢复 / 打开工程 / 加载备份」 | 正常——这些功能不存在 |
-| 想找「导出 JSON / 导出工程」 | 没有——只有 PDF / 图片 ZIP / PPTX / 不可逆脱敏 PDF |
+| 找不到“导入 / 恢复 / 打开工程 / 加载备份” | 正常——这些功能不存在 |
+| 想找“导出 JSON / 导出工程” | 没有——只有 PDF / 图片 ZIP / PPTX / 不可逆脱敏 PDF |
 | 篡改 `zr-settings`（localStorage） | 下次打开读回；非法字段按第 3.2 节兜底，整体解析失败则全用默认 |
 | `redactStyle.opacity < 100` 的遮罩 | 高亮模式，导出保留原文（半透明覆盖） |
 | `redactStyle.opacity = 100` 的遮罩 | 脱敏模式，导出永久抹除 |

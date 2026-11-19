@@ -1,7 +1,7 @@
 # ZenLatex 文件规范（`.tex` 导入 + localStorage 持久化 JSON）
 
 > 用途：让 AI（或任何程序）**直接生成可被 ZenLatex 导入的 `.tex` 文件**。
-> 用户在 ZenLatex 顶部菜单「文档 → 导入 .tex 文件」（快捷键 `Ctrl/⌘ + O`）
+> 用户在 ZenLatex 顶部菜单“文档 → 导入 .tex 文件”（快捷键 `Ctrl/⌘ + O`）
 > 选中该 `.tex`，文件内容即被读入编辑器并触发编译。
 >
 > 本文所有结论都是从 `omm-latex.html` 的代码里逐行核对出来的，不是推测：
@@ -12,7 +12,7 @@
 >   `getTemplateStore()` / `normalizeTemplate()`（~2018–2059 行）、
 >   `restorePrefs()` 里的 `LS.get('editor')`（~5035–5073 行）
 >
-> ⚠️ **本应用没有任何「导入 JSON 文件」的入口。** 唯一的文件导入就是 `.tex` 纯文本。
+> ⚠️ **本应用没有任何“导入 JSON 文件”的入口。** 唯一的文件导入就是 `.tex` 纯文本。
 > JSON 只存在于浏览器 localStorage 里，是程序**自动落盘、自动恢复**的内部状态，
 > 不能从磁盘文件重新导入（详见第 6 节）。
 
@@ -20,7 +20,7 @@
 
 ## 0. 一句话结论
 
-**能被「导入文件」的只有 `.tex`（以及 `.txt`/`.latex`）纯文本，不是 JSON。**
+**能被“导入文件”的只有 `.tex`（以及 `.txt`/`.latex`）纯文本，不是 JSON。**
 所以要让 AI 产出可被本应用使用的工件，正确做法是**生成一份合法的、自包含的 LaTeX 源码**，
 保存为 `main.tex` 后由用户导入。JSON 形态（快照 / 模板库 / 编辑器配置）只是 localStorage
 内部状态，**无法**从文件导入，本文只在第 6 节作为参考如实记录其结构。
@@ -32,7 +32,7 @@
 把下面这段连同本文一起发给 AI，让它直接产出可导入的 `.tex`：
 
 ```text
-你要生成一个可被 ZenLatex（omm-latex.html）「导入 .tex 文件」直接使用的 LaTeX 源文件 main.tex。
+你要生成一个可被 ZenLatex（omm-latex.html）“导入 .tex 文件”直接使用的 LaTeX 源文件 main.tex。
 
 硬性要求：
 1. 输出必须是单一、自包含的 LaTeX 文档：从 \documentclass 到 \end{document} 全在一行文件里。
@@ -54,7 +54,7 @@
 
 ---
 
-## 1. 「导入」到底接收什么
+## 1. “导入”到底接收什么
 
 照抄代码行为：
 
@@ -99,7 +99,7 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
   `\bibliography{}` / 本地 `graphicx` 图片路径，**只要不在那一份 `main.tex` 文本里，就必然编译失败**。
   → AI 生成的 `.tex` 必须**自包含**：参考文献内联 `thebibliography`、图用 TikZ/pgfplots 现画或公网 URL。
 - **依赖本地服务**：必须先在本机跑 MiKTeX 编译服务（默认 `http://127.0.0.1:8123`，
-  菜单「编译 → 服务地址」配置，持久化键 `zentex.api`）。服务没起来时导入照常成功，但编译显示“等待本地服务”。
+  菜单“编译 → 服务地址”配置，持久化键 `zentex.api`）。服务没起来时导入照常成功，但编译显示“等待本地服务”。
 - **引擎与中文**：默认 XeLaTeX。内置模板的中文文档类是 `ctexart` / `ctexbeamer`（需 `ctex` 宏包与系统中文字体）。
 
 ---
@@ -193,14 +193,14 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
 | 图 | 优先 TikZ/pgfplots 现画，或公网 https 图床 URL；勿写本机相对路径图片 |
 | 表格 | `tabular` 列数与 `&`/`\\` 数量一致；建议 `booktabs` |
 | 引擎 | 默认 XeLaTeX，所用宏包需该引擎可用；切换引擎见菜单 |
-| 编译 | 以「能一次编译通过」为第一目标，避免未定义命令 |
+| 编译 | 以“能一次编译通过”为第一目标，避免未定义命令 |
 
 ---
 
 ## 3. 内置模板（可仿照其结构）
 
 `BUILTIN_TEMPLATES`（~1954）内置 7 个模板，AI 可参照其文档类与包组合产出对应题材。
-模板的 JSON 形态见第 6.2 节，但**内置模板不可被文件替换**，只能由用户在「模板 → 新建/编辑」里另存。
+模板的 JSON 形态见第 6.2 节，但**内置模板不可被文件替换**，只能由用户在“模板 → 新建/编辑”里另存。
 
 | `id` | 名称 | 说明 | 文档类 / 关键包 |
 |---|---|---|---|
@@ -212,10 +212,10 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
 | `blank` | 空白文档 | 最小骨架 | `ctexart`、geometry |
 | `drawing` | 理工科研绘图集 | 电路·化学·生物 | `ctexart`、tikz、circuitikz、chemfig |
 
-> 另有一个隐藏 id `humanities`（~1997，「统计与数据可视化」，pgfplots 全套），存在于数据中但
+> 另有一个隐藏 id `humanities`（~1997，“统计与数据可视化”，pgfplots 全套），存在于数据中但
 > 不在主菜单快捷列出；其骨架同样可参照。
 
-「文档 → 新建：中文学术论文」直接载入 `paper`；「清空为空白文档」载入 `blank`。
+“文档 → 新建：中文学术论文”直接载入 `paper`；“清空为空白文档”载入 `blank`。
 
 ---
 
@@ -230,7 +230,7 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
 | 导出 PNG `export-png` / `export-png1` | 按 `zentex.pngDpi` 渲染整页/当前页 | `page-<i>.png` |
 | 复制源码到剪贴板 `copy` | `copyText(state.tex)` | 剪贴板文本 |
 
-所以「导出 → .tex」是往返通道：导出的 `main.tex` 可被另一个浏览器/设备再次「导入 .tex」。
+所以“导出 → .tex”是往返通道：导出的 `main.tex` 可被另一个浏览器/设备再次“导入 .tex”。
 **这是唯一可靠的跨设备迁移方式。**
 
 ---
@@ -239,10 +239,10 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
 
 代码里所有“导入/restore”路径核对结果：
 
-- 「导入」= 仅 `.tex/.txt/.latex` 文本（第 1 节）。
+- “导入”= 仅 `.tex/.txt/.latex` 文本（第 1 节）。
 - 模板的新建/编辑/删除/恢复原版（`saveTemplateDefinition` / `deleteCustomTemplate` /
   `resetTemplateOverride`，~2091–2157，UI 处理 ~4820–4899）**只读写 localStorage**，
-  **没有**「从文件载入模板」的按钮或读取逻辑。
+  **没有**“从文件载入模板”的按钮或读取逻辑。
 - 启动恢复 `boot()`（~5086）只调用 `restorePrefs()` + `restoreCurrentDocument()`，
   二者**只从 localStorage 读**，不接收任何文件。
 - 没有 `readAsDataURL`、没有 `.json` 文件选择、没有 `FileReader`+`JSON.parse` 组合。
@@ -360,7 +360,7 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
 
 ## 7. 给生成方的硬性检查清单
 
-要产出「能被 ZenLatex 导入」的工件，逐条自查：
+要产出“能被 ZenLatex 导入”的工件，逐条自查：
 
 1. **只生成 `.tex` 纯文本**（或 `.latex`/`.txt`），UTF-8 编码，保存为 `main.tex`。
 2. **单文件自包含**：从 `\documentclass` 到 `\end{document}` 完整；**绝不用**
@@ -386,5 +386,5 @@ change → FileReader.readAsText(f, 'utf-8')     // ~4945
 | `\input`/外部 `.bib`/本机图片 | 导入成功，但编译报 “file not found”（应用不上传附件） |
 | 本地服务未启动 | 导入/编辑照常，仅编译显示“等待本地服务” |
 | 刷新页面 | 自动恢复上次编辑（读 `zentex.document`），无需任何文件 |
-| 换浏览器/设备 | 用「导出 .tex」再「导入 .tex」迁移；模板需在本机重新建立 |
-| 想要“导入模板文件” | 不支持；只能在「模板 → 新建/编辑」里粘贴 LaTeX 内容另存 |
+| 换浏览器/设备 | 用“导出 .tex”再“导入 .tex”迁移；模板需在本机重新建立 |
+| 想要“导入模板文件” | 不支持；只能在“模板 → 新建/编辑”里粘贴 LaTeX 内容另存 |

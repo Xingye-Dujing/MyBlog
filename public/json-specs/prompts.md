@@ -1,6 +1,6 @@
 # 一页提示词 · 复制即用
 
-> 用法：找到目标项目，**整段复制**下面对应的 ```text 代码块发给 AI，并补上你的需求（例如「做一张 6 节点的阅读脑图」「导入 30 条备考语料」）。
+> 用法：找到目标项目，**整段复制**下面对应的 ```text 代码块发给 AI，并补上你的需求（例如“做一张 6 节点的阅读脑图”“导入 30 条备考语料”）。
 > 每段都是**自包含**的：含硬性门槛、字段骨架和一个最小合法示例，AI 不需要再读完整规范就能产出可导入文件。
 > 交付物一律 **UTF-8、合法、无注释、无尾逗号、无 markdown 代码围栏**（LaTeX 项是 `.tex` 纯文本）。
 
@@ -84,7 +84,7 @@ type 取值：text / todo / group / markdown / math / image。
 ## Annotate（omm-annotate.html · ZenMark · `.json` 项目备份，整体替换）
 
 ```text
-你要生成一个 ZenMark 项目备份文件（.json，UTF-8），走「导入 → 项目备份」路径（会替换当前全部数据）。只输出 JSON，不要代码围栏/注释/尾逗号。
+你要生成一个 ZenMark 项目备份文件（.json，UTF-8），走“导入 → 项目备份”路径（会替换当前全部数据）。只输出 JSON，不要代码围栏/注释/尾逗号。
 
 顶层：{ "app":"zenmark","version":1,"exportedAt":"YYYY-MM-DD HH:mm","project":{ ... } }
 硬性：project 里必须有 "codes" 数组（可空），否则判坏文件。project 七个数组：docs / codes / anns / rels / memos / marks / notes，按需给、缺省即空。
@@ -113,10 +113,10 @@ type 取值：text / todo / group / markdown / math / image。
 ---
 
 <a id="corpus"></a>
-## Corpus（omm-corpus.html · ZenCorpus · `.json`「从 JSON 恢复」，整体替换）
+## Corpus（omm-corpus.html · ZenCorpus · `.json`“从 JSON 恢复”，整体替换）
 
 ```text
-你要生成一个 ZenCorpus 语料库文件（JSON，UTF-8），走「从 JSON 恢复」导入。只输出 JSON，不要代码围栏/注释/尾逗号。
+你要生成一个 ZenCorpus 语料库文件（JSON，UTF-8），走“从 JSON 恢复”导入。只输出 JSON，不要代码围栏/注释/尾逗号。
 
 顶层必须同时有 "entries"(数组) 和 "categories"(数组)——这是唯一硬校验，缺任一直接失败；建议再加 "version":2。
 恢复是整体替换：你要的全部写进 entries，内置语料不会自动保留。
@@ -141,12 +141,12 @@ settings/stats/conversations 可整体省略（用默认）；apiKey 除非明�
 ---
 
 <a id="data"></a>
-## Data（omm-data.html · ZenData · `.json` 数据集，「从文件/从文本导入」）
+## Data（omm-data.html · ZenData · `.json` 数据集，“从文件/从文本导入”）
 
 ```text
-你要生成一个 ZenData 可导入的数据文件（.json，纯 JSON，UTF-8），走「从文件导入 / 从文本导入」。只输出 JSON，不要代码围栏/注释/尾逗号。
+你要生成一个 ZenData 可导入的数据文件（.json，纯 JSON，UTF-8），走“从文件导入 / 从文本导入”。只输出 JSON，不要代码围栏/注释/尾逗号。
 
-顶层是「表数据」，二选一：
+顶层是“表数据”，二选一：
 (a) 对象数组：[ {"列名":值, ...}, ... ]（最推荐，键即列名）；
 (b) 数组的数组：[ [v, v, ...], ... ]（无表头，列名自动 A、B、C…）。
 绝不输出 { "tables":[...] } 那种整工作区外壳——文件导入不认它。
@@ -169,10 +169,10 @@ settings/stats/conversations 可整体省略（用默认）；apiKey 除非明�
 ```text
 你要生成 Zenglish 的可导入 JSON（UTF-8）。先确认类型（A/B/C/D），只输出 JSON，不要代码围栏/注释/尾逗号。
 
-【A 词库】走「导入词库」。顶层是数组（或 {"words":[...]}）。每元素：
+【A 词库】走“导入词库”。顶层是数组（或 {"words":[...]}）。每元素：
   对象 { "w":"单词","ph":"音标","m":"释义","ex":"例句" }（只有这 4 字段有用），或二元以上数组 ["单词","音标","释义","例句"]。w 为空则丢弃。永远新建一本词书。
-【B 涂鸦】走「导入涂鸦」。顶层 {"drawings": { "小写单词": { "strokes":[...] } }}。每笔 { "color":"#rrggbb","width":4,"erase":false,"points":[{"x":100,"y":100,"p":0.7}, ...] }。画布 1200×800；x∈[0,1200]、y∈[0,800]、p∈[0.15,1]。key 必须是当前词书里已存在的单词（小写）→ 所以先导 A 再导 B。
-【C 备份】走「恢复备份」，整体覆盖。顶层必须同时有 "books" 和 "prog" 两对象（缺任一判非法）。books 里自定义词书 { "id":"u…","name":"…","builtin":false,"w":[[词,音标,释义,例句,例句译], ...] }（内置 cet6 的 w 可 null）；prog 每词 { "b":0,"due":毫秒,"seen":0,"ok":0,"bad":0,"fuzzy":0,"star":false }，key 小写。
+【B 涂鸦】走“导入涂鸦”。顶层 {"drawings": { "小写单词": { "strokes":[...] } }}。每笔 { "color":"#rrggbb","width":4,"erase":false,"points":[{"x":100,"y":100,"p":0.7}, ...] }。画布 1200×800；x∈[0,1200]、y∈[0,800]、p∈[0.15,1]。key 必须是当前词书里已存在的单词（小写）→ 所以先导 A 再导 B。
+【C 备份】走“恢复备份”，整体覆盖。顶层必须同时有 "books" 和 "prog" 两对象（缺任一判非法）。books 里自定义词书 { "id":"u…","name":"…","builtin":false,"w":[[词,音标,释义,例句,例句译], ...] }（内置 cet6 的 w 可 null）；prog 每词 { "b":0,"due":毫秒,"seen":0,"ok":0,"bad":0,"fuzzy":0,"star":false }，key 小写。
 【D 互通包】顶层 {"omm":"bridge","v":1,"items":[...]}。item 有 "t"：词 {t:"word",w,ph,m,ex,exZh,note,tags,src}；句 {t:"sentence",en,zh}；文 {t:"doc",title,text}。
 
 最小示例（A，照此结构）：
@@ -189,7 +189,7 @@ settings/stats/conversations 可整体省略（用默认）；apiKey 除非明�
 ## Planner（omm-planner.html · ZenPlan · `.json` 整册备份，追加去重）
 
 ```text
-你要生成一个 ZenPlan 计划本导入文件（JSON，UTF-8），走「导入」（永远追加 + 按 id 去重，绝不覆盖）。只输出 JSON，不要代码围栏/注释/尾逗号。
+你要生成一个 ZenPlan 计划本导入文件（JSON，UTF-8），走“导入”（永远追加 + 按 id 去重，绝不覆盖）。只输出 JSON，不要代码围栏/注释/尾逗号。
 
 默认用整册外壳：
 { "app":"zenplan","version":2,"exportedAt":"<ISO 时间>",
@@ -217,8 +217,8 @@ settings/stats/conversations 可整体省略（用默认）；apiKey 除非明�
 ## Visualization（omm-visualization.html · ZenViz · `.json` 右侧属性设置；数据另走 CSV）
 
 ```text
-你要生成一个 ZENVIZ 右侧属性设置文件（.json，UTF-8），走「导入右侧属性设置」。只输出 JSON，不要代码围栏/注释/尾逗号。
-注意：图表「数据」不走 JSON，走 CSV/TSV/XLSX（表头列名按图型角色排：分类列/数值列/来源去向权重等）。本文件只设外观与图参。
+你要生成一个 ZENVIZ 右侧属性设置文件（.json，UTF-8），走“导入右侧属性设置”。只输出 JSON，不要代码围栏/注释/尾逗号。
+注意：图表“数据”不走 JSON，走 CSV/TSV/XLSX（表头列名按图型角色排：分类列/数值列/来源去向权重等）。本文件只设外观与图参。
 
 顶层硬性：{ "kind":"zenviz-right-properties","version":1,"engines":{...} }，kind 与 version 一字不差，version 必须是数字 1。
 engines 的键只能取 echarts / chartjs / apexcharts / zen。每个引擎里写 "typeStates" 和 "chartProps" 两个子对象，键是图表类型 id（如 line/bar/pie…）。
@@ -242,7 +242,7 @@ engines 的键只能取 echarts / chartjs / apexcharts / zen。每个引擎里�
 ## Latex（omm-latex.html · ZenLatex · `.tex`，不是 JSON）
 
 ```text
-你要生成一个可直接「导入 .tex」并一次编译通过的 LaTeX 文档（纯文本 .tex，UTF-8），只输出 .tex 内容本身。
+你要生成一个可直接“导入 .tex”并一次编译通过的 LaTeX 文档（纯文本 .tex，UTF-8），只输出 .tex 内容本身。
 
 单文件：一份从 \documentclass 到 \end{document} 的完整文档。绝对不要用 \input / \include / \bibliography{external} / 本机相对路径图片（会报 file not found）；参考文献用 thebibliography 内联；图用 TikZ/pgfplots 现画，或公网 https 图床 URL。
 文档类：中文用 ctexart（配 XeLaTeX 默认引擎），英文用 article。公式行内 $…$、独立 $$…$$ 或 \[…\]，成对闭合。表格 tabular 列数与 &/\\ 数量一致，建议 booktabs。

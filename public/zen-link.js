@@ -1,6 +1,6 @@
 /* zen-link.js — 把任意 omm-* 产品接入 zen-card 生态
  * 以 <script type="module" src="zen-link.js"></script> 引入即可：
- *   1) 页面右下角提供一个「卡」悬浮按钮，可把选中文字发布为 zen-card；
+ *   1) 页面右下角提供一个“卡”悬浮按钮，可把选中文字发布为 zen-card；
  *   2) 接收其他产品通过 OMMShare 或 postMessage 发来的 zen-card，存入统一收件箱。
  * 不改动产品自身逻辑，纯增量，避免破坏既有功能。
  */

@@ -449,7 +449,7 @@ class PluginRegistry:
                 except Exception:
                     os.replace(backup, target)
                     raise
-                # 保留上一版本用于「回滚」，而不是立即删除。
+                # 保留上一版本用于“回滚”，而不是立即删除。
                 rollback = self.user_root / (".rollback-" + manifest["id"])
                 if rollback.exists():
                     shutil.rmtree(rollback, ignore_errors=True)

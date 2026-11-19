@@ -37,7 +37,7 @@ public/desktop/plugin_specs.py        VERSION = "1.0.17"
 
 `VERSION` 同时决定：
 
-- 桌面程序自更新时「本地版本」是多少；
+- 桌面程序自更新时“本地版本”是多少；
 - `build_plugins.py` 生成的插件包版本与 `catalog.json` 里的 `version`。
 
 > **不要用 PowerShell 批量替换源码。**
@@ -66,7 +66,7 @@ Gitee 与 GitHub 的 `latest` 都解析到当前最新 Release，所以：
 
 ### 1.3 清理本机旧版本副本
 
-发版前先删旧副本，避免「本地看着是旧界面 / 磁盘越攒越大」。可释放的空间很大：
+发版前先删旧副本，避免“本地看着是旧界面 / 磁盘越攒越大”。可释放的空间很大：
 
 ```powershell
 # 1) 用户插件目录里的旧副本（内置插件会随安装包更新，这些副本是纯冗余）
@@ -89,7 +89,7 @@ Get-ChildItem D:\blog\web\public\dist\plugins -Filter *.zip |
 
 ### 1.4 插件安装目录可以改（自动迁移）
 
-集成器 →「插件管理」→「已安装」顶部显示当前安装目录，点「修改」可直接改名，
+集成器 →“插件管理”→“已安装”顶部显示当前安装目录，点“修改”可直接改名，
 确认后**已安装的插件会自动迁移过去**，不需要重装：
 
 ```text
@@ -148,7 +148,7 @@ cd D:\blog\web\public
   ```
 
 - **重建任何 EXE 之后都必须重新跑 §3**，否则 `catalog.json` 里的 SHA-256 对不上新文件。
-- 构建器自带「产物未重写」保护（`_artifact_stamp`），不会拿旧 exe 冒充新版本。
+- 构建器自带“产物未重写”保护（`_artifact_stamp`），不会拿旧 exe 冒充新版本。
 
 ---
 
@@ -312,7 +312,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\delete_gitee
 
 规则：
 
-- **只删当前版本和上一个版本之外的**。删「上一个版本」的 Windows 资源会让那版用户无法自更新。
+- **只删当前版本和上一个版本之外的**。删“上一个版本”的 Windows 资源会让那版用户无法自更新。
 - `-Keep catalog.json` **不能省**：旧程序靠它发现新版本，删了那版就永久收不到更新提示。
 - 删除的是大件（EXE / 框架 / 插件包 / spec / template），`catalog.json` 留下。
 
@@ -341,10 +341,10 @@ foreach ($prev in @("v1.0.5","v1.0.4","v1.0.3")) {
 ```
 
 覆盖的只是清单文件，旧版本自己的 EXE 和插件包不受影响。这会破坏那个 Release
-「清单与自身产物自洽」，但这是让旧程序发现新版的唯一办法，属于已知取舍。
+“清单与自身产物自洽”，但这是让旧程序发现新版的唯一办法，属于已知取舍。
 
 > 如果某个旧版本的 Gitee 资源已被配额清理删光（只剩 catalog.json），那版用户
-> 仍能收到「发现新版本」提示，但下载会失败——这是配额下的必然结果，优先保证
+> 仍能收到“发现新版本”提示，但下载会失败——这是配额下的必然结果，优先保证
 > 当前两版完整。
 
 ---
@@ -365,7 +365,7 @@ gh workflow run macos-build.yml -R Xingye-Dujing/MyBlog --ref production -f rele
 工作流约 15 分钟。等它 `conclusion: success` 后再做 §7.1 的最终校验
 （否则 GitHub 资产数还是 28 而不是 56）。
 
-macOS 只做「检测 + 打开下载链接」，不原地替换程序。
+macOS 只做“检测 + 打开下载链接”，不原地替换程序。
 
 ---
 
@@ -439,7 +439,7 @@ Invoke-WebRequest http://127.0.0.1:9340/json/version -UseBasicParsing
 **三个必须注意的点：**
 
 1. **一定要禁缓存。** WebView2 会缓存 `omm-desktop.js` / `omm-*.html`，不禁用会
-   看到旧界面而误判「没生效」：
+   看到旧界面而误判“没生效”：
 
    ```js
    const cdp = await page.target().createCDPSession();
@@ -487,7 +487,7 @@ Start-Sleep 35
 ```text
 旧版启动（约 0.9 秒后）→ 请求 /__omm/update/check（此后每 4 小时再查一次）
     → 读 Release 上的 catalog.json，version 高于本地 VERSION 才提示
-    → 右下角提示「发现新版本」，可选「稍后」或「立即更新」
+    → 右下角提示“发现新版本”，可选“稍后”或“立即更新”
     → 立即更新：按 catalog 的 url 下载 → 校验 SHA-256 与大小 → 不符即中止
     → 退出进程 → 脱离的 PowerShell 助手等待进程结束后替换 exe → 重启
 ```
@@ -517,7 +517,7 @@ Start-Sleep 35
 
 ### 同一个版本号为什么不能覆盖
 
-旧版判断「有没有更新」只看版本号：已经更新到 1.0.6 的用户不会再收到提示；
+旧版判断“有没有更新”只看版本号：已经更新到 1.0.6 的用户不会再收到提示；
 而且 `catalog.json` 里记着 SHA-256，换了文件就对不上。要修 bug 就发 1.0.7。
 
 ---
@@ -544,9 +544,9 @@ Start-Sleep 35
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
-| 旧版提示「检查不到更新」 | `catalog.json` 没上传 / `version` 没改 / 最新 catalog 没覆盖到旧版本自己的 Release（§5.4） |
+| 旧版提示“检查不到更新” | `catalog.json` 没上传 / `version` 没改 / 最新 catalog 没覆盖到旧版本自己的 Release（§5.4） |
 | Gitee `api/v5/...` 返回 **403** | 现在必须带 `access_token`（从 `git credential fill` 取），见 §5.2 |
-| Gitee 上传报「超出仓库附件配额」 | 仓库累计 1 GB 已满；先删更早版本的大件（§5.3），macOS 永不传 Gitee |
+| Gitee 上传报“超出仓库附件配额” | 仓库累计 1 GB 已满；先删更早版本的大件（§5.3），macOS 永不传 Gitee |
 | 上传后校验值对不上 | 重建过 EXE 却没重跑 `build_plugins.py`；重跑并重传该 exe 与 catalog |
 | 升级后产品界面还是旧版 | `%LOCALAPPDATA%\OMM-ZEN\plugins` 里有旧副本。已按版本号修好；仍异常就看 `/api/plugins` 的 `source` |
 | 验证时看到旧界面 | WebView2 缓存。用 CDP `Network.setCacheDisabled` + `reload({ignoreCache:true})`（§7.2） |
@@ -585,15 +585,15 @@ Start-Sleep 35
 
 ### 11.3 存档接口（`/__omm/fs/*`）
 
-`/__omm/fs/archive` 是唯一的「存档」接口，把两类记录合并成一条时间线：
+`/__omm/fs/archive` 是唯一的“存档”接口，把两类记录合并成一条时间线：
 
 | `kind` | 内容 | 动作 |
 | --- | --- | --- |
-| `file` | 产品保存过的文件（旧版「共享数据」） | 载入 / 复制路径 |
+| `file` | 产品保存过的文件（旧版“共享数据”） | 载入 / 复制路径 |
 | `snapshot` | 应用状态快照 | 恢复 / 改名 / 删除 |
 
 - 旧的 `/snapshots`、`/shared` 保留（兼容旧客户端），界面只用 `/archive`。
 - 快照改名：`POST /__omm/fs/snapshot/rename` `{path, label}`，文件名按新名字重写。
-- 集成器顶栏「存档」按钮打开该面板；集成器内（`omm_embed=1`）的产品不再显示
-  左下角浮动「存档」按钮，只保留顶栏入口。
-- 集成器里「在应用中打开」会把文件通过 `postMessage` 交给对应产品载入。
+- 集成器顶栏“存档”按钮打开该面板；集成器内（`omm_embed=1`）的产品不再显示
+  左下角浮动“存档”按钮，只保留顶栏入口。
+- 集成器里“在应用中打开”会把文件通过 `postMessage` 交给对应产品载入。

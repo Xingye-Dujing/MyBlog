@@ -224,7 +224,7 @@
       tags: (file && file.tags) || [],
     }
     return apiPost('/publish', payload).then(function (data) {
-      state.toast('已放入共享空间「' + channelName(data.item.channel) + '」')
+      state.toast('已放入共享空间“' + channelName(data.item.channel) + '”')
       if (state.root) refresh()
       return data.item
     })
@@ -242,7 +242,7 @@
       replace_key: opts.replaceKey || '',
     }
     return apiPost('/publish', payload).then(function (data) {
-      state.toast('已放入共享空间「' + channelName(data.item.channel) + '」')
+      state.toast('已放入共享空间“' + channelName(data.item.channel) + '”')
       if (state.root) refresh()
       return data.item
     })
@@ -275,7 +275,7 @@
       payload: payload,
     }).then(function () {
       openApp(target)
-      state.toast('已发送到「' + appName(target) + '」')
+      state.toast('已发送到“' + appName(target) + '”')
     }).catch(function (err) {
       state.toast('发送失败：' + (err && err.message ? err.message : err), 'error')
     })
@@ -308,7 +308,7 @@
       title: item.title,
     }).then(function () {
       var canOpen = state.isHub || (window.parent && window.parent !== window)
-      state.toast(canOpen ? '已发送到「' + name + '」' : '已放入「' + name + '」的收件箱，打开它即可接收')
+      state.toast(canOpen ? '已发送到“' + name + '”' : '已放入“' + name + '”的收件箱，打开它即可接收')
       openApp(target.app)
     }).catch(function (err) {
       state.toast('发送失败：' + (err && err.message ? err.message : err), 'error')
@@ -316,7 +316,7 @@
   }
 
   function removeItem(item) {
-    var message = '从共享空间移除「' + item.title + '」？\n不会删除本地的存档文件。'
+    var message = '从共享空间移除“' + item.title + '”？\n不会删除本地的存档文件。'
     var confirmed = window.OMMUI && window.OMMUI.confirm
       ? window.OMMUI.confirm(message, { title: '移除共享项目', ok: '移除', danger: true })
       : Promise.resolve(window.confirm(message))
@@ -653,7 +653,7 @@
 
     root.innerHTML =
       '<div class="osh">' +
-      '  <div class="osh-lead">跨产品中转站：这里只放你主动分享出来的副本。发送给其它产品不会移动或删除「存档历史」，删除共享也不会删除本地文件。</div>' +
+      '  <div class="osh-lead">跨产品中转站：这里只放你主动分享出来的副本。发送给其它产品不会移动或删除“存档历史”，删除共享也不会删除本地文件。</div>' +
       '  <div class="osh-bar">' +
       '    <button type="button" class="omm-secondary" data-act="refresh">刷新</button>' +
       '    <button type="button" class="omm-secondary" data-act="rules">连接规则</button>' +
@@ -889,7 +889,7 @@
       state.toast(
         failed
           ? '已发送 ' + ok + ' 个，失败 ' + failed + ' 个'
-          : '已把 ' + ok + ' 个项目发送到「' + targetName + '」'
+          : '已把 ' + ok + ' 个项目发送到“' + targetName + '”'
       )
       state.selected = {}
       refresh()
@@ -928,7 +928,7 @@
       button.dataset.open = target.app
       button.dataset.ch = item.channel
       button.dataset.id = item.id
-      button.title = '发送到「' + target.name + '」并切换到它'
+      button.title = '发送到“' + target.name + '”并切换到它'
       actions.appendChild(button)
     })
     if (!targets.length) {

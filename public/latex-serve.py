@@ -672,7 +672,7 @@ for _entry in os.environ.get("OMM_LATEX_ALLOWED_ORIGINS", "").split(","):
 def _origin_allowed(origin):
     """origin 为空表示非浏览器客户端（桌面壳 / 脚本），不做 CORS 限制。"""
     # 注意：字符串 "null" 是沙箱 iframe / file:// 页面的 opaque origin，
-    # 不能当作「无 Origin」放行，否则任何本地 HTML 都能绕过白名单并借 CORS 读回文件。
+    # 不能当作“无 Origin”放行，否则任何本地 HTML 都能绕过白名单并借 CORS 读回文件。
     if not origin:
         return True
     if origin == "null":
@@ -948,7 +948,7 @@ def main(port=None):
     print("  MiKTeX: %s" % (miktex_bin() or "未检测到（可在页面设置里指定）"))
     print("  可用引擎: %s" % (", ".join(avail) if avail else "无（请检查 MiKTeX 路径）"))
     print("  本地打开: http://127.0.0.1:%d/omm-latex.html" % port)
-    print("  云端页面: 在「编译 → 服务地址」填 http://127.0.0.1:%d" % port)
+    print("  云端页面: 在“编译 → 服务地址”填 http://127.0.0.1:%d" % port)
     print("  （仅允许白名单来源跨域调用；可用 OMM_LATEX_ALLOWED_ORIGINS 追加域名）")
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)

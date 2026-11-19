@@ -23,7 +23,7 @@
 把下面这段连同本文一起发给 AI，让它直接产出可导入的卡片包：
 
 ```text
-你要生成一个 ZenCard 知识卡片包（.json，UTF-8），用于「导入卡片包」。只输出 JSON 本身，
+你要生成一个 ZenCard 知识卡片包（.json，UTF-8），用于“导入卡片包”。只输出 JSON 本身，
 不要 Markdown 代码块围栏、不要注释、不要尾逗号。
 
 顶层：
@@ -124,12 +124,12 @@
 | 批注 → 卡 / 卡 → 批注 | `fromAnnotateMark` / `toAnnotateMark` | `{quote,start,end,sty,note}` |
 | 英语桥接包 → 卡 / 卡 → 桥接包 | `fromEnglishBridge` / `toEnglishBridge` | `{t:"word"|"sentence"|"doc",…}` |
 | 卡 → 画布节点 / 整张画布 | `toWriterNode` / `toWriterCanvas` | `.zc` 的 `text` 节点 |
-| 卡 → Writer 实际插入 | Writer 右键「插入知识卡片…」 | 带出处与批注的 `text` 节点，节点带 `data-zen-card-id` |
+| 卡 → Writer 实际插入 | Writer 右键“插入知识卡片…” | 带出处与批注的 `text` 节点，节点带 `data-zen-card-id` |
 
-Writer 还可通过右键「插入图表…」把 CSV 渲染成自包含 SVG（data URL）作为 `image` 节点，
-通过「时间机器…」列出工作台存档并二次确认后恢复。
+Writer 还可通过右键“插入图表…”把 CSV 渲染成自包含 SVG（data URL）作为 `image` 节点，
+通过“时间机器…”列出工作台存档并二次确认后恢复。
 | 卡 → 数据表行 / 行 → 卡 | `toDataRow` / `fromDataRow` | ZenData 行对象 |
-| 数据表 → 图表数据 | `DataViz.toPayload` / `VizBridge.send` | 数据工作台「一键出图」→ ZenViz |
+| 数据表 → 图表数据 | `DataViz.toPayload` / `VizBridge.send` | 数据工作台“一键出图”→ ZenViz |
 | 搜索结果 → 卡 | `fromSearchResult` | 搜索摘要对象 |
 | 搜索历史 → 卡 / 卡 → 历史 | `SearchLibrary.toCard` / `fromCard` | 智能搜索知识库（全文检索、置顶、卡片包导入导出） |
 | 网页选中 → 卡 | `fromWebSelection` | 选区 / 剪藏 |
@@ -139,7 +139,7 @@ Writer 还可通过右键「插入图表…」把 CSV 渲染成自包含 SVG（d
 
 ## 5. Hub 知识图谱
 
-静书房 Hub 工具栏的「知识图谱」按钮会收集生态内的卡片并绘制关系图：
+静书房 Hub 工具栏的“知识图谱”按钮会收集生态内的卡片并绘制关系图：
 
 - Hub 读取自身域名下的 `zen.cards.v1`、`zen.inbox.v1`、`zen.clip.v1`；
 - 同时向每个已打开产品的 iframe 发送 `omm:zen-card-request`，产品端通过
@@ -148,7 +148,7 @@ Writer 还可通过右键「插入图表…」把 CSV 渲染成自包含 SVG（d
 - 跨 iframe 请求一律用该 iframe 自身 URL 推导的 origin（`frameTargetOrigin`），
   产品端回信用 `omm_hub_origin` 参数或 referrer 推导的明确 origin，不使用通配符。
 
-Hub 工具栏的「数据流」面板读取插件清单的 `share.channels`，按通道列出发布 / 消费 / 双向
+Hub 工具栏的“数据流”面板读取插件清单的 `share.channels`，按通道列出发布 / 消费 / 双向
 角色，并记录近期共享与卡片流转事件，便于观察内容如何在产品间移动。
 
 ## 6. 常见坑
