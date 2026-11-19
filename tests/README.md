@@ -34,6 +34,9 @@ python tests/product_guard.py --only LINK,BRIDGE  # 只跑指定检查项
 python tests/product_guard.py --only REGISTRY     # 产品注册表一致性
 python tests/product_guard.py --only RESOURCE,XSS,A11Y  # 资源 / 转义 / 可访问性
 python tests/product_guard.py --only FORMAT     # JSON 规范与产品源码一致
+python tests/product_guard.py --only VERSION    # 分层版本与内容指纹
+python tests/product_guard.py --record-baseline # 发布后重录版本基线（仅发布时执行）
+python tests/product_guard.py --suggest-bump    # 列出因内容变更而建议升版本的产品
 python tests/no_jp_quotes.py              # 仅引号修正（product_guard 已内置该能力）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
@@ -58,6 +61,21 @@ npm run build                             # 前端生产构建
 但不允许出现未知产品或字段漂移。尚未 `git add` 的产品页属于开发中中间态，
 不会被 REGISTRY 误判；一旦纳入版本库即开始校验。
 
+## 分层版本模型
+
+产品版本本就独立演进：改了一个产品，其他产品不必跟着升版本。VERSION 检查因此分三层：
+
+- **套件版本**：`plugin_specs.VERSION` 与 `catalog.json` 的 `version`、`tag`、`base_url`、
+  `gitee_url` 必须一致，代表同一次发布批次。
+- **产品版本**：只在同一个产品的 `plugin_specs` 与发布目录之间比对，绝不跨产品比较；
+  发布目录允许滞后于产品清单。
+- **内容指纹**：基线 `tests/version_baseline.json` 记录每个产品入口页与共享模块的 hash。
+  产品内容变了但版本没升会报警并给出补丁号建议；版本升了内容没变会提示空 bump；
+  共享模块变了则要求升套件版本；已发布版本的 SHA-256 不可改写。
+
+基线只在**发布完成时**用 `--record-baseline` 更新，随每次提交更新就会失去意义；
+日常用 `--suggest-bump` 查看哪些产品因内容变更需要升版本。
+
 ## 覆盖内容
 
 **`test_backend_hardening.py`**（14 项）
@@ -79,9 +97,9 @@ npm run build                             # 前端生产构建
   不改文件，违规时以退出码 1 失败。脚本按字节读写以保留 CRLF/LF 原样。
 - 单元测试验证替换映射、幂等性与“源码中零违规”。
 
-**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，37 项）
+**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，46 项）
 
-在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，11 个独立检查项
+在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，12 个独立检查项
 （`--list` 可查看，`--only` 可筛选）：
 
 | 代码 | 检查项 | 自动修正 |
@@ -97,6 +115,7 @@ npm run build                             # 前端生产构建
 | `A11Y` | 图片是否有 `alt`、交互控件是否有可访问名 | 否 |
 | `REGISTRY` | 启动器从 `plugin_specs` 派生、入口页齐全、发布目录无漂移（未跟踪页面豁免） | 否 |
 | `FORMAT` | JSON 规范声明的格式标识同时出现在实现产品源码中，防止文档与代码漂移 | 否 |
+| `VERSION` | 分层版本模型：套件版本严格一致、产品版本只比同产品、内容指纹防漏升版本 | 否 |
 
 - 默认运行会先自动修正引号，再串行跑完所有检查；`--check` 全程只读，违规退出码 1。
 - 误报豁免：外链 / 锚点 / `data:` / `javascript:`、JS 模板与替换占位符 `${}`、`$2`、
@@ -133,7 +152,7 @@ npm run build                             # 前端生产构建
 - `test_cmdk_upgrade.mjs` Cmd+K 检索增强：子序列模糊评分（前缀加权）、`usageStats` 使用频率加权与稳定排序、本地即时命令（`= 算术`、`@date`、`hex/bin/oct` 换算，算术只接受安全字符）；面板本体未重建，仅在过滤阶段接入。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。另含 `OfflineChainTest`：阻断一切非本地网络请求后，建卡、建规则、ZenPack 导出与 Cmd+K 仍全部可用，把“完全离线”变成回归项。
-- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）；16 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
+- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）、`VERSION`（套件版本一致、产品版本只比同产品、内容指纹防漏升、空 bump 与降级提示）；25 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
 - `test_json_specs.mjs` JSON 规范一致性：不只比对文档，直接调用 `ZenCard` / `ZenBackup` / `ZenPack` / `ZenSRS` / `ZenFlow` 的导出函数，断言产物满足 `format` / `v` / `cards[]` / `products[]` / `nodes` 等总表硬性要求，并验证卡片包、工作区包、SRS、规则序列化的往返。
 - `test_today_panel.mjs` 与 `tests/e2e/test_today_panel.py` Hub“今日”面板：纯函数聚合待复习卡片、卡片数、笔记、规则启用数与最近笔记/搜索；面板只读各产品既有 localStorage、复用 `activateApp`、不新增存储；E2E 在真实浏览器注入数据后校验面板数字与条目。
 

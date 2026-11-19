@@ -19,6 +19,9 @@ XSS    no unescaped dynamic value is concatenated into innerHTML
 A11Y   images have alt and clickable controls have an accessible name
 REGISTRY product ids / entry pages / release catalog stay in sync with the
        single source of truth (``plugin_specs.BUILTIN_PLUGINS``)
+VERSION layered version model: suite version strict across release surfaces,
+       product versions compared only within the same product, and content
+       fingerprints flag changes that forgot to bump a version
 
 Usage
 -----
@@ -30,6 +33,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -50,8 +54,9 @@ DESKTOP = PUB / "desktop"
 # re-parsing plugin_specs with a second, subtly different implementation.
 sys.path.insert(0, str(DESKTOP))
 import product_registry  # noqa: E402
-from plugin_specs import DESKTOP_EXE_NAMES  # noqa: E402
+from plugin_specs import DESKTOP_EXE_NAMES, VERSION, version_key  # noqa: E402
 
+BASELINE = "tests/version_baseline.json"
 CATALOG = "public/dist/catalog.json"
 LAUNCHER = "public/desktop/omm_launcher.py"
 
@@ -69,6 +74,16 @@ FORMAT_CONTRACTS = [
     ("planner.md", ["public/omm-planner.html"], ["planners", "version"]),
     ("visualization.md", ["public/omm-visualization.html"],
      ["zenviz-right-properties", "version"]),
+]
+
+# Cross-product infrastructure: changing any of these affects every consumer,
+# so it is tied to the SUITE version rather than to individual products.
+SHARED_MODULES = [
+    "public/zen-card.js", "public/zen-link.js", "public/zen-canvas-layout.js",
+    "public/zen-chart.js", "public/zen-flow.js", "public/zen-srs.js",
+    "public/zen-backup.js", "public/zen-pack.js", "public/zen-review.js",
+    "public/data-viz.js", "public/search-library.js", "public/viz-bridge.js",
+    "public/omm-embed.js", "public/omm-share.js", "public/omm-desktop.js",
 ]
 
 # Products that act as *consumers* of the universal card bridge.  The hub and
@@ -427,6 +442,164 @@ def check_a11y(files, exists) -> list[Issue]:
     return issues
 
 
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _content(rel: str, files) -> str:
+    text = files.get(rel)
+    if text is None:
+        disk = ROOT / rel
+        text = disk.read_text(encoding="utf-8") if disk.exists() else None
+    return text or ""
+
+
+def _fingerprint(rel: str, files) -> str:
+    return _sha256(rel + "\n" + _content(rel, files))
+
+
+def _shared_fingerprint(files) -> str:
+    return _sha256("\n".join(
+        rel + "\n" + _content(rel, files) for rel in SHARED_MODULES
+    ))
+
+
+def _suggested_bump(version) -> str:
+    nums = [int(p) for p in re.findall(r"\d+", str(version))[:4]]
+    if not nums:
+        return "0.0.1"
+    while len(nums) < 3:
+        nums.append(0)
+    nums[2] += 1
+    return ".".join(str(n) for n in nums[:3])
+
+
+def _read_catalog(files):
+    text = _content(CATALOG, files)
+    return json.loads(text) if text else {}
+
+
+def _builtin_versions() -> dict[str, str]:
+    return {
+        item["id"]: str(item.get("version", VERSION))
+        for item in product_registry.BUILTIN_PLUGINS
+    }
+
+
+def _suite_version_issues(catalog) -> list[Issue]:
+    issues = []
+    suite = str(VERSION)
+    if str(catalog.get("version", "")) != suite:
+        issues.append(Issue("VERSION", CATALOG, 0,
+                            "发布目录 version 与套件版本不一致: %s != %s" % (catalog.get("version"), suite)))
+    if str(catalog.get("tag", "")).lstrip("v") != suite:
+        issues.append(Issue("VERSION", CATALOG, 0, "发布目录 tag 与套件版本不一致"))
+    for key in ("base_url", "gitee_url"):
+        url = str(catalog.get(key, ""))
+        match = re.search(r"/v?(\d+(?:\.\d+){1,3})/?$", url)
+        if not match or match.group(1) != suite:
+            issues.append(Issue("VERSION", CATALOG, 0,
+                                "%s 中的版本号与套件版本不一致: %s" % (key, url)))
+    return issues
+
+
+def _product_version_issues(catalog, versions) -> list[Issue]:
+    issues = []
+    for row in catalog.get("plugins", []):
+        pid = row.get("id")
+        if pid not in versions:
+            continue  # unknown products are reported by REGISTRY
+        source_version = versions[pid]
+        catalog_version = str(row.get("version", ""))
+        if catalog_version != source_version:
+            issues.append(Issue("VERSION", CATALOG, 0,
+                                "产品 %s 版本不一致: 清单 %s / 发布目录 %s"
+                                % (pid, source_version, catalog_version)))
+    return issues
+
+
+def check_version(files, exists) -> list[Issue]:
+    """Layered version model: suite strict, product local, fingerprint-driven."""
+    baseline_text = files.get(BASELINE)
+    if not baseline_text:
+        return [Issue("VERSION", BASELINE, 0,
+                      "缺少版本基线，请运行 python tests/product_guard.py --record-baseline")]
+    baseline = json.loads(baseline_text)
+    catalog = _read_catalog(files)
+    versions = _builtin_versions()
+    issues = _suite_version_issues(catalog) + _product_version_issues(catalog, versions)
+
+    old_products = baseline.get("products", {})
+    by_id = {item["id"]: item for item in product_registry.BUILTIN_PLUGINS}
+    for pid, source_version in versions.items():
+        entry = by_id[pid]["entry"]
+        rel = "public/" + entry
+        fingerprint = _fingerprint(rel, files)
+        old = old_products.get(pid)
+        if not old:
+            continue
+        old_version = str(old.get("version", ""))
+        if old.get("fingerprint") != fingerprint:
+            if old_version == source_version:
+                issues.append(Issue("VERSION", rel, 0,
+                                    "产品内容已变更但版本未升，建议升至 %s"
+                                    % _suggested_bump(source_version)))
+        elif old_version != source_version:
+            issues.append(Issue("VERSION", rel, 0,
+                                "版本已升至 %s 但产品内容未变化（空 bump）" % source_version))
+
+    old_shared = baseline.get("shared", {}).get("fingerprint")
+    if old_shared and old_shared != _shared_fingerprint(files):
+        suite = str(VERSION)
+        if str(baseline.get("suiteVersion", "")) == suite:
+            issues.append(Issue("VERSION", "public/zen-card.js", 0,
+                                "共享模块已变更但套件版本未升，建议升至 %s"
+                                % _suggested_bump(suite)))
+
+    old_suite = str(baseline.get("suiteVersion", ""))
+    if old_suite and version_key(str(VERSION)) < version_key(old_suite):
+        issues.append(Issue("VERSION", "public/desktop/plugin_specs.py", 0,
+                            "套件版本降级: %s -> %s" % (old_suite, VERSION)))
+    for pid, old in old_products.items():
+        if pid in versions and version_key(versions[pid]) < version_key(str(old.get("version", ""))):
+            issues.append(Issue("VERSION", "public/desktop/plugin_specs.py", 0,
+                                "产品 %s 版本降级" % pid))
+
+    for row in catalog.get("plugins", []):
+        pid = row.get("id")
+        old = old_products.get(pid)
+        if not old or not row.get("sha256") or not old.get("sha256"):
+            continue
+        if str(row.get("version")) == str(old.get("version")) and row["sha256"] != old["sha256"]:
+            issues.append(Issue("VERSION", CATALOG, 0,
+                                "已发布版本 %s 的校验和发生变化，禁止同版本重发" % pid))
+    return issues
+
+
+def record_baseline() -> str:
+    """Snapshot current versions / fingerprints as the release baseline."""
+    files = snapshot()
+    catalog = _read_catalog(files)
+    rows = {row.get("id"): row for row in catalog.get("plugins", [])}
+    baseline = {
+        "schema": 1,
+        "suiteVersion": str(VERSION),
+        "products": {},
+        "shared": {"fingerprint": _shared_fingerprint(files)},
+    }
+    for item in product_registry.BUILTIN_PLUGINS:
+        pid = item["id"]
+        row = rows.get(pid) or {}
+        baseline["products"][pid] = {
+            "version": str(item.get("version", VERSION)),
+            "fingerprint": _fingerprint("public/" + item["entry"], files),
+            "sha256": row.get("sha256", ""),
+        }
+    path = ROOT / BASELINE
+    path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return BASELINE
+
+
 def _tracked_paths():
     """Paths known to git, or None when git is unavailable.
 
@@ -527,6 +700,7 @@ CHECKS: list[Check] = [
     Check("XSS", "HTML 拼接转义", False, check_xss),
     Check("A11Y", "可访问名称", False, check_a11y),
     Check("REGISTRY", "产品注册表一致性", False, check_registry),
+    Check("VERSION", "分层版本与内容指纹", False, check_version),
 ]
 
 
@@ -580,7 +754,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--only", metavar="CODES",
                         help="run only these comma-separated check codes")
     parser.add_argument("--list", action="store_true", help="list available checks")
+    parser.add_argument("--record-baseline", action="store_true",
+                        help="snapshot current versions and content fingerprints")
+    parser.add_argument("--suggest-bump", action="store_true",
+                        help="print suggested version bumps for changed products")
     args = parser.parse_args(argv)
+
+    if args.record_baseline:
+        print("已写入版本基线:", record_baseline())
+        return 0
+
+    if args.suggest_bump:
+        suggestions = [i for i in check_version(snapshot(), real_exists) if "建议" in i.message]
+        for issue in suggestions:
+            print(issue.render())
+        if not suggestions:
+            print("没有需要升版本的内容变更。")
+        return 0
 
     if args.list:
         for c in CHECKS:

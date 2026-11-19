@@ -182,6 +182,98 @@ class FormatCheckTests(unittest.TestCase):
         self.assertEqual(len(issues), len(g.FORMAT_CONTRACTS))
 
 
+class VersionCheckTests(unittest.TestCase):
+    def _files(self):
+        version = str(g.VERSION)
+        catalog = {
+            "version": version, "tag": "v" + version,
+            "base_url": "https://example.com/v" + version,
+            "gitee_url": "https://example.com/v" + version,
+            "plugins": [{"id": "writer", "version": version, "sha256": "abc"}],
+        }
+        item = next(x for x in g.product_registry.BUILTIN_PLUGINS if x["id"] == "writer")
+        rel = "public/" + item["entry"]
+        files = {g.CATALOG: json.dumps(catalog), rel: "原始内容"}
+        for module in g.SHARED_MODULES:
+            files[module] = "共享模块内容"
+        baseline = {
+            "schema": 1, "suiteVersion": version,
+            "products": {"writer": {
+                "version": version,
+                "fingerprint": g._fingerprint(rel, files),
+                "sha256": "abc",
+            }},
+            "shared": {"fingerprint": g._shared_fingerprint(files)},
+        }
+        files[g.BASELINE] = json.dumps(baseline)
+        self.entry = rel
+        return files
+
+    def _messages(self, files):
+        return [i.message for i in g.check_version(files, lambda t: True)]
+
+    def test_real_tree_passes_with_recorded_baseline(self):
+        self.assertEqual(g.check_version(g.snapshot(), lambda t: True), [])
+
+    def test_missing_baseline_is_reported(self):
+        files = self._files()
+        files.pop(g.BASELINE)
+        self.assertTrue(any("缺少版本基线" in m for m in self._messages(files)))
+
+    def test_suite_version_drift_is_reported(self):
+        files = self._files()
+        catalog = json.loads(files[g.CATALOG])
+        catalog["tag"] = "v0.0.1"
+        files[g.CATALOG] = json.dumps(catalog)
+        self.assertTrue(any("tag 与套件版本不一致" in m for m in self._messages(files)))
+
+    def test_product_version_drift_is_reported_only_for_same_product(self):
+        files = self._files()
+        catalog = json.loads(files[g.CATALOG])
+        catalog["plugins"][0]["version"] = "0.0.1"
+        files[g.CATALOG] = json.dumps(catalog)
+        messages = self._messages(files)
+        self.assertTrue(any("产品 writer 版本不一致" in m for m in messages))
+        self.assertFalse(any("跨产品" in m for m in messages))
+
+    def test_content_change_without_bump_suggests_patch(self):
+        files = self._files()
+        files[self.entry] = "内容已修改"
+        messages = self._messages(files)
+        self.assertTrue(any("内容已变更但版本未升" in m for m in messages))
+        self.assertTrue(any("建议升至" in m for m in messages))
+
+    def test_shared_module_change_suggests_suite_bump(self):
+        files = self._files()
+        files["public/zen-card.js"] = "共享模块已修改"
+        self.assertTrue(any("共享模块已变更但套件版本未升" in m for m in self._messages(files)))
+
+    def test_downgrade_and_republished_checksum_are_reported(self):
+        files = self._files()
+        baseline = json.loads(files[g.BASELINE])
+        baseline["suiteVersion"] = "9.9.9"
+        files[g.BASELINE] = json.dumps(baseline)
+        self.assertTrue(any("套件版本降级" in m for m in self._messages(files)))
+
+        files = self._files()
+        catalog = json.loads(files[g.CATALOG])
+        catalog["plugins"][0]["sha256"] = "changed"
+        files[g.CATALOG] = json.dumps(catalog)
+        self.assertTrue(any("校验和发生变化" in m for m in self._messages(files)))
+
+    def test_empty_bump_is_reported(self):
+        files = self._files()
+        baseline = json.loads(files[g.BASELINE])
+        baseline["products"]["writer"]["version"] = "0.0.1"
+        files[g.BASELINE] = json.dumps(baseline)
+        self.assertTrue(any("空 bump" in m for m in self._messages(files)))
+
+    def test_suggested_bump_increments_patch(self):
+        self.assertEqual(g._suggested_bump("1.0.17"), "1.0.18")
+        self.assertEqual(g._suggested_bump("v2.3"), "2.3.1")
+        self.assertEqual(g._suggested_bump("bad"), "0.0.1")
+
+
 class ResourceCheckTests(unittest.TestCase):
     def test_missing_static_asset_is_reported(self):
         files = {"public/page.html": '<link href="missing.css"><script src="ok.js"></script>'}
