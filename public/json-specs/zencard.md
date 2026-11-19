@@ -124,6 +124,10 @@
 | 批注 → 卡 / 卡 → 批注 | `fromAnnotateMark` / `toAnnotateMark` | `{quote,start,end,sty,note}` |
 | 英语桥接包 → 卡 / 卡 → 桥接包 | `fromEnglishBridge` / `toEnglishBridge` | `{t:"word"|"sentence"|"doc",…}` |
 | 卡 → 画布节点 / 整张画布 | `toWriterNode` / `toWriterCanvas` | `.zc` 的 `text` 节点 |
+| 卡 → Writer 实际插入 | Writer 右键「插入知识卡片…」 | 带出处与批注的 `text` 节点，节点带 `data-zen-card-id` |
+
+Writer 还可通过右键「插入图表…」把 CSV 渲染成自包含 SVG（data URL）作为 `image` 节点，
+通过「时间机器…」列出工作台存档并二次确认后恢复。
 | 卡 → 数据表行 / 行 → 卡 | `toDataRow` / `fromDataRow` | ZenData 行对象 |
 | 搜索结果 → 卡 | `fromSearchResult` | 搜索摘要对象 |
 | 网页选中 → 卡 | `fromWebSelection` | 选区 / 剪藏 |

@@ -6,6 +6,9 @@
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <script type="module" src="zen-link.js"></script>
+    <script type="module" src="zen-card.js"></script>
+    <script type="module" src="zen-chart.js"></script>
+    <link rel="stylesheet" href="writer-zen.css" />
     <script src="vendor/supabase/2/supabase.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>所思所想</title>
@@ -5243,6 +5246,16 @@
       </div>
       <div class="dd-item" data-action="ctxNewGroup">
         <span data-i18n="ctx.newGroup">New Group Node</span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item" data-action="ctxZenCard" id="ctx-zen-card">
+        <span>插入知识卡片…</span>
+      </div>
+      <div class="dd-item" data-action="ctxZenChart" id="ctx-zen-chart">
+        <span>插入图表…</span>
+      </div>
+      <div class="dd-item" data-action="ctxTimeMachine" id="ctx-time-machine">
+        <span>时间机器…</span>
       </div>
       <div class="dd-item" data-action="ctxNewCanvas">
         <span data-i18n="ctx.newCanvas">New Sub-canvas</span>
@@ -22497,6 +22510,23 @@ notify pgrst, 'reload schema';</textarea
                 DOM.contextMenu.classList.remove('open')
                 break
               }
+              case 'ctxZenCard': {
+                const world = CanvasManager.screenToWorld(AppState.ctxX, AppState.ctxY)
+                if (typeof ZenWriterDeep !== 'undefined') ZenWriterDeep.openCardPicker(world)
+                DOM.contextMenu.classList.remove('open')
+                break
+              }
+              case 'ctxZenChart': {
+                const world = CanvasManager.screenToWorld(AppState.ctxX, AppState.ctxY)
+                if (typeof ZenWriterDeep !== 'undefined') ZenWriterDeep.openChart(world)
+                DOM.contextMenu.classList.remove('open')
+                break
+              }
+              case 'ctxTimeMachine': {
+                if (typeof ZenWriterDeep !== 'undefined') ZenWriterDeep.openTimeMachine()
+                DOM.contextMenu.classList.remove('open')
+                break
+              }
               case 'ctxNewCanvas': {
                 const world = CanvasManager.screenToWorld(AppState.ctxX, AppState.ctxY)
                 NodeManager.newSubCanvasAt(world.x, world.y)
@@ -23577,6 +23607,179 @@ notify pgrst, 'reload schema';</textarea
           },
           usage: () => ZWStore.estimate(),
         }
+
+        // ===== 深改：知识卡片 / 内嵌图表 / 时间机器 =====
+        const ZenWriterDeep = {
+          world: { x: 0, y: 0 },
+          esc(s) {
+            return String(s == null ? '' : s)
+              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+          },
+          open(title, html) {
+            const modal = document.getElementById('zw-zen-modal')
+            if (!modal) return
+            document.getElementById('zw-zen-title').textContent = title
+            document.getElementById('zw-zen-body').innerHTML = html
+            modal.hidden = false
+          },
+          close() {
+            const modal = document.getElementById('zw-zen-modal')
+            if (modal) modal.hidden = true
+          },
+          bindClose() {
+            const modal = document.getElementById('zw-zen-modal')
+            if (!modal || modal.dataset.bound) return
+            modal.dataset.bound = '1'
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.closest('#zw-zen-close')) this.close()
+            })
+          },
+          cards() {
+            const out = []
+            ;['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach((key) => {
+              try {
+                const raw = JSON.parse(localStorage.getItem(key) || '[]')
+                if (Array.isArray(raw)) raw.forEach((c) => out.push(c))
+              } catch (_) {}
+            })
+            const seen = Object.create(null)
+            return out.filter((c) => {
+              if (!c || !c.content || seen[c.id]) return false
+              seen[c.id] = 1
+              return true
+            })
+          },
+          openCardPicker(world) {
+            this.world = world || { x: AppState.panX + 120, y: AppState.panY + 120 }
+            this.bindClose()
+            const cards = this.cards()
+            const list = cards.length
+              ? cards.map((c, i) =>
+                  '<div class="zw-zen-item" data-card="' + i + '">' +
+                  this.esc(String(c.content).slice(0, 100)) +
+                  '<div class="zw-zen-meta">' + this.esc(c.kind || 'note') + ' · ' + this.esc(c.source || '') +
+                  (c.tags && c.tags.length ? ' · ' + c.tags.map((t) => '#' + this.esc(t)).join(' ') : '') +
+                  '</div></div>'
+                ).join('')
+              : '<div class="zw-zen-empty">没有卡片。可在任意产品的「卡」按钮剪藏，或在下方粘贴卡片 JSON。</div>'
+            this.open('插入知识卡片',
+              '<p class="zw-zen-note">选择一张卡片，在右键位置插入带出处与批注的引用节点。</p>' +
+              '<div class="zw-zen-list" id="zw-zen-card-list">' + list + '</div>' +
+              '<p class="zw-zen-note">或粘贴单张 zen-card JSON：</p>' +
+              '<textarea id="zw-zen-card-json" placeholder=\'{"format":"zen-card","v":1,"content":"..."}\'></textarea>' +
+              '<div class="zw-zen-row" style="margin-top:8px">' +
+              '<button type="button" class="zw-zen-btn primary" id="zw-zen-add-card">插入 JSON 卡片</button></div>')
+            const body = document.getElementById('zw-zen-body')
+            body.querySelectorAll('[data-card]').forEach((row) => {
+              row.addEventListener('click', () => this.insertCard(cards[Number(row.dataset.card)]))
+            })
+            const add = document.getElementById('zw-zen-add-card')
+            if (add) add.addEventListener('click', () => {
+              try {
+                const card = JSON.parse(document.getElementById('zw-zen-card-json').value)
+                if (!card || !card.content) throw new Error('content 为空')
+                this.insertCard(card)
+              } catch (e) { notify('卡片 JSON 无效：' + e.message) }
+            })
+          },
+          insertCard(raw) {
+            const c = window.ZenCard && window.ZenCard.create ? window.ZenCard.create(raw) : raw
+            const parts = ['<p><b>' + this.esc(c.content) + '</b></p>']
+            if (c.translation) parts.push('<p><em>' + this.esc(c.translation) + '</em></p>')
+            if (c.note) parts.push('<blockquote>' + this.esc(c.note) + '</blockquote>')
+            const meta = ['来源：' + this.esc(c.source || 'manual')]
+            if (c.ref) meta.push('出处：' + this.esc(c.ref))
+            if (c.tags && c.tags.length) meta.push(c.tags.map((t) => '#' + this.esc(t)).join(' '))
+            parts.push('<p><small>' + meta.join(' · ') + '</small></p>')
+            const node = NodeManager.createNodeAt(this.world.x, this.world.y, 'text', {
+              title: '引用 · ' + String(c.kind || 'note'),
+              content: parts.join(''),
+              w: '340px',
+            })
+            if (node && c.id) node.dataset.zenCardId = String(c.id)
+            this.close()
+            debouncedAutoSave(true)
+            notify('已插入知识卡片')
+          },
+          openChart(world) {
+            this.world = world || { x: AppState.panX + 120, y: AppState.panY + 120 }
+            this.bindClose()
+            this.open('插入图表',
+              '<p class="zw-zen-note">首行为表头，首列为分类名。例：月份,销量\\n一月,12\\n二月,19</p>' +
+              '<div class="zw-zen-row"><select id="zw-zen-chart-kind"><option value="bar">柱状图</option><option value="line">折线图</option></select>' +
+              '<select id="zw-zen-chart-palette"><option value="mono">素墨</option><option value="culture">人文</option><option value="science">科学</option><option value="editorial">刊物</option></select></div>' +
+              '<input id="zw-zen-chart-title" placeholder="图表标题（可选）" />' +
+              '<textarea id="zw-zen-chart-csv" placeholder="月份,销量\\n一月,12\\n二月,19" style="margin-top:8px"></textarea>' +
+              '<div class="zw-zen-row" style="margin-top:8px">' +
+              '<button type="button" class="zw-zen-btn primary" id="zw-zen-add-chart">插入图表节点</button></div>')
+            const add = document.getElementById('zw-zen-add-chart')
+            if (add) add.addEventListener('click', () => {
+              const csv = document.getElementById('zw-zen-chart-csv').value
+              if (!csv.trim()) { notify('请先填入数据'); return }
+              if (!window.ZenChart) { notify('图表模块尚未加载'); return }
+              const spec = {
+                csv,
+                kind: document.getElementById('zw-zen-chart-kind').value,
+                palette: document.getElementById('zw-zen-chart-palette').value,
+                title: document.getElementById('zw-zen-chart-title').value.trim(),
+              }
+              const src = window.ZenChart.toDataURL(spec)
+              const node = NodeManager.createNodeAt(this.world.x, this.world.y, 'image', {
+                title: '图表 · ' + (spec.title || spec.kind),
+                srcMode: 'embed',
+                src,
+                w: '640px',
+              })
+              if (node) node.dataset.zenChart = '1'
+              this.close()
+              debouncedAutoSave(true)
+              notify('已插入图表')
+            })
+          },
+          async openTimeMachine() {
+            this.bindClose()
+            const dk = typeof BaselineManager !== 'undefined' ? BaselineManager.desktop() : null
+            if (!dk || typeof dk.listSnapshots !== 'function') {
+              this.open('时间机器', '<p class="zw-zen-note">工作台不可用：请在静书房中打开本产品后使用。</p>')
+              return
+            }
+            let list = []
+            try {
+              list = BaselineManager.normalizeArchiveList(await dk.listSnapshots())
+            } catch (e) { notify('读取存档失败：' + e.message) }
+            const rows = list.length
+              ? list.slice(0, 60).map((item, i) =>
+                  '<div class="zw-zen-item" data-snap="' + i + '">' +
+                  this.esc(item.label || item.name || item.path) +
+                  '<div class="zw-zen-meta">' + this.esc(String(item.time || '').slice(0, 19)) +
+                  ' · ' + this.esc(item.app || dk.app || 'writer') + '</div></div>'
+                ).join('')
+              : '<div class="zw-zen-empty">暂无可恢复的存档。</div>'
+            this.open('时间机器',
+              '<p class="zw-zen-note">按时间列出工作台存档，点选一项恢复（会覆盖当前画布，可先撤销）。</p>' +
+              '<div class="zw-zen-list" id="zw-zen-snap-list">' + rows + '</div>')
+            const body = document.getElementById('zw-zen-body')
+            body.querySelectorAll('[data-snap]').forEach((row) => {
+              row.addEventListener('click', async () => {
+                const item = list[Number(row.dataset.snap)]
+                if (!item || !item.path) return
+                const ok = await showConfirm('恢复存档「' + (item.label || item.name) + '」？当前画布将被覆盖。')
+                if (!ok) return
+                try {
+                  const res = await fetch(
+                    '/__omm/fs/snapshot?app=' + encodeURIComponent(item.app || dk.app || 'writer') +
+                    '&path=' + encodeURIComponent(item.path), { cache: 'no-store' })
+                  if (!res.ok) throw new Error('HTTP ' + res.status)
+                  const data = await res.json()
+                  await dk.restore(data.snapshot)
+                  this.close()
+                } catch (e) { notify('恢复失败：' + e.message) }
+              })
+            })
+          },
+        }
+        window.ZenWriterDeep = ZenWriterDeep
       })()
     </script>
     <script id="zw-cloud-sync-script">
@@ -24949,5 +25152,13 @@ notify pgrst, 'reload schema';</textarea
         else boot()
       })()
     </script>
+
+    <!-- ===== Writer 深改：知识卡片 / 图表 / 时间机器 ===== -->
+    <div class="zw-zen-modal" id="zw-zen-modal" hidden>
+      <div class="zw-zen-card" role="dialog" aria-modal="true" aria-label="Writer 扩展面板">
+        <header><span id="zw-zen-title">面板</span><button type="button" class="zw-zen-x" id="zw-zen-close" aria-label="关闭">×</button></header>
+        <div class="zw-zen-body" id="zw-zen-body"></div>
+      </div>
+    </div>
   </body>
 </html>

@@ -41,6 +41,8 @@ def main() -> int:
         "test_backup.mjs",
         "test_products.mjs",
         "test_knowledge_graph.mjs",
+        "test_chart.mjs",
+        "test_writer_deep.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])
