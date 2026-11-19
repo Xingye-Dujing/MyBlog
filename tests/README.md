@@ -13,9 +13,12 @@ python tests/run_all.py
 或分别运行：
 
 ```bash
-python -m unittest discover -s tests -v   # Python 后端安全/健壮性与引号守卫
-python tests/no_jp_quotes.py              # 每次改完就运行：发现日式/繁体角引号即原地修正并复核
-python tests/no_jp_quotes.py --check      # 只检查、绝不改文件（回归套件使用，违规退出码 1）
+python -m unittest discover -s tests -v   # Python 后端安全、引号守卫与统一产品守卫
+python tests/product_guard.py             # 每次改完就运行：自动修正引号并跑完全部守卫检查
+python tests/product_guard.py --check     # 只检查、绝不改文件（回归套件使用，违规退出码 1）
+python tests/product_guard.py --list      # 列出全部检查项与其代码
+python tests/product_guard.py --only LINK,BRIDGE  # 只跑指定检查项
+python tests/no_jp_quotes.py              # 仅引号修正（product_guard 已内置该能力）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
   tests/test_review.mjs tests/test_backup.mjs tests/test_products.mjs \
@@ -45,9 +48,30 @@ npm run build                             # 前端生产构建
 - 扫描范围覆盖整个仓库的自身源码与文档，自动跳过第三方依赖（`vendor`、`.venv`、
   `node_modules`）、构建产物、缓存以及被 git 忽略的本地工具目录（`.workbuddy`）。
 - `python tests/no_jp_quotes.py` 默认即在发现时立即原地替换并自动复核；`--check` 只检查、
-  不改文件，违规时以退出码 1 失败。脚本按字节读写以保留 CRLF/LF 原样。该守卫已作为
-  独立步骤（`--check` 模式）接入 `run_all.py`，每次全量回归都会强制执行。
-- 单元测试验证替换映射、幂等性与"源码中零违规"。
+  不改文件，违规时以退出码 1 失败。脚本按字节读写以保留 CRLF/LF 原样。
+- 单元测试验证替换映射、幂等性与“源码中零违规”。
+
+**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，21 项）
+
+在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，6 个独立检查项
+（`--list` 可查看，`--only` 可筛选）：
+
+| 代码 | 检查项 | 自动修正 |
+|---|---|---|
+| `QUOTE` | 禁用角引号（复用 `no_jp_quotes`） | 是 |
+| `LINK` | 产品页与 JSON 规范里的本地 `href`/`src`/Markdown 链接目标是否存在 | 否 |
+| `IMPORT` | `public/` 下 ES 模块的相对导入是否可解析 | 否 |
+| `BRIDGE` | 12 个消费型产品是否以 `type="module"` 引入 `zen-link.js` | 否 |
+| `SPEC` | `json-specs/*.md` 是否都被 README 索引、索引是否指向存在的文件 | 否 |
+| `DEBUG` | 产品页与模块里是否残留 `debugger` 调试语句 | 否 |
+
+- 默认运行会先自动修正引号，再串行跑完所有检查；`--check` 全程只读，违规退出码 1。
+- 误报豁免：外链 / 锚点 / `data:` / `javascript:`、JS 模板与替换占位符 `${}`、`$2`、
+  构建变量 `%BASE_URL%`、Markdown 散文示例 `[文字](链接)`、第三方 `vendor` 与 Vue 前端
+  `src/` 均被正确排除；根相对路径同时按 `public/` 与仓库根两种基准解析。
+- 检查函数接收内存文件表与存在性谓词，单测用合成数据逐项验证（含真实代码树零异常、
+  CLI 参数、分组报告），不改动任何产品文件。
+- 已以 `--check` 模式作为独立步骤接入 `run_all.py`，取代原单一引号步骤。
 
 **`test_message_security.mjs`**（20 项）
 
