@@ -206,6 +206,14 @@ class A11yCheckTests(unittest.TestCase):
 
 
 class RegistryCheckTests(unittest.TestCase):
+    def setUp(self):
+        # Synthetic file maps are not in git; disable the tracked-path filter.
+        self._orig = g._tracked_paths
+        g._tracked_paths = lambda: None
+
+    def tearDown(self):
+        g._tracked_paths = self._orig
+
     def test_real_registry_is_consistent(self):
         issues = g.check_registry(g.snapshot(), lambda t: True)
         self.assertEqual(issues, [], "真实注册表不应报异常: %r" % issues)

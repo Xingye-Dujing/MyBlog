@@ -41,7 +41,8 @@ node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
   tests/test_writer_deep.mjs tests/test_search_library.mjs \
   tests/test_search_page.mjs tests/test_data_viz.mjs \
   tests/test_dataviz_flow.mjs tests/test_data_flow.mjs \
-  tests/test_canvas_layout.mjs tests/test_cmdk.mjs tests/test_zenpack.mjs \
+  tests/test_canvas_layout.mjs tests/test_cmdk.mjs tests/test_cmdk_upgrade.mjs \
+  tests/test_zenpack.mjs \
   tests/test_zenviz_core_sync.mjs  # 图表页必须与 zen viz-core 生成结果逐字一致
 npm run lint                              # 前端静态检查
 npm run build                             # 前端生产构建
@@ -53,7 +54,8 @@ npm run build                             # 前端生产构建
 `public/desktop/product_registry.py` 从中派生启动器的 `APPS` / `WINDOW_TITLES`
 （含后端类型与端口），统一守卫的 `REGISTRY` 检查再校验入口页、桌面程序表与
 发布目录 `public/dist/catalog.json` 是否一致。发布目录允许滞后于产品清单，
-但不允许出现未知产品或字段漂移。
+但不允许出现未知产品或字段漂移。尚未 `git add` 的产品页属于开发中中间态，
+不会被 REGISTRY 误判；一旦纳入版本库即开始校验。
 
 ## 覆盖内容
 
@@ -122,6 +124,7 @@ npm run build                             # 前端生产构建
 - `test_data_flow.mjs` Hub 数据流面板：入口与面板元素、命令注册、`flowChannels` 按通道分组并保留角色、流转事件写入、角色标签渲染。
 - `test_canvas_layout.mjs` Writer 通用布局引擎：从 Writer 原样抽取的 `zen-canvas-layout.js` 各策略均可产出无重叠、确定性坐标；Writer 不再内联实现、ZenFlow 与 Writer 均直接调用同一模块。
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
+- `test_cmdk_upgrade.mjs` Cmd+K 检索增强：子序列模糊评分（前缀加权）、`usageStats` 使用频率加权与稳定排序、本地即时命令（`= 算术`、`@date`、`hex/bin/oct` 换算，算术只接受安全字符）；面板本体未重建，仅在过滤阶段接入。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。
 - `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无未知产品与字段漂移）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）；12 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。

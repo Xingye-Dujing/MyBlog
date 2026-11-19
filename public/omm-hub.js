@@ -4661,6 +4661,123 @@
     if (save) save.click();
   }
 
+  /* ---- Cmd+K 检索增强：纯函数，便于单独测试；面板本体不改写 ---- */
+  function cmdkPad(n) {
+    return n < 10 ? '0' + n : String(n)
+  }
+
+  function cmdkFormatNumber(value) {
+    return Number.isInteger(value) ? String(value) : String(Math.round(value * 1e6) / 1e6)
+  }
+
+  /* 子序列模糊评分：连续命中与词首命中加权，完全不匹配返回 -1。 */
+  function cmdkFuzzyScore(text, query) {
+    var s = String(text == null ? '' : text).toLowerCase()
+    var q = String(query == null ? '' : query).trim().toLowerCase()
+    if (!q) return 0
+    var exact = s.indexOf(q)
+    if (exact >= 0) return 1000 - exact + (exact === 0 ? 200 : 0)
+    var qi = 0
+    var score = 0
+    var streak = 0
+    var last = -1
+    for (var i = 0; i < s.length && qi < q.length; i++) {
+      if (s[i] === q[qi]) {
+        streak = last === i - 1 ? streak + 1 : 0
+        score += 10 + streak * 8 + (i === 0 ? 15 : 0)
+        last = i
+        qi++
+      }
+    }
+    return qi === q.length ? score : -1
+  }
+
+  /* 匹配分 + 使用频率加权；稳定排序保留原始顺序作为同分兜底。 */
+  function cmdkRank(items, query, usage) {
+    var q = String(query == null ? '' : query).trim().toLowerCase()
+    if (!q) return (items || []).slice()
+    var usageMap = usage || {}
+    return (items || []).map(function (item, idx) {
+      var text = [item.label, item.hint, item.group, item.keywords].join(' ')
+      var score = cmdkFuzzyScore(text, q)
+      if (score < 0) return null
+      var u = item.appId && usageMap[item.appId]
+      var boost = u
+        ? Math.min(60, ((u.opens || 0) * 2 + Math.round((u.seconds || 0) / 60)) * 3)
+        : 0
+      return { item: item, score: score + boost, idx: idx }
+    }).filter(Boolean).sort(function (a, b) {
+      return b.score - a.score || a.idx - b.idx
+    }).map(function (hit) {
+      return hit.item
+    })
+  }
+
+  function cmdkCopy(text, message) {
+    try {
+      if (navigator.clipboard) navigator.clipboard.writeText(text);
+    } catch (e) {
+      /* clipboard is optional */
+    }
+    toast(message)
+  }
+
+  /* 即时命令：本地计算 / 日期 / 进制换算，不触发网络。 */
+  function cmdkInstantItems(query) {
+    var q = String(query == null ? '' : query).trim()
+    if (!q) return []
+    var out = []
+    var m = /^=\s*(.+)$/.exec(q)
+    if (m) {
+      var expr = m[1].trim()
+      if (/^[\d+\-*/().\s%]+$/.test(expr)) {
+        try {
+          var value = Function('"use strict"; return (' + expr + ')')()
+          if (typeof value === 'number' && isFinite(value)) {
+            out.push({
+              group: '即时命令', label: '= ' + cmdkFormatNumber(value),
+              hint: '计算 ' + expr, glyph: '算',
+              run: (function (v) {
+                return function () { cmdkCopy(String(v), '已复制计算结果') }
+              })(value),
+            })
+          }
+        } catch (e) {
+          /* invalid expression: no instant item */
+        }
+      }
+    }
+    if (/^@date$/i.test(q)) {
+      var d = new Date()
+      var label = d.getFullYear() + '-' + cmdkPad(d.getMonth() + 1) + '-' + cmdkPad(d.getDate())
+      var ts = String(d.getTime())
+      out.push({
+        group: '即时命令', label: label,
+        hint: '今天 · Unix 时间戳 ' + ts, glyph: '日',
+        run: function () { cmdkCopy(ts, '已复制时间戳') },
+      })
+    }
+    var radix = /^(hex|bin|oct)\s+(\d+)$/i.exec(q)
+    if (radix) {
+      var n = parseInt(radix[2], 10)
+      if (isFinite(n) && n >= 0) {
+        var kind = radix[1].toLowerCase()
+        var converted = kind === 'hex' ? '0x' + n.toString(16)
+          : kind === 'bin' ? '0b' + n.toString(2)
+            : '0o' + n.toString(8)
+        out.push({
+          group: '即时命令', label: converted,
+          hint: radix[2] + ' 的' + (kind === 'hex' ? '十六进制' : kind === 'bin' ? '二进制' : '八进制'),
+          glyph: '进',
+          run: (function (v) {
+            return function () { cmdkCopy(v, '已复制换算结果') }
+          })(converted),
+        })
+      }
+    }
+    return out
+  }
+
   function cmdkActionList() {
     var list = [
       { label: '最近动态', hint: '跨产品的文档、快照、共享与通知', keywords: 'timeline recent zuijin dongtai', run: function () { openTimeline(); } },
@@ -4706,6 +4823,7 @@
         hint: app.description || app.id,
         glyph: app.glyph || '·',
         keywords: app.id + ' ' + (APP_ALIASES[app.id] || ''),
+        appId: app.id,
         run: function () { activateApp(app.id); },
       });
     });
@@ -4718,6 +4836,7 @@
         hint: '切换到该标签',
         glyph: app.glyph || '·',
         keywords: app.id + ' tab',
+        appId: appId,
         run: function () { activateApp(appId); },
       });
     });
@@ -4797,6 +4916,7 @@
           hint: ((doc.nodes || []).length || 0) + ' 个节点',
           glyph: '写',
           keywords: id,
+          appId: 'writer',
           run: function () { activateApp('writer'); },
         });
       });
@@ -4810,6 +4930,7 @@
         hint: String(h.answer || '').slice(0, 36),
         glyph: '搜',
         keywords: 'history',
+        appId: 'search',
         run: function () { activateApp('search'); },
       });
     });
@@ -4837,19 +4958,15 @@
   function renderCmdk() {
     if (!els.cmdkList) return;
     var query = (els.cmdkInput.value || '').trim().toLowerCase();
-    cmdkFiltered = cmdkItems.filter(function (item) {
-      if (!query) return true;
-      return (
-        item.label + ' ' + (item.hint || '') + ' ' + (item.group || '') + ' ' + (item.keywords || '')
-      ).toLowerCase().indexOf(query) >= 0;
-    });
+    // 候选集 = 已注册项 + 即时命令；匹配与加权交给纯函数，分组渲染保持不变。
+    cmdkFiltered = cmdkRank(cmdkItems.concat(cmdkInstantItems(query)), query, usageStats);
     if (cmdkIndex >= cmdkFiltered.length) cmdkIndex = Math.max(0, cmdkFiltered.length - 1);
     if (cmdkIndex < 0) cmdkIndex = 0;
     if (!cmdkFiltered.length) {
       els.cmdkList.innerHTML = '<div class="cmdk-empty">没有匹配的命令或应用。</div>';
       return;
     }
-    var groups = ['应用', '已打开', '动作', '知识卡片', '笔记', '搜索历史', '最近文件', '共享项目'];
+    var groups = ['即时命令', '应用', '已打开', '动作', '知识卡片', '笔记', '搜索历史', '最近文件', '共享项目'];
     var html = '';
     groups.forEach(function (group) {
       var groupItems = [];

@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 import urllib.parse
 from dataclasses import dataclass
@@ -374,6 +375,22 @@ def check_a11y(files, exists) -> list[Issue]:
     return issues
 
 
+def _tracked_paths():
+    """Paths known to git, or None when git is unavailable.
+
+    An untracked omm-*.html is an in-progress product page, not a release
+    product yet.  REGISTRY must not fail on it; once it is committed, the
+    check applies.  Tests override this with a lambda returning None.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"], cwd=ROOT,
+            capture_output=True, text=True, check=True)
+        return set(result.stdout.splitlines())
+    except Exception:
+        return None
+
+
 def check_registry(files, exists) -> list[Issue]:
     """Keep every registration surface derived from plugin_specs.
 
@@ -392,10 +409,12 @@ def check_registry(files, exists) -> list[Issue]:
         if rel not in files and not (ROOT / rel).exists():
             issues.append(Issue("REGISTRY", rel, 0, "注册产品缺少入口页"))
 
+    tracked = _tracked_paths()
     html_ids = {
         rel[len("public/omm-"):-len(".html")]
         for rel in files
         if rel.startswith("public/omm-") and rel.endswith(".html")
+        and (tracked is None or rel in tracked)
     }
     for name in sorted(html_ids - all_ids):
         issues.append(Issue("REGISTRY", "public/omm-%s.html" % name, 0,
