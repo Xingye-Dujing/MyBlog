@@ -5,6 +5,8 @@
     <script src="omm-embed.js"></script>
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
+    <script type="module" src="zen-card.js"></script>
+    <script type="module" src="search-library.js"></script>
     <script type="module" src="zen-link.js"></script>
     <meta
       name="viewport"
@@ -214,6 +216,13 @@
       .history-item:hover { background: var(--hover); }
       .history-item .h-q { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .history-item .h-m { font-size: 9px; color: var(--text-faint); margin-top: 2px; }
+      .kb-item { padding: 7px 9px; border-bottom: 1px solid var(--border-faint); cursor: pointer; }
+      .kb-item:hover { background: var(--hover); }
+      .kb-item .kb-q { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .kb-item .kb-m { font-size: 9px; color: var(--text-faint); margin-top: 2px; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+      .kb-item .kb-tag { border: 1px solid var(--border-dim); border-radius: 999px; padding: 0 5px; }
+      .kb-item .kb-pin, .kb-item .kb-send { border: 0; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; }
+      .kb-item .kb-pin.on { color: var(--accent-orange); }
       .h-del { float: right; border: 0; background: transparent; color: var(--text-faint); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
       .h-del:hover { color: var(--accent-red); }
 
@@ -425,6 +434,7 @@
         <button class="menu-btn" id="m-new">新搜索</button>
         <button class="menu-btn" id="m-stop">停止</button>
         <button class="menu-btn" id="m-history">历史</button>
+        <button class="menu-btn" id="m-kb" data-open="dd-kb">知识库</button>
       </div>
       <div class="menu-group">
         <span class="menu-label">Export</span>
@@ -461,6 +471,17 @@
       <div class="dd-actions"><button class="mini-btn" id="history-clear">清空历史</button></div>
     </div>
 
+    <div class="dropdown" id="dd-kb" style="width:360px">
+      <div class="dd-title">搜索知识库 <span id="kb-count" class="k">0</span></div>
+      <label class="dd-field"><input class="dd-input" id="kb-filter" placeholder="全文检索：问题 / 摘要 / 来源 / 标签…" /></label>
+      <label class="dd-check"><input type="checkbox" id="kb-pinned" /> 仅看置顶</label>
+      <div class="dd-title" id="kb-stats" style="font-size:9px"></div>
+      <div id="kb-list" style="max-height:300px;overflow:auto"></div>
+      <div class="dd-actions">
+        <button class="mini-btn" id="kb-export">导出卡片包</button>
+        <label class="mini-btn" style="display:inline-flex;align-items:center;cursor:pointer">导入<input type="file" id="kb-import" accept=".json" hidden /></label>
+      </div>
+    </div>
     <div class="dropdown" id="dd-settings">
       <div class="dd-title">AI 服务 · DeepSeek</div>
       <label class="dd-field"><span>接口地址</span><input class="dd-input" id="set-base" placeholder="https://api.deepseek.com" /></label>
@@ -609,6 +630,8 @@
         var toastTimer = 0
         var findText = ''
         var historyFilter = ''
+        var kbFilter = ''
+        var kbPinned = false
         var selText = ''
 
         function toast(msg) {
@@ -1147,6 +1170,7 @@
           save()
           renderHistory()
           renderSuggestions()
+          renderKB()
         }
         function renderHistory() {
           var box = $('history-list')
@@ -1166,6 +1190,44 @@
               '<button class="h-del" data-del="' + x.i + '" title="删除">×</button></div>' +
               '</div>'
           }).join('')
+        }
+
+        /* ---------------- 搜索知识库 ---------------- */
+        function renderKB() {
+          var box = $('kb-list')
+          if (!box || !window.SearchLibrary) {
+            if (box) box.innerHTML = '<div class="empty-hint" style="padding:2em 0">知识库模块尚未加载</div>'
+            return
+          }
+          var entries = window.SearchLibrary.filter(S.history, kbFilter, { onlyPinned: kbPinned })
+          var stats = window.SearchLibrary.stats(S.history)
+          $('kb-count').textContent = S.history.length
+          $('kb-stats').textContent = stats.pinned + ' 条置顶 · ' + stats.sources + ' 个来源 · ' +
+            stats.tags.slice(0, 4).map(function (t) { return '#' + t.tag + '(' + t.count + ')' }).join(' ')
+          if (!entries.length) {
+            box.innerHTML = '<div class="empty-hint" style="padding:2em 0">' +
+              (S.history.length ? '没有匹配的历史' : '暂无历史，搜索后自动入库') + '</div>'
+            return
+          }
+          var shown = entries.slice(0, 60)
+          box.innerHTML = shown.map(function (h) {
+            var idx = S.history.indexOf(h)
+            var tags = (h.tags || []).map(function (t) { return '<span class="kb-tag">#' + esc(t) + '</span>' }).join(' ')
+            return '<div class="kb-item" data-kb="' + idx + '">' +
+              '<div class="kb-q">' + esc(h.query) + '</div>' +
+              '<div class="kb-m"><span>' + esc(new Date(h.ts).toLocaleDateString()) + '</span>' + tags +
+              '<button class="kb-pin' + (h.pinned ? ' on' : '') + '" data-pin="' + idx + '" title="置顶">★</button>' +
+              '<button class="kb-send" data-send="' + idx + '" title="发送到产品">↗</button></div></div>'
+          }).join('')
+        }
+        function kbSend(entry, target) {
+          if (!window.SearchLibrary || !window.OMMShare || !window.OMMShare.send) {
+            toast('当前环境无法发送，请导出卡片包'); return
+          }
+          var card = window.SearchLibrary.toCard(entry)
+          window.OMMShare.send({ to: target, format: 'zen-card', title: String(entry.query).slice(0, 40), payload: card })
+            .then(function () { toast('已发送到 ' + target); closeDropdowns() })
+            .catch(function () { toast('发送失败') })
         }
 
         /* ---------------- export ---------------- */
@@ -1410,7 +1472,62 @@
           closeDropdowns()
         })
         $('history-clear').addEventListener('click', function () {
-          S.history = []; save(); renderHistory(); renderSuggestions(); toast('已清空历史')
+          S.history = []; save(); renderHistory(); renderSuggestions(); renderKB(); toast('已清空历史')
+        })
+        $('m-kb').addEventListener('click', function () { renderKB() })
+        $('kb-filter').addEventListener('input', function () { kbFilter = this.value.trim(); renderKB() })
+        $('kb-pinned').addEventListener('change', function () { kbPinned = !!this.checked; renderKB() })
+        $('kb-list').addEventListener('click', function (e) {
+          var pin = e.target.closest('[data-pin]')
+          if (pin) {
+            e.stopPropagation()
+            var hp = S.history[parseInt(pin.getAttribute('data-pin'), 10)]
+            if (hp) { hp.pinned = !hp.pinned; save(); renderKB(); toast(hp.pinned ? '已置顶' : '已取消置顶') }
+            return
+          }
+          var send = e.target.closest('[data-send]')
+          if (send) {
+            e.stopPropagation()
+            var he = S.history[parseInt(send.getAttribute('data-send'), 10)]
+            if (he) {
+              var target = prompt('发送到哪个产品？', 'writer')
+              if (target) kbSend(he, target)
+            }
+            return
+          }
+          var item = e.target.closest('[data-kb]')
+          if (!item) return
+          var h = S.history[parseInt(item.getAttribute('data-kb'), 10)]
+          if (!h) return
+          current = clone(h)
+          $('q').value = h.query
+          $('results').classList.remove('hidden')
+          $('toolbar').classList.remove('hidden')
+          $('empty').classList.add('hidden')
+          renderCurrent(); closeDropdowns()
+        })
+        $('kb-export').addEventListener('click', function () {
+          if (!window.SearchLibrary) { toast('知识库模块尚未加载'); return }
+          download('omm-search-kb.json', window.SearchLibrary.pack(S.history, '搜索知识库'), 'application/json')
+          closeDropdowns()
+        })
+        $('kb-import').addEventListener('change', function (e) {
+          var f = e.target.files && e.target.files[0]
+          if (!f || !window.SearchLibrary) return
+          var reader = new FileReader()
+          reader.onload = function () {
+            try {
+              var incoming = window.SearchLibrary.unpack(String(reader.result))
+              incoming.forEach(function (entry) {
+                S.history = S.history.filter(function (h) { return h.query !== entry.query })
+                S.history.push(entry)
+              })
+              save(); renderHistory(); renderSuggestions(); renderKB()
+              toast('已导入 ' + incoming.length + ' 条')
+            } catch (err) { toast('导入失败：' + err.message) }
+          }
+          reader.readAsText(f)
+          e.target.value = ''
         })
         $('set-save').addEventListener('click', function () {
           S.settings.apiBase = $('set-base').value.trim() || DEFAULT.settings.apiBase
@@ -1464,6 +1581,7 @@
         applySettings()
         renderSuggestions()
         renderHistory()
+        renderKB()
         renderCurrent()
       })()
     </script>
