@@ -32,6 +32,7 @@ python tests/product_guard.py --check     # 只检查、绝不改文件（回归
 python tests/product_guard.py --list      # 列出全部检查项与其代码
 python tests/product_guard.py --only LINK,BRIDGE  # 只跑指定检查项
 python tests/product_guard.py --only REGISTRY     # 产品注册表一致性
+python tests/product_guard.py --only RESOURCE,XSS,A11Y  # 资源 / 转义 / 可访问性
 python tests/no_jp_quotes.py              # 仅引号修正（product_guard 已内置该能力）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
@@ -123,7 +124,7 @@ npm run build                             # 前端生产构建
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。
-- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`，校验启动器必须从 `product_registry` 派生、入口页齐全、桌面程序表一致、发布目录无未知产品与字段漂移；5 项专项用例覆盖这些反例。
+- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无未知产品与字段漂移）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）；12 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
 
 ## 前置条件
 

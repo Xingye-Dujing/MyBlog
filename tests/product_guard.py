@@ -12,6 +12,9 @@ IMPORT relative ES-module import specifiers that do not resolve
 BRIDGE canonical consumer products must load ``zen-link.js`` as a module
 SPEC   every JSON spec document is indexed from ``json-specs/README.md``
 DEBUG  no ``debugger`` statement may ship in a product page or module
+RESOURCE every static CSS url() and non-product-page asset reference resolves
+XSS    no unescaped dynamic value is concatenated into innerHTML
+A11Y   images have alt and clickable controls have an accessible name
 REGISTRY product ids / entry pages / release catalog stay in sync with the
        single source of truth (``plugin_specs.BUILTIN_PLUGINS``)
 
@@ -69,6 +72,32 @@ MD_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 JS_IMPORT = re.compile(r"""(?:from|import)\s+["'](\.[^"']+)["']""")
 SCRIPT_TAG = re.compile(r"<script\b[^>]*>", re.I)
 DEBUGGER = re.compile(r"\bdebugger\b")
+CSS_URL = re.compile(r"url\(\s*[\"']?([^\)\"']+)[\"']?\s*\)", re.I)
+# Only real static assets are checked: names like ``blob``, ``url`` or
+# ``image.url`` are JavaScript expressions, not paths.
+STATIC_ASSET = re.compile(
+    r"\.(?:css|js|mjs|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|mp4|webm|json|html?)(?:[?#]|$)",
+    re.I)
+# Only untrusted-looking data concatenated into innerHTML is flagged.  Static
+# markup, trusted enums and explicit escaping are all intentional patterns in
+# this codebase and must not produce noise.
+XSS_ASSIGN = re.compile(r"(innerHTML|outerHTML|insertAdjacentHTML|document\.write)\s*(?:=|\()?", re.I)
+XSS_ESCAPERS = (
+    "esc(", "escapeHtml(", "kgEscape(", "escape(", "sanitize(",
+    "DOMPurify", "textContent", "JSON.stringify", "encodeURIComponent",
+    "markSpanHTML",
+)
+XSS_UNTRUSTED = re.compile(
+    r"\.value\b|location\.|decodeURIComponent|params\.|searchParams|"
+    r"\bquery\b|\binput\b|\.dataset\b|\bpayload\b|\braw\b", re.I)
+XSS_SAFE = re.compile(r"ZenCard\.(KINDS|SOURCES)|APP_LIST|\bICO\(|\bt\(", re.I)
+A11Y_IMG = re.compile(r"<img\b([^>]*)>", re.I)
+A11Y_CLICK = {
+    "button": re.compile(r"<button\b([^>]*)>(.*?)</button>", re.I | re.S),
+    "a": re.compile(r"<a\b([^>]*)>(.*?)</a>", re.I | re.S),
+}
+A11Y_NAMED = re.compile(
+    r"aria-label\s*=|aria-labelledby\s*=|\btitle\s*=|data-i18n\s*=|aria-hidden\s*=", re.I)
 
 
 @dataclass(frozen=True)
@@ -258,6 +287,93 @@ def check_debug(files, exists) -> list[Issue]:
     return issues
 
 
+def _in_asset_scope(rel: str) -> bool:
+    """Owned HTML/CSS only: no third-party bundles, builds or dist output."""
+    if not rel.startswith("public/") or "/vendor/" in "/" + rel:
+        return False
+    if rel.startswith("public/dist/"):
+        return False
+    return rel.lower().endswith((".html", ".css"))
+
+
+def check_resources(files, exists) -> list[Issue]:
+    """Resolve CSS url() and non-product-page asset references."""
+    issues = []
+    for rel, text in files.items():
+        if not _in_asset_scope(rel):
+            continue
+        is_css = rel.lower().endswith(".css")
+        is_html = rel.lower().endswith(".html")
+        seen: set[str] = set()
+        for lineno, line in _lines(text):
+            urls = [m.group(1) for m in CSS_URL.finditer(line)]
+            if is_html and not re.match(r"public/omm-", rel):
+                urls += [m.group(1) for m in HTML_ATTR.finditer(line)]
+            for url in urls:
+                if not STATIC_ASSET.search(url.strip()):
+                    continue
+                target = local_target(rel, url)
+                if target is None or target in seen:
+                    continue
+                seen.add(target)
+                if not exists(target):
+                    issues.append(Issue("RESOURCE", rel, lineno,
+                                        "本地资源引用不存在: %s" % url))
+    return issues
+
+
+def check_xss(files, exists) -> list[Issue]:
+    """Flag dynamic values concatenated into an HTML sink without escaping."""
+    issues = []
+    for rel, text in files.items():
+        if not rel.startswith("public/") or "/vendor/" in "/" + rel:
+            continue
+        if rel.startswith("public/dist/") or not rel.lower().endswith((".html", ".js", ".mjs")):
+            continue
+        for lineno, line in _lines(text):
+            if not XSS_ASSIGN.search(line):
+                continue
+            if "+" not in line and "${" not in line and "`" not in line:
+                continue
+            if any(marker in line for marker in XSS_ESCAPERS):
+                continue
+            if XSS_SAFE.search(line) or not XSS_UNTRUSTED.search(line):
+                continue
+            issues.append(Issue("XSS", rel, lineno,
+                                "HTML 拼接含未转义的动态值，请显式转义后再写入"))
+    return issues
+
+
+def check_a11y(files, exists) -> list[Issue]:
+    """Require alt on sourced images and a name on interactive controls."""
+    issues = []
+    for rel, text in files.items():
+        if not rel.startswith("public/") or "/vendor/" in "/" + rel:
+            continue
+        if rel.startswith("public/dist/") or not rel.lower().endswith(".html"):
+            continue
+        for m in A11Y_IMG.finditer(text):
+            attrs = m.group(1)
+            if re.search(r"\balt\s*=", attrs, re.I):
+                continue
+            if not re.search(r"\bsrc\s*=", attrs, re.I):  # runtime placeholder
+                continue
+            issues.append(Issue("A11Y", rel, text.count("\n", 0, m.start()) + 1,
+                                "图片缺少 alt 属性"))
+        for tag, pattern in A11Y_CLICK.items():
+            for m in pattern.finditer(text):
+                attrs, inner = m.group(1), m.group(2)
+                if A11Y_NAMED.search(attrs) or "data-color=" in attrs:
+                    continue
+                plain = re.sub(r"<[^>]+>", "", inner)
+                plain = re.sub(r"&[a-zA-Z#0-9]+;", "", plain).strip()
+                if plain:
+                    continue
+                issues.append(Issue("A11Y", rel, text.count("\n", 0, m.start()) + 1,
+                                    "%s 缺少可访问名称（aria-label 或文本）" % tag))
+    return issues
+
+
 def check_registry(files, exists) -> list[Issue]:
     """Keep every registration surface derived from plugin_specs.
 
@@ -335,6 +451,9 @@ CHECKS: list[Check] = [
     Check("BRIDGE", "产品桥接注入", False, check_bridge),
     Check("SPEC", "JSON 规范索引同步", False, check_specs),
     Check("DEBUG", "调试语句残留", False, check_debug),
+    Check("RESOURCE", "静态资源可达性", False, check_resources),
+    Check("XSS", "HTML 拼接转义", False, check_xss),
+    Check("A11Y", "可访问名称", False, check_a11y),
     Check("REGISTRY", "产品注册表一致性", False, check_registry),
 ]
 

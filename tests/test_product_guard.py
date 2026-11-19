@@ -148,6 +148,63 @@ class DebugCheckTests(unittest.TestCase):
         self.assertEqual(g.check_debug(files, lambda t: True), [])
 
 
+class ResourceCheckTests(unittest.TestCase):
+    def test_missing_static_asset_is_reported(self):
+        files = {"public/page.html": '<link href="missing.css"><script src="ok.js"></script>'}
+        issues = g.check_resources(files, lambda t: t == "ok.js")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].code, "RESOURCE")
+        self.assertIn("missing.css", issues[0].message)
+
+    def test_css_url_is_checked_but_js_expressions_are_ignored(self):
+        files = {"public/a.css": 'body{background:url("/img/nope.png")}'}
+        issues = g.check_resources(files, lambda t: False)
+        self.assertEqual(len(issues), 1)
+        js = {"public/a.js": "a.href = url\nimg.src = blob"}
+        self.assertEqual(g.check_resources(js, lambda t: False), [])
+
+    def test_product_pages_are_covered_by_link_check_instead(self):
+        files = {"public/omm-x.html": '<link href="missing.css">'}
+        self.assertEqual(g.check_resources(files, lambda t: False), [])
+
+
+class XssCheckTests(unittest.TestCase):
+    def test_unescaped_dynamic_value_is_reported(self):
+        files = {"public/omm-x.html": "box.innerHTML = '<b>' + input.value + '</b>'"}
+        issues = g.check_xss(files, lambda t: True)
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].code, "XSS")
+
+    def test_escaped_and_static_values_are_ignored(self):
+        files = {
+            "public/omm-x.html": "\n".join([
+                "box.innerHTML = '<b>' + esc(input.value) + '</b>'",
+                "box.innerHTML = '<b>' + ZenCard.KINDS.join('') + '</b>'",
+                "box.innerHTML = '<b>static</b>'",
+            ])
+        }
+        self.assertEqual(g.check_xss(files, lambda t: True), [])
+
+
+class A11yCheckTests(unittest.TestCase):
+    def test_missing_alt_and_name_are_reported(self):
+        files = {"public/omm-x.html": '<img src="a.png"><button></button>'}
+        issues = g.check_a11y(files, lambda t: True)
+        self.assertEqual(len(issues), 2)
+        self.assertTrue(all(i.code == "A11Y" for i in issues))
+
+    def test_labelled_controls_and_placeholders_are_ignored(self):
+        files = {"public/omm-x.html": "\n".join([
+            '<img src="a.png" alt="">',
+            '<img>',
+            '<button aria-label="确定"></button>',
+            '<button data-i18n="ok"></button>',
+            '<button data-color="#fff"></button>',
+            '<a href="/" title="home"></a>',
+        ])}
+        self.assertEqual(g.check_a11y(files, lambda t: True), [])
+
+
 class RegistryCheckTests(unittest.TestCase):
     def test_real_registry_is_consistent(self):
         issues = g.check_registry(g.snapshot(), lambda t: True)

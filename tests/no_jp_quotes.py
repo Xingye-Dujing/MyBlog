@@ -51,7 +51,7 @@ SKIP_DIRS = {
     ".git", "node_modules", "dist", "build", "coverage",
     "vendor", "__pycache__", ".vite", ".cache",
     # Local-only tooling / virtualenv (gitignored, not product source).
-    ".venv", ".workbuddy", ".idea", ".vscode",
+    ".venv", ".workbuddy", ".idea", ".vscode", "agent_workspace",
 }
 
 
