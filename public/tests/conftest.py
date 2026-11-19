@@ -10,17 +10,7 @@ for path in (ROOT, ROOT / 'desktop'):
         sys.path.insert(0, text)
 
 
-def pytest_collection_modifyitems(items):
-    """框架自带的“全仓库引号风格门禁”扫描整个 public/ 源码树。
-
-    本仓库在 .workbuddy/、data/ 等目录里已有大量历史角括号，与本插件无关。
-    只跳过这一条仓库级门禁；同一文件里的 fixer/白名单两条行为测试照常运行。
-    """
-    for item in items:
-        if item.name == 'test_no_forbidden_quotes_anywhere_in_the_repository' and \
-                'framework' in item.path.parts:
-            item.add_marker(
-                __import__('pytest').mark.skip(
-                    reason='框架源码树门禁；本仓库其他目录存在历史角括号，与 AI 工作区无关'
-                )
-            )
+# 框架自带的全仓库引号门禁现在与 tools/check_quote_style.py 共用同一套排除规则：
+# .workbuddy/ 历史目录、vendor/ 第三方包、build/ 与 dist/ 构建产物都不再参与扫描，
+# OMM 自写的 agent_workspace/omm_*.py 也已清零角括号。因此这条门禁不再跳过，
+# 框架与产品共用一道防线。

@@ -51,6 +51,8 @@ EXCLUDE_DIRS = frozenset(
         'node_modules',
         'data',
         'live-data',
+        '.workbuddy',
+        'vendor',
         'build',
         'dist',
         '*.egg-info',

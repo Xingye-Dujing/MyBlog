@@ -56,6 +56,13 @@ public/
     └── omm_shared.py              # APP_NAMES += ai
 ```
 
+## 导入约定
+
+`agent_workspace/` 内含 `types.py`。若把**包目录本身**加入 `sys.path`，它会遮蔽标准库
+`types`，导致 `MappingProxyType` 循环导入。唯一支持的用法是把 `public/` 加入 `sys.path`，
+再以包路径导入：`import agent_workspace.omm_data`。`tests/conftest.py` 已如此配置，
+`tests/test_import_paths.py` 用子进程锁定这一约定。
+
 ## 3. 运行
 
 源码方式（需要先在 `.venv` 安装 `requests>=2.31`）：

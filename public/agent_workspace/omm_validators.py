@@ -599,6 +599,10 @@ def v_zenflow(obj: Any, text: str, r: Report) -> str:
             continue
         if not str(rule.get('name') or '').strip():
             r.error('%s.name 不能为空' % path)
+        # 与 zen-flow.js 的 validateRule 一致：至少需要一条 action，否则规则永不触发。
+        actions = rule.get('actions')
+        if not isinstance(actions, list) or not actions:
+            r.error('%s.actions 至少需要一条 action' % path)
         if 'priority' in rule and not _is_num(rule['priority']):
             r.error('%s.priority 必须是数字（越小越先执行）' % path)
         if 'enabled' in rule and not isinstance(rule['enabled'], bool):
@@ -606,7 +610,7 @@ def v_zenflow(obj: Any, text: str, r: Report) -> str:
         when = rule.get('when')
         if when is not None and not isinstance(when, dict):
             r.error('%s.when 必须是对象' % path)
-        for action_index, action in enumerate(rule.get('actions') or []):
+        for action_index, action in enumerate(actions if isinstance(actions, list) else []):
             apath = '%s.actions[%d]' % (path, action_index)
             if not isinstance(action, dict):
                 r.error('%s 必须是对象' % apath)
