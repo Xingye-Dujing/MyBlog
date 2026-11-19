@@ -23,6 +23,7 @@
 
 | 项目 | 源文件 | 应用名 | 导入入口 | AI 该生成的东西 | 扩展名 | 顶层硬性要求（不满足就导入失败） |
 |---|---|---|---|---|---|---|
+| [ZenPack](zenpack.md) | `zen-pack.js` + `zen-backup.js` | 工作区搬家 | 导出 / 导入工作区包 | `.json` | `format:"zen-backup"` 与 `v:1`，`products[].id` 为 localStorage 键名 |
 | [ZenCard](zencard.md) | `zen-card.js` | 通用卡片 | 导入卡片包 | 卡片包对象 | `.json` | `format:"zen-card-pack"` 且 `v:1` 且 `cards[]` |
 | [Writer](writer.md) | `omm-writer.html` | ZenWriter | 导入文件 | 画布对象 | `.zc` | 顶层有 `nodes` 数组 |
 | [Annotate](annotate.md) | `omm-annotate.html` | ZenMark | 导入（项目备份）/ 导入互通包 | 项目备份对象 | `.json` | `project.codes` 是数组（整库替换） |
@@ -73,6 +74,7 @@
 json-specs/
 ├── README.md          本索引
 ├── prompts.md         ★ 各项目“一页提示词”，复制即用（自包含，无需附整份规范）
+├── zenpack.md         ZenPack 工作区包（复用 ZenBackup 清单格式）
 ├── zencard.md         ★ ZenCard 通用卡片 / 卡片包（跨产品中间格式）
 ├── writer.md          ZenWriter 画布 (.zc)          ← 画布规范正本
 ├── annotate.md        ZenMark  项目备份 / 互通包 (.json)

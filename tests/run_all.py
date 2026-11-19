@@ -50,6 +50,9 @@ def main() -> int:
         "test_data_viz.mjs",
         "test_dataviz_flow.mjs",
         "test_data_flow.mjs",
+        "test_canvas_layout.mjs",
+        "test_cmdk.mjs",
+        "test_zenpack.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])

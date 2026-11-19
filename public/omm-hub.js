@@ -4759,6 +4759,60 @@
         run: function () { window.OMMShare.openArtifact(item, target); },
       });
     });
+    // 知识卡片 / 笔记 / 搜索历史：直接读取各产品既有的 localStorage，不另建存储，
+    // 动作也复用既有的 openKnowledgeGraph / showKgDetail / activateApp。
+    function cmdkRead(key, fallback) {
+      try {
+        var raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+    var cmdkCards = [];
+    ['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach(function (key) {
+      (cmdkRead(key, []) || []).forEach(function (c) {
+        if (c && c.content && !cmdkCards.some(function (x) { return x.id === c.id; })) {
+          cmdkCards.push(c);
+        }
+      });
+    });
+    cmdkCards.slice(-12).reverse().forEach(function (c) {
+      items.push({
+        group: '知识卡片',
+        label: String(c.content || '').slice(0, 42),
+        hint: (c.source || 'manual') + ' · ' + (c.kind || 'note'),
+        glyph: '卡',
+        keywords: (c.tags || []).join(' ') + ' ' + (c.note || ''),
+        run: function () { openKnowledgeGraph(); showKgDetail(c); },
+      });
+    });
+    var cmdkDocs = cmdkRead('zc-docs', null);
+    if (cmdkDocs && cmdkDocs.meta) {
+      Object.keys(cmdkDocs.meta).slice(0, 12).forEach(function (id) {
+        var doc = cmdkDocs.meta[id] || {};
+        items.push({
+          group: '笔记',
+          label: doc.name || id,
+          hint: ((doc.nodes || []).length || 0) + ' 个节点',
+          glyph: '写',
+          keywords: id,
+          run: function () { activateApp('writer'); },
+        });
+      });
+    }
+    var cmdkSearch = cmdkRead('omm-search-v1', null);
+    ((cmdkSearch && cmdkSearch.history) || []).slice(-10).reverse().forEach(function (h) {
+      if (!h || !h.query) return;
+      items.push({
+        group: '搜索历史',
+        label: h.query,
+        hint: String(h.answer || '').slice(0, 36),
+        glyph: '搜',
+        keywords: 'history',
+        run: function () { activateApp('search'); },
+      });
+    });
     cmdkItems = items;
   }
 
@@ -4795,7 +4849,7 @@
       els.cmdkList.innerHTML = '<div class="cmdk-empty">没有匹配的命令或应用。</div>';
       return;
     }
-    var groups = ['应用', '已打开', '动作', '最近文件', '共享项目'];
+    var groups = ['应用', '已打开', '动作', '知识卡片', '笔记', '搜索历史', '最近文件', '共享项目'];
     var html = '';
     groups.forEach(function (group) {
       var groupItems = [];

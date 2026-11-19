@@ -11,6 +11,20 @@
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
     <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
     <link rel="stylesheet" href="zen-ui.css" />
+    <script src="zen-canvas-layout.js"></script>
+    <style>
+      .flow-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+      .flow-canvas { position: relative; min-height: 460px; overflow: auto; border: 1px solid var(--line, #ddd); border-radius: 8px; background: var(--panel, #fff); }
+      .flow-canvas svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+      .flow-node { position: absolute; box-sizing: border-box; width: 180px; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line, #ccc); border-radius: 7px; background: var(--panel, #fff); cursor: pointer; font-size: 12px; line-height: 1.5; }
+      .flow-node:hover { border-color: var(--accent, #555); box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+      .flow-node .fk { font-size: 10px; opacity: .65; letter-spacing: 1px; }
+      .flow-node .ft { font-weight: 600; margin: 2px 0; word-break: break-all; }
+      .flow-node.rule { border-left: 3px solid #4c8; }
+      .flow-node.when { border-left: 3px solid #48c; }
+      .flow-node.action { border-left: 3px solid #e84; }
+      .flow-node.off { opacity: .5; }
+    </style>
   </head>
   <body>
     <div id="app">
@@ -19,6 +33,7 @@
         <nav class="tabs" id="tabs">
           <button data-view="rules" class="active">规则</button>
           <button data-view="editor">编辑器</button>
+          <button data-view="flow">流程图</button>
           <button data-view="run">运行记录</button>
         </nav>
         <span class="spacer"></span>
@@ -72,6 +87,24 @@
               <button class="btn primary" id="save-rule">保存规则</button>
               <button class="btn" id="cancel-edit">取消</button>
             </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-flow">
+          <div class="panel">
+            <h2>流程视图</h2>
+            <p class="hint">同一批规则的可视化表达：点击任意节点进入右侧编辑器修改。布局直接复用 Writer“所思所想”的通用布局引擎，不在本页重复实现。</p>
+            <div class="flow-toolbar">
+              <select id="flow-strategy">
+                <option value="smart">智能</option><option value="layered">分层</option>
+                <option value="spine">主线</option><option value="force">力导向</option>
+                <option value="radial">径向</option><option value="timeline">时间线</option>
+              </select>
+              <button class="btn" id="flow-relayout">自动排列</button>
+              <button class="btn primary" id="flow-new">新建规则</button>
+              <span class="muted" id="flow-status"></span>
+            </div>
+            <div class="flow-canvas" id="flow-canvas"></div>
           </div>
         </section>
 
@@ -165,11 +198,80 @@
         actions = []; renderActions()
       }
 
+      /* 流程视图：只把既有规则映射为节点/连线，规则语义仍完全由 ZenFlow 决定。
+       * 布局直接调用 Writer 抽出的通用模块，不在本产品重复实现排布算法。 */
+      const FLOW_STRATEGY_KEY = 'zen.flow.strategy.v1'
+
+      function flowGraph() {
+        const nodes = []; const conns = []
+        rules.forEach((r) => {
+          const ruleId = 'rule:' + r.id
+          const whenId = 'when:' + r.id
+          const conds = Object.keys(r.when).filter((k) => r.when[k]).map((k) => k + '=' + r.when[k]).join(' · ') || '所有卡片'
+          nodes.push({ id: ruleId, w: 180, h: 78, kind: 'rule', label: r.name,
+            sub: '优先级 ' + r.priority + (r.enabled ? '' : ' · 停用'), rule: r, off: !r.enabled })
+          nodes.push({ id: whenId, w: 180, h: 68, kind: 'when', label: conds, sub: '当', rule: r })
+          conns.push({ from: ruleId, to: whenId, fromPort: 'bottom', toPort: 'top' })
+          r.actions.forEach((a, i) => {
+            const id = 'act:' + r.id + ':' + i
+            const arg = a.value || a.to || a.channel || a.message
+            nodes.push({ id, w: 180, h: 60, kind: 'action',
+              label: a.type + (arg ? ' · ' + arg : ''), sub: '则 ' + (i + 1), rule: r })
+            conns.push({ from: whenId, to: id, fromPort: 'bottom', toPort: 'top' })
+          })
+        })
+        return { nodes, conns }
+      }
+
+      function renderFlow() {
+        const box = $('flow-canvas'); if (!box) return
+        const graph = flowGraph()
+        const layout = window.ZenCanvasLayout.computeCanvasLayout(
+          graph.nodes, graph.conns, { strategy: $('flow-strategy').value })
+        const items = layout.items || []
+        const byId = new Map(items.map((it) => [it.id, it]))
+        const width = Math.max(600, items.reduce((m, it) => Math.max(m, (it.x || 0) + 200), 0) + 24)
+        const height = Math.max(460, items.reduce((m, it) => Math.max(m, (it.y || 0) + 90), 0) + 24)
+        box.style.width = width + 'px'; box.style.height = height + 'px'
+        box.innerHTML = ''
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.setAttribute('width', width); svg.setAttribute('height', height)
+        graph.conns.forEach((c) => {
+          const a = byId.get(c.from); const b = byId.get(c.to); if (!a || !b) return
+          const x1 = (a.x || 0) + 90; const y1 = (a.y || 0) + 72
+          const x2 = (b.x || 0) + 90; const y2 = (b.y || 0)
+          const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+          p.setAttribute('d', 'M' + x1 + ' ' + y1 + ' C' + x1 + ' ' + ((y1 + y2) / 2) + ' ' + x2 + ' ' + ((y1 + y2) / 2) + ' ' + x2 + ' ' + y2)
+          p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'var(--line, #999)'); p.setAttribute('stroke-width', '1.5')
+          svg.appendChild(p)
+        })
+        box.appendChild(svg)
+        graph.nodes.forEach((n) => {
+          const it = byId.get(n.id); if (!it) return
+          const el = document.createElement('div')
+          el.className = 'flow-node ' + n.kind + (n.off ? ' off' : '')
+          el.style.left = (it.x || 0) + 'px'; el.style.top = (it.y || 0) + 'px'
+          el.title = '点击进入编辑器修改该规则'
+          el.innerHTML = '<div class="fk">' + esc(n.sub || n.kind) + '</div><div class="ft">' + esc(n.label) + '</div>'
+          el.addEventListener('click', () => editRule(n.rule))
+          box.appendChild(el)
+        })
+        $('flow-status').textContent = rules.length + ' 条规则 · ' + graph.nodes.length + ' 个节点 · ' + graph.conns.length + ' 条连线'
+      }
+
       function bind() {
         $('tabs').addEventListener('click', (e) => {
           const b = e.target.closest('button[data-view]'); if (!b) return
           $('tabs').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b))
           document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + b.dataset.view))
+          if (b.dataset.view === 'flow') renderFlow()
+        })
+        $('flow-relayout').addEventListener('click', renderFlow)
+        $('flow-strategy').addEventListener('change', (e) => {
+          localStorage.setItem(FLOW_STRATEGY_KEY, e.target.value); renderFlow()
+        })
+        $('flow-new').addEventListener('click', () => {
+          resetEditor(); document.querySelector('[data-view="editor"]').click()
         })
         $('theme-btn').addEventListener('click', () => {
           document.body.classList.toggle('theme-dark')
@@ -230,6 +332,7 @@
       }
 
       if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
+      $('flow-strategy').value = localStorage.getItem(FLOW_STRATEGY_KEY) || 'smart'
       load(); fillSelects(); renderActions(); resetEditor(); bind(); renderRules()
     </script>
   </body>
