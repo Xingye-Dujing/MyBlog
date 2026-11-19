@@ -23,48 +23,16 @@ from pathlib import Path
 
 from app_updater import ShellHandler
 import omm_shared
+from product_registry import apps, window_titles
 
 IS_WINDOWS = os.name == "nt"
 IS_MACOS = sys.platform == "darwin"
 
 # app id -> (html file, loopback port, backend)
-APPS = {
-    "annotate":      ("omm-annotate.html",      8311, None),
-    "corpus":        ("omm-corpus.html",        8312, None),
-    "data":          ("omm-data.html",          8313, None),
-    "english":       ("omm-english.html",       8314, None),
-    "latex":         ("omm-latex.html",         8123, "latex"),
-    "mdforge":       ("omm-mdforge.html",       8316, "mdforge"),
-    "message":       ("omm-message.html",       8317, None),
-    "planner":       ("omm-planner.html",       8318, None),
-    "redact":        ("omm-redact.html",        8319, None),
-    "visualization": ("omm-visualization.html", 8320, None),
-    "writer":        ("omm-writer.html",        8321, None),
-    "zencard":       ("omm-zencard.html",       8323, None),
-    "zenflow":       ("omm-zenflow.html",       8324, None),
-    "zenclip":       ("omm-zenclip.html",       8325, None),
-    "zenreview":     ("omm-zenreview.html",     8326, None),
-    "zenbackup":     ("omm-zenbackup.html",     8327, None),
-}
-
-WINDOW_TITLES = {
-    "annotate": "文本标注",
-    "corpus": "英语语料库",
-    "data": "数据工作台",
-    "english": "六级备考",
-    "latex": "LaTeX 编译工作台",
-    "mdforge": "Markdown 铸造台",
-    "message": "消息同步",
-    "planner": "日程安排",
-    "redact": "文档脱敏工具",
-    "visualization": "可视化图表",
-    "writer": "所思所想",
-    "zencard": "间隔复习",
-    "zenflow": "自动化编排",
-    "zenclip": "网页剪藏",
-    "zenreview": "复盘报告",
-    "zenbackup": "统一备份",
-}
+# 全部由 plugin_specs.BUILTIN_PLUGINS 派生，新增产品只需改唯一真源一处；
+# 这样也补上了旧硬编码表漏掉的 search（8322）。
+APPS = apps()
+WINDOW_TITLES = window_titles()
 
 HUB_PORT = 8300
 HUB_HTML = "omm-hub.html"

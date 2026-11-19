@@ -292,6 +292,7 @@ def build_hub() -> bool:
         "--hidden-import", "hub_server",
         "--hidden-import", "plugin_manager",
         "--hidden-import", "plugin_specs",
+        "--hidden-import", "product_registry",
         # optional tray/hotkey extras; missing on the build machine = warning only
         "--hidden-import", "pystray",
         "--collect-submodules", "pystray",
@@ -433,6 +434,7 @@ def build_framework() -> bool:
         "--hidden-import", "hub_server",
         "--hidden-import", "plugin_manager",
         "--hidden-import", "plugin_specs",
+        "--hidden-import", "product_registry",
         # optional tray/hotkey extras; missing on the build machine = warning only
         "--hidden-import", "pystray",
         "--collect-submodules", "pystray",
@@ -532,6 +534,7 @@ def build_installer() -> bool:
         "--hidden-import", "installer_server",
         "--hidden-import", "plugin_manager",
         "--hidden-import", "plugin_specs",
+        "--hidden-import", "product_registry",
     ]
     args += _webview_args(INSTALLER_TARGET)
     args.append(str(entry))

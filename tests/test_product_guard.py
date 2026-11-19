@@ -5,6 +5,7 @@ build step is involved.  The guard is fed a small in-memory file map plus a
 stub ``exists`` predicate so each check can be verified in isolation.
 """
 import io
+import json
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
 
@@ -145,6 +146,41 @@ class DebugCheckTests(unittest.TestCase):
     def test_word_in_a_string_outside_public_is_ignored(self):
         files = {"tests/example.py": "pattern = r'\\bdebugger\\b'"}
         self.assertEqual(g.check_debug(files, lambda t: True), [])
+
+
+class RegistryCheckTests(unittest.TestCase):
+    def test_real_registry_is_consistent(self):
+        issues = g.check_registry(g.snapshot(), lambda t: True)
+        self.assertEqual(issues, [], "真实注册表不应报异常: %r" % issues)
+
+    def test_unregistered_product_page_is_reported(self):
+        files = {"public/omm-ghost.html": ""}
+        issues = g.check_registry(files, lambda t: True)
+        self.assertTrue(any("未在任何注册表登记" in i.message for i in issues))
+
+    def test_catalog_rejects_unknown_product_and_drifted_fields(self):
+        catalog = {"plugins": [
+            {"id": "ghost", "name": "幽灵"},
+            {"id": "writer", "name": "漂移名称", "description": "x",
+             "glyph": "x", "order": 999},
+        ]}
+        files = {g.CATALOG: json.dumps(catalog, ensure_ascii=False)}
+        issues = g.check_registry(files, lambda t: True)
+        messages = [i.message for i in issues]
+        self.assertTrue(any("未知产品: ghost" in m for m in messages))
+        self.assertTrue(any("writer 的 name" in m for m in messages))
+
+    def test_launcher_must_be_derived_from_registry(self):
+        hardcoded = 'APPS = {\n    "annotate": ("omm-annotate.html", 8311, None),\n}\n'
+        issues = g.check_registry({g.LAUNCHER: hardcoded}, lambda t: True)
+        messages = [i.message for i in issues]
+        self.assertTrue(any("未从 product_registry 派生" in m for m in messages))
+        self.assertTrue(any("硬编码的 APPS" in m for m in messages))
+
+    def test_derived_launcher_is_clean(self):
+        derived = "from product_registry import apps, window_titles\nAPPS = apps()\n"
+        issues = g.check_registry({g.LAUNCHER: derived}, lambda t: True)
+        self.assertEqual([i for i in issues if i.path == g.LAUNCHER], [])
 
 
 class IntegrationTests(unittest.TestCase):

@@ -38,7 +38,7 @@ def main() -> int:
     failures = 0
     failures += run("Backend hardening (Python unittest)",
                     [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
-    failures += run("Unified product guard (quotes / links / imports / bridge / specs / debug)",
+    failures += run("Unified product guard (quotes / links / imports / bridge / specs / debug / registry)",
                     [sys.executable, "tests/product_guard.py", "--check"])
     failures += run("postMessage protocol (Node)",
                     ["node", "tests/test_message_security.mjs"])

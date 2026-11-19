@@ -12,6 +12,8 @@ IMPORT relative ES-module import specifiers that do not resolve
 BRIDGE canonical consumer products must load ``zen-link.js`` as a module
 SPEC   every JSON spec document is indexed from ``json-specs/README.md``
 DEBUG  no ``debugger`` statement may ship in a product page or module
+REGISTRY product ids / entry pages / release catalog stay in sync with the
+       single source of truth (``plugin_specs.BUILTIN_PLUGINS``)
 
 Usage
 -----
@@ -23,6 +25,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import urllib.parse
@@ -34,6 +37,17 @@ import no_jp_quotes
 
 ROOT = Path(__file__).resolve().parent.parent
 PUB = ROOT / "public"
+DESKTOP = PUB / "desktop"
+
+# The registry truth lives under desktop/.  Loading the derived module here
+# lets the guard validate the exact same view the launcher uses, instead of
+# re-parsing plugin_specs with a second, subtly different implementation.
+sys.path.insert(0, str(DESKTOP))
+import product_registry  # noqa: E402
+from plugin_specs import DESKTOP_EXE_NAMES  # noqa: E402
+
+CATALOG = "public/dist/catalog.json"
+LAUNCHER = "public/desktop/omm_launcher.py"
 
 # Products that act as *consumers* of the universal card bridge.  The hub and
 # the five ecosystem products are intentionally excluded: they produce/manage
@@ -244,6 +258,76 @@ def check_debug(files, exists) -> list[Issue]:
     return issues
 
 
+def check_registry(files, exists) -> list[Issue]:
+    """Keep every registration surface derived from plugin_specs.
+
+    The launcher must consume ``product_registry`` (never its own hardcoded
+    table), every registered product must have a page, and the release catalog
+    may lag behind but must never contain unknown products or drifted fields.
+    """
+    issues = []
+    products = product_registry.BUILTIN_PLUGINS
+    by_id = {item["id"]: item for item in products}
+    ids = set(by_id)
+    all_ids = product_registry.all_ids()
+
+    for item in products:
+        rel = "public/" + item["entry"]
+        if rel not in files and not (ROOT / rel).exists():
+            issues.append(Issue("REGISTRY", rel, 0, "注册产品缺少入口页"))
+
+    html_ids = {
+        rel[len("public/omm-"):-len(".html")]
+        for rel in files
+        if rel.startswith("public/omm-") and rel.endswith(".html")
+    }
+    for name in sorted(html_ids - all_ids):
+        issues.append(Issue("REGISTRY", "public/omm-%s.html" % name, 0,
+                            "产品页未在任何注册表登记: %s" % name))
+    for name in sorted(all_ids - html_ids):
+        # The snapshot may omit dist/, but source pages are always present.
+        if (PUB / ("omm-%s.html" % name)).exists():
+            continue
+        issues.append(Issue("REGISTRY", "public/omm-%s.html" % name, 0,
+                            "注册表产品缺少页面: %s" % name))
+
+    exe_ids = set(DESKTOP_EXE_NAMES)
+    for name in sorted(exe_ids ^ all_ids):
+        issues.append(Issue("REGISTRY", "public/desktop/plugin_specs.py", 0,
+                            "桌面程序表与产品注册表不一致: %s" % name))
+
+    cat_text = files.get(CATALOG)
+    if cat_text is None:
+        disk = ROOT / CATALOG
+        cat_text = disk.read_text(encoding="utf-8") if disk.exists() else None
+    if cat_text is None:
+        issues.append(Issue("REGISTRY", CATALOG, 0, "发布目录缺失"))
+    else:
+        catalog = json.loads(cat_text)
+        rows = {row["id"]: row for row in catalog.get("plugins", [])}
+        for name in sorted(set(rows) - ids):
+            issues.append(Issue("REGISTRY", CATALOG, 0, "发布目录含未知产品: %s" % name))
+        for name, row in rows.items():
+            if name not in by_id:
+                continue
+            for field in ("name", "description", "glyph", "order"):
+                if row.get(field) != by_id[name].get(field):
+                    issues.append(Issue("REGISTRY", CATALOG, 0,
+                                        "发布目录 %s 的 %s 与真源不一致" % (name, field)))
+
+    launcher = files.get(LAUNCHER)
+    if launcher is None:
+        issues.append(Issue("REGISTRY", LAUNCHER, 0, "桌面启动器缺失"))
+    else:
+        if "from product_registry import" not in launcher:
+            issues.append(Issue("REGISTRY", LAUNCHER, 0,
+                                "启动器未从 product_registry 派生产品表"))
+        if re.search(r'^\s*"annotate":\s*\(', launcher, re.M):
+            issues.append(Issue("REGISTRY", LAUNCHER, 0,
+                                "启动器仍保留硬编码的 APPS 表"))
+    return issues
+
+
 CHECKS: list[Check] = [
     Check("QUOTE", "禁用角引号", True, check_quotes),
     Check("LINK", "本地链接可达性", False, check_links),
@@ -251,6 +335,7 @@ CHECKS: list[Check] = [
     Check("BRIDGE", "产品桥接注入", False, check_bridge),
     Check("SPEC", "JSON 规范索引同步", False, check_specs),
     Check("DEBUG", "调试语句残留", False, check_debug),
+    Check("REGISTRY", "产品注册表一致性", False, check_registry),
 ]
 
 

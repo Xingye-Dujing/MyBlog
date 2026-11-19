@@ -31,6 +31,7 @@ python tests/product_guard.py             # 每次改完就运行：自动修正
 python tests/product_guard.py --check     # 只检查、绝不改文件（回归套件使用，违规退出码 1）
 python tests/product_guard.py --list      # 列出全部检查项与其代码
 python tests/product_guard.py --only LINK,BRIDGE  # 只跑指定检查项
+python tests/product_guard.py --only REGISTRY     # 产品注册表一致性
 python tests/no_jp_quotes.py              # 仅引号修正（product_guard 已内置该能力）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
@@ -44,6 +45,14 @@ node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
 npm run lint                              # 前端静态检查
 npm run build                             # 前端生产构建
 ```
+
+## 产品注册表单一真源
+
+新增产品只需改 `public/desktop/plugin_specs.py` 的 `BUILTIN_PLUGINS`：
+`public/desktop/product_registry.py` 从中派生启动器的 `APPS` / `WINDOW_TITLES`
+（含后端类型与端口），统一守卫的 `REGISTRY` 检查再校验入口页、桌面程序表与
+发布目录 `public/dist/catalog.json` 是否一致。发布目录允许滞后于产品清单，
+但不允许出现未知产品或字段漂移。
 
 ## 覆盖内容
 
@@ -114,6 +123,7 @@ npm run build                             # 前端生产构建
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。
+- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`，校验启动器必须从 `product_registry` 派生、入口页齐全、桌面程序表一致、发布目录无未知产品与字段漂移；5 项专项用例覆盖这些反例。
 
 ## 前置条件
 
