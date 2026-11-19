@@ -173,6 +173,8 @@ npm run build                             # 前端生产构建
 - **AI 学习包技能**：新增 `omm.zen.study` 技能（第 21 个），把实时数据变成复习卡片包/规则包草稿；`omm_live_data` 纳入所有技能的公共上下文，模型据此回答"我最近的数据…"。`test_omm_ai.py` 更新技能覆盖断言。
 - **ZenReview 从工作台拉取**：ZenReview 的"从工作台拉取"按钮复用同一条 `omm:live-data-request` 链路，Hub 快照新增 timeline（flowEvents）与 planner（`zp-data-v2` 扁平化）两类数据，自动填回粘贴框；明确 origin、token 校验、超时降级。测试见 `test_review_pull.mjs` 与 `test_knowledge_graph.mjs`。
 - **Data→Viz→Report**：可视化产品新增"复盘"导出按钮，把当前图表的标题/类型/行列数登记到 `zen.viz.review.v1`（限 50 条）；Hub 快照把它并入 timeline，ZenReview 拉取后自动纳入报告。测试见 `test_dataviz_flow.mjs` 与 `test_knowledge_graph.mjs`。
+- **Writer 引用回链复习**：引用节点 header 新增"习"按钮（仅带 `zenCardId` 的节点），经 Hub 的 `omm:review-card` 协议激活 ZenCard 并转发 `omm:focus-card`，ZenCard 切到卡片库、高亮并滚动到该卡片；两端都校验父窗口来源、明确 origin、无通配符。
+- **今日复习画布**：Writer 的卡片选择器新增"只看今日到期"筛选，读 `zen.srs.v1` 用 `due <= now` 过滤并标记"待复习"，避免引入新模块依赖。测试见 `test_writer_review_link.mjs` 与 E2E `test_writer_review_link.py`（真实浏览器验证筛选与复习按钮）。
 
 ## 前置条件
 
