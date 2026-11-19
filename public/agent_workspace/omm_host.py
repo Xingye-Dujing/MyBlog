@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -21,6 +22,73 @@ from .omm_tools import KNOWLEDGE_DIR, build_tools
 APP_NAME = '静书房 AI 工作区'
 _SAFE_EXT = {'.md', '.json', '.txt', '.csv', '.tsv', '.tex', '.yaml', '.yml', '.zc', '.zwlib', '.zen-card', '.py'}
 _SECRET_KEYS = {'apikey', 'api_key', 'password', 'secret', 'token', 'credential', 'authorization'}
+
+
+def _redact_live(value: Any, depth: int = 0) -> Any:
+    """Recursively mask credential-like fields in client-supplied live data.
+
+    The browser snapshot may contain API keys (search settings, supabase config).
+    It is injected into the model prompt, so those fields must never survive —
+    regardless of what the page sends. Arrays are capped and scalars truncated so
+    a single huge snapshot cannot blow the context budget.
+    """
+    if depth >= 6:
+        return '…'
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            k = str(key)
+            normalized = re.sub(r'[^a-z0-9]', '', k.lower())
+            if normalized in _SECRET_KEYS or any(
+                s in normalized for s in ('apikey', 'accesstoken', 'password', 'secret', 'supabase')
+            ):
+                out[k] = '***'
+            else:
+                out[k] = _redact_live(item, depth + 1)
+        return out
+    if isinstance(value, list):
+        return [_redact_live(item, depth + 1) for item in value[:50]]
+    if isinstance(value, str):
+        return value[:2000]
+    return value
+
+
+def omm_live_context(query: str, payload: dict, account: str = '') -> str:
+    """Render a redacted snapshot of the user's real product data into context.
+
+    The AI page collects `zen.cards.v1`, `zc-docs`, `omm-search-v1` and flow rules
+    from the Hub (which can cross iframe origins) and sends them in
+    `context.omm_live`. This source turns that into readable text. It is strictly
+    read-only and defensive: unknown shapes degrade to an empty string, so a
+    malformed or malicious payload can never break context assembly.
+    """
+    live = payload.get('omm_live') if isinstance(payload, dict) else None
+    if not isinstance(live, dict) or not live:
+        return ''
+    safe = _redact_live(live)
+    lines = []
+    labels = {
+        'cards': '知识卡片',
+        'notes': '笔记',
+        'searches': '最近搜索',
+        'rules': '工作流规则',
+        'clips': '剪藏',
+    }
+    for key, label in labels.items():
+        rows = safe.get(key)
+        if not isinstance(rows, list) or not rows:
+            continue
+        lines.append('【%s · %d 条】' % (label, len(rows)))
+        for row in rows[:20]:
+            text = json.dumps(row, ensure_ascii=False) if isinstance(row, (dict, list)) else str(row)
+            lines.append('- ' + text[:300])
+    if not lines:
+        return ''
+    return '\n'.join([
+        '# 静书房实时数据（用户本机，仅供参考；写入仍需产物审批）',
+        *lines,
+        '说明：以上是用户真实产品数据的只读快照，敏感字段已脱敏。引用时不要编造未出现的内容。',
+    ])
 
 
 def shared_dir() -> Path:
@@ -163,7 +231,10 @@ class OMMZenHostAdapter(DefaultHostAdapter):
                 '- 规范文档：omm_knowledge/ 下 %d 份，可用 omm_spec_search / docs_search 读取。' % len(list(KNOWLEDGE_DIR.glob('*.md'))),
                 '- 本工作区默认只读：写入通过产物审批，由界面调用 OMMDesktop.saveText / OMMShare 完成。',
             ])
-        return [CallableContextSource('omm_workspace', omm_state)]
+        return [
+            CallableContextSource('omm_workspace', omm_state),
+            CallableContextSource('omm_live_data', omm_live_context),
+        ]
 
     def tools(self):
         return list(self._tools)

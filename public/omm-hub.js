@@ -5130,6 +5130,73 @@
     }, 600);
   }
 
+  /* ---------------------------------------------------------------- live data */
+  /* The AI workspace asks the Hub for a read-only snapshot of the user's real
+   * product data. The Hub is the only pane that can cross iframe origins: it can
+   * read same-origin localStorage (web build) and fan out the existing
+   * zen-card-request to every embedded product (desktop, isolated ports). */
+  var liveDataWaiters = Object.create(null);
+  var liveDataSeq = 0;
+
+  function collectLiveLocalData() {
+    function arr(key) {
+      try {
+        var raw = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(raw) ? raw : [];
+      } catch (e) { return []; }
+    }
+    function text(v, n) { return String(v == null ? '' : v).slice(0, n); }
+    return {
+      cards: arr('zen.cards.v1').concat(arr('zen.inbox.v1')).slice(0, 200).map(function (c) {
+        return { content: text(c.content, 1500), kind: text(c.kind, 40),
+          tags: Array.isArray(c.tags) ? c.tags.slice(0, 8).map(String) : [], source: text(c.source, 40) };
+      }),
+      notes: arr('zc-docs').slice(0, 100).map(function (d) {
+        return { title: text(d.title, 200), content: text(d.content != null ? d.content : d.text, 1500) };
+      }),
+      searches: arr('omm-search-v1').slice(0, 100).map(function (s) {
+        return { query: text(s.query, 300), answer: text(s.answer, 1200) };
+      }),
+      rules: arr('zen.flow.rules.v1').slice(0, 100).map(function (r) {
+        return { name: text(r.name, 200), enabled: r.enabled !== false };
+      }),
+      clips: arr('zen.clip.v1').slice(0, 100).map(function (c) {
+        return { content: text(c.content, 1200), source: text(c.source, 40) };
+      }),
+    };
+  }
+
+  function respondLiveData(sourceFrame, origin) {
+    var token = 'live' + (++liveDataSeq);
+    var snapshot = collectLiveLocalData();
+    var waiter = liveDataWaiters[token] = { frame: sourceFrame, origin: origin, snapshot: snapshot };
+    frames.forEach(function (frame) {
+      var target = frameTargetOrigin(frame);
+      if (!target) return;
+      try {
+        frame.contentWindow.postMessage({ type: 'omm:zen-card-request', token: token }, target);
+      } catch (e) { /* ignore */ }
+    });
+    waiter.timer = window.setTimeout(function () {
+      var w = liveDataWaiters[token];
+      if (!w) return;
+      delete liveDataWaiters[token];
+      // de-duplicate cards collected from all panes by content prefix.
+      var seen = Object.create(null);
+      w.snapshot.cards = (w.snapshot.cards || []).filter(function (c) {
+        var key = String(c.content || '').slice(0, 100);
+        if (!key || seen[key]) return false;
+        seen[key] = 1;
+        return true;
+      }).slice(0, 200);
+      try {
+        w.frame.contentWindow.postMessage(
+          { type: 'omm:live-data-reply', token: token, data: w.snapshot }, w.origin
+        );
+      } catch (e) { /* ignore */ }
+    }, 700);
+  }
+
   function dedupeGraphCards(list) {
     var seen = Object.create(null);
     return (list || []).filter(function (c) {
@@ -6819,11 +6886,25 @@
         return;
       }
       if (data.type === 'omm:zen-card-reply') {
+        // A live-data request reuses the card protocol: feed any active waiter.
+        var waiter = liveDataWaiters[data.token];
+        if (waiter && Array.isArray(data.cards)) {
+          data.cards.slice(0, 200).forEach(function (c) {
+            var n = kgNormalize(c);
+            if (n) waiter.snapshot.cards.push({
+              content: n.content, kind: n.kind, tags: n.tags, source: n.source
+            });
+          });
+        }
         if (!graphOpen || !Array.isArray(data.cards)) return;
         var incoming = data.cards.map(kgNormalize).filter(Boolean);
         graphCards = dedupeGraphCards(graphCards.concat(incoming));
         renderKnowledgeGraph();
         pushFlowEvent('card', '收到 ' + (sourceApp || '产品') + ' 的 ' + incoming.length + ' 张卡片');
+        return;
+      }
+      if (data.type === 'omm:live-data-request') {
+        respondLiveData(sourceFrame, event.origin);
         return;
       }
       if (data.type === 'omm:saved') {

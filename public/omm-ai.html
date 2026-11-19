@@ -228,7 +228,8 @@ kbd{font-family:var(--mono);border:1px solid var(--line-soft);border-bottom-widt
   var $ = function (id) { return document.getElementById(id); };
   var S = {
     conv: '', skill: 'omm.zen.ai', provider: 'complete', model: 'complete', base: '',
-    key: '', busy: false, products: [], skills: [], artifacts: {}, docs: [], formats: {}, lastHolder: null
+    key: '', busy: false, products: [], skills: [], artifacts: {}, docs: [], formats: {}, lastHolder: null,
+    liveToken: '', liveResolve: null
   };
 
   function esc(text) {
@@ -294,7 +295,34 @@ kbd{font-family:var(--mono);border:1px solid var(--line-soft);border-bottom-widt
     if (data && data.type === 'omm:shortcut') {
       if (data.action === 'new-chat') newChat();
     }
+    if (data && data.type === 'omm:live-data-reply' && data.token === S.liveToken && S.liveResolve) {
+      var resolve = S.liveResolve; S.liveResolve = null; S.liveToken = '';
+      resolve(data.data || null);
+    }
   });
+
+  /* Ask the Hub for a read-only snapshot of the user's real product data.
+   * Resolves to null when standalone or when the Hub does not answer in time —
+   * the chat must never be blocked by this best-effort enrichment. */
+  function requestLiveData() {
+    if (window.parent === window || !messageHubOrigin) return Promise.resolve(null);
+    if (S.liveResolve) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      S.liveToken = 'live-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
+      S.liveResolve = resolve;
+      var timer = setTimeout(function () {
+        if (S.liveResolve === resolve) { S.liveResolve = null; S.liveToken = ''; resolve(null); }
+      }, 1400);
+      var settle = function () { clearTimeout(timer); };
+      // Clear the timer once the reply arrives by wrapping the resolver.
+      S.liveResolve = function (value) { settle(); resolve(value); };
+      try {
+        window.parent.postMessage({ type: 'omm:live-data-request', token: S.liveToken }, messageHubOrigin);
+      } catch (error) {
+        S.liveResolve = null; S.liveToken = ''; settle(); resolve(null);
+      }
+    });
+  }
 
   function switchTab(name) {
     Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (button) {
@@ -477,11 +505,16 @@ kbd{font-family:var(--mono);border:1px solid var(--line-soft);border-bottom-widt
 
   async function send(text) {
     if (!text.trim() || S.busy) return;
-    S.busy = true; $('btnSend').disabled = true; $('btnStop').disabled = false; status('生成中…');
+    S.busy = true; $('btnSend').disabled = true; $('btnStop').disabled = false; status('等待数据…');
+    // Best-effort: enrich the prompt with the user's real product data (cards,
+    // notes, searches, rules). Never blocks chat if the Hub is absent.
+    var live = await requestLiveData();
+    status('生成中…');
     addMessage('user', text);
     var holder = addMessage('assistant', '', S.skill); S.lastHolder = holder;
     var body = { text: text, conversation_id: S.conv, skill: S.skill, provider: S.provider,
-      model: S.model, baseUrl: S.base, stream: true, title: true };
+      model: S.model, baseUrl: S.base, stream: true, title: true,
+      context: live ? { omm_live: live } : {} };
     var headers = { 'Content-Type': 'application/json' };
     if (S.key) headers['X-Provider-Key'] = S.key;
     try {

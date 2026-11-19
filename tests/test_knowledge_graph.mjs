@@ -59,6 +59,47 @@ test('Hub 处理产品回传的卡片', () => {
   assert.ok(hub.includes('graphCards = dedupeGraphCards'))
 })
 
+/* ------------------------------------------- AI 实时数据快照 */
+
+test('Hub 聚合各产品的同源 localStorage 键', () => {
+  const store = {
+    'zen.cards.v1': JSON.stringify([{ content: 'SM-2 算法', kind: 'fact', tags: ['学习'] }]),
+    'zen.inbox.v1': JSON.stringify([{ content: '收件箱条目' }]),
+    'zc-docs': JSON.stringify([{ title: '我的笔记', content: '正文' }]),
+    'omm-search-v1': JSON.stringify([{ query: '卡片盒', answer: '笔记方法' }]),
+    'zen.flow.rules.v1': JSON.stringify([{ name: '归档规则', enabled: true }]),
+    'zen.clip.v1': JSON.stringify([{ content: '剪藏内容' }]),
+  }
+  const localStorage = { getItem: (k) => (k in store ? store[k] : null) }
+  const { collectLiveLocalData } = load(hub, ['collectLiveLocalData'], { localStorage, JSON })
+  const snap = collectLiveLocalData()
+  assert.equal(snap.cards.length, 2)
+  assert.equal(snap.cards[0].content, 'SM-2 算法')
+  assert.equal(snap.cards[0].tags.join(','), '学习')
+  assert.equal(snap.notes[0].title, '我的笔记')
+  assert.equal(snap.searches[0].query, '卡片盒')
+  assert.equal(snap.rules[0].name, '归档规则')
+  assert.equal(snap.clips[0].content, '剪藏内容')
+})
+
+test('Hub 损坏的 localStorage 数据被安全忽略', () => {
+  const localStorage = { getItem: () => '{not-json' }
+  const { collectLiveLocalData } = load(hub, ['collectLiveLocalData'], { localStorage, JSON })
+  const snap = collectLiveLocalData()
+  for (const key of ['cards', 'notes', 'searches', 'rules', 'clips']) {
+    assert.equal(snap[key].length, 0)
+  }
+})
+
+test('live-data 请求用明确 origin、无通配符，并复用卡片协议', () => {
+  const segment = hub.slice(hub.indexOf('function respondLiveData('), hub.indexOf('function dedupeGraphCards('))
+  assert.ok(segment.includes("type: 'omm:zen-card-request'"))
+  assert.ok(segment.includes('frameTargetOrigin(frame)'))
+  assert.ok(segment.includes("type: 'omm:live-data-reply'"))
+  assert.doesNotMatch(segment, /postMessage\([^,]+,\s*'\*'/)
+  assert.ok(hub.includes("data.type === 'omm:live-data-request'"))
+})
+
 test('kgNormalize 归一化并过滤空内容', () => {
   const { kgNormalize } = load(hub, ['kgNormalize'])
   const card = kgNormalize({ id: 'zc-1', kind: 'quote', source: 'annotate', content: '句子', tags: ['a'], links: [{ id: 'zc-2' }], color: '#f00' })
