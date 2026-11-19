@@ -96,7 +96,7 @@ def settings_path() -> Path:
 
 def load_settings() -> Dict[str, Any]:
     try:
-        data = json.loads(settings_path().read_text(encoding="utf-8"))
+        data = json.loads(settings_path().read_text(encoding="utf-8-sig"))
         return data if isinstance(data, dict) else {}
     except Exception:  # noqa: BLE001 - a broken settings file must not block startup
         return {}
@@ -256,6 +256,8 @@ def validate_manifest(
     if data.get("schema") not in (None, PLUGIN_API):
         raise PluginError("不支持的插件规范版本：%s" % data.get("schema"))
     plugin_id = _clean_name(data.get("id"), "id", 41).lower()
+    if not re.fullmatch(r"[a-z][a-z0-9-]{0,40}", plugin_id):
+        raise PluginError("id 必须以小写字母开头，且只包含小写字母、数字和 -")
     if not ID_RE.match(plugin_id):
         raise PluginError("id 只能使用小写字母、数字和连字符，且以字母开头")
     name = _clean_name(data.get("name"), "name", 80)
@@ -447,7 +449,11 @@ class PluginRegistry:
                 except Exception:
                     os.replace(backup, target)
                     raise
-                shutil.rmtree(backup, ignore_errors=True)
+                # 保留上一版本用于「回滚」，而不是立即删除。
+                rollback = self.user_root / (".rollback-" + manifest["id"])
+                if rollback.exists():
+                    shutil.rmtree(rollback, ignore_errors=True)
+                shutil.move(str(backup), str(rollback))
             else:
                 os.replace(staging, target)
             self.reload()
@@ -470,6 +476,30 @@ class PluginRegistry:
         shutil.rmtree(target)
         self.reload()
         return bundled is not None and bundled.is_dir()
+
+    def rollback(self, plugin_id: str) -> Dict[str, Any]:
+        """把插件恢复到上一次更新前的版本（仅用户安装的插件）。"""
+        target = self.user_root / plugin_id
+        backup = self.user_root / (".rollback-" + plugin_id)
+        if not backup.is_dir():
+            raise PluginError("没有可用的上一版本")
+        if not target.is_dir():
+            raise PluginError("当前插件不存在，无法回滚")
+        parked = self.user_root / (".rollback-current-" + plugin_id)
+        if parked.exists():
+            shutil.rmtree(parked)
+        os.replace(target, parked)
+        try:
+            os.replace(backup, target)
+        except Exception:
+            os.replace(parked, target)
+            raise
+        shutil.rmtree(parked, ignore_errors=True)
+        self.reload()
+        plugin = self.get(plugin_id)
+        if not plugin:
+            raise PluginError("回滚后无法读取插件")
+        return plugin
 
 
 def sha256_bytes(data: bytes) -> str:

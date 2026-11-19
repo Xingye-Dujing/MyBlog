@@ -163,7 +163,13 @@ def main() -> None:
     )
     template_zip = DIST / "plugin-template.zip"
     zip_dir(ROOT / "plugin-template", template_zip)
-    shutil.copy2(ROOT / "plugin-spec.md", DIST / "plugin-spec.md")
+    # 发布副本脱离 public/ 目录，相对链接会失效，改成绝对 GitHub 链接。
+    spec_text = (ROOT / "plugin-spec.md").read_text(encoding="utf-8")
+    spec_base = "https://github.com/Xingye-Dujing/MyBlog/blob/production/public/"
+    spec_text = spec_text.replace(
+        "desktop/PLUGIN-GUIDE.md", spec_base + "desktop/PLUGIN-GUIDE.md"
+    ).replace("desktop/README.md", spec_base + "desktop/README.md")
+    (DIST / "plugin-spec.md").write_text(spec_text, encoding="utf-8")
     print("\nCatalog: %s" % catalog_path)
     print("Template: %s" % template_zip)
     print("Spec: %s" % (DIST / "plugin-spec.md"))

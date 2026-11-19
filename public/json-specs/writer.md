@@ -29,7 +29,7 @@
 ```text
 你要生成一个 ZenWriter 画布文件（.zc，JSON 格式）。
 
-严格遵守配套文档《zencanvas-JSON-spec.md》里的字段、缺省值和容错规则。硬性要求：
+严格遵守本文档（《writer.md》，即 Writer 画布规范）里的字段、缺省值和容错规则。硬性要求：
 
 1. 顶层输出 { "format": "zenwriter-canvas", "v": 2, "name": "...", "nodes": [...], "connections": [...] }。
 2. 每个节点必须有 "id"(唯一, 格式 node-数字) 和 "type"(text/todo/group/markdown/math/image 之一)。

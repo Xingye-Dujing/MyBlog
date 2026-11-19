@@ -1,7 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 
 const visible = ref(false)
+const noticeBox = ref(null)
+const closeBtn = ref(null)
+let previouslyFocused = null
 
 function isDesktop() {
   return window.innerWidth > 768
@@ -11,17 +14,48 @@ onMounted(() => {
   if (!isDesktop()) return
   const dismissed = localStorage.getItem('reading-notice-dismissed')
   if (dismissed !== 'true') {
+    previouslyFocused = document.activeElement
     visible.value = true
+    nextTick(() => closeBtn.value?.focus())
   }
+  window.addEventListener('keydown', handleKeydown)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+function handleKeydown(e) {
+  if (!visible.value) return
+  if (e.key === 'Escape') {
+    close()
+    return
+  }
+  // 焦点陷阱：对话框打开时 Tab 只在内部按钮间循环，不跑到背景内容。
+  if (e.key === 'Tab') {
+    const items = noticeBox.value?.querySelectorAll('button:not([disabled])')
+    if (!items?.length) return
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
+}
 
 function close() {
   visible.value = false
+  previouslyFocused?.focus?.()
+  previouslyFocused = null
 }
 
 function dismiss() {
   localStorage.setItem('reading-notice-dismissed', 'true')
-  visible.value = false
+  close()
 }
 
 </script>
@@ -30,14 +64,23 @@ function dismiss() {
   <Teleport to="body">
     <Transition name="notice-fade">
       <div v-if="visible" class="notice-overlay" @click.self="close">
-        <div class="notice-box">
-          <div class="notice-title">阅读提示</div>
+        <div
+          ref="noticeBox"
+          class="notice-box"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reading-notice-title"
+        >
+          <div id="reading-notice-title" class="notice-title">阅读提示</div>
           <div class="notice-body">
             <p>电脑端推荐将浏览器缩放至 <strong>90%</strong> 阅读博客，以获得最佳排版效果。</p>
             <p>推荐按 <strong>F11</strong> 全屏浏览，获得更沉浸的阅读体验。</p>
             <p>快捷键：<strong>Ctrl+B</strong> 折叠/展开左侧文章列表，<strong>Ctrl+O</strong> 折叠/展开右侧大纲导览。</p>
           </div>
           <div class="notice-footer">
+            <button ref="closeBtn" class="notice-btn notice-btn-ghost" @click="close">
+              稍后再说
+            </button>
             <button class="notice-btn" @click="dismiss">不再提醒</button>
           </div>
         </div>
@@ -98,6 +141,11 @@ function dismiss() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 10px;
+}
+.notice-btn:focus-visible {
+  outline: 2px solid #c9372e;
+  outline-offset: 2px;
 }
 
 .notice-btn {

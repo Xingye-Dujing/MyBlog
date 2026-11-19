@@ -1,8 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+const DATA_URL = `${import.meta.env.BASE_URL}data/comments.json`
+
 export const useCommentStore = defineStore('comment', () => {
   const comments = ref([])
+  const isInitialized = ref(false)
+  const loading = ref(false)
+  const error = ref('')
 
   // Get comments for a specific chat (function, not computed)
   function getChatComments(chatId) {
@@ -15,31 +20,31 @@ export const useCommentStore = defineStore('comment', () => {
   }
 
   async function init() {
-    console.log('[CommentStore] init() called')
-
-    // Load from static JSON file
-    console.log('[CommentStore] Trying to load from /data/comments.json')
+    // 失败后 error 有值：允许再次调用以真正重试（否则“重试”按钮无效）。
+    if ((isInitialized.value && !error.value) || loading.value) return
+    loading.value = true
+    error.value = ''
     try {
-      const res = await fetch('/data/comments.json')
-      console.log('[CommentStore] Static file response status:', res.status, res.ok)
-      if (res.ok) {
-        comments.value = await res.json()
-        console.log('[CommentStore] Loaded from static file, count:', comments.value.length)
-        return
-      } else {
-        console.error('[CommentStore] Static file fetch failed, status:', res.status)
-      }
-    } catch (error) {
-      console.error('[CommentStore] Failed to load comments data from static file:', error)
+      const res = await fetch(DATA_URL, { cache: 'no-cache' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (!Array.isArray(data)) throw new Error('数据格式无效')
+      comments.value = data
+    } catch (err) {
+      console.error('[CommentStore] 加载失败:', err)
+      error.value = '评论数据加载失败，请刷新重试。'
+      comments.value = []
+    } finally {
+      loading.value = false
+      isInitialized.value = true
     }
-
-    // Fallback: empty data
-    console.log('[CommentStore] Fallback to empty data')
-    comments.value = []
   }
 
   return {
     comments,
+    isInitialized,
+    loading,
+    error,
     init,
     getChatComments,
     getMessageComments,

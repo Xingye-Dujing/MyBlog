@@ -5,7 +5,7 @@ import { eagerLoadImagesInRange } from '@/utils/scrollHelper'
 export function useSections(chat, messagesContainer) {
   const sections = ref([])
   const activeHeadingId = ref(null)
-  let scrollListener = null
+  let scrollElement = null
 
   function buildSections() {
     if (!chat.value || !chat.value.messages.length) {
@@ -96,11 +96,8 @@ export function useSections(chat, messagesContainer) {
       const container = messagesContainer.value
       if (!container) return
 
-      const messageEls = Array.from(container.querySelectorAll('.message-wrapper'))
-      const targetIdx = chat.value.messages.findIndex((m) => m.id === targetMsg.id)
-      if (targetIdx === -1) return
-
-      const targetEl = messageEls[targetIdx]
+      // 折叠的分区不在 DOM 中，按消息 id 定位，而不是用消息数组下标。
+      const targetEl = container.querySelector(`[data-msg-id="${targetMsg.id}"]`)
       if (!targetEl) return
 
       await eagerLoadImagesInRange(container, targetEl)
@@ -118,7 +115,7 @@ export function useSections(chat, messagesContainer) {
   }
 
   function onScroll() {
-    if (!messagesContainer.value || !sections.value.length) return
+    if (!messagesContainer.value || !sections.value.length || !chat.value) return
     const container = messagesContainer.value
     const messageElements = container.querySelectorAll('.message-wrapper')
     let currentActiveId = null
@@ -127,7 +124,12 @@ export function useSections(chat, messagesContainer) {
       const rect = el.getBoundingClientRect()
       const containerRect = container.getBoundingClientRect()
       if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
-        const section = sections.value.find((s) => i >= s.startMsgIndex && i <= s.endMsgIndex)
+        const msgId = el.dataset.msgId
+        const msgIndex = chat.value.messages.findIndex((m) => m.id === msgId)
+        const section =
+          msgIndex === -1
+            ? null
+            : sections.value.find((s) => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex)
         if (section && section.headingMsgIndex !== null) {
           currentActiveId = section.id
           break
@@ -143,14 +145,16 @@ export function useSections(chat, messagesContainer) {
 
   function attachScrollListener() {
     if (messagesContainer.value) {
-      messagesContainer.value.addEventListener('scroll', onScroll)
-      scrollListener = onScroll
+      detachScrollListener()
+      scrollElement = messagesContainer.value
+      scrollElement.addEventListener('scroll', onScroll)
     }
   }
 
   function detachScrollListener() {
-    if (messagesContainer.value && scrollListener) {
-      messagesContainer.value.removeEventListener('scroll', scrollListener)
+    if (scrollElement) {
+      scrollElement.removeEventListener('scroll', onScroll)
+      scrollElement = null
     }
   }
 

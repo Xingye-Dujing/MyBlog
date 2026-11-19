@@ -149,6 +149,31 @@ def mime_for(name: str) -> str:
     return mimetypes.guess_type(name)[0] or "application/octet-stream"
 
 
+def _empty_ai() -> Dict[str, Any]:
+    """全产品共用的 AI 配置（密钥由用户自愿填写，默认留空）。"""
+    return {
+        "provider": "deepseek",
+        "apiBase": "https://api.deepseek.com",
+        "apiModel": "deepseek-flash",
+        "apiKey": "",
+        "system": "",
+    }
+
+
+def _normalize_ai(raw: Any) -> Dict[str, Any]:
+    cfg = _empty_ai()
+    if not isinstance(raw, dict):
+        return cfg
+    for key in ("provider", "apiBase", "apiModel", "apiKey", "system"):
+        if key in raw:
+            cfg[key] = str(raw.get(key) or "").strip()
+    if not cfg["apiBase"]:
+        cfg["apiBase"] = _empty_ai()["apiBase"]
+    if not cfg["apiModel"]:
+        cfg["apiModel"] = _empty_ai()["apiModel"]
+    return cfg
+
+
 def _empty_config() -> Dict[str, Any]:
     return {
         "version": API_VERSION,
@@ -162,6 +187,7 @@ def _empty_config() -> Dict[str, Any]:
         "ui": {"zoom": {}},
         "share": {"path": ""},
         "docx_pdf": {"soffice": "", "abiword": "", "gs": ""},
+        "ai": _empty_ai(),
         "apps": {},
     }
 
@@ -233,6 +259,7 @@ def _normalize_config(raw: Any) -> Dict[str, Any]:
         zoom[clean_app_id(key)] = max(0.3, min(3.0, factor))
     appearance_raw = ui.get("appearance") if isinstance(ui.get("appearance"), dict) else {}
     cfg["ui"] = {"zoom": zoom, "appearance": _clean_appearance(appearance_raw)}
+    cfg["ai"] = _normalize_ai(raw.get("ai"))
     return cfg
 
 
@@ -326,7 +353,8 @@ _FileLock = FileLock
 
 def load_config() -> Dict[str, Any]:
     try:
-        data = json.loads(config_path().read_text(encoding="utf-8"))
+        # utf-8-sig 同时兼容带/不带 BOM 的文件，避免用户手工编辑后设置被清空。
+        data = json.loads(config_path().read_text(encoding="utf-8-sig"))
     except Exception:
         data = None
     return _normalize_config(data)
@@ -439,6 +467,36 @@ def resolve_share_dir(cfg: Optional[Dict[str, Any]] = None) -> Path:
     raw = str((cfg.get("share") or {}).get("path") or "").strip()
     path = Path(os.path.expandvars(os.path.expanduser(raw))) if raw else shared_root() / "share"
     return path
+
+
+def sanitize_restored_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """恢复备份前校验所有路径边界。
+
+    备份文件可能来自他人或被篡改；_normalize_config 只做格式化，不做边界检查。
+    若直接写回，save.path / save_path / resources.path 可把 fs API 的允许根目录
+    改到 C:\\ 或用户主目录，形成任意文件读写。
+    """
+    if not isinstance(cfg, dict):
+        raise ValueError("配置格式无效")
+
+    def check(raw: Any, label: str) -> None:
+        text = str(raw or "").strip()
+        if not text:
+            return
+        path = Path(os.path.expandvars(os.path.expanduser(text)))
+        if omm_fs.unsafe_bulk_root(path):
+            raise ValueError("备份中的%s是系统或用户根目录，已拒绝恢复" % label)
+
+    check((cfg.get("save") or {}).get("path"), "保存目录")
+    check((cfg.get("share") or {}).get("path"), "共享目录")
+    for entry in (cfg.get("apps") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        check(entry.get("save_path"), "应用保存目录")
+        for item in (entry.get("resources") or {}).values():
+            if isinstance(item, dict):
+                check(item.get("path"), "资源目录")
+    return cfg
 
 
 def resolve_mode(app: str, cfg: Optional[Dict[str, Any]] = None) -> str:
@@ -711,7 +769,7 @@ def read_snapshot(raw: str) -> Dict[str, Any]:
     path = _snapshot_path(raw)
     if not path.is_file() or not path.name.endswith(SNAPSHOT_SUFFIX):
         raise ValueError("快照文件不存在")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
 def rename_snapshot(raw: str, label: str) -> Dict[str, Any]:
@@ -728,7 +786,7 @@ def rename_snapshot(raw: str, label: str) -> Dict[str, Any]:
     if not clean:
         raise ValueError("名称无效")
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:  # noqa: BLE001 - a broken snapshot still deserves a rename
         payload = {}
     if not isinstance(payload, dict):
@@ -1045,7 +1103,7 @@ def _soffice_candidates(configured: str) -> list[str]:
                     try:
                         key = winreg.OpenKey(
                             hive,
-                            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\\" + exe,
+                            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths" + "\\" + exe,
                         )
                         value, _ = winreg.QueryValueEx(key, "")
                         winreg.CloseKey(key)
@@ -1573,6 +1631,11 @@ def handle_get(
         )
     if path == "/__omm/fs/shared":
         return _json(200, list_shared())
+    if path == "/__omm/fs/ai-config":
+        cfg = load_config()
+        ai = _normalize_ai(cfg.get("ai"))
+        # 只有密钥存在时才回传，避免页面上到处暴露空字段。
+        return _json(200, {"ok": True, "ai": ai, "configured": bool(ai.get("apiKey"))})
     if path == "/__omm/fs/search":
         all_apps = (query.get("all") or ["1"])[0] != "0"
         raw_query = (query.get("q") or [""])[0].strip()
@@ -1655,6 +1718,15 @@ def handle_post(
         payload_app = clean_app_id(payload.get("app") or app)
         if path == "/__omm/fs/config":
             return _json(200, _update_config(payload_app, payload))
+        if path == "/__omm/fs/ai-config":
+            ai_raw = payload.get("ai") if isinstance(payload.get("ai"), dict) else payload
+            ai = _normalize_ai(ai_raw)
+            with FileLock(lock_path()):
+                cfg = load_config()
+                cfg["ai"] = ai
+                cfg["updated"] = now_iso()
+                _write_config(cfg)
+            return _json(200, {"ok": True, "ai": ai, "configured": bool(ai.get("apiKey"))})
         if path == "/__omm/fs/save":
             raw = str(payload.get("data") or "")
             if not raw:
@@ -1953,6 +2025,10 @@ def _update_config(app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         if target_path.exists() and not target_path.is_dir():
             raise ValueError("目标路径已存在而且是文件：%s" % target_path)
+        # 与 share_path 分支保持一致：禁止把保存目录设为 C:\、用户主目录等
+        # 大范围根目录，否则 _allowed_roots() 会把整棵目录加入 fs API 白名单。
+        if omm_fs.unsafe_bulk_root(target_path):
+            raise ValueError("请选择一个专用文件夹作为保存目录，不要使用系统或用户根目录")
 
     migration: Optional[Dict[str, Any]] = None
     if target_path is not None:

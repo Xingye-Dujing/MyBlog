@@ -3090,6 +3090,9 @@
     openPanel: openPanel,
     openFolder: function () { return apiPost('/open', { app: effectiveApp() }) },
     config: function () { return apiGet('/config', { app: effectiveApp() }) },
+    // 全产品共用的 AI 配置：在工作台「设置 → AI 服务」一处填写，所有产品读取。
+    aiConfig: function () { return apiGet('/ai-config') },
+    setAIConfig: function (ai) { return apiPost('/ai-config', { ai: ai || {} }) },
     shared: function () { return apiGet('/shared') },
     setConfig: function (patch) {
       return apiPost('/config', Object.assign({ app: effectiveApp() }, patch || {}))

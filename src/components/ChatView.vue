@@ -84,6 +84,16 @@ async function navigateSearch(direction) {
   if (!matches.length) return
   currentMatchIndex.value = (currentMatchIndex.value + direction + matches.length) % matches.length
   const target = matches[currentMatchIndex.value]
+  // 命中项可能位于折叠分区中，先展开它所在（及之前）的分区。
+  const idx = chat.value.messages.findIndex((m) => m.id === target.id)
+  if (idx !== -1) {
+    sections.value.forEach((section) => {
+      if (section.collapsed && idx >= section.startMsgIndex && idx <= section.endMsgIndex) {
+        toggleSection(section.id)
+      }
+    })
+  }
+  await nextTick()
   const el = messagesContainer.value?.querySelector(`[data-msg-id="${target.id}"]`)
   if (!el) return
   await eagerLoadImagesInRange(messagesContainer.value, el)
@@ -112,19 +122,31 @@ function handleKeydown(e) {
   }
 }
 
-function scrollToHashMessage() {
+async function scrollToHashMessage() {
   const hash = route.hash
   if (!hash || !hash.startsWith('#msg-')) return
   const msgId = hash.slice(5)
-  nextTick(async () => {
-    await new Promise((r) => setTimeout(r, 300))
-    const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
-    if (!el) return
-    await eagerLoadImagesInRange(messagesContainer.value, el)
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    el.classList.add('deep-link-highlight')
-    setTimeout(() => el.classList.remove('deep-link-highlight'), 1500)
-  })
+  // 数据由异步 fetch 提供：轮询等待消息渲染，避免固定延时造成深链接失效。
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await nextTick()
+    if (chat.value) {
+      const idx = chat.value.messages.findIndex((m) => m.id === msgId)
+      const section = sections.value.find(
+        (s) => idx >= s.startMsgIndex && idx <= s.endMsgIndex,
+      )
+      if (section?.collapsed) toggleSection(section.id)
+      await nextTick()
+      const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
+      if (el) {
+        await eagerLoadImagesInRange(messagesContainer.value, el)
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        el.classList.add('deep-link-highlight')
+        setTimeout(() => el.classList.remove('deep-link-highlight'), 1500)
+        return
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100))
+  }
 }
 
 watch(() => route.hash, scrollToHashMessage)
@@ -151,7 +173,9 @@ watch(
     if (newChat) {
       buildSections()
       nextTick(() => {
-        if (messagesContainer.value) {
+        if (route.hash.startsWith('#msg-')) {
+          scrollToHashMessage()
+        } else if (messagesContainer.value) {
           messagesContainer.value.scrollTop = 0
         }
       })
@@ -193,19 +217,50 @@ onUnmounted(() => {
           <h2 class="chat-name">{{ chat.title }}</h2>
           <span class="chat-meta">{{ chat.messages.length }} 条消息</span>
         </div>
-        <button class="header-btn" title="搜索" @click="toggleSearch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button class="header-btn" type="button" title="搜索（内容中的关键词）" aria-label="搜索消息内容" @click="toggleSearch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+        <!-- Desktop: outline toggle button (Ctrl+O also works) -->
+        <button
+          v-if="!isMobile && sections.length > 0"
+          class="header-btn"
+          type="button"
+          :title="showOutlinePanel ? '隐藏导览（Ctrl+O）' : '显示导览（Ctrl+O）'"
+          :aria-label="showOutlinePanel ? '隐藏导览' : '显示导览'"
+          :aria-pressed="showOutlinePanel"
+          @click="toggleOutlinePanel"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
           </svg>
         </button>
         <!-- Mobile: outline toggle button -->
         <button
           v-if="isMobile && sections.length > 0"
           class="outline-toggle-btn"
+          type="button"
           @click="toggleOutlinePanel"
           :title="showOutlinePanel ? '隐藏导览' : '显示导览'"
-        ></button>
+          :aria-label="showOutlinePanel ? '隐藏导览' : '显示导览'"
+          :aria-pressed="showOutlinePanel"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+        </button>
       </div>
 
       <div v-if="showSearch" class="search-bar">
@@ -290,6 +345,7 @@ onUnmounted(() => {
             <MessageBubble
               v-if="msg._visible"
               :message="msg"
+              :chat-id="chat.id"
               :show-date="msg.showDate"
               :class="{ 'search-match': msg._searchMatch }"
               :data-msg-id="msg.id"
@@ -310,9 +366,53 @@ onUnmounted(() => {
       @jump-to="jumpToSection"
     />
   </div>
+
+  <!-- 找不到对话（或数据仍在加载）时显示；必须与外层 v-if="chat" 配对，
+       不能挂到大纲侧栏的 v-if 上，否则手机端/隐藏大纲时会误报“对话不存在”。 -->
+  <div v-else class="chat-missing">
+    <template v-if="chatStore.loading">
+      <p>正在加载对话…</p>
+    </template>
+    <template v-else>
+      <h2>对话不存在或已被移除</h2>
+      <p>{{ chatStore.error || '链接可能已失效，请从首页选择一个对话。' }}</p>
+      <button type="button" class="back-home-btn" @click="router.push({ name: 'home' })">
+        返回首页
+      </button>
+    </template>
+  </div>
 </template>
 
 <style scoped>
+.chat-missing {
+  max-width: 520px;
+  margin: 15vh auto;
+  padding: 32px;
+  text-align: center;
+  color: #444;
+}
+.chat-missing h2 {
+  font-size: 1.3rem;
+  font-weight: 400;
+  margin-bottom: 12px;
+}
+.chat-missing p {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 20px;
+}
+.back-home-btn {
+  padding: 8px 20px;
+  border: 1px solid #c9372e;
+  background: #fff;
+  color: #c9372e;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.back-home-btn:hover {
+  background: #fff5f5;
+}
+
 :deep(.section-highlight) {
   transition: background 0.3s;
   background: #faf0e6;
@@ -590,9 +690,28 @@ onUnmounted(() => {
     border-radius: 10px;
   }
   .outline-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     padding: 8px;
-    margin-left: 10px;
-    margin-right: 10px;
+    margin-left: 6px;
+    border: none;
+    background: none;
+    color: #666;
+    cursor: pointer;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .outline-toggle-btn:active {
+    background: #f0f0f0;
+  }
+
+  .outline-toggle-btn svg {
+    width: 100%;
+    height: 100%;
   }
 
   .search-bar {

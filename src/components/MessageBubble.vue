@@ -5,18 +5,49 @@ import { useCommentStore } from '@/stores/comment'
 
 const props = defineProps({
   message: { type: Object, required: true },
+  chatId: { type: String, default: '' },
   showDate: { type: Boolean, default: false },
 })
 const commentStore = useCommentStore()
 const isCommentsExpanded = ref(false)
 const copiedLink = ref(false)
+const copyFailed = ref(false)
+
+function legacyCopy(text) {
+  const input = document.createElement('textarea')
+  input.value = text
+  input.setAttribute('readonly', '')
+  input.style.position = 'fixed'
+  input.style.opacity = '0'
+  document.body.appendChild(input)
+  input.select()
+  let ok = false
+  try {
+    ok = document.execCommand('copy')
+  } catch {
+    ok = false
+  }
+  document.body.removeChild(input)
+  return ok
+}
 
 function copyLink() {
   const url = `${window.location.origin}${window.location.pathname}#msg-${props.message.id}`
-  navigator.clipboard.writeText(url).then(() => {
-    copiedLink.value = true
-    setTimeout(() => (copiedLink.value = false), 1500)
-  })
+  const done = (ok) => {
+    if (ok) {
+      copiedLink.value = true
+      copyFailed.value = false
+      setTimeout(() => (copiedLink.value = false), 1500)
+    } else {
+      copyFailed.value = true
+      setTimeout(() => (copyFailed.value = false), 2000)
+    }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => done(true), () => done(legacyCopy(url)))
+  } else {
+    done(legacyCopy(url))
+  }
 }
 const rendered = computed(() => renderMarkdown(props.message.content))
 
@@ -39,7 +70,7 @@ const dateStr = computed(() => {
 // Get comments for this specific message
 const messageComments = computed(() => {
   return commentStore
-    .getMessageComments(props.message.chatId, props.message.id)
+    .getMessageComments(props.chatId || props.message.chatId, props.message.id)
     .sort((a, b) => a.timestamp - b.timestamp)
 })
 
@@ -77,13 +108,15 @@ function formatTime(timestamp) {
     <div class="message-bubble">
       <div class="message-content" v-html="rendered"></div>
       <div class="message-footer">
-        <span
+        <button
+          type="button"
           class="message-time"
-          :title="copiedLink ? '已复制链接' : '点击复制链接'"
+          :aria-label="copiedLink ? '已复制链接' : '复制此消息的链接'"
+          :title="copyFailed ? '复制失败，请手动复制地址栏链接' : (copiedLink ? '已复制链接' : '点击复制链接')"
           @click="copyLink"
         >
-          {{ copiedLink ? '已复制' : timeStr }}
-        </span>
+          {{ copiedLink ? '已复制' : copyFailed ? '复制失败' : timeStr }}
+        </button>
         <button v-if="commentCount > 0" class="comment-toggle-btn" @click.stop="toggleComments">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -107,7 +140,7 @@ function formatTime(timestamp) {
               <span class="comment-author">{{ comment.author }}</span>
               <span class="comment-time">{{ formatTime(comment.timestamp) }}</span>
             </div>
-            <div class="comment-text" v-html="renderMarkdown(comment.content)"></div>
+            <div class="comment-text" v-html="renderMarkdown(comment.content, { allowIframe: false })"></div>
           </div>
         </div>
       </div>
@@ -351,12 +384,20 @@ function formatTime(timestamp) {
 }
 
 .message-time {
+  font-family: inherit;
   font-size: 0.75rem;
   color: #bbb;
+  background: none;
+  border: 0;
+  padding: 0;
   letter-spacing: 0.5px;
   cursor: pointer;
   user-select: none;
   transition: color 0.2s;
+}
+.message-time:focus-visible {
+  outline: 2px solid #c9372e;
+  outline-offset: 2px;
 }
 
 .message-time:hover {

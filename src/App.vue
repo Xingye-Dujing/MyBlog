@@ -15,7 +15,7 @@ import ReadingNotice from '@/components/ReadingNotice.vue'
 <style>
 @font-face {
   font-family: APL;
-  src: url('/public/APL385.ttf');
+  src: url('/APL385.ttf');
 }
 
 .apl-code code {

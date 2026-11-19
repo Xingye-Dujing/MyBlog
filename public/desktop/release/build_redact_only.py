@@ -25,10 +25,10 @@ if str(DESKTOP) not in sys.path:
 
 import offline  # noqa: E402
 from build_plugins import OUT, DIST, sha256, zip_dir  # noqa: E402
-from plugin_specs import PLUGIN_BY_ID  # noqa: E402
+from plugin_specs import PLUGIN_BY_ID, VERSION  # noqa: E402
 
-TAG = "v1.0.16"
-REDACT_VERSION = "1.0.16"
+TAG = "v" + VERSION
+REDACT_VERSION = VERSION
 
 
 def main() -> None:

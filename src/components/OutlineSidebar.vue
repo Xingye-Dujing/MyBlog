@@ -22,11 +22,21 @@
         class="outline-item"
         :class="{ active: activeHeadingId === section.id }"
       >
-        <div class="outline-item-header" @click="handleJump(section)">
+        <div
+          class="outline-item-header"
+          role="button"
+          tabindex="0"
+          :aria-expanded="!section.collapsed"
+          @click="handleJump(section)"
+          @keydown.enter="handleJump(section)"
+          @keydown.space.prevent="handleJump(section)"
+        >
           <button
             class="collapse-btn"
+            type="button"
             @click.stop="handleToggle(section.id)"
             :title="section.collapsed ? '展开内容' : '折叠内容'"
+            :aria-label="section.collapsed ? '展开内容' : '折叠内容'"
           >
             <svg
               viewBox="0 0 24 24"
@@ -48,7 +58,17 @@
       </div>
     </div>
     <!-- Desktop resize handle -->
-    <div v-if="!isMobile" class="resize-handle" @mousedown="startResize"></div>
+    <div
+      v-if="!isMobile"
+      class="resize-handle"
+      role="separator"
+      aria-orientation="vertical"
+      tabindex="0"
+      :aria-label="'拖拽调整导览宽度，当前 ' + width + ' 像素'"
+      @mousedown="startResize"
+      @keydown.left.prevent="nudgeWidth(-10)"
+      @keydown.right.prevent="nudgeWidth(10)"
+    ></div>
   </div>
 </template>
 
@@ -91,6 +111,11 @@ function onMouseMove(e) {
   let newWidth = startWidth - delta
   newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth))
   width.value = newWidth
+}
+
+function nudgeWidth(delta) {
+  width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width.value + delta))
+  localStorage.setItem(STORAGE_KEY, width.value)
 }
 
 function stopResize() {
@@ -174,6 +199,11 @@ function handleToggle(sectionId) {
 
 .outline-item-header:hover {
   background: #fafafa;
+}
+.outline-item-header:focus-visible,
+.resize-handle:focus-visible {
+  outline: 2px solid #c9372e;
+  outline-offset: -2px;
 }
 
 .outline-item.active .outline-item-header {

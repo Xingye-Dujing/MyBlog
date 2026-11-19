@@ -71,7 +71,7 @@ function formatTime(timestamp) {
             <span class="comment-author">{{ comment.author }}</span>
             <span class="comment-time">{{ formatTime(comment.timestamp) }}</span>
           </div>
-          <div class="comment-text" v-html="renderMarkdown(comment.content)"></div>
+          <div class="comment-text" v-html="renderMarkdown(comment.content, { allowIframe: false })"></div>
         </div>
       </div>
     </div>

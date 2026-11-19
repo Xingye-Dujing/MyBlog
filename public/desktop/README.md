@@ -107,7 +107,7 @@
   界面动效、顶部菜单栏显示/隐藏，设置会持久化。圆角同时作用于 Dock 外框和
   图标框。
 - **字体与图标**：英文使用 Literata，中文使用宋体（SimSun / Songti SC）；顶部
-  标签、Dock、应用面板与安装器使用用户提供的 `icon.ico` / `icon-writer.png`
+  标签、Dock、应用面板与安装器使用用户提供的 `icon.ico` / `icon-writer.ico`
   产品图标。
 - 工作台外壳使用暖墨色，不使用纯黑；各产品页面保留自己的主题与配色。
 
@@ -155,6 +155,27 @@ macOS:   ~/Library/Application Support/OMM-ZEN/miktex.json
   查看插件、检查服务与复制错误。
 - **设置**：启动时恢复会话、隐藏标签自动休眠、定时快照、重置布局、存储占用、使用统计、
   备份 / 恢复设置与共享规则（不包含文件与插件包）。
+- **全局内容搜索** `Ctrl+Shift+F`：顶栏放大镜或命令面板进入，跨所有产品的已保存文档做全文
+  检索（由桌面桥 `/__omm/fs/search` 读取文件内容），结果可直接交给对应产品打开。
+- **最近动态**：顶栏时钟打开跨产品时间线，把文档、快照、共享和通知按时间汇总，可按类型筛选。
+- **静心专注模式** `Ctrl+Shift+Z`：番茄钟计时、四种离线合成环境音（雨声 / 白噪 / 咖啡馆 /
+  关闭）、免打扰与窗格淡化；时长、环境音与开关在设置里持久化。
+- **全量备份与恢复**：设置 → 存储与备份里除原「设置与规则」备份外，新增「全量备份（含文档…）」，
+  将配置、共享空间、快照与所有已保存文档打包成 zip；恢复会覆盖同名文件并保留其他文件，
+  操作前自动备份当前配置。
+- **统一 AI 配置**：设置 → AI 服务填写一次服务商 / Base URL / 模型 / Key / 系统提示词，
+  写入 `shared.json` 的 `ai` 段，所有产品可通过 `window.OMMDesktop.aiConfig()` 读取
+  （语料库已支持自动继承）；密钥默认留空、不随设置备份导出。
+- **自定义快捷键与命令宏**：设置里可为所有内置动作重新绑定组合键（点击按键框后直接按键），
+  并把多个动作组成宏，绑定快捷键或出现在命令面板中；随外观设置一起备份。
+- **无障碍**：工作台字号 85%–150%、高对比度、减少动画、图标按钮自动补 `aria-label`；
+  不改动各产品内部的缩放。
+- **插件详情与回滚**：已安装插件新增「详情」页，显示版本、来源、运行时、端口、作者、
+  主页与共享频道权限声明；更新过的插件会保留上一版本，可一键回滚。
+- **独立窗口与多屏布局**：标签右键「脱离为独立窗口」在新工作台窗口单独打开该产品；
+  设置里开启「按显示器记住布局」后，每块屏幕恢复各自的标签与分屏。
+- **可选云备份**：设置 → 云备份（WebDAV）默认关闭；可手动上传 / 下载恢复，
+  或设置每天 / 每周自动上传。凭据只存工作台本地，不写入 `shared.json`。
 
 桌面窗口默认记住上次的窗口位置与大小（写入 `shared.json` 的 `ui.window`）。
 
@@ -218,7 +239,7 @@ macOS:   ~/Library/Application Support/OMM-ZEN/...
 .venv\Scripts\python.exe desktop\build_exes.py hub
 
 # 生成在线插件包和 catalog.json（先构建 framework，才能写入其校验值）
-.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.2
+.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.17
 
 # 直接从源码运行工作台（使用生成的插件目录）
 .venv\Scripts\python.exe desktop\omm_launcher.py --app hub --debug --plugins build\plugin-dirs
@@ -263,11 +284,11 @@ IndexedDB 都在用户数据目录中，更新前还会备份配置文件，重�
 
 ```powershell
 # 发布后自检（校验本地产物、catalog 与 GitHub Release 资产）
-.venv\Scripts\python.exe desktop\release\verify_release.py --tag v1.0.2
+.venv\Scripts\python.exe desktop\release\verify_release.py --tag v1.0.17
 
 # Gitee Release 与 Windows 附件上传
-powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee_release.ps1 -Tag v1.0.2
-powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.2
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee_release.ps1 -Tag v1.0.17
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.17
 ```
 
 ## Gitee 附件配额与发布策略（重要）
@@ -311,7 +332,7 @@ Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 ```bash
 python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
 python3 desktop/build_exes.py --clean
-python3 desktop/build_plugins.py --tag v1.0.2
+python3 desktop/build_plugins.py --tag v1.0.17
 # 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app、dist/OMM-ZEN-Setup.app
 #       dist/OMM-ZEN-Framework-macOS-<arch>.zip
 ```
@@ -340,7 +361,7 @@ xattr -dr com.apple.quarantine /Applications/OMM-Planner.app
    增加一项（id、名称、字标、入口页面、固定端口、runtime、依赖的 vendor 子目录）。
 2. 在 `desktop/omm_launcher.py` 的 `APPS` 与 `WINDOW_TITLES` 增加独立运行入口。
 3. 页面 `<head>` 引入 `<script src="omm-embed.js"></script>`。
-4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.2` →
+4. 重新构建：`build_exes.py framework` → `build_plugins.py --tag v1.0.17` →
    `build_exes.py hub installer`。在线安装器与工作台插件面板会自动看到它。
 
 用户导入自己的产品不需要改代码：按 `public/plugin-spec.md` 准备目录和

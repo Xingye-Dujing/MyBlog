@@ -435,6 +435,9 @@ def run_pass(exe, work, mainfile, timeout=COMPILE_TIMEOUT, job_id=None, cancel_e
         exe,
         "-interaction=nonstopmode",
         "-file-line-error",
+        # 禁止 \write18 执行 shell 命令：与 mdforge/compiler.py 保持一致。
+        # 即使本机 MiKTeX 开启了 shell escape，也可避免恶意 .tex 触发命令执行。
+        "-no-shell-escape",
         mainfile,
     ]
     env = dict(os.environ)
@@ -488,6 +491,15 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
     if not exe:
         return {"ok": False, "error": "找不到 %s，请确认 MiKTeX 安装路径" % engine}
 
+    # 外部传入的编译参数做边界校验，避免异常值导致 500 或路径越界。
+    try:
+        n_passes = max(1, min(4, int(passes or 1)))
+    except (TypeError, ValueError):
+        n_passes = 2
+    mainfile = os.path.basename(str(mainfile or "main.tex"))
+    if not mainfile.lower().endswith(".tex"):
+        mainfile = "main.tex"
+
     os.makedirs(BUILD_DIR, exist_ok=True)
     key = uuid.uuid4().hex[:12]
     work = os.path.join(BUILD_DIR, key)
@@ -502,7 +514,7 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
         logs = []
         codes = []
         t0 = time.time()
-        n = max(1, min(4, int(passes or 1)))
+        n = n_passes
         for i in range(n):
             if cancel_event.is_set():
                 elapsed = int((time.time() - t0) * 1000)
@@ -639,6 +651,37 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
 
 
 # ----------------------------------------------------------------- HTTP
+# 本机服务不应被任意网站跨域调用：否则恶意页面可提交 .tex（\input 读取本机文件）
+# 并通过 CORS 读回 PDF、或调用 /__omm/fs/* 读写本地文件。只允许已知来源。
+_ALLOWED_ORIGINS = {
+    "https://xingye-blog.xyz",
+    "https://my-blog-eight-dun.vercel.app",
+}
+for _entry in os.environ.get("OMM_LATEX_ALLOWED_ORIGINS", "").split(","):
+    _entry = _entry.strip().rstrip("/")
+    if _entry:
+        _ALLOWED_ORIGINS.add(_entry)
+
+
+def _origin_allowed(origin):
+    """origin 为空表示非浏览器客户端（桌面壳 / 脚本），不做 CORS 限制。"""
+    if not origin or origin == "null":
+        return True
+    try:
+        parsed = urlparse(origin)
+    except Exception:
+        return False
+    host = (parsed.hostname or "").lower()
+    if host in ("127.0.0.1", "localhost", "::1"):
+        return True
+    return origin.rstrip("/") in _ALLOWED_ORIGINS
+
+
+def _host_allowed(header_value):
+    host = (header_value or "").split(":")[0].strip().lower().strip("[]")
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
 class Handler(SimpleHTTPRequestHandler):
     server_version = "ZentexServe/1.0"
 
@@ -650,14 +693,24 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ---------- 响应助手 ----------
     def _cors(self):
-        """允许被云端页面（其它源）调用；兼容跨源请求；Chrome/Edge 的 Local Network Access 权限由浏览器负责处理。"""
-        self.send_header("Access-Control-Allow-Origin", "*")
+        """仅回显已登记的来源，绝不使用通配符 `*`（否则任意网站都能读回本机文件）。"""
+        origin = (self.headers.get("Origin") or "").strip()
+        if not origin or not _origin_allowed(origin):
+            return
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Max-Age", "600")
         # 浏览器本地网络访问（LNA）：公网页面访问 loopback 服务时可能经过权限检查
         if (self.headers.get("Access-Control-Request-Private-Network") or "").lower() == "true":
             self.send_header("Access-Control-Allow-Private-Network", "true")
+
+    def _request_allowed(self):
+        """拦截 DNS 重绑定与未登记来源的跨域请求。"""
+        if not _host_allowed(self.headers.get("Host")):
+            return False
+        return _origin_allowed((self.headers.get("Origin") or "").strip())
 
     def send_json(self, obj, code=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -687,6 +740,8 @@ class Handler(SimpleHTTPRequestHandler):
             pass
 
     def do_OPTIONS(self):
+        if not self._request_allowed():
+            return self.send_bytes(b"forbidden", "text/plain", 403)
         self.send_response(204)
         self.send_header("Content-Length", "0")
         self._cors()
@@ -694,6 +749,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ---------- 路由 ----------
     def do_GET(self):
+        if not self._request_allowed():
+            return self.send_bytes(b"forbidden", "text/plain", 403)
         u = urlparse(self.path)
         p = u.path
         if p.startswith("/__omm/share/"):
@@ -758,6 +815,8 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if not self._request_allowed():
+            return self.send_bytes(b"forbidden", "text/plain", 403)
         u = urlparse(self.path)
         if u.path.startswith("/__omm/share/"):
             if omm_share is None:
@@ -858,8 +917,8 @@ class Handler(SimpleHTTPRequestHandler):
             _compile_lock.release()
 
 
-def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8123
+def main(port=None):
+    port = int(port) if port is not None else (int(sys.argv[1]) if len(sys.argv) > 1 else 8123)
     os.makedirs(BUILD_DIR, exist_ok=True)
     avail = [k for k in ENGINE_FILES if engine_path(k)]
     print("ZENTEX 本地编译服务  http://127.0.0.1:%d/" % port)
@@ -867,13 +926,21 @@ def main():
     print("  可用引擎: %s" % (", ".join(avail) if avail else "无（请检查 MiKTeX 路径）"))
     print("  本地打开: http://127.0.0.1:%d/omm-latex.html" % port)
     print("  云端页面: 在「编译 → 服务地址」填 http://127.0.0.1:%d" % port)
-    print("  （已开启跨域；Chrome/Edge 的本地网络访问权限由浏览器负责检查）")
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print("  （仅允许白名单来源跨域调用；可用 OMM_LATEX_ALLOWED_ORIGINS 追加域名）")
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError as exc:
+        print("[错误] 无法监听端口 %d：%s。请关闭占用端口的程序或换一个端口。" % (port, exc),
+              file=sys.stderr)
+        return 1
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        srv.server_close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

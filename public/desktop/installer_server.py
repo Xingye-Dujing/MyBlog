@@ -258,7 +258,7 @@ def install_task(state: InstallerState, selected: list[str], install_dir: str, s
             "framework": platform,
         }
         try:
-            (Path(install_dir) / "install.json").write_text(
+            (target / "install.json").write_text(
                 json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception:
@@ -364,9 +364,9 @@ class InstallerHandler(QuietHandler):
             if parsed.path == "/api/launch":
                 target = Path(str(self.state.progress.get("exe") or ""))
                 if not target.is_file():
-                    target = Path(self.state.install_dir) / "OMM-ZEN.exe"
+                    target = Path(self.state.install_dir).expanduser() / "OMM-ZEN.exe"
                 if sys.platform == "darwin":
-                    apps = list(Path(self.state.install_dir).glob("*.app"))
+                    apps = list(Path(self.state.install_dir).expanduser().glob("*.app"))
                     if not apps:
                         raise PluginError("找不到已安装的 OMM-ZEN.app")
                     subprocess.Popen(["open", str(apps[0])])

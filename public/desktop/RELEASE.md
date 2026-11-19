@@ -28,11 +28,11 @@ Release 标签一旦发布就视为不可变：同一个版本号不要覆盖重
 
 ## 1. 发版前：改版本号 + 清理本地旧副本
 
-### 1.1 改版本号（只有两处）
+### 1.1 改版本号（两处文件，工作流里有默认值与兜底值两个字段）
 
 ```text
-public/desktop/plugin_specs.py        VERSION = "1.0.6"
-.github/workflows/macos-build.yml     default: v1.0.6  /  RELEASE_TAG
+public/desktop/plugin_specs.py        VERSION = "1.0.17"
+.github/workflows/macos-build.yml     default: v1.0.17  /  RELEASE_TAG
 ```
 
 `VERSION` 同时决定：
@@ -155,7 +155,7 @@ cd D:\blog\web\public
 ## 3. 生成插件包与 `catalog.json`
 
 ```powershell
-.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.6
+.venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.17
 ```
 
 产出 `dist/plugins/plugin-<id>-1.0.6.zip`（11 个）、`dist/catalog.json`、
@@ -196,9 +196,9 @@ print('latest_url ', bool(c.get('latest_url')), bool(c.get('gitee_latest_url')))
 cd D:\blog\web
 git add -A
 git commit -m "feat: <本次改动概要>"
-git tag v1.0.6
+git tag v1.0.17
 git push MyBlog production ; git push Gitee production
-git push MyBlog v1.0.6   ; git push Gitee v1.0.6
+git push MyBlog v1.0.17   ; git push Gitee v1.0.17
 ```
 
 `MyBlog` = GitHub，`Gitee` = Gitee。标签指向打了标签的那个提交。
@@ -207,7 +207,7 @@ git push MyBlog v1.0.6   ; git push Gitee v1.0.6
 
 ```powershell
 git log --oneline -5
-git merge-base --is-ancestor <修复提交> v1.0.6 ; if ($?) { "包含" }
+git merge-base --is-ancestor <修复提交> v1.0.17 ; if ($?) { "包含" }
 ```
 
 ---
@@ -217,10 +217,10 @@ git merge-base --is-ancestor <修复提交> v1.0.6 ; if ($?) { "包含" }
 ### 5.1 GitHub（全量，无配额）
 
 ```powershell
-gh release create v1.0.6 -R Xingye-Dujing/MyBlog --title "OMM-ZEN v1.0.6" --notes-file <notes.md>
+gh release create v1.0.17 -R Xingye-Dujing/MyBlog --title "OMM-ZEN v1.0.17" --notes-file <notes.md>
 
 # 先传 catalog.json
-gh release upload v1.0.6 dist\catalog.json -R Xingye-Dujing/MyBlog
+gh release upload v1.0.17 dist\catalog.json -R Xingye-Dujing/MyBlog
 
 # 再传其余 27 个（13 EXE + framework + template + spec + 11 插件包）
 $files  = @(Get-ChildItem dist -Filter 'OMM-*.exe' | ForEach-Object FullName)
@@ -228,7 +228,7 @@ $files += @(Get-ChildItem dist -Filter 'OMM-ZEN-Framework-win64.zip' | ForEach-O
 $files += 'dist\plugin-template.zip','dist\plugin-spec.md'
 $files += @(Get-ChildItem dist\plugins -Filter '*-1.0.6.zip' | ForEach-Object FullName)
 "count=$($files.Count)"   # 必须是 27
-gh release upload v1.0.6 @files -R Xingye-Dujing/MyBlog
+gh release upload v1.0.17 @files -R Xingye-Dujing/MyBlog
 ```
 
 Windows 资源应为 **28 个**（含 `catalog.json`）。macOS 由 §6 的工作流补上 28 个，最终 56。
@@ -239,16 +239,16 @@ Windows 资源应为 **28 个**（含 `catalog.json`）。macOS 由 §6 的工�
 
 ```powershell
 # 1) 建 Release
-powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee_release.ps1 -Tag v1.0.6 -Notes <notes.md>
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\create_gitee_release.ps1 -Tag v1.0.17 -Notes <notes.md>
 
 # 2) 先传 catalog.json
-powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.6 -Names "catalog.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.17 -Names "catalog.json"
 
 # 3) 再传其余 27 个
 $names  = @(Get-ChildItem dist -Filter 'OMM-*.exe' | ForEach-Object Name)
 $names += 'OMM-ZEN-Framework-win64.zip','plugin-template.zip','plugin-spec.md'
 $names += @(Get-ChildItem dist\plugins -Filter '*-1.0.6.zip' | ForEach-Object Name)
-powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.6 -Names ($names -join ',')
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee_assets.ps1 -Tag v1.0.17 -Names ($names -join ',')
 ```
 
 上传 28 个；Gitee 页面会显示 **30** 个，多出来的是 Gitee 自动生成的源码包，正常。
@@ -293,7 +293,7 @@ def head(u):
     except Exception:
         return 0
 total = 0
-for tag in ("v1.0.4","v1.0.5","v1.0.6"):
+for tag in ("v1.0.15","v1.0.16"):
     u = "https://gitee.com/api/v5/repos/%s/releases/tags/%s?access_token=%s" % (REPO, tag, tok)
     d = json.loads(urllib.request.urlopen(urllib.request.Request(u,
         headers={"User-Agent":"OMM-ZEN"}), timeout=90).read())
@@ -331,7 +331,7 @@ https://gitee.com/.../releases/download/v1.0.3/catalog.json
 ```powershell
 # Gitee：脚本会同时更新 prev 和当前版本
 foreach ($prev in @("v1.0.5","v1.0.4","v1.0.3")) {
-  powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\publish_pointer.ps1 -Tag v1.0.6 -PrevTag $prev
+  powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\publish_pointer.ps1 -Tag v1.0.17 -PrevTag $prev
 }
 
 # GitHub：逐个 --clobber
@@ -354,7 +354,7 @@ foreach ($prev in @("v1.0.5","v1.0.4","v1.0.3")) {
 macOS 必须在 macOS 上构建，仓库自带工作流：
 
 ```powershell
-gh workflow run macos-build.yml -R Xingye-Dujing/MyBlog --ref production -f release_tag=v1.0.6
+gh workflow run macos-build.yml -R Xingye-Dujing/MyBlog --ref production -f release_tag=v1.0.17
 ```
 
 在 `macos-15`（arm64）与 `macos-15-intel`（x86_64）上执行
@@ -375,7 +375,7 @@ macOS 只做「检测 + 打开下载链接」，不原地替换程序。
 
 ```powershell
 cd D:\blog\web\public
-.venv\Scripts\python.exe desktop\release\verify_release.py --tag v1.0.6
+.venv\Scripts\python.exe desktop\release\verify_release.py --tag v1.0.17
 ```
 
 期望：`OK: catalog and release assets are consistent`，
@@ -388,8 +388,8 @@ cd D:\blog\web\public
 import hashlib, json, pathlib, urllib.request
 DIST = pathlib.Path(r"D:\blog\web\public\dist")
 CAT  = json.loads((DIST/"catalog.json").read_text(encoding="utf-8"))
-GH = "https://github.com/Xingye-Dujing/MyBlog/releases/download/v1.0.6/"
-GT = "https://gitee.com/Xingye-Dujing/my-blog/releases/download/v1.0.6/"
+GH = "https://github.com/Xingye-Dujing/MyBlog/releases/download/v1.0.17/"
+GT = "https://gitee.com/Xingye-Dujing/my-blog/releases/download/v1.0.17/"
 def fetch(u):
     req = urllib.request.Request(u, headers={"User-Agent":"OMM-ZEN","Cache-Control":"no-cache"})
     with urllib.request.urlopen(req, timeout=600) as r:

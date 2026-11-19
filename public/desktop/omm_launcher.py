@@ -133,16 +133,15 @@ def start_latex(port: int) -> int:
 
     def run():
         try:
-            mod.main()
+            # 直接传端口，避免跨线程修改全局 sys.argv 造成竞态。
+            try:
+                mod.main(port)
+            except TypeError:
+                mod.main()
         except SystemExit:
             pass
 
-    old_argv = sys.argv
-    sys.argv = [str(script), str(port)]
-    try:
-        threading.Thread(target=run, daemon=True).start()
-    finally:
-        sys.argv = old_argv
+    threading.Thread(target=run, daemon=True).start()
     return port
 
 

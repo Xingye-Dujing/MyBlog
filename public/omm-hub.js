@@ -25,12 +25,36 @@
   var PIN_KEY = 'omm.hub.pins.v1';
   var RECENT_KEY = 'omm.hub.recent.v1';
   var WORKSPACE_KEY = 'omm.hub.workspaces.v1';
+  var SCREEN_KEY_PREFIX = 'omm.hub.screen-layout.v1.';
   var DEFAULT_CUSTOM_HEX = '#FF8FC8';
   var ACCENT_HEX_HINT = '支持 #RGB / #RRGGBB，例如 #FF8FC8；深色主题会自动提亮。';
   /* Allowed values for the "定时快照" interval (in minutes). Shared by the
      settings dropdown, the persisted-appearance whitelist and backup restore.
      Keep in sync with the <option> list in omm-hub.html. */
   var SNAP_INTERVALS = [0, 5, 10, 15, 30, 45, 60, 120, 240, 360, 720, 1440];
+
+  /* 可自定义快捷键的命令表。默认组合与 README / 设置页里的快捷键列表一致。 */
+  var COMMANDS = [
+    { id: 'next-tab', label: '下一个标签', def: 'Ctrl+Tab' },
+    { id: 'prev-tab', label: '上一个标签', def: 'Ctrl+Shift+Tab' },
+    { id: 'close-tab', label: '关闭当前标签', def: 'Ctrl+W' },
+    { id: 'command-palette', label: '命令面板', def: 'Ctrl+K' },
+    { id: 'global-search', label: '全局内容搜索', def: 'Ctrl+Shift+F' },
+    { id: 'zen-mode', label: '静心专注', def: 'Ctrl+Shift+Z' },
+    { id: 'reopen-tab', label: '重开关闭的标签', def: 'Ctrl+Shift+T' },
+    { id: 'notify-panel', label: '通知中心', def: 'Ctrl+Shift+N' },
+    { id: 'split-v', label: '左右分屏', def: 'Ctrl+\\' },
+    { id: 'split-h', label: '上下分屏', def: 'Ctrl+Shift+\\' },
+    { id: 'toggle-dock', label: '显示 / 隐藏 Dock', def: 'Ctrl+Shift+D' },
+    { id: 'focus-pane', label: '专注当前窗格', def: 'Ctrl+Shift+M' },
+    { id: 'open-0', label: '所有应用', def: 'Ctrl+0' },
+  ];
+  for (var _i = 1; _i <= 9; _i++) {
+    COMMANDS.push({ id: 'open-' + _i, label: '打开第 ' + _i + ' 个应用', def: 'Ctrl+' + _i });
+  }
+  var DEFAULT_KEYMAP = {};
+  COMMANDS.forEach(function (cmd) { DEFAULT_KEYMAP[cmd.id] = cmd.def; });
+
   function snapIntervalLabel(minutes) {
     minutes = Number(minutes) || 0;
     if (minutes < 60) return '每 ' + minutes + ' 分钟';
@@ -48,7 +72,74 @@
     sleep: 15,
     snap: 0,
     dockSort: 'fixed',
+    focus: { pomodoro: 25, breakMin: 5, sound: 'none', dim: true, dnd: true },
+    keymap: {},
+    macros: [],
+    a11y: { fontScale: 1, highContrast: false, reduceMotion: false, ariaLabels: true },
+    multiMonitor: true,
+    cloud: { enabled: false, url: '', user: '', password: '', schedule: 'manual', lastAt: 0 },
   };
+
+  function normalizeCloud(raw) {
+    var data = raw && typeof raw === 'object' ? raw : {};
+    return {
+      enabled: data.enabled === true,
+      url: typeof data.url === 'string' ? data.url : '',
+      user: typeof data.user === 'string' ? data.user : '',
+      password: typeof data.password === 'string' ? data.password : '',
+      schedule: ['manual', 'daily', 'weekly'].indexOf(data.schedule) >= 0 ? data.schedule : 'manual',
+      lastAt: Number(data.lastAt) || 0,
+    };
+  }
+
+  function normalizeA11y(raw) {
+    var data = raw && typeof raw === 'object' ? raw : {};
+    var scale = Number(data.fontScale);
+    return {
+      fontScale: isFinite(scale) && scale >= 0.8 && scale <= 1.6 ? Math.round(scale * 100) / 100 : 1,
+      highContrast: data.highContrast === true,
+      reduceMotion: data.reduceMotion === true,
+      ariaLabels: data.ariaLabels !== false,
+    };
+  }
+
+  function normalizeKeymap(raw) {
+    var out = {};
+    var src = raw && typeof raw === 'object' ? raw : {};
+    COMMANDS.forEach(function (cmd) {
+      var value = typeof src[cmd.id] === 'string' ? src[cmd.id].trim() : '';
+      out[cmd.id] = value || cmd.def;
+    });
+    return out;
+  }
+
+  function normalizeMacros(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(function (m) {
+      return m && typeof m.name === 'string' && m.name.trim() && Array.isArray(m.actions);
+    }).slice(0, 20).map(function (m) {
+      return {
+        name: m.name.trim().slice(0, 40),
+        key: typeof m.key === 'string' ? m.key.trim() : '',
+        actions: m.actions.filter(function (a) { return typeof a === 'string'; }).slice(0, 12),
+      };
+    });
+  }
+
+  function normalizeFocus(raw) {
+    var data = raw && typeof raw === 'object' ? raw : {};
+    function num(value, fallback, min, max) {
+      var n = Number(value);
+      return isFinite(n) && n >= min && n <= max ? Math.round(n) : fallback;
+    }
+    return {
+      pomodoro: num(data.pomodoro, 25, 1, 180),
+      breakMin: num(data.breakMin, 5, 1, 60),
+      sound: ['none', 'rain', 'noise', 'coffee'].indexOf(data.sound) >= 0 ? data.sound : 'none',
+      dim: data.dim !== false,
+      dnd: data.dnd !== false,
+    };
+  }
 
   /* Single source of truth for the accent palette.  Every tinted surface reads
      the --accent* variables derived from here, so UI colours are never
@@ -207,6 +298,25 @@
   var cmdkSharesAt = 0;
   var cmdkSpace = null;
   var cmdkFiltered = [];
+  var gsearchOpen = false;
+  var gsearchTimer = 0;
+  var gsearchSeq = 0;
+  var gsearchResults = [];
+  var gsearchIndex = 0;
+  var zenActive = false;
+  var zenRunning = false;
+  var zenPhase = 'focus';
+  var zenRemaining = 0;
+  var zenTotal = 0;
+  var zenTimer = 0;
+  var zenAudio = null;
+  var zenSource = null;
+  var zenNodes = [];
+  var aiSavedKey = '';
+  var aiConfigPromise = null;
+  var timelineOpen = false;
+  var timelineFilter = 'all';
+  var timelineEvents = [];
   var autoSleepTimer = 0;
   var lastAutoSnapAt = 0;
   var autoSnapBusy = false;
@@ -418,6 +528,66 @@
 
   /* ------------------------------------------------------------- persistence */
 
+  function screenKey() {
+    try {
+      var s = window.screen || {};
+      return [s.width, s.height, s.availLeft || 0, s.availTop || 0].join('x');
+    } catch (e) { return 'default'; }
+  }
+
+  function applyDetachAndScreenLayout() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var detach = params.get('detach');
+      if (detach && APP_BY_ID[detach]) {
+        state.open = [detach];
+        state.tree = { type: 'leaf', id: 'p1' };
+        state.panes = { p1: detach };
+        state.focused = 'p1';
+        state.maximized = null;
+        return;
+      }
+      if (hubAppearance.multiMonitor === false) return;
+      var raw = localStorage.getItem(SCREEN_KEY_PREFIX + screenKey());
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      if (!data || !data.tree || !data.panes) return;
+      state.open = Array.isArray(data.open)
+        ? data.open.filter(function (id) { return !!APP_BY_ID[id]; }) : [];
+      state.tree = data.tree;
+      state.panes = data.panes;
+      state.focused = data.focused && data.panes[data.focused] ? data.focused : 'p1';
+      state.maximized = data.maximized || null;
+      if (typeof data.dock === 'boolean') state.dock = data.dock;
+    } catch (e) { /* 忽略损坏的布局 */ }
+  }
+
+  function saveScreenLayout() {
+    if (hubAppearance.multiMonitor === false) return;
+    try {
+      var payload = {
+        open: state.open, tree: state.tree, panes: state.panes,
+        focused: state.focused, maximized: state.maximized, dock: state.dock,
+      };
+      localStorage.setItem(SCREEN_KEY_PREFIX + screenKey(), JSON.stringify(payload));
+    } catch (e) { /* ignore */ }
+  }
+
+  function detachApp(appId) {
+    if (!appId) return;
+    var app = appOf(appId);
+    fetch('/api/detach?app=' + encodeURIComponent(appId), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.ok) throw new Error('detach failed');
+        toast('已在新窗口打开「' + (app ? app.name : appId) + '」');
+      })
+      .catch(function () {
+        var url = 'omm-hub.html?detach=' + encodeURIComponent(appId);
+        window.open(url, '_blank');
+      });
+  }
+
   function loadState() {
     if (hubAppearance.restore === false) {
       state = defaultState();
@@ -543,6 +713,21 @@
     els.cmdk = document.getElementById('command-palette');
     els.cmdkInput = document.getElementById('cmdk-input');
     els.cmdkList = document.getElementById('cmdk-list');
+    els.gsearch = document.getElementById('global-search');
+    els.gsearchInput = document.getElementById('gsearch-input');
+    els.gsearchList = document.getElementById('gsearch-list');
+    els.gsearchMeta = document.getElementById('gsearch-meta');
+    els.zenBar = document.getElementById('zen-bar');
+    els.zenProgress = document.getElementById('zen-progress');
+    els.zenClock = document.getElementById('zen-clock');
+    els.zenModeLabel = document.getElementById('zen-mode-label');
+    els.zenHint = document.getElementById('zen-hint');
+    els.zenToggle = document.getElementById('zen-toggle');
+    els.zenSkip = document.getElementById('zen-skip');
+    els.zenSound = document.getElementById('zen-sound');
+    els.zenExit = document.getElementById('zen-exit');
+    els.timelinePanel = document.getElementById('timeline-panel');
+    els.timelineList = document.getElementById('timeline-list');
     els.toast = document.getElementById('toast');
     els.pluginPanel = document.getElementById('plugin-panel');
     els.ppBody = document.getElementById('pp-body');
@@ -570,6 +755,7 @@
       autoSleepTick();
       autoSnapTick();
       usageTick();
+      cloudAutoTick();
     }, 60000);
 
     if (window.ResizeObserver) {
@@ -578,6 +764,8 @@
     window.addEventListener('resize', scheduleLayout);
     window.addEventListener('beforeunload', saveNow);
     window.addEventListener('pagehide', saveNow);
+    window.addEventListener('beforeunload', saveScreenLayout);
+    window.addEventListener('pagehide', saveScreenLayout);
     lockShellScroll();
   }
 
@@ -614,6 +802,7 @@
         buildDock();
         if (restore) {
           loadState();
+          applyDetachAndScreenLayout();
           ensureSplitKeys(state.tree);
           applyDockState();
           renderAll();
@@ -1343,6 +1532,12 @@
         ? Number(data.snap)
         : 0;
       hubAppearance.dockSort = data.dockSort === 'usage' ? 'usage' : 'fixed';
+      hubAppearance.focus = normalizeFocus(data.focus);
+      hubAppearance.keymap = normalizeKeymap(data.keymap);
+      hubAppearance.macros = normalizeMacros(data.macros);
+      hubAppearance.a11y = normalizeA11y(data.a11y);
+      hubAppearance.multiMonitor = data.multiMonitor !== false;
+      hubAppearance.cloud = normalizeCloud(data.cloud);
     } catch (e) {
       /* ignore */
     }
@@ -1487,6 +1682,15 @@
   function applyHubAppearance() {
     if (!document.documentElement) return;
     document.documentElement.style.setProperty('--radius', hubAppearance.radius + 'px');
+    var a11y = hubAppearance.a11y || normalizeA11y(null);
+    document.documentElement.style.setProperty('--ui-scale', String(a11y.fontScale || 1));
+    document.body.classList.toggle('hc', !!a11y.highContrast);
+    document.body.classList.toggle('reduce-motion', !!a11y.reduceMotion);
+    if (a11y.ariaLabels !== false) {
+      Array.prototype.forEach.call(document.querySelectorAll('button[title]:not([aria-label])'), function (btn) {
+        btn.setAttribute('aria-label', btn.getAttribute('title'));
+      });
+    }
     document.documentElement.dataset.accent = hubAppearance.accent;
     document.documentElement.dataset.theme = effectiveTheme();
     applyAccentPalette();
@@ -1502,7 +1706,7 @@
     if (themeSelect) themeSelect.value = hubAppearance.theme;
     var snapSelect = document.getElementById('hub-snap');
     if (snapSelect) snapSelect.value = String(hubAppearance.snap);
-    document.body.classList.toggle('no-motion', !hubAppearance.motion);
+    document.body.classList.toggle('no-motion', !hubAppearance.motion || !!a11y.reduceMotion);
     els.app.classList.toggle('topbar-hidden', !hubAppearance.topbar);
     var restore = document.getElementById('hub-restore');
     if (restore) restore.setAttribute('aria-checked', String(hubAppearance.restore));
@@ -1520,21 +1724,282 @@
     if (motion) motion.setAttribute('aria-checked', String(hubAppearance.motion));
     var topbar = document.getElementById('hub-topbar');
     if (topbar) topbar.setAttribute('aria-checked', String(hubAppearance.topbar));
+    var f = hubAppearance.focus || {};
+    var fp = document.getElementById('hub-focus-pomodoro');
+    if (fp) fp.value = String(f.pomodoro);
+    var fb = document.getElementById('hub-focus-break');
+    if (fb) fb.value = String(f.breakMin);
+    var fs = document.getElementById('hub-focus-sound');
+    if (fs) fs.value = f.sound || 'none';
+    var fd = document.getElementById('hub-focus-dim');
+    if (fd) fd.setAttribute('aria-checked', String(f.dim !== false));
+    var fn = document.getElementById('hub-focus-dnd');
+    if (fn) fn.setAttribute('aria-checked', String(f.dnd !== false));
+    var zenBtn = document.getElementById('zen-btn');
+    if (zenBtn) zenBtn.classList.toggle('active', zenActive);
+    var multi = document.getElementById('hub-multimonitor');
+    if (multi) multi.setAttribute('aria-checked', String(hubAppearance.multiMonitor !== false));
+    var cloud = hubAppearance.cloud || normalizeCloud(null);
+    var cloudEnabled = document.getElementById('hub-cloud-enabled');
+    if (cloudEnabled) cloudEnabled.setAttribute('aria-checked', String(cloud.enabled));
+    ['hub-cloud-url', 'hub-cloud-user', 'hub-cloud-password'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = cloud[id.replace('hub-cloud-', '')] || '';
+    });
+    var cloudSchedule = document.getElementById('hub-cloud-schedule');
+    if (cloudSchedule) cloudSchedule.value = cloud.schedule || 'manual';
+    var fontSelect = document.getElementById('hub-a11y-font');
+    if (fontSelect) fontSelect.value = String(a11y.fontScale);
+    [['hub-a11y-contrast', a11y.highContrast], ['hub-a11y-motion', a11y.reduceMotion],
+     ['hub-a11y-aria', a11y.ariaLabels]].forEach(function (pair) {
+      var node = document.getElementById(pair[0]);
+      if (node) node.setAttribute('aria-checked', String(pair[1]));
+    });
     broadcastTheme(effectiveTheme());
+  }
+
+  function cloudConfigFromForm() {
+    var value = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    return {
+      enabled: hubAppearance.cloud.enabled,
+      url: value('hub-cloud-url'),
+      user: value('hub-cloud-user'),
+      password: (function () {
+        var el = document.getElementById('hub-cloud-password');
+        return el && el.value ? el.value : (hubAppearance.cloud.password || '');
+      })(),
+      schedule: value('hub-cloud-schedule') || 'manual',
+      lastAt: hubAppearance.cloud.lastAt || 0,
+    };
+  }
+
+  function persistCloudConfig() {
+    hubAppearance.cloud = cloudConfigFromForm();
+    saveHubAppearance();
+  }
+
+  function uploadCloudBackup(silent) {
+    var cfg = cloudConfigFromForm();
+    if (!cfg.url) { if (!silent) toast('请先填写 WebDAV 地址', 'error'); return Promise.resolve(false); }
+    var hint = document.getElementById('hub-cloud-hint');
+    if (!silent && hint) hint.textContent = '正在生成全量备份并上传…';
+    return fetch('/api/cloud/upload', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: cfg.url, user: cfg.user, password: cfg.password }),
+    })
+      .then(function (r) { return r.json().then(function (d) {
+        if (!r.ok || !d.ok) throw new Error((d && d.error) || '上传失败'); return d;
+      }); })
+      .then(function (d) {
+        hubAppearance.cloud = cfg;
+        hubAppearance.cloud.lastAt = Date.now();
+        saveHubAppearance();
+        if (!silent) {
+          if (hint) hint.textContent = '上次上传：' + new Date().toLocaleString() +
+            ' · ' + ((d.stats || {}).files || 0) + ' 项。';
+          toast('云备份已上传');
+        }
+        return true;
+      })
+      .catch(function (error) {
+        if (!silent) {
+          toast('云备份上传失败：' + (error && error.message ? error.message : error), 'error');
+          if (hint) hint.textContent = '上传失败，请检查 WebDAV 地址与凭据。';
+        }
+        return false;
+      });
+  }
+
+  function downloadCloudRestore() {
+    var cfg = cloudConfigFromForm();
+    if (!cfg.url) { toast('请先填写 WebDAV 地址', 'error'); return; }
+    ommConfirm('从 WebDAV 下载最近的备份并恢复？同名文件会被覆盖，恢复前自动备份当前配置。',
+      { title: '从云备份恢复', ok: '下载并恢复', danger: true }).then(function (ok) {
+      if (!ok) return;
+      fetch('/api/cloud/download', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cfg.url, user: cfg.user, password: cfg.password }),
+      })
+        .then(function (r) { return r.json().then(function (d) {
+          if (!r.ok || !d.ok) throw new Error((d && d.error) || '下载失败'); return d;
+        }); })
+        .then(function (d) {
+          return fetch('/api/full-restore', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ zip: d.zip }),
+          });
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (result) {
+          if (!result.ok) throw new Error(result.error || '恢复失败');
+          toast('云备份已恢复，正在重新加载…');
+          setTimeout(function () { location.reload(); }, 1000);
+        })
+        .catch(function (error) {
+          toast('云恢复失败：' + (error && error.message ? error.message : error), 'error');
+        });
+    });
+  }
+
+  function cloudAutoTick() {
+    var cloud = hubAppearance.cloud || {};
+    if (!cloud.enabled || cloud.schedule === 'manual' || !cloud.url) return;
+    var interval = cloud.schedule === 'daily' ? 86400000 : 604800000;
+    if (Date.now() - (cloud.lastAt || 0) < interval) return;
+    toast('正在自动上传到 WebDAV…');
+    uploadCloudBackup(true);
+  }
+
+  var macroKeyCombo = '';
+  var comboCapturing = false;
+
+  function captureCombo(node, done) {
+    if (!node || node.dataset.capturing === '1') return;
+    comboCapturing = true;
+    node.dataset.capturing = '1';
+    node.classList.add('capturing');
+    var previous = node.textContent;
+    node.textContent = '按下组合键…';
+    function onKey(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      node.removeEventListener('keydown', onKey, true);
+      delete node.dataset.capturing;
+      node.classList.remove('capturing');
+      comboCapturing = false;
+      if (event.key === 'Escape') { node.textContent = previous; return; }
+      var combo = comboFromEvent(event);
+      if (!combo) { node.textContent = previous; return; }
+      node.textContent = combo;
+      done(combo);
+    }
+    node.addEventListener('keydown', onKey, true);
+  }
+
+  function renderKeymap() {
+    var list = document.getElementById('hub-keymap-list');
+    if (!list) return;
+    var map = hubAppearance.keymap || {};
+    list.innerHTML = COMMANDS.map(function (cmd) {
+      return '<div class="keymap-row"><span>' + esc(cmd.label) + '</span>' +
+        '<button class="keymap-key" type="button" data-km="' + esc(cmd.id) + '">' +
+        esc(map[cmd.id] || cmd.def) + '</button></div>';
+    }).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('[data-km]'), function (btn) {
+      btn.addEventListener('click', function () {
+        captureCombo(btn, function (combo) {
+          hubAppearance.keymap[btn.dataset.km] = combo;
+          saveHubAppearance();
+        });
+      });
+    });
+  }
+
+  function renderMacros() {
+    var list = document.getElementById('hub-macro-list');
+    if (!list) return;
+    var macros = hubAppearance.macros || [];
+    if (!macros.length) {
+      list.innerHTML = '<span class="storage-dim">还没有命令宏。</span>';
+      return;
+    }
+    list.innerHTML = macros.map(function (m, index) {
+      return '<div class="macro-row"><b>' + esc(m.name) + '</b>' +
+        '<code>' + esc((m.actions || []).join(' → ') || '（无动作）') + '</code>' +
+        '<button class="macro-key" type="button" data-macro-key="' + index + '">' +
+        esc(m.key || '未绑定') + '</button>' +
+        '<button type="button" data-macro-del="' + index + '">删除</button></div>';
+    }).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('[data-macro-key]'), function (btn) {
+      btn.addEventListener('click', function () {
+        captureCombo(btn, function (combo) {
+          hubAppearance.macros[Number(btn.dataset.macroKey)].key = combo;
+          saveHubAppearance();
+        });
+      });
+    });
+    Array.prototype.forEach.call(list.querySelectorAll('[data-macro-del]'), function (btn) {
+      btn.addEventListener('click', function () {
+        hubAppearance.macros.splice(Number(btn.dataset.macroDel), 1);
+        saveHubAppearance();
+        renderMacros();
+      });
+    });
+  }
+
+  function loadAIConfig() {
+    var hint = document.getElementById('hub-ai-hint');
+    if (!window.OMMDesktop || !window.OMMDesktop.aiConfig) {
+      if (hint) hint.textContent = 'AI 配置仅在桌面版可用（浏览器预览模式不连接本机服务）。';
+      return;
+    }
+    aiConfigPromise = window.OMMDesktop.aiConfig().then(function (data) {
+      var ai = (data && data.ai) || {};
+      aiSavedKey = ai.apiKey || '';
+      var set = function (id, value) { var el = document.getElementById(id); if (el) el.value = value || ''; };
+      set('hub-ai-provider', ai.provider || 'deepseek');
+      set('hub-ai-base', ai.apiBase);
+      set('hub-ai-model', ai.apiModel);
+      set('hub-ai-system', ai.system);
+      set('hub-ai-key', '');
+      if (hint) hint.textContent = data.configured
+        ? '已保存密钥（为安全起见不再显示）。修改后留空即保持原密钥；需要更换请直接填写新值。'
+        : '尚未填写 API Key。在这里填写一次，所有支持 AI 的产品都能读取。';
+    }).catch(function () {
+      if (hint) hint.textContent = '读取 AI 配置失败；工作台可能未运行在桌面版环境。';
+    });
+  }
+
+  function saveAIConfig(clearKey) {
+    var run = function () {
+      var hint = document.getElementById('hub-ai-hint');
+      var value = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+      var ai = {
+        provider: value('hub-ai-provider') || 'deepseek',
+        apiBase: value('hub-ai-base'),
+        apiModel: value('hub-ai-model'),
+        system: value('hub-ai-system'),
+        apiKey: clearKey ? '' : (value('hub-ai-key') || aiSavedKey),
+      };
+      if (!window.OMMDesktop || !window.OMMDesktop.setAIConfig) {
+        toast('AI 配置仅在桌面版可用', 'error');
+        return;
+      }
+      return window.OMMDesktop.setAIConfig(ai).then(function () {
+        aiSavedKey = ai.apiKey;
+        var key = document.getElementById('hub-ai-key');
+        if (key) key.value = '';
+        if (hint) hint.textContent = ai.apiKey
+          ? 'AI 配置已保存，所有产品下次启动时生效。'
+          : 'AI 配置已保存（未设置密钥，在线功能需各产品自行填写）。';
+        toast('AI 配置已保存');
+      }).catch(function (error) {
+        toast('保存 AI 配置失败：' + (error && error.message ? error.message : error), 'error');
+      });
+    };
+    // aiSavedKey 由异步请求填充；若用户抢在加载完成前保存，留空的输入框会被当成
+    // “清空密钥”。等加载结束再写，避免静默抹掉服务端已有的密钥。
+    return aiConfigPromise ? aiConfigPromise.then(run) : run();
   }
 
   function openHubSettings() {
     closePopovers();
     closePluginPanel();
     closeCommandPalette();
+    closeGlobalSearch();
+    closeTimeline();
     els.hubSettings.hidden = false;
     applyHubAppearance();
+    loadAIConfig();
+    renderKeymap();
+    renderMacros();
     loadStorage(false);
     renderUsage();
   }
 
   function closeHubSettings() {
     els.hubSettings.hidden = true;
+    comboCapturing = false;
   }
 
   /* Custom hex accent: OMM-ZEN styled, no native colour picker popup. */
@@ -1721,6 +2186,141 @@
           : '已关闭定时快照');
       });
     }
+    var focusFields = [
+      ['hub-focus-pomodoro', 'pomodoro', Number],
+      ['hub-focus-break', 'breakMin', Number],
+      ['hub-focus-sound', 'sound', String],
+    ];
+    focusFields.forEach(function (field) {
+      var node = document.getElementById(field[0]);
+      if (!node) return;
+      node.addEventListener('change', function () {
+        hubAppearance.focus[field[1]] = field[2] === Number ? Number(node.value) : node.value;
+        if (field[1] === 'sound' && zenActive) setZenSound(node.value);
+        saveHubAppearance();
+        applyHubAppearance();
+      });
+    });
+    var focusDim = document.getElementById('hub-focus-dim');
+    if (focusDim) focusDim.addEventListener('click', function () {
+      hubAppearance.focus.dim = !hubAppearance.focus.dim;
+      saveHubAppearance();
+      applyHubAppearance();
+      document.body.classList.toggle('zen-dim', zenActive && hubAppearance.focus.dim);
+    });
+    var focusDnd = document.getElementById('hub-focus-dnd');
+    if (focusDnd) focusDnd.addEventListener('click', function () {
+      hubAppearance.focus.dnd = !hubAppearance.focus.dnd;
+      saveHubAppearance();
+      applyHubAppearance();
+      document.body.classList.toggle('zen-dnd', zenActive && hubAppearance.focus.dnd);
+    });
+    var aiProvider = document.getElementById('hub-ai-provider');
+    var aiPresets = {
+      deepseek: ['https://api.deepseek.com', 'deepseek-flash'],
+      openai: ['https://api.openai.com/v1', 'gpt-4o-mini'],
+      openrouter: ['https://openrouter.ai/api/v1', 'deepseek/deepseek-chat'],
+      zhipu: ['https://open.bigmodel.cn/api/paas/v4', 'glm-4-flash'],
+      custom: ['', ''],
+    };
+    if (aiProvider) aiProvider.addEventListener('change', function () {
+      var preset = aiPresets[aiProvider.value];
+      if (!preset) return;
+      var base = document.getElementById('hub-ai-base');
+      var model = document.getElementById('hub-ai-model');
+      if (base && !base.value.trim()) base.value = preset[0];
+      if (model && !model.value.trim()) model.value = preset[1];
+    });
+    var aiSave = document.getElementById('hub-ai-save');
+    if (aiSave) aiSave.addEventListener('click', function () { saveAIConfig(false); });
+    var aiLoad = document.getElementById('hub-ai-load');
+    if (aiLoad) aiLoad.addEventListener('click', loadAIConfig);
+    var aiClear = document.getElementById('hub-ai-clear');
+    if (aiClear) aiClear.addEventListener('click', function () {
+      ommConfirm('清除本机保存的 AI 密钥？各产品自己的密钥不受影响。',
+        { title: '清除 AI 密钥', ok: '清除', danger: true }).then(function (ok) {
+        if (ok) saveAIConfig(true);
+      });
+    });
+    var a11yFont = document.getElementById('hub-a11y-font');
+    if (a11yFont) a11yFont.addEventListener('change', function () {
+      hubAppearance.a11y.fontScale = Number(a11yFont.value) || 1;
+      saveHubAppearance();
+      applyHubAppearance();
+    });
+    [['hub-a11y-contrast', 'highContrast'], ['hub-a11y-motion', 'reduceMotion'],
+     ['hub-a11y-aria', 'ariaLabels']].forEach(function (pair) {
+      var node = document.getElementById(pair[0]);
+      if (!node) return;
+      node.addEventListener('click', function () {
+        hubAppearance.a11y[pair[1]] = !hubAppearance.a11y[pair[1]];
+        saveHubAppearance();
+        applyHubAppearance();
+      });
+    });
+    var cloudEnabled = document.getElementById('hub-cloud-enabled');
+    if (cloudEnabled) cloudEnabled.addEventListener('click', function () {
+      hubAppearance.cloud.enabled = !hubAppearance.cloud.enabled;
+      saveHubAppearance();
+      applyHubAppearance();
+    });
+    var cloudUpload = document.getElementById('hub-cloud-upload');
+    if (cloudUpload) cloudUpload.addEventListener('click', function () { persistCloudConfig(); uploadCloudBackup(false); });
+    var cloudDownload = document.getElementById('hub-cloud-download');
+    if (cloudDownload) cloudDownload.addEventListener('click', function () { persistCloudConfig(); downloadCloudRestore(); });
+    var cloudClear = document.getElementById('hub-cloud-clear');
+    if (cloudClear) cloudClear.addEventListener('click', function () {
+      ommConfirm('清除本机保存的 WebDAV 地址与凭据？云端已有备份不会删除。',
+        { title: '清除云备份凭据', ok: '清除', danger: true }).then(function (ok) {
+        if (!ok) return;
+        hubAppearance.cloud = normalizeCloud({ schedule: hubAppearance.cloud.schedule });
+        saveHubAppearance();
+        applyHubAppearance();
+        toast('云备份凭据已清除');
+      });
+    });
+    var multiSwitch = document.getElementById('hub-multimonitor');
+    if (multiSwitch) multiSwitch.addEventListener('click', function () {
+      hubAppearance.multiMonitor = hubAppearance.multiMonitor === false;
+      saveHubAppearance();
+      applyHubAppearance();
+    });
+    var keymapReset = document.getElementById('hub-keymap-reset');
+    if (keymapReset) keymapReset.addEventListener('click', function () {
+      ommConfirm('把所有快捷键恢复为默认组合？命令宏不受影响。',
+        { title: '恢复默认快捷键', ok: '恢复' }).then(function (ok) {
+        if (!ok) return;
+        hubAppearance.keymap = normalizeKeymap(null);
+        saveHubAppearance();
+        renderKeymap();
+        toast('快捷键已恢复默认');
+      });
+    });
+    var macroName = document.getElementById('hub-macro-name');
+    var macroActions = document.getElementById('hub-macro-actions');
+    var macroKey = document.getElementById('hub-macro-key');
+    if (macroKey) macroKey.addEventListener('click', function () {
+      captureCombo(macroKey, function (combo) { macroKeyCombo = combo; });
+    });
+    var macroAdd = document.getElementById('hub-macro-add');
+    if (macroAdd) macroAdd.addEventListener('click', function () {
+      var name = macroName && macroName.value.trim();
+      var actions = macroActions && macroActions.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!name || !actions || !actions.length) {
+        toast('请填写宏名称和至少一个动作', 'error');
+        return;
+      }
+      hubAppearance.macros = normalizeMacros((hubAppearance.macros || []).concat([
+        { name: name, actions: actions, key: macroKeyCombo }
+      ]));
+      saveHubAppearance();
+      macroKeyCombo = '';
+      if (macroName) macroName.value = '';
+      if (macroActions) macroActions.value = '';
+      if (macroKey) macroKey.textContent = '点击后按组合键';
+      renderMacros();
+      toast('命令宏已添加');
+    });
     var resetLayoutBtn = document.getElementById('hub-reset-layout');
     if (resetLayoutBtn) resetLayoutBtn.addEventListener('click', function () { resetLayout(true); });
     var closeAllBtn = document.getElementById('hub-close-all');
@@ -1741,6 +2341,18 @@
         var file = restoreFile.files && restoreFile.files[0];
         restoreFile.value = '';
         if (file) restoreBackup(file);
+      });
+    }
+    var fullBackup = document.getElementById('hub-full-backup');
+    if (fullBackup) fullBackup.addEventListener('click', downloadFullBackup);
+    var fullRestorePick = document.getElementById('hub-full-restore-pick');
+    var fullRestoreFile = document.getElementById('hub-full-restore-file');
+    if (fullRestorePick && fullRestoreFile) {
+      fullRestorePick.addEventListener('click', function () { fullRestoreFile.click(); });
+      fullRestoreFile.addEventListener('change', function () {
+        var file = fullRestoreFile.files && fullRestoreFile.files[0];
+        fullRestoreFile.value = '';
+        if (file) restoreFullBackup(file);
       });
     }
     var dockUsage = document.getElementById('hub-dock-usage');
@@ -1773,18 +2385,9 @@
       });
     }
     document.getElementById('hub-settings-reset').addEventListener('click', function () {
-      hubAppearance = {
-        radius: 0,
-        accent: 'amber',
-        accentHex: '',
-        theme: 'light',
-        motion: true,
-        topbar: true,
-        restore: true,
-        sleep: 15,
-        snap: 0,
-        dockSort: 'fixed',
-      };
+      // 统一走归一化函数补全全部字段；手写对象曾遗漏 focus/cloud/a11y 等，
+      // 导致重置后静心模式、云备份、无障碍开关在刷新前一直抛 TypeError。
+      hubAppearance = normalizeAppearance(null);
       saveHubAppearance();
       applyHubAppearance();
       var accentHint = document.getElementById('hub-accent-hex-hint');
@@ -1928,6 +2531,12 @@
       sleep: [0, 5, 15, 30].indexOf(Number(data.sleep)) >= 0 ? Number(data.sleep) : 15,
       snap: SNAP_INTERVALS.indexOf(Number(data.snap)) >= 0 ? Number(data.snap) : 0,
       dockSort: data.dockSort === 'usage' ? 'usage' : 'fixed',
+      focus: normalizeFocus(data.focus),
+      keymap: normalizeKeymap(data.keymap),
+      macros: normalizeMacros(data.macros),
+      a11y: normalizeA11y(data.a11y),
+      multiMonitor: data.multiMonitor !== false,
+      cloud: normalizeCloud(data.cloud),
     };
   }
 
@@ -1990,6 +2599,86 @@
     reader.readAsText(file);
   }
 
+  function base64FromBuffer(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var chunk = 0x8000;
+    var parts = [];
+    for (var i = 0; i < bytes.length; i += chunk) {
+      parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)));
+    }
+    return btoa(parts.join(''));
+  }
+
+  function downloadFullBackup() {
+    var hint = document.getElementById('hub-full-backup-hint');
+    if (hint) hint.textContent = '正在打包全量备份（文件较多时可能需要几十秒）…';
+    fetch('/api/full-backup', { cache: 'no-store' })
+      .then(function (response) {
+        return response.json().then(function (result) {
+          if (!response.ok || !result.ok) throw new Error((result && result.error) || '备份失败');
+          return result;
+        });
+      })
+      .then(function (result) {
+        var binary = atob(result.zip || '');
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        var blob = new Blob([bytes], { type: 'application/zip' });
+        var url = URL.createObjectURL(blob);
+        var anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'jing-shufang-full-' + backupStamp() + '.zip';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        var s = result.stats || {};
+        toast('全量备份已生成：' + (s.files || 0) + ' 项（含快照 ' +
+          (s.snapshots || 0) + '、共享 ' + (s.share || 0) + '）');
+        if (hint) hint.textContent = '全量备份包含所有产品的设置、共享空间、快照与已保存文档，可整体迁移到新电脑。';
+      })
+      .catch(function (error) {
+        toast('全量备份失败：' + (error && error.message ? error.message : error), 'error');
+        if (hint) hint.textContent = '全量备份失败，请重试或查看通知。';
+      });
+  }
+
+  function restoreFullBackup(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      ommConfirm(
+        '这会从全量备份恢复设置、共享空间、快照与所有已保存文档。\n' +
+        '同名文件将被覆盖，未包含在备份中的文件会保留；恢复前会自动备份当前配置。继续？',
+        { title: '从全量备份恢复', ok: '恢复', danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
+        var payload = JSON.stringify({ zip: base64FromBuffer(reader.result) });
+        fetch('/api/full-restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        })
+          .then(function (response) {
+            return response.json().then(function (result) {
+              if (!response.ok || !result.ok) throw new Error((result && result.error) || '恢复失败');
+              return result;
+            });
+          })
+          .then(function (result) {
+            var r = result.restored || {};
+            toast('全量恢复完成，正在重新加载…（' +
+              (r.files || 0) + ' 文档 / ' + (r.snapshots || 0) + ' 快照）');
+            setTimeout(function () { location.reload(); }, 1000);
+          })
+          .catch(function (error) {
+            toast('恢复失败：' + (error && error.message ? error.message : error), 'error');
+          });
+      });
+    };
+    reader.onerror = function () { toast('读取备份文件失败', 'error'); };
+    reader.readAsArrayBuffer(file);
+  }
+
   function resetLayout(askConfirm) {
     function commit() {
       closeMany(state.open.slice(), { remember: false });
@@ -2025,6 +2714,8 @@
 
   function openPluginPanel(tab) {
     closeCommandPalette();
+    closeGlobalSearch();
+    closeTimeline();
     closePopovers();
     if (els.hubSettings) els.hubSettings.hidden = true;
     if (tab) pluginPanelTab = tab;
@@ -2090,6 +2781,8 @@
       esc(version || app.version || '') +
       '</span>' +
       '<span class="pp-actions">' +
+      '<button class="pp-btn" type="button" data-pp-action="detail" data-id="' +
+      esc(app.id) + '" title="查看详情与权限">详情</button>' +
       '<button class="pp-btn" type="button" data-pp-action="open" data-id="' +
       esc(app.id) +
       '">打开</button>' +
@@ -2100,6 +2793,68 @@
         : '') +
       '</span></div>'
     );
+  }
+
+  function showPluginDetail(pluginId) {
+    var app = (PLUGIN_INFO || []).filter(function (item) { return item.id === pluginId; })[0];
+    if (!app || !els.ppBody) return;
+    var channels = ((app.share && app.share.channels) || []);
+    var roles = { publish: '仅发布', consume: '仅接收', both: '发布与接收' };
+    var channelHtml = channels.length
+      ? '<div class="pp-detail-channels">' + channels.map(function (c) {
+          return '<div class="pp-channel"><code>' + esc(c.id) + '</code>' +
+            '<span>' + esc(roles[c.role] || c.role || 'both') + '</span>' +
+            (c.name ? '<span>' + esc(c.name) + '</span>' : '') + '</div>';
+        }).join('') + '</div>'
+      : '<div class="setting-hint">该插件没有声明共享频道，不会读写其他产品的数据。</div>';
+    els.ppBody.innerHTML =
+      '<div class="pp-detail">' +
+      '<div class="setting-actions"><button class="pp-btn" type="button" data-pp-action="detail-back">← 返回列表</button></div>' +
+      '<h2 class="pp-detail-title">' + esc(app.name) + ' <small>' + esc(app.version || '') + '</small></h2>' +
+      '<p class="pp-note">' + esc(app.description || '暂无说明') + '</p>' +
+      '<dl class="pp-detail-list">' +
+      '<div><dt>标识</dt><dd><code>' + esc(app.id) + '</code></dd></div>' +
+      '<div><dt>来源</dt><dd>' + (app.source === 'user' ? '用户安装' : '内置') + '</dd></div>' +
+      '<div><dt>运行时</dt><dd>' + esc(app.runtime || 'static') + '</dd></div>' +
+      '<div><dt>端口</dt><dd>' + esc(app.port || '—') + '</dd></div>' +
+      '<div><dt>作者</dt><dd>' + esc(app.author || '—') + '</dd></div>' +
+      '<div><dt>主页</dt><dd>' + (app.homepage
+        ? '<a href="' + esc(app.homepage) + '" target="_blank" rel="noreferrer">' + esc(app.homepage) + '</a>'
+        : '—') + '</dd></div>' +
+      '</dl>' +
+      '<h3 class="pp-detail-h3">共享权限声明</h3>' + channelHtml +
+      '<p class="setting-hint">声明只代表插件申请的能力；实际连接规则由「存档 → 跨产品共享」决定，随时可以撤销。</p>' +
+      '<div class="setting-actions">' +
+      '<button class="pp-btn primary" type="button" data-pp-action="open" data-id="' + esc(app.id) + '">打开插件</button>' +
+      (app.rollback
+        ? '<button class="pp-btn" type="button" data-pp-action="rollback" data-id="' + esc(app.id) + '">回滚到上一版本</button>'
+        : '') +
+      '</div></div>';
+  }
+
+  function rollbackPlugin(pluginId) {
+    ommConfirm('把这个插件恢复到更新前的版本？当前版本会被替换（不会删除你的文档与设置）。',
+      { title: '回滚插件', ok: '回滚', danger: true }).then(function (ok) {
+      if (!ok) return;
+      fetch('/api/plugins/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pluginId }),
+      })
+        .then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok || !data.ok) throw new Error((data && data.error) || '回滚失败');
+            return data;
+          });
+        })
+        .then(function () {
+          toast('已回滚，正在重新加载…');
+          setTimeout(function () { location.reload(); }, 800);
+        })
+        .catch(function (error) {
+          toast('回滚失败：' + (error && error.message ? error.message : error), 'error');
+        });
+    });
   }
 
   function renderInstalledPlugins() {
@@ -3809,7 +4564,10 @@
   }
 
   function cmdkActionList() {
-    return [
+    var list = [
+      { label: '最近动态', hint: '跨产品的文档、快照、共享与通知', keywords: 'timeline recent zuijin dongtai', run: function () { openTimeline(); } },
+      { label: '开启 / 退出静心专注', hint: '番茄钟 + 环境音　Ctrl+Shift+Z', keywords: 'focus zen jingxin zhuanzhu', run: function () { setZen(!zenActive); } },
+      { label: '全局内容搜索', hint: '跨产品全文检索　Ctrl+Shift+F', keywords: 'search sousuo quanju wenben', run: function () { openGlobalSearch(); } },
       { label: '打开存档历史', hint: '查看文件与快照', keywords: 'archive cundang', run: function () { openArchivePane('archive'); } },
       { label: '打开跨产品共享', hint: '发送/接收共享内容', keywords: 'share gongxiang', run: function () { openArchivePane('share'); } },
       { label: '插件管理', hint: '安装、更新、卸载、导入', keywords: 'plugin chajian', run: function () { openPluginPanel('installed'); } },
@@ -3829,6 +4587,16 @@
       { label: '重新打开已关闭标签', hint: 'Ctrl+Shift+T', keywords: 'reopen', run: reopenLastClosed },
       { label: '检查框架更新', hint: '工作台与产品更新', keywords: 'update gengxin', run: function () { openPluginPanel('update'); } },
     ];
+    (hubAppearance.macros || []).forEach(function (macro, index) {
+      list.push({
+        group: '命令宏',
+        label: '宏：' + macro.name,
+        hint: (macro.key || '未绑定') + ' · ' + (macro.actions || []).join(' → '),
+        keywords: 'macro hong ' + macro.name,
+        run: function () { runMacro(index); },
+      });
+    });
+    return list;
   }
 
   function buildCmdkItems() {
@@ -4010,6 +4778,451 @@
     cmdkIndex = 0;
   }
 
+  /* ---------- 全局内容搜索：跨产品全文检索（基于桌面桥 /__omm/fs/search） ---------- */
+  function openGlobalSearch(initial) {
+    if (!els.gsearch) return;
+    closePopovers();
+    closeCommandPalette();
+    closePluginPanel();
+    closeTimeline();
+    if (els.hubSettings) els.hubSettings.hidden = true;
+    gsearchOpen = true;
+    els.gsearch.hidden = false;
+    els.gsearchInput.value = initial || '';
+    gsearchIndex = 0;
+    var q = (initial || '').trim();
+    if (q) runGlobalSearch();
+    else renderGlobalSearch(null, '输入关键词，检索全部 11 个产品中已保存的文档内容。');
+    setTimeout(function () { els.gsearchInput.focus(); els.gsearchInput.select(); }, 0);
+  }
+
+  function closeGlobalSearch() {
+    if (!els.gsearch) return;
+    gsearchOpen = false;
+    gsearchSeq += 1;
+    window.clearTimeout(gsearchTimer);
+    els.gsearch.hidden = true;
+    els.gsearchInput.value = '';
+    gsearchResults = [];
+    gsearchIndex = 0;
+  }
+
+  function gsearchEscape(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function gsearchHighlight(text, needle) {
+    var out = gsearchEscape(text);
+    var token = gsearchEscape(needle).trim();
+    if (!token) return out;
+    try {
+      var re = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      return out.replace(re, function (m) { return '<mark>' + m + '</mark>'; });
+    } catch (e) { return out; }
+  }
+
+  function runGlobalSearch() {
+    if (!els.gsearch) return;
+    var q = els.gsearchInput.value.trim();
+    gsearchSeq += 1;
+    var seq = gsearchSeq;
+    window.clearTimeout(gsearchTimer);
+    if (!q) {
+      gsearchResults = [];
+      renderGlobalSearch(null, '输入关键词，检索全部 11 个产品中已保存的文档内容。');
+      return;
+    }
+    renderGlobalSearch(null, '正在检索「' + gsearchEscape(q) + '」…', true);
+    gsearchTimer = window.setTimeout(function () {
+      fetch('/__omm/fs/search?q=' + encodeURIComponent(q) + '&all=1&limit=60', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (seq !== gsearchSeq || !gsearchOpen) return;
+          if (!data || !data.matches) {
+            renderGlobalSearch(null, '检索服务不可用（仅桌面版支持）。');
+            return;
+          }
+          gsearchResults = data.matches || [];
+          gsearchIndex = 0;
+          var meta = '找到 ' + gsearchResults.length + ' 处匹配 · 扫描 ' +
+            (data.scanned || 0) + ' 个文件';
+          if (data.truncated) meta += '（结果较多，已截断）';
+          renderGlobalSearch(q, meta);
+        })
+        .catch(function () {
+          if (seq === gsearchSeq && gsearchOpen) renderGlobalSearch(null, '检索失败，请稍后重试。');
+        });
+    }, 220);
+  }
+
+  function renderGlobalSearch(needle, meta, loading) {
+    if (!els.gsearch) return;
+    if (els.gsearchMeta) els.gsearchMeta.innerHTML = meta || '';
+    if (loading) {
+      els.gsearchList.innerHTML = '<div class="gsearch-loading">正在检索全部产品内容…</div>';
+      return;
+    }
+    if (!gsearchResults.length) {
+      els.gsearchList.innerHTML = '<div class="cmdk-empty">' +
+        (needle ? '没有找到与「' + gsearchEscape(needle) + '」相关的内容' : '输入关键词开始检索') +
+        '</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < gsearchResults.length; i++) {
+      var m = gsearchResults[i];
+      var app = APP_BY_ID[m.app];
+      var appName = (app && app.name) || m.app_name || m.app || '未知产品';
+      var glyph = (app && app.glyph) || appName.charAt(0);
+      var snippet = gsearchHighlight(m.snippet || m.title || '', needle || '');
+      html += '<button class="cmdk-item gsearch-item' + (i === gsearchIndex ? ' active' : '') +
+        '" type="button" data-gs="' + i + '">' +
+        '<span class="glyph">' + gsearchEscape(glyph) + '</span>' +
+        '<span class="g-body">' +
+        '<span class="g-title"><span class="g-name">' + gsearchEscape(m.title || m.name || '未命名') +
+        '</span><span class="g-app">' + gsearchEscape(appName) + '</span></span>' +
+        '<span class="g-snippet">' + snippet + '</span>' +
+        '</span>' +
+        '<span class="g-count">' + (m.count || 1) + ' 处</span>' +
+        '</button>';
+    }
+    els.gsearchList.innerHTML = html;
+    var active = els.gsearchList.querySelector('.gsearch-item.active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  function moveGsearch(delta) {
+    if (!gsearchResults.length) return;
+    gsearchIndex = (gsearchIndex + delta + gsearchResults.length) % gsearchResults.length;
+    renderGlobalSearch(els.gsearchInput.value.trim(), null);
+  }
+
+  function openGsearchResult(index) {
+    var m = gsearchResults[index];
+    if (!m || !m.path) return;
+    closeGlobalSearch();
+    window.dispatchEvent(new CustomEvent('omm:load-file', {
+      detail: { path: m.path, name: m.name || m.title, mime: m.mime, app: m.app }
+    }));
+  }
+
+  /* ---------- 静心专注模式：番茄钟 + 离线环境音 + 免打扰 ---------- */
+  function stopZenSound() {
+    var src = zenSource;
+    var ctx = zenAudio;
+    var nodes = zenNodes;
+    zenSource = null;
+    zenAudio = null;
+    zenNodes = [];
+    if (!ctx) return;
+    try {
+      if (src) {
+        var g = nodes[1];
+        if (g) g.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+      }
+    } catch (e) { /* ignore */ }
+    // 必须等淡出结束再 stop + close，否则 AudioContext 会立刻切断声音（爆音）。
+    var finish = function () {
+      try { if (src) src.stop(); } catch (e) {}
+      nodes.forEach(function (n) { try { n.disconnect(); } catch (e) {} });
+      try { ctx.close(); } catch (e) {}
+    };
+    if (src) window.setTimeout(finish, 320);
+    else finish();
+  }
+
+  function setZenSound(kind) {
+    hubAppearance.focus.sound = kind;
+    saveHubAppearance();
+    var select = document.getElementById('hub-focus-sound');
+    if (select) select.value = kind;
+    stopZenSound();
+    if (!kind || kind === 'none') { renderZen(); return; }
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) { toast('此环境不支持网页音频', 'error'); renderZen(); return; }
+    try {
+      zenAudio = new Ctx();
+      var buffer = zenAudio.createBuffer(1, zenAudio.sampleRate * 3, zenAudio.sampleRate);
+      var data = buffer.getChannelData(0);
+      var last = 0;
+      for (var i = 0; i < data.length; i++) {
+        var white = Math.random() * 2 - 1;
+        if (kind === 'noise') {
+          data[i] = white * 0.22;
+        } else if (kind === 'coffee') {
+          last = (last + 0.02 * white) / 1.02;
+          data[i] = last * 2.6 * 0.5 + white * 0.018;
+        } else {
+          last = (last + 0.035 * white) / 1.035;
+          data[i] = last * 2.8 * 0.4 + white * 0.1;
+        }
+      }
+      var source = zenAudio.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      var filter = zenAudio.createBiquadFilter();
+      filter.type = kind === 'noise' ? 'bandpass' : 'lowpass';
+      filter.frequency.value = kind === 'rain' ? 1500 : (kind === 'coffee' ? 700 : 1200);
+      var gain = zenAudio.createGain();
+      gain.gain.value = 0;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(zenAudio.destination);
+      source.start();
+      gain.gain.linearRampToValueAtTime(0.16, zenAudio.currentTime + 1.2);
+      zenSource = source;
+      zenNodes = [filter, gain];
+    } catch (e) {
+      stopZenSound();
+      toast('环境音启动失败', 'error');
+    }
+    renderZen();
+  }
+
+  function playZenChime() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      [660, 880].forEach(function (freq, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.18);
+        gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + i * 0.18 + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.18);
+        osc.stop(ctx.currentTime + i * 0.18 + 0.55);
+      });
+      window.setTimeout(function () { try { ctx.close(); } catch (e) {} }, 1600);
+    } catch (e) { /* ignore */ }
+  }
+
+  function renderZen() {
+    if (!els.zenBar) return;
+    var total = zenTotal || 1;
+    var pct = Math.max(0, Math.min(1, zenRemaining / total));
+    if (els.zenProgress) els.zenProgress.style.strokeDashoffset = String(119.4 * (1 - pct));
+    var mins = Math.floor(Math.max(0, zenRemaining) / 60);
+    var secs = Math.max(0, zenRemaining) % 60;
+    if (els.zenClock) els.zenClock.textContent = (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+    if (els.zenModeLabel) els.zenModeLabel.textContent = zenPhase === 'focus' ? '专注时间' : '短暂休息';
+    if (els.zenHint) els.zenHint.textContent = zenRunning
+      ? (zenPhase === 'focus' ? '保持沉浸，暂离纷扰' : '起身活动，放松眼睛')
+      : '已暂停 · 点击开始继续';
+    if (els.zenToggle) els.zenToggle.textContent = zenRunning ? '暂停' : '开始';
+    if (els.zenSound) {
+      var names = { none: '♪ 关', rain: '♪ 雨声', noise: '♪ 白噪', coffee: '♪ 咖啡馆' };
+      els.zenSound.textContent = names[hubAppearance.focus.sound] || '♪ 关';
+    }
+    els.zenBar.classList.toggle('running', zenRunning);
+  }
+
+  function zenTick() {
+    if (!zenRunning || !zenActive) return;
+    zenRemaining -= 1;
+    if (zenRemaining <= 0) {
+      playZenChime();
+      if (zenPhase === 'focus') {
+        zenPhase = 'break';
+        zenTotal = (hubAppearance.focus.breakMin || 5) * 60;
+        zenRemaining = zenTotal;
+        zenRunning = true;
+        toast('专注完成，休息一下 ☕');
+      } else {
+        zenPhase = 'focus';
+        zenTotal = (hubAppearance.focus.pomodoro || 25) * 60;
+        zenRemaining = zenTotal;
+        zenRunning = false;
+        toast('休息结束，准备下一轮');
+      }
+    }
+    renderZen();
+  }
+
+  function setZen(active) {
+    if (active === zenActive) return;
+    zenActive = active;
+    document.body.classList.toggle('zen-mode', active);
+    document.body.classList.toggle('zen-dim', active && hubAppearance.focus.dim !== false);
+    document.body.classList.toggle('zen-dnd', active && hubAppearance.focus.dnd !== false);
+    if (els.zenBar) els.zenBar.hidden = !active;
+    window.clearInterval(zenTimer);
+    zenTimer = 0;
+    if (!active) {
+      zenRunning = false;
+      stopZenSound();
+      toast('已退出静心模式');
+    } else {
+      zenPhase = 'focus';
+      zenTotal = (hubAppearance.focus.pomodoro || 25) * 60;
+      zenRemaining = zenTotal;
+      zenRunning = true;
+      zenTimer = window.setInterval(zenTick, 1000);
+      if (hubAppearance.focus.sound && hubAppearance.focus.sound !== 'none') {
+        setZenSound(hubAppearance.focus.sound);
+      }
+      toast('静心模式已开启 · 保持沉浸');
+    }
+    renderZen();
+    applyHubAppearance();
+  }
+
+  /* ---------- 最近动态：跨产品时间线 ---------- */
+  function timelineTime(value) {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+    var t = Date.parse(String(value).replace(' ', 'T'));
+    return isFinite(t) ? t : 0;
+  }
+
+  function timelineDay(value) {
+    var t = timelineTime(value);
+    if (!t) return '时间未知';
+    var d = new Date(t);
+    var today = new Date();
+    if (d.toDateString() === today.toDateString()) return '今天';
+    var yesterday = new Date(Date.now() - 86400000);
+    if (d.toDateString() === yesterday.toDateString()) return '昨天';
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  function openTimeline() {
+    if (!els.timelinePanel) return;
+    closePopovers();
+    closeCommandPalette();
+    closeGlobalSearch();
+    closePluginPanel();
+    if (els.hubSettings) els.hubSettings.hidden = true;
+    timelineOpen = true;
+    els.timelinePanel.hidden = false;
+    timelineFilter = 'all';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tl]'), function (btn) {
+      btn.classList.toggle('active', btn.dataset.tl === 'all');
+    });
+    loadTimeline();
+  }
+
+  function closeTimeline() {
+    if (!els.timelinePanel) return;
+    timelineOpen = false;
+    els.timelinePanel.hidden = true;
+  }
+
+  function loadTimeline() {
+    if (!els.timelineList) return;
+    els.timelineList.innerHTML = '<div class="tl-empty">正在汇总最近动态…</div>';
+    var archivePromise = fetch('/__omm/fs/archive?all=1&limit=120', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : { entries: [] }; })
+      .catch(function () { return { entries: [] }; });
+    var sharePromise = (window.OMMShare && window.OMMShare.loadSpace)
+      ? window.OMMShare.loadSpace().catch(function () { return null; })
+      : Promise.resolve(null);
+    Promise.all([archivePromise, sharePromise]).then(function (results) {
+      if (!timelineOpen) return;
+      var archive = results[0] || {};
+      var space = results[1];
+      var events = [];
+      (archive.entries || []).forEach(function (entry) {
+        var kind = entry.kind === 'snapshot' ? 'snapshot' : 'file';
+        var app = APP_BY_ID[entry.app];
+        events.push({
+          type: kind,
+          time: entry.time || entry.updated || entry.mtime || '',
+          title: entry.name || entry.label || entry.title || '未命名',
+          sub: ((app && app.name) || entry.app_name || entry.app || '') +
+            (kind === 'snapshot' ? ' · ' + (entry.label || '自动快照') : ' · 已保存文档'),
+          glyph: kind === 'snapshot' ? '快' : ((app && app.glyph) || '文'),
+          data: entry,
+        });
+      });
+      ((space && space.items) || []).forEach(function (item) {
+        events.push({
+          type: 'share',
+          time: item.created || item.at || item.time || '',
+          title: item.title || '共享项目',
+          sub: '共享到 ' + (item.channel || '共享空间') + ' · ' + (item.source_name || ''),
+          glyph: '享',
+          data: item,
+        });
+      });
+      (notifications || []).forEach(function (note) {
+        events.push({
+          type: 'notify',
+          time: note.at || 0,
+          title: note.title || '通知',
+          sub: note.body || '工作台通知',
+          glyph: '知',
+          data: note,
+        });
+      });
+      events.sort(function (a, b) { return timelineTime(b.time) - timelineTime(a.time); });
+      timelineEvents = events;
+      renderTimeline();
+    });
+  }
+
+  function renderTimeline() {
+    if (!els.timelineList) return;
+    var items = timelineEvents.filter(function (e) {
+      return timelineFilter === 'all' || e.type === timelineFilter;
+    });
+    if (!items.length) {
+      els.timelineList.innerHTML = '<div class="tl-empty">这个分类还没有记录。</div>';
+      return;
+    }
+    var html = '';
+    var lastDay = '';
+    items.forEach(function (e, index) {
+      var day = timelineDay(e.time);
+      if (day !== lastDay) { html += '<div class="tl-day">' + esc(day) + '</div>'; lastDay = day; }
+      var label = { file: '文档', snapshot: '快照', share: '共享', notify: '通知' }[e.type] || '';
+      html += '<button class="tl-item" type="button" data-tl-item="' + index + '">' +
+        '<span class="tl-glyph">' + gsearchEscape(e.glyph) + '</span>' +
+        '<span class="tl-main"><span class="tl-title">' + esc(e.title) + '</span>' +
+        '<span class="tl-sub">' + esc(e.sub) + ' · ' + esc(notifyTime(e.time)) + '</span></span>' +
+        '<span class="tl-kind">' + label + '</span></button>';
+    });
+    els.timelineList.innerHTML = html;
+  }
+
+  function openTimelineItem(index) {
+    var e = timelineEvents.filter(function (item) {
+      return timelineFilter === 'all' || item.type === timelineFilter;
+    })[index];
+    if (!e) return;
+    var d = e.data || {};
+    if (e.type === 'file') {
+      closeTimeline();
+      window.dispatchEvent(new CustomEvent('omm:load-file', {
+        detail: { path: d.path, name: d.name, mime: d.mime, app: d.app }
+      }));
+    } else if (e.type === 'snapshot') {
+      closeTimeline();
+      window.dispatchEvent(new CustomEvent('omm:restore-snapshot', {
+        detail: { path: d.path, app: d.app, name: d.name, label: d.label }
+      }));
+    } else if (e.type === 'share') {
+      var space = cmdkSpace || {};
+      var channel = (space.channels || []).filter(function (c) { return c.id === d.channel; })[0];
+      var target = channel && (channel.apps || []).filter(function (a) { return a.consume; })[0];
+      if (target && window.OMMShare) {
+        closeTimeline();
+        window.OMMShare.openArtifact(d, target);
+      } else {
+        toast('找不到该共享项目的接收产品');
+      }
+    } else if (e.type === 'notify') {
+      if (d.app && APP_BY_ID[d.app]) { closeTimeline(); activateApp(d.app); }
+      else toast(d.body || d.title || '通知');
+    }
+  }
+
   function showTabMenu(x, y, appId) {
     var app = appOf(appId);
     if (!app) return;
@@ -4023,6 +5236,7 @@
       '<button class="menu-item" type="button" data-tab-ctx="sleep"><span class="check"></span>' +
       (sleeping ? '唤醒' : '休眠（释放内存）') +
       '</button>' +
+      '<button class="menu-item" type="button" data-tab-ctx="detach"><span class="check"></span>脱离为独立窗口</button>' +
       '<button class="menu-item" type="button" data-tab-ctx="window"><span class="check"></span>在新窗口打开</button>' +
       '<button class="menu-item" type="button" data-tab-ctx="link"><span class="check"></span>复制应用链接</button>' +
       '<div class="menu-sep"></div>' +
@@ -4233,6 +5447,9 @@
         save();
       } else if (act === 'plugins') openPluginPanel();
       else if (act === 'command') openCommandPalette();
+      else if (act === 'globalsearch') openGlobalSearch();
+      else if (act === 'zen') setZen(!zenActive);
+      else if (act === 'timeline') { if (timelineOpen) closeTimeline(); else openTimeline(); }
       else if (act === 'notify') toggleNotifyPanel();
       else if (act === 'settings') openHubSettings();
       else if (act === 'launcher') toggleLauncher();
@@ -4241,6 +5458,65 @@
     els.brand.addEventListener('click', function () {
       toggleLauncher();
     });
+
+    /* 全局内容搜索 */
+    if (els.gsearch) {
+      els.gsearch.addEventListener('click', function (event) {
+        if (event.target === els.gsearch || event.target.closest('#gsearch-close')) {
+          closeGlobalSearch();
+          return;
+        }
+        var item = event.target.closest('[data-gs]');
+        if (item) openGsearchResult(Number(item.dataset.gs));
+      });
+      els.gsearchInput.addEventListener('input', function () {
+        gsearchIndex = 0;
+        runGlobalSearch();
+      });
+    }
+
+    /* 静心专注浮条 */
+    if (els.zenBar) {
+      els.zenToggle.addEventListener('click', function () { zenRunning = !zenRunning; renderZen(); });
+      els.zenSkip.addEventListener('click', function () {
+        playZenChime();
+        if (zenPhase === 'focus') {
+          zenPhase = 'break';
+          zenTotal = (hubAppearance.focus.breakMin || 5) * 60;
+        } else {
+          zenPhase = 'focus';
+          zenTotal = (hubAppearance.focus.pomodoro || 25) * 60;
+        }
+        zenRemaining = zenTotal;
+        renderZen();
+      });
+      els.zenSound.addEventListener('click', function () {
+        var order = ['none', 'rain', 'noise', 'coffee'];
+        var current = order.indexOf(hubAppearance.focus.sound);
+        setZenSound(order[(current + 1) % order.length]);
+      });
+      els.zenExit.addEventListener('click', function () { setZen(false); });
+    }
+
+    /* 最近动态 */
+    if (els.timelinePanel) {
+      var closeTimelineBtn = document.getElementById('timeline-close');
+      if (closeTimelineBtn) closeTimelineBtn.addEventListener('click', closeTimeline);
+      els.timelinePanel.addEventListener('click', function (event) {
+        if (event.target === els.timelinePanel) { closeTimeline(); return; }
+        var tab = event.target.closest('[data-tl]');
+        if (tab) {
+          timelineFilter = tab.dataset.tl;
+          Array.prototype.forEach.call(document.querySelectorAll('[data-tl]'), function (btn) {
+            btn.classList.toggle('active', btn === tab);
+          });
+          renderTimeline();
+          return;
+        }
+        var item = event.target.closest('[data-tl-item]');
+        if (item) openTimelineItem(Number(item.dataset.tlItem));
+      });
+    }
     if (els.notifyPanel) {
       els.notifyPanel.addEventListener('click', function (event) {
         if (event.target.closest('#notify-clear')) {
@@ -4505,7 +5781,8 @@
         else if (tabAction === 'sleep') {
           if (appStatus[tabApp] === 'sleeping') activateApp(tabApp);
           else sleepApp(tabApp);
-        } else if (tabAction === 'window') openAppWindow(tabApp);
+        } else if (tabAction === 'detach') detachApp(tabApp);
+        else if (tabAction === 'window') openAppWindow(tabApp);
         else if (tabAction === 'link') copyAppLink(tabApp);
         else if (tabAction === 'move-right') {
           var pane = findPaneByApp(tabApp) || state.focused;
@@ -4594,6 +5871,9 @@
         var name = action.dataset.ppAction;
         if (name === 'install') installOnlinePlugin(id);
         else if (name === 'remove') removePlugin(id);
+        else if (name === 'detail') showPluginDetail(id);
+        else if (name === 'detail-back') renderPluginPanel();
+        else if (name === 'rollback') rollbackPlugin(id);
         else if (name === 'open') {
           closePluginPanel();
           activateApp(id);
@@ -4920,12 +6200,74 @@
     return String(value || '').replace(/^omm-/, '').trim();
   }
 
+  function comboFromEvent(event) {
+    var key = event.key;
+    if (!key || ['Control', 'Shift', 'Alt', 'Meta', 'CapsLock'].indexOf(key) >= 0) return '';
+    var normalized = {
+      '|': '\\', '+': '=', ':': ';', '?': '/', '<': ',', '>': '.',
+      '_': '-', '~': '`', '"': "'",
+    };
+    var k = normalized[key] || key;
+    if (k === ' ') k = 'Space';
+    else if (/^Arrow/.test(k)) k = k.slice(5);
+    else if (k.length === 1) k = k.toUpperCase();
+    var parts = [];
+    if (event.ctrlKey || event.metaKey) parts.push('Ctrl');
+    if (event.altKey) parts.push('Alt');
+    if (event.shiftKey) parts.push('Shift');
+    parts.push(k);
+    return parts.join('+');
+  }
+
+  function resolveCombo(combo) {
+    if (!combo) return null;
+    var map = hubAppearance.keymap || {};
+    for (var id in map) {
+      if (Object.prototype.hasOwnProperty.call(map, id) && map[id] === combo) {
+        return { type: 'command', value: id };
+      }
+    }
+    var macros = hubAppearance.macros || [];
+    for (var i = 0; i < macros.length; i++) {
+      if (macros[i].key && macros[i].key === combo) return { type: 'macro', value: i };
+    }
+    return null;
+  }
+
+  function runMacro(index) {
+    var macro = (hubAppearance.macros || [])[index];
+    if (!macro) return;
+    toast('运行宏：' + macro.name);
+    (macro.actions || []).forEach(function (action, i) {
+      window.setTimeout(function () {
+        if (/^open-[0-9]$/.test(action)) {
+          handleShortcut('open-index', { index: parseInt(action.slice(5), 10) });
+        } else if (action.indexOf('macro:') === 0) {
+          var nested = parseInt(action.slice(6), 10);
+          if (nested !== index && (hubAppearance.macros || [])[nested]) runMacro(nested);
+        } else {
+          handleShortcut(action, {});
+        }
+      }, i * 120);
+    });
+  }
+
   function onKeyDown(event) {
+    if (comboCapturing) return;
     var mod = event.ctrlKey || event.metaKey;
     if (!mod) {
+      if (gsearchOpen) {
+        if (event.key === 'Escape') { closeGlobalSearch(); event.preventDefault(); return; }
+        if (event.key === 'ArrowDown') { moveGsearch(1); event.preventDefault(); return; }
+        if (event.key === 'ArrowUp') { moveGsearch(-1); event.preventDefault(); return; }
+        if (event.key === 'Enter') { openGsearchResult(gsearchIndex); event.preventDefault(); return; }
+      }
       if (event.key === 'Escape') {
         if (cmdkOpen) {
           closeCommandPalette();
+          event.preventDefault();
+        } else if (timelineOpen) {
+          closeTimeline();
           event.preventDefault();
         } else if (!els.hubSettings.hidden) {
           closeHubSettings();
@@ -4936,6 +6278,9 @@
         } else if (!els.ctxMenu.hidden || !els.layoutMenu.hidden || launcherOpen) {
           closePopovers();
           event.preventDefault();
+        } else if (zenActive) {
+          setZen(false);
+          event.preventDefault();
         } else if (state.maximized) {
           setMaximized(false);
           event.preventDefault();
@@ -4945,9 +6290,6 @@
     }
 
     var key = event.key;
-    var lower = (key || '').toLowerCase();
-    var action = null;
-    var extra = null;
 
     if (event.altKey && /^[1-9]$/.test(key)) {
       var saved = loadWorkspaces();
@@ -4959,25 +6301,23 @@
       }
       return;
     }
-    if (key === 'Tab') action = event.shiftKey ? 'prev-tab' : 'next-tab';
-    else if (lower === 'w') action = 'close-tab';
-    else if (lower === 'k') action = 'command-palette';
-    else if (lower === 't' && event.shiftKey) action = 'reopen-tab';
-    else if (lower === 'n' && event.shiftKey) action = 'notify-panel';
-    else if (key === '\\' || key === '|') action = event.shiftKey ? 'split-h' : 'split-v';
-    else if (lower === 'd' && event.shiftKey) action = 'toggle-dock';
-    else if (lower === 'm' && event.shiftKey) action = 'focus-pane';
-    else if (key === '0') action = 'open-index', (extra = { index: 0 });
-    else if (/^[1-9]$/.test(key)) action = 'open-index', (extra = { index: parseInt(key, 10) });
 
-    if (!action) return;
+    var combo = comboFromEvent(event);
+    var hit = resolveCombo(combo);
+    if (!hit) return;
     event.preventDefault();
     event.stopPropagation();
-    handleShortcut(action, extra || {});
+    if (hit.type === 'macro') runMacro(hit.value);
+    else if (/^open-[0-9]$/.test(hit.value)) {
+      var n = parseInt(hit.value.slice(5), 10);
+      handleShortcut('open-index', { index: n });
+    } else handleShortcut(hit.value, {});
   }
 
   function handleShortcut(action, data) {
     if (action === 'command-palette') openCommandPalette();
+    else if (action === 'global-search') openGlobalSearch();
+    else if (action === 'zen-mode') setZen(!zenActive);
     else if (action === 'reopen-tab') reopenLastClosed();
     else if (action === 'notify-panel') toggleNotifyPanel();
     else if (action === 'next-tab') cycleTab(1);

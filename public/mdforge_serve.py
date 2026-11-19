@@ -33,6 +33,9 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--open", action="store_true", help="启动后打开浏览器")
     args = parser.parse_args()
+    if args.debug and args.host not in ("127.0.0.1", "localhost", "::1"):
+        print("[错误] 出于安全考虑，--debug 仅允许绑定本机回环地址。", file=sys.stderr)
+        sys.exit(1)
     if port_in_use(args.host, args.port):
         print(
             "[错误] 端口 %d 已被占用。可能已有一个 MdForge 服务在运行；请关闭旧进程或换用 --port。"
@@ -46,7 +49,16 @@ def main() -> None:
     print("engines ", ", ".join(k for k, v in env.get("engines", {}).items() if v) or "无")
     if args.open:
         threading.Timer(0.8, lambda: webbrowser.open("http://%s:%d/omm-mdforge.html" % (args.host, args.port))).start()
-    app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
+    # 即使开启 debug 也不启用 Werkzeug 交互式调试器：其 /console 可执行任意代码。
+    # 仅保留自动重载方便开发。
+    app.run(
+        host=args.host,
+        port=args.port,
+        debug=args.debug,
+        use_debugger=False,
+        use_reloader=args.debug,
+        threaded=True,
+    )
 
 
 if __name__ == "__main__":

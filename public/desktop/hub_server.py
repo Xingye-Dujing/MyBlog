@@ -49,6 +49,8 @@ from plugin_manager import (
 HUB_PORT = 8300
 HUB_HTML = "omm-hub.html"
 MAX_IMPORT_BYTES = 220 * 1024 * 1024
+# 全量备份包含文档、快照与共享文件，体积远大于设置备份。
+MAX_FULL_BACKUP_BYTES = 800 * 1024 * 1024
 
 
 class _QuietHTTPServer(ThreadingHTTPServer):
@@ -110,7 +112,7 @@ class HubServer:
     # ------------------------------------------------------------- ports
     def _load_ports(self) -> dict:
         try:
-            data = json.loads(self.ports_path.read_text(encoding="utf-8"))
+            data = json.loads(self.ports_path.read_text(encoding="utf-8-sig"))
             return {str(k): int(v) for k, v in data.items()} if isinstance(data, dict) else {}
         except Exception:
             return {}
@@ -155,9 +157,14 @@ class HubServer:
         os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
         if str(self.root) not in sys.path:
             sys.path.insert(0, str(self.root))
-        from mdforge.server import app  # noqa: WPS433
+        import mdforge.server as mdforge_server  # noqa: WPS433
         from werkzeug.serving import make_server
 
+        # PUBLIC_ROOT 在模块首次 import 时就固化了；插件更新/重启后如果不刷新，
+        # 仍会从旧目录提供页面和模板。所有路由都在调用时读取该全局变量，
+        # 因此这里按当前插件目录重新赋值即可（比 importlib 重载更安全）。
+        mdforge_server.PUBLIC_ROOT = plugin_dir.resolve()
+        app = mdforge_server.app
         server = make_server("127.0.0.1", port, app, threaded=True)
         _serve(server)
         return server
@@ -318,16 +325,18 @@ class HubServer:
         with self.lock:
             plugins = []
             for item in self.registry.list():
-                plugins.append(
-                    {
-                        key: item.get(key)
-                        for key in (
-                            "id", "name", "version", "description", "glyph",
-                            "entry", "runtime", "port", "order", "author",
-                            "source", "share",
-                        )
-                    }
-                )
+                info = {
+                    key: item.get(key)
+                    for key in (
+                        "id", "name", "version", "description", "glyph",
+                        "entry", "runtime", "port", "order", "author",
+                        "source", "share", "homepage",
+                    )
+                }
+                info["rollback"] = (
+                    self.user_plugin_root / (".rollback-" + str(item.get("id")))
+                ).is_dir()
+                plugins.append(info)
             return {
                 "api": 1,
                 "framework": "OMM-ZEN",
@@ -412,6 +421,84 @@ class HubServer:
             fallback = self.registry.remove(plugin_id)
             self._sync_share()
             return {"ok": True, "bundled_remains": fallback}
+
+    # ------------------------------------------------------------------
+    # 可选的 WebDAV 云备份：默认关闭，凭据只由页面临时传入，不写入 shared.json。
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _webdav_request(url: str, user: str, password: str, method: str,
+                        data: bytes | None = None, timeout: float = 90.0):
+        import base64
+        import urllib.error
+        import urllib.request
+
+        if not url.startswith(("http://", "https://")):
+            raise ValueError("WebDAV 地址必须以 http:// 或 https:// 开头")
+        request = urllib.request.Request(url, data=data, method=method)
+        if user:
+            token = base64.b64encode(("%s:%s" % (user, password)).encode("utf-8")).decode("ascii")
+            request.add_header("Authorization", "Basic " + token)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 405:  # MKCOL 已存在时视为成功
+                return exc.code, b""
+            raise
+
+    def cloud_upload(self, payload: dict) -> dict:
+        import base64
+        from urllib.parse import urlsplit, urlunsplit
+
+        url = str(payload.get("url") or "").strip()
+        user = str(payload.get("user") or "")
+        password = str(payload.get("password") or "")
+        result = self.full_backup()
+        raw = base64.b64decode(result["zip"])
+
+        # 尽量创建远端父目录（失败则以 PUT 的结果为准）。
+        try:
+            parsed = urlsplit(url)
+            segments = [s for s in parsed.path.split("/") if s][:-1]
+            current = ""
+            for segment in segments:
+                current += "/" + segment
+                self._webdav_request(
+                    urlunsplit((parsed.scheme, parsed.netloc, current, "", "")),
+                    user, password, "MKCOL", timeout=15.0,
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
+        self._webdav_request(url, user, password, "PUT", data=raw)
+        return {"ok": True, "url": url, "stats": result["stats"], "bytes": len(raw)}
+
+    def cloud_download(self, payload: dict) -> dict:
+        import base64
+
+        url = str(payload.get("url") or "").strip()
+        user = str(payload.get("user") or "")
+        password = str(payload.get("password") or "")
+        _status, body = self._webdav_request(url, user, password, "GET")
+        return {"ok": True, "zip": base64.b64encode(body).decode("ascii"), "bytes": len(body)}
+
+    def detach_pane(self, app_id: str) -> dict:
+        """在工作台新窗口中单独打开某个产品（脱离当前分屏）。"""
+        self.ensure(app_id)
+        from urllib.parse import quote
+
+        url = "http://127.0.0.1:%d/%s?detach=%s" % (
+            self.port, HUB_HTML, quote(str(app_id))
+        )
+        threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
+        return {"ok": True, "url": url}
+
+    def rollback_plugin(self, plugin_id: str) -> dict:
+        with self.lock:
+            self.stop(plugin_id)
+            plugin = self.registry.rollback(plugin_id)
+            self._sync_share()
+            return {"ok": True, "plugin": plugin}
 
 
     # ------------------------------------------------------------- storage
@@ -529,6 +616,7 @@ class HubServer:
         if not isinstance(shared, dict):
             raise ValueError("备份里没有 shared 配置")
         cfg = omm_shared._normalize_config(shared)
+        cfg = omm_shared.sanitize_restored_config(cfg)
         saved = omm_shared.backup_config()
         with omm_shared.FileLock(omm_shared.lock_path()):
             omm_shared._write_config(cfg)
@@ -551,6 +639,216 @@ class HubServer:
             raise KeyError("unknown plugin")
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
         return {"ok": True, "url": url}
+
+    # ------------------------------------------------------------------
+    # 全量备份 / 恢复：配置 + 共享空间 + 快照 + 已保存文档，打包成单个 zip。
+    # 与 settings-only 的 backup()/restore() 并存，互不干扰。
+    # ------------------------------------------------------------------
+    def full_backup(self) -> dict:
+        import base64
+        import io
+        import zipfile
+
+        import omm_shared
+        import omm_share
+
+        cfg = omm_shared.load_config()
+        buffer = io.BytesIO()
+        stats = {"files": 0, "snapshots": 0, "share": 0, "bytes": 0}
+
+        def add_path(zf: "zipfile.ZipFile", path: Path, arcname: str) -> None:
+            try:
+                zf.write(path, arcname)
+                stats["files"] += 1
+            except Exception:  # noqa: BLE001 - 单个文件失败不应中断整个备份
+                pass
+
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            manifest = {
+                "schema": 2,
+                "kind": "omm-zen-full-backup",
+                "version": VERSION,
+                "created": omm_shared.now_iso(),
+                "note": "静书房全量备份：设置 + 共享空间 + 快照 + 已保存文档",
+            }
+            zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            zf.writestr("data/shared.json", json.dumps(cfg, ensure_ascii=False, indent=2))
+            zf.writestr(
+                "data/policy.json",
+                json.dumps(omm_share.load_policy(), ensure_ascii=False, indent=2),
+            )
+
+            # 插件清单（仅记录，不含插件包二进制）
+            try:
+                import plugin_manager
+
+                plugin_root = plugin_manager.default_plugin_root()
+                installed = []
+                if Path(plugin_root).is_dir():
+                    for child in sorted(Path(plugin_root).iterdir()):
+                        manifest_file = child / "plugin.json"
+                        if not manifest_file.is_file():
+                            continue
+                        try:
+                            meta = json.loads(manifest_file.read_text(encoding="utf-8"))
+                        except Exception:  # noqa: BLE001
+                            continue
+                        installed.append(
+                            {
+                                "id": meta.get("id", child.name),
+                                "name": meta.get("name", ""),
+                                "version": meta.get("version", ""),
+                            }
+                        )
+                zf.writestr("data/plugins.json", json.dumps(installed, ensure_ascii=False, indent=2))
+            except Exception:  # noqa: BLE001
+                pass
+
+            # 跨产品共享空间（文件、记录、收件箱）
+            share_dir = omm_shared.resolve_share_dir(cfg)
+            if share_dir.is_dir():
+                for path in sorted(share_dir.rglob("*")):
+                    if path.is_file():
+                        add_path(zf, path, "share/" + path.relative_to(share_dir).as_posix())
+                        stats["share"] += 1
+
+            # 每个产品的快照与已注册保存文件
+            app_ids = set((cfg.get("apps") or {}).keys())
+            try:
+                app_ids.update(omm_shared.APP_NAMES.keys())
+            except Exception:  # noqa: BLE001
+                pass
+            for app in sorted(app_ids):
+                safe_app = str(app).replace("/", "_").replace("\\", "_")
+                save_dir = omm_shared.resolve_save_dir(app, cfg)
+                snap_dir = save_dir / "snapshots" / safe_app
+                if snap_dir.is_dir():
+                    for path in sorted(snap_dir.rglob("*")):
+                        if path.is_file():
+                            add_path(
+                                zf,
+                                path,
+                                "snapshots/%s/%s" % (safe_app, path.relative_to(snap_dir).as_posix()),
+                            )
+                            stats["snapshots"] += 1
+                entry = (cfg.get("apps") or {}).get(app) or {}
+                # resources 是 {文件名: 记录} 字典，不是列表。
+                for res in (entry.get("resources") or {}).values():
+                    raw = str((res or {}).get("path") or "")
+                    if not raw:
+                        continue
+                    path = Path(os.path.expandvars(os.path.expanduser(raw)))
+                    if path.is_file():
+                        add_path(zf, path, "files/%s/%s" % (safe_app, path.name))
+
+        raw = buffer.getvalue()
+        stats["bytes"] = len(raw)
+        return {
+            "ok": True,
+            "schema": 2,
+            "version": VERSION,
+            "created": manifest["created"],
+            "zip": base64.b64encode(raw).decode("ascii"),
+            "stats": stats,
+        }
+
+    def full_restore(self, payload: dict) -> dict:
+        """从全量备份恢复：先备份当前配置，再覆盖配置并还原共享/快照/文档。"""
+        import base64
+        import io
+        import shutil
+        import tempfile
+        import zipfile
+        from pathlib import PurePosixPath
+
+        import omm_shared
+        import omm_share
+
+        raw = payload.get("zip")
+        if not isinstance(raw, str) or not raw:
+            raise ValueError("备份内容为空")
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("备份文件已损坏或不是有效的归档") from exc
+
+        with tempfile.TemporaryDirectory(prefix="omm-restore-") as tmp:
+            root = Path(tmp) / "unzip"
+            root.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                for name in zf.namelist():
+                    posix = name.replace("\\", "/")
+                    parts = PurePosixPath(posix).parts
+                    if posix.startswith("/") or ":" in parts[0] or ".." in parts:
+                        raise ValueError("备份包含不安全的路径，已拒绝恢复")
+                zf.extractall(root)
+
+            manifest_file = root / "manifest.json"
+            shared_file = root / "data" / "shared.json"
+            if not manifest_file.is_file() or not shared_file.is_file():
+                raise ValueError("不是静书房全量备份")
+            try:
+                manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                manifest = {}
+            if manifest.get("kind") not in (None, "omm-zen-full-backup"):
+                raise ValueError("备份类型不匹配")
+
+            cfg_raw = json.loads(shared_file.read_text(encoding="utf-8-sig"))
+            cfg = omm_shared._normalize_config(cfg_raw)
+            cfg = omm_shared.sanitize_restored_config(cfg)
+
+            # 安全网：覆盖配置前先备份当前 shared.json。
+            saved = omm_shared.backup_config()
+            with omm_shared.FileLock(omm_shared.lock_path()):
+                omm_shared._write_config(cfg)
+
+            policy_restored = False
+            policy_file = root / "data" / "policy.json"
+            if policy_file.is_file():
+                try:
+                    policy = json.loads(policy_file.read_text(encoding="utf-8-sig"))
+                    omm_share.save_policy(omm_share._normalize_policy(policy))
+                    policy_restored = True
+                except Exception:  # noqa: BLE001
+                    pass
+
+            restored = {"share": 0, "snapshots": 0, "files": 0}
+
+            share_src = root / "share"
+            if share_src.is_dir():
+                share_dir = omm_shared.resolve_share_dir(cfg)
+                share_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(share_src, share_dir, dirs_exist_ok=True)
+                restored["share"] = sum(1 for p in share_src.rglob("*") if p.is_file())
+
+            snap_root = root / "snapshots"
+            if snap_root.is_dir():
+                for app_dir in sorted(p for p in snap_root.iterdir() if p.is_dir()):
+                    app = app_dir.name
+                    dest = omm_shared.resolve_save_dir(app, cfg) / "snapshots" / app
+                    dest.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(app_dir, dest, dirs_exist_ok=True)
+                    restored["snapshots"] += sum(1 for p in app_dir.rglob("*") if p.is_file())
+
+            files_root = root / "files"
+            if files_root.is_dir():
+                for app_dir in sorted(p for p in files_root.iterdir() if p.is_dir()):
+                    app = app_dir.name
+                    dest = omm_shared.resolve_save_dir(app, cfg)
+                    dest.mkdir(parents=True, exist_ok=True)
+                    for item in app_dir.iterdir():
+                        if item.is_file():
+                            shutil.copy2(item, dest / item.name)
+                            restored["files"] += 1
+
+        return {
+            "ok": True,
+            "backup": saved,
+            "restored": restored,
+            "policy": policy_restored,
+            "created": manifest.get("created"),
+        }
 
 
 class HubHandler(ShellHandler):
@@ -612,10 +910,18 @@ class HubHandler(ShellHandler):
             if parsed.path == "/api/backup":
                 self._reply(200, self.hub.backup())
                 return
+            if parsed.path == "/api/full-backup":
+                self._reply(200, self.hub.full_backup())
+                return
             if parsed.path == "/api/window":
                 query = parse_qs(parsed.query)
                 app_id = (query.get("app") or [""])[0]
                 self._reply(200, self.hub.open_window(app_id))
+                return
+            if parsed.path == "/api/detach":
+                query = parse_qs(parsed.query)
+                app_id = (query.get("app") or [""])[0]
+                self._reply(200, self.hub.detach_pane(app_id))
                 return
             if parsed.path == "/api/health":
                 self._reply(
@@ -651,6 +957,10 @@ class HubHandler(ShellHandler):
                 payload = self._json_body(8 * 1024 * 1024)
                 self._reply(200, self.hub.restore(payload))
                 return
+            if parsed.path == "/api/full-restore":
+                payload = self._json_body(MAX_FULL_BACKUP_BYTES)
+                self._reply(200, self.hub.full_restore(payload))
+                return
             if parsed.path == "/api/plugins/install":
                 payload = self._json_body()
                 plugin_id = str(payload.get("id") or "")
@@ -672,6 +982,21 @@ class HubHandler(ShellHandler):
                 if not plugin_id:
                     raise PluginError("缺少插件 id")
                 self._reply(200, self.hub.remove_plugin(plugin_id))
+                return
+            if parsed.path == "/api/cloud/upload":
+                payload = self._json_body(MAX_FULL_BACKUP_BYTES)
+                self._reply(200, self.hub.cloud_upload(payload))
+                return
+            if parsed.path == "/api/cloud/download":
+                payload = self._json_body(4 * 1024 * 1024)
+                self._reply(200, self.hub.cloud_download(payload))
+                return
+            if parsed.path == "/api/plugins/rollback":
+                payload = self._json_body()
+                plugin_id = str(payload.get("id") or "")
+                if not plugin_id:
+                    raise PluginError("缺少插件 id")
+                self._reply(200, self.hub.rollback_plugin(plugin_id))
                 return
         except PluginError as exc:
             self._reply(400, {"ok": False, "error": str(exc)})

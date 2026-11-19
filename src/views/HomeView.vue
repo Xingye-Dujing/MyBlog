@@ -1,17 +1,22 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useChatStore } from '@/stores/chat'
+import { useCommentStore } from '@/stores/comment'
 import ChatList from '@/components/ChatList.vue'
 import ChatView from '@/components/ChatView.vue'
 import PortalView from './PortalView.vue'
 
 const route = useRoute()
+const chatStore = useChatStore()
+const commentStore = useCommentStore()
 
 const hasActiveChat = computed(() => !!route.params.id)
 
-// Check if mobile
-function isMobile() {
-  return window.innerWidth <= 768
+// Check if mobile — 响应式，随窗口尺寸/旋转更新
+const isMobile = ref(window.innerWidth <= 768)
+function handleViewportResize() {
+  isMobile.value = window.innerWidth <= 768
 }
 
 // Sidebar state
@@ -55,6 +60,14 @@ function doResize(e) {
   }
 }
 
+function nudgeSidebar(delta) {
+  sidebarWidth.value = Math.max(
+    minSidebarWidth,
+    Math.min(maxSidebarWidth, sidebarWidth.value + delta),
+  )
+  saveState()
+}
+
 function stopResize() {
   isResizing.value = false
   document.body.style.cursor = ''
@@ -81,32 +94,45 @@ onMounted(() => {
   window.addEventListener('mousemove', doResize)
   window.addEventListener('mouseup', stopResize)
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('resize', handleViewportResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('mousemove', doResize)
   window.removeEventListener('mouseup', stopResize)
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('resize', handleViewportResize)
 })
 </script>
 
 <template>
   <div class="home-layout">
+    <div v-if="chatStore.error" class="data-error" role="alert">
+      <span>{{ chatStore.error }}</span>
+      <button type="button" @click="chatStore.init(); commentStore.init()">重试</button>
+    </div>
+    <!-- 手机端不应用桌面端的折叠状态（否则桌面 Ctrl+B 折叠后，手机首页会白屏） -->
     <ChatList
-      v-show="!isCollapsed && (!hasActiveChat || !isMobile())"
+      v-show="isMobile ? !hasActiveChat : !isCollapsed"
       :class="{
-        'mobile-hidden': hasActiveChat && !isMobile(),
-        collapsed: isCollapsed && !isMobile(),
+        'mobile-hidden': hasActiveChat && !isMobile,
+        collapsed: isCollapsed && !isMobile,
       }"
-      :style="{ width: isMobile() ? '100%' : `${sidebarWidth}px` }"
+      :style="{ width: isMobile ? '100%' : `${sidebarWidth}px` }"
     />
 
     <!-- Resize handle - only show on desktop when not collapsed -->
     <div
-      v-if="!isCollapsed && !isMobile()"
+      v-if="!isCollapsed && !isMobile"
       class="resize-handle"
       :class="{ resizing: isResizing }"
+      role="separator"
+      aria-orientation="vertical"
+      tabindex="0"
+      :aria-label="'拖拽调整侧栏宽度，当前 ' + sidebarWidth + ' 像素'"
       @mousedown="startResize"
+      @keydown.left.prevent="nudgeSidebar(-20)"
+      @keydown.right.prevent="nudgeSidebar(20)"
     ></div>
 
     <ChatView v-if="hasActiveChat" class="chat-panel" />
@@ -123,6 +149,31 @@ onUnmounted(() => {
   height: 100vh;
   overflow: hidden;
   position: relative;
+}
+
+.data-error {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #fff3f3;
+  border-bottom: 1px solid #f3c9c5;
+  color: #a52d25;
+  font-size: 0.85rem;
+}
+.data-error button {
+  border: 1px solid #a52d25;
+  background: #fff;
+  color: #a52d25;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
 }
 
 .chat-panel {
@@ -154,6 +205,10 @@ onUnmounted(() => {
 
 .resize-handle:hover {
   background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.05), transparent);
+}
+.resize-handle:focus-visible {
+  outline: 2px solid #c9372e;
+  outline-offset: -2px;
 }
 
 .resize-handle.resizing {

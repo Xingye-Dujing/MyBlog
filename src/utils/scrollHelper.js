@@ -27,14 +27,29 @@ export async function eagerLoadImagesInRange(container, targetEl) {
 
   if (rangeImages.length === 0) return
 
+  const cleanups = []
   const loadPromises = rangeImages.map((img) => {
     if (img.complete) return Promise.resolve()
     return new Promise((resolve) => {
+      const done = () => {
+        img.removeEventListener('load', done)
+        img.removeEventListener('error', done)
+        resolve()
+      }
+      cleanups.push(done)
       img.loading = 'eager'
-      img.addEventListener('load', resolve, { once: true })
-      img.addEventListener('error', resolve, { once: true })
+      img.addEventListener('load', done, { once: true })
+      img.addEventListener('error', done, { once: true })
     })
   })
 
-  await Promise.race([Promise.all(loadPromises), new Promise((r) => setTimeout(r, 300))])
+  try {
+    await Promise.race([Promise.all(loadPromises), new Promise((r) => setTimeout(r, 300))])
+  } finally {
+    // 超时后也要清理监听并恢复懒加载，否则图片会一直 eager。
+    cleanups.forEach((done) => done())
+    rangeImages.forEach((img) => {
+      img.loading = 'lazy'
+    })
+  }
 }

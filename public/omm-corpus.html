@@ -6572,6 +6572,25 @@ notify pgrst, 'reload schema';</textarea
           }
         }
         let S = load()
+
+        // 工作台「设置 → AI 服务」填写过统一配置、而本产品尚未设置密钥时，自动继承。
+        // 各产品自己保存过密钥的情况不会被覆盖。
+        try {
+          if (window.OMMDesktop && window.OMMDesktop.aiConfig && !(S.settings.apiKey || '').trim()) {
+            window.OMMDesktop.aiConfig().then(function (res) {
+              var ai = res && res.ai
+              if (!ai || !ai.apiKey) return
+              S.settings.apiKey = ai.apiKey
+              if (ai.apiBase) S.settings.apiBase = ai.apiBase
+              if (ai.apiModel) S.settings.apiModel = ai.apiModel
+              if (ai.system) S.settings.system = ai.system
+              if (ai.provider) S.settings.provider = ai.provider
+              applySettings()
+              save()
+            }).catch(function () {})
+          }
+        } catch (e) { /* 浏览器预览模式：忽略 */ }
+
         function renderAll() {
           populateCats()
           applySettings()

@@ -69,7 +69,7 @@
 json-specs/
 ├── README.md          本索引
 ├── prompts.md         ★ 各项目「一页提示词」，复制即用（自包含，无需附整份规范）
-├── writer.md          ZenWriter 画布 (.zc)         ← 亦为根目录 zencanvas-JSON-spec.md 的副本
+├── writer.md          ZenWriter 画布 (.zc)          ← 画布规范正本
 ├── annotate.md        ZenMark  项目备份 / 互通包 (.json)
 ├── corpus.md          ZenCorpus 恢复 / 互通包 (.json)
 ├── data.md            ZenData  数据集 / 文本导入 (.json)
@@ -81,4 +81,4 @@ json-specs/
 └── message.md         ZenMessage 无文件导入（数据模型/加密说明）
 ```
 
-> 根目录的 `zencanvas-JSON-spec.md`（Writer 画布原始规范）保留未动；`json-specs/writer.md` 是其副本，方便和本目录其它规范一起打包发给 AI。
+> Writer 画布规范以 `json-specs/writer.md` 为准；旧文档里提到的根目录 `zencanvas-JSON-spec.md` 已不再单独维护。

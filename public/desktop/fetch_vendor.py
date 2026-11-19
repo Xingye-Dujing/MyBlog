@@ -16,7 +16,7 @@ import shutil
 import tarfile
 import time
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "vendor"
@@ -84,8 +84,15 @@ def fetch_first(paths: list[str]) -> bytes:
             url = MIRRORS[mirror] + path
             if mirror == "npmmirror":
                 # registry.npmmirror.com serves package files via /<name>/<version>/files/<path>
-                name, _, rest = path.partition("@")
-                version, _, file_path = rest.partition("/")
+                # 注意 scope 包以 @ 开头，不能直接按第一个 @ 切分。
+                raw = path.lstrip("/")
+                if raw.startswith("@"):
+                    scope, _, remainder = raw[1:].partition("/")
+                    pkg, _, after = remainder.partition("@")
+                    name = "@%s/%s" % (scope, pkg)
+                else:
+                    name, _, after = raw.partition("@")
+                version, _, file_path = after.partition("/")
                 url = "%s%s/%s/files/%s" % (MIRRORS["npmmirror"], name, version, file_path)
             try:
                 return fetch(url, retries=1)
@@ -116,11 +123,19 @@ def download_tree(rel_dir: str, package: str, version: str, wanted: list[str]) -
             if not name.startswith("package/"):
                 continue
             rel = name[len("package/"):]
+            # 拒绝路径穿越：恶意 tarball 可能含 package/../../evil 或绝对路径。
+            parts = PurePosixPath(rel).parts
+            if not parts or ".." in parts or rel.startswith("/") or ":" in parts[0]:
+                print("  skip unsafe tar member %s" % name)
+                continue
             if any(rel == w or rel.startswith(w + "/") for w in wanted):
                 members.append(member)
         for member in members:
             rel = member.name[len("package/"):]
             target = dest_root / rel
+            if not target.resolve().is_relative_to(dest_root.resolve()):
+                print("  skip unsafe tar member %s" % member.name)
+                continue
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue

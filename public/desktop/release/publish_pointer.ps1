@@ -1,6 +1,6 @@
 param(
-  [string]$Tag = 'v1.0.4',
-  [string]$PrevTag = 'v1.0.3'
+  [string]$Tag = 'v1.0.17',
+  [string]$PrevTag = 'v1.0.16'
 )
 # Publish the newest catalog.json onto the previous release as well.
 #

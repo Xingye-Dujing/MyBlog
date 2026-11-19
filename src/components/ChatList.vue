@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { getPlainText } from '@/composables/useMarkdown'
@@ -9,7 +9,8 @@ const router = useRouter()
 const chatStore = useChatStore()
 
 const searchQuery = ref('')
-const expandedTags = ref(new Set())
+// 默认全部展开：只记录被用户手动折叠的分组。
+const collapsedTags = ref(new Set())
 
 const filteredChats = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -82,18 +83,27 @@ function formatDate(ts) {
 }
 
 function toggleTagExpand(tag) {
-  const newSet = new Set(expandedTags.value)
-  if (newSet.has(tag)) {
-    newSet.delete(tag)
-  } else {
-    newSet.add(tag)
-  }
-  expandedTags.value = newSet
+  const newSet = new Set(collapsedTags.value)
+  if (newSet.has(tag)) newSet.delete(tag)
+  else newSet.add(tag)
+  collapsedTags.value = newSet
 }
 
 function isExpanded(tag) {
-  return expandedTags.value.has(tag)
+  // 搜索时强制展开，避免命中项藏在折叠分组里。
+  return searchQuery.value.trim() ? true : !collapsedTags.value.has(tag)
 }
+
+// 切换对话时确保它所在分组是展开的。
+watch(activeChatId, (id) => {
+  if (!id || !chatStore.chats.length) return
+  const chat = chatStore.chats.find((c) => c.id === id)
+  if (!chat) return
+  const tags = chat.tags.length ? chat.tags : ['untagged']
+  const next = new Set(collapsedTags.value)
+  tags.forEach((t) => next.delete(t))
+  collapsedTags.value = next
+})
 </script>
 
 <template>
@@ -128,7 +138,15 @@ function isExpanded(tag) {
     <div class="chat-items">
       <!-- Untagged chats -->
       <div v-if="groupedChats.untagged.length" class="chat-group">
-        <div class="group-header" @click="toggleTagExpand('untagged')">
+        <div
+          class="group-header"
+          role="button"
+          tabindex="0"
+          :aria-expanded="isExpanded('untagged')"
+          @click="toggleTagExpand('untagged')"
+          @keydown.enter="toggleTagExpand('untagged')"
+          @keydown.space.prevent="toggleTagExpand('untagged')"
+        >
           <svg
             class="expand-icon"
             :class="{ expanded: isExpanded('untagged') }"
@@ -148,7 +166,11 @@ function isExpanded(tag) {
             :key="chat.id"
             class="chat-item"
             :class="{ active: chat.id === activeChatId }"
+            role="button"
+            tabindex="0"
             @click="selectChat(chat)"
+            @keydown.enter="selectChat(chat)"
+            @keydown.space.prevent="selectChat(chat)"
           >
             <div class="chat-item-main">
               <div class="chat-item-header">
@@ -190,7 +212,15 @@ function isExpanded(tag) {
 
       <!-- Tagged chats -->
       <div v-for="(chats, tag) in groupedChats.tagged" :key="tag" class="chat-group">
-        <div class="group-header" @click="toggleTagExpand(tag)">
+        <div
+          class="group-header"
+          role="button"
+          tabindex="0"
+          :aria-expanded="isExpanded(tag)"
+          @click="toggleTagExpand(tag)"
+          @keydown.enter="toggleTagExpand(tag)"
+          @keydown.space.prevent="toggleTagExpand(tag)"
+        >
           <svg
             class="expand-icon"
             :class="{ expanded: isExpanded(tag) }"
@@ -210,7 +240,11 @@ function isExpanded(tag) {
             :key="chat.id"
             class="chat-item"
             :class="{ active: chat.id === activeChatId }"
+            role="button"
+            tabindex="0"
             @click="selectChat(chat)"
+            @keydown.enter="selectChat(chat)"
+            @keydown.space.prevent="selectChat(chat)"
           >
             <div class="chat-item-main">
               <div class="chat-item-header">
@@ -400,6 +434,11 @@ function isExpanded(tag) {
 
 .group-header:hover {
   background: #f5f5f5;
+}
+.group-header:focus-visible,
+.chat-item:focus-visible {
+  outline: 2px solid #c9372e;
+  outline-offset: -2px;
 }
 
 .group-header:first-child {
