@@ -82,10 +82,11 @@ npm run build                             # 前端生产构建
 
 ## 覆盖内容
 
-**`test_backend_hardening.py`**（14 项）
+**`test_backend_hardening.py`**（20 项）
 
 - 桌面桥 `request_is_local()`：Host / Origin 双重校验，拒绝 DNS rebinding、跨站 POST 与 `Origin: null`。
-- WebDAV `remote_url_is_public()`：拒绝 loopback、内网、链路本地、云元数据地址与 URL 内嵌凭据；验证 `OMM_CLOUD_ALLOW_PRIVATE` 开关。
+- WebDAV `remote_url_is_public()`：拒绝 loopback、内网、链路本地、云元数据地址与 URL 内嵌凭据；验证 `OMM_CLOUD_ALLOW_PRIVATE` 开关。现在还会把十进制整数、八进制与十六进制写法（如 `http://2130706433/`、`http://0177.0.0.1/`）规范化后再判断，堵住字面量绕过。
+- WebDAV 重定向：`ValidatedRedirectHandler` 让 3xx 的每一跳都重新过 SSRF 校验，跨域跳转移除 `Authorization`，避免公网 DAV 用 302 把 Basic 凭据带回内网；`hub_server._webdav_request()` 改用校验过的 opener。
 - 共享资源授权：注册文件只允许按精确路径读取，不再把整个父目录加入白名单。
 - mdforge 多实例隔离：两个 `create_app(root)` 实例各自提供自己的静态文件，不串目录。
 - 签名错误脱敏：`CalledProcessError` 中的 `/p <password>` 不会被打印。
@@ -137,15 +138,17 @@ npm run build                             # 前端生产构建
 
 - 从真实源码抽取 `isNewerVersion` / `versionKey` 并在 VM 中执行，验证与后端 Python 元组比较语义一致（`1.2.0 > 1.2`）。
 - `frameTargetOrigin()`：按 iframe 自身 URL 推导目标 origin，跨端口场景不被工作台 origin 覆盖；拒绝非 loopback 地址。
-- 静态防护断言：4 个桥接脚本 + writer 内联脚本中不再出现 `postMessage(..., '*')`；所有 `message` 监听器都校验 `event.origin`；工作台把自身 origin 下发到 iframe URL，产品端读取该参数。
+- 静态防护断言：4 个桥接脚本 + writer 与 AI 工作区内联脚本中不再出现 `postMessage(..., '*')`；所有 `message` 监听器都校验 `event.origin` 与 `event.source === window.parent`；工作台把自身 origin 下发到 iframe URL，产品端读取该参数。
+- AI 工作区消息监听：此前完全无校验，任意 iframe 都能借 `omm:theme` 改写主题或触发新建会话。现在复用 Hub 下发的 origin，单独实现 `isTrustedParentOrigin()` 并拦截非父窗口来源；6 项行为用例分别覆盖嵌入与独立运行下信任/拒绝的情形（共 28 项 JS 检查）。
 
-**`test_zencard.mjs` 等 18 个新增套件**（node:test，共 157 项）
+**`test_zencard.mjs` 等 21 个专项套件**（node:test，共 182 项）
 
 - `zen-card.js` 通用知识卡片的归一化 / 严格校验 / 序列化 / 去重 / 指纹，以及与语料、批注、英语桥接包、写作画布、数据表、搜索、剪藏的双向转换。
 - `zen-srs.js` SM-2 间隔重复：评级映射、间隔递增、遗忘重置、易度下限、到期队列、统计、持久化往返。
 - `zen-flow.js` 工作流规则：条件匹配、六类动作、优先级多规则运行、副作用汇总、持久化。
 - `zen-review.js` 复盘聚合：日期区间过滤、活跃度 / 标签统计、Markdown 报告生成。
-- `zen-backup.js` 统一备份：清单校验和、差异比对、三种合并策略、按 id 去重。
+- `zen-backup.js` 统一备份：清单校验和、差异比对、三种合并策略、按 id 去重，以及导出脱敏与恢复白名单。
+- 备份安全：`isSecretKey()` 按词识别 `apiKey` / `token` / `secret` / `password` / `supabase` 等字段；`redactSecrets()` 在导出时丢弃整条凭据键、遮罩敏感字段并重算校验和，使清单仍通过校验；`restorableEntries()` 只接受 OMM-ZEN 键前缀或本地已存在的键，挡住 `__proto__` 与任意覆写。ZenPack 导出即脱敏、恢复只写工作区目录内的键；ZenBackup 页的扫描预览、导出与恢复同样走这套规则。6 项专项用例覆盖误报、漏报、篡改与往返。
 - `test_products.mjs` 集成护栏：5 个新产品的标题 / 样式 / 桥接引入、模块脚本语法、DOM id 引用完整性、无开发残留；12 个既有产品仍引入 zen-link；origin 信任校验；每个页面的 id 引用都对得上真实元素。
 - `test_knowledge_graph.mjs` Hub 知识图谱：工具栏入口与面板元素、命令注册、跨 iframe 卡片请求使用 frameTargetOrigin 而非通配符、产品端以明确 origin 回传、纯函数 `kgNormalize`/`dedupeGraphCards`/`kgEscape` 的归一化与转义。
 - `test_chart.mjs` `zen-chart.js`：CSV 解析、数组/对象/CSV 归一化、柱状与折线 SVG、标题转义、data URL、空数据兜底。
