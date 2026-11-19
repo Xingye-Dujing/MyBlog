@@ -38,7 +38,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-class ChainTest(unittest.TestCase):
+class BrowserCase:
+    """Shared browser lifecycle; no tests live here so subclasses stay focused."""
     @classmethod
     def setUpClass(cls):
         cls._server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), QuietHandler)
@@ -72,6 +73,9 @@ class ChainTest(unittest.TestCase):
 
     def assert_no_script_errors(self):
         self.assertEqual(self._errors, [], "页面存在未捕获脚本异常: %s" % self._errors[:3])
+
+class ChainTest(BrowserCase, unittest.TestCase):
+    """Online chains: the suite runs against the local static server."""
 
     # ------------------------------------------------------------------ #
     def test_all_pages_boot_without_script_errors(self):
@@ -175,6 +179,85 @@ class ChainTest(unittest.TestCase):
         text = self.page.locator("#cmdk-list").inner_text()
         self.assertIn("E2E 命令面板卡片", text)
         self.assertIn("知识卡片", text)
+        self.assert_no_script_errors()
+
+class OfflineChainTest(BrowserCase, unittest.TestCase):
+    """Same user flows, but every non-local network request is blocked.
+
+    A static page still loads from 127.0.0.1; anything leaving the machine is
+    aborted.  This turns "fully offline" from a claim into a regression test.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.context.route("**/*", self._offline)
+
+    def _offline(self, route):
+        url = route.request.url
+        if (url.startswith("http://127.0.0.1")
+                or url.startswith("data:")
+                or url.startswith("blob:")):
+            route.continue_()
+        else:
+            route.abort()
+
+    def test_offline_zencard_roundtrip(self):
+        self.open("omm-zencard.html")
+        self.page.click('[data-view="library"]')
+        self.page.fill("#new-content", "离线卡片")
+        self.page.click("#add-card")
+        self.page.wait_for_timeout(200)
+        cards = json.loads(self.page.evaluate("localStorage.getItem('zen.cards.v1') || '[]'"))
+        self.assertTrue(any("离线卡片" in c.get("content", "") for c in cards))
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_timeout(300)
+        self.assertIn("离线卡片", self.page.locator("body").inner_text())
+        self.assert_no_script_errors()
+
+    def test_offline_zenflow_rule_and_layout(self):
+        self.open("omm-zenflow.html")
+        self.assertTrue(self.page.evaluate("typeof window.ZenCanvasLayout === 'object'"))
+        self.page.click('[data-view="editor"]')
+        self.page.fill("#r-name", "离线规则")
+        self.page.fill("#w-tag", "offline")
+        self.page.select_option("#a-type", "notify")
+        self.page.fill("#a-value", "hello")
+        self.page.click("#add-action")
+        self.page.click("#save-rule")
+        self.page.wait_for_timeout(200)
+        rules = json.loads(self.page.evaluate("localStorage.getItem('zen.flow.rules.v1') || '[]'"))
+        self.assertTrue(any("离线规则" in r.get("name", "") for r in rules))
+        self.page.click('[data-view="flow"]')
+        self.page.wait_for_timeout(300)
+        self.assertGreater(self.page.locator("#flow-canvas .flow-node").count(), 0)
+        self.assert_no_script_errors()
+
+    def test_offline_zenpack_export(self):
+        self.open("omm-zenbackup.html")
+        self.page.evaluate("localStorage.setItem('zen.cards.v1', '[{\"id\":\"off\",\"content\":\"离线包\"}]')")
+        self.page.click("#zp-collect")
+        self.page.wait_for_timeout(200)
+        self.assertGreater(int(self.page.locator("#manifest-count").inner_text()), 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "offline-pack.json")
+            with self.page.expect_download() as dl:
+                self.page.click("#zp-export")
+            dl.value.save_as(target)
+            data = json.loads(Path(target).read_text(encoding="utf-8"))
+            self.assertEqual(data["format"], "zen-backup")
+        self.assert_no_script_errors()
+
+    def test_offline_hub_cmdk(self):
+        self.open("omm-hub.html")
+        self.page.evaluate("""() => {
+            localStorage.setItem('zen.cards.v1', JSON.stringify([
+                { id: 'o1', content: '离线命令卡片', kind: 'note', source: 'manual', tags: ['offline'] }
+            ]));
+        }""")
+        self.page.click("#command-btn")
+        self.page.fill("#cmdk-input", "离线命令卡片")
+        self.page.wait_for_timeout(200)
+        self.assertIn("离线命令卡片", self.page.locator("#cmdk-list").inner_text())
         self.assert_no_script_errors()
 
 
