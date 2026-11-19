@@ -111,6 +111,19 @@ test('Hub 快照包含 timeline 与 Planner 完成项', () => {
   assert.equal(snap.planner[1].done, false)
 })
 
+test('Viz 送复盘的图表进入 Hub 时间线', () => {
+  const snap = liveData({
+    'zen.viz.review.v1': JSON.stringify([
+      { app: 'visualization', ts: '2026-02-01T10:00:00Z', title: '论文趋势', chartType: 'line', rows: 12 },
+    ]),
+  })
+  const chartEvents = snap.timeline.filter((e) => e.app === 'visualization')
+  assert.equal(chartEvents.length, 1)
+  assert.ok(chartEvents[0].title.includes('论文趋势'))
+  assert.ok(chartEvents[0].title.includes('line'))
+  assert.ok(chartEvents[0].title.includes('12 行'))
+})
+
 test('live-data 请求用明确 origin、无通配符，并复用卡片协议', () => {
   const segment = hub.slice(hub.indexOf('function respondLiveData('), hub.indexOf('function dedupeGraphCards('))
   assert.ok(segment.includes("type: 'omm:zen-card-request'"))

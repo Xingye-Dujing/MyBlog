@@ -5166,9 +5166,19 @@
       // Timeline + Planner are what ZenReview asks for. Same-origin (web build)
       // reads them directly; on isolated desktop ports they degrade to empty and
       // the product falls back to its manual paste boxes.
-      timeline: (flowEvents || []).slice(0, 60).map(function (ev) {
-        return { app: text(ev.kind, 40), ts: ev.at ? new Date(ev.at).toISOString() : '', title: text(ev.text, 300) };
-      }),
+      timeline: (function () {
+        var items = (flowEvents || []).slice(0, 60).map(function (ev) {
+          return { app: text(ev.kind, 40), ts: ev.at ? new Date(ev.at).toISOString() : '', title: text(ev.text, 300) };
+        });
+        // Chart-to-report: Viz products register a review entry in this key.
+        arr('zen.viz.review.v1').slice(-40).forEach(function (e) {
+          if (e && typeof e === 'object') {
+            items.push({ app: 'visualization', ts: text(e.ts, 40),
+              title: text(e.title, 300) + ' · ' + text(e.chartType, 40) + ' (' + (e.rows || 0) + ' 行)' });
+          }
+        });
+        return items.slice(0, 80);
+      })(),
       planner: (function () {
         var out = [];
         var data = arr('zp-data-v2')[0];

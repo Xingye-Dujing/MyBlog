@@ -52,3 +52,46 @@ test('Data / Viz 主脚本语法可解析', () => {
   assert.doesNotThrow(() => new Function(biggestScript(data)))
   assert.doesNotThrow(() => new Function(biggestScript(viz)))
 })
+
+/* ------------------------------------------- Viz -> Report */
+
+function extractFunction(text, name) {
+  const start = text.indexOf('function ' + name + '(')
+  assert.notEqual(start, -1, name + ' 未找到')
+  const open = text.indexOf('{', start)
+  let depth = 0
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}' && --depth === 0) return text.slice(start, i + 1)
+  }
+  throw new Error('括号不平衡: ' + name)
+}
+
+test('Viz 有送复盘按钮与 exportReview 入口', () => {
+  assert.ok(viz.includes('id="save-review-btn"'))
+  assert.ok(viz.includes("$('#save-review-btn').onclick = exportReview"))
+  assert.ok(viz.includes('function exportReview()'))
+  assert.ok(viz.includes("'zen.viz.review.v1'"))
+})
+
+test('exportReview 把图表摘要追加到复盘键并限量 50 条', () => {
+  const store = { 'zen.viz.review.v1': JSON.stringify([{ title: '旧图' }]) }
+  const localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = v },
+  }
+  const status = []
+  const fn = new Function('localStorage', 'state', 'setStatus', 'Date', 'String',
+    extractFunction(viz, 'exportReview') + '\nreturn exportReview;'
+  )(localStorage, { title: '新趋势', type: 'bar', data: [{ a: 1, b: 2 }] },
+    (m) => status.push(m), Date, String)
+  fn()
+  const list = JSON.parse(store['zen.viz.review.v1'])
+  assert.equal(list.length, 2)
+  assert.equal(list[0].title, '旧图')
+  assert.equal(list[1].title, '新趋势')
+  assert.equal(list[1].app, 'visualization')
+  assert.equal(list[1].rows, 1)
+  assert.equal(list[1].cols, 2)
+  assert.ok(status[0].includes('新趋势'))
+})
