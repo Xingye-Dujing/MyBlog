@@ -87,3 +87,74 @@ test('ZenPack 未重复实现备份核心函数', () => {
   const code = ZenPack.makePack.toString() + ZenPack.readPack.toString() + ZenPack.planPack.toString()
   assert.ok(code.includes('ZenBackup.'), '应委托 ZenBackup')
 })
+
+/* ------------------------------------------------- 导出脱敏与恢复键白名单 */
+
+test('isSecretKey 按词识别字段与条目名', () => {
+  for (const key of ['apiKey', 'api_key', 'accessToken', 'client_secret', 'password',
+    'X-Supabase-Key', 'zenglish-supabase-config-v1']) {
+    assert.equal(ZenBackup.isSecretKey(key), true, key)
+  }
+  for (const key of ['zen.cards.v1', 'omm-search-v1', 'apiBase', 'title', 'content']) {
+    assert.equal(ZenBackup.isSecretKey(key), false, key)
+  }
+})
+
+test('redactSecrets 遮罩敏感字段、丢弃凭据条目并重算校验和', () => {
+  const raw = ZenBackup.collect([
+    { id: 'omm-search-v1', data: { apiKey: 'sk-123', apiBase: 'https://x', headers: { Authorization: 'Bearer y' } } },
+    { id: 'zenglish-supabase-config-v1', data: { url: 'https://x', key: 'abc' } },
+    { id: 'zen.cards.v1', data: [{ id: 'a', content: 'ok' }] },
+  ])
+  const safe = ZenBackup.redactSecrets(raw)
+  assert.deepEqual(safe.products.map((p) => p.id), ['omm-search-v1', 'zen.cards.v1'])
+  assert.equal(safe.products[0].data.apiKey, '***REDACTED***')
+  assert.equal(safe.products[0].data.headers.Authorization, '***REDACTED***')
+  assert.equal(safe.products[0].data.apiBase, 'https://x')
+  assert.deepEqual(ZenBackup.validate(safe), { ok: true, errors: [] })
+  assert.equal(raw.products[0].data.apiKey, 'sk-123') // 不改动原对象
+})
+
+test('makePack 导出即脱敏，不带走密钥', () => {
+  const s = storage({
+    'omm-search-v1': JSON.stringify({ apiKey: 'sk-secret', query: 'hello' }),
+    'zenglish-supabase-config-v1': JSON.stringify({ key: 'abc' }),
+    'zen.cards.v1': '[]',
+  })
+  const pack = ZenPack.makePack(s)
+  assert.deepEqual(pack.products.map((p) => p.id).sort(), ['omm-search-v1', 'zen.cards.v1'])
+  const search = pack.products.find((p) => p.id === 'omm-search-v1')
+  assert.equal(search.data.apiKey, '***REDACTED***')
+  assert.equal(search.data.query, 'hello')
+  assert.ok(!JSON.stringify(pack).includes('sk-secret'))
+})
+
+test('restorableEntries 拒绝任意键、特殊键与凭据键', () => {
+  const manifest = ZenBackup.collect([
+    { id: 'zen.cards.v1', data: [] },
+    { id: '__proto__', data: { polluted: true } },
+    { id: 'admin', data: 'x' },
+    { id: 'zenglish-supabase-config-v1', data: { key: 'abc' } },
+    { id: 'my-notes', data: [] },
+  ])
+  const entries = ZenBackup.restorableEntries(manifest, ['my-notes'])
+  assert.deepEqual(entries.map((e) => e.key), ['zen.cards.v1', 'my-notes'])
+})
+
+test('applyPack 只写工作区白名单内的键', () => {
+  const manifest = ZenBackup.collect([
+    { id: 'zen.cards.v1', data: '[]' },
+    { id: '__proto__', data: '{}' },
+    { id: 'admin', data: 'x' },
+  ])
+  const dst = storage({})
+  ZenPack.applyPack(manifest, dst)
+  assert.deepEqual([...dst._map.keys()], ['zen.cards.v1'])
+})
+
+test('ZenBackup 页面导出前脱敏、恢复时过滤', () => {
+  const html = readFileSync(new URL('../public/omm-zenbackup.html', import.meta.url), 'utf8')
+  assert.ok(html.includes('ZenBackup.redactSecrets('))
+  assert.ok(html.includes('ZenBackup.restorableEntries('))
+  assert.ok(!html.includes('localStorage.setItem(p.id'))
+})

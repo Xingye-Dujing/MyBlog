@@ -8,6 +8,79 @@ function str(v) {
   return v === null || v === undefined ? '' : String(v)
 }
 
+/* 备份会作为文件分享出去，不能直接携带 API Key / 令牌 / 数据库凭据。
+ * 字段名按“词”判断，兼容 apiKey / api_key / accessToken / X-Supabase-Key。 */
+const SECRET_WORDS = new Set([
+  'apikey', 'token', 'secret', 'password', 'passwd', 'pwd',
+  'credential', 'credentials', 'authorization', 'supabase',
+])
+const REDACTED = '***REDACTED***'
+
+function wordsOf(key) {
+  return str(key)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map(function (w) { return w.toLowerCase() })
+}
+
+function isSecretKey(key) {
+  const words = wordsOf(key)
+  if (words.some(function (w) { return SECRET_WORDS.has(w) })) return true
+  // apiKey 分词后是 api + key；紧凑串仍能命中 apikey 这类组合词。
+  const compact = words.join('')
+  return Array.from(SECRET_WORDS).some(function (w) { return compact.indexOf(w) >= 0 })
+}
+
+function redactValue(value) {
+  if (Array.isArray(value)) return value.map(redactValue)
+  if (value && typeof value === 'object') {
+    const out = {}
+    Object.keys(value).forEach(function (k) {
+      out[k] = isSecretKey(k) ? REDACTED : redactValue(value[k])
+    })
+    return out
+  }
+  return value
+}
+
+/* 导出前调用：整条密钥条目直接丢弃，普通条目里的敏感字段遮罩，并重算校验和。 */
+function redactSecrets(manifest) {
+  if (!manifest || !Array.isArray(manifest.products)) return manifest
+  const products = manifest.products
+    .filter(function (p) { return p && !isSecretKey(p.id) })
+    .map(function (p) {
+      const data = redactValue(p.data)
+      return Object.assign({}, p, { data: data, checksum: checksum(data) })
+    })
+  return Object.assign({}, manifest, { products: products })
+}
+
+/* 恢复时只允许写回 OMM-ZEN 自己的键（或当前已存在的键），防止伪造包借
+ * p.id 覆盖任意 localStorage 项或写入 __proto__ 之类的特殊键。 */
+const RESTORE_PREFIXES = ['zen.', 'zc-', 'zw', 'zp-', 'zr-', 'omm.', 'omm-', 'zenglish-']
+
+function isRestorableKey(key) {
+  const k = str(key)
+  if (!k || k.length > 200 || isSecretKey(k)) return false
+  return RESTORE_PREFIXES.some(function (prefix) { return k.indexOf(prefix) === 0 })
+}
+
+function restorableEntries(manifest, knownKeys, allowedKeys) {
+  const known = Array.isArray(knownKeys) ? knownKeys : []
+  const allowed = Array.isArray(allowedKeys) && allowedKeys.length ? allowedKeys : null
+  return (manifest && Array.isArray(manifest.products) ? manifest.products : [])
+    .filter(function (p) {
+      if (!p || isSecretKey(p.id)) return false
+      if (allowed) return allowed.indexOf(p.id) >= 0
+      return isRestorableKey(p.id) || known.indexOf(p.id) >= 0
+    })
+    .map(function (p) {
+      return { key: p.id, value: typeof p.data === 'string' ? p.data : JSON.stringify(p.data) }
+    })
+}
+
 function checksum(value) {
   const text = JSON.stringify(value)
   let h = 2166136261
@@ -127,6 +200,9 @@ function diff(current, incoming) {
   return { added: added, removed: removed, changed: changed }
 }
 
-export const ZenBackup = { collect, validate, byId, uniqueBy, merge, diff, checksum }
+export const ZenBackup = {
+  collect, validate, byId, uniqueBy, merge, diff, checksum,
+  isSecretKey, redactSecrets, isRestorableKey, restorableEntries,
+}
 if (typeof globalThis !== 'undefined') globalThis.ZenBackup = ZenBackup
 export default ZenBackup

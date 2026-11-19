@@ -34,7 +34,9 @@ function scanWorkspace(storage, keys) {
 }
 
 function makePack(storage, meta) {
-  return ZenBackup.collect(scanWorkspace(storage), meta || { name: 'OMM-ZEN 工作区包' })
+  // 工作区包会被搬去另一台机器，导出前先脱敏：整条凭据键丢弃、字段遮罩、重算校验和。
+  const collected = ZenBackup.collect(scanWorkspace(storage), meta || { name: 'OMM-ZEN 工作区包' })
+  return ZenBackup.redactSecrets(collected)
 }
 
 function readPack(text) {
@@ -49,14 +51,9 @@ function planPack(current, incoming) {
   return { diff: ZenBackup.diff(current, incoming), merged: ZenBackup.merge(current, incoming) }
 }
 
-/* 恢复到 localStorage 时使用的键值对；字符串原样写回，对象序列化。 */
+/* 恢复到 localStorage 时使用的键值对：只允许写回工作区目录内的键。 */
 function restoreEntries(manifest) {
-  return (manifest && Array.isArray(manifest.products) ? manifest.products : []).map(function (p) {
-    return {
-      key: p.id,
-      value: typeof p.data === 'string' ? p.data : JSON.stringify(p.data),
-    }
-  })
+  return ZenBackup.restorableEntries(manifest, null, WORKSPACE_KEYS)
 }
 
 function applyPack(manifest, storage) {

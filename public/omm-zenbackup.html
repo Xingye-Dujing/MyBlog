@@ -72,6 +72,11 @@
       function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800) }
       function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
       function manifest() { return ZenBackup.collect(products, { name: 'OMM-ZEN 全量备份' }) }
+      /* 扫描列表与导出文件都可能离开本机，先按与 ZenPack 相同的规则遮罩敏感字段。 */
+      function safePreview(data) {
+        const masked = ZenBackup.redactSecrets({ products: [{ id: 'preview', data }] }).products[0].data
+        return esc(JSON.stringify(masked).slice(0, 80))
+      }
       function render() {
         $('manifest-count').textContent = products.length
         $('status-text').textContent = products.length + ' 个产品'
@@ -90,7 +95,7 @@
           rows.push({ id: key, name: key, data })
         }
         $('scan-list').innerHTML = rows.length
-          ? rows.map((r, i) => `<div class="item"><div class="body"><div class="title">${esc(r.name)}</div><div class="meta">${esc(JSON.stringify(r.data).slice(0, 80))}</div></div><div class="ops"><button class="btn sm" data-i="${i}">加入</button></div></div>`).join('')
+          ? rows.map((r, i) => `<div class="item"><div class="body"><div class="title">${esc(r.name)}</div><div class="meta">${safePreview(r.data)}</div></div><div class="ops"><button class="btn sm" data-i="${i}">加入</button></div></div>`).join('')
           : '<div class="empty">没有本地数据</div>'
         $('scan-list').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
           const r = rows[Number(b.dataset.i)]
@@ -109,7 +114,7 @@
           render(); toast('已添加')
         })
         $('pack-btn').addEventListener('click', () => {
-          const m = manifest(); const check = ZenBackup.validate(m)
+          const m = ZenBackup.redactSecrets(manifest()); const check = ZenBackup.validate(m)
           if (!check.ok) return toast(check.errors[0])
           const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(m, null, 2)], { type: 'application/json' })); a.download = 'omm-zen-backup.json'; a.click(); URL.revokeObjectURL(a.href)
         })
@@ -134,10 +139,11 @@
         $('restore-btn').addEventListener('click', () => {
           if (!incoming) return toast('先导入备份')
           if (!confirm('按导入的备份覆盖本地对应数据？此操作不可撤销。')) return
-          incoming.products.forEach((p) => {
-            try { localStorage.setItem(p.id, typeof p.data === 'string' ? p.data : JSON.stringify(p.data)) } catch {}
+          const entries = ZenBackup.restorableEntries(incoming, Object.keys(localStorage))
+          entries.forEach((e) => {
+            try { localStorage.setItem(e.key, e.value) } catch {}
           })
-          toast('已恢复，请刷新页面')
+          toast('已恢复 ' + entries.length + ' 个键，请刷新页面')
         })
         $('zp-collect').addEventListener('click', () => {
           products = ZenPack.scanWorkspace(localStorage)
