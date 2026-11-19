@@ -23,9 +23,12 @@ test('omm-visualization.html matches the shared core generator', (t) => {
       build, '--product', 'omm', '--root', out,
     ], { encoding: 'utf8' })
     assert.equal(run.status, 0, `build.py failed: ${run.stderr}`)
-    assert.deepEqual(
-      readFileSync(join(out, 'public/omm-visualization.html')),
-      readFileSync(committed),
+    // Windows checkouts turn the generated LF file into CRLF; compare content,
+    // not the working-tree line endings.
+    const normalize = (p) => readFileSync(p).toString('utf8').replace(/\r\n/g, '\n')
+    assert.equal(
+      normalize(join(out, 'public/omm-visualization.html')),
+      normalize(committed),
       'regenerate the file with build.py instead of editing it by hand',
     )
   } finally {
