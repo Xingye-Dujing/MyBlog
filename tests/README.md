@@ -33,6 +33,7 @@ python tests/product_guard.py --list      # 列出全部检查项与其代码
 python tests/product_guard.py --only LINK,BRIDGE  # 只跑指定检查项
 python tests/product_guard.py --only REGISTRY     # 产品注册表一致性
 python tests/product_guard.py --only RESOURCE,XSS,A11Y  # 资源 / 转义 / 可访问性
+python tests/product_guard.py --only FORMAT     # JSON 规范与产品源码一致
 python tests/no_jp_quotes.py              # 仅引号修正（product_guard 已内置该能力）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
@@ -42,7 +43,7 @@ node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
   tests/test_search_page.mjs tests/test_data_viz.mjs \
   tests/test_dataviz_flow.mjs tests/test_data_flow.mjs \
   tests/test_canvas_layout.mjs tests/test_cmdk.mjs tests/test_cmdk_upgrade.mjs \
-  tests/test_zenpack.mjs \
+  tests/test_json_specs.mjs tests/test_today_panel.mjs tests/test_zenpack.mjs \
   tests/test_zenviz_core_sync.mjs  # 图表页必须与 zen viz-core 生成结果逐字一致
 npm run lint                              # 前端静态检查
 npm run build                             # 前端生产构建
@@ -78,9 +79,9 @@ npm run build                             # 前端生产构建
   不改文件，违规时以退出码 1 失败。脚本按字节读写以保留 CRLF/LF 原样。
 - 单元测试验证替换映射、幂等性与“源码中零违规”。
 
-**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，21 项）
+**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，37 项）
 
-在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，6 个独立检查项
+在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，11 个独立检查项
 （`--list` 可查看，`--only` 可筛选）：
 
 | 代码 | 检查项 | 自动修正 |
@@ -91,6 +92,11 @@ npm run build                             # 前端生产构建
 | `BRIDGE` | 12 个消费型产品是否以 `type="module"` 引入 `zen-link.js` | 否 |
 | `SPEC` | `json-specs/*.md` 是否都被 README 索引、索引是否指向存在的文件 | 否 |
 | `DEBUG` | 产品页与模块里是否残留 `debugger` 调试语句 | 否 |
+| `RESOURCE` | CSS `url()` 与非产品页静态资源引用是否可达（JS 动态表达式不误报） | 否 |
+| `XSS` | 动态值拼入 `innerHTML` 等 HTML 写入口是否显式转义 | 否 |
+| `A11Y` | 图片是否有 `alt`、交互控件是否有可访问名 | 否 |
+| `REGISTRY` | 启动器从 `plugin_specs` 派生、入口页齐全、发布目录无漂移（未跟踪页面豁免） | 否 |
+| `FORMAT` | JSON 规范声明的格式标识同时出现在实现产品源码中，防止文档与代码漂移 | 否 |
 
 - 默认运行会先自动修正引号，再串行跑完所有检查；`--check` 全程只读，违规退出码 1。
 - 误报豁免：外链 / 锚点 / `data:` / `javascript:`、JS 模板与替换占位符 `${}`、`$2`、
@@ -106,7 +112,7 @@ npm run build                             # 前端生产构建
 - `frameTargetOrigin()`：按 iframe 自身 URL 推导目标 origin，跨端口场景不被工作台 origin 覆盖；拒绝非 loopback 地址。
 - 静态防护断言：4 个桥接脚本 + writer 内联脚本中不再出现 `postMessage(..., '*')`；所有 `message` 监听器都校验 `event.origin`；工作台把自身 origin 下发到 iframe URL，产品端读取该参数。
 
-**`test_zencard.mjs` 等 14 个新增套件**（node:test，共 130 项）
+**`test_zencard.mjs` 等 18 个新增套件**（node:test，共 157 项）
 
 - `zen-card.js` 通用知识卡片的归一化 / 严格校验 / 序列化 / 去重 / 指纹，以及与语料、批注、英语桥接包、写作画布、数据表、搜索、剪藏的双向转换。
 - `zen-srs.js` SM-2 间隔重复：评级映射、间隔递增、遗忘重置、易度下限、到期队列、统计、持久化往返。
@@ -126,8 +132,10 @@ npm run build                             # 前端生产构建
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
 - `test_cmdk_upgrade.mjs` Cmd+K 检索增强：子序列模糊评分（前缀加权）、`usageStats` 使用频率加权与稳定排序、本地即时命令（`= 算术`、`@date`、`hex/bin/oct` 换算，算术只接受安全字符）；面板本体未重建，仅在过滤阶段接入。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
-- `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。
-- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无未知产品与字段漂移）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）；12 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
+- `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。另含 `OfflineChainTest`：阻断一切非本地网络请求后，建卡、建规则、ZenPack 导出与 Cmd+K 仍全部可用，把“完全离线”变成回归项。
+- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）；16 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
+- `test_json_specs.mjs` JSON 规范一致性：不只比对文档，直接调用 `ZenCard` / `ZenBackup` / `ZenPack` / `ZenSRS` / `ZenFlow` 的导出函数，断言产物满足 `format` / `v` / `cards[]` / `products[]` / `nodes` 等总表硬性要求，并验证卡片包、工作区包、SRS、规则序列化的往返。
+- `test_today_panel.mjs` 与 `tests/e2e/test_today_panel.py` Hub“今日”面板：纯函数聚合待复习卡片、卡片数、笔记、规则启用数与最近笔记/搜索；面板只读各产品既有 localStorage、复用 `activateApp`、不新增存储；E2E 在真实浏览器注入数据后校验面板数字与条目。
 
 ## 前置条件
 

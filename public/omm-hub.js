@@ -324,6 +324,7 @@
   var graphSeq = 0;
   var graphPos = [];
   var flowOpen = false;
+  var todayOpen = false;
   var flowEvents = [];
   var autoSleepTimer = 0;
   var lastAutoSnapAt = 0;
@@ -761,6 +762,9 @@
     els.flowChannels = document.getElementById('flow-channels');
     els.flowEventList = document.getElementById('flow-event-list');
     els.flowStatus = document.getElementById('flow-status');
+    els.todayPanel = document.getElementById('today-panel');
+    els.todayBody = document.getElementById('today-body');
+    els.todayStatus = document.getElementById('today-status');
     els.zenBar = document.getElementById('zen-bar');
     els.zenProgress = document.getElementById('zen-progress');
     els.zenClock = document.getElementById('zen-clock');
@@ -5321,6 +5325,109 @@
     }
   }
 
+  /* ---------- 今日：聚合各产品既有 localStorage，不新增存储 ---------- */
+  function buildTodaySummary(input) {
+    var data = input || {}
+    var cards = Array.isArray(data.cards) ? data.cards : []
+    var srs = Array.isArray(data.srs) ? data.srs : []
+    var docs = data.docs && data.docs.meta ? data.docs.meta : {}
+    var history = Array.isArray(data.search && data.search.history)
+      ? data.search.history : []
+    var rules = Array.isArray(data.rules) ? data.rules : []
+    var now = Number(data.now) || Date.now()
+    var due = srs.filter(function (s) {
+      return s && Number(s.due || 0) <= now
+    }).length
+    var docIds = Object.keys(docs)
+    return {
+      cards: cards.length,
+      due: due,
+      notes: docIds.length,
+      rules: rules.length,
+      activeRules: rules.filter(function (r) { return r && r.enabled !== false }).length,
+      recentNotes: docIds.slice(-3).reverse().map(function (id) {
+        return { id: id, name: (docs[id] && docs[id].name) || id }
+      }),
+      recentSearches: history.slice(-3).reverse().map(function (h) {
+        return h && h.query ? String(h.query) : ''
+      }).filter(Boolean),
+    }
+  }
+
+  function todayRead(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key)
+      return raw ? JSON.parse(raw) : fallback
+    } catch (e) {
+      return fallback
+    }
+  }
+
+  function renderToday(summary) {
+    if (!els.todayBody) return
+    var s = summary || buildTodaySummary({})
+    var tiles = [
+      { label: '待复习', value: s.due, app: 'zencard', hint: '张到期卡片' },
+      { label: '知识卡片', value: s.cards, app: 'zencard', hint: '张累计' },
+      { label: '笔记画布', value: s.notes, app: 'writer', hint: '篇' },
+      { label: '自动化规则', value: s.rules, app: 'zenflow', hint: s.activeRules + ' 条启用' },
+    ]
+    var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">'
+    tiles.forEach(function (t) {
+      html += '<button type="button" class="btn" data-today-app="' + t.app +
+        '" style="text-align:left;padding:10px"><div class="oc-muted" style="font-size:11px">' +
+        esc(t.label) + '</div><div style="font-size:22px;font-weight:600">' + t.value +
+        '</div><div class="oc-muted" style="font-size:10px">' + esc(t.hint) + '</div></button>'
+    })
+    html += '</div>'
+    html += '<div class="pp-status" style="margin-top:14px">最近笔记</div>'
+    html += s.recentNotes.length
+      ? s.recentNotes.map(function (n) {
+          return '<button type="button" class="kg-detail" data-today-note="' + esc(n.id) +
+            '" style="display:block;width:100%;text-align:left;cursor:pointer">' + esc(n.name) + '</button>'
+        }).join('')
+      : '<div class="kg-detail">暂无笔记</div>'
+    html += '<div class="pp-status" style="margin-top:14px">最近搜索</div>'
+    html += s.recentSearches.length
+      ? s.recentSearches.map(function (q) {
+          return '<button type="button" class="kg-detail" data-today-search="' + esc(q) +
+            '" style="display:block;width:100%;text-align:left;cursor:pointer">' + esc(q) + '</button>'
+        }).join('')
+      : '<div class="kg-detail">暂无搜索历史</div>'
+    els.todayBody.innerHTML = html
+    if (els.todayStatus) {
+      els.todayStatus.textContent = s.due + ' 张待复习 · ' + s.notes + ' 篇笔记 · ' +
+        s.activeRules + '/' + s.rules + ' 条规则启用中'
+    }
+  }
+
+  function openToday() {
+    if (!els.todayPanel) return
+    closePopovers();
+    closeCommandPalette();
+    closePluginPanel();
+    closeGlobalSearch();
+    closeTimeline();
+    if (graphOpen) closeKnowledgeGraph();
+    if (flowOpen) closeDataFlow();
+    if (els.hubSettings) els.hubSettings.hidden = true;
+    todayOpen = true;
+    els.todayPanel.hidden = false;
+    renderToday(buildTodaySummary({
+      cards: todayRead('zen.cards.v1', []),
+      srs: todayRead('zen.srs.v1', []),
+      docs: todayRead('zc-docs', null),
+      search: todayRead('omm-search-v1', null),
+      rules: todayRead('zen.flow.rules.v1', []),
+      now: Date.now(),
+    }));
+  }
+
+  function closeToday() {
+    todayOpen = false;
+    if (els.todayPanel) els.todayPanel.hidden = true;
+  }
+
   function gsearchEscape(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -5964,6 +6071,7 @@
       else if (act === 'globalsearch') openGlobalSearch();
       else if (act === 'graph') { if (graphOpen) closeKnowledgeGraph(); else openKnowledgeGraph(); }
       else if (act === 'flow') { if (flowOpen) closeDataFlow(); else openDataFlow(); }
+      else if (act === 'today') { if (todayOpen) closeToday(); else openToday(); }
       else if (act === 'zen') setZen(!zenActive);
       else if (act === 'timeline') { if (timelineOpen) closeTimeline(); else openTimeline(); }
       else if (act === 'notify') toggleNotifyPanel();
@@ -5986,6 +6094,18 @@
         if (event.target === els.dataFlow || event.target.closest('#flow-close')) {
           closeDataFlow();
         }
+      });
+    }
+    if (els.todayPanel) {
+      els.todayPanel.addEventListener('click', function (event) {
+        if (event.target === els.todayPanel || event.target.closest('#today-close')) {
+          closeToday();
+          return;
+        }
+        var tile = event.target.closest('[data-today-app]');
+        if (tile) { closeToday(); activateApp(tile.dataset.todayApp); return; }
+        if (event.target.closest('[data-today-note]')) { closeToday(); activateApp('writer'); return; }
+        if (event.target.closest('[data-today-search]')) { closeToday(); activateApp('search'); return; }
       });
     }
 
@@ -6873,6 +6993,7 @@
     else if (action === 'global-search') openGlobalSearch();
     else if (action === 'knowledge-graph') openKnowledgeGraph();
     else if (action === 'data-flow') openDataFlow();
+    else if (action === 'today') openToday();
     else if (action === 'zen-mode') setZen(!zenActive);
     else if (action === 'reopen-tab') reopenLastClosed();
     else if (action === 'notify-panel') toggleNotifyPanel();

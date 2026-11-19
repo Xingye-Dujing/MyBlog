@@ -60,6 +60,8 @@ def main() -> int:
         "test_canvas_layout.mjs",
         "test_cmdk.mjs",
         "test_cmdk_upgrade.mjs",
+        "test_json_specs.mjs",
+        "test_today_panel.mjs",
         "test_zenpack.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
