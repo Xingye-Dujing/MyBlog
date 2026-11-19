@@ -11,6 +11,9 @@
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
     <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
     <link rel="stylesheet" href="zen-ui.css" />
+    <style>
+      .item.focused { outline: 2px solid var(--accent, #e3a400); outline-offset: 2px; background: var(--accent-wash, rgba(227,164,0,.1)); }
+    </style>
   </head>
   <body>
     <div id="app">
@@ -340,6 +343,38 @@
           } catch (err) { toast('导入失败：' + err.message) }
         })
       }
+      /* 从 Writer 的引用节点跳转过来：切到卡片库、清搜索、高亮指定卡片并滚动到它。
+       * 只接受来自父窗口 Hub 的消息，cardId 必须是本页真实存在的卡片。 */
+      function focusCard(cardId) {
+        const id = String(cardId || '')
+        if (!id || !cards.some((c) => c.id === id)) return false
+        $('lib-search').value = ''
+        $('tabs').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.view === 'library'))
+        document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-library'))
+        renderLibrary()
+        const row = $('card-list').querySelector('[data-id="' + CSS.escape(id) + '"]')
+        if (row) {
+          row.classList.add('focused')
+          if (row.scrollIntoView) row.scrollIntoView({ block: 'center' })
+        }
+        return !!row
+      }
+      window.addEventListener('message', (event) => {
+        if (event.source !== window.parent) return
+        let hub = ''
+        try {
+          const raw = new URLSearchParams(location.search).get('omm_hub_origin')
+          if (raw) {
+            const u = new URL(raw)
+            if ((u.protocol === 'http:' || u.protocol === 'https:') &&
+                ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) hub = u.origin
+          }
+        } catch (e) { /* ignore */ }
+        const trusted = hub ? event.origin === hub : /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]|::1)(:\d+)?$/.test(String(event.origin || ''))
+        if (!trusted) return
+        const d = event.data
+        if (d && d.type === 'omm:focus-card') focusCard(d.cardId)
+      })
       function syncSrs() {
         const ids = Object.create(null)
         cards.forEach((c) => { ids[c.id] = 1; if (!srs.find((s) => s.id === c.id)) srs.push(ZenSRS.createState(c.id, Date.now())) })

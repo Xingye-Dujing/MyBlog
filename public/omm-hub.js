@@ -6937,6 +6937,21 @@
         respondLiveData(sourceFrame, event.origin);
         return;
       }
+      if (data.type === 'omm:review-card') {
+        // A Writer citation asks us to jump to ZenCard and highlight a card.
+        var cardId = String(data.cardId || '');
+        if (!cardId) return;
+        activateApp('zencard');
+        whenAppReady('zencard', function (frame) {
+          if (!frame) return;
+          try {
+            frame.contentWindow.postMessage(
+              { type: 'omm:focus-card', cardId: cardId }, frameTargetOrigin(frame)
+            );
+          } catch (e) { /* ignore */ }
+        });
+        return;
+      }
       if (data.type === 'omm:saved') {
         window.dispatchEvent(new CustomEvent('omm:archive-refresh'));
         loadRecentFiles(true);

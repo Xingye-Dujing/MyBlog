@@ -9801,7 +9801,12 @@ notify pgrst, 'reload schema';</textarea
                             <div class="todo-checkbox" data-action="toggleTodo"></div>`
             }
             headerInner += `
-                            <div class="node-action-btn border-color-btn" data-action="editBorderColor" data-i18n-title="border.title" title="Border colour"><span class="node-color-dot"></span></div>
+                            <div class="node-action-btn border-color-btn" data-action="editBorderColor" data-i18n-title="border.title" title="Border colour"><span class="node-color-dot"></span></div>`
+            if (data && data.zenCardId) {
+              headerInner += `
+                            <div class="node-action-btn review-card-btn" data-action="reviewCard" title="到卡片库复习这张卡片">习</div>`
+            }
+            headerInner += `
                             <div class="node-action-btn lock-btn" data-action="toggleLock">○</div>
                             <div class="node-action-btn minimize" data-action="minimize">−</div>
                             <div class="node-action-btn close" data-action="closeNode">×</div>
@@ -19558,6 +19563,23 @@ notify pgrst, 'reload schema';</textarea
                   debouncedAutoSave()
                 }
                 break
+              case 'reviewCard':
+                const rcNode = target.closest('.node')
+                const rcId = rcNode && rcNode.dataset.zenCardId
+                if (rcId) {
+                  const hubRaw = new URLSearchParams(location.search).get('omm_hub_origin')
+                  let hub = location.origin
+                  try {
+                    if (hubRaw) {
+                      const u = new URL(hubRaw)
+                      if ((u.protocol === 'http:' || u.protocol === 'https:') &&
+                          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) hub = u.origin
+                    }
+                  } catch (_) {}
+                  try { window.parent.postMessage({ type: 'omm:review-card', cardId: rcId }, hub) } catch (_) {}
+                  notify('已请求在卡片库中复习这张卡片')
+                }
+                break
               case 'closeNode':
                 const node = target.closest('.node')
                 if (node) {
@@ -20568,21 +20590,38 @@ notify pgrst, 'reload schema';</textarea
               return true
             })
           },
+          /* 到期卡片 id 集合：直接读 zen.srs.v1，due <= now 即为待复习。
+           * 不依赖 zen-srs.js，避免给 Writer 增加新的模块依赖。 */
+          dueCardIds(now) {
+            const out = Object.create(null)
+            let states = []
+            try { states = JSON.parse(localStorage.getItem('zen.srs.v1') || '[]') } catch (_) {}
+            const t = typeof now === 'number' ? now : Date.now()
+            if (Array.isArray(states)) states.forEach((s) => {
+              if (s && s.id && Number(s.due) <= t) out[String(s.id)] = 1
+            })
+            return out
+          },
           openCardPicker(world) {
             this.world = world || { x: AppState.panX + 120, y: AppState.panY + 120 }
             this.bindClose()
-            const cards = this.cards()
+            const all = this.cards()
+            const dueOnly = !!this._dueOnly
+            const due = this.dueCardIds()
+            const cards = dueOnly ? all.filter((c) => due[c.id]) : all
             const list = cards.length
               ? cards.map((c, i) =>
-                  '<div class="zw-zen-item" data-card="' + i + '">' +
+                  '<div class="zw-zen-item" data-card="' + (all.indexOf(c)) + '">' +
                   this.esc(String(c.content).slice(0, 100)) +
-                  '<div class="zw-zen-meta">' + this.esc(c.kind || 'note') + ' · ' + this.esc(c.source || '') +
+                  '<div class="zw-zen-meta">' + (due[c.id] ? '<b>待复习 · </b>' : '') + this.esc(c.kind || 'note') + ' · ' + this.esc(c.source || '') +
                   (c.tags && c.tags.length ? ' · ' + c.tags.map((t) => '#' + this.esc(t)).join(' ') : '') +
                   '</div></div>'
                 ).join('')
-              : '<div class="zw-zen-empty">没有卡片。可在任意产品的“卡”按钮剪藏，或在下方粘贴卡片 JSON。</div>'
-            this.open('插入知识卡片',
+              : '<div class="zw-zen-empty">' + (dueOnly ? '没有到期的卡片。' : '没有卡片。可在任意产品的“卡”按钮剪藏，或在下方粘贴卡片 JSON。') + '</div>'
+            this.open(dueOnly ? '今日复习 · 插入卡片' : '插入知识卡片',
               '<p class="zw-zen-note">选择一张卡片，在右键位置插入带出处与批注的引用节点。</p>' +
+              '<label class="zw-zen-row" style="align-items:center;gap:6px;margin-bottom:8px">' +
+              '<input type="checkbox" id="zw-zen-due"' + (dueOnly ? ' checked' : '') + ' /> 只看今日到期（' + Object.keys(due).length + '）</label>' +
               '<div class="zw-zen-list" id="zw-zen-card-list">' + list + '</div>' +
               '<p class="zw-zen-note">或粘贴单张 zen-card JSON：</p>' +
               '<textarea id="zw-zen-card-json" placeholder=\'{"format":"zen-card","v":1,"content":"..."}\'></textarea>' +
@@ -20590,7 +20629,12 @@ notify pgrst, 'reload schema';</textarea
               '<button type="button" class="zw-zen-btn primary" id="zw-zen-add-card">插入 JSON 卡片</button></div>')
             const body = document.getElementById('zw-zen-body')
             body.querySelectorAll('[data-card]').forEach((row) => {
-              row.addEventListener('click', () => this.insertCard(cards[Number(row.dataset.card)]))
+              row.addEventListener('click', () => this.insertCard(all[Number(row.dataset.card)]))
+            })
+            const dueToggle = document.getElementById('zw-zen-due')
+            if (dueToggle) dueToggle.addEventListener('change', () => {
+              this._dueOnly = dueToggle.checked
+              this.openCardPicker(this.world)
             })
             const add = document.getElementById('zw-zen-add-card')
             if (add) add.addEventListener('click', () => {
@@ -20613,6 +20657,7 @@ notify pgrst, 'reload schema';</textarea
             const node = NodeManager.createNodeAt(this.world.x, this.world.y, 'text', {
               title: '引用 · ' + String(c.kind || 'note'),
               content: parts.join(''),
+              zenCardId: c.id ? String(c.id) : '',
               w: '340px',
             })
             if (node && c.id) node.dataset.zenCardId = String(c.id)
