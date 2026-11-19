@@ -19,7 +19,8 @@ node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
   tests/test_review.mjs tests/test_backup.mjs tests/test_products.mjs \
   tests/test_knowledge_graph.mjs tests/test_chart.mjs \
   tests/test_writer_deep.mjs tests/test_search_library.mjs \
-  tests/test_search_page.mjs  # 新增产品、通用格式、Hub 图谱、Writer 与搜索深改
+  tests/test_search_page.mjs tests/test_data_viz.mjs \
+  tests/test_dataviz_flow.mjs  # 新增产品、通用格式、Hub 图谱、Writer/搜索/数据深改
 npm run lint                              # 前端静态检查
 npm run build                             # 前端生产构建
 ```
@@ -40,7 +41,7 @@ npm run build                             # 前端生产构建
 - `frameTargetOrigin()`：按 iframe 自身 URL 推导目标 origin，跨端口场景不被工作台 origin 覆盖；拒绝非 loopback 地址。
 - 静态防护断言：4 个桥接脚本 + writer 内联脚本中不再出现 `postMessage(..., '*')`；所有 `message` 监听器都校验 `event.origin`；工作台把自身 origin 下发到 iframe URL，产品端读取该参数。
 
-**`test_zencard.mjs` 等 11 个新增套件**（node:test，共 113 项）
+**`test_zencard.mjs` 等 13 个新增套件**（node:test，共 125 项）
 
 - `zen-card.js` 通用知识卡片的归一化 / 严格校验 / 序列化 / 去重 / 指纹，以及与语料、批注、英语桥接包、写作画布、数据表、搜索、剪藏的双向转换。
 - `zen-srs.js` SM-2 间隔重复：评级映射、间隔递增、遗忘重置、易度下限、到期队列、统计、持久化往返。
@@ -53,6 +54,8 @@ npm run build                             # 前端生产构建
 - `test_writer_deep.mjs` Writer 深改：模块与面板引入、三个右键动作与分发分支、`ZenWriterDeep` 三个入口、引用块出处/批注、图表自包含 data URL、时间机器走工作台快照且二次确认、主脚本整体语法可解析。
 - `test_search_library.mjs` `search-library.js`：历史条目与 zen-card 互转、全文检索、置顶、去重、卡片包导出/导入回填、统计。
 - `test_search_page.mjs` 智能搜索深改：知识库模块引入与面板元素、渲染/筛选/置顶/发送、新搜索与清空后的刷新、导入导出、主脚本语法。
+- `test_data_viz.mjs` `data-viz.js`：表格转 CSV 的转义、角色推断、数据负载构造与校验。
+- `test_dataviz_flow.mjs` Data → Viz 一键出图：模块引入、菜单与动作、嵌入 origin、Viz 接收处理、桥接三路径与 origin 校验、两个主脚本语法。
 
 ## 前置条件
 

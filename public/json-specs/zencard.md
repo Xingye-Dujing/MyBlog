@@ -129,6 +129,7 @@
 Writer 还可通过右键「插入图表…」把 CSV 渲染成自包含 SVG（data URL）作为 `image` 节点，
 通过「时间机器…」列出工作台存档并二次确认后恢复。
 | 卡 → 数据表行 / 行 → 卡 | `toDataRow` / `fromDataRow` | ZenData 行对象 |
+| 数据表 → 图表数据 | `DataViz.toPayload` / `VizBridge.send` | 数据工作台「一键出图」→ ZenViz |
 | 搜索结果 → 卡 | `fromSearchResult` | 搜索摘要对象 |
 | 搜索历史 → 卡 / 卡 → 历史 | `SearchLibrary.toCard` / `fromCard` | 智能搜索知识库（全文检索、置顶、卡片包导入导出） |
 | 网页选中 → 卡 | `fromWebSelection` | 选区 / 剪藏 |

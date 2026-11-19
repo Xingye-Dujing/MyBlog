@@ -6,6 +6,7 @@
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <script type="module" src="zen-link.js"></script>
+    <script type="module" src="viz-bridge.js"></script>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>可视化图表</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
@@ -16234,6 +16235,27 @@
               ? 'ZENVIZ 已就绪 · 可导入 CSV / TXT / XLSX'
               : 'ZENVIZ · 当前使用自绘引擎',
           )
+        }
+        /* 接收数据工作台「一键出图」投递的表格 */
+        if (window.VizBridge) {
+          window.VizBridge.onData(function (payload) {
+            try {
+              var csv = payload.csv
+              if (!csv && Array.isArray(payload.headers)) {
+                var lines = [payload.headers.join(',')]
+                ;(payload.rows || []).forEach(function (r) { lines.push((r || []).join(',')) })
+                csv = lines.join('\r\n')
+              }
+              state.data = parseTextData(String(csv || ''))
+              normalizeDataSelection({ fillDefaults: true })
+              renderDataTable()
+              renderChart()
+              setStatus('已接收 · ' + (payload.name || '数据表'))
+            } catch (err) {
+              console.error(err)
+              setStatus('接收失败 · ' + (err.message || err), 'err')
+            }
+          })
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
         else init()
