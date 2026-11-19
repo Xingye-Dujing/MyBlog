@@ -148,6 +148,9 @@ Writer 还可通过右键「插入图表…」把 CSV 渲染成自包含 SVG（d
 - 跨 iframe 请求一律用该 iframe 自身 URL 推导的 origin（`frameTargetOrigin`），
   产品端回信用 `omm_hub_origin` 参数或 referrer 推导的明确 origin，不使用通配符。
 
+Hub 工具栏的「数据流」面板读取插件清单的 `share.channels`，按通道列出发布 / 消费 / 双向
+角色，并记录近期共享与卡片流转事件，便于观察内容如何在产品间移动。
+
 ## 6. 常见坑
 
 - **v 是数字**：`v:"1"` 会被判非法。

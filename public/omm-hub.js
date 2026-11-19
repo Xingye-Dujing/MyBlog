@@ -41,6 +41,7 @@
     { id: 'command-palette', label: '命令面板', def: 'Ctrl+K' },
     { id: 'global-search', label: '全局内容搜索', def: 'Ctrl+Shift+F' },
     { id: 'knowledge-graph', label: '知识图谱', def: '' },
+    { id: 'data-flow', label: '数据流', def: '' },
     { id: 'zen-mode', label: '静心专注', def: 'Ctrl+Shift+Z' },
     { id: 'reopen-tab', label: '重开关闭的标签', def: 'Ctrl+Shift+T' },
     { id: 'notify-panel', label: '通知中心', def: 'Ctrl+Shift+N' },
@@ -322,6 +323,8 @@
   var graphCards = [];
   var graphSeq = 0;
   var graphPos = [];
+  var flowOpen = false;
+  var flowEvents = [];
   var autoSleepTimer = 0;
   var lastAutoSnapAt = 0;
   var autoSnapBusy = false;
@@ -754,6 +757,10 @@
     els.kgDetail = document.getElementById('kg-detail');
     els.kgList = document.getElementById('kg-list');
     els.kgStatus = document.getElementById('kg-status');
+    els.dataFlow = document.getElementById('data-flow');
+    els.flowChannels = document.getElementById('flow-channels');
+    els.flowEventList = document.getElementById('flow-event-list');
+    els.flowStatus = document.getElementById('flow-status');
     els.zenBar = document.getElementById('zen-bar');
     els.zenProgress = document.getElementById('zen-progress');
     els.zenClock = document.getElementById('zen-clock');
@@ -3515,6 +3522,7 @@
     if (els.ctxMenu) els.ctxMenu.hidden = true;
     if (els.notifyPanel) els.notifyPanel.hidden = true;
     if (graphOpen) closeKnowledgeGraph();
+    if (flowOpen) closeDataFlow();
     var tabsMore = document.getElementById('tabs-more');
     if (tabsMore) tabsMore.hidden = true;
     renderNotifyBadge();
@@ -5072,6 +5080,76 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /* ---------- 数据流：把插件清单里的共享通道可视化 ---------- */
+  function flowChannels() {
+    var map = Object.create(null);
+    APP_LIST.forEach(function (app) {
+      (app.share && app.share.channels || []).forEach(function (ch) {
+        if (!ch || !ch.id) return;
+        if (!map[ch.id]) map[ch.id] = { id: ch.id, apps: [] };
+        map[ch.id].apps.push({
+          id: app.id, name: app.name || app.id, role: ch.role || 'both',
+        });
+      });
+    });
+    return Object.keys(map).map(function (id) {
+      return map[id];
+    });
+  }
+
+  function pushFlowEvent(kind, text) {
+    flowEvents.unshift({ kind: kind, text: String(text || ''), at: Date.now() });
+    if (flowEvents.length > 30) flowEvents.length = 30;
+    if (flowOpen) renderDataFlow();
+  }
+
+  function openDataFlow() {
+    if (!els.dataFlow) return;
+    closePopovers();
+    closeCommandPalette();
+    closePluginPanel();
+    closeGlobalSearch();
+    closeTimeline();
+    if (graphOpen) closeKnowledgeGraph();
+    if (els.hubSettings) els.hubSettings.hidden = true;
+    flowOpen = true;
+    els.dataFlow.hidden = false;
+    renderDataFlow();
+  }
+
+  function closeDataFlow() {
+    flowOpen = false;
+    if (els.dataFlow) els.dataFlow.hidden = true;
+  }
+
+  function renderDataFlow() {
+    if (!els.flowChannels) return;
+    var channels = flowChannels();
+    var roleLabel = { both: '双向', publish: '发布', consume: '消费' };
+    els.flowChannels.innerHTML = channels.length
+      ? channels.map(function (ch) {
+          var chips = ch.apps.map(function (a) {
+            return '<span class="flow-chip ' + a.role + '" title="' + a.id + '">' +
+              kgEscape(a.name) + ' · ' + (roleLabel[a.role] || a.role) + '</span>';
+          }).join('');
+          return '<div class="flow-channel"><div class="fc-name">' + kgEscape(ch.id) +
+            '</div><div class="fc-apps">' + chips + '</div></div>';
+        }).join('')
+      : '<div class="kg-detail">当前插件清单没有声明共享通道。</div>';
+    if (els.flowStatus) {
+      els.flowStatus.textContent = channels.length + ' 个共享通道 · ' +
+        flowEvents.length + ' 条近期流转';
+    }
+    if (els.flowEventList) {
+      els.flowEventList.innerHTML = flowEvents.length
+        ? flowEvents.slice(0, 12).map(function (ev) {
+            return '<div class="flow-event"><span class="fe-time">' +
+              new Date(ev.at).toLocaleTimeString() + '</span>' + kgEscape(ev.text) + '</div>';
+          }).join('')
+        : '<div class="kg-detail">暂无流转记录</div>';
+    }
+  }
+
   function gsearchEscape(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -5714,6 +5792,7 @@
       else if (act === 'command') openCommandPalette();
       else if (act === 'globalsearch') openGlobalSearch();
       else if (act === 'graph') { if (graphOpen) closeKnowledgeGraph(); else openKnowledgeGraph(); }
+      else if (act === 'flow') { if (flowOpen) closeDataFlow(); else openDataFlow(); }
       else if (act === 'zen') setZen(!zenActive);
       else if (act === 'timeline') { if (timelineOpen) closeTimeline(); else openTimeline(); }
       else if (act === 'notify') toggleNotifyPanel();
@@ -5728,6 +5807,13 @@
       els.knowledgeGraph.addEventListener('click', function (event) {
         if (event.target === els.knowledgeGraph || event.target.closest('#kg-close')) {
           closeKnowledgeGraph();
+        }
+      });
+    }
+    if (els.dataFlow) {
+      els.dataFlow.addEventListener('click', function (event) {
+        if (event.target === els.dataFlow || event.target.closest('#flow-close')) {
+          closeDataFlow();
         }
       });
     }
@@ -6446,6 +6532,7 @@
         var incoming = data.cards.map(kgNormalize).filter(Boolean);
         graphCards = dedupeGraphCards(graphCards.concat(incoming));
         renderKnowledgeGraph();
+        pushFlowEvent('card', '收到 ' + (sourceApp || '产品') + ' 的 ' + incoming.length + ' 张卡片');
         return;
       }
       if (data.type === 'omm:saved') {
@@ -6464,6 +6551,7 @@
           '「' + targetName + '」收到：' + (data.title || '共享项目'),
           { app: targetApp, kind: 'share' }
         );
+        pushFlowEvent('share', sourceApp + ' → ' + targetApp + '：' + (data.title || '共享项目'));
         return;
       }
       if (data.type === 'omm:pointerdown') {
@@ -6474,7 +6562,8 @@
           !els.layoutMenu.hidden ||
           !els.ctxMenu.hidden ||
           (els.notifyPanel && !els.notifyPanel.hidden) ||
-          graphOpen
+          graphOpen ||
+          flowOpen
         ) {
           closePopovers();
         }
@@ -6612,6 +6701,7 @@
     if (action === 'command-palette') openCommandPalette();
     else if (action === 'global-search') openGlobalSearch();
     else if (action === 'knowledge-graph') openKnowledgeGraph();
+    else if (action === 'data-flow') openDataFlow();
     else if (action === 'zen-mode') setZen(!zenActive);
     else if (action === 'reopen-tab') reopenLastClosed();
     else if (action === 'notify-panel') toggleNotifyPanel();
