@@ -1,0 +1,1470 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="omm-embed.js"></script>
+    <script src="omm-desktop.js"></script>
+    <script src="omm-share.js"></script>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5"
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <title>智能搜索</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="vendor/fonts/literata-sub.css" />
+    <style>
+      :root {
+        --font-en: 'Literata', 'Georgia', 'Times New Roman', serif;
+        --font-mono: 'Literata', 'SimSun', '宋体', 'NSimSun', serif;
+        --bg: #fff;
+        --text: #000;
+        --text-dim: rgba(0, 0, 0, 0.35);
+        --text-faint: rgba(0, 0, 0, 0.12);
+        --border: #000;
+        --border-dim: rgba(0, 0, 0, 0.15);
+        --border-faint: rgba(0, 0, 0, 0.06);
+        --hover: rgba(0, 0, 0, 0.04);
+        --active-bg: #000;
+        --active-text: #fff;
+        --accent-red: #cc3333;
+        --accent-green: #339933;
+        --accent-blue: #3366cc;
+        --accent-orange: #cc6600;
+        --fscale: 1;
+        --radius: 0px;
+        --border-width: 1px;
+        --border-style: solid;
+        --border-alpha: 0.15;
+      }
+      body.theme-dark {
+        --bg: #000;
+        --text: #fff;
+        --text-dim: rgba(255, 255, 255, 0.38);
+        --text-faint: rgba(255, 255, 255, 0.14);
+        --border: #fff;
+        --border-dim: rgba(255, 255, 255, 0.16);
+        --border-faint: rgba(255, 255, 255, 0.07);
+        --hover: rgba(255, 255, 255, 0.06);
+        --active-bg: #fff;
+        --active-text: #000;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      *:not(svg):not(path):not(polyline):not(circle) { border-radius: var(--radius); }
+      html, body { height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font: calc(13px * var(--fscale))/1.5 var(--font-mono);
+        overflow: hidden;
+        user-select: none;
+        transition: background-color 0.25s, color 0.25s;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: none;
+      }
+      button, input, textarea, select {
+        font: inherit; color: var(--text); border-radius: var(--radius);
+      }
+      input, textarea, select { user-select: text; }
+      button, input, select, textarea {
+        touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+      }
+      ::selection { background: rgba(51, 102, 204, 0.22); }
+      body.theme-dark ::selection { background: rgba(80, 160, 255, 0.28); }
+
+      body.bg-grid {
+        background-image:
+          linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+      body.bg-dots {
+        background-image: radial-gradient(circle, var(--border-dim) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      body.bg-cross {
+        background-image:
+          linear-gradient(var(--border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 20px 20px;
+      }
+      body.bg-diagonal {
+        background-image: repeating-linear-gradient(
+          45deg, transparent, transparent 28px, var(--border-faint) 28px, var(--border-faint) 29px
+        );
+      }
+
+      /* ---------- splash ---------- */
+      #splash {
+        position: fixed; inset: 0; z-index: 9999; background: var(--bg);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: opacity 0.6s;
+      }
+      #splash.fade-out { opacity: 0; pointer-events: none; }
+      .splash-logo {
+        font-family: var(--font-mono); font-size: 28px; font-weight: 400;
+        color: var(--text); letter-spacing: 8px; margin-bottom: 8px;
+      }
+      .splash-tagline {
+        font-size: 10px; color: var(--text-dim); letter-spacing: 3px;
+        text-transform: uppercase; margin-bottom: 40px; text-align: center;
+      }
+      .splash-enter {
+        padding: 10px 32px; background: transparent;
+        border: var(--border-width) var(--border-style) var(--border);
+        color: var(--text); font-family: var(--font-mono); font-size: 11px;
+        letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+        transition: all 0.15s; font-weight: 500;
+      }
+      .splash-enter:hover { box-shadow: inset 0 -2px 0 var(--text); background: var(--hover); }
+
+      /* ---------- hidden top menu ---------- */
+      #menu-trigger {
+        position: fixed; top: 0; left: 0; width: 100%; height: 8px; z-index: 2000;
+      }
+      #top-menu {
+        position: fixed; top: -48px; left: 0; width: 100%; height: 48px;
+        background: var(--bg); border-bottom: var(--border-width) var(--border-style) var(--border);
+        display: flex; align-items: center; justify-content: center; gap: 2px;
+        z-index: 1999; transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        padding: 0 12px; overflow-x: auto; scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      #top-menu::-webkit-scrollbar { display: none; }
+      #menu-trigger:hover ~ #top-menu, #top-menu:hover, #top-menu.pinned,
+      body.submenu-open #top-menu { top: 0; }
+      .menu-group {
+        display: flex; align-items: center; gap: 2px; padding: 0 6px;
+        position: relative; flex-shrink: 0; touch-action: manipulation;
+      }
+      .menu-group + .menu-group:before {
+        content: ''; position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
+        width: 1px; height: 20px; background: var(--border-dim);
+      }
+      .menu-label {
+        font-size: calc(9px * var(--fscale)); letter-spacing: 1.5px; color: var(--text-faint);
+        text-transform: uppercase; padding: 0 4px; font-weight: 500; white-space: nowrap;
+      }
+      .menu-btn {
+        color: var(--text-dim); cursor: pointer; padding: 4px 10px;
+        border: var(--border-width) var(--border-style) transparent; background: transparent;
+        font-size: calc(11px * var(--fscale)); letter-spacing: 0.4px; white-space: nowrap;
+        transition: 0.15s; min-height: 36px; display: inline-flex; align-items: center;
+      }
+      .menu-btn:hover { color: var(--text); border-color: var(--border); background: var(--hover); }
+      .menu-btn.active { color: var(--text); border-color: var(--border); box-shadow: inset 0 -2px 0 var(--text); }
+      .pin-btn {
+        width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+        border: var(--border-width) var(--border-style) transparent; cursor: pointer;
+        color: var(--text-faint); transition: all 0.15s; margin-left: 2px; background: transparent;
+        flex-shrink: 0;
+      }
+      .pin-btn:hover { color: var(--text); border-color: var(--border-dim); }
+      .pin-btn.pinned {
+        color: var(--text); border-color: var(--border); background: var(--hover);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .pin-btn svg { width: 14px; height: 14px; display: block; }
+
+      /* ---------- dropdowns ---------- */
+      .dropdown {
+        position: fixed; top: 52px; left: 8px; min-width: 240px; max-width: min(360px, 92vw);
+        background: var(--bg); border: var(--border-width) var(--border-style) var(--border);
+        padding: 6px; z-index: 2100; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-4px);
+        transition: opacity 0.18s, transform 0.18s, visibility 0.18s;
+      }
+      .dropdown.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
+      .dd-title {
+        font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-faint);
+        padding: 8px 8px 5px; border-bottom: var(--border-width) var(--border-style) var(--border-faint);
+        margin-bottom: 4px;
+      }
+      .dd-title:not(:first-child) { margin-top: 6px; }
+      .dd-item {
+        display: block; width: 100%; text-align: left; padding: 7px 9px; border: 0;
+        background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px;
+        letter-spacing: 0.3px;
+      }
+      .dd-item:hover { background: var(--hover); color: var(--text); }
+      .dd-item .k { color: var(--text-faint); float: right; font-size: 10px; }
+      .dd-field {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 5px 8px; font-size: 11px; color: var(--text-dim);
+      }
+      .dd-field > span { flex-shrink: 0; }
+      .dd-input, .dd-select {
+        flex: 1; min-width: 0; background: transparent; border: var(--border-width) var(--border-style) var(--border-dim);
+        padding: 5px 7px; outline: none; color: var(--text); font-size: 11px;
+      }
+      .dd-input:focus, .dd-select:focus { border-color: var(--text); }
+      .dd-check { display: flex; align-items: center; gap: 8px; padding: 7px 8px; font-size: 11px; color: var(--text-dim); cursor: pointer; }
+      .dd-check input { accent-color: var(--text); }
+      .dd-actions { display: flex; gap: 6px; padding: 8px; }
+      .dd-note {
+        font-size: 10px; line-height: 1.7; color: var(--text-faint); padding: 8px;
+        border-top: var(--border-width) var(--border-style) var(--border-faint); margin-top: 4px;
+      }
+      .history-item {
+        display: block; width: 100%; text-align: left; border: 0; background: transparent;
+        padding: 8px 9px; cursor: pointer; border-bottom: var(--border-width) var(--border-style) var(--border-faint);
+      }
+      .history-item:hover { background: var(--hover); }
+      .history-item .h-q { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .history-item .h-m { font-size: 9px; color: var(--text-faint); margin-top: 2px; }
+      .h-del { float: right; border: 0; background: transparent; color: var(--text-faint); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+      .h-del:hover { color: var(--accent-red); }
+
+      /* ---------- main ---------- */
+      #app { position: absolute; inset: 0; overflow-y: auto; user-select: text; }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 44px 24px 90px; }
+      .hero-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .brand { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; }
+      .brand-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 0.6px; }
+      .brand-sub .free { color: var(--accent-green); }
+      .searchbar {
+        display: flex; align-items: stretch; border: var(--border-width) var(--border-style) var(--border);
+        margin-top: 18px; background: var(--bg);
+      }
+      .searchbar:focus-within { box-shadow: inset 0 -2px 0 var(--text); }
+      .searchbar input.q {
+        flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+        padding: 16px 18px; font-size: calc(16px * var(--fscale)); color: var(--text);
+      }
+      .searchbar input.q::placeholder { color: var(--text-faint); }
+      .searchbar button {
+        border: 0; border-left: var(--border-width) var(--border-style) var(--border-dim);
+        background: transparent; padding: 0 22px; cursor: pointer; font-size: 11px;
+        letter-spacing: 2px; transition: background 0.15s; white-space: nowrap;
+      }
+      .searchbar button:hover { background: var(--hover); }
+      .searchbar button.stop { display: none; color: var(--accent-red); }
+      .searchbar.searching button.go { display: none; }
+      .searchbar.searching button.stop { display: block; }
+      .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+      .chip {
+        border: var(--border-width) var(--border-style) var(--border-dim); background: transparent;
+        color: var(--text-dim); padding: 5px 10px; font-size: 11px; cursor: pointer; transition: 0.15s;
+      }
+      .chip:hover { border-color: var(--text); color: var(--text); }
+
+      .statusbar {
+        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        padding: 9px 0; margin-top: 26px; border-bottom: var(--border-width) var(--border-style) var(--border-faint);
+        font-size: 11px; color: var(--text-dim); min-height: 34px;
+      }
+      .status-dot { width: 6px; height: 6px; background: var(--text-faint); flex-shrink: 0; }
+      .status-dot.busy { background: var(--accent-blue); animation: blink 1s steps(2) infinite; }
+      @keyframes blink { 50% { opacity: 0.25; } }
+      #status-text { color: var(--text); }
+      .status-meta { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+      .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0 14px; }
+      .seg { display: inline-flex; }
+      .seg button {
+        background: transparent; border: var(--border-width) var(--border-style) var(--border-dim);
+        color: var(--text-dim); padding: 6px 11px; cursor: pointer;
+        font-size: calc(11px * var(--fscale)); letter-spacing: 1px;
+      }
+      .seg button + button { border-left: 0; }
+      .seg button.active {
+        background: var(--hover); color: var(--text); border-color: var(--border);
+        box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .mini-btn {
+        border: var(--border-width) dashed var(--border-dim); background: transparent;
+        color: var(--text-dim); padding: 6px 12px; cursor: pointer;
+        font-size: calc(11px * var(--fscale)); letter-spacing: 1px;
+      }
+      .mini-btn:hover { border-style: solid; border-color: var(--border); color: var(--text); }
+      .mini-btn.primary { border-style: solid; color: var(--text); }
+
+      .results { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+      @media (max-width: 840px) { .results { grid-template-columns: 1fr; } }
+      .panel { border: var(--border-width) var(--border-style) var(--border-dim); background: var(--bg); padding: 20px 22px; }
+      .panel-t {
+        font-size: calc(10px * var(--fscale)); letter-spacing: 2px; text-transform: uppercase;
+        color: var(--text-dim); margin-bottom: 14px; display: flex; justify-content: space-between;
+      }
+      .answer-body { font-size: calc(14px * var(--fscale)); line-height: 1.85; word-break: break-word; }
+      .answer-body h1, .answer-body h2, .answer-body h3, .answer-body h4 {
+        font-weight: 600; line-height: 1.4; margin: 1.1em 0 0.5em;
+      }
+      .answer-body h1 { font-size: 1.35em; } .answer-body h2 { font-size: 1.2em; }
+      .answer-body h3 { font-size: 1.08em; } .answer-body h4 { font-size: 1em; }
+      .answer-body p { margin: 0 0 0.9em; }
+      .answer-body ul, .answer-body ol { margin: 0 0 0.9em; padding-left: 1.6em; }
+      .answer-body li { margin: 0.2em 0; }
+      .answer-body strong { font-weight: 600; }
+      .answer-body a { color: var(--accent-blue); text-decoration: underline; text-underline-offset: 2px; }
+      .answer-body code {
+        font-family: var(--font-mono); background: var(--hover); padding: 1px 4px; font-size: 0.9em;
+      }
+      .answer-body pre {
+        background: var(--hover); padding: 12px 14px; overflow-x: auto; margin: 0 0 1em;
+        border-left: 2px solid var(--border-dim);
+      }
+      .answer-body pre code { background: transparent; padding: 0; }
+      .answer-body blockquote {
+        border-left: 2px solid var(--border); padding-left: 14px; color: var(--text-dim); margin: 0 0 1em;
+      }
+      .answer-body table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 0.9em; }
+      .answer-body th, .answer-body td {
+        border: var(--border-width) var(--border-style) var(--border-dim); padding: 6px 9px; text-align: left;
+      }
+      .answer-body th { color: var(--text-dim); font-weight: 500; }
+      .cite {
+        color: var(--accent-blue); font-size: 9px; vertical-align: super; cursor: pointer;
+        padding: 0 1px; line-height: 0;
+      }
+      .cite:hover { text-decoration: underline; }
+      .err-box { color: var(--accent-red); font-size: 12px; line-height: 1.8; }
+      .source-list { display: block; }
+      .source {
+        display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px;
+        padding: 12px 4px; border-bottom: var(--border-width) var(--border-style) var(--border-faint);
+        cursor: pointer; transition: background 0.12s, padding-left 0.15s;
+      }
+      .source:last-child { border-bottom: 0; }
+      .source:hover { background: var(--hover); padding-left: 8px; }
+      .source.flash { background: rgba(51, 102, 204, 0.1); }
+      .source .idx { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; padding-top: 2px; }
+      .source .s-title { font-size: 13px; line-height: 1.5; }
+      .source .s-title a { color: var(--text); text-decoration: none; }
+      .source:hover .s-title a { text-decoration: underline; text-underline-offset: 2px; }
+      .source .s-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 10px; color: var(--text-dim); }
+      .source .s-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+      .source .s-snippet {
+        font-size: 11px; color: var(--text-dim); line-height: 1.6; margin-top: 5px;
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+      }
+      .tag {
+        padding: 1px 6px; border: var(--border-width) var(--border-style) var(--border-dim);
+        color: var(--text-dim); font-size: 10px;
+      }
+      .tag.cited { color: var(--accent-blue); border-color: var(--accent-blue); }
+      .related { margin-top: 18px; }
+      .related .rel-title { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
+      .empty-hint { text-align: center; color: var(--text-faint); padding: 5em 1em; letter-spacing: 1px; line-height: 2; font-size: 12px; }
+      .hidden { display: none !important; }
+
+      /* ---------- enhancements ---------- */
+      .find-input {
+        flex: 1; min-width: 120px; max-width: 220px; background: transparent;
+        border: var(--border-width) var(--border-style) var(--border-dim);
+        padding: 5px 9px; outline: none; color: var(--text); font-size: calc(11px * var(--fscale));
+      }
+      .find-input::placeholder { color: var(--text-faint); }
+      .find-input:focus { border-color: var(--text); }
+      .mini-btn.on { border-style: solid; color: var(--text); box-shadow: inset 0 -2px 0 var(--text); }
+      .panel-actions { display: flex; align-items: center; gap: 12px; }
+      .txt-btn {
+        border: 0; background: transparent; color: var(--text-dim); font-size: 10px;
+        letter-spacing: 1px; cursor: pointer; padding: 0 2px;
+      }
+      .txt-btn:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+      .src-copy {
+        border: var(--border-width) var(--border-style) var(--border-faint); background: transparent;
+        color: var(--text-faint); font-size: 9px; padding: 0 5px; cursor: pointer;
+      }
+      .src-copy:hover { border-color: var(--border); color: var(--text); }
+      mark { background: rgba(51, 102, 204, 0.16); color: inherit; padding: 0 1px; }
+      .turn-note {
+        font-size: 10px; color: var(--text-dim); line-height: 1.8; margin: -4px 0 14px;
+        padding-bottom: 10px; border-bottom: var(--border-width) var(--border-style) var(--border-faint);
+      }
+      .turn-q { color: var(--text); }
+      .turn-arrow { color: var(--text-faint); padding: 0 7px; }
+      .turn-cur { color: var(--accent-blue); }
+      .follow-bar {
+        display: flex; align-items: stretch; margin-top: 18px;
+        border-top: var(--border-width) var(--border-style) var(--border-faint); padding-top: 14px;
+      }
+      .follow-bar input {
+        flex: 1; min-width: 0; background: transparent; border: var(--border-width) var(--border-style) var(--border-dim);
+        border-right: 0; padding: 8px 11px; outline: none; font-size: calc(12px * var(--fscale)); color: var(--text);
+      }
+      .follow-bar input::placeholder { color: var(--text-faint); }
+      .follow-bar input:focus { border-color: var(--text); }
+      .follow-bar button {
+        border: var(--border-width) var(--border-style) var(--border-dim); background: transparent;
+        color: var(--text-dim); padding: 0 14px; cursor: pointer; font-size: 11px; letter-spacing: 1px;
+      }
+      .follow-bar button:hover { color: var(--text); border-color: var(--text); background: var(--hover); }
+      .err-box .mini-btn { margin-top: 10px; }
+      .sel-search {
+        position: fixed; z-index: 2500; display: none; padding: 6px 11px; background: var(--bg);
+        border: var(--border-width) var(--border-style) var(--text); color: var(--text);
+        font-size: 11px; letter-spacing: 1px; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      }
+      .sel-search.show { display: block; }
+
+      /* ---------- toast ---------- */
+      #toast {
+        position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(8px);
+        background: var(--bg); border: var(--border-width) var(--border-style) var(--border);
+        padding: 9px 16px; font-size: 11px; letter-spacing: 0.5px; z-index: 3000;
+        opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); max-width: 90vw; text-align: center;
+      }
+      #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+  </head>
+  <body>
+    <div id="splash">
+      <div class="splash-logo">SEARCH</div>
+      <div class="splash-tagline">免费联网智能搜索 · 引用溯源 · 一键导出</div>
+      <button class="splash-enter" id="splash-enter">进入</button>
+    </div>
+
+    <div id="menu-trigger"></div>
+    <nav id="top-menu">
+      <div class="menu-group">
+        <span class="menu-label">Search</span>
+        <button class="menu-btn" id="m-new">新搜索</button>
+        <button class="menu-btn" id="m-stop">停止</button>
+        <button class="menu-btn" id="m-history">历史</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">Export</span>
+        <button class="menu-btn" data-open="dd-export">导出</button>
+        <button class="menu-btn" id="m-copy">复制 Markdown</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">View</span>
+        <button class="menu-btn" id="m-theme">主题</button>
+        <button class="menu-btn" data-open="dd-settings">设置</button>
+      </div>
+      <button class="pin-btn" id="pin-btn" title="固定菜单">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z" />
+        </svg>
+      </button>
+    </nav>
+
+    <div class="dropdown" id="dd-export">
+      <div class="dd-title">导出当前结果</div>
+      <button class="dd-item" data-export="json">JSON <span class="k">结构化数据</span></button>
+      <button class="dd-item" data-export="md">Markdown <span class="k">摘要与来源</span></button>
+      <button class="dd-item" data-export="csv">CSV <span class="k">来源表格</span></button>
+      <button class="dd-item" data-export="html">HTML <span class="k">离线报告</span></button>
+      <div class="dd-title">其他</div>
+      <button class="dd-item" id="ex-copy">复制为 Markdown</button>
+      <button class="dd-item" id="ex-history">导出全部历史 (JSON)</button>
+    </div>
+
+    <div class="dropdown" id="dd-history">
+      <div class="dd-title">搜索历史 <span id="history-count" class="k">0</span></div>
+      <label class="dd-field"><input class="dd-input" id="history-filter" placeholder="筛选历史…" /></label>
+      <div id="history-list"></div>
+      <div class="dd-actions"><button class="mini-btn" id="history-clear">清空历史</button></div>
+    </div>
+
+    <div class="dropdown" id="dd-settings">
+      <div class="dd-title">AI 服务 · DeepSeek</div>
+      <label class="dd-field"><span>接口地址</span><input class="dd-input" id="set-base" placeholder="https://api.deepseek.com" /></label>
+      <label class="dd-field"><span>模型</span><input class="dd-input" id="set-model" placeholder="deepseek-flash" /></label>
+      <label class="dd-field"><span>API Key</span><input class="dd-input" id="set-key" type="password" placeholder="sk-..." /></label>
+      <label class="dd-check"><input type="checkbox" id="set-thinking" /> 深度思考搜索（多步检索求证）</label>
+      <label class="dd-check"><input type="checkbox" id="set-force" /> 强制联网（即使模型认为无需检索）</label>
+      <div class="dd-title">显示</div>
+      <label class="dd-field"><span>主题</span><select class="dd-select" id="set-theme"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+      <label class="dd-field"><span>背景</span><select class="dd-select" id="set-bg"><option value="void">无</option><option value="grid">网格</option><option value="dots">点阵</option><option value="cross">交叉</option><option value="diagonal">斜纹</option></select></label>
+      <label class="dd-field"><span>字号</span><input class="dd-input" id="set-scale" type="number" min="0.8" max="1.4" step="0.05" /></label>
+      <div class="dd-actions"><button class="mini-btn primary" id="set-save">保存设置</button></div>
+      <div class="dd-note">联网搜索与网页抓取的工具调用本身不计费，仅按模型 Token 用量计费。密钥仅保存在本机浏览器，不会上传到任何第三方服务器。</div>
+    </div>
+
+    <main id="app">
+      <div class="wrap">
+        <div class="hero-top">
+          <div class="brand">OMM · Search</div>
+          <div class="brand-sub">由 <b>DeepSeek deepseek_web_search</b> 驱动 · <span class="free">工具调用免费</span></div>
+        </div>
+
+        <div class="searchbar" id="searchbar">
+          <input class="q" id="q" type="text" placeholder="输入问题或关键词，回车搜索…" autocomplete="off" spellcheck="false" />
+          <button class="go" id="go">搜索</button>
+          <button class="stop" id="stop">停止</button>
+        </div>
+        <div class="suggestions" id="suggestions"></div>
+
+        <div class="statusbar hidden" id="statusbar">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">就绪</span>
+          <span class="status-meta" id="status-meta"></span>
+        </div>
+
+        <div class="toolbar hidden" id="toolbar">
+          <div class="seg" id="seg-filter">
+            <button data-filter="all" class="active">全部</button>
+            <button data-filter="cited">已引用</button>
+            <button data-filter="uncited">未引用</button>
+          </div>
+          <div class="seg" id="seg-sort">
+            <button data-sort="relevance" class="active">相关度</button>
+            <button data-sort="time">时间</button>
+          </div>
+          <div class="seg" id="seg-time">
+            <button data-time="all" class="active">不限时间</button>
+            <button data-time="year">一年内</button>
+            <button data-time="month">一月内</button>
+            <button data-time="week">一周内</button>
+          </div>
+          <input class="find-input" id="find-input" placeholder="在结果中查找…" />
+          <button class="mini-btn" id="force-btn" title="强制模型执行联网搜索">强制联网</button>
+          <button class="mini-btn" data-open="dd-export">导出结果</button>
+        </div>
+
+        <div class="results hidden" id="results">
+          <section class="panel">
+            <div class="panel-t">
+              <span>智能摘要</span>
+              <span class="panel-actions">
+                <button class="txt-btn" id="copy-answer">复制答案</button>
+                <span id="answer-source-count"></span>
+              </span>
+            </div>
+            <div class="turn-note hidden" id="turn-note"></div>
+            <div class="answer-body" id="answer-body"></div>
+            <div class="follow-bar hidden" id="follow-bar">
+              <input id="follow-input" placeholder="基于本次搜索继续追问…" />
+              <button id="follow-btn">追问</button>
+            </div>
+            <div class="related hidden" id="related">
+              <div class="rel-title">相关搜索</div>
+              <div class="suggestions" id="related-chips"></div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-t"><span>结果来源</span><span id="source-count"></span></div>
+            <div class="source-list" id="source-list"></div>
+          </section>
+        </div>
+
+        <div class="empty-hint" id="empty">
+          输入问题，开始一次免费的联网搜索。<br />
+          答案由 DeepSeek 联网检索并附来源引用，结果可一键导出。
+        </div>
+      </div>
+    </main>
+
+    <button class="sel-search" id="sel-search">搜索选中内容</button>
+    <div id="toast"></div>
+
+    <script>
+      ;(function () {
+        'use strict'
+
+        var LS = 'omm-search-v1'
+        var DEFAULT = {
+          settings: {
+            theme: 'light', bg: 'void', fontScale: 1,
+            apiBase: 'https://api.deepseek.com', apiModel: 'deepseek-flash', apiKey: '',
+            thinking: false, forceWeb: false, timeRange: 'all', filter: 'all', sort: 'relevance'
+          },
+          history: []
+        }
+        var SYS_PROMPT =
+          '你是一个严谨的智能搜索引擎。请基于联网搜索到的资料回答用户问题：' +
+          '用中文、简洁清晰、分点作答；重要事实后紧跟来源引用；同一来源只引用一次。' +
+          '不要编造来源，不要输出与问题无关的内容。使用 Markdown 格式（标题、列表、加粗、表格）整理答案。'
+
+        function clone(x) { return JSON.parse(JSON.stringify(x)) }
+        function load() {
+          try {
+            var raw = localStorage.getItem(LS)
+            if (!raw) return clone(DEFAULT)
+            var o = JSON.parse(raw) || {}
+            return {
+              settings: Object.assign({}, DEFAULT.settings, o.settings || {}),
+              history: Array.isArray(o.history) ? o.history : []
+            }
+          } catch (e) { return clone(DEFAULT) }
+        }
+        var S = load()
+        function save() { try { localStorage.setItem(LS, JSON.stringify(S)) } catch (e) {} }
+
+        // 静书房工作台配置过一次密钥后，本产品自动继承。
+        try {
+          if (window.OMMDesktop && window.OMMDesktop.aiConfig && !S.settings.apiKey) {
+            window.OMMDesktop.aiConfig().then(function (res) {
+              var ai = res && res.ai
+              if (!ai || !ai.apiKey) return
+              S.settings.apiKey = ai.apiKey
+              if (ai.apiBase) S.settings.apiBase = ai.apiBase
+              if (ai.apiModel) S.settings.apiModel = ai.apiModel
+              applySettings(); save()
+            }).catch(function () {})
+          }
+        } catch (e) {}
+
+        var $ = function (id) { return document.getElementById(id) }
+        var current = null
+        var searching = false
+        var abort = null
+        var startTime = 0
+        var lastRender = 0
+        var toastTimer = 0
+        var findText = ''
+        var historyFilter = ''
+        var selText = ''
+
+        function toast(msg) {
+          var t = $('toast')
+          t.textContent = String(msg || '')
+          t.classList.add('show')
+          clearTimeout(toastTimer)
+          toastTimer = setTimeout(function () { t.classList.remove('show') }, 2800)
+        }
+
+        function esc(s) {
+          return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        }
+        function highlight(text, kw) {
+          var s = esc(text)
+          if (!kw) return s
+          try {
+            var re = new RegExp('(' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi')
+            return s.replace(re, '<mark>$1</mark>')
+          } catch (e) { return s }
+        }
+        function hostOf(url) {
+          try { return new URL(url).hostname } catch (e) { return String(url || '').slice(0, 40) }
+        }
+        function fmtDate(v) {
+          if (!v) return ''
+          var d = new Date(v)
+          if (isNaN(d.getTime())) return String(v).slice(0, 10)
+          return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+        }
+        function fmtTime(ms) {
+          if (ms < 1000) return ms + ' ms'
+          return (ms / 1000).toFixed(1) + ' s'
+        }
+        function sysPrompt() {
+          return SYS_PROMPT + (S.settings.forceWeb ? ' 本轮必须执行联网搜索，不得仅凭内部知识作答。' : '')
+        }
+
+        /* ---------------- settings ---------------- */
+        function applySettings() {
+          var st = S.settings
+          document.body.classList.toggle('theme-dark', st.theme === 'dark')
+          document.body.classList.remove('bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal')
+          if (st.bg && st.bg !== 'void') document.body.classList.add('bg-' + st.bg)
+          document.documentElement.style.setProperty('--fscale', String(st.fontScale || 1))
+          var inputs = {
+            'set-base': st.apiBase, 'set-model': st.apiModel, 'set-key': st.apiKey,
+            'set-theme': st.theme, 'set-bg': st.bg, 'set-scale': st.fontScale
+          }
+          Object.keys(inputs).forEach(function (id) { var el = $(id); if (el) el.value = inputs[id] })
+          var th = $('set-thinking'); if (th) th.checked = !!st.thinking
+          var fw = $('set-force'); if (fw) fw.checked = !!st.forceWeb
+          syncSegs()
+        }
+        function syncSegs() {
+          document.querySelectorAll('#seg-filter button').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-filter') === S.settings.filter)
+          })
+          document.querySelectorAll('#seg-sort button').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-sort') === S.settings.sort)
+          })
+          document.querySelectorAll('#seg-time button').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-time') === (S.settings.timeRange || 'all'))
+          })
+          $('force-btn').classList.toggle('on', !!S.settings.forceWeb)
+        }
+
+        /* ---------------- dropdowns ---------------- */
+        function closeDropdowns() {
+          document.querySelectorAll('.dropdown.open').forEach(function (d) { d.classList.remove('open') })
+        }
+        function toggleDropdown(id) {
+          var el = $(id)
+          var wasOpen = el.classList.contains('open')
+          closeDropdowns()
+          if (!wasOpen) {
+            if (id === 'dd-history') {
+              historyFilter = ''
+              $('history-filter').value = ''
+              renderHistory()
+            }
+            el.classList.add('open')
+          }
+        }
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('.dropdown') && !e.target.closest('[data-open]') &&
+              e.target.id !== 'm-history') closeDropdowns()
+        })
+
+        /* ---------------- markdown ---------------- */
+        function mdInline(s) {
+          s = esc(s)
+          s = s.replace(/`([^`]+)`/g, '<code>$1</code>')
+          s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+          s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener">$1</a>')
+          s = s.replace(/\u0001(\d+)\u0002/g, '<sup class="cite" data-n="$1">[$1]</sup>')
+          return s
+        }
+        function mdBlock(text) {
+          var lines = String(text || '').split('\n')
+          var out = []
+          var i = 0
+          function isHead(l) { return /^\s*#{1,4}\s/.test(l) }
+          function isBlockStart(l) { return isHead(l) || /^\s*>/.test(l) || /^\s*[-*+]\s/.test(l) || /^\s*\d+\.\s/.test(l) }
+          function sepRow(l) { return l.indexOf('-') >= 0 && /^\s*\|?[\s:|\-]+\|?\s*$/.test(l) }
+          function cells(l) { return l.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(function (c) { return c.trim() }) }
+          while (i < lines.length) {
+            var line = lines[i]
+            if (!line.trim()) { i++; continue }
+            if (line.indexOf('|') >= 0 && i + 1 < lines.length && sepRow(lines[i + 1])) {
+              var head = cells(line); i += 2
+              var rows = []
+              while (i < lines.length && lines[i].indexOf('|') >= 0 && lines[i].trim()) {
+                rows.push(cells(lines[i])); i++
+              }
+              out.push('<table><thead><tr>' + head.map(function (c) { return '<th>' + mdInline(c) + '</th>' }).join('') +
+                '</tr></thead><tbody>' + rows.map(function (r) {
+                  return '<tr>' + r.map(function (c) { return '<td>' + mdInline(c) + '</td>' }).join('') + '</tr>'
+                }).join('') + '</tbody></table>')
+              continue
+            }
+            var h = line.match(/^\s*(#{1,4})\s+(.*)$/)
+            if (h) {
+              var lv = Math.min(h[1].length, 4)
+              out.push('<h' + lv + '>' + mdInline(h[2]) + '</h' + lv + '>'); i++; continue
+            }
+            if (/^\s*>\s?/.test(line)) {
+              out.push('<blockquote>' + mdInline(line.replace(/^\s*>\s?/, '')) + '</blockquote>'); i++; continue
+            }
+            var ul = line.match(/^\s*[-*+]\s+(.*)$/)
+            if (ul) {
+              var items = []
+              while (i < lines.length) {
+                var m = lines[i].match(/^\s*[-*+]\s+(.*)$/)
+                if (!m) break
+                items.push('<li>' + mdInline(m[1]) + '</li>'); i++
+              }
+              out.push('<ul>' + items.join('') + '</ul>'); continue
+            }
+            var ol = line.match(/^\s*\d+\.\s+(.*)$/)
+            if (ol) {
+              var oitems = []
+              while (i < lines.length) {
+                var m2 = lines[i].match(/^\s*\d+\.\s+(.*)$/)
+                if (!m2) break
+                oitems.push('<li>' + mdInline(m2[1]) + '</li>'); i++
+              }
+              out.push('<ol>' + oitems.join('') + '</ol>'); continue
+            }
+            var para = [line.trim()]; i++
+            while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) {
+              para.push(lines[i].trim()); i++
+            }
+            out.push('<p>' + mdInline(para.join('<br>')) + '</p>')
+          }
+          return out.join('')
+        }
+        function mdToHtml(src) {
+          var parts = String(src || '').split(/```/)
+          return parts.map(function (p, i) {
+            if (i % 2 === 1) {
+              var nl = p.indexOf('\n')
+              var code = nl >= 0 ? p.slice(nl + 1) : p
+              return '<pre><code>' + esc(code) + '</code></pre>'
+            }
+            return mdBlock(p)
+          }).join('')
+        }
+
+        /* ---------------- search ---------------- */
+        function mergeSources(list) {
+          ;(list || []).forEach(function (s) {
+            if (!s || !s.url) return
+            for (var i = 0; i < current.sources.length; i++) if (current.sources[i].url === s.url) return
+            current.sources.push({
+              url: s.url,
+              title: s.title || s.url,
+              snippet: s.snippet || '',
+              site: s.site_name || hostOf(s.url),
+              icon: s.site_icon || '',
+              date: s.page_age || s.published_at || ''
+            })
+          })
+        }
+        function addQueries(list) {
+          ;(list || []).forEach(function (q) {
+            if (q && current.queries.indexOf(q) < 0) current.queries.push(q)
+          })
+        }
+        function sourceIndexOf(url) {
+          for (var i = 0; i < current.sources.length; i++) if (current.sources[i].url === url) return i + 1
+          return -1
+        }
+        function buildCitedText(text, annotations) {
+          var marks = []
+          ;(annotations || []).forEach(function (a) {
+            var u = a && (a.url_citation || a)
+            if (!u || typeof u.end_index !== 'number') return
+            var n = sourceIndexOf(u.url)
+            if (n < 0) {
+              mergeSources([{ url: u.url, title: u.title || u.url }])
+              n = sourceIndexOf(u.url)
+            }
+            marks.push({ pos: u.end_index, n: n })
+          })
+          marks.sort(function (a, b) { return a.pos - b.pos })
+          var chars = Array.from(String(text || ''))
+          var out = []
+          var last = 0
+          var usedPos = {}
+          marks.forEach(function (m) {
+            if (m.pos <= last || m.pos > chars.length || usedPos[m.pos]) return
+            out.push(chars.slice(last, m.pos).join(''))
+            out.push('\u0001' + m.n + '\u0002')
+            last = m.pos
+            usedPos[m.pos] = 1
+          })
+          out.push(chars.slice(last).join(''))
+          return out.join('')
+        }
+        function setStatus(text, busy) {
+          $('status-text').textContent = text
+          $('status-dot').classList.toggle('busy', !!busy)
+        }
+
+        async function runSearch(query, opts) {
+          opts = opts || {}
+          var q = String(query || '').trim()
+          if (!q) { toast('请输入搜索内容'); return }
+          if (searching) { toast('正在搜索中，请先停止当前搜索'); return }
+          var key = String(S.settings.apiKey || '').trim()
+          if (!key) { toast('请先在设置中配置 DeepSeek API Key'); toggleDropdown('dd-settings'); return }
+
+          var context = Array.isArray(opts.context) ? clone(opts.context) : []
+          var reasoning = ''
+          searching = true
+          startTime = Date.now()
+          lastRender = 0
+          current = {
+            query: q, answer: '', sources: [], queries: [], annotations: [], usage: null,
+            elapsed: 0, ts: Date.now(), error: '', context: context,
+            isFollowUp: context.length > 0, assistantMsg: null, serverToolCalls: null
+          }
+          $('q').value = q
+          $('searchbar').classList.add('searching')
+          $('statusbar').classList.remove('hidden')
+          $('results').classList.remove('hidden')
+          $('empty').classList.add('hidden')
+          $('toolbar').classList.remove('hidden')
+          renderCurrent()
+          setStatus('正在连接搜索服务…', true)
+
+          var controller = new AbortController()
+          abort = controller
+          var base = String(S.settings.apiBase || 'https://api.deepseek.com').replace(/\/$/, '')
+          var url = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions'
+          var messages = [{ role: 'system', content: sysPrompt() }]
+            .concat(context)
+            .concat([{ role: 'user', content: q }])
+          var body = {
+            model: S.settings.apiModel || 'deepseek-flash',
+            messages: messages,
+            tools: [{ type: 'deepseek_web_search' }, { type: 'deepseek_read_url' }],
+            stream: true,
+            thinking: { type: S.settings.thinking ? 'enabled' : 'disabled' }
+          }
+          var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }
+
+          function handleChunk(obj) {
+            if (obj.error) throw new Error(obj.error.message || JSON.stringify(obj.error))
+            var ch = obj.choices && obj.choices[0]
+            if (!ch) return
+            var d = ch.delta || {}
+            if (d.reasoning_content) {
+              reasoning += d.reasoning_content
+              if (S.settings.thinking) setStatus('正在多步思考与检索…', true)
+            }
+
+            var ev = ch.server_tool_event
+            if (ev) {
+              if (ev.type === 'call_started') {
+                var a = ev.action || {}
+                if (a.type === 'search') {
+                  addQueries(a.queries)
+                  setStatus('正在搜索：' + (a.queries || []).slice(0, 3).join(' · '), true)
+                } else if (a.type === 'open_page' || a.type === 'read_link') {
+                  setStatus('正在阅读：' + hostOf(a.url), true)
+                } else if (a.type === 'find_in_page') {
+                  setStatus('正在核对：' + (a.pattern || ''), true)
+                }
+              } else if (ev.type === 'call_completed') {
+                if (ev.sources && ev.sources.length) {
+                  mergeSources(ev.sources)
+                  setStatus('已找到 ' + current.sources.length + ' 条结果，正在整理…', true)
+                } else if (ev.page && ev.page.url) {
+                  mergeSources([{ url: ev.page.url, title: ev.page.title || ev.page.url, site_name: hostOf(ev.page.url), published_at: ev.page.published_at }])
+                  setStatus('正在整理来源…', true)
+                }
+              }
+            }
+            if (typeof d.content === 'string' && d.content) {
+              current.answer += d.content
+              setStatus('正在生成回答…', true)
+              var now = Date.now()
+              if (now - lastRender > 70) { renderAnswerOnly(); lastRender = now }
+            }
+            if (ch.finish_reason) {
+              if (d.server_tool_calls) {
+                current.serverToolCalls = d.server_tool_calls
+                d.server_tool_calls.forEach(function (step) {
+                  ;(step.calls || []).forEach(function (c) {
+                    if (c.action && c.action.queries) addQueries(c.action.queries)
+                    if (c.sources) mergeSources(c.sources)
+                    if (c.page && c.page.url) mergeSources([{
+                      url: c.page.url, title: c.page.title || c.page.url,
+                      site_name: hostOf(c.page.url), published_at: c.page.published_at
+                    }])
+                  })
+                })
+              }
+              if (d.annotations) current.annotations = d.annotations
+              if (obj.usage) current.usage = obj.usage
+            }
+          }
+          function consume(buffer) {
+            var lines = buffer.split('\n')
+            for (var i = 0; i < lines.length; i++) {
+              var line = lines[i].trim()
+              if (line.indexOf('data:') !== 0) continue
+              var data = line.slice(5).trim()
+              if (!data || data === '[DONE]') continue
+              var obj
+              try { obj = JSON.parse(data) } catch (e) { continue }
+              handleChunk(obj)
+            }
+          }
+
+          try {
+            var res = await fetch(url, {
+              method: 'POST', headers: headers, body: JSON.stringify(body), signal: controller.signal
+            })
+            if (!res.ok) {
+              var tx = await res.text()
+              if (res.status === 400 && /thinking|reasoning/i.test(tx) && body.thinking) {
+                delete body.thinking
+                res = await fetch(url, {
+                  method: 'POST', headers: headers, body: JSON.stringify(body), signal: controller.signal
+                })
+                if (!res.ok) throw new Error(shortErr(await res.text()) || ('HTTP ' + res.status))
+              } else {
+                throw new Error(shortErr(tx) || ('HTTP ' + res.status))
+              }
+            }
+            if (!res.body || !res.body.getReader) throw new Error('当前浏览器不支持流式读取')
+            var reader = res.body.getReader()
+            var decoder = new TextDecoder('utf-8')
+            var buffer = ''
+            while (true) {
+              var rd = await reader.read()
+              if (rd.done) break
+              buffer += decoder.decode(rd.value, { stream: true })
+              var parts = buffer.split('\n')
+              buffer = parts.pop()
+              consume(parts.join('\n'))
+            }
+            if (buffer.trim()) consume(buffer)
+            setStatus('搜索完成', false)
+          } catch (e) {
+            if (e && e.name === 'AbortError') {
+              current.error = '已停止本次搜索。'
+              setStatus('已停止', false)
+            } else {
+              current.error = e && e.message ? e.message : String(e)
+              setStatus('搜索失败', false)
+              toast(current.error)
+            }
+          } finally {
+            searching = false
+            abort = null
+            current.elapsed = Date.now() - startTime
+            if (current.answer || current.sources.length) {
+              var am = { role: 'assistant', content: current.answer }
+              if (reasoning) am.reasoning_content = reasoning
+              if (current.serverToolCalls) am.server_tool_calls = current.serverToolCalls
+              if (current.annotations && current.annotations.length) am.annotations = current.annotations
+              current.assistantMsg = am
+            }
+            $('searchbar').classList.remove('searching')
+            renderCurrent()
+            if (!opts.noHistory && current.query && (current.answer || current.sources.length)) pushHistory(current)
+          }
+        }
+        function shortErr(tx) {
+          try {
+            var o = JSON.parse(tx)
+            return (o.error && (o.error.message || o.error.type)) || ''
+          } catch (e) { return String(tx || '').slice(0, 300) }
+        }
+        function followUp() {
+          if (!current || !current.assistantMsg) { toast('当前结果无法追问，请先完成一次搜索'); return }
+          var text = $('follow-input').value.trim()
+          if (!text) { toast('请输入追问内容'); return }
+          var ctx = (current.context || []).concat([
+            { role: 'user', content: current.query }, current.assistantMsg
+          ])
+          $('follow-input').value = ''
+          runSearch(text, { context: ctx })
+        }
+
+        /* ---------------- rendering ---------------- */
+        function renderAnswerOnly() {
+          var el = $('answer-body')
+          if (!el || !current) return
+          $('answer-source-count').textContent = searching
+            ? '实时生成' : (current.error ? '失败' : (current.answer ? '已生成' : '等待中'))
+          if (current.error && !current.answer) {
+            el.innerHTML = '<div class="err-box">' + esc(current.error) +
+              (searching ? '' : '<button class="mini-btn" id="retry-btn">重试</button>') + '</div>'
+            return
+          }
+          el.innerHTML = mdToHtml(buildCitedText(current.answer, current.annotations))
+        }
+        function visibleSources() {
+          if (!current) return []
+          var list = current.sources.slice()
+          if (S.settings.filter === 'cited') {
+            var cited = {}
+            ;(current.annotations || []).forEach(function (a) { var u = a && (a.url_citation || a); if (u && u.url) cited[u.url] = 1 })
+            list = list.filter(function (s) { return cited[s.url] })
+          } else if (S.settings.filter === 'uncited') {
+            var cited2 = {}
+            ;(current.annotations || []).forEach(function (a) { var u = a && (a.url_citation || a); if (u && u.url) cited2[u.url] = 1 })
+            list = list.filter(function (s) { return !cited2[s.url] })
+          }
+          var tr = S.settings.timeRange || 'all'
+          if (tr !== 'all') {
+            var days = tr === 'year' ? 365 : tr === 'month' ? 30 : 7
+            var cutoff = Date.now() - days * 86400000
+            list = list.filter(function (s) {
+              var t = s.date ? new Date(s.date).getTime() : 0
+              return !!t && t >= cutoff
+            })
+          }
+          if (findText) {
+            var ft = findText.toLowerCase()
+            list = list.filter(function (s) {
+              return String(s.title + ' ' + s.snippet + ' ' + s.site + ' ' + s.url).toLowerCase().indexOf(ft) >= 0
+            })
+          }
+          if (S.settings.sort === 'time') {
+            list.sort(function (a, b) { return (new Date(b.date || 0).getTime() || 0) - (new Date(a.date || 0).getTime() || 0) })
+          }
+          return list
+        }
+        function renderCurrent() {
+          var has = !!(current && current.query)
+          $('empty').classList.toggle('hidden', has)
+          $('results').classList.toggle('hidden', !has)
+          $('toolbar').classList.toggle('hidden', !has)
+          $('statusbar').classList.toggle('hidden', !has)
+          if (!has) return
+
+          var citedUrls = {}
+          ;(current.annotations || []).forEach(function (a) { var u = a && (a.url_citation || a); if (u && u.url) citedUrls[u.url] = 1 })
+
+          $('status-meta').innerHTML =
+            '<span>结果 ' + current.sources.length + '</span>' +
+            '<span>' + fmtTime(current.elapsed || (Date.now() - startTime)) + '</span>' +
+            (current.usage && current.usage.server_tool_use
+              ? '<span>检索 ' + ((current.usage.server_tool_use.tool_search || 0) + (current.usage.server_tool_use.web_search_requests || 0)) + ' 次</span>'
+              : '') +
+            (current.usage && current.usage.output_tokens
+              ? '<span>Tokens ' + current.usage.output_tokens + '</span>' : '')
+
+          renderAnswerOnly()
+
+          var tn = $('turn-note')
+          if (current.isFollowUp && (current.context || []).length) {
+            var users = current.context.filter(function (m) { return m.role === 'user' })
+            tn.innerHTML = '<span class="turn-q">追问链</span>' +
+              users.map(function (m) { return '<span class="turn-arrow">→</span><span>' + esc(m.content) + '</span>' }).join('') +
+              '<span class="turn-arrow">→</span><span class="turn-cur">' + esc(current.query) + '</span>'
+            tn.classList.remove('hidden')
+          } else tn.classList.add('hidden')
+          $('follow-bar').classList.toggle('hidden', searching || !current.assistantMsg)
+
+          var list = visibleSources()
+          var html = ''
+          list.forEach(function (s) {
+            var n = sourceIndexOf(s.url)
+            var isCited = !!citedUrls[s.url]
+            html += '<div class="source" data-si="' + n + '">' +
+              '<div class="idx">' + (n > 0 ? String(n).padStart(2, '0') : '·') + '</div>' +
+              '<div>' +
+              '<div class="s-title"><a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + highlight(s.title || s.url, findText) + '</a></div>' +
+              '<div class="s-meta">' +
+                (isCited ? '<span class="tag cited">已引用</span>' : '') +
+                '<span>' + highlight(s.site || hostOf(s.url), findText) + '</span>' +
+                (s.date ? '<span>' + esc(fmtDate(s.date)) + '</span>' : '') +
+                '<span class="s-url">' + highlight(hostOf(s.url) + '/' + String(s.url).split('/').slice(3).join('/').slice(0, 48), findText) + '</span>' +
+                '<button class="src-copy" data-copy="' + n + '" title="复制链接">复制</button>' +
+              '</div>' +
+              (s.snippet ? '<div class="s-snippet">' + highlight(s.snippet, findText) + '</div>' : '') +
+              '</div></div>'
+          })
+          $('source-list').innerHTML = html || '<div class="empty-hint">' +
+            (findText || S.settings.timeRange !== 'all' ? '没有匹配的结果，试试放宽筛选条件' : '该筛选下暂无结果') + '</div>'
+          $('source-count').textContent = list.length + ' / ' + current.sources.length
+
+          var rel = $('related')
+          if (current.queries.length) {
+            rel.classList.remove('hidden')
+            $('related-chips').innerHTML = current.queries.map(function (q) {
+              return '<button class="chip" data-q="' + esc(q) + '">' + esc(q) + '</button>'
+            }).join('')
+          } else rel.classList.add('hidden')
+
+          document.querySelectorAll('.source').forEach(function (node) {
+            node.addEventListener('click', function (e) {
+              if (e.target.closest('a, .src-copy')) return
+              var url = current.sources[parseInt(node.getAttribute('data-si'), 10) - 1]
+              if (url) window.open(url.url, '_blank', 'noopener')
+            })
+          })
+        }
+
+        /* ---------------- history ---------------- */
+        function pushHistory(entry) {
+          S.history = S.history.filter(function (h) { return h.query !== entry.query })
+          S.history.unshift(clone(entry))
+          if (S.history.length > 50) S.history.length = 50
+          save()
+          renderHistory()
+          renderSuggestions()
+        }
+        function renderHistory() {
+          var box = $('history-list')
+          $('history-count').textContent = S.history.length
+          var shown = S.history.map(function (h, i) { return { h: h, i: i } }).filter(function (x) {
+            return !historyFilter || String(x.h.query || '').toLowerCase().indexOf(historyFilter.toLowerCase()) >= 0
+          })
+          if (!shown.length) {
+            box.innerHTML = '<div class="empty-hint" style="padding:2em 0">' +
+              (S.history.length ? '没有匹配的历史' : '暂无历史') + '</div>'
+            return
+          }
+          box.innerHTML = shown.map(function (x) {
+            return '<div class="history-item" data-h="' + x.i + '">' +
+              '<div class="h-q">' + esc(x.h.query) + '</div>' +
+              '<div class="h-m">' + esc(new Date(x.h.ts).toLocaleString()) + ' · ' + (x.h.sources || []).length + ' 条结果' +
+              '<button class="h-del" data-del="' + x.i + '" title="删除">×</button></div>' +
+              '</div>'
+          }).join('')
+        }
+
+        /* ---------------- export ---------------- */
+        function safeName() {
+          return String(current && current.query || 'search')
+            .replace(/[\\/:*?"<>|\r\n]/g, '_').slice(0, 40) || 'search'
+        }
+        function asJSON() {
+          return JSON.stringify({
+            engine: 'OMM-ZEN Search', provider: 'DeepSeek',
+            query: current.query, answer: current.answer,
+            sources: current.sources, queries: current.queries,
+            context: current.context || [], isFollowUp: !!current.isFollowUp,
+            usage: current.usage, elapsed_ms: current.elapsed,
+            created_at: new Date(current.ts).toISOString()
+          }, null, 2)
+        }
+        function asMarkdown() {
+          var lines = [
+            '# 搜索：' + current.query, '',
+            '> 由 OMM-ZEN Search · DeepSeek 联网搜索生成 · ' + new Date(current.ts).toLocaleString(), '',
+            '## 智能摘要', '', current.answer || '（无摘要）', ''
+          ]
+          if (current.isFollowUp && (current.context || []).length) {
+            lines.push('## 对话上下文', '')
+            current.context.forEach(function (m) { if (m.role === 'user') lines.push('- ' + m.content) })
+            lines.push('')
+          }
+          lines.push('## 结果来源（' + current.sources.length + '）', '')
+          current.sources.forEach(function (s, i) {
+            lines.push((i + 1) + '. **' + (s.title || s.url) + '**')
+            lines.push('   - 网址：' + s.url)
+            if (s.site) lines.push('   - 站点：' + s.site)
+            if (s.date) lines.push('   - 发布：' + fmtDate(s.date))
+            if (s.snippet) lines.push('   - 摘要：' + s.snippet.replace(/\s+/g, ' ').slice(0, 300))
+            lines.push('')
+          })
+          if (current.queries.length) lines.push('## 相关搜索', '', current.queries.map(function (q) { return '- ' + q }).join('\n'), '')
+          return lines.join('\n')
+        }
+        function csvCell(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"' }
+        function asCSV() {
+          var rows = [['序号', '标题', '网址', '站点', '发布时间', '摘要'].map(csvCell).join(',')]
+          current.sources.forEach(function (s, i) {
+            rows.push([i + 1, s.title, s.url, s.site, fmtDate(s.date), s.snippet].map(csvCell).join(','))
+          })
+          return '\ufeff' + rows.join('\r\n')
+        }
+        function asHTML() {
+          return '<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8">' +
+            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+            '<title>' + esc(current.query) + ' · 搜索报告</title><style>' +
+            'body{margin:0;background:#fff;color:#000;font:14px/1.8 Georgia,\'SimSun\',serif}' +
+            '.w{max-width:820px;margin:0 auto;padding:40px 24px 80px}' +
+            'h1{font-size:22px;letter-spacing:1px}h2{font-size:14px;text-transform:uppercase;letter-spacing:2px;margin:32px 0 12px}' +
+            '.m{color:rgba(0,0,0,.4);font-size:11px;border-bottom:1px solid rgba(0,0,0,.15);padding-bottom:12px}' +
+            '.a{font-size:15px;line-height:1.9}p{margin:0 0 12px}ul,ol{padding-left:22px}' +
+            'code{background:rgba(0,0,0,.05);padding:1px 4px}pre{background:rgba(0,0,0,.05);padding:12px;overflow:auto}' +
+            'table{border-collapse:collapse;width:100%}th,td{border:1px solid rgba(0,0,0,.15);padding:6px 9px;text-align:left}' +
+            '.s{border-bottom:1px solid rgba(0,0,0,.08);padding:12px 0}.s b{font-size:14px}.s a{color:#000;text-decoration:none}' +
+            '.s p{font-size:12px;color:rgba(0,0,0,.45);margin:4px 0 0}.s u{color:rgba(0,0,0,.4);font-size:11px;text-decoration:none}' +
+            '.cite{color:#3366cc;font-size:10px;vertical-align:super}' +
+            '@media print{.w{padding:0}}' +
+            '</style></head><body><div class="w">' +
+            '<h1>' + esc(current.query) + '</h1>' +
+            '<div class="m">OMM-ZEN Search · DeepSeek 联网搜索 · ' + esc(new Date(current.ts).toLocaleString()) + '</div>' +
+            '<h2>智能摘要</h2><div class="a">' + mdToHtml(buildCitedText(current.answer, current.annotations)) + '</div>' +
+            '<h2>结果来源（' + current.sources.length + '）</h2>' + current.sources.map(function (s, i) {
+              return '<div class="s"><b>' + (i + 1) + '. <a href="' + esc(s.url) + '">' + esc(s.title || s.url) + '</a></b>' +
+                '<p>' + esc(s.site || '') + (s.date ? ' · ' + esc(fmtDate(s.date)) : '') + '</p>' +
+                '<p>' + esc(s.snippet || '') + '</p><u>' + esc(s.url) + '</u></div>'
+            }).join('') + '</div></body></html>'
+        }
+        function download(filename, content, mime, bom) {
+          var blob = typeof content === 'string'
+            ? new Blob([bom ? '\ufeff' + content : content], { type: mime || 'text/plain;charset=utf-8' })
+            : content
+          var url = URL.createObjectURL(blob)
+          var a = document.createElement('a')
+          a.href = url; a.download = filename
+          document.body.appendChild(a); a.click(); a.remove()
+          setTimeout(function () { URL.revokeObjectURL(url) }, 3000)
+        }
+        function exportAs(fmt) {
+          if (!current || !current.query) { toast('暂无可导出的结果'); return }
+          var name = safeName()
+          if (fmt === 'json') download(name + '.json', asJSON(), 'application/json')
+          else if (fmt === 'md') download(name + '.md', asMarkdown(), 'text/markdown;charset=utf-8')
+          else if (fmt === 'csv') download(name + '.csv', asCSV(), 'text/csv;charset=utf-8')
+          else if (fmt === 'html') download(name + '.html', asHTML(), 'text/html;charset=utf-8')
+          closeDropdowns()
+          toast('已导出 ' + fmt.toUpperCase())
+        }
+        function fallbackCopy(text, okMsg) {
+          var ta = document.createElement('textarea')
+          ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+          document.body.appendChild(ta); ta.select()
+          try { document.execCommand('copy'); toast(okMsg || '已复制') } catch (e) { toast('复制失败') }
+          ta.remove()
+        }
+        function copyText(text, okMsg) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () { toast(okMsg || '已复制') })
+              .catch(function () { fallbackCopy(text, okMsg) })
+          } else fallbackCopy(text, okMsg)
+        }
+        function copyMarkdown() {
+          if (!current || !current.query) { toast('暂无可复制的结果'); return }
+          copyText(asMarkdown(), '已复制为 Markdown')
+          closeDropdowns()
+        }
+
+        /* ---------------- suggestions ---------------- */
+        var EXAMPLES = [
+          'DeepSeek V4.1 有哪些更新', '今日重要科技新闻',
+          '如何高效学习文言文', '北京未来三天天气', '2026 年诺贝尔奖得主'
+        ]
+        function renderSuggestions() {
+          var recent = S.history.slice(0, 4).map(function (h) { return h.query })
+          var list = recent.concat(EXAMPLES.filter(function (x) { return recent.indexOf(x) < 0 })).slice(0, 8)
+          $('suggestions').innerHTML = list.map(function (q) {
+            return '<button class="chip" data-q="' + esc(q) + '">' + esc(q) + '</button>'
+          }).join('')
+        }
+
+        /* ---------------- events ---------------- */
+        $('splash-enter').addEventListener('click', function () {
+          $('splash').classList.add('fade-out')
+          setTimeout(function () { $('splash').style.display = 'none' }, 650)
+          $('q').focus()
+        })
+        $('go').addEventListener('click', function () { runSearch($('q').value) })
+        $('stop').addEventListener('click', function () { if (abort) abort.abort() })
+        $('q').addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); runSearch($('q').value) }
+        })
+        $('follow-btn').addEventListener('click', followUp)
+        $('follow-input').addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); followUp() }
+        })
+        $('history-filter').addEventListener('input', function () {
+          historyFilter = this.value.trim(); renderHistory()
+        })
+        $('history-list').addEventListener('click', function (e) {
+          var del = e.target.closest('[data-del]')
+          if (del) {
+            e.stopPropagation()
+            S.history.splice(parseInt(del.getAttribute('data-del'), 10), 1)
+            save(); renderHistory(); renderSuggestions(); toast('已删除该记录'); return
+          }
+          var it = e.target.closest('.history-item')
+          if (!it) return
+          var h = S.history[parseInt(it.getAttribute('data-h'), 10)]
+          if (!h) return
+          current = clone(h)
+          current.elapsed = h.elapsed || 0
+          $('q').value = h.query
+          setStatus('历史记录', false)
+          $('statusbar').classList.remove('hidden')
+          $('results').classList.remove('hidden')
+          $('toolbar').classList.remove('hidden')
+          $('empty').classList.add('hidden')
+          renderCurrent()
+          closeDropdowns()
+        })
+        $('find-input').addEventListener('input', function () {
+          findText = this.value.trim(); renderCurrent()
+        })
+        $('force-btn').addEventListener('click', function () {
+          S.settings.forceWeb = !S.settings.forceWeb; save(); syncSegs()
+          toast(S.settings.forceWeb ? '已开启强制联网' : '已关闭强制联网')
+        })
+        $('copy-answer').addEventListener('click', function () {
+          if (!current || !current.answer) { toast('暂无答案'); return }
+          copyText(current.answer, '已复制答案')
+        })
+        document.addEventListener('click', function (e) {
+          var c = e.target.closest('[data-q]')
+          if (c) { runSearch(c.getAttribute('data-q')); return }
+          var d = e.target.closest('[data-open]')
+          if (d) { toggleDropdown(d.getAttribute('data-open')); return }
+          var ex = e.target.closest('[data-export]')
+          if (ex) { exportAs(ex.getAttribute('data-export')); return }
+          var cp = e.target.closest('[data-copy]')
+          if (cp) {
+            var src = current && current.sources[parseInt(cp.getAttribute('data-copy'), 10) - 1]
+            if (src) copyText(src.url, '已复制链接')
+            return
+          }
+          if (e.target.closest('#retry-btn')) {
+            runSearch(current.query, { context: current.context, noHistory: true })
+            return
+          }
+          if (e.target.closest('#sel-search')) {
+            var t = selText
+            hideSel()
+            try { window.getSelection().removeAllRanges() } catch (err) {}
+            if (t) runSearch(t)
+            return
+          }
+          var cite = e.target.closest('.cite')
+          if (cite) {
+            var n = cite.getAttribute('data-n')
+            var node = document.querySelector('.source[data-si="' + n + '"]')
+            if (node) {
+              node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              node.classList.add('flash')
+              setTimeout(function () { node.classList.remove('flash') }, 1200)
+            }
+          }
+        })
+        document.querySelectorAll('#seg-filter button').forEach(function (b) {
+          b.addEventListener('click', function () {
+            S.settings.filter = b.getAttribute('data-filter'); save(); syncSegs(); renderCurrent()
+          })
+        })
+        document.querySelectorAll('#seg-sort button').forEach(function (b) {
+          b.addEventListener('click', function () {
+            S.settings.sort = b.getAttribute('data-sort'); save(); syncSegs(); renderCurrent()
+          })
+        })
+        document.querySelectorAll('#seg-time button').forEach(function (b) {
+          b.addEventListener('click', function () {
+            S.settings.timeRange = b.getAttribute('data-time'); save(); syncSegs(); renderCurrent()
+          })
+        })
+        $('m-new').addEventListener('click', function () {
+          current = null; $('q').value = ''; findText = ''; $('find-input').value = ''
+          renderCurrent(); renderSuggestions(); $('q').focus()
+          setStatus('就绪', false); closeDropdowns()
+        })
+        $('m-stop').addEventListener('click', function () { if (abort) abort.abort() })
+        $('m-history').addEventListener('click', function () { toggleDropdown('dd-history') })
+        $('m-theme').addEventListener('click', function () {
+          S.settings.theme = S.settings.theme === 'dark' ? 'light' : 'dark'; save(); applySettings()
+        })
+        $('m-copy').addEventListener('click', copyMarkdown)
+        $('ex-copy').addEventListener('click', copyMarkdown)
+        $('ex-history').addEventListener('click', function () {
+          if (!S.history.length) { toast('暂无历史'); return }
+          download('omm-search-history.json', JSON.stringify(S.history, null, 2), 'application/json')
+          closeDropdowns()
+        })
+        $('history-clear').addEventListener('click', function () {
+          S.history = []; save(); renderHistory(); renderSuggestions(); toast('已清空历史')
+        })
+        $('set-save').addEventListener('click', function () {
+          S.settings.apiBase = $('set-base').value.trim() || DEFAULT.settings.apiBase
+          S.settings.apiModel = $('set-model').value.trim() || DEFAULT.settings.apiModel
+          S.settings.apiKey = $('set-key').value.trim()
+          S.settings.thinking = !!$('set-thinking').checked
+          S.settings.forceWeb = !!$('set-force').checked
+          S.settings.theme = $('set-theme').value
+          S.settings.bg = $('set-bg').value
+          var sc = parseFloat($('set-scale').value)
+          S.settings.fontScale = isNaN(sc) ? 1 : Math.min(1.4, Math.max(0.8, sc))
+          save(); applySettings(); closeDropdowns(); toast('设置已保存')
+        })
+        $('pin-btn').addEventListener('click', function () {
+          var on = $('top-menu').classList.toggle('pinned')
+          this.classList.toggle('pinned', on)
+        })
+
+        function hideSel() { $('sel-search').classList.remove('show') }
+        document.addEventListener('mouseup', function (e) {
+          if (e.target.closest('#sel-search, .dropdown, INPUT, TEXTAREA')) { hideSel(); return }
+          setTimeout(function () {
+            var sel = window.getSelection()
+            var text = sel && sel.toString().trim()
+            if (!text || text.length < 2 || text.length > 120 || !sel.rangeCount) { hideSel(); return }
+            var rect = sel.getRangeAt(0).getBoundingClientRect()
+            if (!rect.width && !rect.height) { hideSel(); return }
+            selText = text
+            var btn = $('sel-search')
+            btn.classList.add('show')
+            btn.style.left = Math.min(window.innerWidth - 130, Math.max(8, rect.left + rect.width / 2 - 55)) + 'px'
+            btn.style.top = Math.max(8, rect.top - 36) + 'px'
+          }, 10)
+        })
+        document.addEventListener('mousedown', function (e) {
+          if (!e.target.closest('#sel-search')) hideSel()
+        })
+        window.addEventListener('scroll', hideSel, true)
+
+        document.addEventListener('keydown', function (e) {
+          var typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName || '')
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault(); $('q').focus(); $('q').select(); return
+          }
+          if (e.key === 'Escape') {
+            closeDropdowns(); hideSel(); if (abort) abort.abort(); return
+          }
+          if (!typing && e.key === '/') { e.preventDefault(); $('q').focus() }
+        })
+
+        applySettings()
+        renderSuggestions()
+        renderHistory()
+        renderCurrent()
+      })()
+    </script>
+  </body>
+</html>

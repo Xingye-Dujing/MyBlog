@@ -1,6 +1,8 @@
 <script setup>
 // 单文件网页门户：条目与 public/ 下的静态页一一对应
 const pages = [
+  { href: '/omm-hub.html', title: '静书房', desc: '单文件工具的统一入口、插件管理与更新中心' },
+  { href: '/omm-mdforge.html', title: 'Markdown 工作台', desc: 'Markdown 编辑、实时预览与多格式导出' },
   { href: '/omm-annotate.html', title: '文本标注', desc: '逐句标记与批注的阅读标注工具' },
   { href: '/omm-corpus.html', title: '英语语料库', desc: '语料检索、统计与词频浏览' },
   { href: '/omm-data.html', title: '数据工作台', desc: '数据清洗、统计与报表输出' },
@@ -9,6 +11,7 @@ const pages = [
   { href: '/omm-message.html', title: '消息同步', desc: '跨端消息的整理与同步' },
   { href: '/omm-planner.html', title: '日程安排', desc: '时间块规划与待办视图' },
   { href: '/omm-redact.html', title: '文档脱敏', desc: '文本敏感信息识别与脱敏处理' },
+  { href: '/omm-search.html', title: '智能搜索', desc: '免费的 DeepSeek 联网搜索、AI 摘要与引用溯源' },
   { href: '/omm-visualization.html', title: '可视化图表', desc: '数据到图形的多形态可视化' },
   { href: '/omm-writer.html', title: '所思所想', desc: '块编辑器写作与导出' },
   { href: '/h5-news.html', title: '高校开放', desc: '高校资讯与开放数据浏览' },

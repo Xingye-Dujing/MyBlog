@@ -47,6 +47,7 @@ DESKTOP_EXE_NAMES = {
     "message": "OMM-Message",
     "planner": "OMM-Planner",
     "redact": "OMM-Redact",
+    "search": "OMM-Search",
     "visualization": "OMM-Visualization",
     "writer": "OMM-Writer",
     "hub": "OMM-ZEN",
@@ -186,6 +187,20 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "order": 90,
         "share": {
             "channels": [{"id": "documents", "role": "both"}]
+        },
+    },
+    {
+        "id": "search",
+        "name": "智能搜索",
+        "glyph": "搜",
+        "description": "免费联网搜索 · AI 摘要 · 引用溯源 · 一键导出",
+        "entry": "omm-search.html",
+        "port": 8322,
+        "runtime": "static",
+        "vendor": [],
+        "order": 115,
+        "share": {
+            "channels": [{"id": "documents", "role": "publish"}]
         },
     },
     {
