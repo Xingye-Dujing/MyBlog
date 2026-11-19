@@ -131,7 +131,18 @@
 
 ---
 
-## 5. 常见坑
+## 5. Hub 知识图谱
+
+静书房 Hub 工具栏的「知识图谱」按钮会收集生态内的卡片并绘制关系图：
+
+- Hub 读取自身域名下的 `zen.cards.v1`、`zen.inbox.v1`、`zen.clip.v1`；
+- 同时向每个已打开产品的 iframe 发送 `omm:zen-card-request`，产品端通过
+  `zen-link.js` 回传 `omm:zen-card-reply`（携带自己的同类 localStorage 数据）；
+- 卡片按 `id` 去重，最多显示 120 个节点；`links` 形成引用边，共享 `tags` 形成同标签边；
+- 跨 iframe 请求一律用该 iframe 自身 URL 推导的 origin（`frameTargetOrigin`），
+  产品端回信用 `omm_hub_origin` 参数或 referrer 推导的明确 origin，不使用通配符。
+
+## 6. 常见坑
 
 - **v 是数字**：`v:"1"` 会被判非法。
 - **content 不能只有空白**：`create()` 不去 trim 正文，但 `validate()` 要求 trim 后非空。

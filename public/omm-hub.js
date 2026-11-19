@@ -40,6 +40,7 @@
     { id: 'close-tab', label: '关闭当前标签', def: 'Ctrl+W' },
     { id: 'command-palette', label: '命令面板', def: 'Ctrl+K' },
     { id: 'global-search', label: '全局内容搜索', def: 'Ctrl+Shift+F' },
+    { id: 'knowledge-graph', label: '知识图谱', def: '' },
     { id: 'zen-mode', label: '静心专注', def: 'Ctrl+Shift+Z' },
     { id: 'reopen-tab', label: '重开关闭的标签', def: 'Ctrl+Shift+T' },
     { id: 'notify-panel', label: '通知中心', def: 'Ctrl+Shift+N' },
@@ -317,6 +318,10 @@
   var timelineOpen = false;
   var timelineFilter = 'all';
   var timelineEvents = [];
+  var graphOpen = false;
+  var graphCards = [];
+  var graphSeq = 0;
+  var graphPos = [];
   var autoSleepTimer = 0;
   var lastAutoSnapAt = 0;
   var autoSnapBusy = false;
@@ -744,6 +749,11 @@
     els.gsearchInput = document.getElementById('gsearch-input');
     els.gsearchList = document.getElementById('gsearch-list');
     els.gsearchMeta = document.getElementById('gsearch-meta');
+    els.knowledgeGraph = document.getElementById('knowledge-graph');
+    els.kgCanvas = document.getElementById('kg-canvas');
+    els.kgDetail = document.getElementById('kg-detail');
+    els.kgList = document.getElementById('kg-list');
+    els.kgStatus = document.getElementById('kg-status');
     els.zenBar = document.getElementById('zen-bar');
     els.zenProgress = document.getElementById('zen-progress');
     els.zenClock = document.getElementById('zen-clock');
@@ -3504,6 +3514,7 @@
     if (els.layoutMenu) els.layoutMenu.hidden = true;
     if (els.ctxMenu) els.ctxMenu.hidden = true;
     if (els.notifyPanel) els.notifyPanel.hidden = true;
+    if (graphOpen) closeKnowledgeGraph();
     var tabsMore = document.getElementById('tabs-more');
     if (tabsMore) tabsMore.hidden = true;
     renderNotifyBadge();
@@ -4871,7 +4882,7 @@
     gsearchIndex = 0;
     var q = (initial || '').trim();
     if (q) runGlobalSearch();
-    else renderGlobalSearch(null, '输入关键词，检索全部 11 个产品中已保存的文档内容。');
+    else renderGlobalSearch(null, '输入关键词，检索全部产品中已保存的文档内容。');
     setTimeout(function () { els.gsearchInput.focus(); els.gsearchInput.select(); }, 0);
   }
 
@@ -4884,6 +4895,181 @@
     els.gsearchInput.value = '';
     gsearchResults = [];
     gsearchIndex = 0;
+  }
+
+  /* ---------- 知识图谱：收集各产品的 zen-card 并画出引用 / 标签关系 ---------- */
+  function kgLocalCards() {
+    var out = [];
+    ['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach(function (key) {
+      try {
+        var raw = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(raw)) out = out.concat(raw);
+      } catch (e) { /* ignore */ }
+    });
+    return out;
+  }
+
+  function kgNormalize(card) {
+    if (!card || typeof card !== 'object' || !card.content) return null;
+    return {
+      id: String(card.id || ('kg-' + Math.random().toString(36).slice(2))),
+      kind: String(card.kind || 'note'),
+      source: String(card.source || 'manual'),
+      content: String(card.content),
+      tags: Array.isArray(card.tags) ? card.tags.slice(0, 8).map(String) : [],
+      links: Array.isArray(card.links) ? card.links : [],
+      color: String(card.color || ''),
+      ref: String(card.ref || ''),
+    };
+  }
+
+  function collectGraphCards() {
+    var seq = ++graphSeq;
+    graphCards = [];
+    kgLocalCards().forEach(function (c) {
+      var n = kgNormalize(c);
+      if (n) graphCards.push(n);
+    });
+    graphCards = dedupeGraphCards(graphCards);
+    renderKnowledgeGraph();
+    /* Ask every embedded product for its own cards; replies are merged below. */
+    frames.forEach(function (frame) {
+      var origin = frameTargetOrigin(frame);
+      if (!origin) return;
+      try {
+        frame.contentWindow.postMessage(
+          { type: 'omm:zen-card-request', token: String(seq) }, origin
+        );
+      } catch (e) { /* ignore */ }
+    });
+    window.setTimeout(function () {
+      if (seq === graphSeq && graphOpen) renderKnowledgeGraph();
+    }, 600);
+  }
+
+  function dedupeGraphCards(list) {
+    var seen = Object.create(null);
+    return (list || []).filter(function (c) {
+      if (!c || seen[c.id]) return false;
+      seen[c.id] = 1;
+      return true;
+    });
+  }
+
+  function openKnowledgeGraph() {
+    if (!els.knowledgeGraph) return;
+    closePopovers();
+    closeCommandPalette();
+    closePluginPanel();
+    closeGlobalSearch();
+    closeTimeline();
+    if (els.hubSettings) els.hubSettings.hidden = true;
+    graphOpen = true;
+    els.knowledgeGraph.hidden = false;
+    collectGraphCards();
+  }
+
+  function closeKnowledgeGraph() {
+    graphOpen = false;
+    graphSeq += 1;
+    if (els.knowledgeGraph) els.knowledgeGraph.hidden = true;
+  }
+
+  function renderKnowledgeGraph() {
+    if (!els.kgCanvas || !els.kgCanvas.getContext) return;
+    var ctx = els.kgCanvas.getContext('2d');
+    var W = els.kgCanvas.width, H = els.kgCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+    var list = graphCards.slice(0, 120);
+    if (!list.length) {
+      ctx.fillStyle = '#888';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('没有卡片：在任意产品的右下角「卡」按钮剪藏内容后即可看到关系图。', W / 2, H / 2);
+      ctx.textAlign = 'left';
+      if (els.kgStatus) els.kgStatus.textContent = '暂无卡片';
+      if (els.kgList) els.kgList.innerHTML = '';
+      return;
+    }
+    graphPos = list.map(function (c, i) {
+      var a = (i / list.length) * Math.PI * 2 - Math.PI / 2;
+      return {
+        x: W / 2 + Math.cos(a) * (W / 2 - 80),
+        y: H / 2 + Math.sin(a) * (H / 2 - 60),
+        card: c,
+      };
+    });
+    var edges = [];
+    list.forEach(function (c, i) {
+      (c.links || []).forEach(function (l) {
+        var j = list.findIndex(function (x) { return x.id === l.id; });
+        if (j >= 0 && j !== i) edges.push({ a: i, b: j, kind: 'ref' });
+      });
+    });
+    for (var i = 0; i < list.length; i++) {
+      for (var j = i + 1; j < list.length; j++) {
+        var ta = list[i].tags || [], tb = list[j].tags || [];
+        if (ta.some(function (t) { return tb.indexOf(t) >= 0; })) edges.push({ a: i, b: j, kind: 'tag' });
+      }
+    }
+    edges.forEach(function (e) {
+      ctx.beginPath();
+      ctx.moveTo(graphPos[e.a].x, graphPos[e.a].y);
+      ctx.lineTo(graphPos[e.b].x, graphPos[e.b].y);
+      ctx.strokeStyle = e.kind === 'ref' ? 'rgba(91,118,146,0.45)' : 'rgba(124,127,66,0.35)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+    graphPos.forEach(function (p) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = p.card.color || '#b56545';
+      ctx.fill();
+      ctx.strokeStyle = '#26231f';
+      ctx.stroke();
+    });
+    if (els.kgStatus) {
+      els.kgStatus.textContent = graphCards.length + ' 张卡片 · ' + edges.length + ' 条关系（引用 / 同标签）';
+    }
+    if (els.kgList) {
+      els.kgList.innerHTML = list.map(function (c, i) {
+        return '<div class="kg-item" data-i="' + i + '" title="' + kgEscape(c.content) + '">' +
+          '<span class="kg-kind">' + kgEscape(c.kind) + '</span>' + kgEscape(c.content.slice(0, 40)) + '</div>';
+      }).join('');
+    }
+    if (!els.kgCanvas._kgBound) {
+      els.kgCanvas._kgBound = true;
+      els.kgCanvas.addEventListener('click', function (ev) {
+        var rect = els.kgCanvas.getBoundingClientRect();
+        var x = (ev.clientX - rect.left) * (els.kgCanvas.width / rect.width);
+        var y = (ev.clientY - rect.top) * (els.kgCanvas.height / rect.height);
+        var hit = -1;
+        graphPos.forEach(function (p, i) {
+          if (Math.abs(p.x - x) < 14 && Math.abs(p.y - y) < 14) hit = i;
+        });
+        if (hit >= 0 && els.kgDetail) showKgDetail(hit);
+      });
+      if (els.kgList) {
+        els.kgList.addEventListener('click', function (ev) {
+          var item = ev.target.closest('.kg-item');
+          if (item) showKgDetail(Number(item.dataset.i));
+        });
+      }
+    }
+  }
+
+  function showKgDetail(i) {
+    var p = graphPos[i];
+    if (!p || !els.kgDetail) return;
+    var c = p.card;
+    els.kgDetail.textContent = c.kind + ' · ' + c.source + '\n' + c.content +
+      (c.ref ? '\n出处：' + c.ref : '') + (c.tags.length ? '\n#' + c.tags.join(' #') : '');
+  }
+
+  function kgEscape(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function gsearchEscape(s) {
@@ -4910,7 +5096,7 @@
     window.clearTimeout(gsearchTimer);
     if (!q) {
       gsearchResults = [];
-      renderGlobalSearch(null, '输入关键词，检索全部 11 个产品中已保存的文档内容。');
+      renderGlobalSearch(null, '输入关键词，检索全部产品中已保存的文档内容。');
       return;
     }
     renderGlobalSearch(null, '正在检索「' + gsearchEscape(q) + '」…', true);
@@ -5527,6 +5713,7 @@
       } else if (act === 'plugins') openPluginPanel();
       else if (act === 'command') openCommandPalette();
       else if (act === 'globalsearch') openGlobalSearch();
+      else if (act === 'graph') { if (graphOpen) closeKnowledgeGraph(); else openKnowledgeGraph(); }
       else if (act === 'zen') setZen(!zenActive);
       else if (act === 'timeline') { if (timelineOpen) closeTimeline(); else openTimeline(); }
       else if (act === 'notify') toggleNotifyPanel();
@@ -5537,6 +5724,13 @@
     els.brand.addEventListener('click', function () {
       toggleLauncher();
     });
+    if (els.knowledgeGraph) {
+      els.knowledgeGraph.addEventListener('click', function (event) {
+        if (event.target === els.knowledgeGraph || event.target.closest('#kg-close')) {
+          closeKnowledgeGraph();
+        }
+      });
+    }
 
     /* 全局内容搜索 */
     if (els.gsearch) {
@@ -6247,6 +6441,13 @@
         openSharedApp(appIdFromMessage(data.app));
         return;
       }
+      if (data.type === 'omm:zen-card-reply') {
+        if (!graphOpen || !Array.isArray(data.cards)) return;
+        var incoming = data.cards.map(kgNormalize).filter(Boolean);
+        graphCards = dedupeGraphCards(graphCards.concat(incoming));
+        renderKnowledgeGraph();
+        return;
+      }
       if (data.type === 'omm:saved') {
         window.dispatchEvent(new CustomEvent('omm:archive-refresh'));
         loadRecentFiles(true);
@@ -6272,7 +6473,8 @@
           !els.launcher.hidden ||
           !els.layoutMenu.hidden ||
           !els.ctxMenu.hidden ||
-          (els.notifyPanel && !els.notifyPanel.hidden)
+          (els.notifyPanel && !els.notifyPanel.hidden) ||
+          graphOpen
         ) {
           closePopovers();
         }
@@ -6409,6 +6611,7 @@
   function handleShortcut(action, data) {
     if (action === 'command-palette') openCommandPalette();
     else if (action === 'global-search') openGlobalSearch();
+    else if (action === 'knowledge-graph') openKnowledgeGraph();
     else if (action === 'zen-mode') setZen(!zenActive);
     else if (action === 'reopen-tab') reopenLastClosed();
     else if (action === 'notify-panel') toggleNotifyPanel();

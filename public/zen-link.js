@@ -12,6 +12,27 @@ const APP = (function () {
   return m ? m[1] : ''
 })()
 
+var HUB_ORIGIN = (function () {
+  try {
+    var raw = new URLSearchParams(location.search).get('omm_hub_origin')
+    if (!raw) return ''
+    var u = new URL(raw)
+    if ((u.protocol === 'http:' || u.protocol === 'https:') &&
+        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) {
+      return u.origin
+    }
+  } catch (e) { /* ignore */ }
+  return ''
+})()
+
+function parentTarget() {
+  if (HUB_ORIGIN) return HUB_ORIGIN
+  try {
+    if (document.referrer) return new URL(document.referrer).origin
+  } catch (e) { /* ignore */ }
+  return location.origin
+}
+
 function isTrusted(origin) {
   try {
     if (origin === location.origin) return true
@@ -159,6 +180,21 @@ function boot() {
     if (!isTrusted(e.origin)) return
     const d = e.data
     if (d && d.type === 'omm:zen-card') receive(d.card)
+    if (d && d.type === 'omm:zen-card-request') {
+      const own = []
+      ;['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach((key) => {
+        try {
+          const raw = JSON.parse(localStorage.getItem(key) || '[]')
+          if (Array.isArray(raw)) raw.forEach((c) => own.push(ZenCard.create(c)))
+        } catch (_) { /* ignore */ }
+      })
+      try {
+        window.parent.postMessage(
+          { type: 'omm:zen-card-reply', token: d.token, app: APP, cards: own },
+          parentTarget()
+        )
+      } catch (_) { /* ignore */ }
+    }
   })
 }
 
