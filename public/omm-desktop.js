@@ -532,13 +532,42 @@
       appId = 'mdforge'
     }
     var embedded = false
+    var hubOrigin = ''
     try {
-      embedded = new URLSearchParams(location.search).get('omm_embed') === '1'
+      var params = new URLSearchParams(location.search)
+      embedded = params.get('omm_embed') === '1'
+      var rawHub = params.get('omm_hub_origin')
+      if (rawHub) {
+        var parsed = new URL(rawHub)
+        if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+            ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsed.hostname) >= 0) {
+          hubOrigin = parsed.origin
+        }
+      }
     } catch (e) {
       embedded = /[?&]omm_embed=1(?:&|$)/.test(location.search)
     }
-    return { appId: appId, embedded: embedded }
+    return { appId: appId, embedded: embedded, hubOrigin: hubOrigin }
   })()
+
+  function isLoopbackOrigin(origin) {
+    try {
+      var u = new URL(String(origin || ''))
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+      return ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
+    } catch (e) {
+      return false
+    }
+  }
+
+  function isTrustedParentOrigin(origin) {
+    if (ENV.hubOrigin) return origin === ENV.hubOrigin
+    return isLoopbackOrigin(origin)
+  }
+
+  function parentTargetOrigin() {
+    return ENV.hubOrigin || '*'
+  }
 
   var originalCreateObjectURL = URL.createObjectURL
   var originalRevokeObjectURL = URL.revokeObjectURL
@@ -1119,7 +1148,7 @@
   function notifyHubSaved() {
     if (!ENV.embedded) return
     try {
-      window.parent.postMessage({ type: 'omm:saved', app: ENV.appId }, '*')
+      window.parent.postMessage({ type: 'omm:saved', app: ENV.appId }, parentTargetOrigin())
     } catch (e) {
       /* ignore */
     }
@@ -1788,12 +1817,13 @@
 
     if (ENV.embedded) {
       try {
-        window.parent.postMessage({ type: 'omm:ready', app: ENV.appId }, '*')
+        window.parent.postMessage({ type: 'omm:ready', app: ENV.appId }, parentTargetOrigin())
       } catch (e) {
         /* ignore */
       }
       window.addEventListener('message', function (event) {
         if (event.source !== window.parent) return
+        if (!isTrustedParentOrigin(event.origin)) return
         var data = event.data
         if (!data || !data.type) return
         if (data.type === 'omm:create-snapshot') onSnapshotRequest(data)
@@ -1827,6 +1857,9 @@
   }
 
   window.addEventListener('message', function (event) {
+    // 只接受来自父窗口（静书房）的状态回执，避免同源的其他 iframe 伪造。
+    if (event.source !== window.parent) return
+    if (!isTrustedParentOrigin(event.origin)) return
     var data = event.data
     if (!data || !data.type) return
     if (data.type === 'omm:state-info-done' && data.token && pendingStateInfo[data.token]) {
@@ -1953,7 +1986,7 @@
       try {
         window.parent.postMessage(
           { type: 'omm:state-info-done', token: token, app: ENV.appId, info: info },
-          '*'
+          parentTargetOrigin()
         )
       } catch (e) { /* ignore */ }
     })
@@ -2982,7 +3015,7 @@
             name: result.name,
             path: result.path,
           },
-          '*'
+          parentTargetOrigin()
         )
       } catch (e) {
         /* ignore */
@@ -2998,7 +3031,7 @@
             ok: false,
             error: err && err.message ? err.message : String(err),
           },
-          '*'
+          parentTargetOrigin()
         )
       } catch (e) {
         /* ignore */
@@ -3014,15 +3047,24 @@
     if (token) {
       restoreTokens[token] = true
       try {
-        window.parent.postMessage({ type: 'omm:restore-accepted', token: token }, '*')
+        window.parent.postMessage({ type: 'omm:restore-accepted', token: token }, parentTargetOrigin())
       } catch (e) {
         /* ignore */
       }
     }
     apiGet('/snapshot', { app: ENV.appId, path: data.path })
       .then(function (result) { return applyState(result.snapshot) })
+      .then(function () {
+        if (token) window.parent.postMessage({ type: 'omm:restore-done', token: token, ok: true }, parentTargetOrigin())
+        delete restoreTokens[token]
+      })
       .catch(function (err) {
-        toast('恢复失败：' + (err && err.message ? err.message : err), 'error')
+        var message = '恢复失败：' + (err && err.message ? err.message : err)
+        toast(message, 'error')
+        // restore-accepted 只代表「收到请求」，真正的成功/失败要回执给工作台，
+        // 否则工作台会一直以为恢复成功。
+        if (token) window.parent.postMessage({ type: 'omm:restore-done', token: token, ok: false, error: message }, parentTargetOrigin())
+        delete restoreTokens[token]
       })
   }
 

@@ -27,7 +27,7 @@ import threading
 import subprocess
 import tempfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, urlsplit, parse_qs
 
 try:  # Desktop shell only; absent on the public website.
     import omm_shared  # type: ignore
@@ -316,7 +316,11 @@ def prune_builds():
         if not rec:
             continue
         d = os.path.dirname(rec["pdf"])
-        if d.startswith(BUILD_DIR):
+        try:
+            inside = os.path.commonpath([os.path.abspath(d), os.path.abspath(BUILD_DIR)]) == os.path.abspath(BUILD_DIR)
+        except ValueError:
+            inside = False
+        if inside:
             shutil.rmtree(d, ignore_errors=True)
     # 孤儿目录：不在内存索引里的一律是上次运行留下的
     try:
@@ -645,7 +649,9 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
             "error": detail,
         }
     finally:
-        if cancel_event.is_set() and key not in _builds:
+        # 没有成功登记（取消 / 未产出 PDF / 异常）的构建目录一律清理，
+        # 否则失败的编译会持续堆积在 BUILD_DIR 里。
+        if key not in _builds:
             shutil.rmtree(work, ignore_errors=True)
         _clear_compile_job(key)
 
@@ -665,8 +671,12 @@ for _entry in os.environ.get("OMM_LATEX_ALLOWED_ORIGINS", "").split(","):
 
 def _origin_allowed(origin):
     """origin 为空表示非浏览器客户端（桌面壳 / 脚本），不做 CORS 限制。"""
-    if not origin or origin == "null":
+    # 注意：字符串 "null" 是沙箱 iframe / file:// 页面的 opaque origin，
+    # 不能当作「无 Origin」放行，否则任何本地 HTML 都能绕过白名单并借 CORS 读回文件。
+    if not origin:
         return True
+    if origin == "null":
+        return False
     try:
         parsed = urlparse(origin)
     except Exception:
@@ -678,7 +688,11 @@ def _origin_allowed(origin):
 
 
 def _host_allowed(header_value):
-    host = (header_value or "").split(":")[0].strip().lower().strip("[]")
+    # 用 urlsplit 解析，正确处理 [::1]:8123 这类 IPv6 Host 头。
+    try:
+        host = (urlsplit("//" + (header_value or "").strip()).hostname or "").lower()
+    except Exception:
+        host = ""
     return host in ("127.0.0.1", "localhost", "::1")
 
 
@@ -845,9 +859,16 @@ class Handler(SimpleHTTPRequestHandler):
         if u.path == "/api/config":
             try:
                 n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = -1
+            if n < 0 or n > 64 * 1024:
+                return self.send_json({"ok": False, "error": "请求体过大或无效"}, 400)
+            try:
                 payload = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
             except Exception as e:
                 return self.send_json({"ok": False, "error": "JSON 解析失败：%r" % (e,)}, 400)
+            if not isinstance(payload, dict):
+                return self.send_json({"ok": False, "error": "请求格式无效"}, 400)
             raw = str(payload.get("miktex_bin") or "").strip().strip('"')
             if not raw:
                 save_config(miktex_bin="")
@@ -901,6 +922,8 @@ class Handler(SimpleHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(n).decode("utf-8"))
             except Exception as e:
                 return self.send_json({"ok": False, "error": "JSON 解析失败：%r" % (e,)}, 400)
+            if not isinstance(payload, dict):
+                return self.send_json({"ok": False, "error": "请求格式无效"}, 400)
 
             tex = payload.get("tex") or ""
             engine = payload.get("engine") or "xelatex"

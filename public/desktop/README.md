@@ -4,9 +4,9 @@
 > 功能开发与插件制作看 [`PLUGIN-GUIDE.md`](PLUGIN-GUIDE.md)；
 > 清单字段契约看 [`../plugin-spec.md`](../plugin-spec.md)。
 
-把 `public/` 下的 11 个产品打包成独立桌面程序，并提供三种集成形态：
+把 `public/` 下的 17 个产品打包成独立桌面程序，并提供三种集成形态：
 
-- **OMM-ZEN.exe / .app**：完整离线版，内置全部 11 个插件。
+- **OMM-ZEN.exe / .app**：完整离线版，内置全部 17 个插件。
 - **OMM-ZEN-Framework**：只含工作台框架，产品以插件形式按需安装。
 - **OMM-ZEN-Setup.exe / .app**：在线安装器，勾选要安装的产品，下载框架和对应插件包。
 
@@ -20,7 +20,7 @@
 
 所有程序都不再显示各产品的品牌启动页，打开后直接进入工作界面。
 
-`dist/` 下生成 13 个 Windows 程序，另有框架 zip：
+`dist/` 下生成 18 个 Windows 程序，另有框架 zip：
 
 | EXE | 对应页面 | 端口 | 大小 | 离线资源 |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,11 @@
 | OMM-Redact.exe | omm-redact.html | 8319 | 30.4 MB | pdf.js、MuPDF、pdf-lib、JSZip、PptxViewJS、mammoth、Chart.js、jsPDF |
 | OMM-Visualization.exe | omm-visualization.html | 8320 | 20.4 MB | Chart.js、ApexCharts、ECharts、SheetJS、html2canvas、jsPDF |
 | OMM-Writer.exe | omm-writer.html | 8321 | 20.3 MB | html2canvas、jsPDF、MathJax、Supabase SDK |
+| OMM-ZenCard.exe | omm-zencard.html | 8323 | — | 无（本地模块） |
+| OMM-ZenFlow.exe | omm-zenflow.html | 8324 | — | 无（本地模块） |
+| OMM-ZenClip.exe | omm-zenclip.html | 8325 | — | 无（本地模块） |
+| OMM-ZenReview.exe | omm-zenreview.html | 8326 | — | 无（本地模块） |
+| OMM-ZenBackup.exe | omm-zenbackup.html | 8327 | — | 无（本地模块） |
 
 单个程序复制到对应系统的电脑即可运行，目标机器不需要 Python、Node 或网络。
 
@@ -230,7 +235,7 @@ macOS:   ~/Library/Application Support/OMM-ZEN/...
 > 上传 Release、让旧版本自更新）请参照 [`RELEASE.md`](RELEASE.md)。
 
 ```powershell
-# 全部重建（11 个单独应用 + 完整版 + 框架 + 安装器）
+# 全部重建（17 个单独应用 + 完整版 + 框架 + 安装器）
 .venv\Scripts\python.exe desktop\build_exes.py --clean
 
 # 只构建框架 / 安装器 / 完整版
@@ -296,13 +301,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee
 Gitee 仓库附件总量只有 **1 GB**，按 Release 累计，不是每个 Release 各自 1 GB。
 当前一个完整版本大致占用：
 
-- Windows 全量（13 个 EXE + 框架 + catalog/模板/规范 + 11 个插件）≈ 490 MB；
-- macOS 28 个资源（26 个 DMG + 2 个框架 zip）≈ 925 MB；
-- 旧版本还会继续占用配额。
+- Windows 全量（18 个 EXE + 框架 + catalog/模板/规范 + 17 个插件）；
+- macOS 每个产品各有 Intel 与 Apple Silicon 两份 DMG，外加框架 zip，资源数随产品增加；
+- 旧版本还会继续占用配额。新增 5 个产品后附件总量较此前更大，发布前按实际产物体积核对配额。
 
 因此 Gitee 无法同时放下 Windows 和 macOS。经验结论：
 
-- **Gitee 只发布 Windows 全量**（28 个附件），确保 EXE、框架、插件和 catalog 完整；
+- **Gitee 只发布 Windows 全量**，确保 EXE、框架、插件和 catalog 完整；
 - **macOS 全量只发布到 GitHub Release**；
 - 上传 macOS 到 Gitee 会返回 `验证失败：文件大小已超出仓库附件配额（1 GB）`，
   不要反复重试，也不要为了腾空间删除当前 Windows 资源；
@@ -320,7 +325,7 @@ macOS 程序必须在 macOS 上构建，不能在 Windows 上交叉编译。仓�
 Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 
 1. 在 Actions 页面手动运行 “Build macOS apps”，传入目标 Release 标签。
-2. 工作流会执行 `python desktop/build_exes.py --clean`，构建 11 个单独应用、
+2. 工作流会执行 `python desktop/build_exes.py --clean`，构建 17 个单独应用、
    完整版、框架和安装器。
 3. 每个 `.app` 打包成 `OMM-<App>-macOS-<arch>.dmg`；框架额外打成
    `OMM-ZEN-Framework-macOS-<arch>.zip`；安装器为

@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
+    <script type="module" src="zen-link.js"></script>
     <script src="vendor/supabase/2/supabase.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>数据工作台</title>
@@ -13260,6 +13261,9 @@ notify pgrst, 'reload schema';</textarea
           authing = false,
           lastHash = '',
           lastDocHash = '',
+          pendingHash = '',
+          pendingDocHash = '',
+          pendingDocChanged = false,
           bootHash = '',
           pollTimer = null,
           pushTimer = null,
@@ -13427,21 +13431,25 @@ notify pgrst, 'reload schema';</textarea
           stopWatcher()
           lastHash = dataHash()
           lastDocHash = docHash()
+          pendingHash = ''
+          pendingDocHash = ''
+          pendingDocChanged = false
           pollTimer = setInterval(function () {
             if (!autoSyncOn || !session || !unlockPassword || syncing) return
             var h = dataHash()
-            if (h === lastHash) return
-            lastHash = h
-            var dH = docHash(),
-              docChanged = dH !== lastDocHash
-            lastDocHash = dH
+            // 失败时保留待推送标记，下一轮轮询继续重试，而不是把变更标记成已同步。
+            if (h === lastHash && h === pendingHash) return
+            pendingHash = h
+            var dH = docHash()
+            pendingDocChanged = dH !== lastDocHash
+            pendingDocHash = dH
             if (pushTimer) clearTimeout(pushTimer)
             pushTimer = setTimeout(function () {
               pushTimer = null
               if (!autoSyncOn || !session || !unlockPassword || syncing) return
               /* 表格内容变了 -> 立刻上传（这是“立即同步”的承诺）；
                  只有外观设置变了 -> 走一次完整判定，避免拿本机旧表格覆盖对端内容 */
-              if (docChanged) autoPush()
+              if (pendingDocChanged) autoPush()
               else autoResolve()
             }, PUSH_DEBOUNCE)
           }, POLL_MS)
@@ -13451,13 +13459,16 @@ notify pgrst, 'reload schema';</textarea
           syncing = true
           try {
             await push()
+            lastHash = pendingHash || dataHash()
+            lastDocHash = pendingDocHash || docHash()
+            pendingHash = ''
+            pendingDocHash = ''
+            pendingDocChanged = false
             setMsg('sync.autoSynced', new Date().toLocaleTimeString())
           } catch (e) {
             setMsg(friendly(e))
           } finally {
             syncing = false
-            lastHash = dataHash()
-            lastDocHash = docHash()
           }
         }
         async function pullQuiet(r) {
@@ -13518,14 +13529,17 @@ notify pgrst, 'reload schema';</textarea
               setMsg('sync.aligned', new Date(state.lastCloudTs).toLocaleString())
             }
             labelKey('sync.synced', true)
+            lastHash = pendingHash || dataHash()
+            lastDocHash = pendingDocHash || docHash()
+            pendingHash = ''
+            pendingDocHash = ''
+            pendingDocChanged = false
           } catch (e) {
             setMsg(friendly(e))
             console.warn('[ZenData Sync] auto resolve failed', e)
           } finally {
             syncing = false
             busy(false)
-            lastHash = dataHash()
-            lastDocHash = docHash()
           }
         }
         function tr(key) {

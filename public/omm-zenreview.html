@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="omm-embed.js"></script>
+    <script src="omm-desktop.js"></script>
+    <script src="omm-share.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>复盘报告</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
+    <link rel="stylesheet" href="zen-ui.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <span class="brand"><span class="glyph">盘</span>ZenReview 复盘报告</span>
+        <span class="spacer"></span>
+        <div class="actions"><button class="btn sm" id="theme-btn">深浅色</button></div>
+      </header>
+      <main class="narrow">
+        <div class="panel">
+          <h2>汇总周期</h2>
+          <div class="row">
+            <label class="field"><span>开始</span><input type="date" id="range-from" /></label>
+            <label class="field"><span>结束</span><input type="date" id="range-to" /></label>
+          </div>
+          <label class="field"><span>标题</span><input id="report-title" value="复盘报告" /></label>
+          <label class="field"><span>手写小结（可选）</span><textarea id="report-notes" placeholder="这周学到了什么……"></textarea></label>
+          <p class="hint">数据来源：ZenCard / ZenClip 的卡片（localStorage）＋ 下方粘贴的 Hub 时间线与 Planner 记录。</p>
+        </div>
+        <div class="grid2">
+          <div class="panel">
+            <h3>Hub 时间线 JSON（可选）</h3>
+            <textarea id="tl-json" placeholder='[{"app":"writer","ts":"2026-01-01T09:00:00Z"}]'></textarea>
+          </div>
+          <div class="panel">
+            <h3>Planner 完成项 JSON（可选）</h3>
+            <textarea id="pl-json" placeholder='[{"title":"写周报","done":true}]'></textarea>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="row tight">
+            <button class="btn primary" id="gen-btn">生成报告</button>
+            <button class="btn" id="copy-btn">复制 Markdown</button>
+            <button class="btn" id="download-btn">下载 .md</button>
+            <button class="btn" id="tocards-btn">导出为知识卡片</button>
+          </div>
+        </div>
+        <div class="panel"><h2>报告预览</h2><pre class="code" id="report-out" style="min-height:220px">点击「生成报告」。</pre></div>
+      </main>
+      <footer class="status"><span><i class="dot"></i>ZenReview · 数据来自本地卡片与时间线</span><span id="status-text"></span></footer>
+    </div>
+    <div id="toast"></div>
+    <script type="module">
+      import { ZenCard } from './zen-card.js'
+      import { ZenReview } from './zen-review.js'
+      const $ = (id) => document.getElementById(id)
+      let last = ''
+      function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800) }
+      function parseArr(id) { try { const v = JSON.parse($(id).value || '[]'); return Array.isArray(v) ? v : [] } catch { return [] } }
+      function cards() {
+        const out = []
+        ;['zen.cards.v1', 'zen.clip.v1'].forEach((k) => { try { out.push(...JSON.parse(localStorage.getItem(k) || '[]')) } catch {} })
+        return out.map(ZenCard.create)
+      }
+      function data() { return { timeline: parseArr('tl-json'), planner: parseArr('pl-json'), cards: cards() } }
+      function range() { return { from: $('range-from').value, to: $('range-to').value } }
+      function bind() {
+        $('theme-btn').addEventListener('click', () => { document.body.classList.toggle('theme-dark'); localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light') })
+        $('gen-btn').addEventListener('click', () => {
+          last = ZenReview.buildReport(data(), { title: $('report-title').value.trim() || '复盘报告', notes: $('report-notes').value, range: range() })
+          $('report-out').textContent = last
+          const s = ZenReview.summarize(data(), range())
+          $('status-text').textContent = `${s.events} 条动态 · ${s.cards} 张卡片 · ${s.done} 项完成`
+          toast('报告已生成')
+        })
+        $('copy-btn').addEventListener('click', async () => { if (!last) return toast('先生成报告'); try { await navigator.clipboard.writeText(last); toast('已复制') } catch { toast('复制失败') } })
+        $('download-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([last], { type: 'text/markdown' })); a.download = 'review.md'; a.click(); URL.revokeObjectURL(a.href) })
+        $('tocards-btn').addEventListener('click', () => {
+          if (!last) return toast('先生成报告')
+          const card = ZenCard.create({ source: 'manual', kind: 'note', content: last, note: '复盘报告', tags: ['复盘'] })
+          const list = cards().concat(card)
+          localStorage.setItem('zen.cards.v1', JSON.stringify(list))
+          toast('已存入 ZenCard 卡片库')
+        })
+      }
+      if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
+      const today = new Date().toISOString().slice(0, 10)
+      $('range-to').value = today
+      $('range-from').value = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+      bind()
+    </script>
+  </body>
+</html>

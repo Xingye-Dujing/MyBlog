@@ -19,6 +19,33 @@
 
   if (embedded) document.documentElement.classList.add('omm-embed');
 
+  /* The hub passes its real origin in the iframe URL so replies can use an
+     explicit targetOrigin (the parent lives on a different loopback port). */
+  var hubOrigin = '';
+  try {
+    var rawHub = new URLSearchParams(window.location.search).get('omm_hub_origin');
+    if (rawHub) {
+      var parsed = new URL(rawHub);
+      if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsed.hostname) >= 0) {
+        hubOrigin = parsed.origin;
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  function parentTargetOrigin() { return hubOrigin || '*'; }
+  function isTrustedParentOrigin(origin) {
+    if (hubOrigin) return origin === hubOrigin;
+    try {
+      var u = new URL(String(origin || ''));
+      return (u.protocol === 'http:' || u.protocol === 'https:') &&
+        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /* Hide the splash before first paint; the enter handler still runs below. */
   var style = document.createElement('style');
   style.id = 'omm-embed-style';
@@ -33,7 +60,7 @@
       }
     }
     try {
-      window.parent.postMessage(msg, '*');
+      window.parent.postMessage(msg, parentTargetOrigin());
     } catch (e) {
       /* ignore */
     }
@@ -46,7 +73,7 @@
       'pointerdown',
       function () {
         try {
-          window.parent.postMessage({ type: 'omm:pointerdown' }, '*');
+          window.parent.postMessage({ type: 'omm:pointerdown' }, parentTargetOrigin());
         } catch (e) {
           /* ignore */
         }
@@ -70,6 +97,8 @@
       });
     }
     window.addEventListener('message', function (event) {
+      if (event.source !== window.parent) return;
+      if (!isTrustedParentOrigin(event.origin)) return;
       var data = event.data;
       if (!data || data.type !== 'omm:load-file') return;
       takeFile(data);

@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
+    <script type="module" src="zen-link.js"></script>
     <script src="vendor/supabase/2/supabase.js"></script>
     <meta
       name="viewport"
@@ -7509,13 +7510,13 @@ notify pgrst, 'reload schema';</textarea
             const i = tableBlocks.length
             tableBlocks.push(
               '<table><thead><tr>' +
-                head.map((x) => '<th>' + x + '</th>').join('') +
+                head.map((x) => '<th>' + esc(x) + '</th>').join('') +
                 '</tr></thead><tbody>' +
                 body
                   .map(
                     (r) =>
                       '<tr>' +
-                      head.map((_, j) => '<td>' + (r[j] || '') + '</td>').join('') +
+                      head.map((_, j) => '<td>' + esc(r[j] || '') + '</td>').join('') +
                       '</tr>',
                   )
                   .join('') +
@@ -8233,6 +8234,25 @@ ${extra}`
             gotContent = !!split.content
             onChunk({ ...split, gotAny, gotContent })
           }
+          // 定义在循环外：末尾未以空行结束的残留块也要用同一个回调处理。
+          const handleEvent = (j) => {
+            const choice = j?.choices?.[0]
+            const delta = choice?.delta || {}
+            const c = typeof delta.content === 'string' ? delta.content : ''
+            const rc = typeof delta.reasoning_content === 'string' ? delta.reasoning_content : ''
+            if (rc) appendReasoningDelta(state, rc)
+            const rd = Array.isArray(delta.reasoning_details) ? delta.reasoning_details : []
+            for (const item of rd) {
+              if (item?.type === 'reasoning.summary' && item.summary)
+                appendReasoningDelta(state, String(item.summary))
+              else if (item?.type === 'reasoning.text' && item.text)
+                appendReasoningDelta(state, String(item.text))
+            }
+            if (c) full += c
+            if (rc || rd.length || c) emit()
+            const finish = choice?.finish_reason
+            if (finish) return
+          }
           while (!done) {
             const { value, done: rdDone } = await reader.read()
             if (rdDone) break
@@ -8240,32 +8260,15 @@ ${extra}`
             const blocks = buffer.split(/\r?\n\r?\n/)
             buffer = blocks.pop() || ''
             for (const block of blocks) {
-              const stop = parseSSEBlock(block, (j) => {
-                const choice = j?.choices?.[0]
-                const delta = choice?.delta || {}
-                const c = typeof delta.content === 'string' ? delta.content : ''
-                const rc =
-                  typeof delta.reasoning_content === 'string' ? delta.reasoning_content : ''
-                if (rc) appendReasoningDelta(state, rc)
-                const rd = Array.isArray(delta.reasoning_details) ? delta.reasoning_details : []
-                for (const item of rd) {
-                  if (item?.type === 'reasoning.summary' && item.summary)
-                    appendReasoningDelta(state, String(item.summary))
-                  else if (item?.type === 'reasoning.text' && item.text)
-                    appendReasoningDelta(state, String(item.text))
-                }
-                if (c) full += c
-                if (rc || rd.length || c) emit()
-                const finish = choice?.finish_reason
-                if (finish) return
-              })
+              const stop = parseSSEBlock(block, handleEvent)
               if (stop) {
                 done = true
                 break
               }
             }
           }
-          if (buffer.trim() && !done) parseSSEBlock(buffer, () => {})
+          // 末尾未以空行结束的 SSE 块也要用真实回调处理，否则最后一段正文会丢失。
+          if (buffer.trim() && !done) parseSSEBlock(buffer, handleEvent)
           emit()
           window.__corpusAbort = null
           S.stats.aiHits = (S.stats.aiHits || 0) + 1
@@ -9850,6 +9853,7 @@ ${extra}`
           syncing = false,
           authing = false,
           lastHash = '',
+          pendingHash = '',
           pollTimer = null,
           pushTimer = null
 
@@ -9990,11 +9994,13 @@ ${extra}`
         function startWatcher() {
           stopWatcher()
           lastHash = dataHash()
+          pendingHash = ''
           pollTimer = setInterval(function () {
             if (!autoSyncOn || !session || !unlockPassword || syncing) return
             var h = dataHash()
-            if (h === lastHash) return
-            lastHash = h
+            // 只在真正推送成功后才推进 lastHash；失败时保留待推送标记，下一轮重试。
+            if (h === lastHash && h === pendingHash) return
+            pendingHash = h
             if (pushTimer) clearTimeout(pushTimer)
             pushTimer = setTimeout(function () {
               pushTimer = null
@@ -10007,12 +10013,13 @@ ${extra}`
           syncing = true
           try {
             await push()
+            lastHash = pendingHash || dataHash()
+            pendingHash = ''
             setStatus('已自动同步到云端：' + new Date().toLocaleTimeString())
           } catch (e) {
             setStatus(friendly(e))
           } finally {
             syncing = false
-            lastHash = dataHash()
           }
         }
         async function pullQuiet(r) {

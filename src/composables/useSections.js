@@ -118,23 +118,36 @@ export function useSections(chat, messagesContainer) {
     if (!messagesContainer.value || !sections.value.length || !chat.value) return
     const container = messagesContainer.value
     const messageElements = container.querySelectorAll('.message-wrapper')
-    let currentActiveId = null
+    if (!messageElements.length) return
+    const containerRect = container.getBoundingClientRect()
+    // 取「顶部已越过阅读线」的最后一条消息：即便某条消息很高、顶部在线上方，
+    // 也能稳定映射到它所属分区，避免导览高亮短暂消失。
+    const readingLine = containerRect.top + Math.min(120, containerRect.height / 3)
+    let activeMsgIndex = -1
     for (let i = 0; i < messageElements.length; i++) {
-      const el = messageElements[i]
-      const rect = el.getBoundingClientRect()
-      const containerRect = container.getBoundingClientRect()
-      if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
-        const msgId = el.dataset.msgId
-        const msgIndex = chat.value.messages.findIndex((m) => m.id === msgId)
-        const section =
-          msgIndex === -1
-            ? null
-            : sections.value.find((s) => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex)
-        if (section && section.headingMsgIndex !== null) {
-          currentActiveId = section.id
-          break
-        }
+      if (messageElements[i].getBoundingClientRect().top <= readingLine) {
+        activeMsgIndex = i
+      } else {
+        break
       }
+    }
+    if (activeMsgIndex === -1) activeMsgIndex = 0
+
+    const activeMsgId = messageElements[activeMsgIndex].dataset.msgId
+    const msgIndex = chat.value.messages.findIndex((m) => m.id === activeMsgId)
+    const section =
+      msgIndex === -1
+        ? null
+        : sections.value.find(
+            (s) => s.headingMsgIndex !== null && msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex,
+          )
+    // 回退到最近的上一个带标题的分区，保证「开头」之前的消息也有高亮。
+    let currentActiveId = section?.id ?? null
+    if (!currentActiveId && msgIndex > -1) {
+      const previous = [...sections.value]
+        .reverse()
+        .find((s) => s.headingMsgIndex !== null && s.startMsgIndex <= msgIndex)
+      currentActiveId = previous?.id ?? null
     }
     if (currentActiveId !== activeHeadingId.value) activeHeadingId.value = currentActiveId
   }

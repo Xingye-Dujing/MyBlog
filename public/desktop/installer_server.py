@@ -304,12 +304,19 @@ class InstallerHandler(QuietHandler):
         self.wfile.write(body)
 
     def _body(self) -> bytes:
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            raise PluginError("请求体无效")
         if length <= 0 or length > 1024 * 1024:
             raise PluginError("请求体无效")
         return self.rfile.read(length)
 
     def do_GET(self):  # noqa: N802
+        import omm_shared
+        if not omm_shared.request_is_local(self):
+            self._reply(403, {"ok": False, "error": "仅允许本机访问"})
+            return
         parsed = urlsplit(self.path)
         try:
             if parsed.path == "/api/config":
@@ -340,6 +347,10 @@ class InstallerHandler(QuietHandler):
         return super().do_GET()
 
     def do_POST(self):  # noqa: N802
+        import omm_shared
+        if not omm_shared.request_is_local(self):
+            self._reply(403, {"ok": False, "error": "仅允许本机访问"})
+            return
         parsed = urlsplit(self.path)
         try:
             if parsed.path == "/api/install":

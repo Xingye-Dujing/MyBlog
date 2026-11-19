@@ -4,7 +4,43 @@
 > 每段都是**自包含**的：含硬性门槛、字段骨架和一个最小合法示例，AI 不需要再读完整规范就能产出可导入文件。
 > 交付物一律 **UTF-8、合法、无注释、无尾逗号、无 markdown 代码围栏**（LaTeX 项是 `.tex` 纯文本）。
 
-索引：[Writer 画布](#writer) · [Annotate 批注](#annotate) · [Corpus 语料](#corpus) · [Data 数据](#data) · [English 词库](#english) · [Planner 计划](#planner) · [Visualization 属性](#visualization) · [Latex 文档](#latex) · [Redact/Message 说明](#不适用)
+索引：[ZenCard 通用卡片](#zencard) · [Writer 画布](#writer) · [Annotate 批注](#annotate) · [Corpus 语料](#corpus) · [Data 数据](#data) · [English 词库](#english) · [Planner 计划](#planner) · [Visualization 属性](#visualization) · [Latex 文档](#latex) · [Redact/Message 说明](#不适用)
+
+---
+
+<a id="zencard"></a>
+## ZenCard（zen-card.js · 跨产品通用知识卡片包 `.json`）
+
+```text
+你要生成一个 ZenCard 知识卡片包（.json，UTF-8），供各 OMM-ZEN 产品导入。只输出 JSON，不要代码围栏/注释/尾逗号。
+
+顶层硬性：
+{ "format":"zen-card-pack", "v":1, "name":"包名", "cards":[...] }
+format 一字不差、v 是数字 1、cards 是数组。
+
+每张卡片必须有：
+- "format":"zen-card"、"v":1
+- "id"：唯一标识（如 zc-1、zc-2，绝不重复）
+- "kind"：quote|note|word|sentence|idea|todo|fact|image 之一
+- "source"：manual|writer|annotate|corpus|english|search|data|web|clip 之一
+- "content"：非空正文（trim 后不能为空）
+- "tags"：字符串数组（可空）
+- "createdAt"/"updatedAt"：ISO 8601（如 2026-01-02T03:04:05.000Z）
+
+可选字段（可整体省略）："ref"（出处）、"translation"（译文/释义）、"note"（批注）、
+"color"（#rrggbb）、"links":[{"rel":"related","id":"另一卡片id"}]、"image"（图片地址）。
+
+最小示例（照此结构）：
+{
+  "format":"zen-card-pack","v":1,"name":"最小示例",
+  "cards":[
+    {"format":"zen-card","v":1,"id":"zc-1","kind":"quote","source":"annotate",
+     "ref":"论文 p.12","content":"知识是思考的沉淀。","translation":"","note":"可作写作引用",
+     "tags":["精读"],"color":"","createdAt":"2026-01-02T03:04:05.000Z","updatedAt":"2026-01-02T03:04:05.000Z"}
+  ]
+}
+自查：format/v 正确；每张卡 content 非空；kind/source 在枚举内；id 唯一；时间是 ISO 8601。
+```
 
 ---
 

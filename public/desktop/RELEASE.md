@@ -124,7 +124,7 @@ cd D:\blog\web\public
 
 产出（`dist/`）：
 
-- **13 个 EXE**：11 个产品 + `OMM-ZEN.exe`（完整版工作台）+ `OMM-ZEN-Setup.exe`（安装器）
+- **18 个 EXE**：17 个产品 + `OMM-ZEN.exe`（完整版工作台）+ `OMM-ZEN-Setup.exe`（安装器）
 - `OMM-ZEN-Framework-win64.zip`（框架版工作台，给在线安装器用）+ `dist/framework/OMM-ZEN.exe`
 
 顺序有讲究：先 `framework`，再全部产品，最后 `hub` / `installer`。
@@ -158,7 +158,7 @@ cd D:\blog\web\public
 .venv\Scripts\python.exe desktop\build_plugins.py --tag v1.0.17
 ```
 
-产出 `dist/plugins/plugin-<id>-1.0.6.zip`（11 个）、`dist/catalog.json`、
+产出 `dist/plugins/plugin-<id>-1.0.6.zip`（17 个）、`dist/catalog.json`、
 `dist/plugin-template.zip`、`dist/plugin-spec.md`，以及源码运行用的
 `build/plugin-dirs/`（集成器在这里找内置插件）。
 

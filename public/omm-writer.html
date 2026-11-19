@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
+    <script type="module" src="zen-link.js"></script>
     <script src="vendor/supabase/2/supabase.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>所思所想</title>
@@ -8726,6 +8727,20 @@ notify pgrst, 'reload schema';</textarea
             })
             // 关键：别的画布可能也引用着同一个 assetId。
             // 只看当前 DOM 会把那些资产删掉，那边就变成死链了。
+            // 文档已迁移到 IndexedDB，必须枚举其中所有文档；旧的 zc-doc:
+            // localStorage 兼容扫描保留，用于尚未迁移的老数据。
+            try {
+              if (window.ZWStore && typeof window.ZWStore.library === 'function') {
+                const lib = await window.ZWStore.library()
+                const docs = (lib && lib.docs) || {}
+                Object.keys(docs).forEach((id) => {
+                  const nodes = (docs[id] && docs[id].nodes) || []
+                  nodes.forEach((n) => {
+                    if (n && n.assetId) ids.add(n.assetId)
+                  })
+                })
+              }
+            } catch (_) {}
             try {
               for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i)
@@ -20254,7 +20269,20 @@ notify pgrst, 'reload schema';</textarea
                   name: rec.archive.name,
                   label: rec.archive.label,
                 },
-                '*',
+                (function () {
+                  // 工作台把自身 origin 放进 iframe URL；跨端口时不能用 '*' 回执。
+                  try {
+                    var raw = new URLSearchParams(location.search).get('omm_hub_origin')
+                    if (raw) {
+                      var u = new URL(raw)
+                      if ((u.protocol === 'http:' || u.protocol === 'https:') &&
+                          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) {
+                        return u.origin
+                      }
+                    }
+                  } catch (_) {}
+                  return '*'
+                })(),
               )
             } catch (_) {}
           },
@@ -23567,6 +23595,7 @@ notify pgrst, 'reload schema';</textarea
           syncing = false,
           authing = false,
           lastHash = '',
+          pendingHash = '',
           hashBusy = false,
           pollTimer = null,
           pushTimer = null,
@@ -23734,6 +23763,7 @@ notify pgrst, 'reload schema';</textarea
         function startWatcher() {
           stopWatcher()
           lastHash = ''
+          pendingHash = ''
           dataHash().then(function (h) {
             lastHash = h
           })
@@ -23745,8 +23775,9 @@ notify pgrst, 'reload schema';</textarea
             hashBusy = true
             dataHash().then(function (h) {
               hashBusy = false
-              if (h === lastHash) return
-              lastHash = h
+              // 只在推送成功后推进 lastHash；失败保留待推送标记以便重试。
+              if (h === lastHash && h === pendingHash) return
+              pendingHash = h
               if (pushTimer) clearTimeout(pushTimer)
               pushTimer = setTimeout(function () {
                 pushTimer = null
@@ -23760,14 +23791,14 @@ notify pgrst, 'reload schema';</textarea
           syncing = true
           try {
             await push()
+            const h = await dataHash()
+            lastHash = pendingHash || h
+            pendingHash = ''
             setMsg('sync.autoSynced', new Date().toLocaleTimeString())
           } catch (e) {
             setMsg(friendly(e))
           } finally {
             syncing = false
-            dataHash().then(function (h) {
-              lastHash = h
-            })
           }
         }
         async function pullQuiet(r) {
@@ -23807,13 +23838,14 @@ notify pgrst, 'reload schema';</textarea
               setMsg('sync.localPushed')
             }
             labelKey('sync.synced', true)
+            lastHash = pendingHash || (await dataHash())
+            pendingHash = ''
           } catch (e) {
             if (!abortOnDecryptError(e)) setMsg(friendly(e))
             console.warn('[ZenWriter Sync] auto resolve failed', e)
           } finally {
             syncing = false
             busy(false)
-            lastHash = await dataHash()
           }
         }
         var SYNC_I18N = {

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="omm-embed.js"></script>
+    <script src="omm-desktop.js"></script>
+    <script src="omm-share.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>间隔复习</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
+    <link rel="stylesheet" href="zen-ui.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <span class="brand"><span class="glyph">卡</span>ZenCard 间隔复习</span>
+        <nav class="tabs" id="tabs">
+          <button data-view="review" class="active">复习</button>
+          <button data-view="library">卡片库</button>
+          <button data-view="graph">关系图</button>
+          <button data-view="io">导入导出</button>
+        </nav>
+        <span class="spacer"></span>
+        <div class="actions"><button class="btn sm" id="theme-btn">深浅色</button></div>
+      </header>
+
+      <main class="narrow">
+        <section class="view active" id="view-review">
+          <div class="panel">
+            <h2>今日复习</h2>
+            <div id="review-stats" class="muted"></div>
+          </div>
+          <div id="review-area"></div>
+        </section>
+
+        <section class="view" id="view-library">
+          <div class="panel">
+            <h2>新建卡片</h2>
+            <label class="field"><span>内容</span><textarea id="new-content" placeholder="要记住的一句话 / 单词 / 摘录"></textarea></label>
+            <div class="row">
+              <label class="field"><span>译文 / 释义</span><input id="new-translation" placeholder="可选" /></label>
+              <label class="field"><span>批注</span><input id="new-note" placeholder="可选" /></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>类型</span><select id="new-kind"></select></label>
+              <label class="field"><span>来源</span><select id="new-source"></select></label>
+              <label class="field"><span>标签（逗号分隔）</span><input id="new-tags" placeholder="精读,备考" /></label>
+            </div>
+            <button class="btn primary" id="add-card">添加卡片</button>
+          </div>
+          <div class="panel">
+            <h2>卡片库 <span id="lib-count" class="badge">0</span></h2>
+            <input id="lib-search" placeholder="搜索内容 / 标签 / 出处" style="margin-bottom:10px" />
+            <div class="list" id="card-list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-graph">
+          <div class="panel">
+            <h2>知识图谱</h2>
+            <p class="hint">连线来自卡片的 links 字段；同标签的卡片也会自动相连。点击节点查看内容。</p>
+            <canvas id="graph-canvas" width="860" height="520" style="width:100%;border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--panel)"></canvas>
+            <div id="graph-detail" class="hint" style="margin-top:8px">点选一个节点。</div>
+          </div>
+        </section>
+
+        <section class="view" id="view-io">
+          <div class="grid2">
+            <div class="panel">
+              <h2>导入卡片包</h2>
+              <p class="hint">粘贴 zen-card-pack JSON，或选择 .json 文件。</p>
+              <textarea id="import-text" placeholder='{"format":"zen-card-pack","v":1,"cards":[...]}'></textarea>
+              <div class="row tight" style="margin-top:8px">
+                <button class="btn" id="import-btn">导入</button>
+                <label class="btn" style="display:inline-flex;align-items:center;justify-content:center">选择文件<input type="file" id="import-file" accept=".json" hidden /></label>
+              </div>
+            </div>
+            <div class="panel">
+              <h2>导出</h2>
+              <p class="hint">导出全部卡片为 zen-card-pack，供其他产品导入。</p>
+              <div class="row tight">
+                <button class="btn primary" id="export-btn">下载 .json</button>
+                <button class="btn" id="copy-btn">复制 JSON</button>
+              </div>
+              <h3>复习进度</h3>
+              <p class="muted" id="srs-info"></p>
+              <button class="btn sm" id="srs-export">导出进度</button>
+              <label class="btn sm" style="display:inline-flex;align-items:center;justify-content:center">导入进度<input type="file" id="srs-import" accept=".json" hidden /></label>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="status"><span><i class="dot"></i>ZenCard · 数据仅存本地</span><span id="status-text"></span></footer>
+    </div>
+    <div id="toast"></div>
+
+    <script type="module">
+      import { ZenCard } from './zen-card.js'
+      import { ZenSRS } from './zen-srs.js'
+
+      const CARD_KEY = 'zen.cards.v1'
+      const SRS_KEY = 'zen.srs.v1'
+      const $ = (id) => document.getElementById(id)
+      let cards = []
+      let srs = []
+      let current = null
+      let revealed = false
+
+      function toast(msg) {
+        const t = $('toast')
+        t.textContent = msg
+        t.classList.add('show')
+        clearTimeout(toast._t)
+        toast._t = setTimeout(() => t.classList.remove('show'), 1800)
+      }
+      function load() {
+        try { cards = JSON.parse(localStorage.getItem(CARD_KEY) || '[]') } catch { cards = [] }
+        try { srs = JSON.parse(localStorage.getItem(SRS_KEY) || '[]') } catch { srs = [] }
+        cards = cards.map((c) => ZenCard.create(c))
+        srs = ZenSRS.fromCards(cards, Date.now()).map((s) => {
+          const old = srs.find((x) => x && x.id === s.id)
+          return old || s
+        })
+      }
+      function save() {
+        localStorage.setItem(CARD_KEY, JSON.stringify(cards))
+        localStorage.setItem(SRS_KEY, JSON.stringify(srs))
+      }
+
+      function renderStats() {
+        const s = ZenSRS.stats(srs, Date.now())
+        $('review-stats').textContent =
+          `共 ${s.total} 张 · 已掌握 ${s.learned} · 学习中 ${s.learning} · 待复习 ${s.due} · 平均易度 ${s.avgEase} · 遗忘 ${s.lapses}`
+        $('srs-info').textContent = `已记录 ${s.total} 张卡片的复习进度，平均易度 ${s.avgEase}。`
+        $('lib-count').textContent = cards.length
+      }
+
+      function renderReview() {
+        const due = ZenSRS.dueQueue(srs, Date.now())
+        const area = $('review-area')
+        if (!due.length) {
+          area.innerHTML = '<div class="empty">暂时没有到期卡片。去「卡片库」添加，或稍后再来。</div>'
+          current = null
+          return
+        }
+        const state = due[0]
+        const card = cards.find((c) => c.id === state.id)
+        if (!card) {
+          srs = srs.filter((s) => s.id !== state.id)
+          save()
+          return renderReview()
+        }
+        current = state
+        revealed = false
+        area.innerHTML =
+          '<div class="flash"><div class="q"></div><div class="a hide"></div></div>' +
+          '<div class="grades">' +
+          ['again:再次', 'hard:困难', 'good:良好', 'good:简单'].map((g) => {
+            const [k, label] = g.split(':')
+            return `<button data-g="${k === 'good' && label === '简单' ? 'easy' : k}" class="${label === '良好' || label === '简单' ? 'good' : ''}">${label}</button>`
+          }).join('') +
+          '</div><p class="hint" style="margin-top:10px">点击卡片显示答案，再选择掌握程度。再次 = 10 分钟后重来。</p>'
+        const q = area.querySelector('.q')
+        q.textContent = card.content
+        const a = area.querySelector('.a')
+        a.textContent = [card.translation && '译：' + card.translation, card.note && '批注：' + card.note,
+          card.tags.length && '#' + card.tags.join(' #'), card.ref && '出处：' + card.ref].filter(Boolean).join('\n')
+        area.querySelector('.flash').addEventListener('click', () => {
+          revealed = !revealed
+          a.classList.toggle('hide', !revealed)
+          a.classList.toggle('show', revealed)
+        })
+        area.querySelectorAll('.grades button').forEach((b) => {
+          b.addEventListener('click', () => {
+            if (!revealed) { toast('先看答案再评分'); return }
+            srs = ZenSRS.update(srs, current.id, b.dataset.g, Date.now())
+            save()
+            renderStats()
+            renderReview()
+          })
+        })
+      }
+
+      function renderLibrary() {
+        const q = $('lib-search').value.trim().toLowerCase()
+        const list = cards.filter((c) =>
+          !q || (c.content + ' ' + c.translation + ' ' + c.note + ' ' + c.tags.join(' ') + ' ' + c.ref).toLowerCase().includes(q)
+        )
+        const box = $('card-list')
+        if (!list.length) { box.innerHTML = '<div class="empty">没有卡片</div>'; return }
+        box.innerHTML = list.map((c) => {
+          const st = srs.find((s) => s.id === c.id) || {}
+          return `<div class="item" data-id="${c.id}">
+            <div class="body"><div class="title">${escape(c.content)}</div>
+              <div class="meta">${escape(c.kind)} · ${escape(c.source)} · 重复 ${st.reps || 0} · ${c.tags.map((t) => '#' + escape(t)).join(' ')}</div>
+              ${c.translation ? '<div class="meta">' + escape(c.translation) + '</div>' : ''}
+            </div>
+            <div class="ops"><button class="btn sm" data-act="send">发送</button><button class="btn sm danger" data-act="del">删</button></div>
+          </div>`
+        }).join('')
+        box.querySelectorAll('.item').forEach((el) => {
+          el.querySelector('[data-act="del"]').addEventListener('click', () => {
+            cards = cards.filter((c) => c.id !== el.dataset.id)
+            srs = srs.filter((s) => s.id !== el.dataset.id)
+            save(); renderLibrary(); renderStats(); renderReview()
+          })
+          el.querySelector('[data-act="send"]').addEventListener('click', () => {
+            const card = cards.find((c) => c.id === el.dataset.id)
+            const target = prompt('发送到哪个产品？\nwriter / corpus / english / annotate / data', 'writer')
+            if (!target) return
+            if (window.OMMShare && window.OMMShare.send) {
+              window.OMMShare.send({ to: target, format: 'zen-card', title: card.content.slice(0, 30), payload: card })
+                .then(() => toast('已发送给 ' + target))
+                .catch(() => toast('发送失败（离线环境可导出 JSON）'))
+            } else toast('当前环境无法发送，请用「导入导出」')
+          })
+        })
+      }
+      function renderGraph() {
+        const canvas = $('graph-canvas')
+        if (!canvas || !canvas.getContext) return
+        const ctx = canvas.getContext('2d')
+        const W = canvas.width, H = canvas.height
+        ctx.clearRect(0, 0, W, H)
+        const list = cards.slice(0, 60)
+        if (!list.length) { $('graph-detail').textContent = '还没有卡片。'; return }
+        const pos = list.map((c, i) => {
+          const a = (i / list.length) * Math.PI * 2
+          return { x: W / 2 + Math.cos(a) * (W / 2 - 90), y: H / 2 + Math.sin(a) * (H / 2 - 70), card: c }
+        })
+        const edges = []
+        list.forEach((c, i) => {
+          (Array.isArray(c.links) ? c.links : []).forEach((l) => {
+            const j = list.findIndex((x) => x.id === l.id)
+            if (j >= 0 && j !== i) edges.push([i, j])
+          })
+        })
+        for (let i = 0; i < list.length; i++) {
+          for (let j = i + 1; j < list.length; j++) {
+            const a = list[i].tags || [], b = list[j].tags || []
+            if (a.some((t) => b.indexOf(t) >= 0)) edges.push([i, j])
+          }
+        }
+        ctx.strokeStyle = 'rgba(120,110,100,0.35)'
+        ctx.lineWidth = 1
+        edges.forEach(([i, j]) => {
+          ctx.beginPath(); ctx.moveTo(pos[i].x, pos[i].y); ctx.lineTo(pos[j].x, pos[j].y); ctx.stroke()
+        })
+        pos.forEach((p, i) => {
+          ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2)
+          ctx.fillStyle = p.card.color || '#b56545'; ctx.fill()
+          ctx.strokeStyle = '#000'; ctx.stroke()
+          ctx.fillStyle = 'rgba(0,0,0,0.55)'
+          ctx.font = '11px sans-serif'
+          ctx.fillText(p.card.kind, p.x + 12, p.y + 4)
+        })
+        canvas.onclick = (e) => {
+          const r = canvas.getBoundingClientRect()
+          const x = (e.clientX - r.left) * (W / r.width)
+          const y = (e.clientY - r.top) * (H / r.height)
+          const hit = pos.find((p) => Math.hypot(p.x - x, p.y - y) < 16)
+          if (hit) $('graph-detail').textContent = hit.card.kind + ' · ' + hit.card.content.slice(0, 200)
+        }
+      }
+
+      function escape(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]))
+      }
+
+      function fillSelects() {
+        $('new-kind').innerHTML = ZenCard.KINDS.map((k) => `<option value="${k}">${k}</option>`).join('')
+        $('new-source').innerHTML = ZenCard.SOURCES.map((k) => `<option value="${k}">${k}</option>`).join('')
+        $('new-kind').value = 'quote'
+        $('new-source').value = 'manual'
+      }
+
+      function bind() {
+        $('tabs').addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-view]')
+          if (!btn) return
+          $('tabs').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn))
+          document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + btn.dataset.view))
+          if (btn.dataset.view === 'review') renderReview()
+          if (btn.dataset.view === 'graph') renderGraph()
+        })
+        $('theme-btn').addEventListener('click', () => {
+          document.body.classList.toggle('theme-dark')
+          localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light')
+        })
+        $('lib-search').addEventListener('input', renderLibrary)
+        $('add-card').addEventListener('click', () => {
+          const content = $('new-content').value.trim()
+          if (!content) { toast('内容不能为空'); return }
+          const card = ZenCard.create({
+            content, translation: $('new-translation').value, note: $('new-note').value,
+            kind: $('new-kind').value, source: $('new-source').value,
+            tags: $('new-tags').value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+          })
+          cards.push(card)
+          srs.push(ZenSRS.createState(card.id, Date.now()))
+          save(); renderLibrary(); renderStats(); renderReview()
+          $('new-content').value = ''; $('new-translation').value = ''; $('new-note').value = ''
+          toast('已添加卡片')
+        })
+        $('export-btn').addEventListener('click', () => {
+          const blob = new Blob([ZenCard.serializePack(cards, { name: 'ZenCard 导出' }, true)], { type: 'application/json' })
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+          a.download = 'zencard-pack.json'; a.click(); URL.revokeObjectURL(a.href)
+        })
+        $('copy-btn').addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(ZenCard.serializePack(cards, { name: 'ZenCard 导出' }, true)); toast('已复制') }
+          catch { toast('复制失败') }
+        })
+        $('import-btn').addEventListener('click', () => {
+          try {
+            const pack = ZenCard.parsePack($('import-text').value)
+            cards = ZenCard.merge(cards.concat(pack.cards))
+            syncSrs(); save(); renderLibrary(); renderStats(); renderReview()
+            toast('导入 ' + pack.cards.length + ' 张卡片')
+          } catch (e) { toast('导入失败：' + e.message) }
+        })
+        $('import-file').addEventListener('change', async (e) => {
+          const f = e.target.files[0]; if (!f) return
+          $('import-text').value = await f.text(); $('import-btn').click()
+        })
+        $('srs-export').addEventListener('click', () => {
+          const blob = new Blob([ZenSRS.serialize(srs)], { type: 'application/json' })
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+          a.download = 'zen-srs.json'; a.click(); URL.revokeObjectURL(a.href)
+        })
+        $('srs-import').addEventListener('change', async (e) => {
+          const f = e.target.files[0]; if (!f) return
+          try {
+            const incoming = ZenSRS.deserialize(await f.text())
+            const map = Object.create(null); srs.concat(incoming).forEach((s) => { map[s.id] = s })
+            srs = Object.keys(map).map((k) => map[k]); save(); renderStats(); renderReview(); toast('进度已导入')
+          } catch (err) { toast('导入失败：' + err.message) }
+        })
+      }
+      function syncSrs() {
+        const ids = Object.create(null)
+        cards.forEach((c) => { ids[c.id] = 1; if (!srs.find((s) => s.id === c.id)) srs.push(ZenSRS.createState(c.id, Date.now())) })
+        srs = srs.filter((s) => ids[s.id])
+      }
+
+      if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
+      load(); fillSelects(); bind(); renderStats(); renderReview(); renderLibrary()
+      $('status-text').textContent = '卡片 ' + cards.length + ' 张'
+    </script>
+  </body>
+</html>

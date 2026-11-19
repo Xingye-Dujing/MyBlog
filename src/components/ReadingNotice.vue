@@ -16,6 +16,7 @@ onMounted(() => {
   if (dismissed !== 'true') {
     previouslyFocused = document.activeElement
     visible.value = true
+    document.body.style.overflow = 'hidden'
     nextTick(() => closeBtn.value?.focus())
   }
   window.addEventListener('keydown', handleKeydown)
@@ -23,6 +24,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
 })
 
 function handleKeydown(e) {
@@ -49,6 +51,7 @@ function handleKeydown(e) {
 
 function close() {
   visible.value = false
+  document.body.style.overflow = ''
   previouslyFocused?.focus?.()
   previouslyFocused = null
 }

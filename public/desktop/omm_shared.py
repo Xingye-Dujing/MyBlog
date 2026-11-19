@@ -17,6 +17,7 @@ programs can write to it at the same time.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import io
 import json
 import mimetypes
@@ -42,6 +43,66 @@ except Exception:  # pragma: no cover - keeps the module importable by itself
 
     def app_data_base() -> Path:  # type: ignore[misc]
         return Path.home() / ".omm-zen"
+
+
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+CLOUD_METADATA_HOSTS = {"metadata.google.internal", "metadata", "instance-data"}
+
+
+def remote_url_is_public(url: str, allow_private: bool = False) -> bool:
+    """Reject URLs that would let a local service reach loopback/private hosts.
+
+    Used for the user-supplied WebDAV endpoint (SSRF guard). A hostname that is
+    not a literal IP is accepted by default — resolving it here would be racy
+    and a DNS-based bypass is still possible; literal loopback/private/metadata
+    targets (the common attack) are blocked outright. Set
+    ``OMM_CLOUD_ALLOW_PRIVATE=1`` for a legitimate LAN WebDAV server.
+    """
+    try:
+        parsed = urlsplit(str(url or "").strip())
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    host = parsed.hostname.lower().rstrip(".")
+    if host in CLOUD_METADATA_HOSTS or host.endswith(".internal") or host.endswith(".local"):
+        return False
+    if host in LOOPBACK_HOSTS or host.endswith(".localhost"):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True  # DNS name; cannot be checked reliably without a lookup
+    if allow_private:
+        return True
+    return ip.is_global
+
+
+def request_is_local(handler) -> bool:
+    """桌面桥仅接受来自本机 loopback 的请求。
+
+    同时校验 Host（阻断 DNS rebinding）与 Origin（阻断其他网站发来的跨站
+    POST/CSRF）。同源页面与不带 Origin 的非浏览器客户端（脚本 / 桌面壳）
+    均放行；沙箱 iframe / file:// 的 opaque origin ``null`` 一律拒绝。
+    """
+    try:
+        host = (urlsplit("//" + (handler.headers.get("Host") or "").strip()).hostname or "").lower()
+    except Exception:
+        host = ""
+    if host not in LOOPBACK_HOSTS:
+        return False
+    origin = (handler.headers.get("Origin") or "").strip()
+    if not origin:
+        return True
+    if origin == "null":
+        return False
+    try:
+        origin_host = (urlsplit(origin).hostname or "").lower()
+    except Exception:
+        return False
+    return origin_host in LOOPBACK_HOSTS
 
 
 API_VERSION = 1
@@ -564,6 +625,29 @@ def _inside(path: Path, root: Path) -> bool:
         return False
 
 
+def _resource_paths(cfg: Optional[Dict[str, Any]] = None) -> Tuple[list[Path], list[Path]]:
+    """Return (exact resource files, resource directories) from the config.
+
+    A registered resource file must be readable *only* at its exact path —
+    granting its whole parent directory would expose every unrelated sibling
+    file through /__omm/fs/file. Directories, on the other hand, are roots by
+    design and are returned separately.
+    """
+    cfg = cfg or load_config()
+    files: list[Path] = []
+    directories: list[Path] = []
+    for entry in (cfg.get("apps") or {}).values():
+        for item in ((entry or {}).get("resources") or {}).values():
+            if not isinstance(item, dict):
+                continue
+            raw = str(item.get("path") or "").strip()
+            if not raw:
+                continue
+            path = Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
+            (directories if path.is_dir() else files).append(path)
+    return files, directories
+
+
 def _allowed_roots(cfg: Optional[Dict[str, Any]] = None) -> list[Path]:
     cfg = cfg or load_config()
     roots: list[Path] = [shared_root() / "updates"]
@@ -572,9 +656,8 @@ def _allowed_roots(cfg: Optional[Dict[str, Any]] = None) -> list[Path]:
         raw = str((entry or {}).get("save_path") or "").strip()
         if raw:
             roots.append(Path(os.path.expandvars(os.path.expanduser(raw))))
-        for item in ((entry or {}).get("resources") or {}).values():
-            if isinstance(item, dict) and str(item.get("path") or "").strip():
-                roots.append(Path(str(item["path"])).parent)
+    _files, resource_dirs = _resource_paths(cfg)
+    roots.extend(resource_dirs)
     snapshots = shared_root() / SNAPSHOT_DIRNAME
     roots.append(snapshots)
     return roots
@@ -1009,7 +1092,10 @@ def list_shared() -> Dict[str, Any]:
 
 def read_shared_file(raw: str) -> Tuple[bytes, str]:
     path = Path(os.path.expandvars(os.path.expanduser(str(raw or "")))).resolve()
-    if not _inside_any(path, _allowed_roots()):
+    allowed_files, _dirs = _resource_paths()
+    # 注册过的单个资源文件按精确路径放行；其他文件必须位于允许的目录根下。
+    exact_match = any(path == allowed for allowed in allowed_files)
+    if not exact_match and not _inside_any(path, _allowed_roots()):
         raise ValueError("文件不在共享目录中")
     if not path.is_file():
         raise ValueError("文件不存在")

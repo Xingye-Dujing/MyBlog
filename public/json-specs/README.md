@@ -23,6 +23,7 @@
 
 | 项目 | 源文件 | 应用名 | 导入入口 | AI 该生成的东西 | 扩展名 | 顶层硬性要求（不满足就导入失败） |
 |---|---|---|---|---|---|---|
+| [ZenCard](zencard.md) | `zen-card.js` | 通用卡片 | 导入卡片包 | 卡片包对象 | `.json` | `format:"zen-card-pack"` 且 `v:1` 且 `cards[]` |
 | [Writer](writer.md) | `omm-writer.html` | ZenWriter | 导入文件 | 画布对象 | `.zc` | 顶层有 `nodes` 数组 |
 | [Annotate](annotate.md) | `omm-annotate.html` | ZenMark | 导入（项目备份）/ 导入互通包 | 项目备份对象 | `.json` | `project.codes` 是数组（整库替换） |
 | [Corpus](corpus.md) | `omm-corpus.html` | ZenCorpus | 导入 / 从 JSON 恢复 | 全量备份对象 | `.json` | **同时**有 `entries[]` 与 `categories[]` |
@@ -39,7 +40,10 @@
 ## 2. 按「能不能让 AI 生成可导入文件」分类
 
 **✅ 支持 AI 直接生成可导入的 JSON（主力场景）**
-- Writer `.zc`、Annotate 项目备份、Corpus 恢复、English 四类、Planner 备份、Data 数据集、Visualization 右侧属性。
+- ZenCard 卡片包、Writer `.zc`、Annotate 项目备份、Corpus 恢复、English 四类、Planner 备份、Data 数据集、Visualization 右侧属性。
+
+**通用中间格式**：ZenCard 不是某个产品的私有文件，而是所有产品互通的桥梁——
+`zen-card.js` 提供与语料、批注、英语桥接包、写作画布、数据表之间的双向纯函数转换。
 
 **⚠️ 有导入但不是 JSON**
 - **Data / Visualization 的图表数据**用 **CSV/TSV/XLSX**（Visualization 内部是 `{headers,rows}`，但导入通道只吃分隔符文本）。要出图就让 AI 生成符合「角色列模型」的 CSV，见 visualization.md 第 6 节。
@@ -69,6 +73,7 @@
 json-specs/
 ├── README.md          本索引
 ├── prompts.md         ★ 各项目「一页提示词」，复制即用（自包含，无需附整份规范）
+├── zencard.md         ★ ZenCard 通用卡片 / 卡片包（跨产品中间格式）
 ├── writer.md          ZenWriter 画布 (.zc)          ← 画布规范正本
 ├── annotate.md        ZenMark  项目备份 / 互通包 (.json)
 ├── corpus.md          ZenCorpus 恢复 / 互通包 (.json)

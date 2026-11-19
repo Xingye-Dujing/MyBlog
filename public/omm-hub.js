@@ -415,6 +415,33 @@
       .replace(/"/g, '&quot;');
   }
 
+  var LOOPBACK_HOSTS = ['127.0.0.1', 'localhost', '[::1]', '::1'];
+
+  function isLoopbackOrigin(origin) {
+    try {
+      var u = new URL(String(origin || ''));
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+      return LOOPBACK_HOSTS.indexOf(u.hostname) >= 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* 产品 iframe 由各插件在独立的 loopback 端口上提供服务，与工作台并不同源。
+     目标 origin 必须从该 iframe 自己的 URL 推导，不能写死 location.origin。 */
+  function frameTargetOrigin(frame) {
+    try {
+      var raw = frame && (frame.dataset.url || frame.src);
+      if (raw && raw !== 'about:blank') {
+        var origin = new URL(raw, window.location.href).origin;
+        if (isLoopbackOrigin(origin)) return origin;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return window.location.origin;
+  }
+
   /* All shell confirmations go through the OMM-ZEN UI kit instead of the
      browser's native dialog. Returns Promise<boolean>. */
   function ommConfirm(message, opts) {
@@ -991,11 +1018,11 @@
     var started = Date.now();
     (function attempt() {
       var frame = frames.get(appId);
-      if (frame && frame.contentWindow) {
-        if (frame.dataset.ready === '1' || Date.now() - started > 2600) {
-          callback(frame);
-          return;
-        }
+      // 必须确认 iframe 已真正 ready，否则消息会发给尚未载入的 document；
+      // 之前的 2.6s 兜底会让下方的 20s 超时分支永远不可达。
+      if (frame && frame.contentWindow && frame.dataset.ready === '1') {
+        callback(frame);
+        return;
       }
       if (Date.now() - started > 20000) {
         callback(null);
@@ -1037,7 +1064,7 @@
               label: detail.label || '手动快照',
               dedup: !!detail.dedup,
             },
-            '*'
+            frameTargetOrigin(frame)
           );
         } catch (e) {
           /* retry until the timeout */
@@ -1068,7 +1095,7 @@
     try {
       frame.contentWindow.postMessage(
         { type: 'omm:state-info', token: detail.token, app: appId },
-        '*'
+        frameTargetOrigin(frame)
       );
     } catch (e) {
       window.dispatchEvent(
@@ -1114,7 +1141,7 @@
               name: detail.name,
               label: detail.label,
             },
-            '*'
+            frameTargetOrigin(frame)
           );
         } catch (e) {
           /* retry */
@@ -1659,7 +1686,7 @@
     var payload = Object.assign({ type: 'omm:theme' }, accentBroadcastPayload(theme));
     frames.forEach(function (frame) {
       try {
-        frame.contentWindow.postMessage(payload, '*');
+        frame.contentWindow.postMessage(payload, frameTargetOrigin(frame));
       } catch (e) {
         /* frame not ready yet */
       }
@@ -1689,6 +1716,14 @@
     if (a11y.ariaLabels !== false) {
       Array.prototype.forEach.call(document.querySelectorAll('button[title]:not([aria-label])'), function (btn) {
         btn.setAttribute('aria-label', btn.getAttribute('title'));
+      });
+    } else {
+      // 关闭「无障碍标签」时移除之前由 title 复制而来的 aria-label，
+      // 否则该开关在本次会话里没有任何可见效果。
+      Array.prototype.forEach.call(document.querySelectorAll('button[title][aria-label]'), function (btn) {
+        if (btn.getAttribute('aria-label') === btn.getAttribute('title')) {
+          btn.removeAttribute('aria-label');
+        }
       });
     }
     document.documentElement.dataset.accent = hubAppearance.accent;
@@ -1829,7 +1864,10 @@
             body: JSON.stringify({ zip: d.zip }),
           });
         })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error('恢复失败（' + r.status + '）');
+          return r.json();
+        })
         .then(function (result) {
           if (!result.ok) throw new Error(result.error || '恢复失败');
           toast('云备份已恢复，正在重新加载…');
@@ -2081,8 +2119,10 @@
     if (window.OMMUI && window.OMMUI.enhanceSelect) window.OMMUI.enhanceSelect(document);
     applyHubAppearance();
     bindAccentCustom();
-    document.getElementById('hub-settings-close').addEventListener('click', closeHubSettings);
-    document.getElementById('hub-settings-done').addEventListener('click', closeHubSettings);
+    var settingsClose = document.getElementById('hub-settings-close');
+    if (settingsClose) settingsClose.addEventListener('click', closeHubSettings);
+    var settingsDone = document.getElementById('hub-settings-done');
+    if (settingsDone) settingsDone.addEventListener('click', closeHubSettings);
     els.hubSettings.addEventListener('click', function (event) {
       if (event.target === els.hubSettings) closeHubSettings();
     });
@@ -2384,7 +2424,8 @@
         openPluginPanel('update');
       });
     }
-    document.getElementById('hub-settings-reset').addEventListener('click', function () {
+    var settingsReset = document.getElementById('hub-settings-reset');
+    if (settingsReset) settingsReset.addEventListener('click', function () {
       // 统一走归一化函数补全全部字段；手写对象曾遗漏 focus/cloud/a11y 等，
       // 导致重置后静心模式、云备份、无障碍开关在刷新前一直抛 TypeError。
       hubAppearance = normalizeAppearance(null);
@@ -2583,8 +2624,14 @@
               saveWorkspaces();
             }
             if (data.launcher && typeof data.launcher === 'object') {
-              if (Array.isArray(data.launcher.pinned)) launcherPinned = data.launcher.pinned.slice(0, 8);
-              if (Array.isArray(data.launcher.recent)) launcherRecent = data.launcher.recent.slice(0, 8);
+              // 与 loadLauncherPrefs 保持一致：只接受字符串 id，避免备份里的
+              // 数字 / 对象破坏后续的 indexOf 与 dataset 写入。
+              if (Array.isArray(data.launcher.pinned)) {
+                launcherPinned = data.launcher.pinned.filter(function (id) { return typeof id === 'string'; }).slice(0, 8);
+              }
+              if (Array.isArray(data.launcher.recent)) {
+                launcherRecent = data.launcher.recent.filter(function (id) { return typeof id === 'string'; }).slice(0, 8);
+              }
               saveLauncherPrefs();
             }
             toast('设置已恢复，正在重新加载…');
@@ -2620,7 +2667,12 @@
         });
       })
       .then(function (result) {
-        var binary = atob(result.zip || '');
+        var binary;
+        try {
+          binary = atob(result.zip || '');
+        } catch (e) {
+          throw new Error('备份文件已损坏，无法解码');
+        }
         var bytes = new Uint8Array(binary.length);
         for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         var blob = new Blob([bytes], { type: 'application/zip' });
@@ -2979,12 +3031,22 @@
     var a = versionKey(latest);
     var b = versionKey(current);
     if (!a.length) return false;
-    for (var i = 0; i < Math.max(a.length, b.length); i++) {
-      var x = a[i] || 0;
-      var y = b[i] || 0;
-      if (x !== y) return x > y;
+    // 与后端 plugin_specs.is_newer 的 Python 元组比较保持一致：
+    // 不补零，逐位比较，全部相等时位数更多的更大（(1,2,0) > (1,2)）。
+    var n = Math.min(a.length, b.length);
+    for (var i = 0; i < n; i++) {
+      if (a[i] !== b[i]) return a[i] > b[i];
     }
-    return false;
+    return a.length > b.length;
+  }
+
+  /* 是否有框架更新：按钮渲染与实际操作必须共用这一判断，避免出现
+     「显示立即更新，点击却说没有可用更新」的矛盾。后端给出 available 时
+     以后端为准；旧后端没有该字段时回退到本地版本比较。 */
+  function frameworkUpdateAvailable(info) {
+    if (!info || info.error) return false;
+    if (typeof info.available === 'boolean') return info.available;
+    return isNewerVersion(info.latest || '', info.current || '');
   }
 
   /* Framework update: the shell itself. */
@@ -2996,7 +3058,7 @@
     }
     var latest = info.latest || '';
     var current = info.current || '';
-    if (!isNewerVersion(latest, current)) {
+    if (!frameworkUpdateAvailable(info)) {
       return '<div class="pp-empty">工作台框架已是最新版本（' + esc(current || '未知') + '）。</div>';
     }
     return (
@@ -3109,6 +3171,7 @@
     updateChecking = true;
     fetch('/__omm/update/check', { cache: 'no-store' })
       .then(function (response) {
+        if (!response.ok) throw new Error('检查更新失败（' + response.status + '）');
         return response.json();
       })
       .then(function (data) {
@@ -3123,7 +3186,7 @@
   }
 
   function applyHubUpdate() {
-    if (!updateInfo || !updateInfo.available) {
+    if (!frameworkUpdateAvailable(updateInfo)) {
       toast('没有可用的更新');
       return;
     }
@@ -3134,11 +3197,14 @@
     toast('正在下载并校验更新…');
     fetch('/__omm/update/apply', { method: 'POST', cache: 'no-store' })
       .then(function (response) {
+        if (!response.ok) throw new Error('更新请求失败（' + response.status + '）');
         return response.json();
       })
       .then(function (data) {
         if (!data || !data.ok) throw new Error((data && data.error) || '更新失败');
         toast('更新完成，工作台即将重启…');
+        // 后台进程会自行重启，但页面不会自动刷新；主动重载才能看到新版本。
+        window.setTimeout(function () { window.location.reload(); }, 1500);
       })
       .catch(function (error) {
         toast('更新失败：' + ((error && error.message) || error));
@@ -3420,12 +3486,15 @@
       });
   }
 
-  function toast(message) {
+  function toast(message, kind) {
     els.toast.textContent = message;
+    // 多处调用会传 'error'，之前被静默丢弃，导致失败提示与成功提示无法区分。
+    els.toast.classList.toggle('error', kind === 'error');
     els.toast.classList.add('on');
     window.clearTimeout(toast._timer);
     toast._timer = window.setTimeout(function () {
       els.toast.classList.remove('on');
+      els.toast.classList.remove('error');
     }, 1600);
   }
 
@@ -3463,7 +3532,7 @@
     whenAppReady(appId, function (frame) {
       if (!frame) return;
       try {
-        frame.contentWindow.postMessage({ type: 'omm:share-nudge' }, '*');
+        frame.contentWindow.postMessage({ type: 'omm:share-nudge' }, frameTargetOrigin(frame));
       } catch (e) {
         /* the product will pick its inbox up on boot instead */
       }
@@ -3490,7 +3559,9 @@
     var timer = window.setInterval(function () {
       tries += 1;
       var frame = frames.get(appId);
-      if (frame && frame.contentWindow) {
+      // 必须等 iframe 真正载入了产品页（dataset.ready），否则 contentWindow
+      // 仍指向 about:blank，消息会在导航中丢失，用户却被告知「已交给…载入」。
+      if (frame && frame.dataset.ready === '1' && frame.contentWindow) {
         window.clearInterval(timer);
         try {
           frame.contentWindow.postMessage(
@@ -3500,7 +3571,7 @@
               name: detail.name,
               mime: detail.mime,
             },
-            '*'
+            frameTargetOrigin(frame)
           );
           toast('已交给「' + APP_BY_ID[appId].name + '」载入');
         } catch (e) {
@@ -3809,7 +3880,12 @@
       if (!frame.dataset.url) return;
       appStatus[appId] = 'ready';
       try {
-        frame.contentWindow.postMessage({ type: 'omm:theme', theme: effectiveTheme() }, '*');
+        // 首次载入也要发完整的强调色 / 圆角配置，否则各产品的归档面板
+        // 只能拿到 theme，用户的自定义外观要等到下次手动切换主题才生效。
+        frame.contentWindow.postMessage(
+          Object.assign({ type: 'omm:theme' }, accentBroadcastPayload(effectiveTheme())),
+          frameTargetOrigin(frame)
+        );
       } catch (e) {
         /* ignore */
       }
@@ -3892,7 +3968,10 @@
            real viewport width; otherwise it boots in the ≤720px mobile layout. */
         sizeFrameBeforeLoad(frame, appId);
         frame.dataset.url = url;
-        frame.src = url + join + 'omm_embed=1';
+        // 把工作台的真实 origin 交给产品，便于它把回执 postMessage 发给明确的
+        // 目标 origin（跨 origin 下无法从 window.parent.location 读取）。
+        frame.src = url + join + 'omm_embed=1&omm_hub_origin=' +
+          encodeURIComponent(window.location.origin);
       },
       function (error) {
         if (loadTimers[appId]) {
@@ -5529,7 +5608,12 @@
         var item = event.target.closest('[data-notify]');
         if (!item) return;
         var note = notifications[Number(item.dataset.notify)];
-        if (note && note.app) activateApp(note.app);
+        if (note && note.app) {
+          // 启动失败的通知指向的 iframe 可能仍存在，activateApp 只会切到它、
+          // 不会真正重试；失败状态下应走 retryApp。
+          if (appStatus[note.app] === 'error') retryApp(note.app);
+          else activateApp(note.app);
+        }
         els.notifyPanel.hidden = true;
         renderNotifyBadge();
       });
@@ -6135,6 +6219,9 @@
         if (!sourceFrame && frame.contentWindow === event.source) sourceFrame = frame;
       });
       if (!sourceFrame) return;
+      // 窗口身份 + origin 双重校验：iframe 来自各插件独立的 loopback 端口，
+      // 期望 origin 必须从该 frame 自己的 URL 推导。
+      if (event.origin !== frameTargetOrigin(sourceFrame) || !isLoopbackOrigin(event.origin)) return;
       var sourceApp = sourceFrame.dataset.app;
 
       if (data.type === 'omm:ready') {
@@ -6149,6 +6236,11 @@
       }
       if (data.type === 'omm:restore-accepted') {
         delete pendingRestores[data.token];
+        return;
+      }
+      if (data.type === 'omm:restore-done') {
+        if (data.ok === false) toast('恢复失败：' + (data.error || '未知错误'), 'error');
+        else toast('快照已恢复');
         return;
       }
       if (data.type === 'omm:share-open') {

@@ -14,6 +14,11 @@ const pages = [
   { href: '/omm-search.html', title: '智能搜索', desc: '免费的 DeepSeek 联网搜索、AI 摘要与引用溯源' },
   { href: '/omm-visualization.html', title: '可视化图表', desc: '数据到图形的多形态可视化' },
   { href: '/omm-writer.html', title: '所思所想', desc: '块编辑器写作与导出' },
+  { href: '/omm-zencard.html', title: '间隔复习', desc: 'SM-2 间隔重复与跨产品知识卡片' },
+  { href: '/omm-zenflow.html', title: '自动化编排', desc: '规则引擎：让卡片在产物间自动流动' },
+  { href: '/omm-zenclip.html', title: '网页剪藏', desc: '把选中的文字一键变成知识卡片' },
+  { href: '/omm-zenreview.html', title: '复盘报告', desc: '汇总时间线与待办，生成复盘报告' },
+  { href: '/omm-zenbackup.html', title: '统一备份', desc: '全产品数据打包、差异比对与恢复' },
   { href: '/h5-news.html', title: '高校开放', desc: '高校资讯与开放数据浏览' },
 ]
 </script>

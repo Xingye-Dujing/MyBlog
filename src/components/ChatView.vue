@@ -67,6 +67,11 @@ const searchMatchCount = computed(() => {
   return messagesWithDates.value.filter((m) => m._searchMatch).length
 })
 
+const currentMatchId = computed(() => {
+  const matches = messagesWithDates.value.filter((m) => m._searchMatch)
+  return matches[currentMatchIndex.value]?.id ?? null
+})
+
 function toggleSearch() {
   showSearch.value = !showSearch.value
   if (showSearch.value) {
@@ -347,7 +352,10 @@ onUnmounted(() => {
               :message="msg"
               :chat-id="chat.id"
               :show-date="msg.showDate"
-              :class="{ 'search-match': msg._searchMatch }"
+              :class="{
+                'search-match': msg._searchMatch,
+                'current-search-match': msg.id === currentMatchId,
+              }"
               :data-msg-id="msg.id"
             />
           </template>
@@ -420,6 +428,12 @@ onUnmounted(() => {
 
 :deep(.search-match) {
   background: #fffde7 !important;
+  transition: background 0.3s;
+}
+
+:deep(.current-search-match) {
+  background: #ffe0b2 !important;
+  box-shadow: inset 3px 0 0 #e65100;
   transition: background 0.3s;
 }
 

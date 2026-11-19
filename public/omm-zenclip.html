@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="omm-embed.js"></script>
+    <script src="omm-desktop.js"></script>
+    <script src="omm-share.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>网页剪藏</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
+    <link rel="stylesheet" href="zen-ui.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <span class="brand"><span class="glyph">剪</span>ZenClip 网页剪藏</span>
+        <span class="spacer"></span>
+        <div class="actions"><button class="btn sm" id="theme-btn">深浅色</button></div>
+      </header>
+      <main class="narrow">
+        <div class="panel">
+          <h2>把选中的文字变成知识卡片</h2>
+          <p class="hint">粘贴文字或 HTML。生成的卡片可剪藏到本地，也可一键发送到写作 / 语料 / 标注等产品。</p>
+          <label class="field"><span>内容（支持 HTML，会自动去掉标签）</span><textarea id="clip-text" placeholder="在这里粘贴……"></textarea></label>
+          <div class="row">
+            <label class="field"><span>出处 URL</span><input id="clip-url" placeholder="https://…" /></label>
+            <label class="field"><span>标签（逗号分隔）</span><input id="clip-tags" placeholder="摘录,待读" /></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>类型</span><select id="clip-kind"></select></label>
+            <label class="field"><span>批注</span><input id="clip-note" placeholder="可选" /></label>
+          </div>
+          <div class="row tight">
+            <button class="btn" id="read-clip">读取剪贴板</button>
+            <button class="btn primary" id="make-card">生成并保存卡片</button>
+            <button class="btn" id="preview-card">预览</button>
+          </div>
+        </div>
+        <div class="panel" id="preview-panel" hidden>
+          <h3>预览</h3><pre class="code" id="preview-code"></pre>
+        </div>
+        <div class="panel">
+          <h2>已剪藏 <span id="clip-count" class="badge">0</span></h2>
+          <div class="row tight" style="margin-bottom:10px">
+            <button class="btn" id="download-btn">下载卡片包</button>
+            <button class="btn" id="copy-btn">复制 JSON</button>
+            <button class="btn danger" id="clear-btn">清空</button>
+          </div>
+          <div class="list" id="clip-list"></div>
+        </div>
+      </main>
+      <footer class="status"><span><i class="dot"></i>ZenClip · 本地剪藏，遵循 zen-card 通用格式</span><span id="status-text"></span></footer>
+    </div>
+    <div id="toast"></div>
+    <script type="module">
+      import { ZenCard } from './zen-card.js'
+      const KEY = 'zen.clip.v1'
+      const $ = (id) => document.getElementById(id)
+      let cards = []
+      function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800) }
+      function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
+      function load() { try { cards = JSON.parse(localStorage.getItem(KEY) || '[]').map(ZenCard.create) } catch { cards = [] } }
+      function save() { localStorage.setItem(KEY, JSON.stringify(cards)); render() }
+      function build() {
+        return ZenCard.fromWebSelection({ text: $('clip-text').value }, {
+          url: $('clip-url').value.trim(), note: $('clip-note').value.trim(),
+          kind: $('clip-kind').value, tags: $('clip-tags').value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+        })
+      }
+      function render() {
+        $('clip-count').textContent = cards.length
+        $('status-text').textContent = cards.length + ' 张卡片'
+        const box = $('clip-list')
+        box.innerHTML = cards.length ? cards.map((c) => `<div class="item" data-id="${c.id}">
+          <div class="body"><div class="title">${esc(c.content.slice(0, 120))}</div>
+            <div class="meta">${esc(c.kind)} · ${c.tags.map((t) => '#' + esc(t)).join(' ')} ${c.ref ? '· ' + esc(c.ref) : ''}</div></div>
+          <div class="ops"><button class="btn sm" data-act="send">发送</button><button class="btn sm danger" data-act="del">删</button></div></div>`).join('')
+          : '<div class="empty">还没有剪藏</div>'
+        box.querySelectorAll('.item').forEach((el) => {
+          el.querySelector('[data-act="del"]').addEventListener('click', () => { cards = cards.filter((c) => c.id !== el.dataset.id); save() })
+          el.querySelector('[data-act="send"]').addEventListener('click', () => {
+            const target = prompt('发送到哪个产品？', 'writer'); if (!target) return
+            const card = cards.find((c) => c.id === el.dataset.id)
+            if (window.OMMShare?.send) window.OMMShare.send({ to: target, format: 'zen-card', payload: card }).then(() => toast('已发送')).catch(() => toast('发送失败'))
+            else toast('离线环境请用下载卡片包')
+          })
+        })
+      }
+      function bind() {
+        $('clip-kind').innerHTML = ZenCard.KINDS.map((k) => `<option value="${k}">${k}</option>`).join('')
+        $('clip-kind').value = 'quote'
+        $('theme-btn').addEventListener('click', () => { document.body.classList.toggle('theme-dark'); localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light') })
+        $('read-clip').addEventListener('click', async () => {
+          try { $('clip-text').value = await navigator.clipboard.readText(); toast('已读取剪贴板') } catch { toast('浏览器未授权读取剪贴板，请手动粘贴') }
+        })
+        $('make-card').addEventListener('click', () => {
+          if (!$('clip-text').value.trim()) { toast('内容不能为空'); return }
+          cards.push(build()); save(); $('clip-text').value = ''; toast('已保存卡片')
+        })
+        $('preview-card').addEventListener('click', () => {
+          const card = build()
+          if (!card.content) { toast('内容不能为空'); return }
+          $('preview-panel').hidden = false
+          $('preview-code').textContent = ZenCard.serialize(card, true) + '\n\n--- Markdown ---\n\n' + ZenCard.toMarkdown(card)
+        })
+        const pack = () => ZenCard.serializePack(cards, { name: 'ZenClip 剪藏' }, true)
+        $('download-btn').addEventListener('click', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([pack()], { type: 'application/json' })); a.download = 'zenclip-pack.json'; a.click(); URL.revokeObjectURL(a.href) })
+        $('copy-btn').addEventListener('click', async () => { try { await navigator.clipboard.writeText(pack()); toast('已复制') } catch { toast('复制失败') } })
+        $('clear-btn').addEventListener('click', () => { if (confirm('清空全部剪藏？')) { cards = []; save() } })
+      }
+      if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
+      load(); bind(); render()
+    </script>
+  </body>
+</html>

@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
+    <script type="module" src="zen-link.js"></script>
     <script src="vendor/supabase/2/supabase.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>六级备考</title>
@@ -14588,7 +14589,7 @@ notify pgrst, 'reload schema';</textarea
               au.ontimeupdate = () => {
                 if (!au.duration) return
                 const t = au.currentTime
-                if (this.ab.on && this.ab.a != null && t >= this.ab.b) au.currentTime = this.ab.a
+                if (this.ab.on && this.ab.a != null && this.ab.b != null && t >= this.ab.b) au.currentTime = this.ab.a
                 seek.value = Math.round((t / au.duration) * 1000)
                 tmEl.textContent = fmtTime(t) + ' / ' + fmtTime(au.duration)
                 let ni = 0
@@ -18304,6 +18305,7 @@ notify pgrst, 'reload schema';</textarea
           syncing = false,
           authing = false,
           lastHash = '',
+          pendingHash = '',
           pollTimer = null,
           pushTimer = null
 
@@ -18445,11 +18447,13 @@ notify pgrst, 'reload schema';</textarea
         function startWatcher() {
           stopWatcher()
           lastHash = dataHash()
+          pendingHash = ''
           pollTimer = setInterval(function () {
             if (!autoSyncOn || !session || !unlockPassword || syncing) return
             var h = dataHash()
-            if (h === lastHash) return
-            lastHash = h
+            // 只在推送成功后推进 lastHash；失败时保留待推送标记以便重试。
+            if (h === lastHash && h === pendingHash) return
+            pendingHash = h
             if (pushTimer) clearTimeout(pushTimer)
             pushTimer = setTimeout(function () {
               pushTimer = null
@@ -18462,12 +18466,13 @@ notify pgrst, 'reload schema';</textarea
           syncing = true
           try {
             await push()
+            lastHash = pendingHash || dataHash()
+            pendingHash = ''
             setStatus('已自动同步到云端：' + new Date().toLocaleTimeString())
           } catch (e) {
             setStatus(friendly(e))
           } finally {
             syncing = false
-            lastHash = dataHash()
           }
         }
         async function pullQuiet(r) {

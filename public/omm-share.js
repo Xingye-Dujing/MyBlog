@@ -24,6 +24,31 @@
   window.__ommShareLoaded = true
 
   var API = '/__omm/share'
+  var HUB_ORIGIN = (function () {
+    try {
+      var raw = new URLSearchParams(location.search).get('omm_hub_origin')
+      if (!raw) return ''
+      var parsed = new URL(raw)
+      if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsed.hostname) >= 0) {
+        return parsed.origin
+      }
+    } catch (e) { /* ignore */ }
+    return ''
+  })()
+
+  function parentTargetOrigin() { return HUB_ORIGIN || '*' }
+  function isTrustedParentOrigin(origin) {
+    if (HUB_ORIGIN) return origin === HUB_ORIGIN
+    try {
+      var u = new URL(String(origin || ''))
+      return (u.protocol === 'http:' || u.protocol === 'https:') &&
+        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
+    } catch (e) {
+      return false
+    }
+  }
+
   var APP = (function () {
     var file = (location.pathname.split('/').pop() || '').toLowerCase()
     var match = file.match(/^omm-([a-z0-9_-]+)\.html$/)
@@ -266,7 +291,7 @@
     }
     if (window.parent && window.parent !== window) {
       try {
-        window.parent.postMessage({ type: 'omm:share-open', app: id }, '*')
+        window.parent.postMessage({ type: 'omm:share-open', app: id }, parentTargetOrigin())
       } catch (e) {
         /* ignore */
       }
@@ -332,7 +357,7 @@
           title: (item && item.title) || message.title || '',
           kind: (item && item.kind) || 'record',
         },
-        '*'
+        parentTargetOrigin()
       );
     } catch (e) {
       /* ignore */
@@ -1039,6 +1064,7 @@
         })
         window.addEventListener('message', function (event) {
           if (event.source !== window.parent) return
+          if (!isTrustedParentOrigin(event.origin)) return
           var data = event.data
           if (data && data.type === 'omm:share-nudge') pollInbox()
         })

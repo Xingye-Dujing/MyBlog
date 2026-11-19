@@ -160,11 +160,10 @@ class HubServer:
         import mdforge.server as mdforge_server  # noqa: WPS433
         from werkzeug.serving import make_server
 
-        # PUBLIC_ROOT 在模块首次 import 时就固化了；插件更新/重启后如果不刷新，
-        # 仍会从旧目录提供页面和模板。所有路由都在调用时读取该全局变量，
-        # 因此这里按当前插件目录重新赋值即可（比 importlib 重载更安全）。
-        mdforge_server.PUBLIC_ROOT = plugin_dir.resolve()
-        app = mdforge_server.app
+        # 每个 mdforge 插件实例创建独立的 Flask app，把静态根目录绑定在各自的
+        # config 里。mdforge.server 的路由通过 _public_root() 读取当前 app 的配置，
+        # 不再依赖进程级 PUBLIC_ROOT 全局变量（多插件并存时会互相串目录）。
+        app = mdforge_server.create_app(plugin_dir.resolve())
         server = make_server("127.0.0.1", port, app, threaded=True)
         _serve(server)
         return server
@@ -431,9 +430,16 @@ class HubServer:
         import base64
         import urllib.error
         import urllib.request
+        import omm_shared
 
         if not url.startswith(("http://", "https://")):
             raise ValueError("WebDAV 地址必须以 http:// 或 https:// 开头")
+        allow_private = os.environ.get("OMM_CLOUD_ALLOW_PRIVATE") == "1"
+        if not omm_shared.remote_url_is_public(url, allow_private):
+            raise ValueError(
+                "WebDAV 地址不被允许：请使用公网地址；"
+                "若为内网服务，请设置 OMM_CLOUD_ALLOW_PRIVATE=1 后重试"
+            )
         request = urllib.request.Request(url, data=data, method=method)
         if user:
             token = base64.b64encode(("%s:%s" % (user, password)).encode("utf-8")).decode("ascii")
@@ -779,7 +785,7 @@ class HubServer:
                 for name in zf.namelist():
                     posix = name.replace("\\", "/")
                     parts = PurePosixPath(posix).parts
-                    if posix.startswith("/") or ":" in parts[0] or ".." in parts:
+                    if not parts or posix.startswith("/") or ":" in parts[0] or ".." in parts:
                         raise ValueError("备份包含不安全的路径，已拒绝恢复")
                 zf.extractall(root)
 
@@ -864,7 +870,10 @@ class HubHandler(ShellHandler):
         self.wfile.write(body)
 
     def _body(self, limit: int = MAX_IMPORT_BYTES) -> bytes:
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            raise PluginError("请求体长度无效")
         if length <= 0:
             raise PluginError("请求体为空")
         if length > limit:
@@ -878,6 +887,10 @@ class HubHandler(ShellHandler):
             raise PluginError("请求格式无效") from exc
 
     def do_GET(self):  # noqa: N802
+        import omm_shared
+        if not omm_shared.request_is_local(self):
+            self._reply(403, {"ok": False, "error": "仅允许本机访问"})
+            return
         parsed = urlsplit(self.path)
         try:
             if self.handle_update_get():
@@ -947,6 +960,10 @@ class HubHandler(ShellHandler):
         return super().do_GET()
 
     def do_POST(self):  # noqa: N802
+        import omm_shared
+        if not omm_shared.request_is_local(self):
+            self._reply(403, {"ok": False, "error": "仅允许本机访问"})
+            return
         parsed = urlsplit(self.path)
         try:
             if self.handle_desktop_post():

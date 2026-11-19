@@ -653,13 +653,15 @@ def fetch_catalog(url: str = CATALOG_URL) -> Dict[str, Any]:
     for candidate in candidates:
         try:
             catalog = fetch_json(candidate)
+            # 结构校验也放进 try：某个镜像返回了合法 JSON 但不是目录（例如
+            # {"message": "Not Found"} 或发布过程中的半成品）时，应继续尝试下一个。
+            if not isinstance(catalog, dict) or not isinstance(catalog.get("plugins"), list):
+                raise PluginError("插件目录缺少 plugins 列表")
+            if not isinstance(catalog.get("frameworks"), dict):
+                raise PluginError("插件目录缺少 frameworks")
         except Exception as exc:  # noqa: BLE001 - try the next mirror
             last = exc
             continue
-        if not isinstance(catalog, dict) or not isinstance(catalog.get("plugins"), list):
-            raise PluginError("插件目录缺少 plugins 列表")
-        if not isinstance(catalog.get("frameworks"), dict):
-            raise PluginError("插件目录缺少 frameworks")
         return catalog
     raise PluginError("插件目录下载失败：%s" % last)
 

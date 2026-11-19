@@ -485,6 +485,9 @@ class ShellHandler(SimpleHTTPRequestHandler):
         return True
 
     def do_GET(self):  # noqa: N802
+        if not omm_shared.request_is_local(self):
+            self.send_error(403, "Forbidden")
+            return
         if self.handle_desktop_get():
             return
         if self.handle_update_get():
@@ -494,6 +497,9 @@ class ShellHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):  # noqa: N802
+        if not omm_shared.request_is_local(self):
+            self.send_error(403, "Forbidden")
+            return
         if self.handle_desktop_post():
             return
         if self.handle_update_post():

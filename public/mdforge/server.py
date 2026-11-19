@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
 
-from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
+from flask import (Flask, Response, abort, current_app, jsonify, request, send_file,
+                   send_from_directory)
 from werkzeug.utils import secure_filename
 
 from . import __version__
@@ -33,6 +34,18 @@ from .validate import validate_document
 PUBLIC_ROOT = Path(
     os.environ.get("OMM_PLUGIN_ROOT") or Path(__file__).resolve().parent.parent
 ).resolve()
+
+
+def _public_root() -> Path:
+    """Return the static root of the *current* app instance.
+
+    A desktop hub can run several mdforge plugins on different ports. Each one
+    gets its own Flask app whose config holds that plugin's directory, so a
+    request must never fall back to the process-wide ``PUBLIC_ROOT`` global
+    (which would serve plugin A's files from plugin B's server).
+    """
+    configured = current_app.config.get("PUBLIC_ROOT")
+    return Path(configured).resolve() if configured else PUBLIC_ROOT
 try:  # The desktop shell provides shared storage; plain web installs do not.
     import omm_shared  # type: ignore
     import omm_share  # type: ignore
@@ -278,23 +291,24 @@ def _parse_payload(payload: Dict[str, Any]) -> Tuple[Document, Any, Dict[str, An
     return document, template, {"issues": issues, "format": fmt, "template": template_name}
 
 
-def create_app() -> Flask:
+def create_app(public_root: Optional[Path] = None) -> Flask:
     app = Flask(__name__, static_folder=None)
+    app.config["PUBLIC_ROOT"] = Path(public_root).resolve() if public_root else PUBLIC_ROOT
     app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
     app.config["JSON_AS_ASCII"] = False
 
     @app.get("/")
     @app.get("/omm-mdforge.html")
     def index():
-        return send_from_directory(str(PUBLIC_ROOT), FRONTEND)
+        return send_from_directory(str(_public_root()), FRONTEND)
 
     @app.get("/omm-desktop.js")
     def desktop_bridge():
-        return send_from_directory(str(PUBLIC_ROOT), "omm-desktop.js")
+        return send_from_directory(str(_public_root()), "omm-desktop.js")
 
     @app.get("/omm-share.js")
     def share_bridge():
-        return send_from_directory(str(PUBLIC_ROOT), "omm-share.js")
+        return send_from_directory(str(_public_root()), "omm-share.js")
 
     @app.get("/__omm/fs/<path:sub>")
     def omm_shared_get(sub: str):
@@ -348,19 +362,19 @@ def create_app() -> Flask:
 
     @app.get("/icon.ico")
     def icon():
-        return send_from_directory(str(PUBLIC_ROOT), "icon.ico")
+        return send_from_directory(str(_public_root()), "icon.ico")
 
     @app.get("/omm-embed.js")
     def embed_bridge():
-        return send_from_directory(str(PUBLIC_ROOT), "omm-embed.js")
+        return send_from_directory(str(_public_root()), "omm-embed.js")
 
     @app.get("/APL385.ttf")
     def apl_font():
-        return send_from_directory(str(PUBLIC_ROOT), "APL385.ttf")
+        return send_from_directory(str(_public_root()), "APL385.ttf")
 
     @app.get("/vendor/<path:filename>")
     def vendor_asset(filename: str):
-        root = (PUBLIC_ROOT / "vendor").resolve()
+        root = (_public_root() / "vendor").resolve()
         target = (root / filename).resolve()
         if root not in target.parents or not target.is_file():
             abort(404)
@@ -422,14 +436,14 @@ def create_app() -> Flask:
 
     @app.get("/api/sample")
     def api_sample():
-        path = PUBLIC_ROOT / "mdforge-examples" / "sample.md"
+        path = _public_root() / "mdforge-examples" / "sample.md"
         if not path.is_file():
             return jsonify({"ok": False, "error": "示例文件不存在"}), 404
         return jsonify({"ok": True, "markdown": path.read_text(encoding="utf-8"), "filename": "sample.md"})
 
     @app.get("/samples/<path:filename>")
     def sample_asset(filename: str):
-        allowed = PUBLIC_ROOT / "mdforge-examples"
+        allowed = _public_root() / "mdforge-examples"
         target = (allowed / filename).resolve()
         if allowed.resolve() not in target.parents or not target.is_file():
             abort(404)

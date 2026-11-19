@@ -40,6 +40,11 @@ APPS = {
     "redact":        ("omm-redact.html",        8319, None),
     "visualization": ("omm-visualization.html", 8320, None),
     "writer":        ("omm-writer.html",        8321, None),
+    "zencard":       ("omm-zencard.html",       8323, None),
+    "zenflow":       ("omm-zenflow.html",       8324, None),
+    "zenclip":       ("omm-zenclip.html",       8325, None),
+    "zenreview":     ("omm-zenreview.html",     8326, None),
+    "zenbackup":     ("omm-zenbackup.html",     8327, None),
 }
 
 WINDOW_TITLES = {
@@ -54,6 +59,11 @@ WINDOW_TITLES = {
     "redact": "文档脱敏工具",
     "visualization": "可视化图表",
     "writer": "所思所想",
+    "zencard": "间隔复习",
+    "zenflow": "自动化编排",
+    "zenclip": "网页剪藏",
+    "zenreview": "复盘报告",
+    "zenbackup": "统一备份",
 }
 
 HUB_PORT = 8300

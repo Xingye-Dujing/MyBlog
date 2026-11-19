@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="omm-embed.js"></script>
+    <script src="omm-desktop.js"></script>
+    <script src="omm-share.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>自动化编排</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
+    <link rel="stylesheet" href="zen-ui.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <span class="brand"><span class="glyph">流</span>ZenFlow 自动化编排</span>
+        <nav class="tabs" id="tabs">
+          <button data-view="rules" class="active">规则</button>
+          <button data-view="editor">编辑器</button>
+          <button data-view="run">运行记录</button>
+        </nav>
+        <span class="spacer"></span>
+        <div class="actions"><button class="btn sm" id="theme-btn">深浅色</button></div>
+      </header>
+      <main class="narrow">
+        <section class="view active" id="view-rules">
+          <div class="panel">
+            <h2>工作流规则</h2>
+            <p class="hint">规则按顺序执行：满足「当」条件的卡片会被「则」里的动作加工，并可发送到其他产品。</p>
+            <div class="list" id="rule-list"></div>
+          </div>
+          <div class="panel">
+            <div class="row tight">
+              <button class="btn primary" id="run-btn">对卡片库运行全部规则</button>
+              <button class="btn" id="export-btn">导出规则</button>
+              <label class="btn" style="display:inline-flex;align-items:center;justify-content:center">导入规则<input type="file" id="import-file" accept=".json" hidden /></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-editor">
+          <div class="panel">
+            <h2 id="editor-title">新建规则</h2>
+            <label class="field"><span>名称</span><input id="r-name" placeholder="例如：搜索结果归档" /></label>
+            <div class="row">
+              <label class="field"><span>优先级（小者先执行）</span><input id="r-priority" type="number" value="0" /></label>
+              <label class="field"><span>启用</span><select id="r-enabled"><option value="1">是</option><option value="0">否</option></select></label>
+            </div>
+            <h3>当（满足全部条件）</h3>
+            <div class="row">
+              <label class="field"><span>来源</span><select id="w-source"></select></label>
+              <label class="field"><span>类型</span><select id="w-kind"></select></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>含标签</span><input id="w-tag" placeholder="留空=不限" /></label>
+              <label class="field"><span>正文包含</span><input id="w-text" placeholder="留空=不限" /></label>
+            </div>
+            <h3>则（依次执行）</h3>
+            <div class="list" id="action-list"></div>
+            <div class="row tight" style="margin-top:8px">
+              <select id="a-type">
+                <option value="addTag">加标签</option><option value="setKind">改类型</option>
+                <option value="highlight">高亮</option><option value="send">发送到产品</option>
+                <option value="publish">发布到共享空间</option><option value="notify">通知</option>
+              </select>
+              <input id="a-value" placeholder="参数（标签名/类型/颜色/目标产品/消息）" />
+              <button class="btn" id="add-action">添加动作</button>
+            </div>
+            <div class="row tight" style="margin-top:14px">
+              <button class="btn primary" id="save-rule">保存规则</button>
+              <button class="btn" id="cancel-edit">取消</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-run">
+          <div class="panel">
+            <h2>最近一次运行</h2>
+            <p class="muted" id="run-summary">尚未运行。</p>
+            <div class="list" id="effect-list"></div>
+          </div>
+        </section>
+      </main>
+      <footer class="status"><span><i class="dot"></i>ZenFlow · 规则与卡片均存本地</span><span id="status-text"></span></footer>
+    </div>
+    <div id="toast"></div>
+
+    <script type="module">
+      import { ZenCard } from './zen-card.js'
+      import { ZenFlow } from './zen-flow.js'
+
+      const RULE_KEY = 'zen.flow.rules.v1'
+      const CARD_KEY = 'zen.cards.v1'
+      const $ = (id) => document.getElementById(id)
+      let rules = []
+      let actions = []
+      let editingId = null
+
+      function toast(msg) {
+        const t = $('toast'); t.textContent = msg; t.classList.add('show')
+        clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800)
+      }
+      function load() {
+        try { rules = JSON.parse(localStorage.getItem(RULE_KEY) || '[]').map(ZenFlow.createRule) } catch { rules = [] }
+      }
+      function save() { localStorage.setItem(RULE_KEY, JSON.stringify(rules)) }
+
+      function renderRules() {
+        const box = $('rule-list')
+        $('status-text').textContent = '规则 ' + rules.length + ' 条'
+        if (!rules.length) { box.innerHTML = '<div class="empty">还没有规则，去「编辑器」新建一条。</div>'; return }
+        box.innerHTML = rules.map((r) => {
+          const conds = Object.keys(r.when).filter((k) => r.when[k]).map((k) => k + '=' + r.when[k]).join(' · ') || '所有卡片'
+          return `<div class="item" data-id="${r.id}">
+            <div class="body"><div class="title">${esc(r.name)} <span class="badge ${r.enabled ? 'on' : ''}">${r.enabled ? '启用' : '停用'}</span></div>
+              <div class="meta">优先级 ${r.priority} · 当 ${esc(conds)}</div>
+              <div class="meta">则 ${r.actions.map((a) => a.type + (a.value || a.to ? '(' + esc(a.value || a.to) + ')' : '')).join(' → ')}</div>
+            </div>
+            <div class="ops">
+              <button class="btn sm" data-act="toggle">${r.enabled ? '停用' : '启用'}</button>
+              <button class="btn sm" data-act="edit">编辑</button>
+              <button class="btn sm danger" data-act="del">删</button>
+            </div></div>`
+        }).join('')
+        box.querySelectorAll('.item').forEach((el) => {
+          const r = rules.find((x) => x.id === el.dataset.id)
+          el.querySelector('[data-act="toggle"]').addEventListener('click', () => { r.enabled = !r.enabled; save(); renderRules() })
+          el.querySelector('[data-act="edit"]').addEventListener('click', () => editRule(r))
+          el.querySelector('[data-act="del"]').addEventListener('click', () => { rules = rules.filter((x) => x.id !== r.id); save(); renderRules() })
+        })
+      }
+
+      function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
+
+      function fillSelects() {
+        $('w-source').innerHTML = '<option value="">不限</option>' + ZenCard.SOURCES.map((s) => `<option value="${s}">${s}</option>`).join('')
+        $('w-kind').innerHTML = '<option value="">不限</option>' + ZenCard.KINDS.map((s) => `<option value="${s}">${s}</option>`).join('')
+      }
+      function renderActions() {
+        $('action-list').innerHTML = actions.length
+          ? actions.map((a, i) => `<div class="item"><div class="body"><span class="badge accent">${a.type}</span> ${esc(a.value || a.to || a.channel || a.message || '')}</div><div class="ops"><button class="btn sm danger" data-i="${i}">删</button></div></div>`).join('')
+          : '<div class="empty">暂无动作</div>'
+        $('action-list').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { actions.splice(Number(b.dataset.i), 1); renderActions() }))
+      }
+      function editRule(r) {
+        editingId = r.id
+        $('editor-title').textContent = '编辑规则'
+        $('r-name').value = r.name
+        $('r-priority').value = r.priority
+        $('r-enabled').value = r.enabled ? '1' : '0'
+        $('w-source').value = r.when.source; $('w-kind').value = r.when.kind
+        $('w-tag').value = r.when.tag; $('w-text').value = r.when.text
+        actions = r.actions.slice()
+        renderActions()
+        document.querySelector('[data-view="editor"]').click()
+      }
+      function resetEditor() {
+        editingId = null
+        $('editor-title').textContent = '新建规则'
+        $('r-name').value = ''; $('r-priority').value = '0'; $('r-enabled').value = '1'
+        $('w-source').value = ''; $('w-kind').value = ''; $('w-tag').value = ''; $('w-text').value = ''
+        $('a-value').value = ''
+        actions = []; renderActions()
+      }
+
+      function bind() {
+        $('tabs').addEventListener('click', (e) => {
+          const b = e.target.closest('button[data-view]'); if (!b) return
+          $('tabs').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b))
+          document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + b.dataset.view))
+        })
+        $('theme-btn').addEventListener('click', () => {
+          document.body.classList.toggle('theme-dark')
+          localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light')
+        })
+        $('add-action').addEventListener('click', () => {
+          const type = $('a-type').value
+          const value = $('a-value').value.trim()
+          const a = { type }
+          if (type === 'send') a.to = value || 'writer'
+          else if (type === 'publish') a.channel = value || 'auto'
+          else a.value = value
+          actions.push(a); $('a-value').value = ''; renderActions()
+        })
+        $('save-rule').addEventListener('click', () => {
+          const data = {
+            id: editingId || undefined, name: $('r-name').value.trim(),
+            priority: Number($('r-priority').value) || 0, enabled: $('r-enabled').value === '1',
+            when: { source: $('w-source').value, kind: $('w-kind').value, tag: $('w-tag').value.trim(), text: $('w-text').value.trim() },
+            actions,
+          }
+          const rule = ZenFlow.createRule(data)
+          const check = ZenFlow.validateRule(rule)
+          if (!check.ok) { toast(check.errors[0]); return }
+          if (editingId) rules = rules.map((r) => (r.id === editingId ? rule : r))
+          else rules.push(rule)
+          save(); resetEditor(); renderRules(); toast('规则已保存')
+          document.querySelector('[data-view="rules"]').click()
+        })
+        $('cancel-edit').addEventListener('click', () => { resetEditor(); document.querySelector('[data-view="rules"]').click() })
+        $('run-btn').addEventListener('click', () => {
+          let cards = []
+          try { cards = JSON.parse(localStorage.getItem(CARD_KEY) || '[]').map(ZenCard.create) } catch { cards = [] }
+          if (!cards.length) { toast('卡片库为空，先去 ZenCard 添加'); return }
+          const out = ZenFlow.run(rules, cards, { now: Date.now() })
+          $('run-summary').textContent = `处理 ${out.cards.length} 张卡片，触发 ${out.fired.length} 条规则，产生 ${out.effects.length} 个动作。`
+          $('effect-list').innerHTML = out.effects.length
+            ? out.effects.map((e) => `<div class="item"><div class="body"><div class="title">${esc(e.type)}</div><div class="meta">${esc(e.to || e.channel || e.message || e.card && e.card.content)} · ${new Date(e.at).toLocaleString()}</div></div></div>`).join('')
+            : '<div class="empty">没有产生动作</div>'
+          document.querySelector('[data-view="run"]').click()
+          out.effects.filter((e) => e.type === 'send' || e.type === 'publish').forEach((e) => {
+            try {
+              if (e.type === 'send' && window.OMMShare?.send) window.OMMShare.send({ to: e.to, format: 'zen-card', payload: e.card })
+              if (e.type === 'publish' && window.OMMShare?.publishRecord) window.OMMShare.publishRecord(e.card, { channel: e.channel, format: 'zen-card' })
+            } catch (_) {}
+          })
+          toast('运行完成')
+        })
+        $('export-btn').addEventListener('click', () => {
+          const blob = new Blob([ZenFlow.serialize(rules)], { type: 'application/json' })
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'zen-flow.json'; a.click(); URL.revokeObjectURL(a.href)
+        })
+        $('import-file').addEventListener('change', async (e) => {
+          const f = e.target.files[0]; if (!f) return
+          try { const incoming = ZenFlow.deserialize(await f.text()); rules = incoming; save(); renderRules(); toast('已导入 ' + incoming.length + ' 条规则') }
+          catch (err) { toast('导入失败：' + err.message) }
+        })
+      }
+
+      if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
+      load(); fillSelects(); renderActions(); resetEditor(); bind(); renderRules()
+    </script>
+  </body>
+</html>

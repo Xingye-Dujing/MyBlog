@@ -45,18 +45,103 @@ def find_signtool() -> str | None:
     return None
 
 
+def _powershell_env(script: str, **extra: str) -> str:
+    env = dict(os.environ)
+    env.update(extra)
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return (out.stdout or "").strip()
+
+
+def _import_pfx_to_store(args: argparse.Namespace) -> str | None:
+    """Import the PFX temporarily so signtool can sign by thumbprint.
+
+    The password travels through an environment variable instead of signtool's
+    ``/p`` argument, which would be visible in the process list for the whole
+    duration of the build. Returns the thumbprint, or None on failure.
+    """
+    try:
+        script = (
+            "$ErrorActionPreference='Stop'; "
+            "$pw = ConvertTo-SecureString $env:OMM_SIGN_PW -AsPlainText -Force; "
+            "$sig = Import-PfxCertificate -FilePath $env:OMM_SIGN_PFX "
+            "-CertStoreLocation Cert:\\CurrentUser\\My -Password $pw; "
+            "Write-Output $sig.Thumbprint"
+        )
+        output = _powershell_env(
+            script,
+            OMM_SIGN_PFX=str(Path(args.pfx).resolve()),
+            OMM_SIGN_PW=args.password or "",
+        )
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        return lines[-1] if lines else None
+    except Exception as exc:  # noqa: BLE001 - fall back to /p below
+        print("  warning: PFX store import failed (%s); /p fallback may expose the password" % exc,
+              file=sys.stderr)
+        return None
+
+
+def _remove_cert(thumbprint: str) -> None:
+    try:
+        _powershell_env(
+            "Remove-Item ('Cert:\\CurrentUser\\My\\' + $env:OMM_SIGN_THUMB) "
+            "-Force -ErrorAction SilentlyContinue",
+            OMM_SIGN_THUMB=thumbprint,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def redacted_process_error(exc: subprocess.CalledProcessError) -> str:
+    """Never echo a signtool command that contains ``/p <password>``."""
+    cmd = getattr(exc, "cmd", None)
+    if not isinstance(cmd, (list, tuple)):
+        return str(exc)
+    parts: list[str] = []
+    hide_next = False
+    for part in cmd:
+        token = str(part)
+        if hide_next:
+            parts.append("***")
+            hide_next = False
+        elif token == "/p":
+            parts.append(token)
+            hide_next = True
+        else:
+            parts.append(token)
+    text = " ".join(parts)
+    if getattr(exc, "stderr", None):
+        text += "\n" + str(exc.stderr).strip()
+    return text
+
+
 def sign_with_signtool(signtool: str, exe: Path, args: argparse.Namespace) -> None:
     cmd = [signtool, "sign", "/fd", "SHA256", "/tr", args.timestamp, "/td", "SHA256"]
+    imported_thumb: str | None = None
     if args.pfx:
-        cmd += ["/f", args.pfx]
         if args.password:
-            cmd += ["/p", args.password]
+            imported_thumb = _import_pfx_to_store(args)
+        if imported_thumb:
+            cmd += ["/sha1", imported_thumb, "/s", "My"]
+        else:
+            cmd += ["/f", args.pfx]
+            if args.password:
+                cmd += ["/p", args.password]
     else:
         cmd += ["/sha1", args.thumbprint, "/s", "My"]
         if args.machine_store:
             cmd += ["/sm"]
     cmd.append(str(exe))
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        if imported_thumb:
+            _remove_cert(imported_thumb)
 
 
 def sign_with_powershell(exe: Path, args: argparse.Namespace) -> None:
@@ -162,7 +247,7 @@ def main() -> None:
                 sign_with_powershell(exe, args)
         except subprocess.CalledProcessError as exc:
             failed.append(exe.name)
-            print("  FAILED (%s)" % exc, file=sys.stderr)
+            print("  FAILED (%s)" % redacted_process_error(exc), file=sys.stderr)
             continue
         print("  %s" % verify(exe), flush=True)
 
