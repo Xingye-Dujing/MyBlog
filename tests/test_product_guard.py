@@ -148,6 +148,40 @@ class DebugCheckTests(unittest.TestCase):
         self.assertEqual(g.check_debug(files, lambda t: True), [])
 
 
+class FormatCheckTests(unittest.TestCase):
+    def _files(self):
+        files = {"public/json-specs/README.md": "总表 " + " ".join(
+            "[%s](%s)" % (doc, doc) for doc, _, _ in g.FORMAT_CONTRACTS)}
+        for doc, sources, tokens in g.FORMAT_CONTRACTS:
+            text = " ".join(tokens)
+            files["public/json-specs/" + doc] = text
+            for source in sources:
+                files[source] = text
+        return files
+
+    def test_real_formats_are_consistent(self):
+        self.assertEqual(g.check_format(g.snapshot(), lambda t: True), [])
+
+    def test_source_drift_is_reported(self):
+        files = self._files()
+        files["public/zen-card.js"] = "zen-card zen-card-pack"
+        issues = g.check_format(files, lambda t: True)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("产品源码缺少格式标识: cards", issues[0].message)
+
+    def test_spec_drift_is_reported(self):
+        files = self._files()
+        files["public/json-specs/zenpack.md"] = "zen-backup"
+        issues = g.check_format(files, lambda t: True)
+        self.assertTrue(any("规范缺少格式标识: products" in i.message for i in issues))
+
+    def test_unregistered_contract_is_reported(self):
+        files = self._files()
+        files["public/json-specs/README.md"] = "空"
+        issues = g.check_format(files, lambda t: True)
+        self.assertEqual(len(issues), len(g.FORMAT_CONTRACTS))
+
+
 class ResourceCheckTests(unittest.TestCase):
     def test_missing_static_asset_is_reported(self):
         files = {"public/page.html": '<link href="missing.css"><script src="ok.js"></script>'}

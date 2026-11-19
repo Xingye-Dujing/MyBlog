@@ -11,6 +11,8 @@ LINK   local href/src and Markdown links that point to a missing file
 IMPORT relative ES-module import specifiers that do not resolve
 BRIDGE canonical consumer products must load ``zen-link.js`` as a module
 SPEC   every JSON spec document is indexed from ``json-specs/README.md``
+FORMAT every JSON spec's format tokens also appear in the product source that
+       implements it — the spec and the code cannot silently drift apart
 DEBUG  no ``debugger`` statement may ship in a product page or module
 RESOURCE every static CSS url() and non-product-page asset reference resolves
 XSS    no unescaped dynamic value is concatenated into innerHTML
@@ -52,6 +54,22 @@ from plugin_specs import DESKTOP_EXE_NAMES  # noqa: E402
 
 CATALOG = "public/dist/catalog.json"
 LAUNCHER = "public/desktop/omm_launcher.py"
+
+# (spec doc, implementing sources, tokens required in BOTH doc and sources)
+# Tokens are the top-level hard requirements from json-specs/README.md.
+# Products that import no JSON (latex / redact / message) have no contract.
+FORMAT_CONTRACTS = [
+    ("zencard.md", ["public/zen-card.js"], ["zen-card", "zen-card-pack", "cards"]),
+    ("zenpack.md", ["public/zen-backup.js", "public/zen-pack.js"], ["zen-backup", "products"]),
+    ("writer.md", ["public/omm-writer.html"], ["zenwriter-canvas", "nodes", "connections"]),
+    ("annotate.md", ["public/omm-annotate.html"], ["codes"]),
+    ("corpus.md", ["public/omm-corpus.html"], ["entries", "categories"]),
+    ("data.md", ["public/omm-data.html"], ["rows", "tables"]),
+    ("english.md", ["public/omm-english.html"], ["books", "prog"]),
+    ("planner.md", ["public/omm-planner.html"], ["planners", "version"]),
+    ("visualization.md", ["public/omm-visualization.html"],
+     ["zenviz-right-properties", "version"]),
+]
 
 # Products that act as *consumers* of the universal card bridge.  The hub and
 # the five ecosystem products are intentionally excluded: they produce/manage
@@ -288,6 +306,40 @@ def check_debug(files, exists) -> list[Issue]:
     return issues
 
 
+def check_format(files, exists) -> list[Issue]:
+    """Keep each JSON spec's declared format in sync with its implementation."""
+    issues = []
+    prefix = "public/json-specs/"
+    readme = files.get(prefix + "README.md", "")
+    for doc, sources, tokens in FORMAT_CONTRACTS:
+        rel_doc = prefix + doc
+        doc_text = files.get(rel_doc)
+        if doc_text is None:
+            issues.append(Issue("FORMAT", rel_doc, 0, "格式规范文档缺失"))
+            continue
+        if "](" + doc + ")" not in readme:
+            issues.append(Issue("FORMAT", prefix + "README.md", 0,
+                                "格式契约未登记总表: %s" % doc))
+        parts = []
+        for source in sources:
+            text = files.get(source)
+            if text is None:
+                disk = ROOT / source
+                text = disk.read_text(encoding="utf-8") if disk.exists() else None
+            if text is None:
+                issues.append(Issue("FORMAT", source, 0, "格式对应的产品源码缺失"))
+            else:
+                parts.append(text)
+        source_text = "\n".join(parts)
+        for token in tokens:
+            if token not in doc_text:
+                issues.append(Issue("FORMAT", rel_doc, 0, "规范缺少格式标识: %s" % token))
+            if token not in source_text:
+                issues.append(Issue("FORMAT", sources[0], 0,
+                                    "产品源码缺少格式标识: %s" % token))
+    return issues
+
+
 def _in_asset_scope(rel: str) -> bool:
     """Owned HTML/CSS only: no third-party bundles, builds or dist output."""
     if not rel.startswith("public/") or "/vendor/" in "/" + rel:
@@ -469,6 +521,7 @@ CHECKS: list[Check] = [
     Check("IMPORT", "ES 模块导入解析", False, check_imports),
     Check("BRIDGE", "产品桥接注入", False, check_bridge),
     Check("SPEC", "JSON 规范索引同步", False, check_specs),
+    Check("FORMAT", "JSON 格式契约同步", False, check_format),
     Check("DEBUG", "调试语句残留", False, check_debug),
     Check("RESOURCE", "静态资源可达性", False, check_resources),
     Check("XSS", "HTML 拼接转义", False, check_xss),
