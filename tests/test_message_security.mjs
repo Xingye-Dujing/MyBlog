@@ -120,12 +120,33 @@ for (const file of bridgeFiles) {
     assert.match(text, /event\.origin/)
   })
 }
-const htmlBridges = ['public/omm-writer.html']
+const htmlBridges = ['public/omm-writer.html', 'public/omm-ai.html']
 for (const file of htmlBridges) {
   const text = src(file)
   check(`${file}: no wildcard postMessage target remains`, () => {
     assert.equal(/postMessage\([\s\S]{0,600}?,\s*'\*'\s*\)/.test(text), false,
       `${file} still contains postMessage(..., '*')`)
+  })
+}
+/* The AI page used to accept omm:theme / omm:shortcut from any origin at all.
+ * Its listener now mirrors the embed bridge: parent source + trusted origin. */
+const aiHtml = src('public/omm-ai.html')
+check('omm-ai.html: inbound messages validate origin', () => {
+  assert.match(aiHtml, /event\.origin/)
+  assert.match(aiHtml, /event\.source !== window\.parent/)
+  assert.match(aiHtml, /isTrustedParentOrigin\(event\.origin\)/)
+})
+for (const [label, hubOrigin, origin, expected] of [
+  ['trusted hub origin when embedded', 'http://127.0.0.1:8300', 'http://127.0.0.1:8300', true],
+  ['other origin when embedded', 'http://127.0.0.1:8300', 'https://evil.example', false],
+  ['loopback when standalone', '', 'http://localhost:8341', true],
+  ['external host when standalone', '', 'https://evil.example', false],
+  ['null origin when standalone', '', 'null', false],
+  ['file origin when standalone', '', 'file:///C:/x', false],
+]) {
+  check(`omm-ai.html: isTrustedParentOrigin - ${label}`, () => {
+    const fn = loadFunctions(aiHtml, ['isTrustedParentOrigin'], { messageHubOrigin: hubOrigin })
+    assert.equal(fn.isTrustedParentOrigin(origin), expected)
   })
 }
 check('hub forwards its own origin into embedded product URLs', () => {

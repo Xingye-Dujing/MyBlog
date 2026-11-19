@@ -263,7 +263,32 @@ kbd{font-family:var(--mono);border:1px solid var(--line-soft);border-bottom-widt
     });
     if (payload.radius != null) root.style.setProperty('--radius', Number(payload.radius) + 'px');
   }
+  /* 主题与快捷指令只接受来自宿主 Hub 的消息。Hub 会把自己的 origin 放进 iframe URL
+     （与 omm-embed.js 同一约定）；任何第三方窗口都不应能借 postMessage 改写本页样式
+     或触发动作。这里不复用 omm-embed.js 的内部函数——它包在 IIFE 里，本页无法访问。 */
+  var messageHubOrigin = '';
+  try {
+    var rawHub = new URLSearchParams(window.location.search).get('omm_hub_origin');
+    if (rawHub) {
+      var parsedHub = new URL(rawHub);
+      if ((parsedHub.protocol === 'http:' || parsedHub.protocol === 'https:') &&
+          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsedHub.hostname) >= 0) {
+        messageHubOrigin = parsedHub.origin;
+      }
+    }
+  } catch (e) { /* 忽略非法 URL */ }
+  function isTrustedParentOrigin(origin) {
+    if (messageHubOrigin) return origin === messageHubOrigin;
+    try {
+      var u = new URL(String(origin || ''));
+      return (u.protocol === 'http:' || u.protocol === 'https:') &&
+        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0;
+    } catch (e) { return false; }
+  }
+
   window.addEventListener('message', function (event) {
+    if (event.source !== window.parent) return;
+    if (!isTrustedParentOrigin(event.origin)) return;
     var data = event.data;
     if (data && data.type === 'omm:theme') setTheme(data);
     if (data && data.type === 'omm:shortcut') {
