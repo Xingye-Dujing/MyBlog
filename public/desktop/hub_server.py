@@ -459,8 +459,13 @@ class HubServer:
         if user:
             token = base64.b64encode(("%s:%s" % (user, password)).encode("utf-8")).decode("ascii")
             request.add_header("Authorization", "Basic " + token)
+        # 默认 urlopen 会跟随 3xx 并把 Authorization 带到重定向目标。初始 URL 的
+        # SSRF 校验必须覆盖每一跳，且跨域跳转要丢弃 Basic 凭据。
+        opener = urllib.request.build_opener(
+            omm_shared.ValidatedRedirectHandler(allow_private)
+        )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with opener.open(request, timeout=timeout) as response:
                 return response.status, response.read()
         except urllib.error.HTTPError as exc:
             if exc.code == 405:  # MKCOL 已存在时视为成功

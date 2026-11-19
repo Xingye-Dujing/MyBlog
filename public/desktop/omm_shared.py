@@ -29,6 +29,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,71 @@ except Exception:  # pragma: no cover - keeps the module importable by itself
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 CLOUD_METADATA_HOSTS = {"metadata.google.internal", "metadata", "instance-data"}
+
+
+def _ip_literal(host: str):
+    """把整数 / 八进制 / 十六进制写法的主机规范化为 ipaddress 对象。
+
+    浏览器与 urllib 都会把 ``http://2130706433/`` 解析成 127.0.0.1。只检查字面的
+    点分十进制会让这类写法绕过 SSRF 守卫。
+    """
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    if re.fullmatch(r"\d{1,10}", host):
+        try:
+            return ipaddress.ip_address(int(host, 10))
+        except ValueError:
+            return None
+    if re.fullmatch(r"0[xX][0-9a-fA-F]{1,8}", host):
+        try:
+            return ipaddress.ip_address(int(host, 16))
+        except ValueError:
+            return None
+    parts = host.split(".")
+    if 1 < len(parts) <= 4 and all(
+        re.fullmatch(r"(?:0[xX][0-9a-fA-F]{1,8}|0[0-7]{1,11}|[0-9]{1,3})", p)
+        for p in parts
+    ):
+        try:
+            nums = []
+            for part in parts:
+                if part.lower().startswith("0x"):
+                    nums.append(int(part, 16))
+                elif len(part) > 1 and part.startswith("0"):
+                    nums.append(int(part, 8))
+                else:
+                    nums.append(int(part, 10))
+            if all(0 <= n <= 255 for n in nums):
+                return ipaddress.ip_address(".".join(str(n) for n in nums))
+        except ValueError:
+            return None
+    return None
+
+
+class ValidatedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """WebDAV 重定向守卫：每一跳重新过 SSRF 校验，跨域时丢弃 Basic 凭据。
+
+    urllib 默认跟随 3xx 并把原请求的 Authorization 头带到重定向目标。一个公网
+    WebDAV 只要 302 到 127.0.0.1 或云元数据地址就能绕过只在初始 URL 做一次的
+    校验，同时泄露凭据。构建 opener 时必须用这个类替换默认重定向处理器。
+    """
+
+    def __init__(self, allow_private: bool = False):
+        self._allow_private = bool(allow_private)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not remote_url_is_public(newurl, self._allow_private):
+            raise ValueError("WebDAV 重定向目标不被允许：%s" % newurl)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is None:
+            return None
+        old = urlsplit(req.full_url)
+        new = urlsplit(newurl)
+        if (old.scheme, old.netloc) != (new.scheme, new.netloc):
+            new_req.remove_header("Authorization")
+        return new_req
 
 
 def remote_url_is_public(url: str, allow_private: bool = False) -> bool:
@@ -71,9 +137,8 @@ def remote_url_is_public(url: str, allow_private: bool = False) -> bool:
         return False
     if host in LOOPBACK_HOSTS or host.endswith(".localhost"):
         return False
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
+    ip = _ip_literal(host)
+    if ip is None:
         return True  # DNS name; cannot be checked reliably without a lookup
     if allow_private:
         return True

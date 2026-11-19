@@ -109,6 +109,59 @@ class RemoteUrlTests(unittest.TestCase):
             omm_shared.remote_url_is_public("http://192.168.1.10/dav", allow_private=True)
         )
 
+    def test_encoded_ip_literals_are_rejected(self):
+        # urllib / browsers resolve these to 127.0.0.1 even though they are not
+        # dotted decimals. A literal-only guard used to let every one through.
+        for url in (
+            "http://2130706433/", "http://0177.0.0.1/", "http://0x7f000001/",
+            "http://0x7f.0.0.1/", "http://168430090/",
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(omm_shared.remote_url_is_public(url))
+
+
+class WebdavRedirectTests(unittest.TestCase):
+    """Every redirect hop must be re-checked and must not leak Basic auth."""
+
+    @staticmethod
+    def _request():
+        import urllib.request
+        req = urllib.request.Request(
+            "https://dav.example.com/backup", headers={"Authorization": "Basic abc"}
+        )
+        return req
+
+    def _redirect(self, newurl, allow_private=False):
+        return omm_shared.ValidatedRedirectHandler(allow_private).redirect_request(
+            self._request(), None, 302, "Moved", {}, newurl
+        )
+
+    def test_same_origin_redirect_keeps_authorization(self):
+        req = self._redirect("https://dav.example.com/other")
+        self.assertEqual(req.headers.get("Authorization"), "Basic abc")
+
+    def test_cross_origin_redirect_drops_authorization(self):
+        req = self._redirect("https://cdn.example.com/other")
+        self.assertNotIn("Authorization", req.headers)
+
+    def test_redirect_to_loopback_is_blocked(self):
+        for url in (
+            "http://127.0.0.1/admin", "http://169.254.169.254/latest/meta-data/",
+            "http://2130706433/",
+        ):
+            with self.subTest(url=url):
+                with self.assertRaises(ValueError):
+                    self._redirect(url)
+
+    def test_private_opt_in_allows_lan_redirect(self):
+        req = self._redirect("http://192.168.1.10/dav", allow_private=True)
+        self.assertNotIn("Authorization", req.headers)  # still cross-origin
+
+    def test_hub_server_uses_validated_opener(self):
+        hub = (ROOT / "public" / "desktop" / "hub_server.py").read_text(encoding="utf-8")
+        self.assertIn("ValidatedRedirectHandler", hub)
+        self.assertNotIn("urllib.request.urlopen(request", hub)
+
 
 class ResourcePathTests(unittest.TestCase):
     """A registered resource file must not expose its whole parent directory."""
