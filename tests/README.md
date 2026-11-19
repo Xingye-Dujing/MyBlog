@@ -168,6 +168,8 @@ npm run build                             # 前端生产构建
 - `test_today_panel.mjs` 与 `tests/e2e/test_today_panel.py` Hub“今日”面板：纯函数聚合待复习卡片、卡片数、笔记、规则启用数与最近笔记/搜索；面板只读各产品既有 localStorage、复用 `activateApp`、不新增存储；E2E 在真实浏览器注入数据后校验面板数字与条目。
 - **AI 工作区对齐**：`no_jp_quotes.py` 现在扫描 OMM 自写的 `agent_workspace/omm_*.py`（上游框架子包保持原样），修复了 4 处漏网的角引号；AI 自带 `tools/check_quote_style.py` 排除 `.workbuddy/` 与 `vendor/` 后，原本被跳过的全仓库门禁恢复运行。`SPEC_SYNC` 守卫把 14 份知识副本绑定到 `json-specs/` 真源；`RUNTIME` 守卫把本机代码执行权限锁给官方 `ai`。`run_all.py` 接入 `pytest public/tests`，182 项 AI 测试（含框架门禁与 golden 对拍）纳入统一回归。
 - `test_golden_formats.mjs` 与 `public/tests/test_golden_formats.py` Golden 对拍：`tests/golden_formats/` 的四份样例必须同时通过产品 JS 导出与 AI Python 校验器；篡改格式或校验和会被两侧同时拒绝。对拍发现并修复了一处真实漂移：`omm_validators.v_zenflow` 原先放行空 `actions`，现已与 `zen-flow.js` 的 `validateRule` 一致。`public/tests/test_import_paths.py` 用子进程锁定 `agent_workspace` 只能经包路径导入，避免包内 `types.py` 遮蔽标准库。
+- **跨产品联动**：`test_search_page.mjs` 新增知识库一键“存为卡片”——历史条目经 `SearchLibrary.toCard()` 落到统一卡片库，闭合“搜索→卡片→复习”链路；`test_flow.mjs` 校验 `ZenFlow.templates()` 的四套规则模板全部合法且枚举正确，ZenFlow 空状态可一键载入。
+- **AI 读取真实数据**：`omm-ai.html` 在发送前经 `omm:live-data-request/reply` 向 Hub 请求各产品只读快照（Hub 聚合同源 localStorage 并复用 `zen-card-request` 跨 iframe 收集卡片），放入 chat 请求的 `context.omm_live`；`omm_host.omm_live_context` 把它渲染成模型上下文，递归脱敏 `apiKey`/`token`/`supabase` 等字段、数组限 50 条正文限 20 条、深度截断容错。独立运行或 Hub 超时则静默降级，绝不阻塞对话。测试见 `test_ai_live_context.mjs`、`test_knowledge_graph.mjs` 与 `public/tests/test_omm_live_context.py`；全部只改 OMM 自写文件，vendored 框架保持原样。
 
 ## 前置条件
 
