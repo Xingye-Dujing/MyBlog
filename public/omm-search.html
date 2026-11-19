@@ -221,7 +221,7 @@
       .kb-item .kb-q { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .kb-item .kb-m { font-size: 9px; color: var(--text-faint); margin-top: 2px; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
       .kb-item .kb-tag { border: 1px solid var(--border-dim); border-radius: 999px; padding: 0 5px; }
-      .kb-item .kb-pin, .kb-item .kb-send { border: 0; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; }
+      .kb-item .kb-pin, .kb-item .kb-send, .kb-item .kb-tocard { border: 0; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; }
       .kb-item .kb-pin.on { color: var(--accent-orange); }
       .h-del { float: right; border: 0; background: transparent; color: var(--text-faint); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
       .h-del:hover { color: var(--accent-red); }
@@ -1217,6 +1217,7 @@
               '<div class="kb-q">' + esc(h.query) + '</div>' +
               '<div class="kb-m"><span>' + esc(new Date(h.ts).toLocaleDateString()) + '</span>' + tags +
               '<button class="kb-pin' + (h.pinned ? ' on' : '') + '" data-pin="' + idx + '" title="置顶">★</button>' +
+              '<button class="kb-tocard" data-tocard="' + idx + '" title="存为卡片">卡</button>' +
               '<button class="kb-send" data-send="' + idx + '" title="发送到产品">↗</button></div></div>'
           }).join('')
         }
@@ -1228,6 +1229,16 @@
           window.OMMShare.send({ to: target, format: 'zen-card', title: String(entry.query).slice(0, 40), payload: card })
             .then(function () { toast('已发送到 ' + target); closeDropdowns() })
             .catch(function () { toast('发送失败') })
+        }
+        /* 一键沉淀：历史条目 -> zen-card -> 统一卡片库。不弹 prompt，直接落库，
+         * 让“搜索 -> 卡片 -> 间隔复习”这条链不必再导出再导入。 */
+        function kbToCard(entry) {
+          if (!window.SearchLibrary || !window.ZenLink) {
+            toast('卡片模块尚未加载'); return
+          }
+          var card = window.SearchLibrary.toCard(entry)
+          window.ZenLink.publish(card, '')
+          toast('已存入卡片库')
         }
 
         /* ---------------- export ---------------- */
@@ -1483,6 +1494,13 @@
             e.stopPropagation()
             var hp = S.history[parseInt(pin.getAttribute('data-pin'), 10)]
             if (hp) { hp.pinned = !hp.pinned; save(); renderKB(); toast(hp.pinned ? '已置顶' : '已取消置顶') }
+            return
+          }
+          var tocard = e.target.closest('[data-tocard]')
+          if (tocard) {
+            e.stopPropagation()
+            var hc = S.history[parseInt(tocard.getAttribute('data-tocard'), 10)]
+            if (hc) kbToCard(hc)
             return
           }
           var send = e.target.closest('[data-send]')

@@ -14,6 +14,8 @@
     <script src="zen-canvas-layout.js"></script>
     <style>
       .flow-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+      .tpl-list { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
+      .tpl-item { white-space: normal; text-align: left; }
       .flow-canvas { position: relative; min-height: 460px; overflow: auto; border: 1px solid var(--line, #ddd); border-radius: 8px; background: var(--panel, #fff); }
       .flow-canvas svg { position: absolute; left: 0; top: 0; pointer-events: none; }
       .flow-node { position: absolute; box-sizing: border-box; width: 180px; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line, #ccc); border-radius: 7px; background: var(--panel, #fff); cursor: pointer; font-size: 12px; line-height: 1.5; }
@@ -143,7 +145,18 @@
       function renderRules() {
         const box = $('rule-list')
         $('status-text').textContent = '规则 ' + rules.length + ' 条'
-        if (!rules.length) { box.innerHTML = '<div class="empty">还没有规则，去“编辑器”新建一条。</div>'; return }
+        if (!rules.length) {
+          const presets = ZenFlow.templates()
+          box.innerHTML = '<div class="empty">还没有规则。去“编辑器”新建一条，或从模板快速开始：</div>' +
+            (presets.length ? '<div class="tpl-list">' + presets.map((t, i) =>
+              '<button class="btn sm tpl-item" data-tpl="' + i + '">+ ' + esc(t.name) + '</button>').join('') + '</div>' : '')
+          box.querySelectorAll('[data-tpl]').forEach((b) => b.addEventListener('click', () => {
+            const t = presets[Number(b.dataset.tpl)]
+            if (!t || rules.some((r) => r.id === t.id)) return
+            rules.push(t); save(); renderRules(); toast('已载入模板：' + t.name)
+          }))
+          return
+        }
         box.innerHTML = rules.map((r) => {
           const conds = Object.keys(r.when).filter((k) => r.when[k]).map((k) => k + '=' + r.when[k]).join(' · ') || '所有卡片'
           return `<div class="item" data-id="${r.id}">

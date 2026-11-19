@@ -125,8 +125,43 @@ function deserialize(text) {
   return obj.rules.map(createRule)
 }
 
+/* 开箱即用的规则模板：让新用户不必先学 when/actions 语法就能接到工作流。
+ * 每个模板都是普通规则对象，先经 createRule 归一化、validateRule 校验后展示。 */
+const RULE_TEMPLATES = [
+  {
+    id: 'tpl-search-to-card',
+    name: '搜索结果自动归档为卡片',
+    when: { source: 'search', kind: 'fact' },
+    actions: [{ type: 'addTag', value: '已归档' }],
+  },
+  {
+    id: 'tpl-clip-tags',
+    name: '剪藏打上待读标签',
+    when: { source: 'clip' },
+    actions: [{ type: 'addTag', value: '待读' }],
+  },
+  {
+    id: 'tpl-web-tag',
+    name: '网页剪藏标记待整理',
+    when: { source: 'web' },
+    actions: [{ type: 'addTag', value: '待整理' }, { type: 'highlight' }],
+  },
+  {
+    id: 'tpl-word-kind',
+    name: '英文生词归入单词类型',
+    when: { source: 'english', kind: 'note' },
+    actions: [{ type: 'setKind', value: 'word' }],
+  },
+]
+
+function templates() {
+  return RULE_TEMPLATES.map(function (t) { return createRule(t) })
+}
+
 export const ZenFlow = {
   ACTIONS,
+  RULE_TEMPLATES,
+  templates,
   createRule,
   validateRule,
   match,

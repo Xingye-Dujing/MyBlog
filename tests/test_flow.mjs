@@ -2,6 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ZenFlow } from '../public/zen-flow.js'
+import { ZenCard } from '../public/zen-card.js'
 
 const baseCard = { id: 'zc-1', kind: 'quote', source: 'annotate', content: '精读句子', tags: ['精读'] }
 
@@ -14,6 +15,20 @@ test('createRule 归一化并过滤非法 action', () => {
   assert.equal(r.enabled, true)
   assert.equal(r.actions.length, 1)
   assert.equal(r.when.source, 'search')
+})
+
+test('内置规则模板全部有效且枚举合法', () => {
+  const tpls = ZenFlow.templates()
+  assert.ok(tpls.length >= 3)
+  for (const t of tpls) {
+    assert.equal(ZenFlow.validateRule(t).ok, true, t.name + ' 校验失败')
+    if (t.when.source) assert.ok(ZenCard.SOURCES.includes(t.when.source), t.name + ' 来源非法')
+    if (t.when.kind) assert.ok(ZenCard.KINDS.includes(t.when.kind), t.name + ' 类型非法')
+    for (const a of t.actions) {
+      if (a.type === 'setKind') assert.ok(ZenCard.KINDS.includes(a.value), t.name + ' setKind 非法')
+    }
+  }
+  assert.equal(new Set(tpls.map((t) => t.id)).size, tpls.length, '模板 id 必须唯一')
 })
 
 test('validateRule 校验名字与 action', () => {
