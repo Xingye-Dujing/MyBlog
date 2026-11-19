@@ -27,6 +27,13 @@ def npm_command() -> str:
     return "npm.cmd" if sys.platform == "win32" else "npm"
 
 
+def venv_python() -> Path | None:
+    """Playwright lives in the repo-local virtualenv, not the system Python."""
+    rel = "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
+    candidate = ROOT / "public" / ".venv" / rel
+    return candidate if candidate.exists() else None
+
+
 def main() -> int:
     failures = 0
     failures += run("Backend hardening (Python unittest)",
@@ -56,6 +63,12 @@ def main() -> int:
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])
+    vp = venv_python()
+    if vp:
+        failures += run("E2E browser chain (Playwright)",
+                        [str(vp), "-m", "unittest", "discover", "-s", "tests/e2e", "-v"])
+    else:
+        print("\nE2E browser chain SKIPPED (repo virtualenv with Playwright not found)")
     failures += run("Build & lint (Vite + ESLint)",
                     [npm_command(), "run", "lint"])
     failures += run("Production build", [npm_command(), "run", "build"])

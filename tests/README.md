@@ -15,6 +15,14 @@
 python tests/run_all.py
 ```
 
+端到端浏览器测试使用仓库自带虚拟环境中的 Playwright（自动由 `run_all.py` 发现并执行）；
+首次运行若缺少浏览器，先执行一次 `public/.venv/Scripts/python.exe -m playwright install chromium-headless-shell`。
+单独运行 E2E：
+
+```bash
+public/.venv/Scripts/python.exe -m unittest discover -s tests/e2e -v
+```
+
 或分别运行：
 
 ```bash
@@ -105,6 +113,7 @@ npm run build                             # 前端生产构建
 - `test_canvas_layout.mjs` Writer 通用布局引擎：从 Writer 原样抽取的 `zen-canvas-layout.js` 各策略均可产出无重叠、确定性坐标；Writer 不再内联实现、ZenFlow 与 Writer 均直接调用同一模块。
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
+- `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。
 
 ## 前置条件
 
