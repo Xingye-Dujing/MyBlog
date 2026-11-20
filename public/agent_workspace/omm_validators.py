@@ -16,6 +16,12 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Tuple
 
 from .omm_data import ALL, PRODUCTS, product
+from .omm_formats_generated import (
+    REGISTRY as FORMAT_REGISTRY,
+    TEMPLATES as GENERATED_TEMPLATES,
+    declarative_errors,
+    detect_kind as generated_detect_kind,
+)
 
 # ── 通用工具 ─────────────────────────────────────────────────────────────────
 
@@ -692,73 +698,18 @@ def v_hub(obj: Any, text: str, r: Report) -> str:
     return 'ai-config'
 
 
+# Bound from the format registry: which deep validator handles each product is
+# a contract fact, not a second handwritten table that can drift.
 VALIDATORS = {
-    'annotate': v_annotate, 'corpus': v_corpus, 'data': v_data, 'english': v_english,
-    'latex': v_latex, 'mdforge': v_mdforge, 'message': v_message, 'planner': v_planner,
-    'redact': v_redact, 'search': v_search, 'visualization': v_visualization,
-    'writer': v_writer, 'zencard': v_zencard, 'zenflow': v_zenflow,
-    'zenclip': v_zenclip, 'zenreview': v_zenreview, 'zenbackup': v_zenbackup,
-    'hub': v_hub,
+    row['product']: globals()[row['validator']]
+    for row in FORMAT_REGISTRY
+    if row.get('validator')
 }
 
 
 def detect_kind(identifier: str, obj: Any, text: str) -> str:
-    """根据内容自动判断导入类型；显式指定 kind 时跳过。"""
-    if identifier == 'annotate':
-        if isinstance(obj, dict) and obj.get('omm') == 'bridge':
-            return 'bridge'
-        if isinstance(obj, dict) and isinstance(obj.get('project'), dict):
-            return 'backup'
-        return 'text'
-    if identifier == 'corpus':
-        if isinstance(obj, dict) and obj.get('omm') == 'bridge':
-            return 'bridge'
-        return 'restore'
-    if identifier == 'data':
-        return 'rows' if isinstance(obj, (dict, list)) else 'csv'
-    if identifier == 'english':
-        if isinstance(obj, dict) and obj.get('omm') == 'bridge':
-            return 'bridge'
-        if isinstance(obj, dict) and isinstance(obj.get('drawings'), dict):
-            return 'doodles'
-        if isinstance(obj, dict) and 'books' in obj and 'prog' in obj:
-            return 'backup'
-        return 'wordbook'
-    if identifier == 'latex':
-        return 'tex'
-    if identifier == 'mdforge':
-        return 'markdown'
-    if identifier in ('message', 'redact'):
-        return 'unsupported'
-    if identifier == 'search':
-        return 'export'
-    if identifier == 'visualization':
-        if isinstance(obj, dict) and obj.get('kind') == 'zenviz-right-properties':
-            return 'properties'
-        return 'csv'
-    if identifier == 'writer':
-        if isinstance(obj, dict) and obj.get('format') == 'zenwriter-library':
-            return 'library'
-        return 'canvas'
-    if identifier == 'zencard':
-        if isinstance(obj, dict) and obj.get('format') == 'zen-card-pack':
-            return 'pack'
-        return 'card'
-    if identifier == 'zenclip':
-        return 'pack'
-    if identifier == 'zenflow':
-        return 'rules'
-    if identifier == 'zenreview':
-        if isinstance(obj, list):
-            return 'timeline'
-        if isinstance(obj, dict):
-            return 'inputs'
-        return 'markdown'
-    if identifier == 'zenbackup':
-        return 'manifest'
-    if identifier == 'hub':
-        return 'ai-config'
-    return 'auto'
+    """根据内容自动判断导入类型；规则来自格式注册表生成的 DETECTION。"""
+    return generated_detect_kind(identifier, obj, text)
 
 
 def validate(identifier: str, content: Any, kind: str | None = None) -> dict:
@@ -780,6 +731,12 @@ def validate(identifier: str, content: Any, kind: str | None = None) -> dict:
         text = _dump(content) if content is not None else ''
     chosen = str(kind or '').strip() or detect_kind(key, obj, text)
     report = Report()
+    # The registry-owned contract (format token, version, field shapes, enums)
+    # is checked before the deep semantic validator, so a template and a
+    # validator can never silently disagree about the wire format.
+    if chosen not in ('unsupported', 'text', 'csv', 'markdown', 'tex'):
+        for message in declarative_errors(key, chosen, obj):
+            report.error(message)
     handler = VALIDATORS.get(key)
     if handler is None:
         report.error('该产品暂不支持自动校验')
@@ -801,79 +758,10 @@ def validate(identifier: str, content: Any, kind: str | None = None) -> dict:
 
 # ── 可直接粘贴给 AI 的生成模板 ───────────────────────────────────────────────
 
-TEMPLATES: Dict[str, Dict[str, Any]] = {
-    'annotate': {
-        'backup': {'app': 'zenmark', 'version': 1, 'exportedAt': '2026-01-01 00:00',
-                   'project': {'docs': [{'id': 'd1', 'text': '原文…'}],
-                               'codes': [{'id': 'c1', 'name': '开放编码', 'level': 'open'}],
-                               'anns': [{'id': 'a1', 'doc': 'd1', 'code': 'c1', 'start': 0, 'end': 2, 'quote': '原文'}],
-                               'rels': [], 'memos': [], 'marks': [], 'notes': []}},
-        'bridge': {'omm': 'bridge', 'v': 1, 'kind': 'notes', 'items': [{'t': 'sentence', 'en': '…', 'zh': '…'}]},
-    },
-    'corpus': {
-        'restore': {'version': 2, 'categories': [{'id': 'cat1', 'name': '写作'}],
-                    'entries': [{'id': 'e1', 'en': 'A natural sentence.', 'zh': '译文', 'type': 'sentence',
-                                 'categoryId': 'cat1', 'tags': ['写作'], 'favorite': False, 'source': 'ai'}]},
-        'bridge': {'omm': 'bridge', 'v': 1, 'kind': 'notes', 'items': [{'t': 'sentence', 'en': '…', 'zh': '…'}]},
-    },
-    'data': {'rows': [{'列一': '值', '列二': 1}], 'csv': '列一,列二\n值,1\n'},
-    'english': {
-        'wordbook': [{'w': 'word', 'ph': '/wɜːd/', 'm': '单词', 'ex': 'Example sentence.'}],
-        'doodles': {'drawings': {'word': {'strokes': [
-            {'color': '#000', 'width': 3, 'erase': False, 'points': [{'x': 100, 'y': 100, 'p': 0.8}]}]}}},
-        'backup': {'books': {'cet6': {'w': []}, 'u1': {'w': [['word', '/wɜːd/', '单词', 'Example', '例句']]}},
-                   'prog': {}},
-        'bridge': {'omm': 'bridge', 'v': 1, 'items': [{'t': 'word', 'w': 'word', 'm': '单词'}]},
-    },
-    'latex': {'tex': '\\documentclass[UTF8]{ctexart}\n\\begin{document}\n标题与正文。\n\\end{document}\n'},
-    'mdforge': {'markdown': '---\ntitle: 标题\ntemplate: academic\n---\n\n# 正文标题\n\n段落……\n\n# 参考文献\n'},
-    'message': {'unsupported': {'note': '本产品没有文件导入；只可产出 localStorage 配置，且不含密钥'}},
-    'planner': {'backup': {'app': 'zenplan', 'version': 2, 'exportedAt': '2026-01-01T00:00:00Z',
-                           'planners': [{'id': 'p1', 'name': '默认'}], 'activeId': 'p1',
-                           'eventsBy': {'p1': {'2026-01-01': [{'id': 'ev1', 'title': '任务',
-                                                                'color': '#888888', 'time': '09:00', 'done': False}]}},
-                           'recursBy': {'p1': []}}},
-    'redact': {'unsupported': {'note': '本产品拒绝 .json 导入；只可产出 zr-settings 用于 localStorage'}},
-    'search': {'export': {'settings': {'apiBase': 'https://api.deepseek.com', 'apiModel': 'deepseek-chat'}, 'history': []}},
-    'visualization': {
-        'properties': {'kind': 'zenviz-right-properties', 'version': 1,
-                       'engines': {'echarts': {'typeStates': {'bar': {}}, 'chartProps': {'bar': {}}}}},
-        'csv': '类别,数值\nA,1\nB,2\n',
-    },
-    'writer': {
-        'canvas': {'format': 'zenwriter-canvas', 'v': 2, 'name': '画布', 'nodes': [
-            {'id': 'node-1', 'type': 'text', 'x': 100, 'y': 100, 'w': '240px', 'h': '80px',
-             'content': '正文'}], 'connections': []},
-        'library': {'format': 'zenwriter-library', 'docs': {}},
-    },
-    'zencard': {
-        'card': {'format': 'zen-card', 'v': 1, 'id': 'zc-1', 'kind': 'note', 'source': 'manual',
-                 'content': '卡片正文', 'tags': [], 'createdAt': '2026-01-01T00:00:00Z',
-                 'updatedAt': '2026-01-01T00:00:00Z'},
-        'pack': {'format': 'zen-card-pack', 'v': 1, 'name': '卡片包', 'cards': [
-            {'format': 'zen-card', 'v': 1, 'id': 'zc-1', 'kind': 'note', 'source': 'manual',
-             'content': '卡片正文', 'tags': [], 'createdAt': '2026-01-01T00:00:00Z',
-             'updatedAt': '2026-01-01T00:00:00Z'}]},
-    },
-    'zenclip': {'pack': {'format': 'zen-card-pack', 'v': 1, 'name': '剪藏', 'cards': [
-        {'format': 'zen-card', 'v': 1, 'id': 'zc-clip-1', 'kind': 'quote', 'source': 'clip',
-         'content': '摘录', 'tags': [], 'createdAt': '2026-01-01T00:00:00Z',
-         'updatedAt': '2026-01-01T00:00:00Z'}]}},
-    'zenflow': {'rules': [{'name': '示例规则', 'priority': 1, 'enabled': True,
-                           'when': {'source': 'manual', 'kind': 'note', 'tag': '待整理', 'text': ''},
-                           'actions': [{'type': 'addTag', 'value': '已整理'}]}]},
-    'zenreview': {'timeline': [{'app': 'writer', 'ts': '2026-01-01T00:00:00Z', 'title': '完成事项'}],
-                  'inputs': {'timeline': [], 'planner': []}},
-    'zenbackup': {'manifest': {'format': 'zen-backup', 'v': 1,
-                               'createdAt': '2026-01-01T00:00:00Z', 'name': '备份',
-                               'products': [{'id': 'zen.cards.v1', 'name': '间隔复习', 'version': '1',
-                                             'savedAt': '2026-01-01T00:00:00Z',
-                                             # checksum 是 data 的 FNV-1a base36；data 改了就必须重算。
-                                             'checksum': js_checksum([]),
-                                             'data': []}]}},
-    'hub': {'ai-config': {'provider': 'deepseek', 'apiBase': 'https://api.deepseek.com',
-                          'apiModel': 'deepseek-chat', 'apiKey': '', 'system': ''}},
-}
+# Single source of truth: public/json-specs/format-registry.json, via the
+# generated module. No second handwritten template table can drift away from
+# the validator contract.
+TEMPLATES: Dict[str, Dict[str, Any]] = GENERATED_TEMPLATES
 
 
 def formats_for(identifier: str) -> dict:

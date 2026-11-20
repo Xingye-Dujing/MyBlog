@@ -103,4 +103,8 @@ public/
 2. 把新的规范文档放进 `agent_workspace/omm_knowledge/`，`omm_spec_search` / `docs_search`
    会自动检索。更新 `PRODUCTS.md`：
    `python -c "from agent_workspace.omm_data import product_index_md; ..."`。
-3. 运行 `pytest tests -q` 确认目录/技能/文档测试仍然通过。
+3. 新增或改动导入格式时，编辑 `public/json-specs/format-registry.json`（唯一可编辑真源），
+   再运行 `python public/tools/gen_formats.py`。不要手改 `omm_formats_generated.py` 与
+   `formats.generated.md`：`GEN_FORMATS` 守卫会检查生成物是否与注册表逐字一致，
+   深度语义校验器通过注册表的 `validator` 字段绑定，并由 golden fixtures 钉死。
+4. 运行 `pytest tests -q` 确认目录/技能/文档/格式契约测试仍然通过。

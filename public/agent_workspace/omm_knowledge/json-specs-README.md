@@ -89,3 +89,5 @@ json-specs/
 ```
 
 > Writer 画布规范以 `json-specs/writer.md` 为准；旧文档里提到的根目录 `zencanvas-JSON-spec.md` 已不再单独维护。
+
+**机器可读真源**：[`format-registry.json`](format-registry.json) 是所有格式 token、版本、字段、硬门槛、AI 骨架与校验器绑定的唯一可编辑来源。由它生成的[格式骨架](formats.generated.md)（含 AI 工作区副本）**请勿手改**；改契约先改注册表，再运行 `python public/tools/gen_formats.py`，`GEN_FORMATS` 守卫会检查生成物是否最新。深度语义校验仍在 `omm_validators.py`，通过注册表的 `validator` 字段绑定。
