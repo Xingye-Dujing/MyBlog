@@ -16,41 +16,13 @@ from typing import Any, Dict, List
 from .errors import AIError
 from .host import CallableContextSource, DefaultHostAdapter, HostEnvironment
 from .omm_data import CHANNELS, PRODUCT_IDS, PRODUCTS, ALL
+from .omm_privacy import scrub
 from .omm_skills import build_skills
 from .omm_tools import KNOWLEDGE_DIR, build_tools
 
 APP_NAME = '静书房 AI 工作区'
 _SAFE_EXT = {'.md', '.json', '.txt', '.csv', '.tsv', '.tex', '.yaml', '.yml', '.zc', '.zwlib', '.zen-card', '.py'}
 _SECRET_KEYS = {'apikey', 'api_key', 'password', 'secret', 'token', 'credential', 'authorization'}
-
-
-def _redact_live(value: Any, depth: int = 0) -> Any:
-    """Recursively mask credential-like fields in client-supplied live data.
-
-    The browser snapshot may contain API keys (search settings, supabase config).
-    It is injected into the model prompt, so those fields must never survive —
-    regardless of what the page sends. Arrays are capped and scalars truncated so
-    a single huge snapshot cannot blow the context budget.
-    """
-    if depth >= 6:
-        return '…'
-    if isinstance(value, dict):
-        out = {}
-        for key, item in value.items():
-            k = str(key)
-            normalized = re.sub(r'[^a-z0-9]', '', k.lower())
-            if normalized in _SECRET_KEYS or any(
-                s in normalized for s in ('apikey', 'accesstoken', 'password', 'secret', 'supabase')
-            ):
-                out[k] = '***'
-            else:
-                out[k] = _redact_live(item, depth + 1)
-        return out
-    if isinstance(value, list):
-        return [_redact_live(item, depth + 1) for item in value[:50]]
-    if isinstance(value, str):
-        return value[:2000]
-    return value
 
 
 def omm_live_context(query: str, payload: dict, account: str = '') -> str:
@@ -65,7 +37,8 @@ def omm_live_context(query: str, payload: dict, account: str = '') -> str:
     live = payload.get('omm_live') if isinstance(payload, dict) else None
     if not isinstance(live, dict) or not live:
         return ''
-    safe = _redact_live(live)
+    # Unified privacy scrub: drops hidden items and masks credentials at once.
+    safe = scrub(live)
     lines = []
     labels = {
         'cards': '知识卡片',
@@ -78,6 +51,7 @@ def omm_live_context(query: str, payload: dict, account: str = '') -> str:
         rows = safe.get(key)
         if not isinstance(rows, list) or not rows:
             continue
+        # scrub() already dropped hidden rows and masked credential fields.
         lines.append('【%s · %d 条】' % (label, len(rows)))
         for row in rows[:20]:
             text = json.dumps(row, ensure_ascii=False) if isinstance(row, (dict, list)) else str(row)

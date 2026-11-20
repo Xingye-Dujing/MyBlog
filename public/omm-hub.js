@@ -5188,6 +5188,9 @@
           var list = Array.isArray(days[day]) ? days[day] : (days[day] && days[day].events) || [];
           list.slice(0, 40).forEach(function (e) {
             if (!e || typeof e !== 'object') return;
+            // Planner 的隐藏项（ed.hidden，“仅编辑页可见”）绝不能离开本机：
+            // 既不能进 AI 的实时快照，也不能进 ZenReview 的拉取数据。
+            if (e.hidden === true) return;
             out.push({ title: text(e.title, 300), done: e.done === true || e.done === 'failed', day: text(day, 40) });
           });
         });

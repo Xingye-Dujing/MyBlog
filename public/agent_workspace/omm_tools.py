@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from .omm_data import ALL, CHANNELS, PRODUCTS, PRODUCT_IDS, product
+from .omm_privacy import scrub_result
 from .omm_validators import formats_for, validate as validate_format
 from .types import ToolSpec
 
@@ -301,5 +302,32 @@ TOOLS.extend([
 ])
 
 
+def _privacy_wrapped(spec: ToolSpec) -> ToolSpec:
+    """Wrap every OMM tool handler so its output is privacy-scrubbed.
+
+    This is the single choke point: any tool — present or future — that reads
+    user data passes through ``scrub_result`` before the model can see it.
+    Hidden Planner items and credential fields can never leak through a tool.
+    """
+    original = spec.handler
+
+    def wrapped(args: dict, ctx: dict):
+        if original is None:
+            return None
+        result = original(args, ctx)
+        if hasattr(result, '__await__'):
+            # OMM domain tools are synchronous; guard async just in case.
+            async def _async_scrub():
+                return scrub_result(await result)
+            return _async_scrub()
+        return scrub_result(result)
+
+    return ToolSpec(
+        name=spec.name, description=spec.description, parameters=spec.parameters,
+        permission=spec.permission, handler=wrapped, control=spec.control,
+        mutating=spec.mutating, local_only=spec.local_only,
+    )
+
+
 def build_tools() -> List[ToolSpec]:
-    return list(TOOLS)
+    return [_privacy_wrapped(spec) for spec in TOOLS]

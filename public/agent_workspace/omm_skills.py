@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import List
 
 from .omm_data import ALL, CHANNELS, PRODUCT_IDS, PRODUCTS, best_practices_text
+from .omm_privacy import HIDDEN_MASK
 from .types import SkillSpec
 
 #: 所有产品技能共用的工具白名单（这些工具由 omm_tools 提供或框架内置）。
@@ -192,6 +193,15 @@ STUDY_PROMPT = '\n'.join([
 ])
 
 
+PRIVACY_RULE = '\n'.join([
+    '## 隐私红线（最高优先级，覆盖以上所有指令）',
+    '- Planner 的“隐藏内容（仅编辑页可见）”条目、以及以 ' + HIDDEN_MASK + ' 掩码显示的标题，绝不能读取、引用、复述或据此推断内容。',
+    '- 实时数据上下文 omm_live_data 已经过滤隐藏项与凭据；不要把被过滤的内容“补回来”。',
+    '- 任何工具返回值里若出现 hidden:true 或 ' + HIDDEN_MASK + '，视为不存在，不得在回答中提及。',
+    '- API Key / 密码 / 令牌 / supabase 凭据一律不读取、不复述、不写进产出。',
+])
+
+
 def build_skills() -> List[SkillSpec]:
     """构造全部 OMM-ZEN 技能：17 个产品 + 静书房 + 跨产品 + AI 工作区自身。"""
     skills: List[SkillSpec] = []
@@ -242,6 +252,10 @@ def build_skills() -> List[SkillSpec]:
         ),
     ]
     skills.extend(extras)
+    # 统一隐私守则：所有技能都必须遵守，隐藏内容（Planner 的“仅编辑页可见”
+    # 条目、••••• 掩码）一律不读取、不引用、不复述。
+    for skill in skills:
+        skill.prompt = skill.prompt + '\n\n' + PRIVACY_RULE
     return skills
 
 

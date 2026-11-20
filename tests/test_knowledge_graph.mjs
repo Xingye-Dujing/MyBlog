@@ -111,6 +111,21 @@ test('Hub 快照包含 timeline 与 Planner 完成项', () => {
   assert.equal(snap.planner[1].done, false)
 })
 
+test('Hub 快照绝不携带 Planner 的隐藏日程', () => {
+  const snap = liveData({
+    'zp-data-v2': JSON.stringify([{ days: {
+      '2026-01-01': [
+        { title: '普通待办', done: true },
+        { title: '绝密内容', done: false, hidden: true },
+        { title: '•••••', done: false, hidden: true },
+      ],
+    } }]),
+  })
+  assert.equal(snap.planner.length, 1)
+  assert.equal(snap.planner[0].title, '普通待办')
+  assert.ok(!JSON.stringify(snap).includes('绝密内容'))
+})
+
 test('Viz 送复盘的图表进入 Hub 时间线', () => {
   const snap = liveData({
     'zen.viz.review.v1': JSON.stringify([
