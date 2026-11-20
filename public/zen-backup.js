@@ -124,8 +124,10 @@ function validate(manifest) {
   else {
     manifest.products.forEach(function (p, i) {
       if (!p || !str(p.id)) errors.push('products[' + i + '].id 不能为空')
-      if (p && p.checksum && p.checksum !== checksum(p.data)) {
-        errors.push('products[' + i + '].checksum 不匹配')
+      // 缺失 checksum 与 checksum 不匹配都不能放过，否则伪造/损坏的包能借
+      // readPack() 的 validate() 这道唯一完整性闸门写入任意工作区键。
+      if (p && (!str(p.checksum) || p.checksum !== checksum(p.data))) {
+        errors.push('products[' + i + '].checksum 缺失或不匹配')
       }
     })
   }
@@ -169,10 +171,10 @@ function merge(current, incoming, opts) {
     if (!right) return left
     if (!left || strategy === 'incoming') return right
     if (strategy === 'current') return left
-    // 有些产品（主题/设置）存的是对象而非数组：两侧都强转 [] 会静默清空数据。
-    // 任一侧是非数组时按策略取其一，不再进入数组去重逻辑。
+    // 只有两侧都是数组才做去重合并；任一侧是对象（主题/设置）时必须取其一，
+    // 否则 arr(对象) 会变成 []，把对象数据整份丢掉。
     const mergedData =
-      Array.isArray(right.data) || Array.isArray(left.data)
+      Array.isArray(right.data) && Array.isArray(left.data)
         ? uniqueBy(arr(right.data).concat(arr(left.data)), o.idField || 'id')
         : strategy === 'incoming' ? right.data : left.data
     // right.checksum 是针对旧 right.data 算的，合并后必须重算，否则生成的清单

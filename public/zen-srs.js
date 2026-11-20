@@ -25,7 +25,8 @@ function createState(cardId, now) {
 function fromCards(cards, now) {
   const seen = Object.create(null)
   return (Array.isArray(cards) ? cards : []).reduce(function (out, c) {
-    const id = String((c && c.id) || '')
+    // 用 nullish 判断而不是 ||：数字 0 是合法的卡片 id，|| 会把它当成空值丢掉。
+    const id = c && c.id != null ? String(c.id) : ''
     if (!id || seen[id]) return out
     seen[id] = 1
     out.push(createState(id, now))
@@ -62,11 +63,13 @@ function grade(state, input, now) {
     next.ease = Math.max(MIN_EASE, next.ease - 0.2)
     return next
   }
+  // SM-2 先更新记忆稳定性（ease），再用新的 ease 推导下次间隔；用旧 ease 会让
+  // "hard" 这类降低 ease 的评分得到偏长的间隔并逐轮累积误差。
+  next.ease = Math.max(MIN_EASE, next.ease + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)))
   next.reps += 1
   if (next.reps === 1) next.interval = 1
   else if (next.reps === 2) next.interval = 6
   else next.interval = Math.max(1, Math.round(next.interval * next.ease))
-  next.ease = Math.max(MIN_EASE, next.ease + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)))
   next.due = t + next.interval * DAY
   return next
 }

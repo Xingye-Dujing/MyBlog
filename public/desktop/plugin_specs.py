@@ -12,7 +12,7 @@ import re
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.24"
+VERSION = "1.0.25"
 
 
 def version_key(value: Any) -> tuple:
@@ -84,7 +84,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "name": "文本标注",
         "glyph": "标",
         "description": "PDF 标注 · 精读 · 批注",
-        "version": "1.0.24",
+        "version": "1.0.25",
         "entry": "omm-annotate.html",
         "port": 8311,
         "runtime": "static",
@@ -233,7 +233,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "name": "可视化图表",
         "glyph": "图",
         "description": "图表与数据可视化",
-        "version": "1.0.24",
+        "version": "1.0.25",
         "entry": "omm-visualization.html",
         "port": 8320,
         "runtime": "static",

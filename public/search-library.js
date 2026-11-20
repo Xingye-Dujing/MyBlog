@@ -51,7 +51,12 @@ function fromCard(card) {
     answer: c.note ? c.content : '',
     sources: c.ref ? [{ url: c.ref, title: c.ref }] : [],
     queries: [],
-    ts: Date.parse(c.createdAt) || Date.now(),
+    // Date.parse 返回 0（epoch 0）或 NaN 都是合法的“无法解析”，不能因为 0 是
+    // falsy 就把历史时间戳改写成当前时间。
+    ts: (function () {
+      var parsed = Date.parse(c.createdAt)
+      return isFinite(parsed) ? parsed : Date.now()
+    })(),
     tags: c.tags.filter((t) => t !== '搜索'),
     pinned: c.color === '#e3a400',
   }

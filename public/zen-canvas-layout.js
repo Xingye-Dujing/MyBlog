@@ -417,7 +417,13 @@
             // 主线排布：长链 + 侧挂结构的最紧凑解，也参与智能择优。
             const rS = layoutBlockSpine(ids)
             let best = score(rF) < score(rL) ? rF : rL
-            if (rS && score(rS) < score(best)) best = rS
+            if (rS && score(rS) < score(best)) {
+              best = rS
+            } else {
+              // 主线方案也会改写共享 edges 的端口/走向；若落选必须还原，
+              // 否则 routed(best) 会拿着别的方案的 ports 与残留的边状态渲染。
+              restoreEdges()
+            }
             return routed(best)
           })
           blocks.sort((a, b) => b.w * b.h - a.w * a.h)

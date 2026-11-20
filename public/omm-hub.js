@@ -5305,32 +5305,44 @@
   function respondLiveData(sourceFrame, origin) {
     var token = 'live' + (++liveDataSeq);
     var snapshot = collectLiveLocalData();
-    var waiter = liveDataWaiters[token] = { frame: sourceFrame, origin: origin, snapshot: snapshot };
+    var waiter = liveDataWaiters[token] = {
+      frame: sourceFrame, origin: origin, snapshot: snapshot,
+      expected: 0, replied: 0, done: false,
+    };
     frames.forEach(function (frame) {
       var target = frameTargetOrigin(frame);
       if (!target) return;
       try {
         frame.contentWindow.postMessage({ type: 'omm:zen-card-request', token: token }, target);
+        waiter.expected++;
       } catch (e) { /* ignore */ }
     });
-    waiter.timer = window.setTimeout(function () {
-      var w = liveDataWaiters[token];
-      if (!w) return;
-      delete liveDataWaiters[token];
-      // de-duplicate cards collected from all panes by content prefix.
-      var seen = Object.create(null);
-      w.snapshot.cards = (w.snapshot.cards || []).filter(function (c) {
-        var key = String(c.content || '').slice(0, 100);
-        if (!key || seen[key]) return false;
-        seen[key] = 1;
-        return true;
-      }).slice(0, 200);
-      try {
-        w.frame.contentWindow.postMessage(
-          { type: 'omm:live-data-reply', token: token, data: w.snapshot }, w.origin
-        );
-      } catch (e) { /* ignore */ }
-    }, 700);
+    // Finish as soon as every addressed pane has replied (slow cold starts used to
+    // be cut off by the old fixed 700 ms window); keep the timer as a fallback for
+    // panes that never answer.
+    waiter.timer = window.setTimeout(function () { finishLiveData(token); }, 2000);
+    if (!waiter.expected) finishLiveData(token);
+  }
+
+  function finishLiveData(token) {
+    var w = liveDataWaiters[token];
+    if (!w || w.done) return;
+    w.done = true;
+    if (w.timer) window.clearTimeout(w.timer);
+    delete liveDataWaiters[token];
+    // de-duplicate cards collected from all panes by content prefix.
+    var seen = Object.create(null);
+    w.snapshot.cards = (w.snapshot.cards || []).filter(function (c) {
+      var key = String(c.content || '').slice(0, 100);
+      if (!key || seen[key]) return false;
+      seen[key] = 1;
+      return true;
+    }).slice(0, 200);
+    try {
+      w.frame.contentWindow.postMessage(
+        { type: 'omm:live-data-reply', token: token, data: w.snapshot }, w.origin
+      );
+    } catch (e) { /* ignore */ }
   }
 
   function dedupeGraphCards(list) {
@@ -7026,6 +7038,7 @@
         // A live-data request reuses the card protocol: feed any active waiter.
         var waiter = liveDataWaiters[data.token];
         if (waiter && Array.isArray(data.cards)) {
+          waiter.replied++;
           data.cards.slice(0, 200).forEach(function (c) {
             // Annotate pushes a read-only coding snapshot through the same bridge.
             if (c && String(c.kind || '') === 'omm.annotate.snapshot') {
@@ -7040,6 +7053,7 @@
               content: n.content, kind: n.kind, tags: n.tags, source: n.source
             });
           });
+          if (waiter.replied >= waiter.expected) finishLiveData(data.token);
         }
         if (!graphOpen || !Array.isArray(data.cards)) return;
         var incoming = data.cards.map(kgNormalize).filter(Boolean);

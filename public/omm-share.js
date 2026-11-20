@@ -71,7 +71,9 @@
     view: 'items',
     loading: false,
     error: '',
-    seen: {},
+    // 消息 id 来自外部；普通对象会让 "constructor"/"__proto__" 命中原型链，
+    // 消息被误判为已读而永久丢失。
+    seen: Object.create(null),
     selected: {},
     previews: {},
   }

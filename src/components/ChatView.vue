@@ -147,7 +147,8 @@ async function scrollToHashMessage() {
   for (let attempt = 0; attempt < 30; attempt++) {
     await nextTick()
     if (chat.value) {
-      const idx = chat.value.messages.findIndex((m) => m.id === msgId)
+      // msgId 来自 location.hash，始终是字符串；消息 id 可能是数字。
+      const idx = chat.value.messages.findIndex((m) => String(m.id) === String(msgId))
       const section = sections.value.find(
         (s) => idx >= s.startMsgIndex && idx <= s.endMsgIndex,
       )

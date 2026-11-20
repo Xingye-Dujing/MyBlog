@@ -39,7 +39,8 @@ function normalizeChats(data) {
         ...chat,
         id: chat.id != null ? String(chat.id) : '',
         title: typeof chat.title === 'string' ? chat.title : String(chat.title ?? ''),
-        tags: Array.isArray(chat.tags) ? chat.tags : [],
+        // 搜索框会对每个 tag 调 toLowerCase；非字符串元素会让整个列表渲染中断。
+        tags: Array.isArray(chat.tags) ? chat.tags.map((tag) => String(tag)) : [],
         updatedAt: Number(chat.updatedAt) || 0,
         messages,
       }

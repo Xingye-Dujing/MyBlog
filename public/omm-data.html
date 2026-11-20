@@ -8657,6 +8657,15 @@ notify pgrst, 'reload schema';</textarea
               var j3 = i
               if (ch === '-') j3++
               while (j3 < s.length && /[0-9.]/.test(s[j3])) j3++
+              // 科学计数法：1e3 / 2.5E-2 都是合法数字，否则 e3 会被当成列名。
+              if (j3 < s.length && /[eE]/.test(s[j3])) {
+                var je = j3 + 1
+                if (je < s.length && /[+-]/.test(s[je])) je++
+                if (je < s.length && /[0-9]/.test(s[je])) {
+                  while (je < s.length && /[0-9]/.test(s[je])) je++
+                  j3 = je
+                }
+              }
               toks.push({ t: 'num', v: parseFloat(s.slice(i, j3)) })
               i = j3
               continue
@@ -8674,7 +8683,7 @@ notify pgrst, 'reload schema';</textarea
               i += 2
               continue
             }
-            if ('=<>(),.*'.indexOf(ch) >= 0) {
+            if ('=<>(),.*+-'.indexOf(ch) >= 0) {
               toks.push({ t: 'op', v: ch })
               i++
               continue
@@ -8822,6 +8831,12 @@ notify pgrst, 'reload schema';</textarea
         P.prototype.operand = function () {
           var x = this.pk()
           if (!x) throw new Error('缺少操作数')
+          // 允许 '- 1' / '+ 1' 这种带空格的一元符号；紧邻数字的 '-1' 已在词法器里处理。
+          if (x.t === 'op' && (x.v === '-' || x.v === '+') && this.pk(1) && this.pk(1).t === 'num') {
+            this.nx()
+            var signed = this.nx()
+            return { k: 'num', v: x.v === '-' ? -signed.v : signed.v }
+          }
           if (x.t === 'num') {
             this.nx()
             return { k: 'num', v: x.v }

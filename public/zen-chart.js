@@ -39,7 +39,11 @@ function parseCSV(text, delimiter) {
         field += ch
       }
     } else if (ch === '"') {
-      quoted = true
+      // 只有字段开头的引号才是包裹符；单元格中间的英寸号等必须原样保留，
+      // 否则一个引号会吞掉后面所有分隔符与换行，整张表塌成一行。
+      // 没有配对引号时（未闭合的引号）也按字面量保留，避免吞掉整张表。
+      if (field === '' && s.indexOf('"', i + 1) >= 0) quoted = true
+      else field += ch
     } else if (ch === d) {
       row.push(field.trim()); field = ''
     } else if (ch === '\n' || ch === '\r') {
@@ -51,6 +55,8 @@ function parseCSV(text, delimiter) {
       field += ch
     }
   }
+  // 未闭合的引号按字面量处理：把开头那个引号补回去，避免丢掉整段数据。
+  if (quoted) field = '"' + field
   row.push(field.trim())
   if (row.some((c) => c !== '')) rows.push(row)
   if (!rows.length) return { labels: [], series: [] }
