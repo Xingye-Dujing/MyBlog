@@ -45,14 +45,29 @@ function redactValue(value) {
   return value
 }
 
+function containsSecret(value) {
+  if (Array.isArray(value)) return value.some(containsSecret)
+  if (value && typeof value === 'object') {
+    return Object.keys(value).some(function (k) { return isSecretKey(k) || containsSecret(value[k]) })
+  }
+  return false
+}
+
 /* 导出前调用：整条密钥条目直接丢弃，普通条目里的敏感字段遮罩，并重算校验和。 */
 function redactSecrets(manifest) {
   if (!manifest || !Array.isArray(manifest.products)) return manifest
   const products = manifest.products
     .filter(function (p) { return p && !isSecretKey(p.id) })
     .map(function (p) {
+      const hadSecret = containsSecret(p.data)
       const data = redactValue(p.data)
-      return Object.assign({}, p, { data: data, checksum: checksum(data) })
+      // 标记“内容被遮罩过”：分享导出可以带它，但绝不能再用它恢复本地数据，
+      // 否则 REDACTED 会把真实的 apiKey/密码覆盖掉且不可撤销。
+      return Object.assign({}, p, {
+        data: data,
+        checksum: checksum(data),
+        redacted: hadSecret || p.redacted === true ? true : undefined,
+      })
     })
   return Object.assign({}, manifest, { products: products })
 }
@@ -72,7 +87,7 @@ function restorableEntries(manifest, knownKeys, allowedKeys) {
   const allowed = Array.isArray(allowedKeys) && allowedKeys.length ? allowedKeys : null
   return (manifest && Array.isArray(manifest.products) ? manifest.products : [])
     .filter(function (p) {
-      if (!p || isSecretKey(p.id)) return false
+      if (!p || isSecretKey(p.id) || p.redacted === true) return false
       if (allowed) return allowed.indexOf(p.id) >= 0
       return isRestorableKey(p.id) || known.indexOf(p.id) >= 0
     })

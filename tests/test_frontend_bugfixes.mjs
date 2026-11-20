@@ -43,6 +43,16 @@ test('合并时混合数组与对象不会丢弃对象数据', () => {
   assert.equal(ZenBackup.validate(merged).ok, true)
 })
 
+test('脱敏导出包不会被恢复到本地覆盖真实密钥', () => {
+  const original = {
+    format: 'zen-backup', v: 1,
+    products: [{ id: 'zen.settings', data: { theme: 'dark', apiKey: 'sk-real' }, checksum: 'x' }],
+  }
+  const shared = ZenBackup.redactSecrets(original)
+  assert.equal(shared.products[0].redacted, true)
+  assert.equal(ZenBackup.restorableEntries(shared, []).length, 0)
+})
+
 /* -------------------------------- zen-srs -------------------------------- */
 
 test('数字 0 的卡片 id 不会被 SRS 丢弃', () => {
