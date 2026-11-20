@@ -40,6 +40,17 @@ def _id(value: Any) -> str:
     return '' if value is None else str(value)
 
 
+def _utf16_slice(text: str, start: int, end: int) -> str:
+    """按 JavaScript ``String.prototype.slice`` 的 UTF-16 码元语义切片。
+
+    annotate 端用 ``doc.text.slice(start, end)`` 取引文，start/end 是 UTF-16
+    码元偏移；Python 字符串按码点切片，emoji 等非 BMP 字符之前二者会错位，
+    导致合法备份被误判为 quote 不匹配。这里显式按 UTF-16 码元切片。
+    """
+    raw = text.encode('utf-16-le', 'surrogatepass')
+    return raw[start * 2:end * 2].decode('utf-16-le', 'ignore')
+
+
 def _base36(number: int) -> str:
     digits = '0123456789abcdefghijklmnopqrstuvwxyz'
     if number == 0:
@@ -213,7 +224,7 @@ def v_annotate(obj: Any, text: str, r: Report) -> str:
             if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end < start:
                 r.error('project.anns[%d].start/end 必须是非负整数且 start <= end' % index)
             elif _id(ann.get('doc')) in doc_map:
-                expected = doc_map[_id(ann['doc'])][start:end]
+                expected = _utf16_slice(doc_map[_id(ann['doc'])], start, end)
                 if str(ann.get('quote') or '') != expected:
                     r.error('project.anns[%d].quote 必须等于 doc.text.slice(start,end)：应为 %r' % (index, expected))
         for index, cc in enumerate(r.array(project, 'cellCodes', 'project')):
@@ -343,7 +354,13 @@ def v_english(obj: Any, text: str, r: Report) -> str:
             for index, stroke in enumerate(payload['strokes']):
                 if not isinstance(stroke, dict):
                     continue
-                for pindex, point in enumerate(stroke.get('points') or []):
+                points = stroke.get('points')
+                if points is None:
+                    points = []
+                if not isinstance(points, list):
+                    r.error('drawings["%s"].strokes[%d].points 必须是数组' % (word, index))
+                    continue
+                for pindex, point in enumerate(points):
                     if not isinstance(point, dict):
                         continue
                     x, y, pressure = point.get('x'), point.get('y'), point.get('p')
@@ -355,9 +372,10 @@ def v_english(obj: Any, text: str, r: Report) -> str:
                         r.error('drawings["%s"].strokes[%d].points[%d].p 超出 [0.15,1]' % (word, index, pindex))
         return 'doodles'
     if isinstance(obj, dict) and 'books' in obj and 'prog' in obj:
+        books = obj['books'] if isinstance(obj['books'], dict) else {}
         if not isinstance(obj['books'], dict) or not isinstance(obj['prog'], dict):
             r.error('完整备份的 books 与 prog 必须都是对象')
-        for book_id, book in (obj['books'] or {}).items():
+        for book_id, book in books.items():
             if str(book_id).startswith('u'):
                 if not isinstance(book, dict) or 'w' not in book:
                     r.error('books["%s"] 缺少 w 词表' % book_id)
@@ -421,20 +439,25 @@ def v_mdforge(obj: Any, text: str, r: Report) -> str:
     if not re.search(r'(?m)^template:\s*academic\s*$', front):
         r.error('frontmatter 必须包含 template: academic')
     body = '\n'.join(lines[end + 1:])
-    if body.lstrip().startswith('```'):
+    body_lines = body.strip().splitlines()
+    fence_lines = [i for i, line in enumerate(body_lines) if line.lstrip().startswith('```')]
+    if len(fence_lines) == 2 and fence_lines[0] == 0 and fence_lines[1] == len(body_lines) - 1:
         r.error('整篇正文不要用代码围栏包裹 —— 只输出 Markdown 纯文本')
     if re.search(r'(?m)^#{5,}\s', body):
         r.error('标题不能超过 H4')
-    if re.search(r'\]\(\s*https?://', body):
+    if re.search(r'!\[[^\]]*\]\(\s*https?://', body):
         r.error('不允许远程图片，图片路径应为 images/...')
     for match in re.finditer(r'!\[[^\]]*\]\(([^)]+)\)', body):
-        path = match.group(1).split()[0]
+        parts = match.group(1).split()
+        if not parts:
+            continue
+        path = parts[0]
         if not path.startswith('images/'):
             r.warn('图片路径 %s 建议使用 images/... 相对路径' % path)
     for block in re.findall(r'```latex-figure[^\n]*\n([\s\S]*?)```', body):
         if '\\begin{figure}' in block and '\\end{figure}' not in block:
             r.error('latex-figure 的 figure 环境未闭合')
-        for forbidden in ('\\input', '\\include', '\\write18', '\\usepackage'):
+        for forbidden in ('\\input', '\\include{', '\\write18', '\\usepackage'):
             if forbidden in block:
                 r.error('latex-figure 内禁止 %s' % forbidden)
     open_fences = len(re.findall(r'(?m)^```', body))
@@ -489,7 +512,12 @@ def v_planner(obj: Any, text: str, r: Report) -> str:
         for day, events in days.items():
             if not _is_date(day):
                 r.error('eventsBy["%s"] 的日期键 "%s" 必须是 YYYY-MM-DD' % (pid, day))
-            for index, event in enumerate(events or []):
+            if events is None:
+                events = []
+            if not isinstance(events, list):
+                r.error('eventsBy["%s"]["%s"] 必须是事件数组' % (pid, day))
+                continue
+            for index, event in enumerate(events):
                 path = 'eventsBy["%s"]["%s"][%d]' % (pid, day, index)
                 if not isinstance(event, dict):
                     r.error('%s 必须是对象' % path)

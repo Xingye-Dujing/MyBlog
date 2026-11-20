@@ -204,3 +204,75 @@ def test_frontend_validation_contract():
                   'id="btnValidate"', '/api/omm/validate', '/api/omm/template',
                   'omm_format_validate', '校验格式'):
         assert token in html, token
+
+
+# ── 不可信导入不得让校验器崩溃 / 合法内容不得被误拒 ─────────────────────────
+
+def test_annotate_quote_uses_utf16_offsets():
+    text = '\U0001f600hello'  # emoji precedes the annotation (surrogate pair in JS)
+    backup = {
+        'app': 'zenmark', 'version': 1,
+        'project': {
+            'docs': [{'id': 'd1', 'text': text}],
+            'codes': [{'id': 'c1'}],
+            'anns': [{'id': 'a1', 'doc': 'd1', 'code': 'c1', 'start': 2, 'end': 7, 'quote': 'hello'}],
+        },
+    }
+    result = validate('annotate', json.dumps(backup, ensure_ascii=False), 'backup')
+    assert not any('quote' in item for item in result['errors']), result['errors']
+
+
+def test_english_doodles_points_non_list_reports_error_not_crash():
+    result = validate('english', {'drawings': {'word': {'strokes': [{'points': 5}]}}}, 'doodles')
+    assert not result['ok']
+    assert any('points' in item for item in result['errors'])
+
+
+def test_english_backup_books_non_dict_reports_error_not_crash():
+    result = validate('english', {'books': [1], 'prog': {}}, 'backup')
+    assert not result['ok']
+    assert any('books' in item for item in result['errors'])
+
+
+def test_planner_events_non_list_reports_error_not_crash():
+    payload = {'app': 'zenplan', 'version': 2, 'planners': [{'id': 'p1'}],
+               'eventsBy': {'p1': {'2026-01-01': 5}}, 'recursBy': {'p1': []}}
+    result = validate('planner', payload, 'backup')
+    assert not result['ok']
+    assert any('事件数组' in item for item in result['errors'])
+
+
+def _mdforge(body: str) -> str:
+    return '---\ntitle: T\ntemplate: academic\n---\n\n' + body
+
+
+def test_mdforge_http_link_is_not_rejected_as_remote_image():
+    result = validate('mdforge', _mdforge('See [ref](https://example.com/paper) for details.'), 'markdown')
+    assert not any('远程图片' in item for item in result['errors']), result['errors']
+
+
+def test_mdforge_remote_image_still_rejected():
+    result = validate('mdforge', _mdforge('![](https://example.com/a.png)'), 'markdown')
+    assert any('远程图片' in item for item in result['errors'])
+
+
+def test_mdforge_whitespace_image_destination_does_not_crash():
+    result = validate('mdforge', _mdforge('![](   )'), 'markdown')
+    assert isinstance(result['errors'], list)
+
+
+def test_mdforge_code_block_as_first_body_block_is_allowed():
+    result = validate('mdforge', _mdforge('```python\nprint(1)\n```\n\nSome prose.'), 'markdown')
+    assert not any('代码围栏包裹' in item for item in result['errors']), result['errors']
+
+
+def test_mdforge_whole_body_fence_still_rejected():
+    result = validate('mdforge', _mdforge('```markdown\n# Title\n```'), 'markdown')
+    assert any('代码围栏包裹' in item for item in result['errors'])
+
+
+def test_mdforge_includegraphics_not_flagged_as_include():
+    result = validate('mdforge', _mdforge(
+        '```latex-figure\n\\begin{figure}\n\\includegraphics[width=0.5\\textwidth]{images/a.png}\n\\end{figure}\n```'
+    ), 'markdown')
+    assert not any('禁止 \\include' in item for item in result['errors']), result['errors']
