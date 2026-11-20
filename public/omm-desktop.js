@@ -25,10 +25,10 @@
  * OMM-ZEN UI kit
  * --------------
  * Everything that used to be a browser-native popup is rendered here instead:
- * confirm / alert / prompt dialogs, select candidate lists and title
- * tooltips.  The surfaces live in a shadow root so product CSS cannot leak
- * in, and they inherit the shell's --radius / --accent / --ink variables so
- * they always follow the current OMM-ZEN appearance.
+ * confirm / alert / prompt dialogs and select candidate lists.  The surfaces
+ * live in a shadow root so product CSS cannot leak in, and they inherit the
+ * shell's --radius / --accent / --ink variables so they always follow the
+ * current OMM-ZEN appearance.
  *
  * Exposed as window.OMMUI and loaded first, so omm-share.js and omm-hub.js
  * can use it too.
@@ -41,10 +41,9 @@
   var LIGHT_STYLE_ID = 'omm-ui-light-style';
   var host = null, shadow = null;
   var veil = null, headTitle = null, bodyEl = null, inputEl = null;
-  var cancelBtn = null, okBtn = null, closeBtn = null, menu = null, tip = null;
+  var cancelBtn = null, okBtn = null, closeBtn = null, menu = null;
   var pending = null;        /* { resolve, kind, danger } */
   var activeSelect = null;   /* { select, trigger, sync, index } */
-  var tipTarget = null, tipTimer = 0;
 
   var SHADOW_CSS = [
     ':host{position:fixed;inset:0;z-index:2147483600;pointer-events:none;',
@@ -104,13 +103,7 @@
     '  font:inherit;font-size:11px;color:var(--oui-ink);border-radius:var(--oui-radius)}',
     '.oui-option:hover,.oui-option.active{background:var(--oui-accent-soft)}',
     '.oui-option[aria-selected="true"]::after{content:"✓";margin-left:auto;',
-    '  color:var(--oui-accent);font-weight:700}',
-    '.oui-tip{position:fixed;z-index:4;max-width:260px;padding:5px 9px;',
-    '  font-size:10px;line-height:1.55;white-space:pre-wrap;word-break:break-word;',
-    '  background:var(--oui-paper);color:var(--oui-ink);border:1px solid var(--oui-line);',
-    '  border-radius:var(--oui-radius);box-shadow:0 8px 22px var(--oui-shadow);',
-    '  pointer-events:none}',
-    '.oui-tip[hidden]{display:none}'
+    '  color:var(--oui-accent);font-weight:700}'
   ].join('');
 
   /* Styles for the light-DOM trigger of custom selects.  Kept in the page so
@@ -146,8 +139,7 @@
     '    </div>',
     '  </div>',
     '</div>',
-    '<div class="oui-menu" role="listbox" hidden></div>',
-    '<div class="oui-tip" hidden></div>'
+    '<div class="oui-menu" role="listbox" hidden></div>'
   ].join('');
 
   function ensure() {
@@ -166,7 +158,6 @@
     okBtn = shadow.querySelector('.oui-ok');
     closeBtn = shadow.querySelector('.oui-x');
     menu = shadow.querySelector('.oui-menu');
-    tip = shadow.querySelector('.oui-tip');
 
     if (!document.getElementById(LIGHT_STYLE_ID)) {
       var style = document.createElement('style');
@@ -219,7 +210,6 @@
     var o = normalizeOptions(opts);
     if (pending) finish(false);
     closeMenu();
-    hideTip(true);
     return new Promise(function (resolve) {
       pending = { resolve: resolve, kind: o.kind, danger: o.danger };
       headTitle.textContent = o.title;
@@ -388,32 +378,6 @@
     });
   }
 
-  /* ------------------------------------------------------------- tooltips */
-
-  function showTip(node, text) {
-    ensure();
-    tip.textContent = text;
-    var rect = node.getBoundingClientRect();
-    tip.hidden = false;
-    var width = Math.min(260, Math.max(120, tip.offsetWidth));
-    var left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-    var top = rect.bottom + 6;
-    if (top + tip.offsetHeight > window.innerHeight - 8) top = Math.max(8, rect.top - tip.offsetHeight - 6);
-    tip.style.left = left + 'px';
-    tip.style.top = top + 'px';
-  }
-
-  function hideTip(restore) {
-    window.clearTimeout(tipTimer);
-    if (restore && tipTarget) {
-      var text = tipTarget.getAttribute('data-omm-tip') || '';
-      tipTarget.setAttribute('title', text);
-      tipTarget.removeAttribute('data-omm-tip');
-    }
-    tipTarget = null;
-    if (tip) tip.hidden = true;
-  }
-
   function bindGlobal() {
     /* Mouse-activated controls must not keep a visible focus ring. Keyboard
        activation (event.detail === 0) keeps its focus for accessibility. */
@@ -440,8 +404,8 @@
       closeMenu();
     }, true);
 
-    window.addEventListener('resize', function () { hideTip(true); closeMenu(); }, true);
-    window.addEventListener('scroll', function () { hideTip(true); if (activeSelect) positionMenu(); }, true);
+    window.addEventListener('resize', function () { closeMenu(); }, true);
+    window.addEventListener('scroll', function () { if (activeSelect) positionMenu(); }, true);
     window.addEventListener('keydown', function (event) {
       if (pending) {
         /* A modal surface owns the keyboard while it is open. */
@@ -470,34 +434,6 @@
         }
       }
     }, true);
-
-    /* Replace native title tooltips with an OMM-ZEN surface. The attribute is
-       only removed while the pointer is over the element and restored as soon
-       as it leaves, so any code reading title still sees the original value. */
-    document.addEventListener('pointerover', function (event) {
-      var node = event.target && event.target.closest ? event.target.closest('[title]') : null;
-      if (!node || node === tipTarget) return;
-      hideTip(true);
-      var text = node.getAttribute('title') || '';
-      if (!text.trim()) return;
-      tipTarget = node;
-      node.setAttribute('data-omm-tip', text);
-      node.removeAttribute('title');
-      var target = node;
-      tipTimer = window.setTimeout(function () {
-        if (tipTarget === target) showTip(target, text);
-      }, 380);
-    }, true);
-    document.addEventListener('pointerout', function (event) {
-      if (!tipTarget) return;
-      var leaving = event.target === tipTarget ||
-        (event.target && event.target.closest && event.target.closest('[data-omm-tip]') === tipTarget);
-      if (!leaving) return;
-      var next = event.relatedTarget;
-      if (next && tipTarget.contains && tipTarget.contains(next)) return;
-      hideTip(true);
-    }, true);
-    document.addEventListener('pointerdown', function () { hideTip(true); }, true);
   }
 
   if (document.readyState === 'loading') {
@@ -511,7 +447,7 @@
     alert: alertBox,
     prompt: promptBox,
     enhanceSelect: enhanceSelect,
-    close: function () { finish(false); closeMenu(); hideTip(true); }
+    close: function () { finish(false); closeMenu(); }
   };
 })();
 

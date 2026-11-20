@@ -1203,7 +1203,7 @@
       return (
         '<button class="dock-app" type="button" draggable="true" data-app="' +
         esc(app.id) +
-        '" title="' +
+        '" aria-label="' +
         esc(app.name) +
         (key ? '　Ctrl+' + key : '') +
         '">' +
@@ -1389,6 +1389,9 @@
     redact: 'tuo min tm pdf office',
     visualization: 'tu biao tb ke shi hua ksh chart',
     writer: 'xie zuo xz chang wen bi ji bj',
+    video: 'shi pin sp video ffmpeg jian ji fen xi gong zuo liu clip cut',
+    zenflow: 'zi dong bian pai zd flow liu cheng',
+    zencard: 'ka pian kp fu xi fx',
   };
 
   function launcherMatches(app, query) {
@@ -3910,7 +3913,7 @@
     var frame = document.createElement('iframe');
     frame.className = 'app-frame';
     frame.dataset.app = appId;
-    frame.setAttribute('title', appOf(appId) ? appOf(appId).name : appId);
+    frame.setAttribute('aria-label', appOf(appId) ? appOf(appId).name : appId);
     frame.setAttribute(
       'allow',
       'clipboard-read; clipboard-write; fullscreen; autoplay; encrypted-media'
