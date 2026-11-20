@@ -77,7 +77,9 @@ _DATA = json.loads(r'''{
           "rels": [],
           "memos": [],
           "marks": [],
-          "notes": []
+          "notes": [],
+          "cellCodes": [],
+          "reliability": []
         }
       },
       "validator": "v_annotate",

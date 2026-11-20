@@ -28,7 +28,7 @@ function extractFunction(text, name) {
 function load(text, names, extra = {}) {
   const code = names.map((n) => extractFunction(text, n)).join('\n') +
     `\nreturn { ${names.join(', ')} }`
-  return vm.runInNewContext(`(function () { ${code} })()`, { Math, Object, Array, String, ...extra })
+  return vm.runInNewContext(`(function () { ${code} })()`, { Math, Object, Array, String, Number, ...extra })
 }
 
 test('Hub 页面包含图谱入口与面板元素', () => {
@@ -63,7 +63,7 @@ test('Hub 处理产品回传的卡片', () => {
 
 function liveData(store, flowEvents) {
   const localStorage = { getItem: (k) => (k in store ? store[k] : null) }
-  const { collectLiveLocalData } = load(hub, ['collectLiveLocalData'],
+  const { collectLiveLocalData } = load(hub, ['annotateLiveSnapshot', 'collectLiveLocalData'],
     { localStorage, JSON, Date, flowEvents: flowEvents || [] })
   return collectLiveLocalData()
 }
@@ -91,6 +91,35 @@ test('Hub 损坏的 localStorage 数据被安全忽略', () => {
   for (const key of ['cards', 'notes', 'searches', 'rules', 'clips', 'planner']) {
     assert.equal(snap[key].length, 0)
   }
+})
+
+test('Hub 快照包含 Annotate 的只读编码快照', () => {
+  const snap = liveData({
+    'zencode.project.v1': JSON.stringify({
+      title: '论文精读',
+      codes: [{ id: 'c1', no: 'C1', name: '论点', level: '主题', def: '作者的核心主张' }],
+      docs: [{ id: 'd1', title: '原文', text: '第一行\n第二行\n第三行' }],
+      anns: [{ code: 'c1', star: true, quote: '核心论点', doc: 'd1', start: 8, end: 12, memo: '重要' }],
+      marks: [{ star: true, quote: '金句', doc: 'd1', text: '批注内容' }],
+      cellCodes: [{ code: 'c1', star: true, row: 1, col: 'B', table: 'd1', round: 2 }],
+      reliability: [{ stat: { kappa: 0.8, po: 0.9, N: 10 }, source: '双编码' }],
+    }),
+  })
+  const ann = snap.annotate
+  assert.equal(ann.title, '论文精读')
+  assert.equal(ann.counts.docs, 1)
+  assert.equal(ann.counts.codes, 1)
+  assert.equal(ann.counts.starred, 3)
+  assert.equal(ann.codes[0].name, '论点')
+  assert.equal(ann.codes[0].count, 2)
+  assert.equal(ann.starred.length, 3)
+  assert.ok(ann.starred.some((s) => s.source === '原文'))
+  assert.equal(ann.reliability[0].kappa, 0.8)
+})
+
+test('Hub 损坏的 Annotate 数据被安全忽略', () => {
+  const snap = liveData({ 'zencode.project.v1': '{broken' })
+  assert.equal(snap.annotate, null)
 })
 
 test('Hub 快照包含 timeline 与 Planner 完成项', () => {

@@ -178,7 +178,8 @@ def v_annotate(obj: Any, text: str, r: Report) -> str:
             r.error('project.codes 不能为空 —— 这是标注项目导入的硬门槛')
         docs = r.array(project, 'docs', 'project')
         ids = set()
-        for group in ('docs', 'codes', 'anns', 'rels', 'memos', 'marks', 'notes'):
+        for group in ('docs', 'codes', 'anns', 'rels', 'memos', 'marks', 'notes',
+                      'cellCodes', 'reliability'):
             for index, item in enumerate(r.array(project, group, 'project')):
                 if not isinstance(item, dict):
                     r.error('project.%s[%d] 必须是对象' % (group, index))
@@ -205,6 +206,32 @@ def v_annotate(obj: Any, text: str, r: Report) -> str:
                 expected = doc_map[ann['doc']][start:end]
                 if str(ann.get('quote') or '') != expected:
                     r.error('project.anns[%d].quote 必须等于 doc.text.slice(start,end)：应为 %r' % (index, expected))
+        for index, cc in enumerate(r.array(project, 'cellCodes', 'project')):
+            if not isinstance(cc, dict):
+                r.error('project.cellCodes[%d] 必须是对象' % index)
+                continue
+            if cc.get('table') not in doc_map:
+                r.error('project.cellCodes[%d].table 指向不存在的文档 id' % index)
+            if cc.get('code') and cc['code'] not in code_ids:
+                r.error('project.cellCodes[%d].code 指向不存在的编码 id' % index)
+            row = cc.get('row')
+            if not isinstance(row, int) or isinstance(row, bool) or row < 0:
+                r.error('project.cellCodes[%d].row 必须是非负整数（0 基行号）' % index)
+            rd = cc.get('round', 1)
+            if not isinstance(rd, int) or isinstance(rd, bool) or rd < 1:
+                r.error('project.cellCodes[%d].round 必须是 >=1 的整数' % index)
+        for index, rel in enumerate(r.array(project, 'reliability', 'project')):
+            if not isinstance(rel, dict):
+                r.error('project.reliability[%d] 必须是对象' % index)
+                continue
+            stat = rel.get('stat')
+            if isinstance(stat, dict):
+                k = stat.get('kappa')
+                if k is not None and (not isinstance(k, (int, float)) or isinstance(k, bool) or k < -1 or k > 1):
+                    r.error('project.reliability[%d].stat.kappa 必须在 -1..1 之间' % index)
+                po = stat.get('po')
+                if po is not None and (not isinstance(po, (int, float)) or isinstance(po, bool) or po < 0 or po > 1):
+                    r.error('project.reliability[%d].stat.po 必须在 0..1 之间' % index)
         return 'backup'
     if not text.strip():
         r.error('纯文本导入不能为空')

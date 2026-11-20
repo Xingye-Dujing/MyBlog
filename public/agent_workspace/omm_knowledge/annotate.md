@@ -7,10 +7,10 @@
 > ZenMark 里“导入”→ 选中该文件 → 确认后，**当前全部数据被这个文件替换**。
 >
 > 本文所有字段名、默认值、容错行为都是从 `omm-annotate.html` 的
-> `Export.json()`（写出，约 10731 行）、`importFiles()` 项目备份分支
-> （读入，约 10981-11016 行）、`Store.load()`（本地装载时的缺省与颜色迁移，
-> 约 5931-5953 行）以及各对象构造函数（`seed()` / `saveMark()` / `addNote()`
-> 等）里**逐行核对**出来的，不是推测。
+> `Export.json()`（写出）、`importFiles()` 项目备份分支（读入）、
+> `Store.load()`（本地装载时的缺省与颜色迁移），以及 `omm-table.js`
+> / `omm-paper.js` 的对象构造处**逐行核对**出来的，不是推测。
+> 代码行号会变动，以函数名与字段名为准。
 >
 > 兼容性：`version: 1`。当前导入代码**不校验** `version`，但请保留它。
 
@@ -63,6 +63,15 @@ else                                       -> 当作“项目备份”，弹确�
 9. 不生成 settings、不生成任何 blob:/data: 版面、不生成 PDF 专有字段。
 10. 只输出 JSON 本身：UTF-8 编码、合法 JSON，不要 markdown 代码块围栏，
     不要注释，不要尾逗号。
+11. 需要表格编码时，另给 project.cellCodes[]：{id,table,row,col,code,round,memo,status,star,ts}。
+    "table" 指向一个 kind:"table" 的 doc id；"row" 是 0 基行号（原表第 N 行写 N-1）；
+    "col" 必须与 doc.columns[] 中的列名逐字一致；"round" 是 >=1 的整数。
+    表格原文（每行各列的值）存在浏览器 IndexedDB，JSON 带不走，必须由用户重新导入同名 CSV。
+12. 需要写论文方法部分时，给 project.reliability[]：{id,ts,source,round,col,stat:{N,po,pe,kappa},disagreements:[]}。
+    kappa 在 -1..1、po/pe 在 0..1；id 用 rl 前缀。
+13. ann / mark / cellCode 都可带布尔 "star":true，表示“典型引文”，会被论文附录与 AI 快照收录。
+14. 面向 AI 工作区时可辅以只读快照 window.ZenAnnotateAI.snapshot() / snapshotMarkdown()；
+    不要虚构用户的真实编码数据，优先读快照再回答。
 ```
 
 ## 1. 文件外壳
@@ -111,7 +120,9 @@ else                                       -> 当作“项目备份”，弹确�
   "rels":  [ /* 第 6 节 片段关联 */ ],
   "memos": [ /* 第 7 节 备忘录 */ ],
   "marks": [ /* 第 8 节 阅读批注 */ ],
-  "notes": [ /* 第 9 节 学习笔记 */ ]
+  "notes": [ /* 第 9 节 学习笔记 */ ],
+  "cellCodes": [ /* 第 9.5 节 表格逐行编码 */ ],
+  "reliability": [ /* 第 9.6 节 编码者信度结果 */ ]
 }
 ```
 
@@ -126,6 +137,8 @@ else                                       -> 当作“项目备份”，弹确�
 | `memos` | 否 | `[]` | |
 | `marks` | 否 | `[]` | |
 | `notes` | 否 | `[]` | |
+| `cellCodes` | 否 | `[]` | 表格行编码；`table`/`code` 必须指向本文件真实 id |
+| `reliability` | 否 | `[]` | 信度检验结果；每条需唯一 `id`（建议 `rl` 前缀） |
 
 导入后 `S.docId` 自动指向 `docs[0]`（有材料的话）。
 
@@ -166,6 +179,11 @@ else                                       -> 当作“项目备份”，弹确�
 > 浏览器数据库，因此备份 JSON 里不含版面”）。AI 凭空写 `kind:"pdf"` 会得到一个
 > “说自己是 PDF 但没有任何版面数据”的坏材料，阅读视图会报“本机未缓存该文件，
 > 请重新导入”。**要 PDF 就让用户走原生“导入 PDF”，不要在 JSON 里造。**
+>
+> `kind:"table"` 同理：JSON 里**只放元数据**（`columns: ["列名",…]`、`rowCount: 数字`，
+> `text` 可留空字符串），每行各列的实际内容在浏览器 IndexedDB 里，必须让用户
+> 重新导入同名 CSV 才能恢复。AI 可以生成 `cellCodes[]` 来指派行号与类目，
+> 但**不能凭空编造表格原文**。
 
 ---
 
@@ -369,13 +387,80 @@ marks 是阅读时随手画的高亮/旁注（不关联码号）。二者互不�
 
 ---
 
+## 9.5 表格行编码 `cellCodes[]`（CSV 表格逐行指派类目）
+
+与 `anns[]` 的区别：`anns` 用字符下标定位到长文；`cellCodes` 用**行号 + 列名**
+定位到表格材料，并且可以多轮次并存。两者共用同一套 `codes[]` 码表。
+
+```jsonc
+{
+  "id": "tcabc123xy0",     // 唯一，建议前缀 tc
+  "table": "dtable001",    // ★ 指向 kind:"table" 的 doc id
+  "row": 0,                // ★ 0 基行号：原表第 1 行写 0，第 N 行写 N-1
+  "col": "情感",            // ★ 必须与 doc.columns[] 里的列名逐字一致
+  "code": "cmin0001",      // ★ 真实存在的 code id
+  "round": 1,              // ★ >=1 的整数；1=开放式编码，2=轴心式编码（归并）
+  "memo": "",
+  "status": "done",        // "done" | "review"
+  "star": false,           // 典型引文标记，true 会进论文附录与 AI 快照
+  "ts": "2026-09-27 12:00"
+}
+```
+
+| 字段 | 类型 | 缺省 / 容错 | 备注 |
+|---|---|---|---|
+| `id` | string | —— | 必须给且全局唯一 |
+| `table` | string | —— | 指向不存在的 doc 时，该条编码在表格视图里看不到 |
+| `row` | number | —— | **0 基**非负整数；与 CSV 的“第 N 行”差 1 |
+| `col` | string | —— | 列名必须逐字匹配，否则不会显示在该列单元格上 |
+| `code` | string | —— | 指向不存在的 code 时，导出与统计会丢这行 |
+| `round` | number | `1` | 不同轮次是不同记录，不要靠覆盖来“重编码” |
+| `status` | string | 非 `review` 即已确认 | |
+| `star` | boolean | `false` | 典型引文 |
+
+> 表格原文不在 JSON 里。导入项目备份后若本机没有原文，表格视图会提示
+> “请重新导入同名 CSV（列名需一致）”，已有编码会按行号挂回。
+
+## 9.6 编码者信度 `reliability[]`（论文方法部分用）
+
+由“编码 → 信度”面板计算并保存；AI 也可以按真实计算结果生成。
+
+```jsonc
+{
+  "id": "rlabc123xy0",          // 唯一，建议前缀 rl
+  "ts": "2026-09-27 12:00",
+  "source": "table",            // "table" | "text"
+  "round": 1,                   // source=table 时有意义
+  "col": "情感",                 // source=table 时为编码列名
+  "stat": {
+    "N": 100,                   // 可比对项数（双方都恰好 1 个码号）
+    "po": 0.82,                 // 观察一致率 0..1
+    "pe": 0.31,                 // 期望一致率 0..1
+    "kappa": 0.739              // Cohen's κ，-1..1
+  },
+  "multi": 5,                   // 多码号项数（另算 Jaccard）
+  "jaccard": 0.6,               // 多码号项平均重合度，可为 null
+  "unmatched": 0,               // 第二编码者未匹配码号数
+  "missing": 2,                 // 只有一方编码的项目数
+  "disagreements": [            // 分歧项目（最多存 30 条）
+    { "k": "12", "a": "c1", "b": "c2" }
+  ]
+}
+```
+
+解释阈值（Landis & Koch）：≤.20 极低｜.21–.40 一般｜.41–.60 中等｜
+.61–.80 较高｜≥.81 几乎完全一致。人文社科通常报告 κ ≥ .60；
+低于此值应先修订码号的操作性定义再重编码。
+
+---
+
 ## 10. 关于 `id` 的约定（全类型通用）
 
 - 导出器用 `uid(prefix)` 生成：`prefix + Date.now().toString(36) + 随机4位base36`。
   例：`d`+`muilx7yo20ph` = `dmuilx7yo20ph`。
 - **应用不会解析你的 id**（不像 ZenWriter 靠 `id.split('-')` 推计数器），
   所以格式相对宽松，但仍强烈建议：
-  - **前缀用约定字母**：`d`材料 / `c`码号 / `a`片段 / `m`备忘 / `k`批注 / `n`笔记 / `r`关联。
+  - **前缀用约定字母**：`d`材料 / `c`码号 / `a`片段 / `m`备忘 / `k`批注 / `n`笔记 / `r`关联 / `tc`表格行编码 / `rl`信度结果。
   - **全局唯一、绝不重复**。同 id 会让 `docById`/`codeById`/引用指向错误。
   - 只用 `[a-z0-9]`，别带 `-`、空格、特殊符号（避免与内部选择器冲突）。
 - **多余未知字段会被静默忽略**（可加你自己的元数据，但重新导出时会丢）。
@@ -590,10 +675,10 @@ marks 是阅读时随手画的高亮/旁注（不关联码号）。二者互不�
 1. 顶层是合法 JSON（UTF-8，无注释、无尾逗号、无代码块围栏），
    且有 `project`（或把字段摊在顶层），其中 **`codes` 是数组**——否则导入判坏。
 2. **没有** `"omm": "bridge"`（有它会被当互通包走追加逻辑，不是你要的整体替换）。
-3. 所有 `id` 全局唯一、只用 `[a-z0-9]`、带约定前缀（d/c/a/m/k/n/r）。
+3. 所有 `id` 全局唯一、只用 `[a-z0-9]`、带约定前缀（d/c/a/m/k/n/r/tc/rl）。
 4. 每个 `code` 有唯一 `id` + `level`∈{open,axial,selective}；
    `color` 要么不写、要么逐字等于第 4.1 节的 12 色之一。
-5. 每个 `doc` 有唯一 `id` + `text`；`kind` **只写 `"text"`，绝不写 `"pdf"`**。
+5. 每个 `doc` 有唯一 `id`；`kind` 写 `"text"` 或 `"table"`，**绝不写 `"pdf"`**。表格 doc 另给 `columns[]` 与 `rowCount`，原文不写进 JSON。
 6. 每个 `ann`：`doc` 和 `code` 都指向真实存在的 id；`start`<`end` 且不越界；
    **`quote === doc.text.slice(start,end)`**；`status`∈{done,review}。
 7. 每个 `mark`：`doc` 真实存在，`start`<`end` 定位到该 text，`sty`∈{note,hl,ul,st,code}，
@@ -602,9 +687,12 @@ marks 是阅读时随手画的高亮/旁注（不关联码号）。二者互不�
    `type` 取自六个中文关联词。
 9. 每个 `note` 的 `kind`∈{word,sentence,template,phrase}；`tags` 是字符串数组。
 10. 所有 `ts` 是 `"YYYY-MM-DD HH:mm"` 字符串，**不是** epoch 毫秒数字。
-11. **不要**在 JSON 里放 `settings`、blob/data URL、PDF 版面、IndexedDB 引用。
+11. **不要**在 JSON 里放 `settings`、blob/data URL、PDF 版面、表格原文、IndexedDB 引用。
+12. 若有 `cellCodes[]`：`table` 指向真实表格 doc、`row` 是 0 基非负整数、`col` 与 `columns[]` 逐字一致、`code` 指向真实 code、`round` ≥ 1。
+13. 若有 `reliability[]`：每条有唯一 `id`；`stat.kappa`∈[-1,1]、`stat.po`∈[0,1]、`stat.N` 为正整数。
+14. `star` 只在确属论文要引用的片段/批注/表格行上写 `true`，避免 AI 快照与论文附录被噪声淹没。
 
-只要 1-3 满足，导入就一定会**成功并整体替换**；4-11 决定“数据是否被正确显示”，
+只要 1-3 满足，导入就一定会**成功并整体替换**；4-14 决定“数据是否被正确显示”，
 其中 5、6 是能否看见高亮/编码的关键。
 
 ---
@@ -615,11 +703,15 @@ marks 是阅读时随手画的高亮/旁注（不关联码号）。二者互不�
 |---|---|
 | 文件里有 `omm:"bridge"` | 走互通包分支（追加成笔记/材料），**不替换** |
 | 解析后没有 `codes` 数组 | 抛错 → 提示“项目文件解析失败”，什么都不变 |
-| 缺 `memos`/`marks`/`notes`/`anns`/`rels`/`docs` | 该项按 `[]` 处理，其余照常 |
+| 缺 `memos`/`marks`/`notes`/`anns`/`rels`/`docs`/`cellCodes`/`reliability` | 该项按 `[]` 处理，其余照常 |
 | 缺 `title` | 保留当前项目标题 |
 | `codes[].color` 不在 12 色板 / 缺省 | 刷新时被改成 `COLORS[i%12]`（按数组下标） |
 | `docs[].kind` 缺省 | 载入时补 `"text"`（正常） |
 | `docs[].kind === "pdf"` 但无版面数据 | 阅读视图报“本机未缓存该文件，请重新导入”——**别造** |
+| `docs[].kind === "table"` 但本机无 CSV 原文 | 表格视图提示“请重新导入同名 CSV”，已有 `cellCodes` 按行号挂回 |
+| `cellCodes[].row` 写成 1 基 | 会整体错一行；原表第 N 行必须写 N-1 |
+| `cellCodes[].col` 与 `columns[]` 不一致 | 该条编码不会显示在目标列单元格上 |
+| `reliability[].stat.kappa` 越界 | AI 格式校验器报错，生成端应修正 |
 | ann 的 `quote` 与 slice(start,end) 不一致 | 定位仍按 start/end；引文显示会错位 |
 | ann 的 `start/end` 越界或重叠其它段 | 渲染时被裁剪，可能不显示，不报错 |
 | `ann.code` / `ann.doc` 指向不存在 id | 该片段无法正确归码/定位，CSV/报告丢这行 |

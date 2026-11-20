@@ -84,6 +84,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "name": "文本标注",
         "glyph": "标",
         "description": "PDF 标注 · 精读 · 批注",
+        "version": "1.0.23",
         "entry": "omm-annotate.html",
         "port": 8311,
         "runtime": "static",

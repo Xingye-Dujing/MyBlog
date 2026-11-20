@@ -84,11 +84,12 @@ public/
 
 ```powershell
 .venv\Scripts\python.exe -m pytest tests -q
-# 176 passed, 1 skipped
+# 203 passed
 ```
 
-唯一跳过的是框架自带的“扫描整个仓库角括号”门禁：本仓库 `.workbuddy/`、`data/` 等
-历史目录本来就有角括号，与 AI 工作区无关；同一文件里的两个 fixer 行为测试照常运行。
+其中 `tests/framework/test_quote_style.py` 是全仓门禁：源码里禁止日式角括号，
+误写时用 `python tools/check_quote_style.py --fix` 一键修复（OpenCode 写入钩子也会修）。
+`.workbuddy/`、`data/` 等历史目录在排除表里，不参与扫描。
 
 测试覆盖：产品目录完整性（17 个、端口唯一、每个 ≥5 条最佳实践）、20 个技能深度与可用性、
 9 个领域工具执行、17 产品模板全量可校验与硬约束拒绝用例、FNV-1a checksum 与浏览器一致、
@@ -108,3 +109,23 @@ public/
    `formats.generated.md`：`GEN_FORMATS` 守卫会检查生成物是否与注册表逐字一致，
    深度语义校验器通过注册表的 `validator` 字段绑定，并由 golden fixtures 钉死。
 4. 运行 `pytest tests -q` 确认目录/技能/文档/格式契约测试仍然通过。
+
+## 6. 与标注工作台（ZenMark）的实时结合
+
+文本标注页不只是“能生成一个可导入的 JSON”，它已经把编码结果做成 AI 可直接消费的只读上下文：
+
+- **页面侧**：`window.ZenAnnotateAI` 暴露 `snapshot()`（结构化 JSON）、
+  `snapshotAsync()`（会补全表格引文原文）、`snapshotMarkdown()`（给模型看的紧凑摘要）。
+  摘要只包含方法数据、码表、编码树、信度结果与“典型引文”，不含整篇访谈原文。
+- **实时通道**：标注页监听工作台广播的 `omm:zen-card-request`（只接受 loopback
+  parent origin，回复用显式 `targetOrigin`），回一张 `kind:"omm.annotate.snapshot"` 的卡片。
+  `omm-hub.js` 的 live-data 桥把它收进 `omm_live.annotate`；同源 web 版则直接从
+  `localStorage['zencode.project.v1']` 生成同一结构。AI 工作区的 `omm_live_data`
+  上下文因此能真实引用用户当前的码号、轮次、κ 值与典型引文，而不是靠用户复制粘贴。
+- **用户动作**：“互通 → 发送到 AI 工作区”把同一份摘要通过共享频道 `documents`
+  发给 AI 插件（`format: omm.annotate.markdown`）；独立网页版降级为下载 Markdown。
+- **文档与校验**：`json-specs/annotate.md`（同步到 `omm_knowledge/annotate.md`）
+  已补齐 `cellCodes[]`、`reliability[]`、`star`、`kind:"table"` 的规则与生成提示词；
+  `omm_validators.py` 会校验这些新数组的行号、轮次、引用与 κ/po 范围。
+- **技能**：`omm.zen.annotate` 由 `omm_data.PRODUCTS['annotate']` 自动衍生，知识更新
+  无需改 `omm_skills.py`。`PRODUCTS.md` 用 `product_index_md()` 重新生成。

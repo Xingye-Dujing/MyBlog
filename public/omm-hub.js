@@ -5138,6 +5138,66 @@
   var liveDataWaiters = Object.create(null);
   var liveDataSeq = 0;
 
+  /* Annotate (ZenMark) is read from same-origin localStorage in the web build.
+   * On isolated desktop ports this yields null and the card-based snapshot below
+   * (pushed by the product pane on zen-card-request) fills the field instead. */
+  function annotateLiveSnapshot() {
+    var pr = null;
+    try { pr = JSON.parse(localStorage.getItem('zencode.project.v1') || 'null'); } catch (e) { return null; }
+    if (!pr || typeof pr !== 'object' || !Array.isArray(pr.codes)) return null;
+    var codes = Object.create(null);
+    pr.codes.forEach(function (c) { if (c && c.id) codes[c.id] = c; });
+    var anns = Array.isArray(pr.anns) ? pr.anns : [];
+    var marks = Array.isArray(pr.marks) ? pr.marks : [];
+    var cells = Array.isArray(pr.cellCodes) ? pr.cellCodes : [];
+    var rel = Array.isArray(pr.reliability) ? pr.reliability : [];
+    var docs = Array.isArray(pr.docs) ? pr.docs : [];
+    var docTitle = Object.create(null);
+    var docText = Object.create(null);
+    docs.forEach(function (d) {
+      if (!d || !d.id) return;
+      docTitle[d.id] = String(d.title || '');
+      docText[d.id] = String(d.text || '');
+    });
+    var rounds = Object.create(null);
+    cells.forEach(function (c) { var k = String(c.round || 1); rounds[k] = (rounds[k] || 0) + 1; });
+    var countFor = Object.create(null);
+    anns.concat(cells).forEach(function (x) { if (x && x.code) countFor[x.code] = (countFor[x.code] || 0) + 1; });
+    var starred = [];
+    anns.forEach(function (a) {
+      if (!a || !a.star) return;
+      var body = docText[a.doc] || '';
+      var para = body.slice(0, Number(a.start) || 0).split('\n').length;
+      starred.push({ code: codes[a.code] ? codes[a.code].no + ' ' + codes[a.code].name : '',
+        text: String(a.quote || '').slice(0, 400), source: docTitle[a.doc] || '',
+        ref: '第 ' + para + ' 段 · 字符 ' + ((Number(a.start) || 0) + 1) + '–' + (Number(a.end) || 0),
+        note: String(a.memo || '').slice(0, 200) });
+    });
+    marks.forEach(function (m) {
+      if (m && m.star) starred.push({ code: '批注', text: String(m.quote || '').slice(0, 400),
+        source: docTitle[m.doc] || '', note: String(m.text || '').slice(0, 200) });
+    });
+    cells.forEach(function (c) {
+      if (c && c.star) starred.push({ code: codes[c.code] ? codes[c.code].no + ' ' + codes[c.code].name : '',
+        text: '表格第 ' + (Number(c.row) + 1) + ' 行 · 列“' + String(c.col || '') + '”',
+        source: docTitle[c.table] || '', note: '第 ' + (c.round || 1) + ' 轮' });
+    });
+    return {
+      title: String(pr.title || ''),
+      counts: { docs: docs.length, codes: pr.codes.length, anns: anns.length, marks: marks.length,
+        cellCodes: cells.length, reliability: rel.length, starred: starred.length, rounds: rounds },
+      codes: pr.codes.slice(0, 80).map(function (c) {
+        return { no: String(c.no || ''), name: String(c.name || ''), level: String(c.level || ''),
+          def: String(c.def || '').slice(0, 300), count: countFor[c.id] || 0 };
+      }),
+      reliability: rel.slice(0, 8).map(function (r) {
+        return { kappa: r.stat && r.stat.kappa, agreement: r.stat && r.stat.po,
+          N: r.stat && r.stat.N, source: r.source || '' };
+      }),
+      starred: starred.slice(0, 20),
+    };
+  }
+
   function collectLiveLocalData() {
     function arr(key) {
       try {
@@ -5196,6 +5256,7 @@
         });
         return out.slice(0, 100);
       })(),
+      annotate: annotateLiveSnapshot(),
     };
   }
 
@@ -6923,6 +6984,14 @@
         var waiter = liveDataWaiters[data.token];
         if (waiter && Array.isArray(data.cards)) {
           data.cards.slice(0, 200).forEach(function (c) {
+            // Annotate pushes a read-only coding snapshot through the same bridge.
+            if (c && String(c.kind || '') === 'omm.annotate.snapshot') {
+              waiter.snapshot.annotate = Object.assign({}, waiter.snapshot.annotate || {}, {
+                markdown: String(c.content || '').slice(0, 12000),
+                source: String(c.source || 'omm-annotate'),
+              });
+              return;
+            }
             var n = kgNormalize(c);
             if (n) waiter.snapshot.cards.push({
               content: n.content, kind: n.kind, tags: n.tags, source: n.source

@@ -45,6 +45,7 @@ python tests/product_guard.py --suggest-bump    # 列出因内容变更而建议
 python tests/no_jp_quotes.py              # 仅引号修正（product_guard 已内置该能力）
 python -m pytest public/tests -q          # AI 工作区全部测试（含框架引号门禁与 golden 对拍）
 node tests/test_message_security.mjs      # postMessage 协议与版本比较
+node --test tests/test_markdown_sanitizer.mjs  # Markdown 输出白名单清洗（含 MathML 绕过）
 node --test tests/test_zencard.mjs tests/test_srs.mjs tests/test_flow.mjs \
   tests/test_review.mjs tests/test_backup.mjs tests/test_products.mjs \
   tests/test_knowledge_graph.mjs tests/test_chart.mjs \
@@ -167,6 +168,7 @@ npm run build                             # 前端生产构建
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
 - `test_cmdk_upgrade.mjs` Cmd+K 检索增强：子序列模糊评分（前缀加权）、`usageStats` 使用频率加权与稳定排序、本地即时命令（`= 算术`、`@date`、`hex/bin/oct` 换算，算术只接受安全字符）；面板本体未重建，仅在过滤阶段接入。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
+- `test_annotate_reliability.mjs` 从 `omm-paper.js` 抽取信度纯函数验证表格行号对齐：第二编码者按提示/导出表填写的 1 基行号必须换算回 `cellCodes.row` 的 0 基键，否则一致性检验会把所有项目判为“只有一方编码”、κ 恒为 0。含完全一致（κ=1、missing=0）与单处分歧两组用例。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。另含 `OfflineChainTest`：阻断一切非本地网络请求后，建卡、建规则、ZenPack 导出与 Cmd+K 仍全部可用，把“完全离线”变成回归项。
 - `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）、`VERSION`（套件版本一致、产品版本只比同产品、内容指纹防漏升、空 bump 与降级提示）、`SPEC_SYNC`（AI 知识副本与规范真源逐字一致）、`RUNTIME`（仅官方 `ai` 可执行本机代码）、`PRIVACY`（隐藏日程不进入 AI 快照）、`GEN_FORMATS`（格式契约单一真源与生成物一致）；45 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
 - `test_json_specs.mjs` JSON 规范一致性：不只比对文档，直接调用 `ZenCard` / `ZenBackup` / `ZenPack` / `ZenSRS` / `ZenFlow` 的导出函数，断言产物满足 `format` / `v` / `cards[]` / `products[]` / `nodes` 等总表硬性要求，并验证卡片包、工作区包、SRS、规则序列化的往返。

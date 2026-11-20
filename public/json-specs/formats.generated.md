@@ -110,7 +110,9 @@
     "rels": [],
     "memos": [],
     "marks": [],
-    "notes": []
+    "notes": [],
+    "cellCodes": [],
+    "reliability": []
   }
 }
 ```

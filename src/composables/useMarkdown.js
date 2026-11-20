@@ -99,23 +99,24 @@ function sanitizeNode(node, allowIframe) {
         continue
       }
 
-      if (!isMathML) {
-        for (const attr of Array.from(child.attributes)) {
-          const name = attr.name.toLowerCase()
-          const value = attr.value
-          if (name.startsWith('on') || !SAFE_ATTRS.has(name)) {
-            child.removeAttribute(attr.name)
-            continue
-          }
-          if ((name === 'href' || name === 'src') && !safeUrl(value)) {
-            child.removeAttribute(attr.name)
-            continue
-          }
-          if (name === 'style') {
-            const cleaned = safeStyle(value)
-            if (cleaned) child.setAttribute('style', cleaned)
-            else child.removeAttribute('style')
-          }
+      // MathML（KaTeX 输出）保留其专有标签与属性，但事件处理器、危险协议与
+      // 危险 style 必须照常清理：原始 HTML 里的 <math> 同样进入 MathML 命名空间，
+      // 不能仅凭命名空间就当作可信内容放过（否则 <math onmouseover=...> 可绕过白名单）。
+      for (const attr of Array.from(child.attributes)) {
+        const name = attr.name.toLowerCase()
+        const value = attr.value
+        if (name.startsWith('on') || (!isMathML && !SAFE_ATTRS.has(name))) {
+          child.removeAttribute(attr.name)
+          continue
+        }
+        if ((name === 'href' || name === 'src' || name === 'xlink:href') && !safeUrl(value)) {
+          child.removeAttribute(attr.name)
+          continue
+        }
+        if (name === 'style') {
+          const cleaned = safeStyle(value)
+          if (cleaned) child.setAttribute('style', cleaned)
+          else child.removeAttribute('style')
         }
       }
 
