@@ -200,6 +200,29 @@ class HubServer:
         _serve(server)
         return server
 
+    def _start_video(self, port: int, plugin_dir: Path):
+        """视频工作台：内置 ffmpeg 的 Python 后端，零 pip 依赖。"""
+        os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
+        bundled = plugin_dir / "video-runtime" / "bin" / (
+            "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+        )
+        if bundled.is_file():
+            os.environ["OMM_FFMPEG"] = str(bundled)
+        script = self.root / "video-serve.py"
+        if not script.is_file():
+            script = plugin_dir / "video-serve.py"
+        if not script.is_file():
+            raise RuntimeError("缺少 video-serve.py")
+        spec = importlib.util.spec_from_file_location("omm_video_plugin_backend", str(script))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("无法加载视频工作台后端")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        module.Handler.root = plugin_dir.resolve()
+        server = _QuietHTTPServer(("127.0.0.1", port), module.Handler)
+        _serve(server)
+        return server
+
     def _url(self, port: int, entry: str) -> str:
         return "http://127.0.0.1:%d/%s" % (port, entry)
 
@@ -241,6 +264,8 @@ class HubServer:
                     return self._start_ai(port, plugin_dir)
                 if runtime == "latex":
                     return self._start_latex(port, plugin_dir)
+                if runtime == "video":
+                    return self._start_video(port, plugin_dir)
                 return self._start_static(port, plugin_dir, default_app=plugin_id)
 
             try:

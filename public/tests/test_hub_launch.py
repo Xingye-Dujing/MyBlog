@@ -33,6 +33,29 @@ def test_cli_hub_web_preview_keeps_public_behaviour(monkeypatch):
     assert os.environ['OMM_DESKTOP'] == '0'
 
 
+def test_stage_copies_es_module_siblings(tmp_path):
+    """Regression: `import { X } from './zen-card.js'` must be staged as well.
+
+    The old src/href-only scan silently skipped ES module imports, so plugin
+    dirs shipped without their shared JS and the page module failed to load.
+    """
+    import offline
+
+    cases = {
+        'omm-zenbackup.html': ('zen-backup.js', 'zen-pack.js'),
+        'omm-zencard.html': ('zen-card.js', 'zen-srs.js'),
+        'omm-zenclip.html': ('zen-card.js',),
+        'omm-zenflow.html': ('zen-card.js', 'zen-flow.js'),
+        'omm-zenreview.html': ('zen-card.js', 'zen-review.js'),
+    }
+    for html, assets in cases.items():
+        dest = tmp_path / html
+        dest.mkdir()
+        offline._copy_referenced_assets(html, dest)
+        for asset in assets:
+            assert (dest / asset).is_file(), (html, asset)
+
+
 def test_hub_starts_ai_plugin(tmp_path, monkeypatch):
     import offline
     from hub_server import HubServer

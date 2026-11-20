@@ -323,6 +323,20 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
             "channels": [{"id": "documents", "role": "both"}]
         },
     },
+    {
+        # 视频分析与处理工作台：工作流画布 + 内置轻量 ffmpeg
+        # 注意：不加入 DESKTOP_EXE_NAMES，暂不生成独立 EXE，只在静书房内以插件运行。
+        "id": "video",
+        "name": "视频工作台",
+        "glyph": "视",
+        "description": "节点工作流 · 视频分析与处理 · 内置 ffmpeg",
+        "entry": "omm-video.html",
+        "port": 8329,
+        "runtime": "video",
+        "vendor": [],
+        "order": 121,
+        "share": {"channels": [{"id": "documents", "role": "publish"}]},
+    },
 ]
 
 PLUGIN_BY_ID = {item["id"]: item for item in BUILTIN_PLUGINS}

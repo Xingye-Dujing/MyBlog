@@ -68,6 +68,10 @@ PLUGIN_ASSETS = [
 _LOCAL_ASSET_RE = re.compile(
     r"""(?:src|href)\s*=\s*["']([^"']+\.(?:js|css))["']""", re.I
 )
+# ES modules reference siblings as `import { X } from './zen-card.js'` (or a bare
+# `import './x.js'`), which the src/href regex never sees. Collect quoted `./`
+# paths separately and normalise them before the nested-path guard below.
+_MODULE_ASSET_RE = re.compile(r"""["'](\./[^"']+\.(?:js|css))["']""", re.I)
 
 
 def _copy_referenced_assets(html_name: str, dest: Path) -> None:
@@ -79,8 +83,15 @@ def _copy_referenced_assets(html_name: str, dest: Path) -> None:
     Vendor/remote paths are handled by copy_vendor and are deliberately skipped.
     """
     text = (ROOT / html_name).read_text(encoding="utf-8", errors="replace")
-    for ref in set(_LOCAL_ASSET_RE.findall(text)):
-        if "/" in ref or "\\" in ref or ref.lower().startswith(("http:", "https:", "//")):
+    refs = set(_LOCAL_ASSET_RE.findall(text)) | set(_MODULE_ASSET_RE.findall(text))
+    for ref in refs:
+        if ref.lower().startswith(("http:", "https:", "//")):
+            continue
+        # `./zen-card.js` is a sibling asset, not a nested path. Strip the
+        # prefix so it survives the nested-path guard and lands in the plugin root.
+        if ref.startswith("./"):
+            ref = ref[2:]
+        if "/" in ref or "\\" in ref:
             continue
         src = ROOT / ref
         if src.is_file():
@@ -94,6 +105,35 @@ def _copy_common(dest: Path) -> None:
             shutil.copy2(src, dest / src.name)
     for src in ROOT.glob("icon-*.png"):
         shutil.copy2(src, dest / src.name)
+
+
+def copy_canvas_framework(dest: Path) -> None:
+    """Stage the shared canvas framework referenced as zen-canvas/*.
+
+    _copy_referenced_assets deliberately skips paths with a slash (vendor and
+    remote URLs), so shared framework folders must be staged explicitly.
+    Every canvas product gets the same copy; editing zen-canvas/ then updates
+    all of them at the next build.
+    """
+    src = ROOT / "zen-canvas"
+    if src.is_dir():
+        shutil.copytree(src, dest / "zen-canvas", dirs_exist_ok=True)
+
+
+def copy_video_runtime(dest: Path) -> None:
+    """Stage the bundled lightweight ffmpeg (bin only, never job data)."""
+    src = ROOT / "video-runtime" / "bin"
+    target = dest / "video-runtime" / "bin"
+    if src.is_dir():
+        target.mkdir(parents=True, exist_ok=True)
+        for f in src.iterdir():
+            if f.is_file():
+                shutil.copy2(f, target / f.name)
+    (dest / "video-runtime" / "work" / "uploads").mkdir(parents=True, exist_ok=True)
+    (dest / "video-runtime" / "work" / "jobs").mkdir(parents=True, exist_ok=True)
+    backend = ROOT / "video-serve.py"
+    if backend.is_file():
+        shutil.copy2(backend, dest / "video-serve.py")
 
 
 def copy_vendor(dest: Path, app_id: str) -> None:
@@ -125,6 +165,7 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
     _copy_referenced_assets(html_name, dest)
+    copy_canvas_framework(dest)
     copy_vendor(dest, app_id)
     return dest
 
@@ -144,6 +185,7 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets(item["entry"], dest)
+    copy_canvas_framework(dest)
     if item.get("apl_font"):
         shutil.copy2(ROOT / "APL385.ttf", dest / "APL385.ttf")
     if item.get("examples"):
@@ -151,6 +193,8 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
             ROOT / "mdforge-examples", dest / "mdforge-examples", dirs_exist_ok=True
         )
     copy_vendor(dest, app_id)
+    if app_id == "video":
+        copy_video_runtime(dest)
     (dest / "plugin.json").write_text(
         json.dumps(manifest(item), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -171,6 +215,9 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
     shutil.copytree(VENDOR / "fonts", dest / "vendor" / "fonts", dirs_exist_ok=True)
     shutil.copytree(ROOT / "plugin-template", dest / "plugin-template", dirs_exist_ok=True)
     shutil.copy2(ROOT / "latex-serve.py", dest / "latex-serve.py")
+    backend = ROOT / "video-serve.py"
+    if backend.is_file():
+        shutil.copy2(backend, dest / "video-serve.py")
 
 
 def stage_hub(dest: Path, common_assets=()) -> Path:

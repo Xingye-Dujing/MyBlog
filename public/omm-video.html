@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="omm-embed.js"></script>
+    <script src="omm-desktop.js"></script>
+    <script src="omm-share.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>视频工作台</title>
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="vendor/fonts/literata-sub.css" />
+    <!-- 不引入 zen-ui.css：严格沿用 omm-writer.html 的 token 与组件风格 -->
+    <link rel="stylesheet" href="zen-canvas/zen-canvas.css" />
+    <style>
+      /* ===== CSS Variables —— 照搬 omm-writer.html:43-97 ===== */
+      :root {
+        --bg: #ffffff;
+        --text: #000000;
+        --text-dim: rgba(0, 0, 0, 0.35);
+        --text-faint: rgba(0, 0, 0, 0.12);
+        --border: #000000;
+        --border-dim: rgba(0, 0, 0, 0.15);
+        --border-faint: rgba(0, 0, 0, 0.06);
+        --hover: rgba(0, 0, 0, 0.04);
+        --active-bg: #1f1f1f;
+        --active-text: #ffffff;
+        --accent-red: #cc3333;
+        --accent-green: #339933;
+        --accent-yellow: #f0b400;
+        --accent-yellow-soft: rgba(240, 180, 0, 0.16);
+        --accent-blue: #3366cc;
+        --accent-orange: #cc6600;
+        --accent-purple: #6633cc;
+        --fscale: 1;
+        --font-mono: 'Literata', 'Georgia', 'Times New Roman', serif;
+        --port-size: 10px;
+        --port-color: #888888;
+        --conn-color: #555555;
+        --conn-width: 2px;
+        --node-bg: #ffffff;
+        --title-font-size: 10px;
+        --content-font-size: 14px;
+        --content-line-height: 1.8;
+        --radius: 0px;
+        --title-color: #222222;
+        /* 框架 CSS 的通用强调色：writer 用绿色表示“已选/进行中” */
+        --accent: var(--accent-green);
+      }
+      body.theme-dark {
+        --bg: #1a1a1a;
+        --text: #ffffff;
+        --text-dim: rgba(255, 255, 255, 0.35);
+        --text-faint: rgba(255, 255, 255, 0.12);
+        --border: #ffffff;
+        --border-dim: rgba(255, 255, 255, 0.15);
+        --border-faint: rgba(255, 255, 255, 0.06);
+        --hover: rgba(255, 255, 255, 0.06);
+        --active-bg: #ffffff;
+        --active-text: #000000;
+        --accent-red: #ff5555;
+        --accent-green: #44cc44;
+        --accent-yellow: #ffd54a;
+        --accent-yellow-soft: rgba(255, 213, 74, 0.18);
+        --accent-blue: #6f9be8;
+        --accent-orange: #e08a3c;
+        --accent-purple: #a58ae0;
+        --port-color: #aaaaaa;
+        --conn-color: #aaaaaa;
+        --node-bg: #242424;
+        --title-color: #eeeeee;
+      }
+      /* Reset & base —— writer:98-123 */
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow: hidden; }
+      body {
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        overflow: hidden;
+        user-select: none;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      ::selection { background: rgba(0, 110, 255, 0.2); color: inherit; }
+      input, textarea, select, button { font-family: inherit; color: inherit; }
+      button { cursor: pointer; }
+
+      /* ===== 顶栏：writer 的 #top-menu / .menu-group / .menu-btn ===== */
+      #app { height: calc(100% - 26px); display: flex; flex-direction: column; }
+      .top-menu {
+        position: relative; z-index: 999; flex: 0 0 auto;
+        min-height: 48px; display: flex; align-items: center; align-content: center;
+        gap: 2px; row-gap: 3px; flex-wrap: wrap;
+        padding: 4px 12px; background: var(--bg);
+        border-bottom: 1px solid var(--border);
+      }
+      .menu-group {
+        display: flex; align-items: center; gap: 2px; padding: 0 6px;
+        position: relative; flex-shrink: 0;
+      }
+      .menu-group + .menu-group::before {
+        content: ''; position: absolute; left: -2px; top: 50%;
+        transform: translateY(-50%); width: 1px; height: 20px; background: var(--border-dim);
+      }
+      .menu-label {
+        font-size: 9px; letter-spacing: 1.5px; color: var(--text-faint);
+        text-transform: uppercase; padding: 0 4px; font-weight: 500; flex-shrink: 0;
+      }
+      .menu-btn {
+        color: var(--text-dim); cursor: pointer; padding: 4px 10px;
+        border: 1px solid transparent; transition: all 0.15s;
+        font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.4px;
+        white-space: nowrap; background: transparent; border-radius: var(--radius);
+      }
+      .menu-btn:hover { color: var(--text); border-color: var(--border); background: var(--hover); }
+      .menu-btn.active, .menu-btn.toggle-on {
+        color: var(--text); background: transparent;
+        border-color: var(--border); box-shadow: inset 0 -2px 0 var(--text);
+      }
+      .menu-btn:disabled { opacity: 0.28; pointer-events: none; }
+      .menu-btn.danger { color: var(--accent-red); }
+      .badge {
+        display: inline-block; border: 1px solid var(--border-dim);
+        padding: 2px 7px; font-size: 9px; letter-spacing: 1px;
+        text-transform: uppercase; color: var(--text-dim); white-space: nowrap;
+      }
+      .spacer { flex: 1; }
+      .sep { width: 1px; height: 18px; background: var(--border-dim); margin: 0 2px; }
+
+      /* ===== 三栏工作区 ===== */
+      .workspace-body {
+        flex: 1 1 auto; min-height: 0; display: grid;
+        grid-template-columns: 196px minmax(0, 1fr) 286px;
+      }
+      .palette, .inspector {
+        min-height: 0; overflow-y: auto; background: var(--bg);
+        border-right: 1px solid var(--border);
+      }
+      .inspector { border-right: 0; border-left: 1px solid var(--border); }
+      .pane-head {
+        position: sticky; top: 0; z-index: 3;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 7px 10px; background: var(--bg);
+        border-bottom: 1px solid var(--border-dim);
+        font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-faint); font-weight: 500;
+      }
+      .pane-head + .pane-head { top: auto; border-top: 1px solid var(--border-dim); }
+      .pane-body { padding: 10px 12px 18px; }
+      .faint, .hintline { color: var(--text-faint); font-size: 10px; }
+      .empty {
+        border: 1px dashed var(--border-dim); padding: 20px 12px; margin: 8px 0;
+        text-align: center; color: var(--text-faint); font-size: 10px; line-height: 1.7;
+      }
+
+      .palette .group-title {
+        margin: 12px 0 6px; font-size: 9px; letter-spacing: 1.5px;
+        color: var(--text-faint); text-transform: uppercase;
+      }
+      .palette .group-title:first-child { margin-top: 2px; }
+      .palette-item {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 5px 7px; margin-bottom: 3px; text-align: left;
+        border: 1px solid var(--border-dim); background: transparent;
+        color: var(--text); font-size: 11px; cursor: grab;
+        transition: background 0.12s, border-color 0.12s;
+      }
+      .palette-item:hover { background: var(--hover); border-color: var(--border); }
+      .palette-item .pi-glyph {
+        width: 18px; height: 18px; flex: 0 0 18px; display: inline-flex;
+        align-items: center; justify-content: center; font-size: 9px;
+        border: 1px solid var(--border-dim); color: var(--text-dim);
+      }
+      .palette-item .pi-desc { font-size: 9px; color: var(--text-faint); display: block; }
+
+      .stage { position: relative; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+      .stage-tools {
+        flex: 0 0 auto; display: flex; align-items: center; gap: 2px;
+        padding: 5px 8px; border-bottom: 1px solid var(--border);
+        background: var(--bg); flex-wrap: wrap;
+      }
+      .stage-tools select {
+        width: auto; padding: 3px 6px; font-size: 10px;
+        background: transparent; border: 1px solid var(--border-dim); outline: none;
+      }
+      .stage-tools select:focus { border-color: var(--text); }
+      #canvas-host { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+      .stage-hint {
+        position: absolute; left: 12px; bottom: 8px; z-index: 4;
+        font-size: 9px; letter-spacing: 0.5px; color: var(--text-faint); pointer-events: none;
+      }
+
+      /* ===== 节点正文：writer 的节点内容排版语言 ===== */
+      .node.zc-node .node-content { padding: 8px 11px; gap: 5px; cursor: default; }
+      .zv-kind {
+        font-size: var(--title-font-size); letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-faint); display: flex; align-items: center; gap: 6px;
+      }
+      .zv-kind i { width: 5px; height: 5px; background: var(--accent-blue); display: inline-block; }
+      .zv-kind.k-in i { background: var(--accent-blue); }
+      .zv-kind.k-analysis i { background: var(--accent-orange); }
+      .zv-kind.k-out i { background: var(--accent-green); }
+      .zv-summary { font-size: 12px; line-height: 1.6; color: var(--text); word-break: break-all; }
+      .zv-summary:empty::after { content: '未设置'; color: var(--text-faint); }
+      .zv-meta { font-size: 10px; color: var(--text-dim); }
+      .zv-progress { height: 2px; background: var(--border-dim); display: none; }
+      .zv-progress.active { display: block; }
+      .zv-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+      .zv-result { font-size: 10px; color: var(--text-dim); max-height: 92px; overflow: auto; }
+      .zv-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 4px; }
+      .zv-thumbs img { width: 100%; height: 40px; object-fit: cover; border: 1px solid var(--border-dim); }
+      .zc-status { font-size: 9px; letter-spacing: 0.5px; color: var(--text-faint); }
+      .zc-status.is-running { color: var(--accent); }
+      .zc-status.is-done { color: var(--accent-green); }
+      .zc-status.is-error { color: var(--accent-red); }
+      .node.zc-node[data-state='running'] { border-color: var(--accent); }
+      .node.zc-node[data-state='error'] { border-color: var(--accent-red); }
+      .node.zc-node[data-state='done'] { border-color: var(--accent-green); }
+
+      /* ===== 检查器：writer 的 .ie-label / .ie-input ===== */
+      .field { margin-bottom: 11px; }
+      .field > span {
+        display: block; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-faint); margin-bottom: 4px; font-weight: 500;
+      }
+      .field input, .field select, .field textarea {
+        width: 100%; background: transparent; border: 1px solid var(--border-dim);
+        color: var(--text); font-size: 11px; padding: 5px 7px; outline: none;
+      }
+      .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--text); }
+      .field input[type='range'] { padding: 0; accent-color: var(--text); cursor: pointer; }
+      .field .hintline { margin-top: 3px; line-height: 1.5; }
+      .field-row { display: flex; gap: 8px; }
+      .field-row > * { flex: 1; }
+      .inspector h3.title {
+        font-family: var(--font-mono); font-size: 13px; font-weight: 500;
+        letter-spacing: 0.5px; margin-bottom: 2px;
+      }
+      .inspector .node-id { font-size: 9px; color: var(--text-faint); margin-bottom: 12px; }
+      .switch-row { display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 8px; }
+      .switch-row input { width: auto; }
+      .section-title {
+        font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-faint); border-top: 1px solid var(--border-dim);
+        padding-top: 10px; margin: 14px 0 10px;
+      }
+      .result-line {
+        font-size: 11px; padding: 5px 0; border-bottom: 1px dashed var(--border-dim);
+        word-break: break-all;
+      }
+      .result-line:last-child { border-bottom: 0; }
+      .result-line a { color: var(--accent-blue); text-decoration: none; margin-right: 8px; }
+      .result-line a:hover { text-decoration: underline; }
+      .mini-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 8px 0; }
+      .mini-thumbs img {
+        width: 100%; height: 52px; object-fit: cover;
+        border: 1px solid var(--border-dim); cursor: zoom-in;
+      }
+      .logbox {
+        font: 10px/1.6 var(--font-mono); white-space: pre-wrap; color: var(--text-dim);
+        max-height: 130px; overflow: auto; user-select: text;
+        border: 1px solid var(--border-dim); padding: 6px;
+      }
+
+      /* ===== 状态栏：writer #status-bar:3378-3399 ===== */
+      #status-bar {
+        position: fixed; bottom: 0; left: 0; right: 0; height: 26px;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 12px; background: var(--bg); border-top: 1px solid var(--border);
+        font-size: 10px; color: var(--text-dim); font-family: var(--font-mono);
+        letter-spacing: 0.5px; z-index: 100;
+      }
+      #status-bar .dot {
+        width: 5px; height: 5px; background: var(--accent-green);
+        display: inline-block; margin-right: 6px;
+      }
+
+      /* ===== 通知：writer #notification:3464-3485 ===== */
+      #toast {
+        position: fixed; bottom: 40px; left: 50%;
+        transform: translateX(-50%) translateY(10px);
+        background: var(--bg); border: 1px solid var(--border);
+        padding: 6px 16px; font-size: 11px; color: var(--text);
+        font-family: var(--font-mono); z-index: 3000; opacity: 0;
+        transition: all 0.2s; pointer-events: none; white-space: nowrap;
+      }
+      #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      .modal {
+        position: fixed; inset: 0; z-index: 5000; display: none;
+        align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.62);
+      }
+      .modal.open { display: flex; }
+      .modal .box {
+        background: var(--bg); border: 1px solid var(--border);
+        max-width: min(92vw, 960px); max-height: 90vh; padding: 14px;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .modal .box video, .modal .box img { max-width: 100%; max-height: 72vh; display: block; }
+      .modal .box video { background: #1a1a1a; }
+      .modal .box-head {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 20px; font-size: 11px; letter-spacing: 0.5px;
+      }
+
+      @media (max-width: 1100px) {
+        .workspace-body { grid-template-columns: 162px minmax(0, 1fr) 250px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header class="top-menu">
+        <div class="menu-group">
+          <span class="menu-label">Video Studio</span>
+          <span style="font-size: 11px; letter-spacing: 0.5px">视频工作台</span>
+        </div>
+        <div class="menu-group"><span class="badge" id="runtime-badge">ffmpeg 检测中</span></div>
+        <div class="menu-group">
+          <button class="menu-btn" id="btn-theme" title="切换亮暗主题">主题</button>
+          <button class="menu-btn" id="btn-upload">导入视频</button>
+          <button class="menu-btn" id="btn-template">示例工作流</button>
+        </div>
+        <div class="menu-group">
+          <button class="menu-btn" id="btn-open">打开</button>
+          <button class="menu-btn" id="btn-save">保存</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="menu-group"><span class="menu-label">OMM-ZEN</span></div>
+      </header>
+
+      <div class="workspace-body">
+        <aside class="palette">
+          <div class="pane-head"><span>节点库</span><span class="faint">点击 / 拖入</span></div>
+          <div class="pane-body" id="palette-body"></div>
+        </aside>
+
+        <section class="stage" id="stage">
+          <div class="stage-tools">
+            <button class="menu-btn toggle-on" id="btn-run">▶ 运行</button>
+            <button class="menu-btn" id="btn-stop" disabled>停止</button>
+            <div class="sep"></div>
+            <button class="menu-btn" id="btn-layout">自动排布</button>
+            <button class="menu-btn" id="btn-fit">适应</button>
+            <button class="menu-btn" id="btn-clear">清空</button>
+            <div class="spacer"></div>
+            <select id="strategy" title="自动排布策略">
+              <option value="smart">smart 智能</option>
+              <option value="layered">layered 分层</option>
+              <option value="spine">spine 主线</option>
+              <option value="force">force 力导向</option>
+              <option value="radial">radial 径向</option>
+              <option value="timeline">timeline 时间线</option>
+            </select>
+            <button class="menu-btn" id="btn-help">用法</button>
+          </div>
+          <div id="canvas-host"></div>
+          <div class="stage-hint">右键拖动平移 · 滚轮缩放 · 从端口拉线连接 · Delete 删除 · Ctrl+Z 撤销</div>
+        </section>
+
+        <aside class="inspector">
+          <div class="pane-head"><span>节点设置</span><span class="faint" id="inspect-kind">未选中</span></div>
+          <div class="pane-body" id="inspector-body">
+            <div class="empty">选中一个节点后在这里设置参数。<br />所有参数都有默认值，直接运行也可以。</div>
+          </div>
+          <div class="pane-head"><span>运行结果</span><span class="faint" id="job-state">待命</span></div>
+          <div class="pane-body" id="result-body">
+            <div class="empty">运行后这里显示媒体信息、片段时间点和产物链接。</div>
+          </div>
+        </aside>
+      </div>
+
+      <footer id="status-bar">
+        <span><span class="dot"></span><span id="stat-runtime">内置 ffmpeg</span></span>
+        <span id="stat-job">任务：无</span>
+        <span id="stat-progress">进度：—</span>
+        <span class="spacer"></span>
+        <span id="stat-nodes">节点 0 · 连线 0</span>
+      </footer>
+    </div>
+
+    <div class="modal" id="preview-modal">
+      <div class="box">
+        <div class="box-head"><span id="preview-title">预览</span><button class="menu-btn" id="preview-close">关闭</button></div>
+        <div id="preview-content"></div>
+      </div>
+    </div>
+    <div id="toast"></div>
+    <input type="file" id="file-input" accept="video/*,audio/*" hidden />
+
+    <script src="zen-canvas-layout.js"></script>
+    <script src="zen-canvas/zen-canvas.js"></script>
+    <script src="zen-video.js"></script>
+  </body>
+</html>
