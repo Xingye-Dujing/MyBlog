@@ -6529,40 +6529,42 @@ notify pgrst, 'reload schema';</textarea
         }
 
         function normEvent(e) {
+          const x = e && typeof e === 'object' ? e : {}
           return {
-            id: String(e.id),
-            type: e.type,
-            title: String(e.title || ''),
-            note: String(e.note || ''),
-            time: /^\d{2}:\d{2}$/.test(e.time || '') ? e.time : '',
-            color: CONFIG.COLORS.indexOf(e.color) >= 0 ? e.color : '#888888',
-            priority: ['high', 'mid', 'low'].indexOf(e.priority) >= 0 ? e.priority : 'mid',
-            tag: String(e.tag || ''),
-            subtasks: normSubtasks(e.subtasks),
-            hidden: !!e.hidden,
-            done: e.done === 'failed' ? 'failed' : !!e.done,
-            created: e.created || 0,
-            order: typeof e.order === 'number' ? e.order : e.created || 0,
+            id: String(x.id || uid()),
+            type: x.type,
+            title: String(x.title || ''),
+            note: String(x.note || ''),
+            time: /^\d{2}:\d{2}$/.test(x.time || '') ? x.time : '',
+            color: CONFIG.COLORS.indexOf(x.color) >= 0 ? x.color : '#888888',
+            priority: ['high', 'mid', 'low'].indexOf(x.priority) >= 0 ? x.priority : 'mid',
+            tag: String(x.tag || ''),
+            subtasks: normSubtasks(x.subtasks),
+            hidden: !!x.hidden,
+            done: x.done === 'failed' ? 'failed' : !!x.done,
+            created: x.created || 0,
+            order: typeof x.order === 'number' ? x.order : x.created || 0,
           }
         }
 
         function normRule(r) {
-          const rr = r.rrule || {}
+          const x = r && typeof r === 'object' ? r : {}
+          const rr = x.rrule || {}
           return {
-            id: String(r.id || uid()),
-            type: ['todo', 'event', 'note'].indexOf(r.type) >= 0 ? r.type : 'todo',
-            title: String(r.title || ''),
-            note: String(r.note || ''),
-            time: /^\d{2}:\d{2}$/.test(r.time || '') ? r.time : '',
-            color: CONFIG.COLORS.indexOf(r.color) >= 0 ? r.color : '#888888',
-            priority: ['high', 'mid', 'low'].indexOf(r.priority) >= 0 ? r.priority : 'mid',
-            tag: String(r.tag || ''),
-            subtasks: normSubtasks(r.subtasks),
-            hidden: !!r.hidden,
-            created: r.created || 0,
-            order: typeof r.order === 'number' ? r.order : -1,
-            renderPast: r.renderPast !== undefined ? !!r.renderPast : true,
-            doneMap: r.doneMap && typeof r.doneMap === 'object' ? r.doneMap : {},
+            id: String(x.id || uid()),
+            type: ['todo', 'event', 'note'].indexOf(x.type) >= 0 ? x.type : 'todo',
+            title: String(x.title || ''),
+            note: String(x.note || ''),
+            time: /^\d{2}:\d{2}$/.test(x.time || '') ? x.time : '',
+            color: CONFIG.COLORS.indexOf(x.color) >= 0 ? x.color : '#888888',
+            priority: ['high', 'mid', 'low'].indexOf(x.priority) >= 0 ? x.priority : 'mid',
+            tag: String(x.tag || ''),
+            subtasks: normSubtasks(x.subtasks),
+            hidden: !!x.hidden,
+            created: x.created || 0,
+            order: typeof x.order === 'number' ? x.order : -1,
+            renderPast: x.renderPast !== undefined ? !!x.renderPast : true,
+            doneMap: x.doneMap && typeof x.doneMap === 'object' ? x.doneMap : {},
             rrule: {
               mode:
                 ['daily', 'weekly', 'monthly', 'yearly', 'dates'].indexOf(rr.mode) >= 0
@@ -7053,13 +7055,17 @@ notify pgrst, 'reload schema';</textarea
                       dst = {}
                     if (src && typeof src === 'object' && !Array.isArray(src)) {
                       Object.keys(src).forEach(function (ds) {
-                        dst[ds] = Array.isArray(src[ds]) ? src[ds].map(normEvent) : []
+                        dst[ds] = Array.isArray(src[ds])
+                          ? src[ds].filter(Boolean).map(normEvent)
+                          : []
                       })
                     }
                     this.eventsBy[k] = dst
                   }, this)
                   Object.keys(rb).forEach(function (k) {
-                    this.recursBy[k] = Array.isArray(rb[k]) ? rb[k].map(normRule) : []
+                    this.recursBy[k] = Array.isArray(rb[k])
+                      ? rb[k].filter(Boolean).map(normRule)
+                      : []
                   }, this)
                   return
                 }
@@ -7076,7 +7082,7 @@ notify pgrst, 'reload schema';</textarea
               if (ev && typeof ev === 'object' && !Array.isArray(ev)) {
                 const dst = {}
                 Object.keys(ev).forEach(function (ds) {
-                  if (Array.isArray(ev[ds])) dst[ds] = ev[ds].map(normEvent)
+                  if (Array.isArray(ev[ds])) dst[ds] = ev[ds].filter(Boolean).map(normEvent)
                 })
                 this.eventsBy[pid] = dst
               }

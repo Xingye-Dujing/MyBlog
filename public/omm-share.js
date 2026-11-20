@@ -74,6 +74,7 @@
     // 消息 id 来自外部；普通对象会让 "constructor"/"__proto__" 命中原型链，
     // 消息被误判为已读而永久丢失。
     seen: Object.create(null),
+    linksPatched: false,
     selected: {},
     previews: {},
   }
@@ -467,7 +468,7 @@
       apiPost('/ack', { ids: ack }).catch(function () {})
       var keys = Object.keys(state.seen)
       if (keys.length > 300) {
-        state.seen = {}
+        state.seen = Object.create(null)
         ack.forEach(function (id) { state.seen[id] = true })
       }
     }
@@ -537,6 +538,8 @@
   /* Links to another product page would 404 on a per-plugin server.  Route
      them to the hub when the desktop shell is present. */
   function patchLinks() {
+    if (state.linksPatched) return
+    state.linksPatched = true
     document.addEventListener('click', function (event) {
       if (!state.enabled) return
       var anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null

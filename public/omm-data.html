@@ -5927,12 +5927,15 @@ notify pgrst, 'reload schema';</textarea
           var d = JSON.parse(text)
           var arr = Array.isArray(d) ? d : Array.isArray(d.rows) ? d.rows : null
           if (!arr) throw new Error('not array')
+          // A single null/garbage element must not abort the whole import.
+          arr = arr.filter(function (r) { return r !== null && typeof r === 'object' })
           if (!arr.length) return newTable('import', [{ name: 'A', type: 'text' }], [[]])
           var keys = []
           if (Array.isArray(arr[0])) {
             var maxc = 0
             arr.forEach(function (r) {
-              if (r.length > maxc) maxc = r.length
+              var n = Array.isArray(r) ? r.length : 0
+              if (n > maxc) maxc = n
             })
             for (var i = 0; i < maxc; i++) keys.push(idxToCol(i))
             var tb = { id: uid(), name: 'import', cols: [], rows: [], colW: [] }
@@ -9226,14 +9229,20 @@ notify pgrst, 'reload schema';</textarea
               p.nx()
               uw = p.expr()
             }
+            var targets = sets.map(function (s2) {
+              var ci = colIndex(ut, s2.col)
+              if (ci < 0) throw new Error('未知列: ' + s2.col)
+              return { col: ci, val: s2.val }
+            })
             pushUndo()
             var cnt = 0
             ut.rows.forEach(function (r) {
               if (uw && !evCond(uw, r, ut)) return
-              sets.forEach(function (s2) {
-                var ci = colIndex(ut, s2.col)
-                if (ci < 0) throw new Error('未知列: ' + s2.col)
-                r[ci] = evOp(s2.val, r, ut)
+              // SQL evaluates every right-hand side against the original row.
+              // Writing into r as we go makes SET a=b, b=a produce (2,2).
+              var original = r.slice()
+              targets.forEach(function (t) {
+                r[t.col] = evOp(t.val, original, ut)
               })
               cnt++
             })
