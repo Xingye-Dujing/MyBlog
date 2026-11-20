@@ -76,6 +76,8 @@ def main() -> int:
         "test_markdown_sanitizer.mjs",
         "test_annotate_reliability.mjs",
         "test_hardening_regressions.mjs",
+        "test_frontend_bugfixes.mjs",
+        "test_security_fixes.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])

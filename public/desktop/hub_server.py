@@ -466,7 +466,12 @@ class HubServer:
         )
         try:
             with opener.open(request, timeout=timeout) as response:
-                return response.status, response.read()
+                # 无限读取慢速响应会一直拖住连接并吃满内存；按本地全量备份的上限
+                # 封顶，超出即视为错误响应。
+                data = response.read(MAX_FULL_BACKUP_BYTES + 1)
+                if len(data) > MAX_FULL_BACKUP_BYTES:
+                    raise ValueError("云端响应过大")
+                return response.status, data
         except urllib.error.HTTPError as exc:
             if exc.code == 405:  # MKCOL 已存在时视为成功
                 return exc.code, b""

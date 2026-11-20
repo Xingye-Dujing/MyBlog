@@ -14,6 +14,7 @@ import functools
 import http.server
 import importlib.util
 import os
+import re
 import socket
 import sys
 import threading
@@ -72,15 +73,32 @@ def port_open(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
-def existing_server_ok(port: int, html: str) -> bool:
-    """True when the port already serves our app (second launch)."""
+def existing_server_ok(port: int, html: str, root: Path | None = None) -> bool:
+    """True when the port already serves *our* app (second launch).
+
+    A bare HTTP 200 is not enough: a unrelated local service squatting the port
+    would be opened in the product's trusted WebView origin. Compare the served
+    page against a marker taken from the local source file.
+    """
     if not port_open(port):
+        return False
+    marker = ""
+    if root is not None:
+        source = Path(root) / html
+        if source.is_file():
+            text = source.read_text(encoding="utf-8", errors="replace")
+            match = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
+            marker = (match.group(1).strip() if match else text[:200].strip())
+    if not marker:
         return False
     try:
         with urllib.request.urlopen(
             "http://127.0.0.1:%d/%s" % (port, html), timeout=1.5
         ) as resp:
-            return resp.status == 200
+            if resp.status != 200:
+                return False
+            body = resp.read(200000).decode("utf-8", errors="replace")
+            return marker in body
     except Exception:
         return False
 
@@ -149,7 +167,7 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def backend_port(wanted_port: int, html: str) -> int:
+def backend_port(wanted_port: int, html: str, root: Path | None = None) -> int:
     """Pick a port for a thread-started backend server.
 
     ``start_*`` runs the real server in a daemon thread and a bind failure there
@@ -158,7 +176,7 @@ def backend_port(wanted_port: int, html: str) -> int:
     open the WebView on the wrong service. Fall back to an ephemeral port, just
     like the static-app path does.
     """
-    if not port_open(wanted_port) or existing_server_ok(wanted_port, html):
+    if not port_open(wanted_port) or existing_server_ok(wanted_port, html, root):
         return wanted_port
     return _free_port()
 
@@ -444,20 +462,20 @@ def run(app_id: str, debug: bool = False, extras: bool = True) -> None:
 
     window_title = WINDOW_TITLES[app_id]
 
-    if existing_server_ok(wanted_port, html):
+    if existing_server_ok(wanted_port, html, root):
         port = wanted_port
     elif backend == "mdforge":
-        target = backend_port(wanted_port, html)
+        target = backend_port(wanted_port, html, root)
         port = start_mdforge(target)
         if not wait_ready(port):
             raise SystemExit("mdforge backend did not start on port %d" % port)
     elif backend == "ai":
-        target = backend_port(wanted_port, html)
+        target = backend_port(wanted_port, html, root)
         port = start_ai(target)
         if not wait_ready(port, seconds=30):
             raise SystemExit("AI workspace backend did not start on port %d" % port)
     elif backend == "latex":
-        target = backend_port(wanted_port, html)
+        target = backend_port(wanted_port, html, root)
         port = start_latex(target)
         if not wait_ready(port, seconds=30):
             raise SystemExit("latex backend did not start on port %d" % port)

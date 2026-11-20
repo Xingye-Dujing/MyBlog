@@ -1803,11 +1803,16 @@
     </div>
     <script>
       ;(function () {
-        // Bmob 初始化 (Secret Key 和 API 安全码)
-        const BMOB_SECRET_KEY = '511ccc97dead7a76'
-        const BMOB_API_SECURITY = 'adhkjkladnlajlka'
-        Bmob.initialize(BMOB_SECRET_KEY, BMOB_API_SECURITY)
-        Bmob.debug(false)
+        // 凭据绝不能写进静态页面：任何访问者都能 view-source 拿到并直接调用 REST API
+        // 刷票/改写数据。仅当宿主在页面加载前注入受限凭据时才启用投票功能。
+        const voteConfig = window.OMM_VOTE_CONFIG || {}
+        const BMOB_SECRET_KEY = String(voteConfig.appId || '')
+        const BMOB_API_SECURITY = String(voteConfig.apiSecurity || '')
+        const VOTE_ENABLED = Boolean(BMOB_SECRET_KEY && BMOB_API_SECURITY)
+        if (VOTE_ENABLED) {
+          Bmob.initialize(BMOB_SECRET_KEY, BMOB_API_SECURITY)
+          Bmob.debug(false)
+        }
         const TABLE_NAME = 'campus_votes' // 数据表名，请在 Bmob 后台创建
 
         const voteOptions = document.querySelectorAll('.vote-option')
@@ -1910,6 +1915,15 @@
         }
 
         async function fetchStatsAndReasons() {
+          if (!VOTE_ENABLED) {
+            if (statsContainer)
+              statsContainer.innerHTML =
+                '<div class="loading-tip">投票功能未启用（服务端未提供受限凭据）</div>'
+            if (percentContainer)
+              percentContainer.innerHTML =
+                '<div class="percent-title">民意风向标</div><div class="empty-reason">投票功能未启用</div>'
+            return
+          }
           try {
             const query = Bmob.Query(TABLE_NAME)
             const allRes = await query.find()
@@ -1951,6 +1965,10 @@
         }
 
         async function submitVote() {
+          if (!VOTE_ENABLED) {
+            alert('投票功能未启用')
+            return
+          }
           if (!selectedVote) {
             alert('请先选择一个观点立场')
             return
@@ -1987,8 +2005,21 @@
           })
         }
 
-        bindVoteEvents()
-        if (submitBtn) submitBtn.addEventListener('click', submitVote)
+        if (!VOTE_ENABLED) {
+          voteOptions.forEach((opt) => {
+            opt.setAttribute('aria-disabled', 'true')
+            opt.style.opacity = '0.5'
+            opt.style.pointerEvents = 'none'
+          })
+          if (submitBtn) {
+            submitBtn.disabled = true
+            submitBtn.title = '投票功能未启用'
+          }
+          if (commentBox) commentBox.disabled = true
+        } else {
+          bindVoteEvents()
+          if (submitBtn) submitBtn.addEventListener('click', submitVote)
+        }
         fetchStatsAndReasons()
       })()
 

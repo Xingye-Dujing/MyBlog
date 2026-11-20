@@ -68,14 +68,33 @@ function safeUrl(value) {
   return SAFE_URL.test(String(value || '').trim())
 }
 
+// 只保留排版类属性。黑名单一漏就能用 position:fixed + z-index 造出覆盖整页的
+// 遮罩（内容型 DoS / UI-redressing）；白名单同时挡住 position / inset /
+// z-index / pointer-events / display 等会改变布局与交互的属性。
+const SAFE_STYLE_PROPS = new Set([
+  'color', 'background-color', 'font-size', 'font-style', 'font-weight', 'font-family',
+  'text-align', 'text-decoration', 'line-height', 'vertical-align', 'white-space',
+  'height', 'width', 'max-width', 'min-width', 'margin', 'margin-left', 'margin-right',
+  'margin-top', 'margin-bottom', 'padding', 'padding-left', 'padding-right',
+  'padding-top', 'padding-bottom', 'border', 'border-color', 'float',
+])
+
 function safeStyle(value) {
-  return String(value || '')
+  const text = String(value || '')
     .replace(/url\s*\([^)]*\)/gi, '')
     .replace(/expression\s*\([^)]*\)/gi, '')
     .replace(/-moz-binding\s*:[^;]+;?/gi, '')
     .replace(/behavior\s*:[^;]+;?/gi, '')
     .replace(/@import[^;]+;?/gi, '')
     .replace(/javascript\s*:/gi, '')
+  return text.split(';').map((part) => {
+    const colon = part.indexOf(':')
+    if (colon < 0) return ''
+    const prop = part.slice(0, colon).trim().toLowerCase()
+    const val = part.slice(colon + 1).trim()
+    if (!SAFE_STYLE_PROPS.has(prop) || !val || /[{}<>]/.test(val)) return ''
+    return `${prop}:${val}`
+  }).filter(Boolean).join(';')
 }
 
 function sanitizeElement(child, allowIframe) {

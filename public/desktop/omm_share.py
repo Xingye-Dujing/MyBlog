@@ -556,7 +556,12 @@ def get_item(app: str, item_id: str) -> Dict[str, Any]:
         raise ValueError("没有权限读取这个共享项目")
     item = _public_item(entry)
     if entry.get("kind") == "record":
-        raw = _read_json(share_root() / str(entry.get("record") or ""), {})
+        # 索引可能来自全量恢复的备份：record 路径必须和 file 路径一样限制在
+        # share 目录内，否则 ../ 能借这条接口读走任意 JSON 文件。
+        path = (share_root() / str(entry.get("record") or "")).resolve()
+        if not _inside_any(path, [share_root()]) or not path.is_file():
+            raise ValueError("共享记录已被移除")
+        raw = _read_json(path, {})
         item["payload"] = raw.get("payload")
         item["format"] = raw.get("format") or item.get("format") or "application/json"
     return item
@@ -867,8 +872,18 @@ def policy_view() -> Dict[str, Any]:
 
 
 def _client_app(default_app: str, query: Dict[str, List[str]]) -> str:
-    raw = (query.get("app") or [""])[0]
-    return clean_app_id(raw or default_app or "app")
+    """Caller identity for the share API.
+
+    ``default_app`` comes from the server's trusted OMM_APP_ID. The query override
+    exists for same-origin callers, but must never let a product claim the hub's
+    all-seeing identity — otherwise the ``app == hub`` bypass exposes every item.
+    """
+    supplied = (query.get("app") or [""])[0]
+    raw = clean_app_id(supplied) if supplied else ""
+    trusted = clean_app_id(default_app or "app")
+    if raw == "hub" and trusted != "hub":
+        raw = ""
+    return raw or trusted
 
 
 def handle_get(
@@ -915,7 +930,9 @@ def handle_post(
         payload = json.loads(body.decode("utf-8")) if body else {}
         if not isinstance(payload, dict):
             raise ValueError("请求格式无效")
-        sender = clean_app_id(payload.get("app") or app)
+        # 发布/发送/删除/确认的发起方必须取服务端可信身份，不能由请求体里的
+        # app 字段冒领（payload.app 只有 /policy 用作“被授权的目标应用”）。
+        sender = app
         if path == "/__omm/share/publish":
             return _json_response(200, {"ok": True, "item": publish(sender, payload)})
         if path == "/__omm/share/send":

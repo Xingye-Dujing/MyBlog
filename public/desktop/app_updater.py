@@ -426,6 +426,11 @@ class ShellHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = 0
+        # 先校验长度再读：否则声明一个超大 Content-Length 就能在返回 413 之前
+        # 把整个请求体缓冲进内存（本地页面也能利用这一点做内存 DoS）。
+        if length > omm_shared.MAX_BODY:
+            self.reply_json(413, {"ok": False, "error": "payload too large"})
+            return True
         body = self.rfile.read(length) if length > 0 else b""
         if parsed.path.startswith("/__omm/share/"):
             if omm_share is None:

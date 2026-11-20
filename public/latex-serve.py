@@ -866,6 +866,8 @@ class Handler(SimpleHTTPRequestHandler):
                 n = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 n = 0
+            if n > omm_shared.MAX_BODY:
+                return self.send_bytes(b"payload too large", "text/plain", 413)
             body = self.rfile.read(n) if n > 0 else b""
             status, ctype, payload = omm_share.handle_post(
                 u.path, parse_qs(u.query), body, os.environ.get("OMM_APP_ID") or "latex"
@@ -878,6 +880,8 @@ class Handler(SimpleHTTPRequestHandler):
                 n = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 n = 0
+            if n > omm_shared.MAX_BODY:
+                return self.send_bytes(b"payload too large", "text/plain", 413)
             body = self.rfile.read(n) if n > 0 else b""
             status, ctype, payload = omm_shared.handle_post(
                 u.path, parse_qs(u.query), body, os.environ.get("OMM_APP_ID") or "latex"
