@@ -169,11 +169,15 @@ function merge(current, incoming, opts) {
     if (!right) return left
     if (!left || strategy === 'incoming') return right
     if (strategy === 'current') return left
-    const mergedData = uniqueBy(
-      arr(right.data).concat(arr(left.data)),
-      o.idField || 'id'
-    )
-    return Object.assign({}, right, { data: mergedData })
+    // 有些产品（主题/设置）存的是对象而非数组：两侧都强转 [] 会静默清空数据。
+    // 任一侧是非数组时按策略取其一，不再进入数组去重逻辑。
+    const mergedData =
+      Array.isArray(right.data) || Array.isArray(left.data)
+        ? uniqueBy(arr(right.data).concat(arr(left.data)), o.idField || 'id')
+        : strategy === 'incoming' ? right.data : left.data
+    // right.checksum 是针对旧 right.data 算的，合并后必须重算，否则生成的清单
+    // 连自己的 validate() 都过不了（"checksum 不匹配"）。
+    return Object.assign({}, right, { data: mergedData, checksum: checksum(mergedData) })
   })
   return {
     format: 'zen-backup',

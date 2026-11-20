@@ -37,8 +37,16 @@ function normTags(v) {
 }
 
 function normDate(v, fallback) {
+  if (typeof v === 'number' && isFinite(v)) {
+    const d = new Date(v)
+    return isNaN(d.getTime()) ? fallback : d.toISOString()
+  }
   const s = str(v).trim()
   if (!s) return fallback
+  if (/^\d+$/.test(s)) {
+    const d = new Date(Number(s))
+    return isNaN(d.getTime()) ? fallback : d.toISOString()
+  }
   const d = new Date(s)
   return isNaN(d.getTime()) ? fallback : d.toISOString()
 }
@@ -212,6 +220,7 @@ function merge(cards, opts) {
 /* ---- per-product conversions (all pure) ---- */
 
 function fromCorpusEntry(entry, categories) {
+  entry = entry && typeof entry === 'object' ? entry : {}
   const cats = arr(categories)
   const cat = cats.find(function (c) {
     return c && c.id === entry.categoryId
@@ -248,6 +257,7 @@ function toCorpusEntry(card, categoryId) {
 }
 
 function fromAnnotateMark(mark, doc) {
+  mark = mark && typeof mark === 'object' ? mark : {}
   const text = doc && typeof doc.text === 'string' ? doc.text : ''
   const start = Number(mark.start) || 0
   const end = Number(mark.end) || start
@@ -345,7 +355,9 @@ function toWriterCanvas(cards, name) {
     format: 'zenwriter-canvas',
     v: 2,
     name: str(name) || '知识卡片',
-    nodes: list.map(toWriterNode),
+    // Array#map passes a 0-based index; toWriterNode expects 1-based positions,
+    // so offset it or the first two cards collide on id/position.
+    nodes: list.map(function (c, i) { return toWriterNode(c, i + 1) }),
     connections: [],
   }
 }
@@ -366,6 +378,7 @@ function toDataRow(card) {
 }
 
 function fromDataRow(row, source) {
+  row = row && typeof row === 'object' ? row : {}
   return create({
     source: source || 'data',
     kind: row.kind,

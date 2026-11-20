@@ -162,6 +162,14 @@ test('Writer 转换：卡片变为合法 .zc 节点与画布', () => {
   assert.equal(canvas.nodes.length, 1)
 })
 
+test('Writer 画布多张卡片的 id 与位置不重复（index 从 1 开始）', () => {
+  const cards = ['A', 'B', 'C'].map((content) => ZenCard.create({ content }, FIXED))
+  const canvas = ZenCard.toWriterCanvas(cards, '知识卡片')
+  assert.deepEqual(canvas.nodes.map((n) => n.id), ['node-1', 'node-2', 'node-3'])
+  const positions = canvas.nodes.map((n) => n.x + ',' + n.y)
+  assert.equal(new Set(positions).size, positions.length)
+})
+
 test('Data 转换：行 <-> 卡片，tags 用 | 连接', () => {
   const card = ZenCard.create({ content: 'x', tags: ['a', 'b'] }, FIXED)
   const row = ZenCard.toDataRow(card)

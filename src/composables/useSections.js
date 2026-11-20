@@ -97,7 +97,11 @@ export function useSections(chat, messagesContainer) {
       if (!container) return
 
       // 折叠的分区不在 DOM 中，按消息 id 定位，而不是用消息数组下标。
-      const targetEl = container.querySelector(`[data-msg-id="${targetMsg.id}"]`)
+      // 用 dataset 精确比对而非字符串拼 CSS 选择器：消息 id 来自静态 JSON，
+      // 可能含引号 / 方括号等字符，直接拼接会让 querySelector 抛 SyntaxError。
+      const targetEl = Array.from(container.querySelectorAll('[data-msg-id]')).find(
+        (el) => el.dataset.msgId === String(targetMsg.id),
+      )
       if (!targetEl) return
 
       await eagerLoadImagesInRange(container, targetEl)
@@ -134,7 +138,9 @@ export function useSections(chat, messagesContainer) {
     if (activeMsgIndex === -1) activeMsgIndex = 0
 
     const activeMsgId = messageElements[activeMsgIndex].dataset.msgId
-    const msgIndex = chat.value.messages.findIndex((m) => m.id === activeMsgId)
+    // dataset 读出来永远是字符串；消息 id 来自静态 JSON，可能是数字。用 String
+    // 归一化后才能与 jumpToSection / findMessageEl 的匹配方式保持一致。
+    const msgIndex = chat.value.messages.findIndex((m) => String(m.id) === String(activeMsgId))
     const section =
       msgIndex === -1
         ? null

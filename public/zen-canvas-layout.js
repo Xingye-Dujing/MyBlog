@@ -17,6 +17,7 @@
   'use strict'
 
         function computeRadialOrTimeline(nodes, conns, mode, opt) {
+          opt = opt || {}
           const sizeOf = new Map()
           nodes.forEach((n) =>
             sizeOf.set(n.id, {

@@ -49,6 +49,24 @@ test('summarize 支持区间过滤', () => {
   assert.equal(s.cards, 2)
 })
 
+test('dateKey 支持数字时间戳（epoch 毫秒）与纯数字字符串', () => {
+  const ts = Date.parse('2026-01-02T00:00:00.000Z')
+  assert.equal(ZenReview.dateKey(ts), '2026-01-02')
+  assert.equal(ZenReview.dateKey(String(ts)), '2026-01-02')
+  assert.equal(ZenReview.summarize({ timeline: [{ app: 'writer', ts }] }).events, 1)
+})
+
+test('summarize 区间过滤同样作用于有日期的完成待办', () => {
+  const s = ZenReview.summarize({
+    planner: [
+      { title: '范围内', done: true, day: '2026-01-02' },
+      { title: '范围外', done: true, day: '2025-01-01' },
+    ],
+  }, { from: '2026-01-01', to: '2026-01-03' })
+  assert.equal(s.done, 1)
+  assert.equal(s.doneList[0].title, '范围内')
+})
+
 test('buildReport 生成包含统计与表格的 Markdown', () => {
   const md = ZenReview.buildReport(data, { title: '周报', notes: '下周继续', range: { from: '2026-01-01', to: '2026-01-03' } })
   assert.ok(md.startsWith('# 周报'))

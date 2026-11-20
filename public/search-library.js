@@ -15,6 +15,11 @@ function toCard(entry, opts) {
   const e = entry && typeof entry === 'object' ? entry : {}
   const o = opts || {}
   const sources = arr(e.sources)
+  const first = sources.length ? sources[0] : null
+  const ref =
+    first && typeof first === 'object'
+      ? str(first.url || first.link || '')
+      : typeof first === 'string' ? first : ''
   const tags = []
     .concat(arr(e.tags), arr(o.tags), ['搜索'])
     .filter((t, i, a) => str(t).trim() && a.indexOf(t) === i)
@@ -23,11 +28,18 @@ function toCard(entry, opts) {
     source: 'search',
     kind: 'fact',
     content: str(e.answer) || str(e.query),
-    note: str(e.query),
-    ref: sources.length ? str(sources[0].url || sources[0].link || '') : '',
+    // 只有确有答案时才把 query 存进 note；否则 fromCard 会把兜底进 content 的
+    // query 误当成答案，凭空造出一条“问答”。
+    note: str(e.answer) ? str(e.query) : '',
+    ref: ref,
     tags,
     color: e.pinned ? '#e3a400' : '',
-    createdAt: e.ts ? new Date(e.ts).toISOString() : undefined,
+    createdAt: (function () {
+      if (!e.ts) return undefined
+      const d = new Date(e.ts)
+      // 坏时间戳不应抛 RangeError 中断整批导出；交给 ZenCard 的 normDate 兜底。
+      return isNaN(d.getTime()) ? undefined : d.toISOString()
+    })(),
   })
 }
 

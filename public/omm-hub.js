@@ -2555,8 +2555,13 @@
       .then(function (response) { return response.json(); })
       .then(function (server) {
         if (!server || !server.ok) throw new Error((server && server.error) || '备份失败');
+        // 界面承诺 WebDAV 凭据不随设置备份导出，但 hubAppearance.cloud.password
+        // 恰好存着它；先把密码置空再走 normalizeAppearance，避免明文写进下载文件。
+        var appearance = normalizeAppearance(Object.assign({}, hubAppearance, {
+          cloud: Object.assign({}, hubAppearance.cloud || {}, { password: '' }),
+        }));
         var payload = Object.assign({}, server, {
-          appearance: hubAppearance,
+          appearance: appearance,
           workspaces: workspaces,
           launcher: { pinned: launcherPinned, recent: launcherRecent },
         });
@@ -3527,6 +3532,7 @@
     if (els.notifyPanel) els.notifyPanel.hidden = true;
     if (graphOpen) closeKnowledgeGraph();
     if (flowOpen) closeDataFlow();
+    if (todayOpen) closeToday();
     var tabsMore = document.getElementById('tabs-more');
     if (tabsMore) tabsMore.hidden = true;
     renderNotifyBadge();
@@ -5199,11 +5205,21 @@
   }
 
   function collectLiveLocalData() {
+    function parsed(key) {
+      try { return JSON.parse(localStorage.getItem(key) || 'null'); }
+      catch (e) { return null; }
+    }
     function arr(key) {
-      try {
-        var raw = JSON.parse(localStorage.getItem(key) || '[]');
-        return Array.isArray(raw) ? raw : [];
-      } catch (e) { return []; }
+      var raw = parsed(key);
+      return Array.isArray(raw) ? raw : [];
+    }
+    // 各产品的本地存储并不都是数组：Search 存 {history:[]}，Writer 存
+    // {order:[],meta:{}}，Planner 存 {eventsBy:{}}。同时兼容历史数组形状。
+    function records(key, field) {
+      var raw = parsed(key);
+      if (Array.isArray(raw)) return raw;
+      if (raw && typeof raw === 'object' && Array.isArray(raw[field])) return raw[field];
+      return [];
     }
     function text(v, n) { return String(v == null ? '' : v).slice(0, n); }
     return {
@@ -5211,10 +5227,27 @@
         return { content: text(c.content, 1500), kind: text(c.kind, 40),
           tags: Array.isArray(c.tags) ? c.tags.slice(0, 8).map(String) : [], source: text(c.source, 40) };
       }),
-      notes: arr('zc-docs').slice(0, 100).map(function (d) {
-        return { title: text(d.title, 200), content: text(d.content != null ? d.content : d.text, 1500) };
-      }),
-      searches: arr('omm-search-v1').slice(0, 100).map(function (s) {
+      // Writer 的 zc-docs 是 {v,activeId,order:[],meta:{id:{name,...}}} 索引，
+      // 正文在 IndexedDB（同步快照读不到），这里能可靠拿到的是文档标题。
+      // 同时兼容历史数组形状 [{title,content}]。
+      notes: (function () {
+        var idx = parsed('zc-docs');
+        var items = [];
+        if (Array.isArray(idx)) {
+          items = idx;
+        } else if (idx && typeof idx === 'object') {
+          var meta = (idx.meta && typeof idx.meta === 'object') ? idx.meta : {};
+          var order = Array.isArray(idx.order) ? idx.order : Object.keys(meta);
+          items = order.map(function (id) {
+            var m = meta[id] || {};
+            return { title: m.name || m.title || id, content: '' };
+          });
+        }
+        return items.slice(0, 100).map(function (d) {
+          return { title: text(d.title, 200), content: text(d.content != null ? d.content : d.text, 1500) };
+        });
+      })(),
+      searches: records('omm-search-v1', 'history').slice(0, 100).map(function (s) {
         return { query: text(s.query, 300), answer: text(s.answer, 1200) };
       }),
       rules: arr('zen.flow.rules.v1').slice(0, 100).map(function (r) {
@@ -5241,9 +5274,18 @@
       })(),
       planner: (function () {
         var out = [];
-        var data = arr('zp-data-v2')[0];
+        var raw = parsed('zp-data-v2');
+        var data = Array.isArray(raw) ? raw[0] : raw;
         if (!data || typeof data !== 'object') return out;
-        var days = data.days || data.eventsBy || {};
+        var days = data.days;
+        // 真实结构：eventsBy 是按 plannerId 再按 day 分层的对象；取 activeId
+        // 指向的日程本，缺失时退到首个日程本。兼容历史 {days:{}} 数组形状。
+        if (!days && data.eventsBy && typeof data.eventsBy === 'object') {
+          var byId = data.eventsBy;
+          var pid = data.activeId && byId[data.activeId] ? data.activeId : Object.keys(byId)[0];
+          days = pid ? byId[pid] : {};
+        }
+        days = days || {};
         Object.keys(days).slice(0, 60).forEach(function (day) {
           var list = Array.isArray(days[day]) ? days[day] : (days[day] && days[day].events) || [];
           list.slice(0, 40).forEach(function (e) {
@@ -5465,8 +5507,9 @@
     els.flowChannels.innerHTML = channels.length
       ? channels.map(function (ch) {
           var chips = ch.apps.map(function (a) {
-            return '<span class="flow-chip ' + a.role + '" title="' + a.id + '">' +
-              kgEscape(a.name) + ' · ' + (roleLabel[a.role] || a.role) + '</span>';
+            // role / id 来自插件 manifest，必须转义后才能进 class 与 title 属性。
+            return '<span class="flow-chip ' + kgEscape(a.role) + '" title="' + kgEscape(a.id) + '">' +
+              kgEscape(a.name) + ' · ' + kgEscape(roleLabel[a.role] || a.role) + '</span>';
           }).join('');
           return '<div class="flow-channel"><div class="fc-name">' + kgEscape(ch.id) +
             '</div><div class="fc-apps">' + chips + '</div></div>';
@@ -7140,6 +7183,9 @@
           event.preventDefault();
         } else if (timelineOpen) {
           closeTimeline();
+          event.preventDefault();
+        } else if (todayOpen) {
+          closeToday();
           event.preventDefault();
         } else if (!els.hubSettings.hidden) {
           closeHubSettings();

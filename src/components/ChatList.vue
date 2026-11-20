@@ -36,7 +36,9 @@ function getMatchingMessages(chat, query, limit = 2) {
 const groupedChats = computed(() => {
   const groups = {
     untagged: [],
-    tagged: {},
+    // 标签来自静态 JSON，可能正好是 constructor / __proto__ 等 Object.prototype
+    // 键名；普通 {} 会让初始化判断为真并对函数 .push 抛错，用无原型表规避。
+    tagged: Object.create(null),
   }
 
   filteredChats.value.forEach((chat) => {

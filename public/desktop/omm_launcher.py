@@ -142,6 +142,27 @@ def start_latex(port: int) -> int:
     return port
 
 
+def _free_port() -> int:
+    """Ask the OS for an unused loopback port (same small race as static apps)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def backend_port(wanted_port: int, html: str) -> int:
+    """Pick a port for a thread-started backend server.
+
+    ``start_*`` runs the real server in a daemon thread and a bind failure there
+    is only printed, while ``wait_ready`` merely opens a TCP connection. If a
+    foreign process holds the fixed port we would otherwise report "ready" and
+    open the WebView on the wrong service. Fall back to an ephemeral port, just
+    like the static-app path does.
+    """
+    if not port_open(wanted_port) or existing_server_ok(wanted_port, html):
+        return wanted_port
+    return _free_port()
+
+
 def wait_ready(port: int, seconds: float = 20.0) -> bool:
     deadline = time.time() + seconds
     while time.time() < deadline:
@@ -426,17 +447,20 @@ def run(app_id: str, debug: bool = False, extras: bool = True) -> None:
     if existing_server_ok(wanted_port, html):
         port = wanted_port
     elif backend == "mdforge":
-        port = start_mdforge(wanted_port)
-        if not wait_ready(wanted_port):
-            raise SystemExit("mdforge backend did not start on port %d" % wanted_port)
+        target = backend_port(wanted_port, html)
+        port = start_mdforge(target)
+        if not wait_ready(port):
+            raise SystemExit("mdforge backend did not start on port %d" % port)
     elif backend == "ai":
-        port = start_ai(wanted_port)
-        if not wait_ready(wanted_port, seconds=30):
-            raise SystemExit("AI workspace backend did not start on port %d" % wanted_port)
+        target = backend_port(wanted_port, html)
+        port = start_ai(target)
+        if not wait_ready(port, seconds=30):
+            raise SystemExit("AI workspace backend did not start on port %d" % port)
     elif backend == "latex":
-        port = start_latex(wanted_port)
-        if not wait_ready(wanted_port, seconds=30):
-            raise SystemExit("latex backend did not start on port %d" % wanted_port)
+        target = backend_port(wanted_port, html)
+        port = start_latex(target)
+        if not wait_ready(port, seconds=30):
+            raise SystemExit("latex backend did not start on port %d" % port)
     else:
         try:
             port = start_static(root, wanted_port)

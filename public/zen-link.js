@@ -189,9 +189,12 @@ function boot() {
         } catch (_) { /* ignore */ }
       })
       try {
+        // 这是“请求-应答”：必须回给已通过 isTrusted 校验的请求方 origin。
+        // 用 parentTarget()（可能来自 document.referrer）会把整库卡片发给
+        // 从未授权的嵌入站点。
         window.parent.postMessage(
           { type: 'omm:zen-card-reply', token: d.token, app: APP, cards: own },
-          parentTarget()
+          e.origin
         )
       } catch (_) { /* ignore */ }
     }

@@ -4958,6 +4958,16 @@ notify pgrst, 'reload schema';</textarea
           var n = Number(String(v).replace(/[,\s]/g, ''))
           return isNaN(n) ? NaN : n
         }
+        function isNumericValue(v) {
+          if (typeof v === 'number') return isFinite(v)
+          if (isNil(v)) return false
+          var s = String(v).trim().replace(/[,\s]/g, '')
+          // 只有规范数字写法才按数值比较；'007'、'0x10'、'001.5' 这类带前导零
+          // 或非十进制的写法是文本编码，不能因为 Number() 能解析就跟 '7' 相等。
+          if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)) return false
+          if (/^[+-]?0\d/.test(s)) return false
+          return isFinite(Number(s))
+        }
         function clamp(v, a, b) {
           return v < a ? a : v > b ? b : v
         }
@@ -8639,8 +8649,13 @@ notify pgrst, 'reload schema';</textarea
               i = j2 + 1
               continue
             }
-            if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(s[i + 1] || ''))) {
+            if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(s[i + 1] || '')) ||
+                (ch === '-' && (/[0-9]/.test(s[i + 1] || '') ||
+                  (s[i + 1] === '.' && /[0-9]/.test(s[i + 2] || ''))))) {
+              // '-' 只在紧邻数字时作为负号（'--' 注释已在前面处理）；否则仍会落到
+              // 后面的运算符分支报错。这样 WHERE score < -1 才能解析。
               var j3 = i
+              if (ch === '-') j3++
               while (j3 < s.length && /[0-9.]/.test(s[j3])) j3++
               toks.push({ t: 'num', v: parseFloat(s.slice(i, j3)) })
               i = j3
@@ -8853,16 +8868,13 @@ notify pgrst, 'reload schema';</textarea
         }
 
         function cmpVals(a, b) {
-          var na = numOf(a),
-            nb = numOf(b)
           if (
-            !isNaN(na) &&
-            !isNaN(nb) &&
             typeof a !== 'boolean' &&
             typeof b !== 'boolean' &&
-            !(isNil(a) || isNil(b))
+            isNumericValue(a) &&
+            isNumericValue(b)
           )
-            return na - nb
+            return numOf(a) - numOf(b)
           var sa = isNil(a) ? '' : String(a)
           var sb = isNil(b) ? '' : String(b)
           return sa < sb ? -1 : sa > sb ? 1 : 0

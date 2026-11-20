@@ -7,20 +7,43 @@ const DATA_URL = `${import.meta.env.BASE_URL}data/chats.json`
 // 依赖消息 id 唯一。加载时做一次防御性去重，避免数据回归时再次引发渲染/定位错乱。
 function normalizeChats(data) {
   if (!Array.isArray(data)) throw new Error('数据格式无效')
-  return data.map((chat) => {
-    if (!chat || !Array.isArray(chat.messages)) return chat
-    const seen = new Set()
-    const messages = []
-    for (const msg of chat.messages) {
-      const key = msg && msg.id != null ? msg.id : `__idx_${messages.length}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      messages.push(msg)
-    }
-    if (messages.length === chat.messages.length) return chat
-    console.warn(`[ChatStore] 对话 ${chat.id} 存在重复消息 id，已去重 ${chat.messages.length - messages.length} 条`)
-    return { ...chat, messages }
-  })
+  // 静态数据里偶尔会出现整条 null / 缺字段的记录。下游（排序、列表、详情）都
+  // 假设每条对话是完整对象，若原样放行，一条坏记录就会让整个首页渲染失败却
+  // 不报错（error 仍为空）。这里统一补齐字段后再交给组件。
+  return data
+    .filter((chat) => {
+      if (chat && typeof chat === 'object' && Array.isArray(chat.messages)) return true
+      console.warn('[ChatStore] 忽略一条缺少 messages 的对话数据')
+      return false
+    })
+    .map((chat) => {
+      const seen = new Set()
+      const messages = []
+      for (const msg of chat.messages) {
+        const key = msg && msg.id != null ? msg.id : `__idx_${messages.length}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        if (!msg || typeof msg !== 'object') {
+          messages.push({ id: key, content: String(msg ?? '') })
+        } else {
+          messages.push({
+            ...msg,
+            content: typeof msg.content === 'string' ? msg.content : String(msg.content ?? ''),
+          })
+        }
+      }
+      if (messages.length !== chat.messages.length) {
+        console.warn(`[ChatStore] 对话 ${chat.id} 存在重复消息 id，已去重 ${chat.messages.length - messages.length} 条`)
+      }
+      return {
+        ...chat,
+        id: chat.id != null ? String(chat.id) : '',
+        title: typeof chat.title === 'string' ? chat.title : String(chat.title ?? ''),
+        tags: Array.isArray(chat.tags) ? chat.tags : [],
+        updatedAt: Number(chat.updatedAt) || 0,
+        messages,
+      }
+    })
 }
 
 export const useChatStore = defineStore('chat', () => {

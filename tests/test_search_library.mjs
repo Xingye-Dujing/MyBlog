@@ -26,6 +26,14 @@ test('toCard 支持追加标签与置顶着色', () => {
   assert.ok(c.tags.includes('重点'))
 })
 
+test('无答案的历史条目往返后不会被凭空补出答案', () => {
+  const card = SearchLibrary.toCard({ query: '待查问题', answer: '', sources: [] })
+  assert.equal(card.note, '')
+  const back = SearchLibrary.fromCard(card)
+  assert.equal(back.query, '待查问题')
+  assert.equal(back.answer, '')
+})
+
 test('fromCard 还原查询与来源', () => {
   const card = SearchLibrary.toCard(entries[0])
   const back = SearchLibrary.fromCard(card)
@@ -60,4 +68,10 @@ test('stats 统计来源、置顶与标签', () => {
   assert.equal(s.sources, 2)
   assert.equal(s.pinned, 1)
   assert.equal(s.tags[0].tag, '科技')
+})
+
+test('toCard 遇到坏时间戳不抛异常、不中断整批导出', () => {
+  const c = SearchLibrary.toCard({ query: 'q', answer: 'a', ts: 'garbage' })
+  assert.ok(c && c.content === 'a')
+  assert.equal(SearchLibrary.pack([{ query: 'bad', ts: 'garbage' }], '库').length > 0, true)
 })

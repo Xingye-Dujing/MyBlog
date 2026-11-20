@@ -13,29 +13,82 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
+function arr(v) {
+  return Array.isArray(v) ? v : []
+}
+function str(v) {
+  return v === null || v === undefined ? '' : String(v)
+}
 
 function parseCSV(text, delimiter) {
   const d = delimiter || ','
-  const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim())
-  if (!lines.length) return { labels: [], series: [] }
-  const cells = lines.map((line) => line.split(d).map((x) => x.trim()))
-  const width = Math.max.apply(null, cells.map((c) => c.length))
-  const labels = cells.slice(1).map((c) => c[0] || '')
-  const names = cells[0].slice(1)
+  const s = String(text || '')
+  const rows = []
+  let row = []
+  let field = ''
+  let quoted = false
+  // 支持引号包裹的单元格：内部的逗号与换行是数据，不是分隔符；双写引号表示
+  // 一个字面引号。原来的 line.split(d) 会把 "a,b" 拆成两列并制造幽灵系列。
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (quoted) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++ }
+        else quoted = false
+      } else {
+        field += ch
+      }
+    } else if (ch === '"') {
+      quoted = true
+    } else if (ch === d) {
+      row.push(field.trim()); field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && s[i + 1] === '\n') i++
+      row.push(field.trim()); field = ''
+      if (row.some((c) => c !== '')) rows.push(row)
+      row = []
+    } else {
+      field += ch
+    }
+  }
+  row.push(field.trim())
+  if (row.some((c) => c !== '')) rows.push(row)
+  if (!rows.length) return { labels: [], series: [] }
+  const width = Math.max.apply(null, rows.map((r) => r.length))
+  const labels = rows.slice(1).map((r) => r[0] || '')
+  const names = rows[0].slice(1)
   const series = []
-  for (let s = 1; s < width; s++) {
+  for (let col = 1; col < width; col++) {
     series.push({
-      name: names[s - 1] || '系列' + s,
-      values: cells.slice(1).map((c) => Number(c[s]) || 0),
+      name: names[col - 1] || '系列' + col,
+      values: rows.slice(1).map((r) => Number(r[col]) || 0),
     })
   }
   return { labels: labels, series: series }
 }
 
+function normalizeSeries(list) {
+  return arr(list).map((s) => ({
+    name: s && typeof s === 'object' ? str(s.name) : '',
+    values: s && Array.isArray(s.values) ? s.values : [],
+  }))
+}
+
 function normalize(spec) {
-  if (Array.isArray(spec)) return { labels: spec.map((x) => String(x.label || x.name || '')), series: [{ name: '值', values: spec.map((x) => Number(x.value) || 0) }] }
+  if (Array.isArray(spec)) {
+    const items = spec.map((x) => (x && typeof x === 'object' ? x : {}))
+    return {
+      labels: items.map((x) => String(x.label || x.name || '')),
+      series: [{ name: '值', values: items.map((x) => Number(x.value) || 0) }],
+    }
+  }
   const s = spec && typeof spec === 'object' ? spec : {}
-  if (s.labels && s.series) return { labels: s.labels.map(String), series: Array.isArray(s.series) ? s.series : [] }
+  if (s.labels && s.series) {
+    return {
+      labels: Array.isArray(s.labels) ? s.labels.map(String) : [],
+      series: normalizeSeries(s.series),
+    }
+  }
   if (typeof s.csv === 'string') return parseCSV(s.csv, s.delimiter)
   return { labels: [], series: [] }
 }
@@ -46,7 +99,10 @@ function renderSVG(spec) {
   const input = spec && typeof spec === 'object' && !Array.isArray(spec) ? spec : {}
   const data = normalize(spec)
   const kind = input.kind === 'line' ? 'line' : 'bar'
-  const palette = PALETTES[input.palette] || PALETTES.mono
+  // 用自有属性判定，避免 __proto__ / constructor 等原型键被当成调色板。
+  const palette = (Object.prototype.hasOwnProperty.call(PALETTES, input.palette)
+    ? PALETTES[input.palette]
+    : null) || PALETTES.mono
   const W = Math.max(320, Number(input.width) || 720)
   const H = Math.max(200, Number(input.height) || 420)
   const padL = 56, padR = 24, padT = input.title ? 52 : 24, padB = 42

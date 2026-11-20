@@ -35,6 +35,18 @@ const {
   detachScrollListener,
 } = useSections(chat, messagesContainer)
 
+// 按消息 id 找 DOM 节点。用 dataset 精确比对，避免把 id 拼进 CSS 选择器后
+// 因引号 / 方括号等特殊字符抛 SyntaxError（id 来自异步加载的静态 JSON）。
+function findMessageEl(id) {
+  const container = messagesContainer.value
+  if (!container) return null
+  return (
+    Array.from(container.querySelectorAll('[data-msg-id]')).find(
+      (el) => el.dataset.msgId === String(id),
+    ) || null
+  )
+}
+
 function isMessageVisible(msgIndex) {
   const section = sections.value.find(
     (s) => msgIndex >= s.startMsgIndex && msgIndex <= s.endMsgIndex,
@@ -99,7 +111,7 @@ async function navigateSearch(direction) {
     })
   }
   await nextTick()
-  const el = messagesContainer.value?.querySelector(`[data-msg-id="${target.id}"]`)
+  const el = findMessageEl(target.id)
   if (!el) return
   await eagerLoadImagesInRange(messagesContainer.value, el)
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -141,7 +153,7 @@ async function scrollToHashMessage() {
       )
       if (section?.collapsed) toggleSection(section.id)
       await nextTick()
-      const el = messagesContainer.value?.querySelector(`[data-msg-id="${msgId}"]`)
+      const el = findMessageEl(msgId)
       if (el) {
         await eagerLoadImagesInRange(messagesContainer.value, el)
         el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -178,6 +190,10 @@ watch(
     if (newChat) {
       buildSections()
       nextTick(() => {
+        // 数据是异步 fetch 的：首次挂载时 messagesContainer 还没渲染，
+        // attachScrollListener() 会直接跳过。对话渲染出来后必须重新挂上，
+        // 否则大纲的随滚动高亮在深链接/刷新打开时始终失效。
+        attachScrollListener()
         if (route.hash.startsWith('#msg-')) {
           scrollToHashMessage()
         } else if (messagesContainer.value) {

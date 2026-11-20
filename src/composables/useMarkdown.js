@@ -78,67 +78,78 @@ function safeStyle(value) {
     .replace(/javascript\s*:/gi, '')
 }
 
+function sanitizeElement(child, allowIframe) {
+  // MathML（KaTeX 输出）与 SVG 之外的命名空间：保留 trusted 的 KaTeX 结构。
+  const isMathML = child.namespaceURI === 'http://www.w3.org/1998/Math/MathML'
+  // 白名单/黑名单都是大写 HTML 名；SVG/MathML 元素的 tagName 在 DOMParser 里是
+  // 小写，若不大写归一，<svg><script> 之类会被当成未知标签“拆包”而不是丢弃，
+  // 把危险子树的内容提升进正文。统一大写后命名空间判断仍由 isMathML 负责。
+  const tag = child.tagName.toUpperCase()
+
+  if (DROP_ENTIRELY.has(tag)) {
+    child.remove()
+    return
+  }
+  if (!isMathML && tag === 'IFRAME' && !allowIframe) {
+    child.remove()
+    return
+  }
+  if (!isMathML && !ALLOWED_TAGS.has(tag)) {
+    // 未知标签拆开保留其文字，避免吞掉正文。被提升上来的子节点不在父节点的
+    // childNodes 快照里，必须就地重新清洗，否则 <foo><img onerror=...></foo>
+    // 会把事件属性/危险协议带过白名单（存储型 XSS）。
+    const moved = Array.from(child.childNodes)
+    child.replaceWith(...moved)
+    moved.forEach((node) => {
+      if (node.nodeType === 1) sanitizeElement(node, allowIframe)
+    })
+    return
+  }
+
+  // MathML（KaTeX 输出）保留其专有标签与属性，但事件处理器、危险协议与
+  // 危险 style 必须照常清理：原始 HTML 里的 <math> 同样进入 MathML 命名空间，
+  // 不能仅凭命名空间就当作可信内容放过（否则 <math onmouseover=...> 可绕过白名单）。
+  for (const attr of Array.from(child.attributes)) {
+    const name = attr.name.toLowerCase()
+    const value = attr.value
+    if (name.startsWith('on') || (!isMathML && !SAFE_ATTRS.has(name))) {
+      child.removeAttribute(attr.name)
+      continue
+    }
+    if ((name === 'href' || name === 'src' || name === 'xlink:href') && !safeUrl(value)) {
+      child.removeAttribute(attr.name)
+      continue
+    }
+    if (name === 'style') {
+      const cleaned = safeStyle(value)
+      if (cleaned) child.setAttribute('style', cleaned)
+      else child.removeAttribute('style')
+    }
+  }
+
+  if (tag === 'IFRAME') {
+    let host = ''
+    try {
+      host = new URL(child.getAttribute('src') || '', window.location.href).hostname
+    } catch {
+      host = ''
+    }
+    if (!IFRAME_HOSTS.includes(host)) {
+      child.remove()
+      return
+    }
+    child.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups')
+    child.setAttribute('referrerpolicy', 'no-referrer')
+  }
+  if (tag === 'A') {
+    child.setAttribute('rel', 'noopener noreferrer')
+  }
+  sanitizeNode(child, allowIframe)
+}
+
 function sanitizeNode(node, allowIframe) {
   for (const child of Array.from(node.childNodes)) {
-    if (child.nodeType === 1) {
-      // MathML（KaTeX 输出）与 SVG 之外的命名空间：保留 trusted 的 KaTeX 结构。
-      const isMathML = child.namespaceURI === 'http://www.w3.org/1998/Math/MathML'
-      const tag = child.tagName
-
-      if (DROP_ENTIRELY.has(tag)) {
-        child.remove()
-        continue
-      }
-      if (!isMathML && tag === 'IFRAME' && !allowIframe) {
-        child.remove()
-        continue
-      }
-      if (!isMathML && !ALLOWED_TAGS.has(tag)) {
-        // 未知标签拆开保留其文字，避免吞掉正文。
-        child.replaceWith(...Array.from(child.childNodes))
-        continue
-      }
-
-      // MathML（KaTeX 输出）保留其专有标签与属性，但事件处理器、危险协议与
-      // 危险 style 必须照常清理：原始 HTML 里的 <math> 同样进入 MathML 命名空间，
-      // 不能仅凭命名空间就当作可信内容放过（否则 <math onmouseover=...> 可绕过白名单）。
-      for (const attr of Array.from(child.attributes)) {
-        const name = attr.name.toLowerCase()
-        const value = attr.value
-        if (name.startsWith('on') || (!isMathML && !SAFE_ATTRS.has(name))) {
-          child.removeAttribute(attr.name)
-          continue
-        }
-        if ((name === 'href' || name === 'src' || name === 'xlink:href') && !safeUrl(value)) {
-          child.removeAttribute(attr.name)
-          continue
-        }
-        if (name === 'style') {
-          const cleaned = safeStyle(value)
-          if (cleaned) child.setAttribute('style', cleaned)
-          else child.removeAttribute('style')
-        }
-      }
-
-      if (tag === 'IFRAME') {
-        let host = ''
-        try {
-          host = new URL(child.getAttribute('src') || '', window.location.href).hostname
-        } catch {
-          host = ''
-        }
-        if (!IFRAME_HOSTS.includes(host)) {
-          child.remove()
-          continue
-        }
-        child.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups')
-        child.setAttribute('referrerpolicy', 'no-referrer')
-      }
-      if (tag === 'A') {
-        child.setAttribute('rel', 'noopener noreferrer')
-      }
-      sanitizeNode(child, allowIframe)
-    }
+    if (child.nodeType === 1) sanitizeElement(child, allowIframe)
   }
 }
 

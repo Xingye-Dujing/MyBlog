@@ -503,6 +503,10 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
     mainfile = os.path.basename(str(mainfile or "main.tex"))
     if not mainfile.lower().endswith(".tex"):
         mainfile = "main.tex"
+    # TeX 按主文件名产出 PDF；写死 main.pdf 会让任何自定义 mainfile 在编译成功后
+    # 被误报为“未产出 PDF”。
+    pdf_name = os.path.splitext(mainfile)[0] + ".pdf"
+    log_name = os.path.splitext(mainfile)[0] + ".log"
 
     os.makedirs(BUILD_DIR, exist_ok=True)
     key = uuid.uuid4().hex[:12]
@@ -548,16 +552,16 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
                     "error": "编译已中止",
                 }
             # 已经产出 PDF 且没有致命的 format 问题，就不必再跑
-            if not os.path.isfile(os.path.join(work, "main.pdf")) and i == 0:
+            if not os.path.isfile(os.path.join(work, pdf_name)) and i == 0:
                 # 第一遍没出 PDF 也允许再试一遍（有些宏包需要两遍）
                 pass
         elapsed = int((time.time() - t0) * 1000)
 
-        pdf_src = os.path.join(work, "main.pdf")
+        pdf_src = os.path.join(work, pdf_name)
         logtxt = "\n".join(logs)
 
-        # 若 main.log 更完整，附上
-        mainlog = os.path.join(work, "main.log")
+        # 若编译日志更完整，附上
+        mainlog = os.path.join(work, log_name)
         if os.path.isfile(mainlog):
             try:
                 with open(mainlog, "r", encoding="utf-8", errors="replace") as f:
@@ -584,7 +588,7 @@ def compile_tex(tex, engine="xelatex", passes=2, mainfile="main.tex"):
                 errs = [{
                     "file": mainfile,
                     "line": 0,
-                    "msg": "编译器没有生成 main.pdf；请查看完整日志。",
+                    "msg": "编译器没有生成 %s；请查看完整日志。" % pdf_name,
                     "level": "error",
                 }]
             log_line("FAIL %s no-pdf codes=%s" % (key, codes))
@@ -670,9 +674,11 @@ for _entry in os.environ.get("OMM_LATEX_ALLOWED_ORIGINS", "").split(","):
 
 
 def _origin_allowed(origin):
-    """origin 为空表示非浏览器客户端（桌面壳 / 脚本），不做 CORS 限制。"""
-    # 注意：字符串 "null" 是沙箱 iframe / file:// 页面的 opaque origin，
-    # 不能当作“无 Origin”放行，否则任何本地 HTML 都能绕过白名单并借 CORS 读回文件。
+    """Origin 层面是否允许“处理”请求（决定是否进入路由，不是是否回显 CORS）。
+
+    放行本机 loopback 来源与显式白名单来源；非浏览器客户端（无 Origin）也放行。
+    ``null`` 是沙箱 iframe / file:// 的 opaque origin，一律拒绝。
+    """
     if not origin:
         return True
     if origin == "null":
@@ -684,6 +690,20 @@ def _origin_allowed(origin):
     host = (parsed.hostname or "").lower()
     if host in ("127.0.0.1", "localhost", "::1"):
         return True
+    return origin.rstrip("/") in _ALLOWED_ORIGINS
+
+
+def _cors_reflect_allowed(origin):
+    """仅对显式登记的来源回显 CORS 头。
+
+    关键区别：loopback 来源可以“调用”本机服务，但绝不能因此获得跨域读取响应的
+    权限。否则任意本机页面（含导入的插件，跑在别的 loopback 端口）都能 fetch
+    ``/__omm/fs/ai-config`` 并读回完整 API 密钥。云端 LaTeX 页的来源是
+    ``_ALLOWED_ORIGINS`` 里登记的域名，照常回显；桌面同源页根本不需要 CORS 头。
+    """
+    origin = (origin or "").strip()
+    if not origin or origin == "null":
+        return False
     return origin.rstrip("/") in _ALLOWED_ORIGINS
 
 
@@ -707,9 +727,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ---------- 响应助手 ----------
     def _cors(self):
-        """仅回显已登记的来源，绝不使用通配符 `*`（否则任意网站都能读回本机文件）。"""
+        """仅对显式白名单来源回显 CORS 头，绝不使用通配符 `*`。"""
         origin = (self.headers.get("Origin") or "").strip()
-        if not origin or not _origin_allowed(origin):
+        if not _cors_reflect_allowed(origin):
             return
         self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Vary", "Origin")
@@ -721,10 +741,17 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Private-Network", "true")
 
     def _request_allowed(self):
-        """拦截 DNS 重绑定与未登记来源的跨域请求。"""
+        """拦截 DNS 重绑定与跨站请求（含不带 Origin 的简单 GET）。"""
         if not _host_allowed(self.headers.get("Host")):
             return False
-        return _origin_allowed((self.headers.get("Origin") or "").strip())
+        origin = (self.headers.get("Origin") or "").strip()
+        site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        # 浏览器简单跨站 GET（<img>/<link>）不发 Origin，但会带
+        # Sec-Fetch-Site: cross-site。白名单来源（云端 LaTeX 页）的跨域
+        # fetch 虽也是 cross-site，但凭登记的 Origin 通过，不受此限。
+        if not origin and site == "cross-site":
+            return False
+        return _origin_allowed(origin)
 
     def send_json(self, obj, code=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")

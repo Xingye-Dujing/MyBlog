@@ -65,6 +65,37 @@ class RequestIsLocalTests(unittest.TestCase):
             )
         )
 
+    def test_cross_site_no_origin_get_rejected(self):
+        # 公网页面的 <img>/<link> 简单 GET 不发 Origin，但带 Sec-Fetch-Site:
+        # cross-site；这是消费型 GET 端点的 CSRF 载体，必须拦下。
+        self.assertFalse(
+            omm_shared.request_is_local(
+                self.Handler({"Host": "127.0.0.1:8300", "Sec-Fetch-Site": "cross-site"})
+            )
+        )
+
+    def test_same_site_cross_port_allowed(self):
+        # 产品分散在多个 loopback 端口，彼此互调是 same-site，须保留。
+        self.assertTrue(
+            omm_shared.request_is_local(
+                self.Handler({
+                    "Host": "127.0.0.1:8300",
+                    "Origin": "http://127.0.0.1:8311",
+                    "Sec-Fetch-Site": "same-site",
+                })
+            )
+        )
+
+    def test_same_origin_allowed(self):
+        self.assertTrue(
+            omm_shared.request_is_local(
+                self.Handler({
+                    "Host": "127.0.0.1:8300",
+                    "Sec-Fetch-Site": "same-origin",
+                })
+            )
+        )
+
     def test_ipv6_loopback_host_allowed(self):
         self.assertTrue(
             omm_shared.request_is_local(self.Handler({"Host": "[::1]:8300"}))
@@ -115,9 +146,48 @@ class RemoteUrlTests(unittest.TestCase):
         for url in (
             "http://2130706433/", "http://0177.0.0.1/", "http://0x7f000001/",
             "http://0x7f.0.0.1/", "http://168430090/",
+            # inet_aton 省略分段的写法同样指向 loopback：127.1 / 127.0.1 /
+            # 0x7f.1。ipaddress 不接受不足四段的点分字符串，旧实现会误判为
+            # DNS 名称并放行，让 WebDAV 302 重定向把请求带回本机。
+            "http://127.1/", "http://127.0.1/", "http://0x7f.1/",
+            "http://127.65535/", "http://127.0.65535/",
         ):
             with self.subTest(url=url):
                 self.assertFalse(omm_shared.remote_url_is_public(url))
+
+
+class HeadersAreLocalTests(unittest.TestCase):
+    """The shared Host/Origin guard used by both handler and Flask services."""
+
+    def test_rejects_foreign_and_opaque_origins(self):
+        self.assertTrue(omm_shared.headers_are_local("127.0.0.1:8316", None))
+        self.assertTrue(omm_shared.headers_are_local("localhost:8316", "http://127.0.0.1:8316"))
+        self.assertFalse(omm_shared.headers_are_local("evil.example", None))
+        self.assertFalse(omm_shared.headers_are_local("127.0.0.1:8316", "https://evil.example"))
+        self.assertFalse(omm_shared.headers_are_local("127.0.0.1:8316", "null"))
+
+
+class BackendPortTests(unittest.TestCase):
+    """A foreign process on the fixed port must not be mistaken for a backend."""
+
+    def test_occupied_fixed_port_falls_back_to_free_port(self):
+        import socket
+
+        import omm_launcher
+
+        free = omm_launcher._free_port()
+        self.assertEqual(omm_launcher.backend_port(free, "omm-ai.html"), free)
+
+        squatter = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        squatter.bind(("127.0.0.1", 0))
+        squatter.listen(1)
+        try:
+            taken = squatter.getsockname()[1]
+            picked = omm_launcher.backend_port(taken, "omm-ai.html")
+            self.assertNotEqual(picked, taken)
+            self.assertFalse(omm_launcher.port_open(picked))
+        finally:
+            squatter.close()
 
 
 class WebdavRedirectTests(unittest.TestCase):
@@ -185,6 +255,33 @@ class ResourcePathTests(unittest.TestCase):
                     omm_shared.read_shared_file(str(sibling))
 
 
+class LatexCorsTests(unittest.TestCase):
+    """CORS 回显只给显式白名单来源，不能给任意 loopback 页面。"""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        path = ROOT / "public" / "latex-serve.py"
+        spec = importlib.util.spec_from_file_location("_omm_latex_serve", path)
+        cls.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.mod)
+
+    def test_allowlisted_cloud_origin_reflected(self):
+        self.assertTrue(self.mod._cors_reflect_allowed("https://xingye-blog.xyz"))
+        self.assertTrue(self.mod._cors_reflect_allowed("https://my-blog-eight-dun.vercel.app/"))
+
+    def test_loopback_origin_not_reflected(self):
+        # 任意 loopback 页面（含别的端口上的插件）不得借 CORS 读回 ai-config。
+        for origin in ("http://127.0.0.1:8340", "http://localhost:8123",
+                       "http://[::1]:8123", "null", ""):
+            with self.subTest(origin=origin):
+                self.assertFalse(self.mod._cors_reflect_allowed(origin))
+
+    def test_request_authorization_still_allows_loopback(self):
+        # 收紧的是 CORS 读取，不是请求处理：本机页仍可调用编译接口。
+        self.assertTrue(self.mod._origin_allowed("http://127.0.0.1:8123"))
+
+
 class MdForgeRootIsolationTests(unittest.TestCase):
     """Two mdforge app instances must serve their own static directories."""
 
@@ -213,6 +310,28 @@ class MdForgeRootIsolationTests(unittest.TestCase):
             self.assertEqual(
                 app_a.config["PUBLIC_ROOT"] != app_b.config["PUBLIC_ROOT"], True
             )
+
+
+class UpdatePathTokenTests(unittest.TestCase):
+    """Remote catalog version strings must not become path separators."""
+
+    def setUp(self):
+        import app_updater
+        self.safe = app_updater.safe_version_path_token
+
+    def test_valid_versions_pass_through(self):
+        self.assertEqual(self.safe("1.0.24"), "1.0.24")
+        self.assertEqual(self.safe(" 1.2.3.4 "), "1.2.3.4")
+
+    def test_traversal_version_is_neutralized(self):
+        for value in ("1.0.24/../../evil", "../../evil", "1.0.24\\..\\evil",
+                      "1.0.24;rm -rf", "", None, "v1.2.3"):
+            with self.subTest(value=value):
+                token = self.safe(value)
+                self.assertNotIn("/", token)
+                self.assertNotIn("\\", token)
+                self.assertNotIn("..", token)
+                self.assertTrue(token)
 
 
 class SigningErrorRedactionTests(unittest.TestCase):

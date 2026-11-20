@@ -566,7 +566,7 @@
   }
 
   function parentTargetOrigin() {
-    return ENV.hubOrigin || '*'
+    return ENV.hubOrigin || location.origin
   }
 
   var originalCreateObjectURL = URL.createObjectURL
@@ -820,9 +820,15 @@
       return { __omm_type: 'bytes', data: await blobToBase64(new Blob([value])) }
     }
     if (ArrayBuffer.isView(value)) {
+      // 只序列化视图实际覆盖的字节区间。大缓冲上的 subarray 若用
+      // value.buffer.slice(0) 会把整块 backing buffer 一起写进快照，恢复后数据错位。
+      var bytes = value.buffer.slice(
+        value.byteOffset,
+        value.byteOffset + value.byteLength
+      )
       return {
         __omm_type: 'bytes',
-        data: await blobToBase64(new Blob([value.buffer.slice(0)])),
+        data: await blobToBase64(new Blob([bytes])),
       }
     }
     if (value instanceof Date) {

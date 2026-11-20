@@ -36,7 +36,11 @@ function validateRule(rule) {
   if (!rule || typeof rule !== 'object') return { ok: false, errors: ['规则必须是对象'] }
   if (!str(rule.name)) errors.push('name 不能为空')
   if (!Array.isArray(rule.actions) || !rule.actions.length) errors.push('至少需要一条 action')
-  rule.actions.forEach(function (a, i) {
+  arr(rule.actions).forEach(function (a, i) {
+    if (!a || typeof a !== 'object') {
+      errors.push('actions[' + i + '] 非法')
+      return
+    }
     if (ACTIONS.indexOf(a.type) < 0) errors.push('actions[' + i + '].type 非法')
     if (a.type === 'send' && !str(a.to)) errors.push('actions[' + i + '].to 不能为空')
   })
@@ -58,6 +62,7 @@ function applyActions(rule, card, ctx) {
   const effects = []
   const at = (ctx && ctx.now) || Date.now()
   arr(rule.actions).forEach(function (a) {
+    if (!a || typeof a !== 'object') return
     switch (a.type) {
       case 'addTag': {
         const t = str(a.value || a.tag).trim()

@@ -92,7 +92,11 @@ def _product_info(args: dict, _ctx: dict) -> dict:
 
 def _spec_search(args: dict, _ctx: dict) -> dict:
     query = str(args.get('query') or '').strip()
-    limit = max(1, min(10, int(args.get('limit') or 3)))
+    try:
+        limit = max(1, min(10, int(args.get('limit') or 3)))
+    except (TypeError, ValueError):
+        # /api/omm/spec 直接把查询参数透传进来；非数字不能变成 HTTP 500。
+        limit = 3
     tokens = _tokens(query)
     if not tokens:
         return {'ok': False, 'error': 'query is required', 'files': list(_SPEC_FILES)}

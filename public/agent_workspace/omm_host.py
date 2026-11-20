@@ -17,12 +17,13 @@ from .errors import AIError
 from .host import CallableContextSource, DefaultHostAdapter, HostEnvironment
 from .omm_data import CHANNELS, PRODUCT_IDS, PRODUCTS, ALL
 from .omm_privacy import scrub
+from .omm_privacy import is_secret_field
 from .omm_skills import build_skills
 from .omm_tools import KNOWLEDGE_DIR, build_tools
 
 APP_NAME = '静书房 AI 工作区'
 _SAFE_EXT = {'.md', '.json', '.txt', '.csv', '.tsv', '.tex', '.yaml', '.yml', '.zc', '.zwlib', '.zen-card', '.py'}
-_SECRET_KEYS = {'apikey', 'api_key', 'password', 'secret', 'token', 'credential', 'authorization'}
+
 
 
 def omm_live_context(query: str, payload: dict, account: str = '') -> str:
@@ -95,10 +96,14 @@ def _invalid(message: str) -> AIError:
 
 
 def _assert_no_secret(value: Any, path: str = '') -> None:
-    """拒绝把密钥或密码夹带进任何产物。"""
+    """拒绝把密钥或密码夹带进任何产物。
+
+    字段名用 omm_privacy.is_secret_field 按词匹配，覆盖 accessToken / privateKey /
+    client_secret / supabase 等写法，避免精确匹配表漏掉常见凭据字段。
+    """
     if isinstance(value, dict):
         for key, item in value.items():
-            if str(key).lower().replace('-', '').replace('_', '') in _SECRET_KEYS and item:
+            if is_secret_field(key) and item:
                 raise _invalid('产物中不允许包含密钥/密码字段：%s' % key)
             _assert_no_secret(item, path + '/' + str(key))
     elif isinstance(value, (list, tuple)):

@@ -49,3 +49,9 @@ test('空数据也能生成合法 SVG', () => {
   assert.ok(svg.includes('<svg'))
   assert.ok(svg.endsWith('</svg>'))
 })
+
+test('normalize 容忍非数组的 labels', () => {
+  const d = ZenChart.normalize({ labels: 'abc', series: [{ name: 's', values: [1] }] })
+  assert.deepEqual(d.labels, [])
+  assert.ok(ZenChart.renderSVG({ labels: 'abc', series: [{ name: 's', values: [1] }] }).includes('<svg'))
+})

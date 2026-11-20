@@ -8,8 +8,19 @@ function str(v) {
   return v === null || v === undefined ? '' : String(v)
 }
 function dateKey(v) {
+  // Hub 时间线的 ts 常是 Date.now() 数字（epoch 毫秒）。原实现先 str() 再
+  // new Date()，把 "1767225600000" 当日期字符串解析成 Invalid Date，导致
+  // 所有数字时间戳的事件被区间过滤静默丢弃。
+  if (typeof v === 'number' && isFinite(v)) {
+    const nd = new Date(v)
+    return isNaN(nd.getTime()) ? '' : nd.toISOString().slice(0, 10)
+  }
   const s = str(v)
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  if (/^\d+$/.test(s)) {
+    const nd = new Date(Number(s))
+    return isNaN(nd.getTime()) ? '' : nd.toISOString().slice(0, 10)
+  }
   const d = new Date(s)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
@@ -17,8 +28,13 @@ function dateKey(v) {
 function inRange(key, range) {
   if (!key) return false
   if (!range || (!range.from && !range.to)) return true
-  if (range.from && key < str(range.from).slice(0, 10)) return false
-  if (range.to && key > str(range.to).slice(0, 10)) return false
+  // 区间边界同样可能是 Date.now() 数字（Hub 时间线就是这种形状）。直接
+  // str(range.from).slice(0,10) 会得到 "1767225600" 之类的片段，与 ISO 日期键
+  // 比较时整个区间的数据会被静默丢弃；统一走 dateKey 归一化。
+  const from = range.from ? dateKey(range.from) : ''
+  const to = range.to ? dateKey(range.to) : ''
+  if (from && key < from) return false
+  if (to && key > to) return false
   return true
 }
 
@@ -30,7 +46,10 @@ function summarize(data, range) {
     return inRange(dateKey(c && c.createdAt), range)
   })
   const done = arr(data && data.planner).filter(function (e) {
-    return e && (e.done === true || e.done === 'done')
+    if (!e || (e.done !== true && e.done !== 'done')) return false
+    const key = dateKey(e.day || e.date || e.ts || e.time || e.at)
+    // 有日期的完成项按区间过滤；历史数据没有日期时沿用原行为（纳入统计）。
+    return !key || inRange(key, range)
   })
   const byApp = Object.create(null)
   timeline.forEach(function (e) {

@@ -623,7 +623,9 @@ class HubServer:
             "schema": 1,
             "version": VERSION,
             "created": omm_shared.now_iso(),
-            "shared": omm_shared.load_config(),
+            # 设置备份会作为文件下载；界面承诺密钥不随它导出。全量备份 ZIP 才
+            # 有意携带完整配置，二者不要混用。
+            "shared": omm_shared.redact_config_secrets(omm_shared.load_config()),
             "policy": omm_share.load_policy(),
         }
 

@@ -86,6 +86,23 @@ test('Hub 聚合各产品的同源 localStorage 键', () => {
   assert.equal(snap.clips[0].content, '剪藏内容')
 })
 
+test('Hub 读取对象形状的真实产品存储（Search/Writer/Planner）', () => {
+  const snap = liveData({
+    'omm-search-v1': JSON.stringify({ settings: { apiKey: 'secret' }, history: [{ query: '真实检索', answer: '答案' }] }),
+    'zc-docs': JSON.stringify({ v: 2, activeId: 'd1', order: ['d1'], meta: { d1: { name: '真实笔记' } } }),
+    'zp-data-v2': JSON.stringify({
+      planners: [{ id: 'p1' }], activeId: 'p1',
+      eventsBy: { p1: { '2026-03-01': [{ title: '真实日程', done: true }] } },
+    }),
+  })
+  assert.equal(snap.searches.length, 1)
+  assert.equal(snap.searches[0].query, '真实检索')
+  assert.equal(snap.notes[0].title, '真实笔记')
+  assert.equal(snap.planner.length, 1)
+  assert.equal(snap.planner[0].title, '真实日程')
+  assert.equal(snap.planner[0].done, true)
+})
+
 test('Hub 损坏的 localStorage 数据被安全忽略', () => {
   const snap = liveData({ anything: '{not-json' })
   for (const key of ['cards', 'notes', 'searches', 'rules', 'clips', 'planner']) {

@@ -119,6 +119,23 @@ test('普通 HTML 的危险协议、事件属性与脚本仍被处理', () => {
   assert.equal(script.parentNode, null)
 })
 
+test('未知标签拆包后，被提升的子节点仍须重新清洗（XSS）', () => {
+  const img = el('img', HTML, [
+    ['src', 'x'],
+    ['onerror', 'alert(document.cookie)'],
+  ])
+  const link = el('a', HTML, [['href', 'javascript:alert(1)']])
+  const nested = el('foo', HTML, [], [link])
+  const unknown = el('center', HTML, [], [img, nested])
+  const root = clean([unknown])
+  // 未知容器被拆开，文字/子节点保留，但危险属性不能随之穿过白名单。
+  assert.equal(root.childNodes.length, 2)
+  assert.equal(img.parentNode, root)
+  assert.equal(img.getAttribute('onerror'), null)
+  assert.equal(link.getAttribute('href'), null)
+  assert.equal(link.getAttribute('rel'), 'noopener noreferrer')
+})
+
 test('safeUrl 允许站点内与白名单协议，拒绝 javascript/data 脚本', () => {
   assert.equal(safeUrl('https://example.com/a'), true)
   assert.equal(safeUrl('/img/a.png'), true)

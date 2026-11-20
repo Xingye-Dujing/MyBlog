@@ -746,17 +746,22 @@ def validate(identifier: str, content: Any, kind: str | None = None) -> dict:
         return {'ok': False, 'product': identifier, 'kind': kind or '',
                 'errors': ['未知产品：%s' % identifier], 'warnings': []}
     key = item['id']
+    chosen = str(kind or '').strip()
     if isinstance(content, str):
         text = content
         obj, parse_error = _parse(text.strip())
-        if parse_error and kind not in ('tex', 'markdown', 'csv', 'text', 'unsupported'):
+        # kind 省略时必须先按内容识别：Markdown/TeX/CSV 本就不是 JSON，不能因为
+        # 解析失败就提前返回 JSON 错误（返回的 kind 还会显示已识别的类型，自相矛盾）。
+        if not chosen:
+            chosen = detect_kind(key, obj, text)
+        if parse_error and chosen not in ('tex', 'markdown', 'csv', 'text', 'unsupported'):
             # JSON 类格式解析失败：仍交给校验器给出更具体的字段错误不可行，直接回报。
-            return {'ok': False, 'product': key, 'kind': kind or detect_kind(key, None, text),
+            return {'ok': False, 'product': key, 'kind': chosen,
                     'errors': [parse_error], 'warnings': []}
     else:
         obj = content
         text = _dump(content) if content is not None else ''
-    chosen = str(kind or '').strip() or detect_kind(key, obj, text)
+    chosen = chosen or detect_kind(key, obj, text)
     report = Report()
     # The registry-owned contract (format token, version, field shapes, enums)
     # is checked before the deep semantic validator, so a template and a

@@ -131,6 +131,18 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
     app.register_blueprint(create_blueprint(ws, url_prefix='/api/ai', account_resolver=lambda: 'default'))
 
     @app.before_request
+    def _omm_local_guard():
+        # 桌面桥的其它 HTTP 服务都做 Host/Origin 双重校验；这里也不能例外，
+        # 否则恶意网页可用 no-cors 的 text/plain POST 把 JSON 写进本机磁盘桥。
+        if _omm_shared is not None and _omm_shared.desktop_enabled():
+            if not _omm_shared.headers_are_local(
+                request.headers.get('Host'), request.headers.get('Origin'),
+                request.headers.get('Sec-Fetch-Site'),
+            ):
+                abort(403)
+        return None
+
+    @app.before_request
     def _omm_map_provider():
         if not request.path.startswith('/api/ai/'):
             return None

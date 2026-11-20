@@ -37,7 +37,7 @@
     return ''
   })()
 
-  function parentTargetOrigin() { return HUB_ORIGIN || '*' }
+  function parentTargetOrigin() { return HUB_ORIGIN || location.origin }
   function isTrustedParentOrigin(origin) {
     if (HUB_ORIGIN) return origin === HUB_ORIGIN
     try {

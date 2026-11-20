@@ -88,3 +88,11 @@ test('serialize / deserialize 往返', () => {
   assert.equal(back[0].name, 'x')
   assert.throws(() => ZenFlow.deserialize('{"format":"bad"}'))
 })
+
+test('validateRule 遇到缺失/非数组 actions 时返回校验失败而不是抛异常', () => {
+  for (const actions of [undefined, null, {}]) {
+    const res = ZenFlow.validateRule({ name: 'x', actions })
+    assert.equal(res.ok, false)
+    assert.ok(res.errors.some((e) => e.indexOf('action') >= 0))
+  }
+})

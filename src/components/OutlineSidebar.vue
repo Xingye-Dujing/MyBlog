@@ -28,8 +28,8 @@
           tabindex="0"
           :aria-expanded="!section.collapsed"
           @click="handleJump(section)"
-          @keydown.enter="handleJump(section)"
-          @keydown.space.prevent="handleJump(section)"
+          @keydown.enter="handleHeaderKeydown($event, section)"
+          @keydown.space="handleHeaderKeydown($event, section)"
         >
           <button
             class="collapse-btn"
@@ -136,12 +136,24 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // 与 HomeView 同理：拖拽中卸载时复位 <body> 样式，避免光标/文本选择卡死。
+  stopResize()
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', stopResize)
 })
 
 function handleJump(section) {
   emit('jump-to', section)
+}
+
+// 折叠按钮的 click 已 .stop，但键盘事件仍会冒泡到父级 header。
+// 焦点在折叠按钮上按 Enter/Space 时只应切换折叠，不应同时触发跳转。
+function handleHeaderKeydown(e, section) {
+  if (e.target && e.target.closest && e.target.closest('.collapse-btn')) return
+  // .prevent 必须放在这里按条件调用：若写在模板的 @keydown.space 上，即使焦点
+  // 在折叠按钮上也会 preventDefault，反而吞掉按钮的空格键激活行为。
+  if (e.key === ' ') e.preventDefault()
+  handleJump(section)
 }
 
 function handleToggle(sectionId) {

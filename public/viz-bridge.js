@@ -22,7 +22,8 @@ function parentTarget() {
       if ((u.protocol === 'http:' || u.protocol === 'https:') &&
           ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) return u.origin
     }
-    if (document.referrer) return new URL(document.referrer).origin
+    // 不能用 document.referrer 作为 postMessage 目标：把页面嵌进任意站点时，
+    // referrer 就是那个站点的 origin，会把手头的数据发给未授权的第三方。
   } catch (e) { /* ignore */ }
   return location.origin
 }
@@ -55,8 +56,9 @@ function onData(handler) {
     if (e.data && e.data.type === 'omm:zenviz-data') fire(e.data.payload)
   }
   window.addEventListener('message', onMessage)
+  var offArtifact = null
   if (window.OMMShare && window.OMMShare.onArtifact) {
-    window.OMMShare.onArtifact(function (a) {
+    offArtifact = window.OMMShare.onArtifact(function (a) {
       if (a && a.format === 'zenviz-data') fire(a.payload || a)
     })
   }
@@ -67,7 +69,10 @@ function onData(handler) {
       localStorage.removeItem(KEY)
     }
   } catch (e) {}
-  return function () { window.removeEventListener('message', onMessage) }
+  return function () {
+    window.removeEventListener('message', onMessage)
+    if (offArtifact) offArtifact()
+  }
 }
 
 export const VizBridge = { send, onData, isTrusted, KEY }

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import threading
@@ -60,6 +61,23 @@ UPDATE_JS_PATH = "/__omm/update.js"
 # ``version_key`` / ``is_newer`` now live in plugin_specs so every layer
 # (updater, hub, frontend payload) compares versions the same way.  Re-export
 # them here for callers that import from this module.
+
+_VERSION_PATH_RE = re.compile(r"^\d+(?:\.\d+){0,3}$")
+
+
+def safe_version_path_token(value: Any) -> str:
+    """Return a strict ``1.2.3`` token safe to embed in an update filename.
+
+    ``info['latest']`` comes from the remote catalog.  ``version_key`` only
+    extracts digits for *comparison*, so a value like ``1.0.24/../../evil``
+    still compares as newer but would become a path separator when
+    interpolated into the download path.  Anything that is not a plain dotted
+    version collapses to a neutral token; the version displayed to users is
+    left untouched.
+    """
+    text = str(value or "").strip()
+    return text if _VERSION_PATH_RE.fullmatch(text) else "unknown-version"
+
 
 def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
@@ -266,10 +284,11 @@ def apply_update(info: Dict[str, Any]) -> Dict[str, Any]:
     update_dir = app_data_base() / "OMM-ZEN" / "updates"
     update_dir.mkdir(parents=True, exist_ok=True)
     suffix = ".exe" if os.name == "nt" else ".bin"
-    source = update_dir / ("%s-%s%s" % (app_id() or "hub", info.get("latest"), suffix))
+    version_token = safe_version_path_token(info.get("latest"))
+    source = update_dir / ("%s-%s%s" % (app_id() or "hub", version_token, suffix))
     source.write_bytes(payload)
     if info.get("kind") == "framework":
-        member = update_dir / ("OMM-ZEN-%s.exe" % info.get("latest"))
+        member = update_dir / ("OMM-ZEN-%s.exe" % version_token)
         _extract_member(source, "OMM-ZEN.exe", member)
         source.unlink(missing_ok=True)
         source = member

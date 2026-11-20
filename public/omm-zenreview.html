@@ -136,7 +136,11 @@
         $('tocards-btn').addEventListener('click', () => {
           if (!last) return toast('先生成报告')
           const card = ZenCard.create({ source: 'manual', kind: 'note', content: last, note: '复盘报告', tags: ['复盘'] })
-          const list = cards().concat(card)
+          // cards() 是 zen.cards.v1 + zen.clip.v1 的并集（供报告统计用），不能写回
+          // 卡片库，否则每次导出都会把剪藏卡片复制进 ZenCard。只追加新报告卡片。
+          let list = []
+          try { const raw = JSON.parse(localStorage.getItem('zen.cards.v1') || '[]'); if (Array.isArray(raw)) list = raw } catch {}
+          list.push(card)
           localStorage.setItem('zen.cards.v1', JSON.stringify(list))
           toast('已存入 ZenCard 卡片库')
         })

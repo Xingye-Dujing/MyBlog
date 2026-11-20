@@ -297,6 +297,18 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
     app.config["JSON_AS_ASCII"] = False
 
+    @app.before_request
+    def _omm_local_guard():
+        # 与桌面桥其它 HTTP 端点一致：桌面模式下校验回环 Host + Origin，
+        # 阻断外部网站借浏览器发起的跨站 POST（磁盘桥解析裸 JSON body）。
+        if omm_shared is not None and omm_shared.desktop_enabled():
+            if not omm_shared.headers_are_local(
+                request.headers.get("Host"), request.headers.get("Origin"),
+                request.headers.get("Sec-Fetch-Site"),
+            ):
+                abort(403)
+        return None
+
     @app.get("/")
     @app.get("/omm-mdforge.html")
     def index():

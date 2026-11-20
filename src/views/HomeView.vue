@@ -98,6 +98,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // 拖拽进行中若发生路由跳转（HomeView 会被卸载），mouseup 永远不会到达这里；
+  // 不复位会让 <body> 一直保持 ew-resize 光标且无法选中文本。
+  stopResize()
   window.removeEventListener('mousemove', doResize)
   window.removeEventListener('mouseup', stopResize)
   window.removeEventListener('keydown', handleKeydown)

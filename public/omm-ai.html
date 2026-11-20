@@ -309,13 +309,16 @@ kbd{font-family:var(--mono);border:1px solid var(--line-soft);border-bottom-widt
     if (S.liveResolve) return Promise.resolve(null);
     return new Promise(function (resolve) {
       S.liveToken = 'live-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
-      S.liveResolve = resolve;
-      var timer = setTimeout(function () {
-        if (S.liveResolve === resolve) { S.liveResolve = null; S.liveToken = ''; resolve(null); }
+      // 超时闭包必须和 S.liveResolve 最终保存的函数是同一个引用。原实现先比较
+      // 原始 resolve，再把它覆盖成包装函数，导致比较永远为假、1400ms 兜底从不
+      // 触发：Hub 不回消息时 send() 会永久卡住、发送按钮一直禁用。
+      var timer = null;
+      var settle = function () { if (timer) clearTimeout(timer); };
+      var wrapped = function (value) { settle(); resolve(value); };
+      S.liveResolve = wrapped;
+      timer = setTimeout(function () {
+        if (S.liveResolve === wrapped) { S.liveResolve = null; S.liveToken = ''; resolve(null); }
       }, 1400);
-      var settle = function () { clearTimeout(timer); };
-      // Clear the timer once the reply arrives by wrapping the resolver.
-      S.liveResolve = function (value) { settle(); resolve(value); };
       try {
         window.parent.postMessage({ type: 'omm:live-data-request', token: S.liveToken }, messageHubOrigin);
       } catch (error) {

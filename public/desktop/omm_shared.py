@@ -70,9 +70,18 @@ def _ip_literal(host: str):
             return ipaddress.ip_address(int(host, 16))
         except ValueError:
             return None
+    # 单个八进制写法不能被上面的十进制分支（限定 10 位）或多段分支（要求至少
+    # 两个点分段）覆盖。libc 的 inet_aton/getaddrinfo 会把这类写法按八进制解析，
+    # 例如 17700000001 / 017700000001 都指向 127.0.0.1；若当作 DNS 名称放行就
+    # 会绕过 SSRF 守卫。
+    if re.fullmatch(r"0?[0-7]{1,11}", host):
+        try:
+            return ipaddress.ip_address(int(host, 8))
+        except ValueError:
+            return None
     parts = host.split(".")
     if 1 < len(parts) <= 4 and all(
-        re.fullmatch(r"(?:0[xX][0-9a-fA-F]{1,8}|0[0-7]{1,11}|[0-9]{1,3})", p)
+        re.fullmatch(r"(?:0[xX][0-9a-fA-F]{1,8}|0[0-7]{1,11}|[0-9]{1,8})", p)
         for p in parts
     ):
         try:
@@ -84,8 +93,25 @@ def _ip_literal(host: str):
                     nums.append(int(part, 8))
                 else:
                     nums.append(int(part, 10))
-            if all(0 <= n <= 255 for n in nums):
-                return ipaddress.ip_address(".".join(str(n) for n in nums))
+            # inet_aton 允许省略点分段：127.1 与 127.0.1 都解析为 127.0.0.1。
+            # 不能把不足四段的数字重新拼成点分字符串交给 ipaddress（会被拒绝），
+            # 必须按 inet_aton 语义合成 32 位整数，否则这类写法会被当成 DNS
+            # 名称放行，绕过 SSRF 守卫。
+            if len(nums) == 2:
+                if nums[0] > 0xFF or nums[1] > 0xFFFFFF:
+                    return None
+                value = (nums[0] << 24) | nums[1]
+            elif len(nums) == 3:
+                if nums[0] > 0xFF or nums[1] > 0xFF or nums[2] > 0xFFFF:
+                    return None
+                value = (nums[0] << 24) | (nums[1] << 16) | nums[2]
+            elif len(nums) == 4:
+                if any(n > 0xFF for n in nums):
+                    return None
+                value = (nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]
+            else:
+                return None
+            return ipaddress.ip_address(value)
         except ValueError:
             return None
     return None
@@ -139,26 +165,40 @@ def remote_url_is_public(url: str, allow_private: bool = False) -> bool:
         return False
     ip = _ip_literal(host)
     if ip is None:
+        # 纯数字 / 0x 形态是 IP 的字面量写法，不是合法 DNS 主机名。无法明确
+        # 解析时绝不能按“普通域名”放行，否则新增的进制写法会重新打开 SSRF。
+        if re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)", host):
+            return False
         return True  # DNS name; cannot be checked reliably without a lookup
     if allow_private:
         return True
     return ip.is_global
 
 
-def request_is_local(handler) -> bool:
-    """桌面桥仅接受来自本机 loopback 的请求。
+def headers_are_local(
+    host_header: str, origin_header: str, sec_fetch_site: str = ""
+) -> bool:
+    """校验 Host + Origin + Sec-Fetch-Site 是否为本机 loopback（供各类 HTTP 服务复用）。
 
     同时校验 Host（阻断 DNS rebinding）与 Origin（阻断其他网站发来的跨站
     POST/CSRF）。同源页面与不带 Origin 的非浏览器客户端（脚本 / 桌面壳）
     均放行；沙箱 iframe / file:// 的 opaque origin ``null`` 一律拒绝。
+
+    浏览器在简单跨站 GET（<img>/<link>/<script>）上不发 Origin，单靠 Origin
+    无法区分。这类请求都带 ``Sec-Fetch-Site: cross-site``（该头浏览器强制设置、
+    JS 无法伪造），据此补一道 CSRF 拦截。产品分散在多个 loopback 端口，
+    彼此互调是 ``same-site``，因此只拒绝 ``cross-site``，保留同站跨端口调用。
     """
     try:
-        host = (urlsplit("//" + (handler.headers.get("Host") or "").strip()).hostname or "").lower()
+        host = (urlsplit("//" + (host_header or "").strip()).hostname or "").lower()
     except Exception:
         host = ""
     if host not in LOOPBACK_HOSTS:
         return False
-    origin = (handler.headers.get("Origin") or "").strip()
+    # 非浏览器客户端没有 Sec-Fetch-Site，保持放行；浏览器跨站导航一律拒绝。
+    if (sec_fetch_site or "").strip().lower() == "cross-site":
+        return False
+    origin = (origin_header or "").strip()
     if not origin:
         return True
     if origin == "null":
@@ -168,6 +208,15 @@ def request_is_local(handler) -> bool:
     except Exception:
         return False
     return origin_host in LOOPBACK_HOSTS
+
+
+def request_is_local(handler) -> bool:
+    """桌面桥仅接受来自本机 loopback 的请求（标准库 handler 版本）。"""
+    return headers_are_local(
+        handler.headers.get("Host"),
+        handler.headers.get("Origin"),
+        handler.headers.get("Sec-Fetch-Site"),
+    )
 
 
 API_VERSION = 1
@@ -249,6 +298,34 @@ def default_save_path() -> Path:
     home = Path.home()
     docs = home / "Documents"
     return (docs if docs.is_dir() else home) / "OMM-ZEN"
+
+
+_SECRET_WORDS = (
+    "apikey", "token", "secret", "password", "passwd", "pwd",
+    "credential", "authorization", "supabase", "privatekey",
+)
+
+
+def _is_secret_key(key: Any) -> bool:
+    norm = re.sub(r"[^a-z0-9]", "", str(key).lower())
+    return any(word in norm for word in _SECRET_WORDS)
+
+
+def redact_config_secrets(value: Any) -> Any:
+    """深拷贝配置并清空所有凭据字段。
+
+    设置备份（/api/backup）会下载为 JSON 文件，界面明确承诺密钥不会随它导出；
+    全量备份 ZIP 则有意保留完整配置，因此只对前者调用本函数。字段名按“词”识别，
+    覆盖 ai.apiKey、cloud.password、supabase 等写法。
+    """
+    if isinstance(value, dict):
+        return {
+            key: ("" if _is_secret_key(key) else redact_config_secrets(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_config_secrets(item) for item in value]
+    return value
 
 
 def now_iso() -> str:
@@ -596,15 +673,59 @@ def resolve_share_dir(cfg: Optional[Dict[str, Any]] = None) -> Path:
     return path
 
 
-def sanitize_restored_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
+def _path_within(path: Path, root: Path) -> bool:
+    """path 是否位于 root 之内（含其自身）。大小写与符号链接按系统语义归一。"""
+    try:
+        child = Path(os.path.normcase(str(path.resolve())))
+        parent = Path(os.path.normcase(str(root.resolve())))
+        return child == parent or parent in child.parents
+    except OSError:
+        return False
+
+
+def config_roots(cfg: Optional[Dict[str, Any]] = None) -> list:
+    """当前配置里所有合法的存储根目录。
+
+    恢复备份时只接受落在这些目录之内的路径：这样本机已有的自定义保存目录可以
+    原样恢复，而一份被篡改的备份无法把文件写到启动目录、系统目录等任意位置。
+    """
+    cfg = cfg or load_config()
+    roots = [shared_root(), default_save_path()]
+
+    def add(raw: Any) -> None:
+        text = str(raw or "").strip()
+        if not text:
+            return
+        roots.append(Path(os.path.expandvars(os.path.expanduser(text))))
+
+    add((cfg.get("save") or {}).get("path"))
+    add((cfg.get("share") or {}).get("path"))
+    for entry in (cfg.get("apps") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        add(entry.get("save_path"))
+        for item in (entry.get("resources") or {}).values():
+            if isinstance(item, dict):
+                add(item.get("path"))
+    return roots
+
+
+def sanitize_restored_config(cfg: Dict[str, Any], allowed_roots=None) -> Dict[str, Any]:
     """恢复备份前校验所有路径边界。
 
     备份文件可能来自他人或被篡改；_normalize_config 只做格式化，不做边界检查。
     若直接写回，save.path / save_path / resources.path 可把 fs API 的允许根目录
-    改到 C:\\ 或用户主目录，形成任意文件读写。
+    改到 C:\\ 或用户主目录，甚至借 full_restore 把文件复制进开机启动目录，形成
+    任意文件读写。除了原有的系统根目录拒绝表，还要求每个路径落在“当前配置已
+    在使用”的根目录之内（未提供时从磁盘上的当前配置推导），堵住任意目录写入。
     """
     if not isinstance(cfg, dict):
         raise ValueError("配置格式无效")
+    if allowed_roots is None:
+        try:
+            allowed_roots = config_roots(load_config())
+        except Exception:  # noqa: BLE001 -  reading current config must not block a restore
+            allowed_roots = [shared_root(), default_save_path()]
 
     def check(raw: Any, label: str) -> None:
         text = str(raw or "").strip()
@@ -613,6 +734,8 @@ def sanitize_restored_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         path = Path(os.path.expandvars(os.path.expanduser(text)))
         if omm_fs.unsafe_bulk_root(path):
             raise ValueError("备份中的%s是系统或用户根目录，已拒绝恢复" % label)
+        if not any(_path_within(path, root) for root in allowed_roots):
+            raise ValueError("备份中的%s不在本机已有的目录范围内，已拒绝恢复" % label)
 
     check((cfg.get("save") or {}).get("path"), "保存目录")
     check((cfg.get("share") or {}).get("path"), "共享目录")
