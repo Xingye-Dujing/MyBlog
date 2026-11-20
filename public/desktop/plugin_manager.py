@@ -479,13 +479,20 @@ class PluginRegistry:
 
     def rollback(self, plugin_id: str) -> Dict[str, Any]:
         """把插件恢复到上一次更新前的版本（仅用户安装的插件）。"""
-        target = self.user_root / plugin_id
-        backup = self.user_root / (".rollback-" + plugin_id)
+        if not ID_RE.match(plugin_id):
+            raise PluginError("无效的插件 id")
+        root = self.user_root.resolve()
+        target = (self.user_root / plugin_id).resolve()
+        backup = (self.user_root / (".rollback-" + plugin_id)).resolve()
+        if target.parent != root or backup.parent != root:
+            raise PluginError("插件路径越界，已拒绝回滚")
         if not backup.is_dir():
             raise PluginError("没有可用的上一版本")
         if not target.is_dir():
             raise PluginError("当前插件不存在，无法回滚")
-        parked = self.user_root / (".rollback-current-" + plugin_id)
+        parked = (self.user_root / (".rollback-current-" + plugin_id)).resolve()
+        if parked.parent != root:
+            raise PluginError("插件路径越界，已拒绝回滚")
         if parked.exists():
             shutil.rmtree(parked)
         os.replace(target, parked)

@@ -147,8 +147,10 @@ class HubServer:
             self._save_ports()
 
     # ------------------------------------------------------------ servers
-    def _start_static(self, port: int, directory: Path):
-        handler = functools.partial(ShellHandler, directory=str(directory))
+    def _start_static(self, port: int, directory: Path, default_app: str = ""):
+        handler = functools.partial(
+            ShellHandler, directory=str(directory), default_app=default_app
+        )
         server = _QuietHTTPServer(("127.0.0.1", port), handler)
         _serve(server)
         return server
@@ -218,7 +220,7 @@ class HubServer:
             runtime = plugin["runtime"]
             plugin_dir = Path(plugin["path"])
 
-            if wanted and existing_server_ok(wanted, entry):
+            if wanted and existing_server_ok(wanted, entry, self.root):
                 url = self._url(wanted, entry)
                 self.servers[plugin_id] = {
                     "url": url,
@@ -236,7 +238,7 @@ class HubServer:
                     return self._start_ai(port, plugin_dir)
                 if runtime == "latex":
                     return self._start_latex(port, plugin_dir)
-                return self._start_static(port, plugin_dir)
+                return self._start_static(port, plugin_dir, default_app=plugin_id)
 
             try:
                 server = start(wanted)
@@ -804,6 +806,8 @@ class HubServer:
             data = base64.b64decode(raw, validate=True)
         except Exception as exc:  # noqa: BLE001
             raise ValueError("备份文件已损坏或不是有效的归档") from exc
+        if len(data) > MAX_FULL_BACKUP_BYTES:
+            raise ValueError("备份文件超过允许大小")
 
         with tempfile.TemporaryDirectory(prefix="omm-restore-") as tmp:
             root = Path(tmp) / "unzip"
@@ -1002,7 +1006,10 @@ class HubHandler(ShellHandler):
                 self._reply(200, self.hub.restore(payload))
                 return
             if parsed.path == "/api/full-restore":
-                payload = self._json_body(MAX_FULL_BACKUP_BYTES)
+                # The zip travels as base64 inside JSON (~4/3 expansion), so cap the
+                # request body at the expanded size or legitimately produced backups
+                # become unrestorable. The decoded size is capped in full_restore().
+                payload = self._json_body(MAX_FULL_BACKUP_BYTES * 4 // 3 + 1024 * 1024)
                 self._reply(200, self.hub.full_restore(payload))
                 return
             if parsed.path == "/api/plugins/install":
@@ -1053,7 +1060,7 @@ class HubHandler(ShellHandler):
 
 def start_hub_server(root: Path, port: int = HUB_PORT, plugin_root: Path | None = None):
     """Start (or reuse) the hub shell server; return its actual port."""
-    if existing_server_ok(port, HUB_HTML):
+    if existing_server_ok(port, HUB_HTML, root):
         return port
     hub = HubServer(root, port, plugin_root=plugin_root)
     HubHandler.hub = hub

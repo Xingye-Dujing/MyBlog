@@ -373,6 +373,13 @@ class ShellHandler(SimpleHTTPRequestHandler):
     server_version = "OMM-ZEN"
     sys_version = ""
 
+    def __init__(self, *args, default_app: str = "", **kwargs):
+        # Trusted identity must be per-handler. In the integrated hub the process-wide
+        # OMM_APP_ID is "hub", so a handler that falls back to it grants every plugin
+        # the hub's all-seeing share identity. Plugin servers pass their own id here.
+        self._default_app = default_app
+        super().__init__(*args, **kwargs)
+
     def log_message(self, fmt, *args):  # noqa: D401 - keep desktop logs quiet
         pass
 
@@ -394,7 +401,7 @@ class ShellHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _default_app_id(self) -> str:
-        return (os.environ.get("OMM_APP_ID") or "app").strip() or "app"
+        return (self._default_app or os.environ.get("OMM_APP_ID") or "app").strip() or "app"
 
     def handle_desktop_get(self) -> bool:
         parsed = urlsplit(self.path)

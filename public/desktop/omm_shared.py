@@ -388,7 +388,7 @@ def _empty_config() -> Dict[str, Any]:
             "auto_snapshot": True,
             "auto_share": False,
         },
-        "ui": {"zoom": {}},
+        "ui": {"zoom": {}, "window": {}},
         "share": {"path": ""},
         "docx_pdf": {"soffice": "", "abiword": "", "gs": ""},
         "ai": _empty_ai(),
@@ -462,7 +462,23 @@ def _normalize_config(raw: Any) -> Dict[str, Any]:
             continue
         zoom[clean_app_id(key)] = max(0.3, min(3.0, factor))
     appearance_raw = ui.get("appearance") if isinstance(ui.get("appearance"), dict) else {}
-    cfg["ui"] = {"zoom": zoom, "appearance": _clean_appearance(appearance_raw)}
+    # Window geometry is written by omm_launcher.remember_geometry() and read back by
+    # saved_geometry(). Dropping it here made geometry persistence impossible: every
+    # load wiped it, and every save discarded the other apps' entries too.
+    window_raw = ui.get("window") if isinstance(ui.get("window"), dict) else {}
+    window: Dict[str, Dict[str, Any]] = {}
+    for key, value in window_raw.items():
+        if not isinstance(value, dict):
+            continue
+        box: Dict[str, Any] = {}
+        for field in ("x", "y", "width", "height"):
+            try:
+                box[field] = int(value[field])
+            except (KeyError, TypeError, ValueError):
+                continue
+        box["maximized"] = bool(value.get("maximized"))
+        window[clean_app_id(key)] = box
+    cfg["ui"] = {"zoom": zoom, "appearance": _clean_appearance(appearance_raw), "window": window}
     cfg["ai"] = _normalize_ai(raw.get("ai"))
     return cfg
 
