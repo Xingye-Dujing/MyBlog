@@ -123,6 +123,32 @@ def validate_document(
         issues.append(_issue("warning", "正文为空", 0, "empty-body"))
 
     for block in doc.blocks:
+        # Math is emitted verbatim into the compiled TeX just like latex-figure
+        # blocks, so it must pass the same dangerous-command guard. Otherwise a
+        # doc with `$$ \input{...} $$` validates clean but injects file reads.
+        if block.type == "math_block":
+            dangerous = _DANGEROUS_TEX_RE.search(_tex_without_comments(block.text or ""))
+            if dangerous:
+                issues.append(
+                    _issue(
+                        "error",
+                        "公式包含不允许的命令：\\%s" % dangerous.group(0).lstrip("\\"),
+                        block.line,
+                        "math-dangerous",
+                    )
+                )
+        for inline in block.inlines or ():
+            if inline.type == "math":
+                dangerous = _DANGEROUS_TEX_RE.search(_tex_without_comments(inline.text or ""))
+                if dangerous:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "行内公式包含不允许的命令：\\%s" % dangerous.group(0).lstrip("\\"),
+                            block.line,
+                            "math-dangerous",
+                        )
+                    )
         if block.type == "heading" and not plain_text(block.inlines).strip():
             issues.append(_issue("warning", "存在空标题", block.line, "empty-heading"))
         if block.type == "table":

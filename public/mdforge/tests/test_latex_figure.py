@@ -154,3 +154,19 @@ title: T
     document = parse_markdown(source, "danger.md")
     issues = validate_document(document, check_images=False)
     assert any(issue["code"] == "latex-figure-dangerous" and issue["level"] == "error" for issue in issues)
+
+
+def test_dangerous_tex_in_math_is_rejected():
+    from mdforge.validate import validate_document
+
+    source = """---
+title: T
+---
+
+$$ \\input{secret} $$
+
+Inline $\\write18{rm -rf /}$ here.
+"""
+    document = parse_markdown(source, "danger-math.md")
+    issues = validate_document(document, check_images=False)
+    assert any(issue["code"] == "math-dangerous" and issue["level"] == "error" for issue in issues)
