@@ -52,7 +52,7 @@ function toast(msg) {
     box = document.createElement('div')
     box.id = 'zen-link-toast'
     box.style.cssText =
-      'position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:#000;color:#fff;' +
+      'position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:#232323;color:#fff;' +
       'padding:7px 14px;border-radius:6px;font:12px/1.5 sans-serif;z-index:99999;opacity:0;' +
       'pointer-events:none;transition:opacity .18s;max-width:80vw'
     document.body.appendChild(box)
