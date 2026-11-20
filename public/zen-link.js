@@ -52,8 +52,8 @@ function toast(msg) {
     box = document.createElement('div')
     box.id = 'zen-link-toast'
     box.style.cssText =
-      'position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:#232323;color:#fff;' +
-      'padding:7px 14px;border-radius:6px;font:12px/1.5 sans-serif;z-index:99999;opacity:0;' +
+      'position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:#2a2a2a;color:#ffffff;' +
+      'padding:7px 14px;border-radius:6px;font:12px/1.5 "Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif;z-index:99999;opacity:0;' +
       'pointer-events:none;transition:opacity .18s;max-width:80vw'
     document.body.appendChild(box)
   }
@@ -120,16 +120,16 @@ function openPanel() {
   panel = document.createElement('div')
   panel.id = 'zen-link-panel'
   panel.style.cssText =
-    'position:fixed;right:14px;bottom:60px;width:min(360px,calc(100vw - 28px));background:#fff;color:#111;' +
-    'border:1px solid #111;border-radius:8px;padding:14px;z-index:99998;box-shadow:0 8px 28px rgba(0,0,0,.16);' +
-    'font:13px/1.5 -apple-system,"Segoe UI",sans-serif'
+    'position:fixed;right:14px;bottom:60px;width:min(360px,calc(100vw - 28px));background:var(--paper,#ffffff);color:var(--ink,#1a1a1a);' +
+    'border:1px solid var(--border,#1a1a1a);border-radius:8px;padding:14px;z-index:99998;box-shadow:0 8px 28px rgba(0,0,0,.16);' +
+    'font:13px/1.5 "Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif'
   panel.innerHTML =
     '<div style="display:flex;align-items:center;margin-bottom:8px"><b>发布为知识卡片</b>' +
     '<span style="flex:1"></span><button id="zlp-close" style="border:0;background:none;font-size:18px;cursor:pointer">×</button></div>' +
-    '<textarea id="zlp-text" style="width:100%;min-height:72px;border:1px solid #ccc;border-radius:5px;padding:7px;box-sizing:border-box" placeholder="要剪藏的内容"></textarea>' +
+    '<textarea id="zlp-text" style="width:100%;min-height:72px;border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:7px;box-sizing:border-box" placeholder="要剪藏的内容"></textarea>' +
     '<div style="display:flex;gap:6px;margin-top:6px">' +
-    '<input id="zlp-tags" style="flex:1;border:1px solid #ccc;border-radius:5px;padding:6px" placeholder="标签，逗号分隔" />' +
-    '<select id="zlp-kind" style="border:1px solid #ccc;border-radius:5px;padding:6px">' +
+    '<input id="zlp-tags" style="flex:1;border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px" placeholder="标签，逗号分隔" />' +
+    '<select id="zlp-kind" style="border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px">' +
     ZenCard.KINDS.map((k) => `<option value="${k}">${k}</option>`).join('') + '</select></div>' +
     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
     '<button class="zlp-send" data-to="" style="padding:5px 9px">存本地</button>' +
@@ -163,7 +163,7 @@ function mount() {
   btn.textContent = '卡'
   btn.style.cssText =
     'position:fixed;right:14px;bottom:14px;width:34px;height:34px;border-radius:50%;' +
-    'border:1px solid #111;background:#fff;color:#111;font:14px sans-serif;cursor:pointer;z-index:99997;' +
+    'border:1px solid var(--border,#1a1a1a);background:var(--paper,#ffffff);color:var(--ink,#1a1a1a);font:14px "Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif;cursor:pointer;z-index:99997;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.12)'
   btn.onclick = openPanel
   document.body.appendChild(btn)

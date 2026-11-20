@@ -107,6 +107,18 @@ def _copy_common(dest: Path) -> None:
         shutil.copy2(src, dest / src.name)
 
 
+def copy_zen_styles(dest: Path) -> None:
+    """Stage the layered OMM-ZEN stylesheet referenced as zen-style/*.
+
+    _copy_referenced_assets skips paths with a slash, so the shared style tree
+    must be copied explicitly, just like the canvas framework. Every product
+    links zen-style/zen.css; editing that tree then updates all products.
+    """
+    src = ROOT / "zen-style"
+    if src.is_dir():
+        shutil.copytree(src, dest / "zen-style", dirs_exist_ok=True)
+
+
 def copy_canvas_framework(dest: Path) -> None:
     """Stage the shared canvas framework referenced as zen-canvas/*.
 
@@ -165,6 +177,7 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
     _copy_referenced_assets(html_name, dest)
+    copy_zen_styles(dest)
     copy_canvas_framework(dest)
     copy_vendor(dest, app_id)
     return dest
@@ -185,6 +198,7 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets(item["entry"], dest)
+    copy_zen_styles(dest)
     copy_canvas_framework(dest)
     if item.get("apl_font"):
         shutil.copy2(ROOT / "APL385.ttf", dest / "APL385.ttf")
@@ -208,6 +222,7 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets("omm-hub.html", dest)
+    copy_zen_styles(dest)
     _copy_common(dest)
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)

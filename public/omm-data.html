@@ -12,2991 +12,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>数据工作台</title>
     <link rel="icon" href="icon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
-    <style>
-      :root {
-        --bg: #ffffff;
-        --text: #1a1a1a;
-        --text-dim: rgba(26, 26, 26, 0.4);
-        --text-faint: rgba(26, 26, 26, 0.15);
-        --border: #1a1a1a;
-        --border-dim: rgba(26, 26, 26, 0.15);
-        --border-faint: rgba(26, 26, 26, 0.06);
-        --hover: rgba(26, 26, 26, 0.06);
-        /* 选中行的行号格是 sticky 单元格，背景必须不透明：
-           用半透明的 --hover 会让下面滚动的行透上来，出现“折叠”重影 */
-        --row-act-bg: #f1f1f1;
-        --active-bg: #1a1a1a;
-        --active-text: #ffffff;
-        --accent-red: #cc3333;
-        --accent-green: #339933;
-        --font-mono: 'Literata', 'SimSun', '宋体', 'NSimSun', 'Songti SC', 'STSong', serif;
-        --zoom: 1;
-        --radius: 0px;
-        --fscale: 1;
-        --cell-fscale: 1;
-        --rowh: 30px;
-      }
-      body.theme-dark {
-        --bg: #1a1a1a;
-        --text: #e8e8e8;
-        --text-dim: rgba(232, 232, 232, 0.4);
-        --text-faint: rgba(232, 232, 232, 0.15);
-        --border: #e8e8e8;
-        --border-dim: rgba(232, 232, 232, 0.15);
-        --border-faint: rgba(232, 232, 232, 0.06);
-        --hover: rgba(232, 232, 232, 0.08);
-        --row-act-bg: #2a2a2a;
-        --active-bg: #e8e8e8;
-        --active-text: #1a1a1a;
-      }
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        height: 100%;
-      }
-      body {
-        background-color: var(--bg);
-        color: var(--text);
-        font-family: var(--font-mono);
-        overflow: hidden;
-        user-select: none;
-        transition:
-          background-color 0.3s,
-          color 0.3s;
-        font-size: calc(13px * var(--fscale));
-      }
-      ::selection {
-        background: rgba(136, 136, 136, 0.3);
-        color: inherit;
-      }
-      button,
-      input,
-      select,
-      textarea {
-        font-family: var(--font-mono);
-      }
+    <link rel="stylesheet" href="zen-style/zen.css">
+  <link rel="stylesheet" href="zen-style/product/omm-data.css">
+<link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
 
-      body.bg-void {
-        background: var(--bg);
-      }
-      body.bg-grid {
-        background-color: var(--bg);
-        background-image:
-          linear-gradient(var(--border-faint) 1px, transparent 1px),
-          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
-        background-size: 40px 40px;
-      }
-      body.bg-dots {
-        background-color: var(--bg);
-        background-image: radial-gradient(circle, var(--border-dim) 1px, transparent 1px);
-        background-size: 24px 24px;
-      }
-      body.bg-cross {
-        background-color: var(--bg);
-        background-image:
-          linear-gradient(var(--border-faint) 1px, transparent 1px),
-          linear-gradient(90deg, var(--border-faint) 1px, transparent 1px);
-        background-size: 40px 40px;
-        background-position: 20px 20px;
-      }
-      body.bg-diagonal {
-        background-color: var(--bg);
-        background-image: repeating-linear-gradient(
-          45deg,
-          transparent,
-          transparent 28px,
-          var(--border-faint) 28px,
-          var(--border-faint) 29px
-        );
-      }
 
-      /* ===================== ZEN HIDDEN MENU ===================== */
-      #menu-trigger {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 8px;
-        z-index: 1000;
-      }
-      #top-menu {
-        position: fixed;
-        top: -48px;
-        left: 0;
-        width: 100%;
-        height: 48px;
-        background: var(--bg);
-        border-bottom: 1px solid var(--border);
-        border-radius: var(--radius);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 2px;
-        z-index: 999;
-        transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        padding: 0 12px;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        scrollbar-width: none;
-      }
-      #top-menu::-webkit-scrollbar {
-        display: none;
-      }
-      #menu-trigger:hover ~ #top-menu,
-      #top-menu:hover,
-      #top-menu.pinned,
-      body.submenu-open #top-menu {
-        top: 0;
-      }
-      .menu-group {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        padding: 0 6px;
-        position: relative;
-        flex-shrink: 0;
-      }
-      .menu-group + .menu-group::before {
-        content: '';
-        position: absolute;
-        left: -2px;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 1px;
-        height: 20px;
-        background: var(--border-dim);
-      }
-      .menu-label {
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        color: var(--text-faint);
-        text-transform: uppercase;
-        padding: 0 4px;
-        font-weight: 500;
-        flex-shrink: 0;
-      }
-      .menu-btn {
-        color: var(--text-dim);
-        cursor: pointer;
-        padding: 4px 10px;
-        border: 1px solid transparent;
-        transition: all 0.15s;
-        font-family: var(--font-mono);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 0.4px;
-        white-space: nowrap;
-        background: transparent;
-        border-radius: var(--radius);
-        user-select: none;
-      }
-      .menu-btn:hover {
-        color: var(--text);
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .menu-btn.active {
-        color: var(--text);
-        background: var(--hover);
-        border-color: var(--border);
-        box-shadow: inset 0 -2px 0 var(--text);
-      }
-      .menu-btn[disabled] {
-        opacity: 0.3;
-        pointer-events: none;
-      }
-      .pin-btn {
-        width: 28px;
-        height: 28px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid transparent;
-        cursor: pointer;
-        color: var(--text-faint);
-        font-size: calc(14px * var(--fscale));
-        transition: all 0.15s;
-        margin-left: 2px;
-        background: transparent;
-        font-family: var(--font-mono);
-        flex-shrink: 0;
-        border-radius: var(--radius);
-      }
-      .pin-btn:hover {
-        color: var(--text);
-        border-color: var(--border-dim);
-      }
-      .pin-btn.pinned {
-        color: var(--text);
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .pin-btn svg {
-        width: 14px;
-        height: 14px;
-      }
-
-      .dropdown {
-        position: fixed;
-        background: var(--bg);
-        border: 1px solid var(--border);
-        padding: 4px;
-        min-width: 220px;
-        z-index: 1001;
-        display: none;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        max-height: 80vh;
-        overflow-y: auto;
-        animation: ddIn 0.15s ease;
-        border-radius: var(--radius);
-      }
-      @keyframes ddIn {
-        from {
-          opacity: 0;
-          transform: translateY(-4px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-      .dropdown.open {
-        display: block;
-      }
-      .dd-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 10px;
-        cursor: pointer;
-        transition: all 0.1s;
-        font-size: calc(12px * var(--fscale));
-        color: var(--text-dim);
-        border: 1px solid transparent;
-        font-family: var(--font-mono);
-        background: transparent;
-        width: 100%;
-        text-align: left;
-        border-radius: var(--radius);
-      }
-      .dd-item:hover {
-        background: var(--hover);
-        color: var(--text);
-      }
-      .dd-item.selected {
-        color: var(--text);
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .dd-item.danger:hover {
-        color: var(--accent-red);
-        border-color: var(--accent-red);
-      }
-      .dd-item .hint {
-        font-size: calc(10px * var(--fscale));
-        color: var(--text-faint);
-        margin-left: 12px;
-      }
-      .dd-divider {
-        height: 1px;
-        background: var(--border-dim);
-        margin: 4px 0;
-      }
-      .dd-label {
-        padding: 6px 10px 2px;
-        font-size: calc(9px * var(--fscale));
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        color: var(--text-faint);
-        font-weight: 500;
-        font-family: var(--font-mono);
-      }
-      .dd-item-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 5px 10px;
-        font-size: calc(12px * var(--fscale));
-        color: var(--text-dim);
-        font-family: var(--font-mono);
-        gap: 8px;
-      }
-      .dd-scroll {
-        max-height: 210px;
-        overflow-y: auto;
-        border-top: 1px solid var(--border-faint);
-        border-bottom: 1px solid var(--border-faint);
-      }
-      /* 排序 / 筛选：固定宽度，列名或单元格内容再长也不会把菜单撑宽 */
-      #dd-sort {
-        width: 296px;
-        min-width: 296px;
-      }
-      #dd-filter {
-        width: 340px;
-        min-width: 340px;
-      }
-      #dd-sort,
-      #dd-filter {
-        max-width: calc(100vw - 24px);
-      }
-      #dd-sort .dd-scroll .dd-item,
-      #dd-filter .dd-item {
-        gap: 8px;
-      }
-      #dd-sort .dd-scroll .dd-item > span:first-child,
-      #dd-filter .dd-item > span:first-child {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      #dd-sort .dd-scroll .dd-item .hint {
-        flex: none;
-        max-width: 40%;
-        margin-left: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      /* 筛选条件行：列 / 操作一行，值一行，窄菜单里不挤 */
-      .fcond {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        padding: 5px 8px;
-      }
-      .fcond-top {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .fcond-top .csel {
-        flex: 1;
-        min-width: 0;
-      }
-      .fcond-top .csel .csel-label {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .fcond-top .settings-btn {
-        flex: none;
-      }
-      .fcond .fval {
-        width: 100%;
-      }
-      #fsel-pop {
-        z-index: 1002;
-        max-width: min(320px, calc(100vw - 24px));
-      }
-      #fsel-pop .dd-item > span {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .dd-empty {
-        padding: 12px 10px;
-        text-align: center;
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1px;
-        color: var(--text-faint);
-      }
-      .dd-select {
-        background: transparent;
-        border: 1px solid var(--border-dim);
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(11px * var(--fscale));
-        padding: 4px 5px;
-        outline: none;
-        border-radius: var(--radius);
-        min-width: 0;
-        color-scheme: light;
-      }
-      body.theme-dark .dd-select {
-        color-scheme: dark;
-      }
-      .dd-select:focus {
-        border-color: var(--text);
-      }
-      .dd-select option {
-        background: var(--bg);
-        color: var(--text);
-      }
-      /* 自定义下拉（替代浏览器内置 select）：触发器 + 候选弹窗。
-         弹窗复用 .dropdown / .dd-item 的视觉体系，候选区不再是浏览器原生样式 */
-      .csel {
-        display: inline-flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        min-width: 78px;
-        padding: 3px 7px;
-        background: transparent;
-        border: 1px solid var(--border-dim);
-        border-radius: var(--radius);
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(11px * var(--fscale));
-        line-height: 1.6;
-        cursor: pointer;
-        user-select: none;
-        transition: all 0.15s;
-        outline: none;
-      }
-      .csel:hover {
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .csel.open,
-      .csel:focus-visible {
-        border-color: var(--text);
-      }
-      .csel-caret {
-        flex: none;
-        width: 0;
-        height: 0;
-        border-left: 3.5px solid transparent;
-        border-right: 3.5px solid transparent;
-        border-top: 4px solid var(--text-faint);
-        transition: border-top-color 0.15s;
-      }
-      .csel:hover .csel-caret {
-        border-top-color: var(--text-dim);
-      }
-      .csel.open .csel-caret {
-        border-top-color: var(--text);
-      }
-      .csel-pop {
-        min-width: 88px;
-      }
-      .csel-pop .dd-item {
-        justify-content: flex-start;
-        gap: 8px;
-      }
-      .dd-text {
-        width: 100%;
-        background: transparent;
-        border: none;
-        outline: none;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(13px * var(--fscale));
-        padding: 8px;
-      }
-      .dd-text::placeholder {
-        color: var(--text-faint);
-      }
-      .dd-text.mono-sm {
-        font-size: calc(12px * var(--fscale));
-        padding: 6px 8px;
-        border: 1px solid var(--border-dim);
-        border-radius: var(--radius);
-      }
-
-      /* ===================== 输入框候选区 ===================== */
-      .sug-wrap {
-        position: relative;
-      }
-      .sug {
-        position: fixed;
-        z-index: 3000;
-        background: var(--bg);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        max-height: 184px;
-        overflow-y: auto;
-        display: none;
-        min-width: 180px;
-        padding: 3px;
-      }
-      .sug.open {
-        display: block;
-        animation: sugIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      @keyframes sugIn {
-        from {
-          transform: translateY(-3px);
-        }
-        to {
-          transform: translateY(0);
-        }
-      }
-      .sug-item {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding: 5px 8px;
-        font-size: calc(12px * var(--fscale));
-        color: var(--text-dim);
-        cursor: pointer;
-        font-family: var(--font-mono);
-        letter-spacing: 0.3px;
-        border: 1px solid transparent;
-        border-radius: var(--radius);
-        white-space: nowrap;
-      }
-      .sug-item .sv {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-      }
-      .sug-item .sk {
-        margin-left: auto;
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.2px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        flex-shrink: 0;
-      }
-      .sug-item:hover,
-      .sug-item.hl {
-        background: var(--hover);
-        color: var(--text);
-      }
-      .sug-item.hl {
-        border-color: var(--border);
-      }
-      .sug-empty {
-        padding: 10px;
-        text-align: center;
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1.5px;
-        color: var(--text-faint);
-      }
-      .sug-head {
-        padding: 4px 8px 5px;
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        border-bottom: 1px solid var(--border-faint);
-        margin-bottom: 3px;
-      }
-
-      /* 原生下拉：统一为 ZEN 外观 */
-      select.dd-select {
-        appearance: none;
-        -webkit-appearance: none;
-        background-image:
-          linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
-          linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
-        background-position:
-          calc(100% - 11px) calc(50% + 1px),
-          calc(100% - 7px) calc(50% + 1px);
-        background-size:
-          4px 4px,
-          4px 4px;
-        background-repeat: no-repeat;
-        padding-right: 20px;
-      }
-      select.dd-select option {
-        background: var(--bg);
-        color: var(--text);
-      }
-
-      /* ===================== 滚动条 ===================== */
-      * {
-        scrollbar-width: thin;
-        scrollbar-color: var(--border-dim) transparent;
-      }
-      ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background-color: var(--border-faint);
-        border: 3px solid transparent;
-        background-clip: padding-box;
-        border-radius: var(--radius);
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background-color: var(--border-dim);
-      }
-      ::-webkit-scrollbar-thumb:active {
-        background-color: var(--text-dim);
-      }
-      ::-webkit-scrollbar-corner {
-        background: transparent;
-      }
-      /* 紧凑滚动区 */
-      .ed-body::-webkit-scrollbar,
-      #modal-body::-webkit-scrollbar,
-      .dd-scroll::-webkit-scrollbar,
-      .dropdown::-webkit-scrollbar,
-      .sug::-webkit-scrollbar,
-      #sql-hist::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      .ed-body::-webkit-scrollbar-thumb,
-      #modal-body::-webkit-scrollbar-thumb,
-      .dd-scroll::-webkit-scrollbar-thumb,
-      .dropdown::-webkit-scrollbar-thumb,
-      .sug::-webkit-scrollbar-thumb,
-      #sql-hist::-webkit-scrollbar-thumb {
-        background-color: var(--border-faint);
-        border-width: 2px;
-      }
-      /* 数据网格：细滚动条 */
-      #grid-scroll::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
-      }
-      #grid-scroll::-webkit-scrollbar-thumb {
-        background-color: var(--border-dim);
-        border: 4px solid transparent;
-      }
-      #grid-scroll:hover::-webkit-scrollbar-thumb {
-        background-color: var(--text-dim);
-      }
-      /* 文本域缩放手柄 */
-      textarea::-webkit-resizer {
-        background-image: repeating-linear-gradient(
-          135deg,
-          transparent 0,
-          transparent 3px,
-          var(--border-dim) 3px,
-          var(--border-dim) 4px
-        );
-        background-size: 11px 11px;
-        background-position: right bottom;
-        background-repeat: no-repeat;
-      }
-
-      .seg {
-        display: flex;
-      }
-      .seg button {
-        flex: 1;
-        background: transparent;
-        border: 1px solid var(--border-dim);
-        color: var(--text-dim);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 1px;
-        padding: 7px 0;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-      .seg button + button {
-        border-left: none;
-      }
-      .seg button:first-child {
-        border-radius: var(--radius) 0 0 var(--radius);
-      }
-      .seg button:last-child {
-        border-radius: 0 var(--radius) var(--radius) 0;
-      }
-      .seg button:hover {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .seg button.active {
-        color: var(--text);
-        border-color: var(--border);
-        box-shadow: inset 0 -2px 0 var(--text);
-      }
-      .seg.mini {
-        width: 168px;
-        flex: none;
-      }
-      .seg.mini button {
-        padding: 4px 0;
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 0.5px;
-      }
-      .seg.wide {
-        width: 100%;
-      }
-
-      .settings-control {
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        flex-shrink: 0;
-      }
-      .settings-btn {
-        width: 22px;
-        height: 22px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        border: 1px solid var(--border-dim);
-        background: transparent;
-        color: var(--text-dim);
-        font-family: var(--font-mono);
-        font-size: calc(13px * var(--fscale));
-        transition: all 0.1s;
-        user-select: none;
-        border-radius: var(--radius);
-      }
-      .settings-btn:hover {
-        border-color: var(--border);
-        color: var(--text);
-        background: var(--hover);
-      }
-      .settings-btn.pinned {
-        color: var(--text);
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .settings-value {
-        min-width: 40px;
-        text-align: center;
-        font-size: calc(11px * var(--fscale));
-        color: var(--text);
-        font-family: var(--font-mono);
-      }
-      .settings-bg-options {
-        display: flex;
-        gap: 3px;
-        flex-shrink: 0;
-      }
-      .settings-bg-dot {
-        display: block;
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        border: 2px solid transparent;
-        transition: all 0.1s;
-        background-color: var(--bg);
-        border-radius: var(--radius);
-      }
-      .settings-bg-dot:hover {
-        border-color: var(--text-dim);
-      }
-      .settings-bg-dot.active {
-        border-color: var(--text);
-      }
-      #dd-settings {
-        min-width: 320px;
-      }
-
-      /* ===================== MAIN ===================== */
-      #main {
-        position: absolute;
-        inset: 0;
-        padding: 60px 28px 64px;
-        display: flex;
-        flex-direction: column;
-        z-index: 1;
-        transition: padding-top 0.38s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      body:not(.menu-pinned):not(.submenu-open) #main {
-        padding-top: 14px;
-      }
-      body.submenu-open:not(.menu-pinned) #main {
-        padding-top: 60px;
-      }
-      body.sb-hidden #main {
-        padding-bottom: 28px;
-      }
-      #ds-head {
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        padding-bottom: 14px;
-        flex-shrink: 0;
-        gap: 12px;
-      }
-      .ch-left {
-        display: flex;
-        align-items: baseline;
-        min-width: 0;
-      }
-      #ch-title {
-        font-size: calc(26px * var(--fscale));
-        font-weight: 500;
-        letter-spacing: 3px;
-        white-space: nowrap;
-      }
-      #ch-sub {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 2px;
-        color: var(--text-dim);
-        margin-left: 14px;
-        white-space: nowrap;
-      }
-      #ch-right {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1px;
-        color: var(--text-dim);
-        display: flex;
-        gap: 18px;
-        white-space: nowrap;
-      }
-      #ch-right b {
-        color: var(--text);
-        font-weight: 500;
-      }
-
-      #view-wrap {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-      }
-      .view {
-        display: none;
-        flex: 1;
-        min-height: 0;
-        flex-direction: column;
-      }
-      .view.on {
-        display: flex;
-      }
-
-      /* ---- context bar ---- */
-      #ctx-bar {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
-        padding-bottom: 8px;
-        min-height: 0;
-        flex-wrap: wrap;
-      }
-      .chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        padding: 3px 8px;
-        border: 1px solid var(--border-dim);
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1px;
-        color: var(--text-dim);
-        border-radius: var(--radius);
-        transition: all 0.15s;
-        white-space: nowrap;
-      }
-      .chip b {
-        color: var(--text);
-        font-weight: 500;
-      }
-      .chip.act {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .chip .x {
-        cursor: pointer;
-        color: var(--text-faint);
-        padding: 0 2px;
-      }
-      .chip .x:hover {
-        color: var(--accent-red);
-      }
-      .chip.warn {
-        border-color: rgba(204, 51, 51, 0.5);
-        color: var(--accent-red);
-      }
-      .chip.warn b {
-        color: var(--accent-red);
-      }
-
-      /* ---- grid ---- */
-      #grid-scroll {
-        flex: 1;
-        min-height: 0;
-        overflow: auto;
-        /* 虚拟滚动：上下 spacer 会随 scrollTop 重排，必须关掉浏览器滚动锚定，
-           否则锚定补偿会把每次重排又变成一次滚动，一格滚轮就会一路滚到底 */
-        overflow-anchor: none;
-        border-top: 1px solid var(--border-dim);
-        border-bottom: 1px solid var(--border-dim);
-        background: var(--bg);
-        outline: none;
-      }
-      #grid-inner {
-        width: max-content;
-        min-width: 100%;
-        position: relative;
-      }
-      #grid-head {
-        display: grid;
-        position: sticky;
-        top: 0;
-        z-index: 6;
-        background: var(--bg);
-        border-bottom: 1px solid var(--border-dim);
-      }
-      .gh {
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 0 8px;
-        height: 34px;
-        border-right: 1px solid var(--border-faint);
-        border-bottom: 1px solid var(--border-dim);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 0.6px;
-        color: var(--text-dim);
-        cursor: pointer;
-        overflow: hidden;
-        user-select: none;
-        transition: background 0.15s;
-      }
-      .gh:hover {
-        background: var(--hover);
-      }
-      .gh .gl {
-        color: var(--text-faint);
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1px;
-        flex-shrink: 0;
-      }
-      .gh .gn {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--text);
-      }
-      .gh .gt {
-        font-size: calc(8px * var(--fscale));
-        letter-spacing: 0.5px;
-        color: var(--text-faint);
-        border: 1px solid var(--border-faint);
-        padding: 0 3px;
-        flex-shrink: 0;
-        text-transform: uppercase;
-        border-radius: var(--radius);
-      }
-      .gh .gs {
-        font-size: calc(9px * var(--fscale));
-        color: var(--text);
-        flex-shrink: 0;
-      }
-      .gh.corner {
-        position: sticky;
-        left: 0;
-        z-index: 7;
-        background: var(--bg);
-        justify-content: center;
-        cursor: default;
-        border-right: 1px solid var(--border-dim);
-        color: var(--text-faint);
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1px;
-      }
-      .gh.act {
-        color: var(--text);
-        background: var(--hover);
-      }
-      /* 列头上的排序手柄：单击列头为“选中整列”，排序改由这里 / 双击列头触发 */
-      .gh .gs {
-        font-size: calc(9px * var(--fscale));
-        color: var(--text-faint);
-        flex-shrink: 0;
-        cursor: pointer;
-        padding: 0 2px;
-        border-radius: var(--radius);
-        line-height: 1;
-      }
-      .gh .gs:hover {
-        color: var(--text);
-        background: var(--hover);
-      }
-      .gh .gs.on {
-        color: var(--text);
-      }
-      /* 整行 / 整列被选中时的高亮：只用底色，不加边框 */
-      .gc.rowline {
-        background: var(--hover);
-      }
-      .gc.colline {
-        background: var(--hover);
-      }
-      .gh-res {
-        position: absolute;
-        right: -3px;
-        top: 0;
-        width: 7px;
-        height: 100%;
-        cursor: col-resize;
-        z-index: 3;
-      }
-      .gh-res:hover {
-        background: var(--border-dim);
-      }
-      /* 行号格底边的行高拖拽手柄：与列宽手柄对称 */
-      .gr-res {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 6px;
-        cursor: row-resize;
-        z-index: 4;
-      }
-      .gr-res:hover,
-      .gr-res.on {
-        background: var(--border-dim);
-        box-shadow: inset 0 -2px 0 var(--text-dim);
-      }
-      /* 拖拽过程中统一光标，避免鼠标划过的单元格把手感抢走 */
-      body.row-resizing,
-      body.row-resizing * {
-        cursor: row-resize !important;
-        user-select: none !important;
-      }
-      body.col-resizing,
-      body.col-resizing * {
-        cursor: col-resize !important;
-        user-select: none !important;
-      }
-      /* 行被拉高后让单元格内容换行，而不是把一行字悬在中间。
-         垂直对齐用 --al-v：拉高的行默认顶对齐，单元格若设了对齐则 inline 变量覆盖 */
-      .grow.tall {
-        --al-v: flex-start;
-      }
-      .grow.tall > .gc {
-        padding-top: 5px;
-      }
-      .grow.tall > .gc > span.cv {
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        max-height: 100%;
-      }
-      /* 九宫格对齐浮层 */
-      #dd-align {
-        min-width: 0;
-        padding: 6px;
-      }
-      .al-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 30px);
-        gap: 3px;
-        padding: 4px 2px 6px;
-      }
-      .al-cell {
-        width: 30px;
-        height: 30px;
-        display: flex;
-        flex-direction: column;
-        padding: 5px 4px;
-        box-sizing: border-box;
-        border: 1px solid var(--border-faint);
-        border-radius: var(--radius);
-        background: transparent;
-        cursor: pointer;
-      }
-      .al-cell:hover {
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .al-cell.on {
-        border-color: var(--text);
-        background: var(--hover);
-      }
-      .al-cell i {
-        display: block;
-        height: 2px;
-        margin: 1px 0;
-        border-radius: 1px;
-        background: var(--text-dim);
-      }
-      .al-cell.on i {
-        background: var(--text);
-      }
-      .al-cell.al-l {
-        align-items: flex-start;
-      }
-      .al-cell.al-c {
-        align-items: center;
-      }
-      .al-cell.al-r {
-        align-items: flex-end;
-      }
-      .al-cell.al-t {
-        justify-content: flex-start;
-      }
-      .al-cell.al-m {
-        justify-content: center;
-      }
-      .al-cell.al-b {
-        justify-content: flex-end;
-      }
-      .al-tip {
-        padding: 0 4px 4px;
-        font-size: calc(9px * var(--fscale));
-        color: var(--text-faint);
-        letter-spacing: 0.4px;
-      }
-      /* 拖拽时跟随光标的尺寸提示 */
-      #res-tip {
-        position: fixed;
-        z-index: 3000;
-        display: none;
-        padding: 3px 7px;
-        font: 11px/1.4 var(--font-mono);
-        color: var(--active-text);
-        background: var(--active-bg);
-        border-radius: var(--radius);
-        pointer-events: none;
-        white-space: nowrap;
-      }
-      /* 悬停时的单元格全文预览：比浏览器原生 title 即时，且跟随主题 */
-      #cell-preview {
-        position: fixed;
-        z-index: 2500;
-        display: none;
-        max-width: min(420px, 60vw);
-        max-height: 60vh;
-        overflow: auto;
-        padding: 6px 9px;
-        background: var(--bg);
-        color: var(--text);
-        border: 1px solid var(--border-dim);
-        border-radius: var(--radius);
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-        font-family: var(--font-mono);
-        font-size: calc(12px * var(--cell-fscale));
-        line-height: 1.5;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        pointer-events: none;
-      }
-      /* 定位（Ctrl+G）子菜单 */
-      .goto-tip {
-        padding: 0 2px 6px;
-        font-size: calc(10px * var(--fscale));
-        color: var(--text-faint);
-        line-height: 1.5;
-      }
-      .grow {
-        display: grid;
-      }
-      .gc {
-        display: flex;
-        align-items: var(--al-v, center);
-        height: var(--rowh);
-        padding: 0 8px;
-        border-right: 1px solid var(--border-faint);
-        border-bottom: 1px solid var(--border-faint);
-        font-size: calc(13px * var(--cell-fscale));
-        line-height: 1.4;
-        color: var(--text);
-        overflow: hidden;
-        cursor: cell;
-        user-select: none;
-        min-width: 0;
-      }
-      /* 内容 span 用 .cv 限定，避免 .gr-res 行高手柄被当成内容处理 */
-      .gc > span.cv {
-        width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        text-align: var(--al-h, left);
-      }
-      .gc.num > span.cv {
-        font-variant-numeric: tabular-nums;
-      }
-      .gc.nil > span.cv {
-        color: var(--text-faint);
-      }
-      .gc.rn {
-        position: sticky;
-        left: 0;
-        /* 高于 .gc.sel(3)，横向滚动时行号格及其行高手柄始终可点 */
-        z-index: 5;
-        background: var(--bg);
-        color: var(--text-faint);
-        font-size: calc(10px * var(--fscale));
-        justify-content: center;
-        border-right: 1px solid var(--border-dim);
-        cursor: default;
-        font-variant-numeric: tabular-nums;
-      }
-      .gc.rn.act {
-        color: var(--text);
-        /* 必须用不透明底色：sticky 行号格一旦半透明，
-           横向滚动时下面的数据行会从它上面透出来 */
-        background: var(--row-act-bg);
-      }
-      .grow:hover .gc.rn {
-        color: var(--text-dim);
-      }
-      .gc.inrange {
-        background: var(--hover);
-      }
-      .gc.sel {
-        box-shadow: inset 0 0 0 1px var(--text);
-        z-index: 3;
-      }
-      .gc.editing {
-        box-shadow: inset 0 0 0 1px var(--text);
-      }
-      .gc .mk {
-        background: transparent;
-        color: var(--text);
-        box-shadow: inset 0 -1px 0 var(--text);
-      }
-      .gc.hit > span.cv {
-        box-shadow: inset 0 -1px 0 var(--text-dim);
-      }
-      .gc.hit.cur {
-        background: var(--hover);
-      }
-      .gc.hit.cur > span.cv {
-        box-shadow: inset 0 -1px 0 var(--text);
-      }
-      /* 点击单元格以外的空白区域时挂上 .sel-off：只隐藏选区高亮，
-         不动 S.sel / S.sel2，菜单与快捷键仍可作用于刚才的选区 */
-      #grid-scroll.sel-off .gh.act {
-        color: var(--text-dim);
-        background: transparent;
-      }
-      #grid-scroll.sel-off .gc.rn.act {
-        color: var(--text-faint);
-        background: var(--bg);
-      }
-      #grid-scroll.sel-off .gc.inrange,
-      #grid-scroll.sel-off .gc.rowline,
-      #grid-scroll.sel-off .gc.colline {
-        background: transparent;
-      }
-      #grid-scroll.sel-off .gc.sel {
-        box-shadow: none;
-      }
-      #cell-editor {
-        position: fixed;
-        display: none;
-        z-index: 2000;
-        background: var(--bg);
-        border: 1px solid var(--text);
-        outline: none;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(13px * var(--cell-fscale));
-        line-height: 1.4;
-        padding: 5px 7px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-        border-radius: var(--radius);
-        resize: none;
-        overflow: hidden;
-        user-select: text;
-      }
-      .empty-hint {
-        color: var(--text-faint);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 2px;
-        text-align: center;
-        padding: 3em 1em;
-      }
-
-      /* ---- sql view ---- */
-      #view-sql {
-        flex-direction: row;
-        gap: 0;
-      }
-      #view-sql.on {
-        display: flex;
-      }
-      .sql-pane {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        border: 1px solid var(--border-dim);
-        overflow: hidden;
-      }
-      .sql-pane.left {
-        width: 42%;
-        min-width: 260px;
-        border-right: none;
-        border-radius: var(--radius) 0 0 var(--radius);
-      }
-      .sql-pane.right {
-        flex: 1;
-        min-width: 0;
-        border-radius: 0 var(--radius) var(--radius) 0;
-      }
-      .sql-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 12px;
-        border-bottom: 1px solid var(--border-faint);
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        flex-shrink: 0;
-      }
-      .sql-head .sh-act {
-        display: flex;
-        gap: 6px;
-      }
-      .mini-btn {
-        border: 1px solid var(--border-dim);
-        background: transparent;
-        color: var(--text-dim);
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1px;
-        padding: 2px 8px;
-        cursor: pointer;
-        transition: all 0.15s;
-        border-radius: var(--radius);
-        text-transform: uppercase;
-      }
-      .mini-btn:hover {
-        color: var(--text);
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      #sql-input {
-        flex: 1;
-        min-height: 120px;
-        background: transparent;
-        border: none;
-        outline: none;
-        resize: none;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(13px * var(--cell-fscale));
-        line-height: 1.7;
-        padding: 14px 16px;
-        user-select: text;
-      }
-      #sql-input::placeholder {
-        color: var(--text-faint);
-      }
-      .sql-foot {
-        border-top: 1px solid var(--border-faint);
-        padding: 8px 12px;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-shrink: 0;
-      }
-      .sql-foot .sp {
-        flex: 1;
-      }
-      .sql-hint {
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1px;
-        color: var(--text-faint);
-      }
-      #sql-hist {
-        border-top: 1px solid var(--border-faint);
-        max-height: 128px;
-        overflow-y: auto;
-        flex-shrink: 0;
-      }
-      .hist-item {
-        padding: 5px 12px;
-        font-size: calc(11px * var(--fscale));
-        color: var(--text-dim);
-        cursor: pointer;
-        border-bottom: 1px solid var(--border-faint);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .hist-item:hover {
-        color: var(--text);
-        background: var(--hover);
-      }
-      #res-wrap {
-        flex: 1;
-        min-height: 0;
-        overflow: auto;
-      }
-      table.rt {
-        border-collapse: collapse;
-        width: max-content;
-        min-width: 100%;
-        font-size: calc(12px * var(--cell-fscale));
-      }
-      table.rt th {
-        position: sticky;
-        top: 0;
-        background: var(--bg);
-        text-align: left;
-        font-weight: 500;
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        color: var(--text-dim);
-        padding: 7px 12px;
-        border-bottom: 1px solid var(--border-dim);
-        border-right: 1px solid var(--border-faint);
-        white-space: nowrap;
-      }
-      table.rt td {
-        padding: 5px 12px;
-        border-bottom: 1px solid var(--border-faint);
-        border-right: 1px solid var(--border-faint);
-        color: var(--text);
-        white-space: nowrap;
-        max-width: 320px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      table.rt td.nil {
-        color: var(--text-faint);
-      }
-      #res-msg {
-        border-top: 1px solid var(--border-faint);
-        padding: 10px 14px;
-        font-size: calc(11px * var(--fscale));
-        color: var(--text-dim);
-        flex-shrink: 0;
-        max-height: 120px;
-        overflow-y: auto;
-        white-space: pre-wrap;
-        user-select: text;
-      }
-      #res-msg.err {
-        color: var(--accent-red);
-      }
-      #res-msg.ok {
-        color: var(--text-dim);
-      }
-
-      /* ---- schema view ---- */
-      #view-schema {
-        overflow-y: auto;
-      }
-      .sch-card {
-        border: 1px solid var(--border-dim);
-        margin-bottom: 16px;
-        max-width: 980px;
-        border-radius: var(--radius);
-        overflow: hidden;
-      }
-      .sch-head {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 14px;
-        border-bottom: 1px solid var(--border-faint);
-        flex-wrap: wrap;
-      }
-      .sch-name {
-        background: transparent;
-        border: 1px solid transparent;
-        outline: none;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(15px * var(--fscale));
-        letter-spacing: 1.5px;
-        padding: 2px 6px;
-        min-width: 120px;
-        border-radius: var(--radius);
-      }
-      .sch-name:hover {
-        border-color: var(--border-dim);
-      }
-      .sch-name:focus {
-        border-color: var(--text);
-      }
-      .sch-meta {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1.5px;
-        color: var(--text-faint);
-      }
-      .sch-sp {
-        flex: 1;
-      }
-      table.sct {
-        border-collapse: collapse;
-        width: 100%;
-        font-size: calc(12px * var(--fscale));
-      }
-      table.sct th {
-        text-align: left;
-        font-weight: 500;
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        padding: 7px 14px;
-        border-bottom: 1px solid var(--border-faint);
-      }
-      table.sct td {
-        padding: 5px 14px;
-        border-bottom: 1px solid var(--border-faint);
-        color: var(--text-dim);
-        vertical-align: middle;
-      }
-      table.sct td.cname {
-        color: var(--text);
-      }
-      table.sct .cn-in {
-        width: 100%;
-        background: transparent;
-        border: 1px solid transparent;
-        outline: none;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(12px * var(--fscale));
-        padding: 2px 4px;
-        border-radius: var(--radius);
-      }
-      table.sct .cn-in:hover {
-        border-color: var(--border-dim);
-      }
-      table.sct .cn-in:focus {
-        border-color: var(--text);
-      }
-      table.sct .del {
-        cursor: pointer;
-        color: var(--text-faint);
-        opacity: 0;
-        transition: all 0.15s;
-        padding: 0 4px;
-      }
-      table.sct tr:hover .del {
-        opacity: 1;
-      }
-      table.sct .del:hover {
-        color: var(--accent-red);
-      }
-      .sch-add {
-        padding: 8px 14px;
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 2px;
-        color: var(--text-faint);
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-      .sch-add:hover {
-        color: var(--text);
-        background: var(--hover);
-      }
-      .sch-new {
-        max-width: 980px;
-        border: 1px dashed var(--border-dim);
-        padding: 12px 14px;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        margin-bottom: 32px;
-        border-radius: var(--radius);
-      }
-      .sch-new span {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 2px;
-        color: var(--text-faint);
-      }
-
-      /* ===================== EDITOR PANEL / MODAL ===================== */
-      .ed-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--border-faint);
-        flex-shrink: 0;
-      }
-      .ed-mode {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        color: var(--text-dim);
-      }
-      .ed-close {
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        color: var(--text-dim);
-        border: 1px solid transparent;
-        font-size: calc(14px * var(--fscale));
-        border-radius: var(--radius);
-        transition: all 0.15s;
-      }
-      .ed-close:hover {
-        color: var(--text);
-        border-color: var(--border-dim);
-      }
-      .ed-body {
-        flex: 1;
-        overflow-y: auto;
-        padding: 14px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        user-select: text;
-      }
-      .ed-body::-webkit-scrollbar {
-        width: 4px;
-      }
-      .ed-body::-webkit-scrollbar-thumb {
-        background: var(--border-dim);
-      }
-      .ed-field {
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-      }
-      .modal-pad {
-        padding: 18px 20px 8px;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .ed-label {
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        font-weight: 500;
-      }
-      .ed-input,
-      .ed-area {
-        background: transparent;
-        border: 1px solid var(--border-dim);
-        padding: 7px 9px;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: calc(13px * var(--fscale));
-        outline: none;
-        width: 100%;
-        border-radius: var(--radius);
-        color-scheme: light;
-        transition: border-color 0.15s;
-        user-select: text;
-      }
-      body.theme-dark .ed-input,
-      body.theme-dark .ed-area {
-        color-scheme: dark;
-      }
-      .ed-input:focus,
-      .ed-area:focus {
-        border-color: var(--text);
-      }
-      .ed-area {
-        resize: vertical;
-        min-height: 180px;
-        line-height: 1.6;
-        font-size: calc(12px * var(--cell-fscale));
-      }
-      .ed-foot {
-        padding: 14px 16px;
-        border-top: 1px solid var(--border-faint);
-        display: flex;
-        gap: 10px;
-        flex-shrink: 0;
-      }
-      .ed-btn {
-        flex: 1;
-        padding: 9px 0;
-        background: transparent;
-        border: 1px solid var(--border-dim);
-        color: var(--text-dim);
-        font-family: var(--font-mono);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 2px;
-        cursor: pointer;
-        transition: all 0.15s;
-        border-radius: var(--radius);
-      }
-      .ed-btn:hover {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .ed-btn.primary {
-        color: var(--text);
-        border-color: var(--border);
-        font-weight: 500;
-      }
-      .ed-btn.primary:hover {
-        box-shadow: inset 0 -2px 0 var(--text);
-      }
-      .ed-btn.danger:hover {
-        color: var(--accent-red);
-        border-color: var(--accent-red);
-      }
-      .ed-note {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 0.6px;
-        color: var(--text-faint);
-        line-height: 1.7;
-      }
-      .ed-stat {
-        font-size: calc(11px * var(--fscale));
-        color: var(--text-dim);
-        letter-spacing: 0.6px;
-      }
-      .ed-stat b {
-        color: var(--text);
-        font-weight: 500;
-      }
-      /* 快捷键说明面板 */
-      .hk-grid {
-        padding: 12px 20px;
-      }
-      .hk-section {
-        margin-bottom: 16px;
-      }
-      .hk-section:last-child {
-        margin-bottom: 0;
-      }
-      .hk-section-title {
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        font-weight: 500;
-        margin-bottom: 6px;
-      }
-      .hk-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 16px;
-        padding: 5px 0;
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 0.6px;
-        color: var(--text-dim);
-        border-bottom: 1px solid var(--border-faint);
-      }
-      .hk-row:last-child {
-        border-bottom: none;
-      }
-      .hk-key {
-        flex: none;
-        border: 1px solid var(--border-dim);
-        padding: 1px 7px;
-        font-size: calc(10px * var(--fscale));
-        color: var(--text);
-        border-radius: var(--radius);
-        white-space: nowrap;
-      }
-      .hk-note {
-        padding: 4px 0 0;
-        font-size: calc(10.5px * var(--fscale));
-        line-height: 1.85;
-        color: var(--text-faint);
-      }
-
-      #modal {
-        position: fixed;
-        inset: 0;
-        z-index: 9000;
-        background: rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(2px);
-        display: none;
-        align-items: center;
-        justify-content: center;
-      }
-      #modal.open {
-        display: flex;
-      }
-      .modal-box {
-        background: var(--bg);
-        border: 1px solid var(--border);
-        width: 560px;
-        max-width: 92vw;
-        max-height: 86vh;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        border-radius: var(--radius);
-      }
-      #modal-body {
-        overflow-y: auto;
-        flex: 1;
-        min-height: 0;
-      }
-      #modal-body::-webkit-scrollbar {
-        width: 4px;
-      }
-      #modal-body::-webkit-scrollbar-thumb {
-        background: var(--border-dim);
-      }
-      .modal-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 14px 20px;
-        border-bottom: 1px solid var(--border-dim);
-      }
-      .modal-title {
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        color: var(--text-dim);
-      }
-
-      /* ===================== SHEET BAR / STATUS / NOTIFY ===================== */
-      #sheet-bar {
-        position: fixed;
-        left: 28px;
-        bottom: 34px;
-        z-index: 95;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        flex-wrap: wrap;
-        max-width: calc(100vw - 56px);
-        transition: bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      body.sb-hidden #sheet-bar {
-        bottom: 8px;
-      }
-      #sheet-tabs {
-        display: flex;
-        gap: 4px;
-        flex-wrap: wrap;
-      }
-      .sheet-tab {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 3px 9px;
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 0.5px;
-        color: var(--text-dim);
-        background: var(--bg);
-        border: 1px solid var(--border-faint);
-        cursor: pointer;
-        transition: all 0.15s;
-        white-space: nowrap;
-        font-family: var(--font-mono);
-        user-select: none;
-        border-radius: var(--radius);
-        max-width: 220px;
-      }
-      .sheet-tab:hover {
-        color: var(--text);
-        border-color: var(--border-dim);
-      }
-      .sheet-tab.active {
-        color: var(--text);
-        background: transparent;
-        border-color: var(--border);
-        box-shadow: inset 0 -2px 0 var(--text);
-      }
-      .sheet-tab .st-n {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .sheet-tab .st-rename {
-        width: 84px;
-        min-width: 0;
-        padding: 0;
-        border: none;
-        border-bottom: 1px solid var(--border);
-        background: transparent;
-        color: var(--text);
-        font: inherit;
-        font-family: var(--font-mono);
-        letter-spacing: inherit;
-        outline: none;
-      }
-      .sheet-tab .st-c {
-        font-size: calc(9px * var(--fscale));
-        color: var(--text-faint);
-        letter-spacing: 0.5px;
-      }
-      .sheet-x {
-        display: none;
-        font-size: 12px;
-        line-height: 1;
-        opacity: 0.55;
-      }
-      .sheet-x:hover {
-        opacity: 1;
-        color: var(--accent-red);
-      }
-      .sheet-tab:hover .sheet-x.has-tables {
-        display: inline;
-      }
-      .sheet-add {
-        width: 22px;
-        height: 22px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: calc(12px * var(--fscale));
-        color: var(--text-dim);
-        background: var(--bg);
-        border: 1px dashed var(--border-dim);
-        cursor: pointer;
-        transition: all 0.15s;
-        border-radius: var(--radius);
-        flex-shrink: 0;
-      }
-      .sheet-add:hover {
-        color: var(--text);
-        border-color: var(--border);
-      }
-
-      #status-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 26px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 12px;
-        background: var(--bg);
-        border-top: 1px solid var(--border);
-        font-size: calc(10px * var(--fscale));
-        color: var(--text-dim);
-        font-family: var(--font-mono);
-        letter-spacing: 0.5px;
-        z-index: 100;
-        transition:
-          opacity 0.3s,
-          transform 0.3s;
-        border-radius: var(--radius);
-      }
-      #status-bar.hidden {
-        opacity: 0;
-        transform: translateY(100%);
-        pointer-events: none;
-      }
-      #stat-left {
-        display: flex;
-        gap: 16px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      #stat-left b {
-        color: var(--text);
-        font-weight: 500;
-      }
-
-      #notification {
-        position: fixed;
-        bottom: 40px;
-        left: 50%;
-        transform: translateX(-50%) translateY(10px);
-        background: var(--bg);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 6px 16px;
-        font-size: calc(11px * var(--fscale));
-        color: var(--text);
-        font-family: var(--font-mono);
-        z-index: 3000;
-        opacity: 0;
-        transition: all 0.2s;
-        pointer-events: none;
-        max-width: 84vw;
-        text-align: center;
-      }
-      #notification.show {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-      }
-      body.sb-hidden #notification {
-        bottom: 14px;
-      }
-
-      #custom-confirm {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        background: rgba(0, 0, 0, 0.5);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(2px);
-      }
-      #custom-confirm.active {
-        display: flex;
-      }
-      .confirm-box {
-        background: var(--bg);
-        border: 1px solid var(--border);
-        padding: 32px 40px 28px;
-        max-width: 420px;
-        width: 90%;
-        text-align: center;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-        border-radius: var(--radius);
-      }
-      .confirm-box .msg {
-        font-family: var(--font-mono);
-        font-size: calc(14px * var(--fscale));
-        letter-spacing: 1px;
-        color: var(--text);
-        margin-bottom: 28px;
-        line-height: 1.6;
-      }
-      .confirm-box .actions {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-      }
-      .confirm-box .actions button {
-        font-family: var(--font-mono);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        padding: 8px 24px;
-        background: transparent;
-        border: 1px solid var(--border);
-        color: var(--text-dim);
-        cursor: pointer;
-        transition: all 0.15s;
-        border-radius: var(--radius);
-      }
-      .confirm-box .actions button:hover {
-        color: var(--text);
-        border-color: var(--border);
-        background: var(--hover);
-      }
-      .confirm-box .actions button.confirm {
-        color: var(--text);
-        background: transparent;
-        border-color: var(--border);
-        font-weight: 500;
-      }
-      .confirm-box .actions button.confirm:hover {
-        box-shadow: inset 0 -2px 0 var(--text);
-      }
-      .confirm-box .actions button.confirm.danger {
-        color: var(--accent-red);
-        border-color: var(--accent-red);
-      }
-
-      #splash {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        background: var(--bg);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        transition: opacity 0.6s;
-      }
-      #splash.fade-out {
-        opacity: 0;
-        pointer-events: none;
-      }
-      .splash-logo {
-        font-family: var(--font-mono);
-        font-size: calc(30px * var(--fscale));
-        color: var(--text);
-        letter-spacing: 10px;
-        margin-bottom: 8px;
-      }
-      .splash-tagline {
-        font-size: calc(10px * var(--fscale));
-        color: var(--text-dim);
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        margin-bottom: 40px;
-      }
-      .splash-enter {
-        padding: 10px 32px;
-        background: transparent;
-        border: 1px solid var(--border);
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        cursor: pointer;
-        transition: all 0.15s;
-        border-radius: var(--radius);
-        font-weight: 500;
-      }
-      .splash-enter:hover {
-        color: var(--text);
-        border-color: var(--border);
-        box-shadow: inset 0 -2px 0 var(--text);
-        background: var(--hover);
-      }
-
-      /* ===================== MOBILE ===================== */
-      #m-nav {
-        display: none;
-        position: fixed;
-        top: 8px;
-        right: 10px;
-        z-index: 1200;
-        align-items: center;
-        gap: 6px;
-      }
-      .mn-btn {
-        min-width: 36px;
-        height: 34px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg);
-        border: 1px solid var(--border-dim);
-        color: var(--text-dim);
-        border-radius: var(--radius);
-        font-family: var(--font-mono);
-        font-size: calc(12px * var(--fscale));
-        padding: 0 9px;
-        cursor: pointer;
-        transition: all 0.15s;
-        user-select: none;
-      }
-      .mn-btn svg {
-        width: 14px;
-        height: 14px;
-        display: block;
-      }
-      .mn-btn:active {
-        transform: scale(0.93);
-      }
-      #m-tabs {
-        display: none;
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 1400;
-        background: var(--bg);
-        border-top: 1px solid var(--border);
-        padding-bottom: env(safe-area-inset-bottom);
-      }
-      .mt-item {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 2px;
-        padding: 7px 0 6px;
-        background: transparent;
-        border: none;
-        color: var(--text-dim);
-        font-family: var(--font-mono);
-        font-size: 9px;
-        letter-spacing: 1px;
-        cursor: pointer;
-        transition: color 0.15s;
-      }
-      .mt-item svg {
-        width: 19px;
-        height: 19px;
-        display: block;
-        transition: transform 0.2s;
-      }
-      .mt-item.active {
-        color: var(--text);
-      }
-      .mt-item.active svg {
-        transform: scale(1.12);
-      }
-      .mt-item:active svg {
-        transform: scale(0.88);
-      }
-      #m-mask {
-        position: fixed;
-        inset: 0;
-        z-index: 1490;
-        background: rgba(0, 0, 0, 0.35);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.25s;
-      }
-      #m-mask.open {
-        opacity: 1;
-        pointer-events: auto;
-      }
-      #m-sheet {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 1500;
-        background: var(--bg);
-        border-top: 1px solid var(--border);
-        border-radius: var(--radius) var(--radius) 0 0;
-        transform: translateY(103%);
-        transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-        padding-bottom: calc(10px + env(safe-area-inset-bottom));
-        max-height: 80vh;
-        overflow-y: auto;
-      }
-      #m-sheet.open {
-        transform: none;
-      }
-      .ms-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--border-faint);
-        font-size: calc(11px * var(--fscale));
-        letter-spacing: 2px;
-        color: var(--text-dim);
-        position: sticky;
-        top: 0;
-        background: var(--bg);
-      }
-      .ms-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 8px;
-        padding: 14px 12px;
-      }
-      .ms-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-        padding: 12px 4px;
-        background: transparent;
-        border: 1px solid var(--border-dim);
-        color: var(--text-dim);
-        font-family: var(--font-mono);
-        font-size: calc(10px * var(--fscale));
-        letter-spacing: 1px;
-        cursor: pointer;
-        border-radius: var(--radius);
-        transition: all 0.15s;
-      }
-      .ms-item svg {
-        width: 17px;
-        height: 17px;
-      }
-      .ms-item:hover {
-        color: var(--text);
-        border-color: var(--text);
-      }
-      .ms-item:active {
-        transform: scale(0.94);
-      }
-      .ms-item.danger {
-        color: var(--accent-red);
-        border-color: rgba(204, 51, 51, 0.4);
-      }
-      .ic {
-        display: inline-flex;
-      }
-      #zp-sync-label {
-        margin-left: 8px;
-      }
-      @media (min-width: 721px) {
-        #m-nav,
-        #m-tabs,
-        #m-mask,
-        #m-sheet {
-          display: none !important;
-        }
-      }
-      @media (pointer: coarse), (max-width: 720px) {
-        ::-webkit-scrollbar {
-          width: 0 !important;
-          height: 0 !important;
-          display: none !important;
-        }
-        *,
-        *::before,
-        *::after {
-          scrollbar-width: none !important;
-        }
-      }
-
-      @media (max-width: 720px) {
-        #menu-trigger,
-        #top-menu {
-          display: none !important;
-        }
-        #main {
-          padding: 50px 14px calc(96px + env(safe-area-inset-bottom));
-        }
-        body.menu-pinned #main,
-        body:not(.menu-pinned) #main {
-          padding-top: 50px;
-        }
-        body.sb-hidden #main {
-          padding-bottom: calc(28px + env(safe-area-inset-bottom));
-        }
-        #ds-head {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 4px;
-          padding-bottom: 10px;
-        }
-        #ch-title {
-          font-size: calc(20px * var(--fscale));
-          letter-spacing: 2px;
-        }
-        #ch-sub {
-          margin-left: 0;
-        }
-        #ch-right {
-          display: none;
-        }
-        #sheet-bar {
-          left: 12px;
-          right: 12px;
-          max-width: none;
-          bottom: calc(64px + env(safe-area-inset-bottom));
-          flex-wrap: nowrap;
-          overflow-x: auto;
-          scrollbar-width: none;
-          padding-bottom: 2px;
-        }
-        body.sb-hidden #sheet-bar {
-          bottom: calc(8px + env(safe-area-inset-bottom));
-        }
-        #status-bar {
-          display: none;
-        }
-        #notification {
-          bottom: auto;
-          top: 54px;
-          max-width: 92vw;
-          white-space: normal;
-          text-align: center;
-        }
-        #view-sql.on {
-          flex-direction: column;
-        }
-        .sql-pane.left {
-          width: 100%;
-          min-width: 0;
-          border-right: 1px solid var(--border-dim);
-          border-bottom: none;
-          max-height: 46%;
-        }
-        .sql-pane.right {
-          min-height: 180px;
-        }
-        .dropdown {
-          left: 10px !important;
-          right: 10px !important;
-          width: auto !important;
-          min-width: 0 !important;
-          top: auto !important;
-          bottom: calc(76px + env(safe-area-inset-bottom)) !important;
-          max-height: 66vh;
-        }
-        .seg.mini {
-          width: 132px;
-        }
-        #m-nav,
-        #m-tabs {
-          display: flex !important;
-        }
-        #m-tabs {
-          padding: 4px 0 2px;
-        }
-        .mt-item {
-          padding: 8px 0 6px;
-          font-size: 9px;
-        }
-        .mt-item svg {
-          width: 18px;
-          height: 18px;
-        }
-        .ms-grid {
-          gap: 5px;
-          padding: 10px 8px;
-        }
-        .ms-item {
-          padding: 8px 2px;
-          font-size: 9px;
-          gap: 4px;
-        }
-        .ms-item svg {
-          width: 14px;
-          height: 14px;
-        }
-        .ms-head {
-          padding: 8px 12px;
-          font-size: 10px;
-        }
-        .modal-box {
-          width: 96vw;
-          max-height: 82vh;
-        }
-      }
-
-      @media print {
-        #menu-trigger,
-        #top-menu,
-        #status-bar,
-        #sheet-bar,
-        #notification,
-        #splash,
-        #custom-confirm,
-        #modal,
-        #m-nav,
-        #m-tabs,
-        #m-mask,
-        #m-sheet,
-        #ctx-bar,
-        .dropdown,
-        .gh-res,
-        .gr-res,
-        #res-tip,
-        #cell-preview {
-          display: none !important;
-        }
-        #main {
-          position: static !important;
-          padding: 0 !important;
-          inset: auto !important;
-          height: auto !important;
-          overflow: visible !important;
-        }
-      }
-    </style>
-
-    <style id="zp-cloud-sync-style">
-      #zp-cloud-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 12000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        background: rgba(0, 0, 0, 0.28);
-        backdrop-filter: blur(5px);
-      }
-      #zp-cloud-modal.open {
-        display: flex;
-      }
-      #zp-cloud-card {
-        width: 460px;
-        max-width: calc(100vw - 28px);
-        max-height: calc(100vh - 32px);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        background: var(--bg);
-        color: var(--text);
-        border: 1px solid var(--border-dim);
-        border-radius: var(--radius);
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-      }
-      .zp-cloud-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 14px 16px;
-        border-bottom: 1px solid var(--border-faint);
-        flex: 0 0 auto;
-      }
-      .zp-cloud-title {
-        font-size: calc(12px * var(--fscale));
-        letter-spacing: 2px;
-        font-weight: 500;
-        min-width: 0;
-      }
-      .zp-cloud-close {
-        width: 28px;
-        height: 28px;
-        flex: 0 0 28px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid transparent;
-        background: transparent;
-        color: var(--text-dim);
-        cursor: pointer;
-        font: inherit;
-        border-radius: var(--radius);
-        padding: 0;
-      }
-      .zp-cloud-close:hover {
-        border-color: var(--border-dim);
-        color: var(--text);
-      }
-      .zp-cloud-body {
-        padding: 16px;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        -webkit-overflow-scrolling: touch;
-        min-height: 0;
-      }
-      .zp-cloud-status {
-        padding: 9px 10px;
-        border: 1px solid var(--border-faint);
-        color: var(--text-dim);
-        font-size: calc(11px * var(--fscale));
-        line-height: 1.5;
-        border-radius: var(--radius);
-      }
-      .zp-cloud-field {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        margin-top: 12px;
-        min-width: 0;
-      }
-      .zp-cloud-label {
-        font-size: calc(9px * var(--fscale));
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        color: var(--text-faint);
-      }
-      .zp-cloud-input {
-        width: 100%;
-        max-width: 100%;
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border-dim);
-        padding: 8px 9px;
-        outline: none;
-        font: inherit;
-        border-radius: var(--radius);
-        min-height: 36px;
-      }
-      .zp-cloud-input:focus {
-        border-color: var(--text);
-      }
-      .zp-cloud-help {
-        font-size: calc(10px * var(--fscale));
-        line-height: 1.55;
-        color: var(--text-faint);
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      .zp-cloud-note {
-        margin-top: 12px;
-        padding: 9px 10px;
-        border-left: 2px solid var(--text);
-        background: var(--hover);
-        font-size: calc(10px * var(--fscale));
-        line-height: 1.6;
-        color: var(--text-dim);
-        border-radius: var(--radius) !important;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      .zp-cloud-note strong {
-        color: var(--text);
-        font-weight: 500;
-      }
-      .zp-cloud-actions {
-        display: flex;
-        gap: 8px;
-        margin-top: 12px;
-        min-width: 0;
-      }
-      .zp-cloud-actions-3 {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-      .zp-cloud-btn {
-        flex: 1;
-        min-width: 0;
-        padding: 8px 10px;
-        background: transparent;
-        color: var(--text-dim);
-        border: 1px solid var(--border-dim);
-        cursor: pointer;
-        font: inherit;
-        border-radius: var(--radius);
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      .zp-cloud-btn:hover {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .zp-cloud-btn.primary {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .zp-cloud-btn.danger:hover {
-        color: var(--accent-red);
-        border-color: var(--accent-red);
-      }
-      .zp-cloud-hidden {
-        display: none !important;
-      }
-
-      .zp-remember {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        margin-top: 8px;
-        cursor: pointer;
-        user-select: none;
-        -webkit-user-select: none;
-        font-size: calc(10px * var(--fscale));
-        line-height: 1.55;
-        color: var(--text-dim);
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      .zp-remember:hover {
-        color: var(--text);
-      }
-      .zp-remember input {
-        position: absolute;
-        width: 0;
-        height: 0;
-        opacity: 0;
-        pointer-events: none;
-      }
-      .zp-cbox {
-        width: 14px;
-        height: 14px;
-        margin-top: 2px;
-        flex: 0 0 auto;
-        box-sizing: border-box;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: transparent;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        transition: border-color 0.15s ease;
-      }
-      .zp-cbox svg {
-        width: 9px;
-        height: 9px;
-        display: block;
-        fill: none;
-        stroke: var(--accent-green);
-        stroke-width: 2.6;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        opacity: 0;
-        transition: opacity 0.15s ease;
-      }
-      .zp-remember input:checked + .zp-cbox svg {
-        opacity: 1;
-      }
-      /* 同步策略 */
-      .zp-autosync {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 12px;
-        padding: 9px 10px;
-        border: 1px solid var(--border-dim);
-        border-radius: var(--radius);
-      }
-      .zp-autosync-main {
-        min-width: 0;
-        flex: 1 1 auto;
-      }
-      .zp-autosync-title {
-        font-size: calc(10px * var(--fscale));
-        color: var(--text);
-        line-height: 1.45;
-      }
-      .zp-autosync-desc {
-        margin-top: 3px;
-        font-size: calc(9px * var(--fscale));
-        line-height: 1.6;
-        color: var(--text-faint);
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      .zp-autosync-btn {
-        flex: 0 0 auto;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: 30px;
-        padding: 6px 10px;
-        background: transparent;
-        color: var(--text-dim);
-        border: 1px solid var(--border-dim);
-        cursor: pointer;
-        font: inherit;
-        font-size: calc(10px * var(--fscale));
-        line-height: 1.4;
-        border-radius: var(--radius);
-        white-space: nowrap;
-      }
-      .zp-autosync-btn:hover {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .zp-autosync-btn.on {
-        color: var(--text);
-        border-color: var(--border);
-      }
-      .zp-as-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--text-faint);
-        flex: 0 0 auto;
-        display: inline-block;
-      }
-      .zp-autosync-btn.on .zp-as-dot {
-        background: var(--accent-green);
-      }
-      /* 开启云同步前的警告 */
-      .zp-warn-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 13000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        background: rgba(0, 0, 0, 0.28);
-        backdrop-filter: blur(5px);
-        box-sizing: border-box;
-      }
-      .zp-warn-modal.open {
-        display: flex;
-      }
-      .zp-warn-card {
-        width: 400px;
-        max-width: calc(100vw - 28px);
-        max-height: calc(100vh - 40px);
-        overflow: auto;
-        background: var(--bg);
-        color: var(--text);
-        border: 1px solid var(--border-dim);
-        border-radius: var(--radius);
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-        padding: 16px;
-        box-sizing: border-box;
-      }
-      .zp-warn-title {
-        font-size: calc(12px * var(--fscale));
-        letter-spacing: 1.6px;
-        font-weight: 500;
-        line-height: 1.5;
-      }
-      .zp-warn-body {
-        margin-top: 10px;
-        padding: 10px;
-        border-left: 2px solid var(--accent-red);
-        background: var(--hover);
-        font-size: calc(10px * var(--fscale));
-        line-height: 1.7;
-        color: var(--text-dim);
-        border-radius: var(--radius);
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      .zp-warn-actions {
-        display: flex;
-        gap: 8px;
-        margin-top: 14px;
-      }
-      .zp-sync-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--text-faint);
-        display: inline-block;
-        flex: 0 0 auto;
-      }
-      .zp-online .zp-sync-dot {
-        background: var(--accent-green);
-      }
-      .zp-busy .zp-sync-dot {
-        animation: zpSyncPulse 1s ease-in-out infinite;
-      }
-      @keyframes zpSyncPulse {
-        0%,
-        100% {
-          opacity: 0.35;
-          transform: scale(0.8);
-        }
-        50% {
-          opacity: 1;
-          transform: scale(1.1);
-        }
-      }
-      #zp-sql-box {
-        width: 100%;
-        height: auto;
-        min-height: 0;
-        overflow: hidden;
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border-dim);
-        padding: 9px;
-        font: inherit;
-        line-height: 1.55;
-        resize: none;
-        border-radius: var(--radius);
-        user-select: none;
-        cursor: default;
-        display: block;
-        box-sizing: border-box;
-        scrollbar-width: none;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      #zp-sql-box::-webkit-scrollbar {
-        display: none;
-        width: 0;
-        height: 0;
-      }
-      .zp-cloud-input,
-      .zp-cloud-btn,
-      .zp-cloud-close,
-      #zp-sql-box,
-      .zp-cloud-status,
-      .zp-cloud-note {
-        border-radius: var(--radius) !important;
-      }
-      .zp-cloud-copy-status {
-        min-height: 1.2em;
-        margin-top: 7px;
-        font-size: calc(9px * var(--fscale));
-        line-height: 1.4;
-        color: var(--text-dim);
-        text-align: left;
-        overflow-wrap: anywhere;
-      }
-      .zp-cloud-copy-status.show {
-        color: var(--text);
-      }
-      #zp-cloud-modal ::selection {
-        background: rgba(136, 136, 136, 0.3);
-        color: inherit;
-      }
-      .zp-cloud-footer {
-        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-        border-top: 1px solid var(--border-faint);
-        font-size: calc(9px * var(--fscale));
-        line-height: 1.6;
-        color: var(--text-faint);
-        flex: 0 0 auto;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-      @media (max-width: 720px) {
-        #zp-cloud-modal {
-          padding: 0;
-          align-items: flex-end;
-        }
-        #zp-cloud-card {
-          width: 100%;
-          max-width: none;
-          max-height: min(92vh, 760px);
-          border-radius: var(--radius) var(--radius) 0 0;
-          border-left: 0;
-          border-right: 0;
-          border-bottom: 0;
-        }
-        .zp-cloud-head {
-          padding: 13px 14px;
-        }
-        .zp-cloud-title {
-          font-size: calc(11px * var(--fscale));
-          letter-spacing: 1.5px;
-        }
-        .zp-cloud-close {
-          width: 32px;
-          height: 32px;
-          flex-basis: 32px;
-        }
-        .zp-cloud-body {
-          padding: 14px;
-          overflow-y: auto;
-        }
-        .zp-cloud-field {
-          margin-top: 10px;
-        }
-        .zp-cloud-input {
-          min-height: 40px;
-          padding: 9px 10px;
-          font-size: calc(12px * var(--fscale));
-        }
-        .zp-cloud-help {
-          line-height: 1.6;
-        }
-        .zp-cloud-note {
-          line-height: 1.65;
-          padding: 10px;
-        }
-        .zp-cloud-actions {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 8px;
-          margin-top: 10px;
-        }
-        .zp-cloud-actions-3 {
-          grid-template-columns: 1fr;
-        }
-        .zp-cloud-btn {
-          width: 100%;
-          min-height: 40px;
-          padding: 9px 11px;
-          font-size: calc(11px * var(--fscale));
-          line-height: 1.5;
-        }
-        #zp-sql-box {
-          font-size: calc(10px * var(--fscale));
-          line-height: 1.55;
-          padding: 9px;
-        }
-        .zp-cloud-copy-status {
-          margin-top: 6px;
-          font-size: calc(9px * var(--fscale));
-        }
-        .zp-cloud-footer {
-          padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-          font-size: calc(9px * var(--fscale));
-          line-height: 1.65;
-        }
-      }
-      @media (min-width: 721px) {
-        #zp-cloud-modal {
-          overscroll-behavior: contain;
-        }
-      }
-      @media (max-width: 380px) {
-        .zp-cloud-body {
-          padding: 12px;
-        }
-        .zp-cloud-head {
-          padding: 12px;
-        }
-        .zp-cloud-footer {
-          padding-left: 12px;
-          padding-right: 12px;
-        }
-      }
-
-      /* ---------- responsive ----------
-         The data grid scrolls horizontally on its own, but the head and the
-         context bar have to fold on a tablet. */
-      @media (max-width: 900px) {
-        #ds-head {
-          flex-wrap: wrap;
-          row-gap: 4px;
-        }
-        #ch-right {
-          gap: 10px;
-        }
-        #ctx-bar {
-          gap: 6px;
-        }
-      }
-      @media (max-width: 720px) {
-        #sheet-bar {
-          left: 8px;
-          right: 8px;
-        }
-      }
-    </style>
   </head>
   <body class="bg-void">
     <!-- ===== Splash ===== -->
@@ -3093,7 +113,7 @@
           data-i18n-title="sync.openTitle"
           title="Supabase 云同步"
         >
-          <span class="zp-sync-dot"></span><span id="zp-sync-label">未配置</span>
+          <span class="zen-sync-dot"></span><span id="zp-sync-label">未配置</span>
         </div>
       </div>
       <div
@@ -3752,13 +772,13 @@
     </div>
 
     <!-- ===== Cloud Sync Modal ===== -->
-    <div id="zp-cloud-modal" aria-hidden="true" inert>
-      <div id="zp-cloud-card" role="dialog" aria-modal="true" aria-labelledby="zp-cloud-title">
-        <div class="zp-cloud-head">
-          <div class="zp-cloud-title" id="zp-cloud-title" data-i18n="sync.title">云同步</div>
+    <div id="zen-cloud-modal" aria-hidden="true" inert>
+      <div id="zen-cloud-card" role="dialog" aria-modal="true" aria-labelledby="zen-cloud-title">
+        <div class="zen-cloud-head">
+          <div class="zen-cloud-title" id="zen-cloud-title" data-i18n="sync.title">云同步</div>
           <button
-            class="zp-cloud-close"
-            id="zp-cloud-close"
+            class="zen-cloud-close"
+            id="zen-cloud-close"
             type="button"
             data-i18n-title="sync.close"
             aria-label="关闭"
@@ -3766,15 +786,15 @@
             ×
           </button>
         </div>
-        <div class="zp-cloud-body">
-          <div class="zp-cloud-status" id="zp-cloud-status" data-i18n="sync.notConfigured">
+        <div class="zen-cloud-body">
+          <div class="zen-cloud-status" id="zen-cloud-status" data-i18n="sync.notConfigured">
             未配置 Supabase
           </div>
           <div id="zp-config-panel">
-            <div class="zp-cloud-field">
-              <div class="zp-cloud-label" data-i18n="sync.projectUrl">Project URL</div>
+            <div class="zen-cloud-field">
+              <div class="zen-cloud-label" data-i18n="sync.projectUrl">Project URL</div>
               <input
-                class="zp-cloud-input"
+                class="zen-cloud-input"
                 id="zp-sb-url"
                 type="url"
                 autocomplete="off"
@@ -3783,10 +803,10 @@
                 placeholder="https://xxxx.supabase.co"
               />
             </div>
-            <div class="zp-cloud-field">
-              <div class="zp-cloud-label" data-i18n="sync.publishableKey">Publishable Key</div>
+            <div class="zen-cloud-field">
+              <div class="zen-cloud-label" data-i18n="sync.publishableKey">Publishable Key</div>
               <input
-                class="zp-cloud-input"
+                class="zen-cloud-input"
                 id="zp-sb-key"
                 type="text"
                 autocomplete="off"
@@ -3794,14 +814,14 @@
                 data-i18n-placeholder="sync.keyPlaceholder"
                 placeholder="sb_publishable_..."
               />
-              <div class="zp-cloud-help" data-i18n="sync.keyHelp">
+              <div class="zen-cloud-help" data-i18n="sync.keyHelp">
                 只填 Supabase Publishable key，不要把 service_role / secret key 放进页面
               </div>
             </div>
-            <div class="zp-cloud-field">
-              <div class="zp-cloud-label" data-i18n="sync.authEmail">Auth 邮箱</div>
+            <div class="zen-cloud-field">
+              <div class="zen-cloud-label" data-i18n="sync.authEmail">Auth 邮箱</div>
               <input
-                class="zp-cloud-input"
+                class="zen-cloud-input"
                 id="zp-auth-email-config"
                 type="email"
                 autocomplete="off"
@@ -3809,27 +829,27 @@
                 data-i18n-placeholder="sync.emailPlaceholder"
                 placeholder="your@email.com"
               />
-              <div class="zp-cloud-help" data-i18n="sync.authEmailHelp">
+              <div class="zen-cloud-help" data-i18n="sync.authEmailHelp">
                 只保存邮箱地址用于登录；密码仅在勾选“记住密码”后保存到本机
               </div>
             </div>
-            <div class="zp-cloud-note">
+            <div class="zen-cloud-note">
               <strong data-i18n="sync.accountGuideTitle">账号与密码</strong><br /><span
                 data-i18n="sync.accountGuide"
                 >这个页面不提供注册请先登录 Supabase Dashboard，在 Authentication → Users 中创建一个
                 Auth 用户，然后使用该用户的邮箱和密码登录本应用</span
               >
             </div>
-            <div class="zp-cloud-actions">
+            <div class="zen-cloud-actions">
               <button
-                class="zp-cloud-btn primary"
+                class="zen-cloud-btn primary"
                 id="zp-save-config"
                 type="button"
                 data-i18n="sync.saveConfig"
               >
                 保存连接设置</button
               ><button
-                class="zp-cloud-btn"
+                class="zen-cloud-btn"
                 id="zp-open-dashboard"
                 type="button"
                 data-i18n="sync.openDashboard"
@@ -3837,23 +857,23 @@
                 打开 Supabase Dashboard
               </button>
             </div>
-            <div class="zp-cloud-actions">
-              <button class="zp-cloud-btn" id="zp-open-sql" type="button" data-i18n="sync.viewSql">
+            <div class="zen-cloud-actions">
+              <button class="zen-cloud-btn" id="zp-open-sql" type="button" data-i18n="sync.viewSql">
                 查看建表 SQL
               </button>
             </div>
           </div>
-          <div id="zp-auth-panel" class="zp-cloud-hidden">
-            <div class="zp-cloud-note">
+          <div id="zp-auth-panel" class="zen-cloud-hidden">
+            <div class="zen-cloud-note">
               <strong data-i18n="sync.loginGuideTitle">登录与同步</strong><br /><span
                 data-i18n="sync.loginGuide"
                 >登录时无需再次输入账号，账号邮箱来自连接设置，下面只需要输入密码</span
               >
             </div>
-            <div class="zp-cloud-field">
-              <div class="zp-cloud-label" data-i18n="sync.password">密码</div>
+            <div class="zen-cloud-field">
+              <div class="zen-cloud-label" data-i18n="sync.password">密码</div>
               <input
-                class="zp-cloud-input"
+                class="zen-cloud-input"
                 id="zp-password"
                 type="password"
                 autocomplete="current-password"
@@ -3861,13 +881,13 @@
                 data-i18n-placeholder="sync.passwordPlaceholder"
                 placeholder="Supabase 登录密码"
               />
-              <div class="zp-cloud-help" data-i18n="sync.passwordHelp">
+              <div class="zen-cloud-help" data-i18n="sync.passwordHelp">
                 密码用于 Supabase Auth 验证和客户端 AES 解密。勾选“记住密码”后只存在本机浏览器的
                 LocalStorage 里，不会上传到云端
               </div>
-              <label class="zp-remember" for="zp-remember-pw">
+              <label class="zen-remember" for="zp-remember-pw">
                 <input type="checkbox" id="zp-remember-pw" />
-                <span class="zp-cbox" aria-hidden="true"
+                <span class="zen-cbox" aria-hidden="true"
                   ><svg viewBox="0 0 12 12"><polyline points="1.6,6.4 4.4,9.2 10.4,2.9" /></svg
                 ></span>
                 <span data-i18n="sync.rememberPw"
@@ -3876,25 +896,25 @@
               </label>
             </div>
 
-            <div class="zp-autosync">
-              <div class="zp-autosync-main">
-                <div class="zp-autosync-title" data-i18n="sync.syncStrategy">同步策略</div>
-                <div class="zp-autosync-desc" id="zp-autosync-desc">
+            <div class="zen-autosync">
+              <div class="zen-autosync-main">
+                <div class="zen-autosync-title" data-i18n="sync.syncStrategy">同步策略</div>
+                <div class="zen-autosync-desc" id="zen-autosync-desc">
                   手动同步：只在点击同步按钮时与云端交换数据
                 </div>
               </div>
               <button
-                class="zp-autosync-btn"
-                id="zp-autosync-btn"
+                class="zen-autosync-btn"
+                id="zen-autosync-btn"
                 type="button"
                 aria-pressed="false"
               >
-                <span class="zp-as-dot"></span><span id="zp-autosync-text">手动同步</span>
+                <span class="zen-as-dot"></span><span id="zp-autosync-text">手动同步</span>
               </button>
             </div>
-            <div class="zp-cloud-actions zp-cloud-actions-3">
+            <div class="zen-cloud-actions zen-cloud-actions-3">
               <button
-                class="zp-cloud-btn primary"
+                class="zen-cloud-btn primary"
                 id="zp-login-only"
                 type="button"
                 data-i18n="sync.loginOnly"
@@ -3902,7 +922,7 @@
                 登录
               </button>
               <button
-                class="zp-cloud-btn"
+                class="zen-cloud-btn"
                 id="zp-login-pull"
                 type="button"
                 data-i18n="sync.loginAndPull"
@@ -3910,7 +930,7 @@
                 登录并从云端同步
               </button>
               <button
-                class="zp-cloud-btn"
+                class="zen-cloud-btn"
                 id="zp-login-push"
                 type="button"
                 data-i18n="sync.loginAndPush"
@@ -3918,9 +938,9 @@
                 登录并上传本地
               </button>
             </div>
-            <div class="zp-cloud-actions">
+            <div class="zen-cloud-actions">
               <button
-                class="zp-cloud-btn"
+                class="zen-cloud-btn"
                 id="zp-open-sql-auth"
                 type="button"
                 data-i18n="sync.viewSql"
@@ -3928,7 +948,7 @@
                 查看建表 SQL
               </button>
               <button
-                class="zp-cloud-btn danger"
+                class="zen-cloud-btn danger"
                 id="zp-signout"
                 type="button"
                 data-i18n="sync.signOut"
@@ -3936,26 +956,26 @@
                 退出登录
               </button>
             </div>
-            <div class="zp-cloud-actions zp-cloud-hidden" id="zp-sync-actions">
-              <button class="zp-cloud-btn" id="zp-sync-now" type="button" data-i18n="sync.syncNow">
+            <div class="zen-cloud-actions zen-cloud-hidden" id="zp-sync-actions">
+              <button class="zen-cloud-btn" id="zp-sync-now" type="button" data-i18n="sync.syncNow">
                 从云端同步</button
               ><button
-                class="zp-cloud-btn"
+                class="zen-cloud-btn"
                 id="zp-upload-now"
                 type="button"
                 data-i18n="sync.uploadNow"
               >
                 上传本地</button
-              ><button class="zp-cloud-btn" id="zp-lock" type="button" data-i18n="sync.lock">
+              ><button class="zen-cloud-btn" id="zp-lock" type="button" data-i18n="sync.lock">
                 锁定数据
               </button>
             </div>
           </div>
-          <div class="zp-cloud-hidden" id="zp-sql-panel">
-            <div class="zp-cloud-label" style="margin-bottom: 6px" data-i18n="sync.sqlEditor">
+          <div class="zen-cloud-hidden" id="zp-sql-panel">
+            <div class="zen-cloud-label" style="margin-bottom: 6px" data-i18n="sync.sqlEditor">
               SQL 编辑器
             </div>
-            <textarea id="zp-sql-box" readonly spellcheck="false">
+            <textarea id="zen-sql-box" readonly spellcheck="false">
 create table if not exists public.zendata_sync (
   user_id uuid primary key references auth.users(id) on delete cascade,
   payload text not null,
@@ -3987,16 +1007,16 @@ end $$;
 
 notify pgrst, 'reload schema';</textarea
             >
-            <div class="zp-cloud-actions">
+            <div class="zen-cloud-actions">
               <button
-                class="zp-cloud-btn primary"
+                class="zen-cloud-btn primary"
                 id="zp-copy-sql"
                 type="button"
                 data-i18n="sync.copySql"
               >
                 复制 SQL</button
               ><button
-                class="zp-cloud-btn"
+                class="zen-cloud-btn"
                 id="zp-back-config"
                 type="button"
                 data-i18n="sync.backConfig"
@@ -4004,28 +1024,28 @@ notify pgrst, 'reload schema';</textarea
                 返回设置
               </button>
             </div>
-            <div class="zp-cloud-copy-status" id="zp-sql-copy-status" aria-live="polite"></div>
+            <div class="zen-cloud-copy-status" id="zp-sql-copy-status" aria-live="polite"></div>
           </div>
         </div>
-        <div class="zp-cloud-footer" data-i18n="sync.footer">
+        <div class="zen-cloud-footer" data-i18n="sync.footer">
           Supabase Auth 负责身份验证，RLS 负责用户隔离；数据表内容上传前在浏览器端使用 AES-GCM
           加密。应用只使用 Publishable key，不需要 service_role / secret key
         </div>
       </div>
     </div>
 
-    <div id="zp-warn-modal" class="zp-warn-modal" aria-hidden="true">
-      <div class="zp-warn-card" role="dialog" aria-modal="true" aria-labelledby="zp-warn-title">
-        <div class="zp-warn-title" id="zp-warn-title" data-i18n="sync.warnTitle">
+    <div id="zen-warn-modal" class="zen-warn-modal" aria-hidden="true">
+      <div class="zen-warn-card" role="dialog" aria-modal="true" aria-labelledby="zen-warn-title">
+        <div class="zen-warn-title" id="zen-warn-title" data-i18n="sync.warnTitle">
           开启云同步前请注意
         </div>
-        <div class="zp-warn-body" id="zp-warn-body" data-i18n="sync.warnBody">
+        <div class="zen-warn-body" id="zen-warn-body" data-i18n="sync.warnBody">
           开启后，本页的任何改动都会立刻写入云端并覆盖此前保存的云端数据。<br />
           云端不会保留任何历史记录的备份，误删除、误改动都无法回滚，并且会立刻影响到所有登录同一账号的设备。
         </div>
-        <div class="zp-warn-actions">
+        <div class="zen-warn-actions">
           <button
-            class="zp-cloud-btn"
+            class="zen-cloud-btn"
             id="zp-warn-cancel"
             type="button"
             data-i18n="sync.warnCancel"
@@ -4033,7 +1053,7 @@ notify pgrst, 'reload schema';</textarea
             取消
           </button>
           <button
-            class="zp-cloud-btn primary"
+            class="zen-cloud-btn primary"
             id="zp-warn-ok"
             type="button"
             data-i18n="sync.warnOk"
@@ -12092,12 +9112,12 @@ notify pgrst, 'reload schema';</textarea
           var tag = (el.tagName || '').toLowerCase()
           if (tag === 'input' || tag === 'textarea' || tag === 'select') return false
           if (el.isContentEditable) return false
-          if (el.closest && el.closest('#zp-cloud-modal, #zp-warn-modal')) return false
+          if (el.closest && el.closest('#zen-cloud-modal, #zen-warn-modal')) return false
           return true
         }
         /* 焦点在云同步弹窗内时不响应应用级快捷键，由弹窗与浏览器自行处理 */
         function inCloudModal(el) {
-          return !!(el && el.closest && el.closest('#zp-cloud-modal, #zp-warn-modal'))
+          return !!(el && el.closest && el.closest('#zen-cloud-modal, #zen-warn-modal'))
         }
 
         function bind() {
@@ -13374,7 +10394,7 @@ notify pgrst, 'reload schema';</textarea
           var p = prefs(),
             cb = E('zp-remember-pw')
           if (cb) cb.checked = p.remember
-          var b = E('zp-autosync-btn')
+          var b = E('zen-autosync-btn')
           if (b) {
             b.classList.toggle('on', p.autoSync)
             b.setAttribute('aria-pressed', p.autoSync ? 'true' : 'false')
@@ -13382,14 +10402,14 @@ notify pgrst, 'reload schema';</textarea
               E('zp-autosync-text').textContent = tr(
                 p.autoSync ? 'sync.modeAuto' : 'sync.modeManual',
               )
-            if (E('zp-autosync-desc'))
-              E('zp-autosync-desc').textContent = tr(
+            if (E('zen-autosync-desc'))
+              E('zen-autosync-desc').textContent = tr(
                 p.autoSync ? 'sync.modeAutoDesc' : 'sync.modeManualDesc',
               )
           }
         }
         function openWarn(onOk, onCancel) {
-          var m = E('zp-warn-modal'),
+          var m = E('zen-warn-modal'),
             ok = E('zp-warn-ok'),
             cc = E('zp-warn-cancel')
           if (!m || !ok || !cc) {
@@ -13460,7 +10480,7 @@ notify pgrst, 'reload schema';</textarea
         function setMsg(key) {
           state.statusKey = key
           var v = tr.apply(null, arguments)
-          if (E('zp-cloud-status')) E('zp-cloud-status').textContent = v
+          if (E('zen-cloud-status')) E('zen-cloud-status').textContent = v
           var lbl = E('zp-sync-label')
           if (lbl) lbl.textContent = v
         }
@@ -13627,12 +10647,12 @@ notify pgrst, 'reload schema';</textarea
         function statusKey(k) {
           state.statusKey = k
           var v = tr(k)
-          var e = E('zp-cloud-status')
+          var e = E('zen-cloud-status')
           if (e) e.textContent = v
         }
 
         function setStatusText(v) {
-          var e = E('zp-cloud-status')
+          var e = E('zen-cloud-status')
           if (e) e.textContent = v
         }
 
@@ -13649,12 +10669,12 @@ notify pgrst, 'reload schema';</textarea
           var e = E('zp-sync-label')
           if (e) e.textContent = tr(k)
           var b = E('zp-sync-btn')
-          if (b) b.classList.toggle('zp-online', !!on)
+          if (b) b.classList.toggle('zen-online', !!on)
         }
         function busy(v) {
           state.busy = !!v
           var b = E('zp-sync-btn')
-          if (b) b.classList.toggle('zp-busy', !!v)
+          if (b) b.classList.toggle('zen-busy', !!v)
         }
         function toast(m) {
           try {
@@ -13944,10 +10964,10 @@ notify pgrst, 'reload schema';</textarea
           var c = cfg(),
             ok = !!(c.url && c.key)
           syncPrefsUI()
-          toggleCls('zp-config-panel', 'zp-cloud-hidden', ok)
-          toggleCls('zp-auth-panel', 'zp-cloud-hidden', !ok)
-          toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
-          toggleCls('zp-sync-actions', 'zp-cloud-hidden', !session || !unlockPassword)
+          toggleCls('zp-config-panel', 'zen-cloud-hidden', ok)
+          toggleCls('zp-auth-panel', 'zen-cloud-hidden', !ok)
+          toggleCls('zp-sql-panel', 'zen-cloud-hidden', true)
+          toggleCls('zp-sync-actions', 'zen-cloud-hidden', !session || !unlockPassword)
           setText('zp-login-pull', tr(session ? 'sync.unlockAndPull' : 'sync.loginAndPull'))
           setText('zp-login-push', tr(session ? 'sync.unlockAndPush' : 'sync.loginAndPush'))
           setText('zp-login-only', tr(session ? 'sync.unlock' : 'sync.loginOnly'))
@@ -14092,7 +11112,7 @@ notify pgrst, 'reload schema';</textarea
           labelKey('sync.loggedInLocked', true)
         }
         function openModal() {
-          var m = E('zp-cloud-modal')
+          var m = E('zen-cloud-modal')
           if (!m) return
           refresh()
           refreshI18n()
@@ -14105,7 +11125,7 @@ notify pgrst, 'reload schema';</textarea
           }, 0)
         }
         function closeModal() {
-          var m = E('zp-cloud-modal')
+          var m = E('zen-cloud-modal')
           if (!m) return
           var a = document.activeElement
           if (a && m.contains(a) && typeof a.blur === 'function') a.blur()
@@ -14116,10 +11136,10 @@ notify pgrst, 'reload schema';</textarea
           if (b && typeof b.focus === 'function') b.focus()
         }
         function refreshI18n() {
-          var m = E('zp-cloud-modal')
+          var m = E('zen-cloud-modal')
           if (!m) return
           m.querySelectorAll('[data-i18n]').forEach(function (x) {
-            if (x.id === 'zp-cloud-status') return
+            if (x.id === 'zen-cloud-status') return
             x.textContent = tr(x.dataset.i18n)
           })
           m.querySelectorAll('[data-i18n-title]').forEach(function (x) {
@@ -14141,14 +11161,14 @@ notify pgrst, 'reload schema';</textarea
           if (E('zp-password')) E('zp-password').placeholder = tr('sync.passwordPlaceholder')
           var st = E('zp-sync-label')
           if (st) st.textContent = tr(state.statusKey || 'sync.unconfiguredLabel')
-          if (!state.busy && E('zp-cloud-status'))
+          if (!state.busy && E('zen-cloud-status'))
             setStatusText(tr(state.statusKey || 'sync.notConfigured'))
 
           syncPrefsUI()
-          var wm = E('zp-warn-modal')
+          var wm = E('zen-warn-modal')
           if (wm) {
             wm.querySelectorAll('[data-i18n]').forEach(function (x) {
-              if (x.id === 'zp-warn-body') x.innerHTML = tr(x.dataset.i18n)
+              if (x.id === 'zen-warn-body') x.innerHTML = tr(x.dataset.i18n)
               else x.textContent = tr(x.dataset.i18n)
             })
           }
@@ -14172,7 +11192,7 @@ notify pgrst, 'reload schema';</textarea
           },
         }
         function autosizeSql() {
-          var x = E('zp-sql-box')
+          var x = E('zen-sql-box')
           if (!x) return
           x.style.height = 'auto'
           x.style.height = x.scrollHeight + 'px'
@@ -14188,9 +11208,9 @@ notify pgrst, 'reload schema';</textarea
               }
             }
           }
-          var c = E('zp-cloud-close')
+          var c = E('zen-cloud-close')
           if (c) c.onclick = closeModal
-          var m = E('zp-cloud-modal')
+          var m = E('zen-cloud-modal')
           if (m)
             m.onclick = function (e) {
               if (e.target === m) closeModal()
@@ -14222,14 +11242,14 @@ notify pgrst, 'reload schema';</textarea
             if (!w) toast(tr('sync.openDashboardFailed'))
           }
           E('zp-open-sql').onclick = function () {
-            toggleCls('zp-config-panel', 'zp-cloud-hidden', true)
-            toggleCls('zp-auth-panel', 'zp-cloud-hidden', true)
-            toggleCls('zp-sql-panel', 'zp-cloud-hidden', false)
+            toggleCls('zp-config-panel', 'zen-cloud-hidden', true)
+            toggleCls('zp-auth-panel', 'zen-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zen-cloud-hidden', false)
             autosizeSql()
             statusKey('sync.tableMissing')
           }
           E('zp-back-config').onclick = function () {
-            toggleCls('zp-sql-panel', 'zp-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zen-cloud-hidden', true)
             refresh()
           }
           E('zp-copy-sql').onclick = async function () {
@@ -14237,10 +11257,10 @@ notify pgrst, 'reload schema';</textarea
             if (n) n.classList.remove('show')
             try {
               if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(E('zp-sql-box').value)
+                await navigator.clipboard.writeText(E('zen-sql-box').value)
               } else {
                 var t = document.createElement('textarea')
-                t.value = E('zp-sql-box').value
+                t.value = E('zen-sql-box').value
                 t.setAttribute('readonly', '')
                 t.style.position = 'fixed'
                 t.style.left = '-9999px'
@@ -14288,26 +11308,26 @@ notify pgrst, 'reload schema';</textarea
               savePrefs({ remember: on, password: on ? v : '' })
               setMsg(on ? 'sync.rememberOn' : 'sync.rememberOff')
             }
-          if (E('zp-autosync-btn'))
-            E('zp-autosync-btn').onclick = function (e) {
+          if (E('zen-autosync-btn'))
+            E('zen-autosync-btn').onclick = function (e) {
               e.preventDefault()
               toggleAutoSync()
             }
           document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return
-            var wm = E('zp-warn-modal')
+            var wm = E('zen-warn-modal')
             if (wm && wm.classList.contains('open')) {
               var cc = E('zp-warn-cancel')
               if (cc) cc.click()
               return
             }
-            var mm = E('zp-cloud-modal')
+            var mm = E('zen-cloud-modal')
             if (mm && mm.classList.contains('open')) closeModal()
           })
           E('zp-open-sql-auth').onclick = function () {
-            toggleCls('zp-config-panel', 'zp-cloud-hidden', true)
-            toggleCls('zp-auth-panel', 'zp-cloud-hidden', true)
-            toggleCls('zp-sql-panel', 'zp-cloud-hidden', false)
+            toggleCls('zp-config-panel', 'zen-cloud-hidden', true)
+            toggleCls('zp-auth-panel', 'zen-cloud-hidden', true)
+            toggleCls('zp-sql-panel', 'zen-cloud-hidden', false)
             autosizeSql()
             statusKey('sync.tableMissing')
           }
@@ -14333,7 +11353,7 @@ notify pgrst, 'reload schema';</textarea
             autoSyncOn = false
             stopWatcher()
             var sp = E('zp-sql-panel')
-            if (sp) sp.classList.add('zp-cloud-hidden')
+            if (sp) sp.classList.add('zen-cloud-hidden')
             refresh()
             statusKey('sync.loggedOut')
             labelKey('sync.unconfiguredLabel', false)

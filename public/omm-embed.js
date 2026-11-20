@@ -96,11 +96,34 @@
         mime: data.mime,
       });
     }
+    /* 工作台广播的主题/强调色/圆角统一落到 zen 令牌，产品页不再各自维护一套。 */
+    function applyZenTheme(data) {
+      if (!data) return;
+      var root = document.documentElement;
+      var dark = data.theme === 'dark';
+      root.setAttribute('data-theme', dark ? 'dark' : 'light');
+      document.body.classList.toggle('theme-dark', dark);
+      var map = {
+        '--zen-radius': data.radius == null ? null : Number(data.radius) + 'px',
+        '--zen-fscale': data.scale == null ? null : String(data.scale)
+      };
+      Object.keys(map).forEach(function (key) {
+        if (map[key] == null) return;
+        root.style.setProperty(key, String(map[key]));
+      });
+      root.style.setProperty('--radius', map['--zen-radius'] || root.style.getPropertyValue('--radius'));
+    }
+
     window.addEventListener('message', function (event) {
       if (event.source !== window.parent) return;
       if (!isTrustedParentOrigin(event.origin)) return;
       var data = event.data;
-      if (!data || data.type !== 'omm:load-file') return;
+      if (!data) return;
+      if (data.type === 'omm:theme') {
+        applyZenTheme(data);
+        return;
+      }
+      if (data.type !== 'omm:load-file') return;
       takeFile(data);
     });
     window.addEventListener('omm-desktop-ready', function () {
