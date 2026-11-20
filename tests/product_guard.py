@@ -23,6 +23,8 @@ REGISTRY product ids / entry pages / release catalog stay in sync with the
        single source of truth (``plugin_specs.BUILTIN_PLUGINS``)
 RUNTIME only the official ``ai`` product may declare the local-code-execution
        runtime; third-party plugin.json files can never opt into it
+PRIVACY Planner's editor-only hidden items must never enter any data snapshot
+        that the AI workspace or ZenReview can read
 VERSION layered version model: suite version strict across release surfaces,
        product versions compared only within the same product, and content
        fingerprints flag changes that forgot to bump a version
@@ -557,6 +559,52 @@ def _product_version_issues(catalog, versions) -> list[Issue]:
     return issues
 
 
+def check_privacy(files, exists) -> list[Issue]:
+    """Planner's editor-only hidden items must never reach the AI or ZenReview.
+
+    ``ed.hidden`` marks a Planner event as "visible in the editor only" and the
+    UI masks its title with ``•••••`` elsewhere. Both snapshot producers must
+    drop those rows at the source, and the AI context renderer must drop them
+    again as a defense-in-depth backstop. This check pins all three invariants.
+    """
+    issues = []
+    hub = files.get("public/omm-hub.js", "")
+    if "zp-data-v2" in hub:
+        # Locate the planner aggregation block and require a hidden guard inside it.
+        start = hub.find("planner: (function ()")
+        end = hub.find("})(),", start) if start >= 0 else -1
+        segment = hub[start:end] if start >= 0 and end > start else ""
+        if not segment or "e.hidden === true" not in segment:
+            issues.append(Issue("PRIVACY", "public/omm-hub.js", 0,
+                                "Hub planner 快照未过滤 hidden 隐藏项"))
+
+    base = "public/agent_workspace/"
+    # Central privacy module must exist and define the hidden mask.
+    privacy = files.get(base + "omm_privacy.py", "")
+    if "HIDDEN_MASK" not in privacy or "def scrub" not in privacy:
+        issues.append(Issue("PRIVACY", base + "omm_privacy.py", 0,
+                            "统一隐私模块缺失或不完整"))
+
+    # AI context source must go through the shared scrub backstop.
+    host = files.get(base + "omm_host.py", "")
+    if "omm_live_context" in host and "from .omm_privacy import scrub" not in host:
+        issues.append(Issue("PRIVACY", base + "omm_host.py", 0,
+                            "AI 实时上下文未使用统一隐私过滤"))
+
+    # Every OMM tool must be wrapped so hidden items never leak via tool output.
+    tools = files.get(base + "omm_tools.py", "")
+    if "build_tools" in tools and "_privacy_wrapped" not in tools:
+        issues.append(Issue("PRIVACY", base + "omm_tools.py", 0,
+                            "工具未统一包装隐私过滤"))
+
+    # Every skill must carry the privacy red line.
+    skills = files.get(base + "omm_skills.py", "")
+    if "build_skills" in skills and "PRIVACY_RULE" not in skills:
+        issues.append(Issue("PRIVACY", base + "omm_skills.py", 0,
+                            "技能缺少隐私红线守则"))
+    return issues
+
+
 def check_version(files, exists) -> list[Issue]:
     """Layered version model: suite strict, product local, fingerprint-driven."""
     baseline_text = files.get(BASELINE)
@@ -780,6 +828,7 @@ CHECKS: list[Check] = [
     Check("A11Y", "可访问名称", False, check_a11y),
     Check("REGISTRY", "产品注册表一致性", False, check_registry),
     Check("RUNTIME", "ai 运行时仅官方可用", False, check_runtime),
+    Check("PRIVACY", "隐藏日程不进入 AI 快照", False, check_privacy),
     Check("VERSION", "分层版本与内容指纹", False, check_version),
 ]
 

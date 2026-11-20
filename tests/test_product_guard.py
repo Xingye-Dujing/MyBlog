@@ -257,6 +257,55 @@ class RuntimeCheckTests(unittest.TestCase):
         self.assertTrue(any("运行时注册表缺少 ai" in i.message for i in issues))
 
 
+class PrivacyCheckTests(unittest.TestCase):
+    def _files(self, **overrides):
+        base = "public/agent_workspace/"
+        files = {
+            "public/omm-hub.js": "planner: (function () { if (e.hidden === true) return; })(),",
+            base + "omm_privacy.py": "HIDDEN_MASK = '...'\ndef scrub(v): pass",
+            base + "omm_host.py": "def omm_live_context():\n  from .omm_privacy import scrub",
+            base + "omm_tools.py": "def build_tools():\n  return [_privacy_wrapped(s) for s in TOOLS]",
+            base + "omm_skills.py": "PRIVACY_RULE = '...'\ndef build_skills(): pass",
+        }
+        files.update(overrides)
+        return files
+
+    def test_real_tree_filters_hidden_planner_items(self):
+        self.assertEqual(g.check_privacy(g.snapshot(), lambda t: True), [])
+
+    def test_missing_hub_guard_is_reported(self):
+        files = self._files(**{
+            "public/omm-hub.js": "zp-data-v2 ... planner: (function () { out.push({title:e.title}) })(),",
+        })
+        issues = g.check_privacy(files, lambda t: True)
+        self.assertTrue(any("Hub planner" in i.message for i in issues))
+
+    def test_missing_host_backstop_is_reported(self):
+        files = self._files(**{
+            "public/agent_workspace/omm_host.py": "def omm_live_context():\n  pass",
+        })
+        issues = g.check_privacy(files, lambda t: True)
+        self.assertTrue(any("统一隐私过滤" in i.message for i in issues))
+
+    def test_missing_unified_privacy_module_is_reported(self):
+        files = self._files(**{"public/agent_workspace/omm_privacy.py": "pass"})
+        issues = g.check_privacy(files, lambda t: True)
+        self.assertTrue(any("统一隐私模块" in i.message for i in issues))
+
+    def test_missing_tool_wrapper_is_reported(self):
+        files = self._files(**{"public/agent_workspace/omm_tools.py": "def build_tools(): return TOOLS"})
+        issues = g.check_privacy(files, lambda t: True)
+        self.assertTrue(any("工具未统一包装" in i.message for i in issues))
+
+    def test_missing_skill_privacy_rule_is_reported(self):
+        files = self._files(**{"public/agent_workspace/omm_skills.py": "def build_skills(): pass"})
+        issues = g.check_privacy(files, lambda t: True)
+        self.assertTrue(any("技能缺少隐私红线" in i.message for i in issues))
+
+    def test_all_layers_present_is_clean(self):
+        self.assertEqual(g.check_privacy(self._files(), lambda t: True), [])
+
+
 class VersionCheckTests(unittest.TestCase):
     def _files(self):
         version = str(g.VERSION)
