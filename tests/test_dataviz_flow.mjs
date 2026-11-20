@@ -83,7 +83,7 @@ test('exportReview 把图表摘要追加到复盘键并限量 50 条', () => {
   const status = []
   const fn = new Function('localStorage', 'state', 'setStatus', 'Date', 'String',
     extractFunction(viz, 'exportReview') + '\nreturn exportReview;'
-  )(localStorage, { title: '新趋势', type: 'bar', data: [{ a: 1, b: 2 }] },
+  )(localStorage, { title: '新趋势', type: 'bar', data: { headers: ['a', 'b'], rows: [{ a: 1, b: 2 }] } },
     (m) => status.push(m), Date, String)
   fn()
   const list = JSON.parse(store['zen.viz.review.v1'])
