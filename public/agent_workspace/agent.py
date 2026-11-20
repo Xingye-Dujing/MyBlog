@@ -162,6 +162,13 @@ class Agent:
         conversation_id = request.conversation_id
         conversation = store.get_conversation(conversation_id, account)
         if not conversation:
+            # Conversation ids are globally unique in the store. An id that belongs to
+            # another account must be refused by name instead of reaching the INSERT and
+            # leaking a raw sqlite3.IntegrityError out of the generator.
+            if conversation_id and store.get_conversation(conversation_id):
+                raise AIError(
+                    'conversation.foreign', kind='refused', key='conversation.foreign', reason=conversation_id
+                )
             conversation = store.create_conversation(account, title='', conversation_id=conversation_id)
             conversation_id = conversation['id']
             yield event('conversation', conversation_id=conversation_id)
@@ -258,7 +265,10 @@ class Agent:
             ]
             allowed -= {'ask_user_question', 'request_approval'}
 
-        rounds = 0
+        # A "Continue" answer to the max-rounds question resumes the loop with the
+        # round counter it already reached. Pop it so only that resumed turn inherits
+        # it; later user turns start from zero again.
+        rounds = int(request.context_payload.pop('rounds_done', 0) or 0)
         max_rounds = int(services.settings.get('tools.max_rounds', 30))
         while True:
             if cancel is not None and getattr(cancel, 'is_set', lambda: False)():
@@ -284,9 +294,22 @@ class Agent:
             )
             history, history_meta = self.fit_history(history, window, reserved)
             context_meta['history'] = history_meta
+            # `_user_row` already persists the user message before this loop, so it is
+            # part of `history` in every flow (normal / retry / resume). Appending it
+            # again sent the same message to the provider twice. Never duplicate it.
             provider_messages = list(history)
-            if not resuming or retrying:
-                provider_messages.append({'role': 'user', 'content': text, 'meta': {'context_text': replay_text}})
+            if retrying:
+                # A retry regenerates the last answer: everything after the last user
+                # message (the failed assistant reply, its tool calls/results) must be
+                # dropped, otherwise the provider continues from that reply instead of
+                # answering the user's question again.
+                last_user = next(
+                    (i for i in range(len(provider_messages) - 1, -1, -1)
+                     if provider_messages[i].get('role') == 'user'),
+                    -1,
+                )
+                if last_user >= 0:
+                    provider_messages = provider_messages[:last_user + 1]
             payload = {
                 'system': self._system(request, skill, provider, account),
                 'messages': replay_context(provider_messages),
@@ -406,9 +429,17 @@ class Agent:
                     return
             rounds += 1
             if max_rounds and rounds >= max_rounds:
+                call_id = new_id('call_round')
+                # Register the decision so `_resume` can tell "Continue" from "Stop"
+                # instead of always starting a fresh turn for both.
+                services.pending[call_id] = {
+                    'kind': 'rounds',
+                    'conversation_id': conversation_id,
+                    'rounds': rounds,
+                }
                 yield event(
                     'question',
-                    call_id=new_id('call_round'),
+                    call_id=call_id,
                     question='Continue or stop?',
                     options=['Continue', 'Stop'],
                     detail={'rounds': rounds},
@@ -515,7 +546,13 @@ class Agent:
         elif name == 'request_approval':
             tool = str(args.get('tool') or '')
             exact = args.get('args') or {}
-            spec = tools.get(tool, account)
+            try:
+                spec = tools.get(tool, account)
+            except AIError as exc:
+                content = {'error': exc.message, 'kind': exc.kind, 'key': exc.key}
+                yield event('tool_result', call_id=call_id, tool=name, content=content, is_error=True)
+                self._persist_tool_result(conversation_id, turn_id, call_id, name, content, True)
+                return 'continue'
             if tool not in allowed:
                 # The offer list is the contract here too: approval may not be
                 # used to promote a tool the turn never advertised.
@@ -533,7 +570,13 @@ class Agent:
                 yield event('tool_result', call_id=call_id, tool=name, content=content, is_error=True)
                 self._persist_tool_result(conversation_id, turn_id, call_id, name, content, True)
                 return 'continue'
-            spec = tools.check(name, {'account': account})
+            try:
+                spec = tools.check(name, {'account': account})
+            except AIError as exc:
+                content = {'error': exc.message, 'kind': exc.kind, 'key': exc.key}
+                yield event('tool_result', call_id=call_id, tool=name, content=content, is_error=True)
+                self._persist_tool_result(conversation_id, turn_id, call_id, name, content, True)
+                return 'continue'
             auto = bool(services.settings.get('approval.auto', True))
             if spec.mutating and not auto and not services.approvals.consume(conversation_id, name, args):
                 yield from self._ask_approval(
@@ -635,6 +678,17 @@ class Agent:
             conversation_id, turn_id, call_id, pending.get('tool', 'question'), content, bool(content.get('error'))
         )
         yield event('tool_result', call_id=call_id, tool=pending.get('tool', 'question'), content=content)
+        if pending.get('kind') == 'rounds':
+            selection = selected.get('selected') if isinstance(selected, dict) else selected
+            if isinstance(selection, str):
+                selection = [selection]
+            choice = str((selection or [''])[0]).strip().lower()
+            request.answers = None
+            request.resume_call_id = ''
+            if choice == 'stop':
+                yield event('done', stop_reason='max_rounds')
+                return
+            request.context_payload['rounds_done'] = int(pending.get('rounds') or 0)
         request.answers = None
         request.resume_call_id = ''
         request.context_payload['resume_mode'] = True

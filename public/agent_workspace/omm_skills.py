@@ -20,6 +20,8 @@ COMMON_TOOLS = (
     'omm_product_info',
     'omm_product_list',
     'omm_spec_search',
+    'omm_spec_read',
+    'omm_channel_info',
     'omm_workspace_status',
     'omm_format_list',
     'omm_format_template',

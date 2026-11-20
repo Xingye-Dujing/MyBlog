@@ -478,6 +478,11 @@ class Store:
             raise ValueError('invalid skill id')
         if str(manifest.get('prompt') or '').strip().startswith(('import ', 'from ')):
             raise ValueError('a user skill may not contain code')
+        # ids are globally unique in the table; without this guard a second account
+        # using the same id silently overwrites the first account's skill.
+        owner = self._db.execute('SELECT account FROM skills WHERE id=?', (skill_id,)).fetchone()
+        if owner is not None and owner['account'] != account:
+            raise ValueError('skill id belongs to another account')
         self._run(
             'INSERT INTO skills (id, account, manifest, created_at) VALUES (?,?,?,?) '
             'ON CONFLICT(id) DO UPDATE SET manifest=excluded.manifest',
@@ -625,6 +630,9 @@ class Store:
         from .types import new_id
 
         script_id = str(payload.get('id') or '').strip() or new_id('script')
+        owner = self._db.execute('SELECT account FROM python_scripts WHERE id=?', (script_id,)).fetchone()
+        if owner is not None and owner['account'] != account:
+            raise ValueError('script id belongs to another account')
         existing = self.get_script(script_id, account)
         version = int(existing.get('version') or 0) + 1
         row = {

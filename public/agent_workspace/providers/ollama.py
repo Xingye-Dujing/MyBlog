@@ -173,6 +173,32 @@ class OllamaProvider(Provider):
                 blocks = message.get('blocks') or []
                 text = ''.join(str(block.get('text') or '') for block in blocks if block.get('type') == 'text')
                 calls = []
+                # Canonical history from Agent.provider_messages uses the OpenAI shape:
+                # a top-level `tool_calls` list with `function.arguments` as a JSON string.
+                # Older/provider-native payloads carry tool_use blocks instead. Support both,
+                # otherwise every tool round after the first loses its calls and leaves an
+                # orphan tool result that the daemon rejects.
+                for call in message.get('tool_calls') or []:
+                    function = call.get('function') if isinstance(call, dict) else {}
+                    function = function if isinstance(function, dict) else {}
+                    name = str(function.get('name') or (call.get('name') if isinstance(call, dict) else '') or '')
+                    if not name:
+                        continue
+                    arguments = function.get('arguments')
+                    if isinstance(arguments, str):
+                        try:
+                            arguments = json.loads(arguments or '{}')
+                        except (ValueError, TypeError):
+                            arguments = {}
+                    calls.append(
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': name,
+                                'arguments': arguments if isinstance(arguments, dict) else {},
+                            },
+                        }
+                    )
                 for block in blocks:
                     if block.get('type') != 'tool_use' or not block.get('name'):
                         continue
@@ -194,14 +220,16 @@ class OllamaProvider(Provider):
             if role == 'tool':
                 block = next((item for item in message.get('blocks') or [] if item.get('type') == 'tool_result'), {})
                 content = block.get('content', message.get('content'))
-                out.append(
-                    {
-                        'role': 'tool',
-                        'content': json.dumps(content, ensure_ascii=False, default=str)
-                        if not isinstance(content, str)
-                        else content,
-                    }
-                )
+                tool_item: dict = {
+                    'role': 'tool',
+                    'content': json.dumps(content, ensure_ascii=False, default=str)
+                    if not isinstance(content, str)
+                    else content,
+                }
+                call_id = message.get('tool_call_id') or block.get('tool_use_id')
+                if call_id:
+                    tool_item['tool_call_id'] = str(call_id)
+                out.append(tool_item)
                 continue
             out.append({'role': 'user', 'content': str(message.get('content') or '')})
         return out

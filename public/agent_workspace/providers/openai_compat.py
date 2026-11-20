@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from ..errors import AIProviderError
 from ..types import ModelSpec, ProviderSpec, usage_totals
 from ..util import iter_sse_frames
 from .base import Provider, check_cancel, event, open_stream
@@ -109,6 +110,13 @@ class OpenAICompatibleProvider(Provider):
             (chunk for chunk in response.iter_content(chunk_size=1024)), cancel_event
         ):
             check_cancel(cancel_event)
+            # A generation can fail AFTER the first byte: the stream then ends with a
+            # frame carrying `error` and no choices, and never sends [DONE]. Reporting a
+            # normal `done` here leaves the user staring at a blank answer.
+            if payload.get('error'):
+                detail = payload['error']
+                detail = detail.get('message') if isinstance(detail, dict) else str(detail)
+                raise AIProviderError('ai.server', kind='network', detail=str(detail or '')[:300])
             if payload.get('usage'):
                 usage.update(payload['usage'])
             choices = payload.get('choices') or []

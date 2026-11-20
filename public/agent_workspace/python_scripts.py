@@ -83,17 +83,25 @@ class ScriptLibrary:
     def __init__(self, store):
         self.store = store
 
+    @staticmethod
+    def _builtin_id(account: str, identifier: str) -> str:
+        # ids are globally unique in the table. Namespace built-ins per account so
+        # seeding a second account cannot hit a UNIQUE constraint or overwrite the
+        # first account's built-ins.
+        return identifier if account in ('', 'default') else '%s:%s' % (account, identifier)
+
     def _seed(self, account: str) -> None:
         existing = {row['id'] for row in self.store.list_scripts(account)}
         for identifier, payload in BUILTINS.items():
-            if identifier in existing:
+            script_id = self._builtin_id(account, identifier)
+            if script_id in existing:
                 continue
             self.store._run(
                 """INSERT INTO python_scripts
                    (id, account, name, code, inputs, outputs, tags, version, builtin, created_at)
                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    identifier,
+                    script_id,
                     account,
                     payload['name'],
                     payload['code'],
@@ -114,6 +122,8 @@ class ScriptLibrary:
     def get(self, account: str, script_id: str) -> dict:
         self._seed(account)
         row = self.store.get_script(script_id, account)
+        if not row and script_id in BUILTINS:
+            row = self.store.get_script(self._builtin_id(account, script_id), account)
         return {**row, 'builtin': bool(row.get('builtin'))} if row else {}
 
     def code(self, account: str, script_id: str) -> str:
@@ -121,7 +131,9 @@ class ScriptLibrary:
 
     def save(self, account: str, payload: dict) -> dict:
         script_id = str(payload.get('id') or '').strip()
-        if script_id in BUILTINS:
+        if script_id in BUILTINS or script_id in {
+            self._builtin_id(account, identifier) for identifier in BUILTINS
+        }:
             from .errors import AIError
 
             raise AIError('python.builtinReadOnly', kind='refused', key='python.builtinReadOnly', reason=script_id)
