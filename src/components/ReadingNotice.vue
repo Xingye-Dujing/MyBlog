@@ -5,25 +5,32 @@ const visible = ref(false)
 const noticeBox = ref(null)
 const closeBtn = ref(null)
 let previouslyFocused = null
+let closed = false
 
 function isDesktop() {
   return window.innerWidth > 768
 }
 
+function maybeShow() {
+  // 视口尺寸是响应式的：首屏在手机宽度打开、之后旋转/放大到桌面宽度的用户
+  // 也应该看到提示，而不是被 mount 时那一次判断永久跳过。
+  if (!isDesktop() || closed || visible.value) return
+  if (localStorage.getItem('reading-notice-dismissed') === 'true') return
+  previouslyFocused = document.activeElement
+  visible.value = true
+  document.body.style.overflow = 'hidden'
+  nextTick(() => closeBtn.value?.focus())
+}
+
 onMounted(() => {
-  if (!isDesktop()) return
-  const dismissed = localStorage.getItem('reading-notice-dismissed')
-  if (dismissed !== 'true') {
-    previouslyFocused = document.activeElement
-    visible.value = true
-    document.body.style.overflow = 'hidden'
-    nextTick(() => closeBtn.value?.focus())
-  }
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('resize', maybeShow)
+  maybeShow()
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('resize', maybeShow)
   document.body.style.overflow = ''
 })
 
@@ -50,6 +57,7 @@ function handleKeydown(e) {
 }
 
 function close() {
+  closed = true
   visible.value = false
   document.body.style.overflow = ''
   previouslyFocused?.focus?.()

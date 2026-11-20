@@ -84,7 +84,15 @@
       els.done.hidden = true;
     });
 
-    loadConfig().then(loadCatalog);
+    loadConfig()
+      .then(loadCatalog)
+      .catch(function (error) {
+        // 配置接口失败时不能被目录接口“正在读取…”覆盖，否则用户只看到
+        // 一个无意义的“目录不可用”，无法发现安装目录从未加载成功。
+        els.summaryState.textContent = '配置加载失败';
+        els.install.disabled = true;
+        els.grid.innerHTML = '<div class="empty">安装配置加载失败：' + esc(error.message) + '</div>';
+      });
   }
 
   function loadConfig() {
@@ -106,7 +114,8 @@
         els.install.textContent = '开始安装';
       })
       .catch(function (error) {
-        els.grid.innerHTML = '<div class="empty">' + esc(error.message) + '</div>';
+        els.pluginDir.textContent = els.pluginDir.textContent || '—';
+        throw error;
       });
   }
 

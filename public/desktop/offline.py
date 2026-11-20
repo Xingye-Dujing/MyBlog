@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -64,6 +65,28 @@ PLUGIN_ASSETS = [
 ]
 
 
+_LOCAL_ASSET_RE = re.compile(
+    r"""(?:src|href)\s*=\s*["']([^"']+\.(?:js|css))["']""", re.I
+)
+
+
+def _copy_referenced_assets(html_name: str, dest: Path) -> None:
+    """Copy every top-level JS/CSS file the staged page actually references.
+
+    Hard-coded asset lists drift as products add shared modules (zen-link.js,
+    viz-bridge.js, data-viz.js, zen-canvas-layout.js, …), producing EXEs whose
+    <script src> tags 404. Deriving the list from the page keeps staging honest.
+    Vendor/remote paths are handled by copy_vendor and are deliberately skipped.
+    """
+    text = (ROOT / html_name).read_text(encoding="utf-8", errors="replace")
+    for ref in set(_LOCAL_ASSET_RE.findall(text)):
+        if "/" in ref or "\\" in ref or ref.lower().startswith(("http:", "https:", "//")):
+            continue
+        src = ROOT / ref
+        if src.is_file():
+            shutil.copy2(src, dest / src.name)
+
+
 def _copy_common(dest: Path) -> None:
     for asset in ("icon.ico", "icon-writer.ico", "icon-writer.png"):
         src = ROOT / asset
@@ -92,8 +115,8 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     # Build-environment note: the desktop build host blocks bulk directory
     # deletions (>50 entries per command). Staging therefore never removes the
     # destination; it creates it if missing and overwrites files in place, so
-    # the build stays under the delete guard. (Source file sets are stable,
-    # so leftover files from older builds are never an issue here.)
+    # the build stays under the delete guard. Referenced assets are derived from
+    # each page, so newly added shared modules are copied automatically.
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / html_name, dest / html_name)
     shutil.copy2(ROOT / "omm-embed.js", dest / "omm-embed.js")
@@ -101,6 +124,7 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     shutil.copy2(ROOT / "omm-share.js", dest / "omm-share.js")
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
+    _copy_referenced_assets(html_name, dest)
     copy_vendor(dest, app_id)
     return dest
 
@@ -111,14 +135,15 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
     # Build-environment note: the desktop build host blocks bulk directory
     # deletions (>50 entries per command). Staging therefore never removes the
     # destination; it creates it if missing and overwrites files in place, so
-    # the build stays under the delete guard. (Source file sets are stable,
-    # so leftover files from older builds are never an issue here.)
+    # the build stays under the delete guard. Referenced assets are derived from
+    # each page, so newly added shared modules are copied automatically.
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / item["entry"], dest / item["entry"])
     for asset in PLUGIN_ASSETS:
         src = ROOT / asset
         if src.is_file():
             shutil.copy2(src, dest / src.name)
+    _copy_referenced_assets(item["entry"], dest)
     if item.get("apl_font"):
         shutil.copy2(ROOT / "APL385.ttf", dest / "APL385.ttf")
     if item.get("examples"):
@@ -138,6 +163,7 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
         src = ROOT / asset
         if src.is_file():
             shutil.copy2(src, dest / src.name)
+    _copy_referenced_assets("omm-hub.html", dest)
     _copy_common(dest)
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
@@ -152,8 +178,8 @@ def stage_hub(dest: Path, common_assets=()) -> Path:
     # Build-environment note: the desktop build host blocks bulk directory
     # deletions (>50 entries per command). Staging therefore never removes the
     # destination; it creates it if missing and overwrites files in place, so
-    # the build stays under the delete guard. (Source file sets are stable,
-    # so leftover files from older builds are never an issue here.)
+    # the build stays under the delete guard. Referenced assets are derived from
+    # each page, so newly added shared modules are copied automatically.
     dest.mkdir(parents=True, exist_ok=True)
     _stage_shell(dest, common_assets=common_assets)
     for item in BUILTIN_PLUGINS:
@@ -166,8 +192,8 @@ def stage_framework(dest: Path, common_assets=()) -> Path:
     # Build-environment note: the desktop build host blocks bulk directory
     # deletions (>50 entries per command). Staging therefore never removes the
     # destination; it creates it if missing and overwrites files in place, so
-    # the build stays under the delete guard. (Source file sets are stable,
-    # so leftover files from older builds are never an issue here.)
+    # the build stays under the delete guard. Referenced assets are derived from
+    # each page, so newly added shared modules are copied automatically.
     dest.mkdir(parents=True, exist_ok=True)
     _stage_shell(dest, common_assets=common_assets)
     (dest / "plugins").mkdir(parents=True, exist_ok=True)
@@ -178,8 +204,8 @@ def stage_installer(dest: Path, common_assets=()) -> Path:
     # Build-environment note: the desktop build host blocks bulk directory
     # deletions (>50 entries per command). Staging therefore never removes the
     # destination; it creates it if missing and overwrites files in place, so
-    # the build stays under the delete guard. (Source file sets are stable,
-    # so leftover files from older builds are never an issue here.)
+    # the build stays under the delete guard. Referenced assets are derived from
+    # each page, so newly added shared modules are copied automatically.
     dest.mkdir(parents=True, exist_ok=True)
     for asset in INSTALLER_ASSETS:
         shutil.copy2(ROOT / asset, dest / asset)
