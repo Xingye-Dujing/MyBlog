@@ -32,7 +32,11 @@ onMounted(() => {
   const savedCollapsed = localStorage.getItem('sidebar-collapsed')
 
   if (savedWidth) {
-    sidebarWidth.value = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, Number(savedWidth)))
+    const width = Number(savedWidth)
+    // Math.max/min with NaN would emit `width: NaNpx` and collapse the layout.
+    if (Number.isFinite(width)) {
+      sidebarWidth.value = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, width))
+    }
   }
   if (savedCollapsed === 'true') {
     isCollapsed.value = true

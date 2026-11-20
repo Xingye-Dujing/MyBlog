@@ -78,6 +78,7 @@ def main() -> int:
         "test_hardening_regressions.mjs",
         "test_frontend_bugfixes.mjs",
         "test_frontend_bugfixes2.mjs",
+        "test_frontend_bugfixes3.mjs",
         "test_security_fixes.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",

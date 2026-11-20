@@ -88,6 +88,11 @@ function safeStyle(value) {
     .replace(/@import[^;]+;?/gi, '')
     .replace(/javascript\s*:/gi, '')
   return text.split(';').map((part) => {
+    // CSS escapes can re-assemble separators and functions AFTER this check:
+    // `width:1px\3b position\3a fixed` contains no literal ';' or ':' beyond the
+    // first, but the browser decodes `\3b`/`\3a` into them. Reject any backslash
+    // so the property whitelist sees exactly what the CSS parser will see.
+    if (part.includes('\\')) return ''
     const colon = part.indexOf(':')
     if (colon < 0) return ''
     const prop = part.slice(0, colon).trim().toLowerCase()

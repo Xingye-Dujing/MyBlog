@@ -16,7 +16,7 @@ const end = source.indexOf('function sanitizeHtml(')
 assert.notEqual(start, -1, 'ALLOWED_TAGS 未找到')
 assert.notEqual(end, -1, 'sanitizeHtml 未找到')
 const code = source.slice(start, end) + '\nreturn { sanitizeNode, safeUrl, safeStyle }'
-const { sanitizeNode, safeUrl } = vm.runInNewContext(
+const { sanitizeNode, safeUrl, safeStyle } = vm.runInNewContext(
   `(function () { ${code} })()`,
   { Set, Array, String, Math, Object, Number, URL,
     window: { location: { href: 'https://example.com/blog/' } } },
@@ -142,4 +142,11 @@ test('safeUrl 允许站点内与白名单协议，拒绝 javascript/data 脚本'
   assert.equal(safeUrl('#section'), true)
   assert.equal(safeUrl('javascript:alert(1)'), false)
   assert.equal(safeUrl('data:text/html;base64,PHNjcmlwdD4='), false)
+})
+
+test('style 白名单不被 CSS 转义绕过（\\3b / \\3a 重组分号与冒号）', () => {
+  const payload = 'width:1px\\3b position\\3a fixed\\3b top\\3a 0\\3b z-index\\3a 9999'
+  assert.equal(safeStyle(payload), '')
+  assert.ok(!/position|z-index/i.test(safeStyle(payload)))
+  assert.equal(safeStyle('color:red;font-weight:bold'), 'color:red;font-weight:bold')
 })
