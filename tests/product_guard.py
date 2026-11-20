@@ -25,6 +25,9 @@ RUNTIME only the official ``ai`` product may declare the local-code-execution
        runtime; third-party plugin.json files can never opt into it
 PRIVACY Planner's editor-only hidden items must never enter any data snapshot
         that the AI workspace or ZenReview can read
+GEN_FORMATS format-registry.json is the single source of truth: generated
+        Python constants and AI skeletons must match it byte-for-byte, every
+        bound validator / source / golden fixture must exist
 VERSION layered version model: suite version strict across release surfaces,
        product versions compared only within the same product, and content
        fingerprints flag changes that forgot to bump a version
@@ -40,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -605,6 +609,107 @@ def check_privacy(files, exists) -> list[Issue]:
     return issues
 
 
+def _load_format_generator():
+    """Load public/tools/gen_formats.py as a module for deterministic rendering."""
+    path = ROOT / "public" / "tools" / "gen_formats.py"
+    spec = importlib.util.spec_from_file_location("_omm_gen_formats", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_gen_formats(files, exists) -> list[Issue]:
+    """Pin format-registry.json as the single editable format contract.
+
+    Generated artifacts (``omm_formats_generated.py`` and the two copies of
+    ``formats.generated.md``) are re-rendered from the registry and compared
+    byte-for-byte. A stale generated file, a missing validator binding, a
+    missing implementing source or a missing golden fixture is a hard failure.
+    """
+    issues = []
+    reg_rel = "public/json-specs/format-registry.json"
+    if reg_rel in files:
+        registry_text = files[reg_rel]  # an explicit None means "missing"
+    else:
+        disk = ROOT / reg_rel
+        registry_text = disk.read_text(encoding="utf-8") if disk.exists() else None
+    if registry_text is None:
+        issues.append(Issue("GEN_FORMATS", reg_rel, 0, "格式契约注册表缺失"))
+        return issues
+    try:
+        registry = json.loads(registry_text)
+    except Exception as exc:
+        issues.append(Issue("GEN_FORMATS", reg_rel, 0, "注册表不是合法 JSON: %s" % exc))
+        return issues
+    if registry.get("schema") != 1:
+        issues.append(Issue("GEN_FORMATS", reg_rel, 0, "注册表 schema 不是 1"))
+        return issues
+    rows = registry.get("formats")
+    if not isinstance(rows, list) or not rows:
+        issues.append(Issue("GEN_FORMATS", reg_rel, 0, "注册表没有 formats"))
+        return issues
+
+    seen = set()
+    validators = files.get("public/agent_workspace/omm_validators.py", "")
+    if not validators:
+        disk = ROOT / "public" / "agent_workspace" / "omm_validators.py"
+        validators = disk.read_text(encoding="utf-8") if disk.exists() else ""
+    for row in rows:
+        key = (row.get("product"), row.get("kind"))
+        if key in seen:
+            issues.append(Issue("GEN_FORMATS", reg_rel, 0, "重复的契约: %s/%s" % key))
+        seen.add(key)
+        validator = row.get("validator")
+        if validator and "def %s(" % validator not in validators:
+            issues.append(Issue("GEN_FORMATS", reg_rel, 0,
+                                "校验器未在 omm_validators.py 定义: %s" % validator))
+        source = row.get("source") or ""
+        source_text = files.get(source)
+        if source_text is None:
+            disk = ROOT / source
+            source_text = disk.read_text(encoding="utf-8", errors="replace") if disk.exists() else None
+        if not source:
+            issues.append(Issue("GEN_FORMATS", reg_rel, 0, "契约缺少实现源码: %s" % (key,)))
+        elif source_text is None:
+            issues.append(Issue("GEN_FORMATS", source, 0, "契约对应的源码缺失"))
+        else:
+            token = row.get("format")
+            if token and token != "bridge" and row.get("kind") != "properties" and token not in source_text:
+                issues.append(Issue("GEN_FORMATS", source, 0,
+                                    "源码缺少注册的格式标识: %s" % token))
+        golden = row.get("golden")
+        if golden:
+            golden_rel = "tests/golden_formats/" + golden
+            if golden_rel not in files and not (ROOT / golden_rel).exists():
+                issues.append(Issue("GEN_FORMATS", golden_rel, 0, "Golden fixture 缺失"))
+
+    detection = registry.get("detection") or {}
+    for pid in sorted({row.get("product") for row in rows}):
+        if pid not in detection:
+            issues.append(Issue("GEN_FORMATS", reg_rel, 0, "产品缺少检测规则: %s" % pid))
+
+    generator = _load_format_generator()
+    if generator is None:
+        issues.append(Issue("GEN_FORMATS", "public/tools/gen_formats.py", 0, "无法加载格式生成器"))
+        return issues
+    expected = {
+        "public/agent_workspace/omm_formats_generated.py": generator.render_py(registry),
+        "public/json-specs/formats.generated.md": generator.render_md(registry),
+        "public/agent_workspace/omm_knowledge/formats.generated.md": generator.render_md(registry),
+    }
+    for rel, want in expected.items():
+        actual = files.get(rel)
+        if actual is None:
+            disk = ROOT / rel
+            actual = disk.read_text(encoding="utf-8") if disk.exists() else None
+        if actual != want:
+            issues.append(Issue("GEN_FORMATS", rel, 0,
+                                "生成物与注册表不一致，请运行 python public/tools/gen_formats.py"))
+    return issues
+
+
 def check_version(files, exists) -> list[Issue]:
     """Layered version model: suite strict, product local, fingerprint-driven."""
     baseline_text = files.get(BASELINE)
@@ -829,6 +934,7 @@ CHECKS: list[Check] = [
     Check("REGISTRY", "产品注册表一致性", False, check_registry),
     Check("RUNTIME", "ai 运行时仅官方可用", False, check_runtime),
     Check("PRIVACY", "隐藏日程不进入 AI 快照", False, check_privacy),
+    Check("GEN_FORMATS", "格式契约单一真源与生成物一致", False, check_gen_formats),
     Check("VERSION", "分层版本与内容指纹", False, check_version),
 ]
 

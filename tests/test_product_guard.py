@@ -306,6 +306,79 @@ class PrivacyCheckTests(unittest.TestCase):
         self.assertEqual(g.check_privacy(self._files(), lambda t: True), [])
 
 
+class GenFormatsCheckTests(unittest.TestCase):
+    def _fixture(self):
+        gen = g._load_format_generator()
+        registry = {
+            'schema': 1, 'checksum': 'fnv1a-utf16-base36',
+            'detection': {'zencard': [{'kind': 'card', 'mode': 'fallback'}]},
+            'formats': [{
+                'product': 'zencard', 'label': '卡片', 'kind': 'card',
+                'format': 'zen-card', 'version': 1, 'source': 'public/zen-card.js',
+                'validator': 'v_zencard', 'golden': 'zencard-card.json',
+                'fields': [], 'hard': [], 'template': {'format': 'zen-card'},
+                'enums': {}, 'ext': '.json',
+            }],
+        }
+        text = json.dumps(registry, ensure_ascii=False)
+        files = {
+            'public/json-specs/format-registry.json': text,
+            'public/agent_workspace/omm_validators.py': 'def v_zencard(...): pass',
+            'public/zen-card.js': 'zen-card',
+            'tests/golden_formats/zencard-card.json': '{}',
+            'public/agent_workspace/omm_formats_generated.py': gen.render_py(registry),
+            'public/json-specs/formats.generated.md': gen.render_md(registry),
+            'public/agent_workspace/omm_knowledge/formats.generated.md': gen.render_md(registry),
+        }
+        return files, registry
+
+    def test_clean_fixture_has_no_issues(self):
+        files, _ = self._fixture()
+        self.assertEqual(g.check_gen_formats(files, lambda t: True), [])
+
+    def test_missing_registry_is_reported(self):
+        # An explicit None simulates a missing file; an absent key would make
+        # the guard legitimately fall back to the real on-disk registry.
+        files, _ = self._fixture()
+        files['public/json-specs/format-registry.json'] = None
+        self.assertTrue(any('注册表缺失' in i.message
+                            for i in g.check_gen_formats(files, lambda t: True)))
+
+    def test_invalid_json_is_reported(self):
+        files, _ = self._fixture()
+        files['public/json-specs/format-registry.json'] = '{nope'
+        self.assertTrue(any('合法 JSON' in i.message
+                            for i in g.check_gen_formats(files, lambda t: True)))
+
+    def test_stale_generated_file_is_reported(self):
+        files, _ = self._fixture()
+        files['public/agent_workspace/omm_formats_generated.py'] = '# stale'
+        issues = g.check_gen_formats(files, lambda t: True)
+        self.assertTrue(any('生成物与注册表不一致' in i.message for i in issues))
+
+    def test_missing_validator_binding_is_reported(self):
+        files, _ = self._fixture()
+        files['public/agent_workspace/omm_validators.py'] = 'def other(...): pass'
+        self.assertTrue(any('校验器未' in i.message
+                            for i in g.check_gen_formats(files, lambda t: True)))
+
+    def test_format_token_missing_in_source_is_reported(self):
+        files, _ = self._fixture()
+        files['public/zen-card.js'] = 'no token here'
+        self.assertTrue(any('格式标识' in i.message
+                            for i in g.check_gen_formats(files, lambda t: True)))
+
+    def test_duplicate_contract_is_reported(self):
+        files, registry = self._fixture()
+        registry['formats'].append(dict(registry['formats'][0]))
+        files['public/json-specs/format-registry.json'] = json.dumps(registry, ensure_ascii=False)
+        self.assertTrue(any('重复的契约' in i.message
+                            for i in g.check_gen_formats(files, lambda t: True)))
+
+    def test_real_tree_is_clean(self):
+        self.assertEqual(g.check_gen_formats(g.snapshot(), lambda t: True), [])
+
+
 class VersionCheckTests(unittest.TestCase):
     def _files(self):
         version = str(g.VERSION)

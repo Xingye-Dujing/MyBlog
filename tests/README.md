@@ -37,6 +37,8 @@ python tests/product_guard.py --only FORMAT     # JSON 规范与产品源码一�
 python tests/product_guard.py --only SPEC_SYNC  # AI 知识副本与 json-specs 逐字一致
 python tests/product_guard.py --only RUNTIME    # ai 运行时仅官方可用
 python tests/product_guard.py --only PRIVACY    # 隐藏日程不进入 AI 快照
+python tests/product_guard.py --only GEN_FORMATS # 格式契约单一真源与生成物一致
+python public/tools/gen_formats.py --check        # 单独校验格式生成物是否最新
 python tests/product_guard.py --only VERSION    # 分层版本与内容指纹
 python tests/product_guard.py --record-baseline # 发布后重录版本基线（仅发布时执行）
 python tests/product_guard.py --suggest-bump    # 列出因内容变更而建议升版本的产品
@@ -105,9 +107,9 @@ npm run build                             # 前端生产构建
   不改文件，违规时以退出码 1 失败。脚本按字节读写以保留 CRLF/LF 原样。
 - 单元测试验证替换映射、幂等性与“源码中零违规”。
 
-**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，58 项）
+**`product_guard.py` / `test_product_guard.py`**（统一产品守卫，69 项）
 
-在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，15 个独立检查项
+在引号守卫之上扩展为覆盖整个 OMM-ZEN 产品面的统一 lint 框架，16 个独立检查项
 （`--list` 可查看，`--only` 可筛选）：
 
 | 代码 | 检查项 | 自动修正 |
@@ -125,6 +127,7 @@ npm run build                             # 前端生产构建
 | `SPEC_SYNC` | AI 工作区的 `omm_knowledge/` 副本与 `json-specs/` 真源逐字一致（含 README 别名） | 否 |
 | `RUNTIME` | 只有官方 `ai` 可声明 `runtime='ai'`；第三方 `plugin.json` 不得提权执行本机代码 | 否 |
 | `PRIVACY` | Planner 标记为“隐藏内容（仅编辑页可见）”的日程不得进入 Hub 快照或 AI 上下文 | 否 |
+| `GEN_FORMATS` | 格式契约注册表是单一真源：生成物逐字一致、校验器/源码/golden 绑定齐全 | 否 |
 | `FORMAT` | JSON 规范声明的格式标识同时出现在实现产品源码中，防止文档与代码漂移 | 否 |
 | `VERSION` | 分层版本模型：套件版本严格一致、产品版本只比同产品、内容指纹防漏升版本 | 否 |
 
@@ -165,7 +168,7 @@ npm run build                             # 前端生产构建
 - `test_cmdk_upgrade.mjs` Cmd+K 检索增强：子序列模糊评分（前缀加权）、`usageStats` 使用频率加权与稳定排序、本地即时命令（`= 算术`、`@date`、`hex/bin/oct` 换算，算术只接受安全字符）；面板本体未重建，仅在过滤阶段接入。
 - `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。另含 `OfflineChainTest`：阻断一切非本地网络请求后，建卡、建规则、ZenPack 导出与 Cmd+K 仍全部可用，把“完全离线”变成回归项。
-- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）、`VERSION`（套件版本一致、产品版本只比同产品、内容指纹防漏升、空 bump 与降级提示）、`SPEC_SYNC`（AI 知识副本与规范真源逐字一致）、`RUNTIME`（仅官方 `ai` 可执行本机代码）、`PRIVACY`（隐藏日程不进入 AI 快照）；37 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
+- `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）、`VERSION`（套件版本一致、产品版本只比同产品、内容指纹防漏升、空 bump 与降级提示）、`SPEC_SYNC`（AI 知识副本与规范真源逐字一致）、`RUNTIME`（仅官方 `ai` 可执行本机代码）、`PRIVACY`（隐藏日程不进入 AI 快照）、`GEN_FORMATS`（格式契约单一真源与生成物一致）；45 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
 - `test_json_specs.mjs` JSON 规范一致性：不只比对文档，直接调用 `ZenCard` / `ZenBackup` / `ZenPack` / `ZenSRS` / `ZenFlow` 的导出函数，断言产物满足 `format` / `v` / `cards[]` / `products[]` / `nodes` 等总表硬性要求，并验证卡片包、工作区包、SRS、规则序列化的往返。
 - `test_today_panel.mjs` 与 `tests/e2e/test_today_panel.py` Hub“今日”面板：纯函数聚合待复习卡片、卡片数、笔记、规则启用数与最近笔记/搜索；面板只读各产品既有 localStorage、复用 `activateApp`、不新增存储；E2E 在真实浏览器注入数据后校验面板数字与条目。
 - **AI 工作区对齐**：`no_jp_quotes.py` 现在扫描 OMM 自写的 `agent_workspace/omm_*.py`（上游框架子包保持原样），修复了 4 处漏网的角引号；AI 自带 `tools/check_quote_style.py` 排除 `.workbuddy/` 与 `vendor/` 后，原本被跳过的全仓库门禁恢复运行。`SPEC_SYNC` 守卫把 14 份知识副本绑定到 `json-specs/` 真源；`RUNTIME` 守卫把本机代码执行权限锁给官方 `ai`。`run_all.py` 接入 `pytest public/tests`，AI 工作区全部测试（含框架门禁、golden 对拍与实时数据上下文）纳入统一回归。
@@ -175,6 +178,7 @@ npm run build                             # 前端生产构建
 - **AI 学习包技能**：新增 `omm.zen.study` 技能（第 21 个），把实时数据变成复习卡片包/规则包草稿；`omm_live_data` 纳入所有技能的公共上下文，模型据此回答"我最近的数据…"。`test_omm_ai.py` 更新技能覆盖断言。
 - **ZenReview 从工作台拉取**：ZenReview 的"从工作台拉取"按钮复用同一条 `omm:live-data-request` 链路，Hub 快照新增 timeline（flowEvents）与 planner（`zp-data-v2` 扁平化）两类数据，自动填回粘贴框；明确 origin、token 校验、超时降级。测试见 `test_review_pull.mjs` 与 `test_knowledge_graph.mjs`。
 - **Data→Viz→Report**：可视化产品新增"复盘"导出按钮，把当前图表的标题/类型/行列数登记到 `zen.viz.review.v1`（限 50 条）；Hub 快照把它并入 timeline，ZenReview 拉取后自动纳入报告。测试见 `test_dataviz_flow.mjs` 与 `test_knowledge_graph.mjs`。
+- **格式契约单一真源**：新增 `public/json-specs/format-registry.json`，把 28 个（产品 × 格式）契约的 format token、版本、字段/枚举、硬门槛、最小模板、检测规则、深度校验器绑定、实现源码与 golden fixture 集中到一处。`public/tools/gen_formats.py` 由它生成 `omm_formats_generated.py`（`TEMPLATES` / `DETECTION` / `detect_kind` / 声明式校验）与 `formats.generated.md`（AI 工作区逐字镜像）。`omm_validators.py` 的模板表、检测 if 链和校验器绑定表已删除，改为使用生成物；深度语义校验器保留但由注册表的 `validator` 字段绑定，并由 golden fixtures 与硬门槛用例钉死。`GEN_FORMATS` 守卫把"生成物是否最新/绑定是否齐全"变成可执行约束，测试见 `public/tests/test_gen_formats.py` 与守卫单测。改契约流程：编辑注册表 → `python public/tools/gen_formats.py` → 跑回归。
 - **隐藏日程隐私保护（全链路）**：Planner 的 `ed.hidden` 项标记为"仅编辑页可见"，UI 用 `•••••` 掩码。新增统一隐私模块 `omm_privacy.py`（`HIDDEN_MASK` / `is_hidden` / `scrub`），覆盖所有 AI 数据读取路径：① Hub 的 `collectLiveLocalData()` 源头跳过 `e.hidden === true` 的日程；② `omm_host.omm_live_context` 用 `scrub()` 兜底；③ `omm_tools.build_tools()` 用 `_privacy_wrapped` 统一包装**所有工具**的返回值，隐藏项与凭据字段一律过滤；④ `build_skills()` 给**每个技能**注入"隐私红线"守则，禁止读取/引用/复述隐藏内容与凭据。这样新增工具或技能也自动受保护。`PRIVACY` 守卫锁死全部不变量，测试见 `test_omm_privacy.py`、`test_omm_live_context.py`、`test_knowledge_graph.mjs` 与守卫单测。
 - **Writer 引用回链复习**：引用节点 header 新增"习"按钮（仅带 `zenCardId` 的节点），经 Hub 的 `omm:review-card` 协议激活 ZenCard 并转发 `omm:focus-card`，ZenCard 切到卡片库、高亮并滚动到该卡片；两端都校验父窗口来源、明确 origin、无通配符。
 - **今日复习画布**：Writer 的卡片选择器新增"只看今日到期"筛选，读 `zen.srs.v1` 用 `due <= now` 过滤并标记"待复习"，避免引入新模块依赖。测试见 `test_writer_review_link.mjs` 与 E2E `test_writer_review_link.py`（真实浏览器验证筛选与复习按钮）。
