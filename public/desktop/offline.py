@@ -78,7 +78,7 @@ def _copy_referenced_assets(html_name: str, dest: Path) -> None:
     """Copy every top-level JS/CSS file the staged page actually references.
 
     Hard-coded asset lists drift as products add shared modules (zen-link.js,
-    viz-bridge.js, data-viz.js, zen-canvas-layout.js, …), producing EXEs whose
+    viz-bridge.js, data-viz.js, zen-canvas/layout-engine.js, …), producing EXEs whose
     <script src> tags 404. Deriving the list from the page keeps staging honest.
     Vendor/remote paths are handled by copy_vendor and are deliberately skipped.
     """

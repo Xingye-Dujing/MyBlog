@@ -1,4 +1,4 @@
-/* zen-canvas-layout.js — Writer“所思所想”画布自动布局引擎（通用纯函数）
+/* zen-canvas/layout-engine.js — Writer“所思所想”画布自动布局引擎（通用纯函数）
  * 本文件由 omm-writer.html 的 AUTO-LAYOUT CORE 区块原样抽取，逻辑未作改写。
  * Writer 与 ZenFlow 流程编辑器共同调用本模块，避免两处重复实现。
  *

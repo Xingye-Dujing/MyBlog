@@ -1066,7 +1066,7 @@
     var self = this
     var engine = (typeof global !== 'undefined' && global.ZenCanvasLayout) || this.opts.layout
     if (!engine || typeof engine.computeCanvasLayout !== 'function') {
-      this.opts.notify('未找到布局引擎（zen-canvas-layout.js）')
+      this.opts.notify('未找到布局引擎（zen-canvas/layout-engine.js）')
       return this
     }
     var list = this.state.nodes.map(function (n) {

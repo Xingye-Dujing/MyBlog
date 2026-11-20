@@ -10,11 +10,11 @@
 zen-canvas/
 ├── zen-canvas.css   # 画布样式（从 writer 画布样式原样抽取，类名保持一致）
 ├── zen-canvas.js    # 画布核心：节点 / 连线 / 视口 / 选择 / 历史 / 序列化 / 事件
-├── layout.js        # 布局引擎桥接（算法仍在根目录 zen-canvas-layout.js，单一真源）
+├── layout-engine.js # 6 策略自动布局引擎（唯一实现，纯函数）
 └── README.md        # 本文件
 ```
 
-根目录的 `zen-canvas-layout.js` 是 6 策略自动布局的**唯一实现**，writer 与
+`zen-canvas/layout-engine.js` 是 6 策略自动布局的**唯一实现**，writer 与
 zenflow 已经验证过；框架只调用，不复制。布局算法改动同样会同步到所有产品。
 
 ## 2. 从 writer 抽取了什么
@@ -61,7 +61,7 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 
 ```html
 <link rel="stylesheet" href="zen-canvas/zen-canvas.css">
-<script src="zen-canvas-layout.js"></script>
+<script src="zen-canvas/layout-engine.js"></script>
 <script src="zen-canvas/zen-canvas.js"></script>
 <div id="canvas-host" style="position:relative;width:100%;height:100%"></div>
 <script>
@@ -117,5 +117,5 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 ## 7. 变更纪律
 
 - 改画布交互 / 样式 → 只改 `zen-canvas/zen-canvas.js` 或 `.css`。
-- 改自动布局算法 → 只改根目录 `zen-canvas-layout.js`。
+- 改自动布局算法 → 只改 `zen-canvas/layout-engine.js`。
 - 产品特有逻辑（节点字段、执行引擎、面板）→ 放在产品自己的 JS 里，不要写进框架。
