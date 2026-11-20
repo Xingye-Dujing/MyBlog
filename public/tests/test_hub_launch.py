@@ -15,6 +15,24 @@ for path in (ROOT, ROOT / 'desktop'):
         sys.path.insert(0, str(path))
 
 
+def test_cli_hub_enables_desktop_bridge_by_default(monkeypatch):
+    import hub_server
+
+    monkeypatch.delenv('OMM_DESKTOP', raising=False)
+    monkeypatch.delenv('OMM_APP_ID', raising=False)
+    hub_server.configure_desktop_env()
+    assert os.environ['OMM_DESKTOP'] == '1'
+    assert os.environ['OMM_APP_ID'] == 'hub'
+
+
+def test_cli_hub_web_preview_keeps_public_behaviour(monkeypatch):
+    import hub_server
+
+    monkeypatch.setenv('OMM_DESKTOP', '1')
+    hub_server.configure_desktop_env(web_preview=True)
+    assert os.environ['OMM_DESKTOP'] == '0'
+
+
 def test_hub_starts_ai_plugin(tmp_path, monkeypatch):
     import offline
     from hub_server import HubServer

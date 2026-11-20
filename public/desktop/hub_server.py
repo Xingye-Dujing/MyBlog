@@ -10,8 +10,11 @@ runtime. The full offline build ships plugins under <root>/plugins; plugins
 installed by the user live in %LOCALAPPDATA%\\OMM-ZEN\\plugins (or the macOS
 equivalent) and override bundled plugins with the same id.
 
-Run the shell in a normal browser for UI work:
+Run the shell in a normal browser for UI work. The desktop bridge is enabled
+by default so /__omm/fs/* behaves like the packaged EXE:
     .venv\\Scripts\\python.exe desktop\\hub_server.py --plugins build\\plugin-dirs
+
+Pass --web-preview to exercise the public-website fallback instead.
 """
 from __future__ import annotations
 
@@ -1074,12 +1077,33 @@ def start_hub_server(root: Path, port: int = HUB_PORT, plugin_root: Path | None 
     return server.server_address[1]
 
 
+def configure_desktop_env(web_preview: bool = False) -> None:
+    """Set the desktop-bridge switch for a CLI-launched hub.
+
+    The packaged launcher sets OMM_DESKTOP itself; a bare ``python hub_server.py``
+    otherwise leaves every /__omm/fs/* route at 404 and the UI silently falls
+    back to localStorage. Enable the bridge for the dev shell by default, with
+    --web-preview keeping the public-website behaviour available.
+    """
+    if web_preview:
+        os.environ["OMM_DESKTOP"] = "0"
+    else:
+        os.environ.setdefault("OMM_DESKTOP", "1")
+    os.environ.setdefault("OMM_APP_ID", "hub")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the OMM-ZEN hub shell")
     parser.add_argument("--port", type=int, default=HUB_PORT)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--plugins", type=Path, default=None)
+    parser.add_argument(
+        "--web-preview",
+        action="store_true",
+        help="disable the /__omm/fs/* desktop bridge (public-website behaviour)",
+    )
     args = parser.parse_args()
+    configure_desktop_env(web_preview=args.web_preview)
     plugin_root = args.plugins.resolve() if args.plugins else None
     port = start_hub_server(args.root.resolve(), args.port, plugin_root=plugin_root)
     print("OMM-ZEN hub  http://127.0.0.1:%d/%s" % (port, HUB_HTML))
