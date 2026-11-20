@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 from .errors import AIError
 from .host import CallableContextSource, DefaultHostAdapter, HostEnvironment
 from .omm_data import CHANNELS, PRODUCT_IDS, PRODUCTS, ALL
-from .omm_privacy import scrub
+from .omm_privacy import scrub_result
 from .omm_privacy import is_secret_field
 from .omm_skills import build_skills
 from .omm_tools import KNOWLEDGE_DIR, build_tools
@@ -39,7 +39,11 @@ def omm_live_context(query: str, payload: dict, account: str = '') -> str:
     if not isinstance(live, dict) or not live:
         return ''
     # Unified privacy scrub: drops hidden items and masks credentials at once.
-    safe = scrub(live)
+    # scrub_result keeps a hidden top-level object as {'hidden': True, ...} instead
+    # of None, so a malicious cross-origin payload cannot break context assembly.
+    safe = scrub_result(live)
+    if not isinstance(safe, dict):
+        return ''
     lines = []
     labels = {
         'cards': '知识卡片',

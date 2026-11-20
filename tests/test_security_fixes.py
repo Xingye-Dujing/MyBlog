@@ -52,5 +52,31 @@ class SourceHardeningTests(unittest.TestCase):
         self.assertIn("_inside_any(path, [share_root()])", share)
 
 
+class LiveContextTests(unittest.TestCase):
+    def test_hidden_top_level_live_payload_degrades_to_empty_string(self):
+        from agent_workspace.omm_host import omm_live_context
+
+        payload = {'omm_live': {'hidden': True, 'cards': [{'content': 'x'}]}}
+        self.assertEqual(omm_live_context('', payload), '')
+
+    def test_live_context_still_renders_visible_cards(self):
+        from agent_workspace.omm_host import omm_live_context
+
+        payload = {'omm_live': {'cards': [{'content': 'note'}]}}
+        self.assertIn('知识卡片', omm_live_context('', payload))
+
+
+class LinkSchemeTests(unittest.TestCase):
+    def test_writer_inline_markdown_filters_javascript_urls(self):
+        src = (ROOT / "public" / "omm-writer.html").read_text(encoding="utf-8-sig")
+        self.assertIn("safeInlineUrl(url)", src)
+        self.assertNotIn("'<a href=\"$2\">$1</a>'", src)
+
+    def test_hub_plugin_homepage_filters_javascript_urls(self):
+        src = (ROOT / "public" / "omm-hub.js").read_text(encoding="utf-8-sig")
+        self.assertIn("safeUrl(app.homepage)", src)
+        self.assertNotIn("'<a href=\"' + esc(app.homepage)", src)
+
+
 if __name__ == "__main__":
     unittest.main()

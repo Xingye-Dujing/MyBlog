@@ -424,6 +424,17 @@
       .replace(/"/g, '&quot;');
   }
 
+  // Only allow link schemes that are safe to hand to an <a href>. Plugin
+  // manifests are untrusted input; esc() stops attribute breakout but does not
+  // stop a javascript: URL from being executable.
+  function safeUrl(value) {
+    var url = String(value || '').trim();
+    if (!url) return '';
+    if (/^(https?:|mailto:)/i.test(url)) return url;
+    if (/^(\/|\.\/|\.\.\/|#)/.test(url)) return url;
+    return '';
+  }
+
   var LOOPBACK_HOSTS = ['127.0.0.1', 'localhost', '[::1]', '::1'];
 
   function isLoopbackOrigin(origin) {
@@ -2896,9 +2907,9 @@
       '<div><dt>运行时</dt><dd>' + esc(app.runtime || 'static') + '</dd></div>' +
       '<div><dt>端口</dt><dd>' + esc(app.port || '—') + '</dd></div>' +
       '<div><dt>作者</dt><dd>' + esc(app.author || '—') + '</dd></div>' +
-      '<div><dt>主页</dt><dd>' + (app.homepage
-        ? '<a href="' + esc(app.homepage) + '" target="_blank" rel="noreferrer">' + esc(app.homepage) + '</a>'
-        : '—') + '</dd></div>' +
+      '<div><dt>主页</dt><dd>' + (safeUrl(app.homepage)
+        ? '<a href="' + esc(safeUrl(app.homepage)) + '" target="_blank" rel="noopener noreferrer">' + esc(app.homepage) + '</a>'
+        : esc(app.homepage || '—')) + '</dd></div>' +
       '</dl>' +
       '<h3 class="pp-detail-h3">共享权限声明</h3>' + channelHtml +
       '<p class="setting-hint">声明只代表插件申请的能力；实际连接规则由“存档 → 跨产品共享”决定，随时可以撤销。</p>' +

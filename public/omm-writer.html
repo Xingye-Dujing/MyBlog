@@ -6859,6 +6859,16 @@ notify pgrst, 'reload schema';</textarea
           })
         }
 
+        // Inline Markdown links are interpolated into innerHTML. Escaping stops
+        // attribute breakout but not a javascript:/vbscript: URL, so filter the
+        // scheme explicitly. The value is already HTML-escaped by the caller.
+        function safeInlineUrl(url) {
+          const value = String(url || '').trim()
+          if (/^(https?:|mailto:)/i.test(value)) return value
+          if (/^(\/|\.\/|\.\.\/|#)/.test(value)) return value
+          return ''
+        }
+
         function getComputedBg() {
           return getComputedStyle(document.body).backgroundColor || '#ffffff'
         }
@@ -10746,7 +10756,10 @@ notify pgrst, 'reload schema';</textarea
             s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
             s = s.replace(/`(.+?)`/g, '<code>$1</code>')
-            s = s.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
+            s = s.replace(/\[(.+?)\]\((.+?)\)/g, function (match, label, url) {
+              const safe = safeInlineUrl(url)
+              return safe ? '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>' : label
+            })
             return s
           },
           _renderMath(container) {
