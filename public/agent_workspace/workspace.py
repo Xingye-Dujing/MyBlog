@@ -113,9 +113,10 @@ class Workspace:
         if target.exists() and not target.is_file():
             raise AIError('workspace.notFile', kind='refused')
         target.parent.mkdir(parents=True, exist_ok=True)
+        existed = target.exists()
         payload = str(content).encode('utf-8')
         target.write_bytes(payload)
-        return {'path': relative, 'absolute': str(target), 'bytes': len(payload), 'created': not target.exists()}
+        return {'path': relative, 'absolute': str(target), 'bytes': len(payload), 'created': not existed}
 
     def snapshot(self) -> str:
         """A short folder notice for the context builder — names only, never contents."""
@@ -172,13 +173,15 @@ class Workspace:
             raise AIError('workspace.commandMissing', kind='not_found', reason=program) from exc
         except subprocess.TimeoutExpired as exc:
             raise AIError('workspace.commandTimeout', kind='timeout', reason=str(timeout)) from exc
-        output = (result.stdout or b'')[:max_bytes].decode('utf-8', errors='replace')
-        error = (result.stderr or b'')[:max_bytes].decode('utf-8', errors='replace')
+        stdout = result.stdout or b''
+        stderr = result.stderr or b''
+        output = stdout[:max_bytes].decode('utf-8', errors='replace')
+        error = stderr[:max_bytes].decode('utf-8', errors='replace')
         return {
             'command': command,
             'cwd': workdir,
             'returncode': result.returncode,
             'stdout': output,
             'stderr': error,
-            'truncated': result.returncode is None,
+            'truncated': len(stdout) > max_bytes or len(stderr) > max_bytes,
         }

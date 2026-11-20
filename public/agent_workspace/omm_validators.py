@@ -30,6 +30,16 @@ def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
+def _id(value: Any) -> str:
+    """把任意形态的 id 归一化为可哈希字符串。
+
+    导入内容来自不可信的 JSON：id 可能是数字、数组甚至对象。直接拿原值做
+    set/dict 的键会在对象/数组形态上抛 ``TypeError: unhashable type``，让
+    validate() 泄漏成 HTTP 500。所有 id 比较都先经过这里。
+    """
+    return '' if value is None else str(value)
+
+
 def _base36(number: int) -> str:
     digits = '0123456789abcdefghijklmnopqrstuvwxyz'
     if number == 0:
@@ -186,33 +196,33 @@ def v_annotate(obj: Any, text: str, r: Report) -> str:
                     continue
                 if not str(item.get('id') or '').strip():
                     r.error('project.%s[%d].id 不能为空' % (group, index))
-                elif item['id'] in ids:
+                elif _id(item['id']) in ids:
                     r.error('id 重复：%s（id 必须全局唯一）' % item['id'])
                 else:
-                    ids.add(item['id'])
+                    ids.add(_id(item['id']))
         doc_map = {str(d.get('id')): str(d.get('text') or '') for d in docs if isinstance(d, dict)}
         code_ids = {str(c.get('id')) for c in codes if isinstance(c, dict)}
         for index, ann in enumerate(r.array(project, 'anns', 'project')):
             if not isinstance(ann, dict):
                 continue
-            if ann.get('doc') not in doc_map:
+            if _id(ann.get('doc')) not in doc_map:
                 r.error('project.anns[%d].doc 指向不存在的文档 id' % index)
-            if ann.get('code') and ann['code'] not in code_ids:
+            if ann.get('code') and _id(ann['code']) not in code_ids:
                 r.error('project.anns[%d].code 指向不存在的编码 id' % index)
             start, end = ann.get('start'), ann.get('end')
             if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end < start:
                 r.error('project.anns[%d].start/end 必须是非负整数且 start <= end' % index)
-            elif ann.get('doc') in doc_map:
-                expected = doc_map[ann['doc']][start:end]
+            elif _id(ann.get('doc')) in doc_map:
+                expected = doc_map[_id(ann['doc'])][start:end]
                 if str(ann.get('quote') or '') != expected:
                     r.error('project.anns[%d].quote 必须等于 doc.text.slice(start,end)：应为 %r' % (index, expected))
         for index, cc in enumerate(r.array(project, 'cellCodes', 'project')):
             if not isinstance(cc, dict):
                 r.error('project.cellCodes[%d] 必须是对象' % index)
                 continue
-            if cc.get('table') not in doc_map:
+            if _id(cc.get('table')) not in doc_map:
                 r.error('project.cellCodes[%d].table 指向不存在的文档 id' % index)
-            if cc.get('code') and cc['code'] not in code_ids:
+            if cc.get('code') and _id(cc['code']) not in code_ids:
                 r.error('project.cellCodes[%d].code 指向不存在的编码 id' % index)
             row = cc.get('row')
             if not isinstance(row, int) or isinstance(row, bool) or row < 0:
@@ -256,7 +266,7 @@ def v_corpus(obj: Any, text: str, r: Report) -> str:
         if not isinstance(category, dict) or not str(category.get('id') or '').strip():
             r.error('categories[%d].id 不能为空' % index)
         else:
-            cat_ids.add(category['id'])
+            cat_ids.add(_id(category['id']))
     entry_ids = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
@@ -264,11 +274,11 @@ def v_corpus(obj: Any, text: str, r: Report) -> str:
             continue
         if not str(entry.get('en') or '').strip():
             r.error('entries[%d].en 不能为空' % index)
-        if entry.get('categoryId') not in cat_ids:
+        if _id(entry.get('categoryId')) not in cat_ids:
             r.error('entries[%d].categoryId 不在 categories 中' % index)
         if 'tags' in entry and not isinstance(entry['tags'], list):
             r.error('entries[%d].tags 必须是数组' % index)
-        identifier = entry.get('id')
+        identifier = _id(entry.get('id'))
         if identifier in entry_ids:
             r.error('entries[%d].id 重复' % index)
         entry_ids.add(identifier)
@@ -463,14 +473,14 @@ def v_planner(obj: Any, text: str, r: Report) -> str:
         if not isinstance(planner, dict) or not str(planner.get('id') or '').strip():
             r.error('planners[%d].id 不能为空' % index)
         else:
-            planner_ids.add(planner['id'])
+            planner_ids.add(_id(planner['id']))
     events_by = r.require(obj, 'eventsBy', '', dict)
     recurs_by = r.require(obj, 'recursBy', '', dict)
     for group, mapping in (('eventsBy', events_by), ('recursBy', recurs_by)):
         if not isinstance(mapping, dict):
             continue
         for key in mapping:
-            if key not in planner_ids:
+            if _id(key) not in planner_ids:
                 r.error('%s 的键 "%s" 未在 planners 中声明，数据会被静默丢弃' % (group, key))
     for pid, days in (events_by or {}).items():
         if not isinstance(days, dict):
@@ -593,9 +603,9 @@ def v_writer(obj: Any, text: str, r: Report) -> str:
         endpoints = [connection.get('from'), connection.get('to')]
         if all(not value for value in endpoints):
             endpoints = [connection.get('source'), connection.get('target')]
-        if any(value not in node_ids for value in endpoints):
+        if any(_id(value) not in node_ids for value in endpoints):
             r.error('%s 的端点必须指向真实存在的节点 id' % path)
-        if endpoints[0] == endpoints[1]:
+        if _id(endpoints[0]) == _id(endpoints[1]):
             r.error('%s 的两端不能是同一个节点' % path)
     return 'canvas'
 

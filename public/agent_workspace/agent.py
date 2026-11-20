@@ -516,10 +516,14 @@ class Agent:
             tool = str(args.get('tool') or '')
             exact = args.get('args') or {}
             spec = tools.get(tool, account)
-            if spec is None:
+            if tool not in allowed:
+                # The offer list is the contract here too: approval may not be
+                # used to promote a tool the turn never advertised.
+                content = {'error': 'tool.notOffered', 'tool': tool}
+            elif spec is None:
                 content = {'error': 'unknown tool', 'tool': tool}
             else:
-                yield from self._ask_approval(call_id, conversation_id, tool, exact, args, request)
+                yield from self._ask_approval(call_id, conversation_id, tool, exact, args, request, allowed)
                 return 'pause'
         else:
             # The offer list is the contract: a tool the turn did not advertise is refused here, at
@@ -533,7 +537,8 @@ class Agent:
             auto = bool(services.settings.get('approval.auto', True))
             if spec.mutating and not auto and not services.approvals.consume(conversation_id, name, args):
                 yield from self._ask_approval(
-                    call_id, conversation_id, name, args, {'question': f'Allow {name}?', 'detail': args}, request
+                    call_id, conversation_id, name, args, {'question': f'Allow {name}?', 'detail': args}, request,
+                    allowed,
                 )
                 return 'pause'
             ctx = {
@@ -554,7 +559,7 @@ class Agent:
         self._persist_tool_result(conversation_id, turn_id, call_id, name, content, False)
         return 'continue'
 
-    def _ask_approval(self, call_id, conversation_id, tool, exact, args, request):
+    def _ask_approval(self, call_id, conversation_id, tool, exact, args, request, allowed=None):
         services = self.services
         labels = {'once': 'Allow once', 'session': 'Allow for this session'}
         preview = approval_preview.preview(tool, exact, services.workspace(request.account))
@@ -564,6 +569,7 @@ class Agent:
             'conversation_id': conversation_id,
             'tool': tool,
             'args': exact,
+            'allowed': tuple(allowed or ()),
         }
         yield event(
             'question',
@@ -619,7 +625,9 @@ class Agent:
                         'cancel_event': request.cancel_event,
                     }
                     try:
-                        executed = services.tools.execute(tool_name, tool_args, ctx)
+                        executed = services.tools.execute(
+                            tool_name, tool_args, ctx, allowed=pending.get('allowed') or None
+                        )
                         content = {'approved': scope, 'tool': tool_name, 'result': executed}
                     except AIError as exc:
                         content = {'approved': scope, 'tool': tool_name, 'error': exc.message}

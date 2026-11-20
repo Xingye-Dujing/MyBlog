@@ -99,13 +99,20 @@ def _read_output(path: Path, max_rows: int) -> tuple[list, bool]:
     produced: list = []
     if not path.exists():
         return produced, False
-    raw = path.read_bytes()[:MAX_BYTES]
-    for line in raw.decode('utf-8', errors='replace').splitlines()[:max_rows]:
+    with path.open('rb') as stream:
+        raw = stream.read(MAX_BYTES)
+    lines = raw.decode('utf-8', errors='replace').splitlines()
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = len(raw)
+    truncated = size > MAX_BYTES or len(lines) > max_rows
+    for line in lines[:max_rows]:
         try:
             produced.append(json.loads(line))
         except ValueError:
             produced.append({'raw': line[:500]})
-    return produced, len(produced) > max_rows
+    return produced, truncated
 
 
 def run_code(

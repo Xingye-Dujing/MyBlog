@@ -51,7 +51,11 @@ class PluginHost:
         identifier = str(manifest.get('id') or '')
         if not PLUGIN_ID_RE.match(identifier):
             raise AIError('plugin.invalid', kind='refused', key='plugin.invalid', reason='bad id')
-        if int(manifest.get('api') or 0) != API_VERSION:
+        try:
+            api_version = int(manifest.get('api') or 0)
+        except (TypeError, ValueError, OverflowError):
+            api_version = -1
+        if api_version != API_VERSION:
             raise AIError(
                 'plugin.apiMismatch', kind='refused', key='plugin.apiMismatch', reason=str(manifest.get('api'))
             )

@@ -41,6 +41,25 @@ def create_blueprint(workspace, *, url_prefix='/api/ai', account_resolver=None):
         payload = request.get_json(silent=True)
         return payload if isinstance(payload, dict) else {}
 
+    def _int_param(value, default, *, minimum=None, maximum=None):
+        """解析不可信的整型查询/请求体参数，返回 ``(值, 错误响应)``。
+
+        ``int('abc')`` 会在路由里抛 ValueError 并变成 HTTP 500；这里统一转成
+        400，并按需夹紧到合理区间。
+        """
+        if value is None or value == '':
+            number = default
+        else:
+            try:
+                number = int(value)
+            except (TypeError, ValueError, OverflowError):
+                return None, (jsonify({'ok': False, 'error': 'invalid integer: %r' % (value,)}), 400)
+        if minimum is not None:
+            number = max(minimum, number)
+        if maximum is not None:
+            number = min(maximum, number)
+        return number, None
+
     def api_key() -> str:
         return str(request.headers.get('X-Provider-Key') or body().get('api_key') or '')
 
@@ -79,15 +98,23 @@ def create_blueprint(workspace, *, url_prefix='/api/ai', account_resolver=None):
 
     @blueprint.get('/conversations')
     def conversations():
+        # bool("0") is True, so the common ?archived=0 form must be parsed explicitly.
+        archived = str(request.args.get('archived', '')).strip().lower() in ('1', 'true', 'yes', 'on')
+        limit, error = _int_param(request.args.get('limit'), 50, minimum=1, maximum=500)
+        if error:
+            return error
+        offset, error = _int_param(request.args.get('offset'), 0, minimum=0)
+        if error:
+            return error
         return jsonify(
             {
                 'ok': True,
                 'conversations': workspace.conversations(
                     account(),
                     query=request.args.get('q', ''),
-                    archived=bool(request.args.get('archived')),
-                    limit=int(request.args.get('limit') or 50),
-                    offset=int(request.args.get('offset') or 0),
+                    archived=archived,
+                    limit=limit,
+                    offset=offset,
                 ),
             }
         )
@@ -142,6 +169,12 @@ def create_blueprint(workspace, *, url_prefix='/api/ai', account_resolver=None):
     @blueprint.post('/chat')
     def chat():
         payload = body()
+        max_tokens, error = _int_param(payload.get('max_tokens'), 0, minimum=0)
+        if error:
+            return error
+        timeout, error = _int_param(payload.get('timeout'), 120, minimum=1, maximum=600)
+        if error:
+            return error
         context = dict(payload.get('context') or {})
         # The composer's extra facts are carried in the context payload, not as server settings.
         for key in ('attachments', 'scope', 'references', 'agent_mode', 'location', 'locale'):
@@ -161,8 +194,8 @@ def create_blueprint(workspace, *, url_prefix='/api/ai', account_resolver=None):
             web_search=payload.get('web_search'),
             safety=str(payload.get('safety') or ''),
             title=bool(payload.get('title', True)),
-            max_tokens=int(payload.get('max_tokens') or 0),
-            timeout=int(payload.get('timeout') or 120),
+            max_tokens=max_tokens,
+            timeout=timeout,
         )
         try:
             if payload.get('stream') is False:
@@ -330,6 +363,9 @@ def create_blueprint(workspace, *, url_prefix='/api/ai', account_resolver=None):
     def files():
         if request.method == 'POST':
             payload = body()
+            size, error = _int_param(payload.get('size'), 0, minimum=0)
+            if error:
+                return error
             return jsonify(
                 {
                     'ok': True,
@@ -337,7 +373,7 @@ def create_blueprint(workspace, *, url_prefix='/api/ai', account_resolver=None):
                         account(),
                         str(payload.get('name') or ''),
                         str(payload.get('path') or ''),
-                        int(payload.get('size') or 0),
+                        size,
                         str(payload.get('conversation_id') or ''),
                     ),
                 }

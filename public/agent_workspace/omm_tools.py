@@ -135,7 +135,14 @@ def _workspace_status(_args: dict, ctx: dict) -> dict:
     cfg = _read_json(shared / 'shared.json')
     ai = cfg.get('ai') if isinstance(cfg.get('ai'), dict) else {}
     channels = []
-    policy = _read_json(shared / 'share' / 'policy.json')
+    # Honor the configured share directory (single source of truth everywhere else
+    # is omm_shared.resolve_share_dir); the default is shared.json's sibling.
+    share_cfg = cfg.get('share') if isinstance(cfg.get('share'), dict) else {}
+    share_raw = str(share_cfg.get('path') or '').strip()
+    share_dir = (
+        Path(os.path.expandvars(os.path.expanduser(share_raw))) if share_raw else shared / 'share'
+    )
+    policy = _read_json(share_dir / 'policy.json')
     raw_channels = policy.get('channels')
     if isinstance(raw_channels, dict):
         channels = [{'id': key, 'members': value} for key, value in raw_channels.items()]

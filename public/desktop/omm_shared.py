@@ -2226,8 +2226,11 @@ def migrate_save_paths(
     for app_id, entry in (cfg.get("apps") or {}).items():
         if not isinstance(entry, dict):
             continue
-        resources: Dict[str, Any] = {}
-        for key, item in (entry.get("resources") or {}).items():
+        # Keep the original records (including resources outside the migrated
+        # folders and their kind/mime/size/title metadata); only rewrite the
+        # path for entries whose location actually moved.
+        resources: Dict[str, Any] = dict(entry.get("resources") or {})
+        for key, item in list(resources.items()):
             if not isinstance(item, dict):
                 continue
             raw = str(item.get("path") or "").strip()
@@ -2237,6 +2240,7 @@ def migrate_save_paths(
             if old_key in mapping:
                 new_path = mapping[old_key]
                 resources[key] = {
+                    **item,
                     "path": new_path,
                     "file": Path(new_path).name,
                 }
