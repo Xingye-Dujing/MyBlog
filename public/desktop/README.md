@@ -76,7 +76,7 @@
 静书房还内置一个带 Python 后端的专属 Agent 插件（`omm-ai.html`，端口 8328，runtime `ai`），
 把 `agent-workspace` 框架与 20 个产品的技能/规范打包进工作台。它由 `hub_server._start_ai()`
 启动，页面、工具与产物审批都通过 OMM-ZEN 桥接与静书房协同；配置与测试见
-[`public/README-AI.md`](../README-AI.md)。用户导入的 zip 仍只能是 `static`，不能声明 `ai` 运行时。
+[`public/docs/README-AI.md`](../docs/README-AI.md)。用户导入的 zip 仍只能是 `static`，不能声明 `ai` 运行时。
 
 ## 在线安装器
 

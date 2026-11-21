@@ -67,7 +67,7 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(issues, [])
 
     def test_files_outside_scope_are_ignored(self):
-        files = {"public/README-MDFORGE.md": "![图](images/pipeline.png)"}
+        files = {"public/docs/README-MDFORGE.md": "![图](images/pipeline.png)"}
         self.assertEqual(g.check_links(files, self.exists), [])
 
 

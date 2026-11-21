@@ -19,6 +19,8 @@
 - [共享模块](shared-modules.md)：可直接复用的 JS 模块与桥接脚本。
 - [新产品开发指南](product-guide.md)：从零到可发布的完整步骤。
 - [技能体系](skills.md)：AI 产品技能与开发者技能的使用与扩展。
+- [AI 工作区](README-AI.md)：静书房 AI 插件的知识、技能、工具与产物契约。
+- [MDFORGE](README-MDFORGE.md)：铸造台的排版与模板说明。
 
 ## 目录约定
 
