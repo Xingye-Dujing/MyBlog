@@ -35,12 +35,14 @@ public/
 ├── agent_workspace/               # 从 ai-agent-framework 原样引入的框架
 │   ├── service.py / agent.py / store.py / tools.py / skills.py / providers/ …
 │   ├── omm_data.py                # 20 个产品的结构化知识（唯一真源）
-│   ├── omm_skills.py              # 24 个技能（20 个产品专家 + 静书房管控 + 跨产品编排 + AI 工作区管家 + 学习包设计师）
+│   ├── omm_skills.py              # 25 个技能（20 个产品专家 + 管控/跨产品/工作区管家/学习包/开发助手）
 │   ├── omm_tools.py               # 9 个领域只读工具（含模板与校验）
 │   ├── omm_validators.py          # 20 产品格式的校验器 + 空白模板 + FNV-1a checksum
 │   ├── omm_host.py                # OMMZenHostAdapter：事实、规范、产物应用
 │   ├── omm_server.py              # Flask create_app(plugin_dir, data_dir)
 │   └── omm_knowledge/             # 规范：json-specs、MDFORGE AI 规范、格式校验说明、PRODUCTS.md
+├── docs/                          # OMM-ZEN 设计系统：令牌、组件、共享模块、新产品开发指南
+├── zen-style/                     # 统一样式层：入口、令牌、基础、组件、能力、产品专有
 ├── tests/
 │   ├── test_omm_ai.py             # 知识/技能/工具/产物/路由/Flask/构建契约/前端契约
 │   ├── test_omm_validators.py     # 20 产品模板与硬约束、checksum、工具/接口/前端校验契约
@@ -91,7 +93,7 @@ public/
 误写时用 `python tools/check_quote_style.py --fix` 一键修复（OpenCode 写入钩子也会修）。
 `.workbuddy/`、`data/` 等历史目录在排除表里，不参与扫描。
 
-测试覆盖：产品目录完整性（20 个、端口唯一、每个 ≥5 条最佳实践）、24 个技能深度与可用性、
+测试覆盖：产品目录完整性（20 个、端口唯一、每个 ≥5 条最佳实践）、25 个技能深度与可用性、
 9 个领域工具执行、20 产品模板全量可校验与硬约束拒绝用例、FNV-1a checksum 与浏览器一致、
 宿主事实与上下文、产物应用（路径穿越/密钥/卡片/打开产品）、
 离线对话与技能路由、自定义 provider 注册、Flask 全部路由、密钥不回传、
