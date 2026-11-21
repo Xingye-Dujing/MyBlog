@@ -14,7 +14,7 @@
   - Ctrl+K 命令面板、Ctrl+Shift+F 跨产品全文搜索、Ctrl+Shift+N 通知、最近动态时间线。
   - 插件面板：在线安装/更新/卸载、导入本地 zip、查看详情与版本回滚。
   - 设置 → AI 服务（全产品共用）：服务商 / Base URL / 模型 / API Key / 系统提示词。
-  - 外观（圆角、强调色、动效、字号、高对比度）、静心专注模式、全量备份与恢复。
+  - 统一的 OMM-ZEN 外观、无障碍字号与高对比度、静心专注模式、全量备份与恢复。
   - 存档与跨产品共享：保存目录、快照、共享目录、连接规则（用户最终授权）。
 - 数据落点：
   - localStorage：omm.hub.appearance.v1 / pins.v1 / recent.v1 / workspaces.v1 / usage.v1 / screen-layout.v1.<id>。

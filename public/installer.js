@@ -10,7 +10,7 @@
   };
 
   var APPEARANCE_KEY = 'omm.installer.appearance.v1';
-  var appearance = { radius: 0, accent: 'amber', motion: true, compact: false };
+  var appearance = { radius: 0, motion: true, compact: false };
 
   var els = {};
 
@@ -225,7 +225,6 @@
         var data = JSON.parse(raw);
         if (data && typeof data === 'object') {
           appearance.radius = [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0 ? Number(data.radius) : 0;
-          appearance.accent = ['amber', 'olive', 'rust', 'blue'].indexOf(data.accent) >= 0 ? data.accent : 'amber';
           appearance.motion = data.motion !== false;
           appearance.compact = !!data.compact;
         }
@@ -245,14 +244,10 @@
 
   function applyAppearance() {
     document.documentElement.style.setProperty('--radius', appearance.radius + 'px');
-    document.documentElement.dataset.accent = appearance.accent;
     document.body.classList.toggle('no-motion', !appearance.motion);
     document.body.classList.toggle('compact', appearance.compact);
     Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
       btn.classList.toggle('active', Number(btn.dataset.radius) === appearance.radius);
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-accent]'), function (btn) {
-      btn.classList.toggle('active', btn.dataset.accent === appearance.accent);
     });
     var motion = document.getElementById('motion');
     var compact = document.getElementById('compact');
@@ -283,13 +278,6 @@
         applyAppearance();
       });
     });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-accent]'), function (btn) {
-      btn.addEventListener('click', function () {
-        appearance.accent = btn.dataset.accent;
-        saveAppearance();
-        applyAppearance();
-      });
-    });
     document.getElementById('motion').addEventListener('click', function () {
       appearance.motion = !appearance.motion;
       saveAppearance();
@@ -301,7 +289,7 @@
       applyAppearance();
     });
     document.getElementById('settings-reset').addEventListener('click', function () {
-      appearance = { radius: 0, accent: 'amber', motion: true, compact: false };
+      appearance = { radius: 0, motion: true, compact: false };
       saveAppearance();
       applyAppearance();
     });

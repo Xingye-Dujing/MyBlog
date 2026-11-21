@@ -25,7 +25,7 @@
   密钥只从请求头 `X-Provider-Key` 进入内存，不写入 `ai.db` / 设置 / 日志 / 生成文件。
 - **与静书房协调**：产品页可一键“打开产品”（`OMMShare.openApp`）；卡片可发送到间隔复习、
   所思所想、语料库、六级备考；共享频道声明为 `documents` / `notes.english` / `data.tables`；
-  页面监听 `omm:theme` 消息，圆角、强调色、深浅主题与工作台一致。
+  页面通过 `omm:theme` 消息继承工作台固定的 OMM-ZEN 外观令牌。
 
 ## 2. 目录
 
