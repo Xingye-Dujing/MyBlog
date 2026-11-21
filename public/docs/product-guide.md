@@ -11,7 +11,14 @@
 
 ## 2. 创建入口页
 
-复制 `plugin-template/index.html` 的结构，或新建 `omm-<id>.html`。`<head>` 必须包含：
+用脚手架一次性生成入口页、产品样式与测试骨架，然后按业务填充：
+
+```bash
+python tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --channels <频道>
+```
+
+它会拒绝覆盖已有文件，并打印需要补进注册表的条目。也可以复制
+`plugin-template/index.html` 的结构手写。`<head>` 必须包含：
 
 ```html
 <script src="omm-embed.js"></script>

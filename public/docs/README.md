@@ -35,5 +35,6 @@ public/
 ├── zen-*.js                   可复用产品逻辑模块
 ├── omm-*.js                   工作台桥接与壳脚本
 ├── json-specs/                JSON 格式规范真源
+├── tools/new_product.py       新产品脚手架
 └── desktop/                   桌面端启动器、离线打包与发布
 ```
