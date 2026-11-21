@@ -12891,6 +12891,7 @@ notify pgrst, 'reload schema';</textarea
       })()
     </script>
 
+    <script src="zen-crypto.js"></script>
     <script id="ze-cloud-sync-script">
       ;(function () {
         'use strict'
@@ -13301,34 +13302,10 @@ notify pgrst, 'reload schema';</textarea
             !!session,
           )
         }
-        function b64(b) {
-          var a = new Uint8Array(b),
-            s = ''
-          for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i])
-          return btoa(s)
-        }
-        function ub64(s) {
-          var b = atob(s),
-            a = new Uint8Array(b.length)
-          for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i)
-          return a.buffer
-        }
-        async function keyFor(pw, salt) {
-          var base = await crypto.subtle.importKey(
-            'raw',
-            new TextEncoder().encode(pw),
-            'PBKDF2',
-            false,
-            ['deriveKey'],
-          )
-          return crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' },
-            base,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt', 'decrypt'],
-          )
-        }
+        var b64 = ZenCrypto.bytesToBase64
+        var ub64 = ZenCrypto.base64ToBytes
+        var keyFor = ZenCrypto.deriveKey
+
         async function enc(data, pw) {
           var salt = crypto.getRandomValues(new Uint8Array(16)),
             iv = crypto.getRandomValues(new Uint8Array(12)),

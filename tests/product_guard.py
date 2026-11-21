@@ -97,6 +97,7 @@ SHARED_MODULES = [
     "public/zen-backup.js", "public/zen-pack.js", "public/zen-review.js",
     "public/data-viz.js", "public/search-library.js", "public/viz-bridge.js",
     "public/omm-embed.js", "public/omm-share.js", "public/omm-desktop.js",
+    "public/zen-crypto.js",
 ]
 
 # Products that act as *consumers* of the universal card bridge.  The hub and
