@@ -9,7 +9,7 @@ Checks
 QUOTE  forbidden Japanese / Traditional corner-bracket quotes (auto-fixable)
 LINK   local href/src and Markdown links that point to a missing file
 IMPORT relative ES-module import specifiers that do not resolve
-BRIDGE canonical consumer products must load ``zen-link.js`` as a module
+BRIDGE canonical consumer products must load ``lib/zen-link.js`` as a module
 SPEC   every JSON spec document is indexed from ``json-specs/README.md``
 SPEC_SYNC the AI workspace's mirrored knowledge docs stay byte-identical to
        ``public/json-specs`` — otherwise the assistant teaches stale formats
@@ -76,8 +76,8 @@ LAUNCHER = "public/desktop/omm_launcher.py"
 # Tokens are the top-level hard requirements from json-specs/README.md.
 # Products that import no JSON (latex / redact / message) have no contract.
 FORMAT_CONTRACTS = [
-    ("zencard.md", ["public/zen-card.js"], ["zen-card", "zen-card-pack", "cards"]),
-    ("zenpack.md", ["public/zen-backup.js", "public/zen-pack.js"], ["zen-backup", "products"]),
+    ("zencard.md", ["public/lib/zen-card.js"], ["zen-card", "zen-card-pack", "cards"]),
+    ("zenpack.md", ["public/lib/zen-backup.js", "public/lib/zen-pack.js"], ["zen-backup", "products"]),
     ("writer.md", ["public/omm-writer.html"], ["zenwriter-canvas", "nodes", "connections"]),
     ("annotate.md", ["public/omm-annotate.html"], ["codes"]),
     ("corpus.md", ["public/omm-corpus.html"], ["entries", "categories"]),
@@ -86,18 +86,18 @@ FORMAT_CONTRACTS = [
     ("planner.md", ["public/omm-planner.html"], ["planners", "version"]),
     ("visualization.md", ["public/omm-visualization.html"],
      ["zenviz-right-properties", "version"]),
-    ("table.md", ["public/zen-table.js"], ["omm-table-workflow", "nodes", "connections"]),
+    ("table.md", ["public/lib/zen-table.js"], ["omm-table-workflow", "nodes", "connections"]),
 ]
 
 # Cross-product infrastructure: changing any of these affects every consumer,
 # so it is tied to the SUITE version rather than to individual products.
 SHARED_MODULES = [
-    "public/zen-card.js", "public/zen-link.js", "public/zen-canvas/layout-engine.js",
-    "public/zen-chart.js", "public/zen-flow.js", "public/zen-srs.js",
-    "public/zen-backup.js", "public/zen-pack.js", "public/zen-review.js",
-    "public/data-viz.js", "public/search-library.js", "public/viz-bridge.js",
+    "public/lib/zen-card.js", "public/lib/zen-link.js", "public/zen-canvas/layout-engine.js",
+    "public/lib/zen-chart.js", "public/lib/zen-flow.js", "public/lib/zen-srs.js",
+    "public/lib/zen-backup.js", "public/lib/zen-pack.js", "public/lib/zen-review.js",
+    "public/lib/data-viz.js", "public/lib/search-library.js", "public/viz-bridge.js",
     "public/omm-embed.js", "public/omm-share.js", "public/omm-desktop.js",
-    "public/zen-crypto.js",
+    "public/lib/zen-crypto.js",
 ]
 
 # Products that act as *consumers* of the universal card bridge.  The hub and
@@ -287,12 +287,12 @@ def check_bridge(files, exists) -> list[Issue]:
             continue
         ok = False
         for tag in SCRIPT_TAG.findall(text):
-            if "zen-link.js" in tag and re.search(r"""type=["']module["']""", tag):
+            if "lib/zen-link.js" in tag and re.search(r"""type=["']module["']""", tag):
                 ok = True
                 break
         if not ok:
             issues.append(Issue("BRIDGE", rel, 0,
-                                "缺少 <script type=\"module\" src=\"zen-link.js\"> 桥接"))
+                                "缺少 <script type=\"module\" src=\"lib/zen-link.js\"> 桥接"))
     return issues
 
 
@@ -746,7 +746,7 @@ def check_version(files, exists) -> list[Issue]:
     if old_shared and old_shared != _shared_fingerprint(files):
         suite = str(VERSION)
         if str(baseline.get("suiteVersion", "")) == suite:
-            issues.append(Issue("VERSION", "public/zen-card.js", 0,
+            issues.append(Issue("VERSION", "public/lib/zen-card.js", 0,
                                 "共享模块已变更但套件版本未升，建议升至 %s"
                                 % _suggested_bump(suite)))
 

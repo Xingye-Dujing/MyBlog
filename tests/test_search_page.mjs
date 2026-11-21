@@ -19,8 +19,8 @@ function extractFunction(text, name) {
 }
 
 test('搜索页引入通用卡片与知识库模块', () => {
-  assert.ok(src.includes('src="zen-card.js"'))
-  assert.ok(src.includes('src="search-library.js"'))
+  assert.ok(src.includes('src="lib/zen-card.js"'))
+  assert.ok(src.includes('src="lib/search-library.js"'))
 })
 
 test('知识库入口与面板齐全', () => {

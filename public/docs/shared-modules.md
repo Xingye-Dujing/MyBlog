@@ -18,15 +18,15 @@
 
 | 文件 | 作用 |
 |---|---|
-| `zen-card.js` | ZenCard 创建 / 校验 / 打包，跨产品通用格式 |
-| `zen-link.js` | 卡片按钮与知识库入口 |
-| `zen-backup.js` / `zen-pack.js` | 工作区快照与工作区包 |
-| `zen-srs.js` / `zen-review.js` | 间隔复习状态与复盘报告 |
-| `zen-flow.js` | 规则校验与执行 |
-| `zen-chart.js` | CSV 解析与自包含 SVG 图表 |
-| `zen-table.js` / `zen-paper.js` | 表格与论文辅助 |
-| `zen-crypto.js` | Base64 编解码、PBKDF2 派生（云同步产品共用） |
-| `data-viz.js` / `viz-bridge.js` / `search-library.js` | 出图、跨页送图、检索 |
+| `lib/zen-card.js` | ZenCard 创建 / 校验 / 打包，跨产品通用格式 |
+| `lib/zen-link.js` | 卡片按钮与知识库入口 |
+| `lib/zen-backup.js` / `lib/zen-pack.js` | 工作区快照与工作区包 |
+| `lib/zen-srs.js` / `lib/zen-review.js` | 间隔复习状态与复盘报告 |
+| `lib/zen-flow.js` | 规则校验与执行 |
+| `lib/zen-chart.js` | CSV 解析与自包含 SVG 图表 |
+| `lib/zen-table.js` / `zen-paper.js` | 表格与论文辅助 |
+| `lib/zen-crypto.js` | Base64 编解码、PBKDF2 派生（云同步产品共用） |
+| `lib/data-viz.js` / `viz-bridge.js` / `lib/search-library.js` | 出图、跨页送图、检索 |
 
 ## 画布框架
 

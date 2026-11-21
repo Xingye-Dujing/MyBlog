@@ -67,6 +67,8 @@ for css in sorted(STYLE_DIR.rglob("*.css")):
 offline = (ROOT / "desktop" / "offline.py").read_text(encoding="utf-8", errors="ignore")
 if "def copy_zen_styles" not in offline or offline.count("copy_zen_styles(dest)") < 3:
     fail("desktop/offline.py: zen-style staging is incomplete")
+if "def copy_shared_lib" not in offline or offline.count("copy_shared_lib(dest)") < 3:
+    fail("desktop/offline.py: shared lib staging is incomplete")
 
 if ERRORS:
     print("STYLE AUDIT FAILED")

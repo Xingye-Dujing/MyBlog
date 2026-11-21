@@ -118,7 +118,7 @@ npm run build                             # 前端生产构建
 | `QUOTE` | 禁用角引号（复用 `no_jp_quotes`） | 是 |
 | `LINK` | 产品页与 JSON 规范里的本地 `href`/`src`/Markdown 链接目标是否存在 | 否 |
 | `IMPORT` | `public/` 下 ES 模块的相对导入是否可解析 | 否 |
-| `BRIDGE` | 12 个消费型产品是否以 `type="module"` 引入 `zen-link.js` | 否 |
+| `BRIDGE` | 12 个消费型产品是否以 `type="module"` 引入 `lib/zen-link.js` | 否 |
 | `SPEC` | `json-specs/*.md` 是否都被 README 索引、索引是否指向存在的文件 | 否 |
 | `DEBUG` | 产品页与模块里是否残留 `debugger` 调试语句 | 否 |
 | `RESOURCE` | CSS `url()` 与非产品页静态资源引用是否可达（JS 动态表达式不误报） | 否 |
@@ -149,33 +149,33 @@ npm run build                             # 前端生产构建
 
 **`test_zencard.mjs` 等专项套件**（node:test，数量以实际运行为准）
 
-- `zen-card.js` 通用知识卡片的归一化 / 严格校验 / 序列化 / 去重 / 指纹，以及与语料、批注、英语桥接包、写作画布、数据表、搜索、剪藏的双向转换。
-- `zen-srs.js` SM-2 间隔重复：评级映射、间隔递增、遗忘重置、易度下限、到期队列、统计、持久化往返。
-- `zen-flow.js` 工作流规则：条件匹配、六类动作、优先级多规则运行、副作用汇总、持久化。
-- `zen-review.js` 复盘聚合：日期区间过滤、活跃度 / 标签统计、Markdown 报告生成。
-- `zen-backup.js` 统一备份：清单校验和、差异比对、三种合并策略、按 id 去重，以及导出脱敏与恢复白名单。
+- `lib/zen-card.js` 通用知识卡片的归一化 / 严格校验 / 序列化 / 去重 / 指纹，以及与语料、批注、英语桥接包、写作画布、数据表、搜索、剪藏的双向转换。
+- `lib/zen-srs.js` SM-2 间隔重复：评级映射、间隔递增、遗忘重置、易度下限、到期队列、统计、持久化往返。
+- `lib/zen-flow.js` 工作流规则：条件匹配、六类动作、优先级多规则运行、副作用汇总、持久化。
+- `lib/zen-review.js` 复盘聚合：日期区间过滤、活跃度 / 标签统计、Markdown 报告生成。
+- `lib/zen-backup.js` 统一备份：清单校验和、差异比对、三种合并策略、按 id 去重，以及导出脱敏与恢复白名单。
 - 备份安全：`isSecretKey()` 按词识别 `apiKey` / `token` / `secret` / `password` / `supabase` 等字段；`redactSecrets()` 在导出时丢弃整条凭据键、遮罩敏感字段并重算校验和，使清单仍通过校验；`restorableEntries()` 只接受 OMM-ZEN 键前缀或本地已存在的键，挡住 `__proto__` 与任意覆写。ZenPack 导出即脱敏、恢复只写工作区目录内的键；ZenBackup 页的扫描预览、导出与恢复同样走这套规则。6 项专项用例覆盖误报、漏报、篡改与往返。
 - `test_products.mjs` 集成护栏：5 个新产品的标题 / 样式 / 桥接引入、模块脚本语法、DOM id 引用完整性、无开发残留；12 个既有产品仍引入 zen-link；origin 信任校验；每个页面的 id 引用都对得上真实元素。
 - `test_knowledge_graph.mjs` Hub 知识图谱：工具栏入口与面板元素、命令注册、跨 iframe 卡片请求使用 frameTargetOrigin 而非通配符、产品端以明确 origin 回传、纯函数 `kgNormalize`/`dedupeGraphCards`/`kgEscape` 的归一化与转义。
-- `test_chart.mjs` `zen-chart.js`：CSV 解析、数组/对象/CSV 归一化、柱状与折线 SVG、标题转义、data URL、空数据兜底。
+- `test_chart.mjs` `lib/zen-chart.js`：CSV 解析、数组/对象/CSV 归一化、柱状与折线 SVG、标题转义、data URL、空数据兜底。
 - `test_writer_deep.mjs` Writer 深改：模块与面板引入、三个右键动作与分发分支、`ZenWriterDeep` 三个入口、引用块出处/批注、图表自包含 data URL、时间机器走工作台快照且二次确认、主脚本整体语法可解析。
-- `test_search_library.mjs` `search-library.js`：历史条目与 zen-card 互转、全文检索、置顶、去重、卡片包导出/导入回填、统计。
+- `test_search_library.mjs` `lib/search-library.js`：历史条目与 zen-card 互转、全文检索、置顶、去重、卡片包导出/导入回填、统计。
 - `test_search_page.mjs` 智能搜索深改：知识库模块引入与面板元素、渲染/筛选/置顶/发送、新搜索与清空后的刷新、导入导出、主脚本语法。
-- `test_data_viz.mjs` `data-viz.js`：表格转 CSV 的转义、角色推断、数据负载构造与校验。
+- `test_data_viz.mjs` `lib/data-viz.js`：表格转 CSV 的转义、角色推断、数据负载构造与校验。
 - `test_dataviz_flow.mjs` Data → Viz 一键出图：模块引入、菜单与动作、嵌入 origin、Viz 接收处理、桥接三路径与 origin 校验、两个主脚本语法。
 - `test_data_flow.mjs` Hub 数据流面板：入口与面板元素、命令注册、`flowChannels` 按通道分组并保留角色、流转事件写入、角色标签渲染。
 - `test_canvas_layout.mjs` 通用布局引擎：`zen-canvas/layout-engine.js` 各策略均可产出无重叠、确定性坐标；Writer 与 ZenFlow 共用该模块。
-- `test_zen_crypto.mjs` 共用加密工具：`zen-crypto.js` 的 Base64 往返、PBKDF2 派生与 AES-GCM 加解密，并断言六个云同步产品复用共享实现、不再内联重复函数。
+- `test_zen_crypto.mjs` 共用加密工具：`lib/zen-crypto.js` 的 Base64 往返、PBKDF2 派生与 AES-GCM 加解密，并断言六个云同步产品复用共享实现、不再内联重复函数。
 - `test_cmdk.mjs` Cmd+K 命令面板扩展：读取卡片 / 笔记 / 搜索历史三类既有 localStorage 来源，复用 `openKnowledgeGraph` / `showKgDetail` / `activateApp`，`cmdkRead` 容错与分组顺序。
 - `test_cmdk_upgrade.mjs` Cmd+K 检索增强：子序列模糊评分（前缀加权）、`usageStats` 使用频率加权与稳定排序、本地即时命令（`= 算术`、`@date`、`hex/bin/oct` 换算，算术只接受安全字符）；面板本体未重建，仅在过滤阶段接入。
-- `test_zenpack.mjs` ZenPack 工作区包：`zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
+- `test_zenpack.mjs` ZenPack 工作区包：`lib/zen-pack.js` 薄包装委托 `ZenBackup` 完成打包 / 校验 / 差异 / 合并，工作区键收集与恢复往返，产品 UI 入口断言。
 - `test_annotate_reliability.mjs` 从 `omm-paper.js` 抽取信度纯函数验证表格行号对齐：第二编码者按提示/导出表填写的 1 基行号必须换算回 `cellCodes.row` 的 0 基键，否则一致性检验会把所有项目判为“只有一方编码”、κ 恒为 0。含完全一致（κ=1、missing=0）与单处分歧两组用例。
 - `tests/e2e/test_chain.py` 真实浏览器端到端：18 个产品页无脚本异常启动；ZenCard 建卡与刷新持久化；ZenFlow 建规则并验证通用布局模块与流程图节点；ZenPack 导出→清空→导入→恢复往返；Hub Cmd+K 检索产品自有数据。另含 `OfflineChainTest`：阻断一切非本地网络请求后，建卡、建规则、ZenPack 导出与 Cmd+K 仍全部可用，把“完全离线”变成回归项。
 - `test_product_guard.py` 统一守卫：在原有 6 项之外新增 `REGISTRY`（启动器必须派生、入口页齐全、桌面程序表一致、发布目录无漂移，未跟踪的开发中间态豁免）、`RESOURCE`（CSS 静态资源引用可达，JS 动态表达式不误报）、`XSS`（动态值拼入 innerHTML 必须显式转义，受信任枚举与已转义写法不误报）、`A11Y`（图片有 alt、交互控件有可访问名）、`FORMAT`（JSON 规范声明的格式标识同时出现在实现源码中）、`VERSION`（套件版本一致、产品版本只比同产品、内容指纹防漏升、空 bump 与降级提示）、`SPEC_SYNC`（AI 知识副本与规范真源逐字一致）、`RUNTIME`（仅官方 `ai` 可执行本机代码）、`PRIVACY`（隐藏日程不进入 AI 快照）、`GEN_FORMATS`（格式契约单一真源与生成物一致）；45 项专项用例覆盖这些反例。同时修复了 3 处存量问题：h5-news 装饰图补 `alt`、语料库新建分类按钮补 `aria-label`、Writer 导出插图补 `alt`。
 - `test_json_specs.mjs` JSON 规范一致性：不只比对文档，直接调用 `ZenCard` / `ZenBackup` / `ZenPack` / `ZenSRS` / `ZenFlow` 的导出函数，断言产物满足 `format` / `v` / `cards[]` / `products[]` / `nodes` 等总表硬性要求，并验证卡片包、工作区包、SRS、规则序列化的往返。
 - `test_today_panel.mjs` 与 `tests/e2e/test_today_panel.py` Hub“今日”面板：纯函数聚合待复习卡片、卡片数、笔记、规则启用数与最近笔记/搜索；面板只读各产品既有 localStorage、复用 `activateApp`、不新增存储；E2E 在真实浏览器注入数据后校验面板数字与条目。
 - **AI 工作区对齐**：`no_jp_quotes.py` 现在扫描 OMM 自写的 `agent_workspace/omm_*.py`（上游框架子包保持原样），修复了 4 处漏网的角引号；AI 自带 `tools/check_quote_style.py` 排除 `.workbuddy/` 与 `vendor/` 后，原本被跳过的全仓库门禁恢复运行。`SPEC_SYNC` 守卫把 14 份知识副本绑定到 `json-specs/` 真源；`RUNTIME` 守卫把本机代码执行权限锁给官方 `ai`。`run_all.py` 接入 `pytest public/tests`，AI 工作区全部测试（含框架门禁、golden 对拍与实时数据上下文）纳入统一回归。
-- `test_golden_formats.mjs` 与 `public/tests/test_golden_formats.py` Golden 对拍：`tests/golden_formats/` 的四份样例必须同时通过产品 JS 导出与 AI Python 校验器；篡改格式或校验和会被两侧同时拒绝。对拍发现并修复了一处真实漂移：`omm_validators.v_zenflow` 原先放行空 `actions`，现已与 `zen-flow.js` 的 `validateRule` 一致。`public/tests/test_import_paths.py` 用子进程锁定 `agent_workspace` 只能经包路径导入，避免包内 `types.py` 遮蔽标准库。
+- `test_golden_formats.mjs` 与 `public/tests/test_golden_formats.py` Golden 对拍：`tests/golden_formats/` 的四份样例必须同时通过产品 JS 导出与 AI Python 校验器；篡改格式或校验和会被两侧同时拒绝。对拍发现并修复了一处真实漂移：`omm_validators.v_zenflow` 原先放行空 `actions`，现已与 `lib/zen-flow.js` 的 `validateRule` 一致。`public/tests/test_import_paths.py` 用子进程锁定 `agent_workspace` 只能经包路径导入，避免包内 `types.py` 遮蔽标准库。
 - **跨产品联动**：`test_search_page.mjs` 新增知识库一键“存为卡片”——历史条目经 `SearchLibrary.toCard()` 落到统一卡片库，闭合“搜索→卡片→复习”链路；`test_flow.mjs` 校验 `ZenFlow.templates()` 的四套规则模板全部合法且枚举正确，ZenFlow 空状态可一键载入。
 - **AI 读取真实数据**：`omm-ai.html` 在发送前经 `omm:live-data-request/reply` 向 Hub 请求各产品只读快照（Hub 聚合同源 localStorage 并复用 `zen-card-request` 跨 iframe 收集卡片），放入 chat 请求的 `context.omm_live`；`omm_host.omm_live_context` 把它渲染成模型上下文，递归脱敏 `apiKey`/`token`/`supabase` 等字段、数组限 50 条正文限 20 条、深度截断容错。独立运行或 Hub 超时则静默降级，绝不阻塞对话。测试见 `test_ai_live_context.mjs`、`test_knowledge_graph.mjs` 与 `public/tests/test_omm_live_context.py`；全部只改 OMM 自写文件，vendored 框架保持原样。
 - **AI 学习包技能**：新增 `omm.zen.study` 技能（第 21 个），把实时数据变成复习卡片包/规则包草稿；`omm_live_data` 纳入所有技能的公共上下文，模型据此回答"我最近的数据…"。`test_omm_ai.py` 更新技能覆盖断言。

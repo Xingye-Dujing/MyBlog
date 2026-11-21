@@ -1,7 +1,7 @@
-/* zen-chart.js 单元测试 */
+/* lib/zen-chart.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ZenChart } from '../public/zen-chart.js'
+import { ZenChart } from '../public/lib/zen-chart.js'
 
 test('parseCSV 解析表头与数值', () => {
   const d = ZenChart.parseCSV('月份,销量\n1月,10\n2月,20')

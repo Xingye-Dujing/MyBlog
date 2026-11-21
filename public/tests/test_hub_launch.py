@@ -42,16 +42,17 @@ def test_stage_copies_es_module_siblings(tmp_path):
     import offline
 
     cases = {
-        'omm-zenbackup.html': ('zen-backup.js', 'zen-pack.js'),
-        'omm-zencard.html': ('zen-card.js', 'zen-srs.js'),
-        'omm-zenclip.html': ('zen-card.js',),
-        'omm-zenflow.html': ('zen-card.js', 'zen-flow.js'),
-        'omm-zenreview.html': ('zen-card.js', 'zen-review.js'),
+        'omm-zenbackup.html': ('lib/zen-backup.js', 'lib/zen-pack.js'),
+        'omm-zencard.html': ('lib/zen-card.js', 'lib/zen-srs.js'),
+        'omm-zenclip.html': ('lib/zen-card.js',),
+        'omm-zenflow.html': ('lib/zen-card.js', 'lib/zen-flow.js'),
+        'omm-zenreview.html': ('lib/zen-card.js', 'lib/zen-review.js'),
     }
     for html, assets in cases.items():
         dest = tmp_path / html
         dest.mkdir()
         offline._copy_referenced_assets(html, dest)
+        offline.copy_shared_lib(dest)
         for asset in assets:
             assert (dest / asset).is_file(), (html, asset)
 

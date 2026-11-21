@@ -5,12 +5,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { ZenBackup } from '../public/zen-backup.js'
-import { ZenReview } from '../public/zen-review.js'
-import { ZenCard } from '../public/zen-card.js'
-import { ZenFlow } from '../public/zen-flow.js'
-import { ZenChart } from '../public/zen-chart.js'
-import { SearchLibrary } from '../public/search-library.js'
+import { ZenBackup } from '../public/lib/zen-backup.js'
+import { ZenReview } from '../public/lib/zen-review.js'
+import { ZenCard } from '../public/lib/zen-card.js'
+import { ZenFlow } from '../public/lib/zen-flow.js'
+import { ZenChart } from '../public/lib/zen-chart.js'
+import { SearchLibrary } from '../public/lib/search-library.js'
 import '../public/zen-canvas/layout-engine.js'
 
 const ROOT = new URL('../', import.meta.url)
@@ -117,7 +117,7 @@ test('Hub 数据流面板转义插件 manifest 的 role / id', () => {
 /* ------------------------- postMessage 目标约束 -------------------------- */
 
 test('卡片请求按已校验的请求方 origin 回传，而非 referrer', () => {
-  const src = read('public/zen-link.js')
+  const src = read('public/lib/zen-link.js')
   const reply = src.slice(src.indexOf("type: 'omm:zen-card-reply'"))
   assert.match(reply.slice(0, 200), /e\.origin/)
   assert.doesNotMatch(reply.slice(0, 200), /parentTarget\(\)/)

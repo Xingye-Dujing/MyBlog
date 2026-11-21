@@ -16,7 +16,7 @@ function biggestScript(text) {
 }
 
 test('Data 引入出图模块与桥接', () => {
-  assert.ok(data.includes('src="data-viz.js"'))
+  assert.ok(data.includes('src="lib/data-viz.js"'))
   assert.ok(data.includes('src="viz-bridge.js"'))
 })
 

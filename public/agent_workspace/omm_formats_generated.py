@@ -794,7 +794,7 @@ _DATA = json.loads(r'''{
       "kind": "workflow",
       "format": "omm-video-workflow",
       "version": 1,
-      "source": "public/zen-video.js",
+      "source": "public/lib/zen-video.js",
       "fields": [
         {
           "name": "nodes",
@@ -887,7 +887,7 @@ _DATA = json.loads(r'''{
       "kind": "workflow",
       "format": "omm-table-workflow",
       "version": 1,
-      "source": "public/zen-table.js",
+      "source": "public/lib/zen-table.js",
       "fields": [
         {
           "name": "nodes",
@@ -1202,7 +1202,7 @@ _DATA = json.loads(r'''{
       "kind": "manifest",
       "format": "zen-backup",
       "version": 1,
-      "source": "public/zen-backup.js",
+      "source": "public/lib/zen-backup.js",
       "fields": [
         {
           "name": "format",
@@ -1262,7 +1262,7 @@ _DATA = json.loads(r'''{
       "kind": "card",
       "format": "zen-card",
       "version": 1,
-      "source": "public/zen-card.js",
+      "source": "public/lib/zen-card.js",
       "fields": [
         {
           "name": "format",
@@ -1361,7 +1361,7 @@ _DATA = json.loads(r'''{
       "kind": "pack",
       "format": "zen-card-pack",
       "version": 1,
-      "source": "public/zen-card.js",
+      "source": "public/lib/zen-card.js",
       "fields": [
         {
           "name": "format",
@@ -1418,7 +1418,7 @@ _DATA = json.loads(r'''{
       "kind": "pack",
       "format": "zen-card-pack",
       "version": 1,
-      "source": "public/zen-card.js",
+      "source": "public/lib/zen-card.js",
       "fields": [
         {
           "name": "format",
@@ -1474,7 +1474,7 @@ _DATA = json.loads(r'''{
       "kind": "rules",
       "format": null,
       "version": null,
-      "source": "public/zen-flow.js",
+      "source": "public/lib/zen-flow.js",
       "fields": [
         {
           "name": "",
@@ -1516,7 +1516,7 @@ _DATA = json.loads(r'''{
       "kind": "inputs",
       "format": null,
       "version": null,
-      "source": "public/zen-review.js",
+      "source": "public/lib/zen-review.js",
       "fields": [
         {
           "name": "timeline",
@@ -1547,7 +1547,7 @@ _DATA = json.loads(r'''{
       "kind": "timeline",
       "format": null,
       "version": null,
-      "source": "public/zen-review.js",
+      "source": "public/lib/zen-review.js",
       "fields": [
         {
           "name": "",

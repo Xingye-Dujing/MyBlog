@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Golden 样本对拍：与 tests/test_golden_formats.mjs 共用同一批 fixtures。
 
-产品 JS 导出（zen-card.js / zen-backup.js / zen-flow.js）与本模块的 Python
+产品 JS 导出（lib/zen-card.js / lib/zen-backup.js / lib/zen-flow.js）与本模块的 Python
 校验器必须同时接受这些样例。一侧的格式规则改了、另一侧没跟上，测试即失败。
 """
 from __future__ import annotations

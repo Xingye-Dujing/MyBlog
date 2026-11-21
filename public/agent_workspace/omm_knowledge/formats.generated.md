@@ -677,7 +677,7 @@
 ### `workflow` · .json
 
 - 契约：format=`omm-video-workflow`，version=`1`
-- 实现源码：`public/zen-video.js`
+- 实现源码：`public/lib/zen-video.js`
 - 深度校验器：`v_video`
 - 硬门槛：format="omm-video-workflow"；version 数字 1；nodes 顶层数组；connections 顶层数组
 
@@ -763,7 +763,7 @@
 ### `workflow` · .json
 
 - 契约：format=`omm-table-workflow`，version=`1`
-- 实现源码：`public/zen-table.js`
+- 实现源码：`public/lib/zen-table.js`
 - 深度校验器：`v_table`
 - 硬门槛：format="omm-table-workflow"；version 数字 1；nodes 顶层数组；connections 顶层数组；有且只有一个 file 节点
 
@@ -1028,7 +1028,7 @@
 ### `manifest` · .json
 
 - 契约：format=`zen-backup`，version=`1`
-- 实现源码：`public/zen-backup.js`
+- 实现源码：`public/lib/zen-backup.js`
 - 深度校验器：`v_zenbackup`
 - Golden fixture：`zenbackup-manifest.json`
 - 硬门槛：format=zen-backup；v 数字 1；checksum 为 data 的 FNV-1a base36
@@ -1071,7 +1071,7 @@
 ### `card` · .json
 
 - 契约：format=`zen-card`，version=`1`
-- 实现源码：`public/zen-card.js`
+- 实现源码：`public/lib/zen-card.js`
 - 深度校验器：`v_zencard`
 - Golden fixture：`zencard-card.json`
 - 硬门槛：format=zen-card；v 数字 1；content 非空；kind/source 在枚举内；tags 是数组
@@ -1111,7 +1111,7 @@
 ### `pack` · .json
 
 - 契约：format=`zen-card-pack`，version=`1`
-- 实现源码：`public/zen-card.js`
+- 实现源码：`public/lib/zen-card.js`
 - 深度校验器：`v_zencard`
 - Golden fixture：`zencard-pack.json`
 - 硬门槛：format=zen-card-pack；v 数字 1；cards 是数组
@@ -1155,7 +1155,7 @@
 ### `pack` · .json
 
 - 契约：format=`zen-card-pack`，version=`1`
-- 实现源码：`public/zen-card.js`
+- 实现源码：`public/lib/zen-card.js`
 - 深度校验器：`v_zenclip`
 - 硬门槛：format=zen-card-pack；cards 是数组
 
@@ -1198,7 +1198,7 @@
 ### `rules` · .json
 
 - 契约：无固定 token
-- 实现源码：`public/zen-flow.js`
+- 实现源码：`public/lib/zen-flow.js`
 - 深度校验器：`v_zenflow`
 - Golden fixture：`zenflow-rules.json`
 - 硬门槛：actions.type 在允许枚举内；顶层规则数组
@@ -1240,7 +1240,7 @@
 ### `inputs` · .json
 
 - 契约：无固定 token
-- 实现源码：`public/zen-review.js`
+- 实现源码：`public/lib/zen-review.js`
 - 深度校验器：`v_zenreview`
 - 硬门槛：timeline / planner 都是数组
 
@@ -1261,7 +1261,7 @@
 ### `timeline` · .json
 
 - 契约：无固定 token
-- 实现源码：`public/zen-review.js`
+- 实现源码：`public/lib/zen-review.js`
 - 深度校验器：`v_zenreview`
 - 硬门槛：顶层是数组
 

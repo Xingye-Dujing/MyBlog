@@ -1,8 +1,8 @@
-/* zen-flow.js 单元测试 */
+/* lib/zen-flow.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ZenFlow } from '../public/zen-flow.js'
-import { ZenCard } from '../public/zen-card.js'
+import { ZenFlow } from '../public/lib/zen-flow.js'
+import { ZenCard } from '../public/lib/zen-card.js'
 
 const baseCard = { id: 'zc-1', kind: 'quote', source: 'annotate', content: '精读句子', tags: ['精读'] }
 

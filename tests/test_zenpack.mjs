@@ -5,8 +5,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { ZenPack } from '../public/zen-pack.js'
-import { ZenBackup } from '../public/zen-backup.js'
+import { ZenPack } from '../public/lib/zen-pack.js'
+import { ZenBackup } from '../public/lib/zen-backup.js'
 
 const HTML = readFileSync(new URL('../public/omm-zenbackup.html', import.meta.url), 'utf8')
 
@@ -77,7 +77,7 @@ test('ZenBackup 产品提供 ZenPack 入口并直接调用通用模块', () => {
   for (const id of ['zp-collect', 'zp-export', 'zp-file', 'zp-restore', 'zp-diff']) {
     assert.ok(HTML.includes('id="' + id + '"'), '缺少入口: ' + id)
   }
-  assert.ok(HTML.includes("import { ZenPack } from './zen-pack.js'"))
+  assert.ok(HTML.includes("import { ZenPack } from './lib/zen-pack.js'"))
   assert.ok(HTML.includes('ZenPack.makePack('))
   assert.ok(HTML.includes('ZenPack.readPack('))
   assert.ok(HTML.includes('ZenPack.applyPack('))

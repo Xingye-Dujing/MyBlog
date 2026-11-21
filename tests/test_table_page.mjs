@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs'
 const ROOT = new URL('../', import.meta.url)
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8')
 const HTML = 'public/omm-table.html'
-const JS = 'public/zen-table.js'
+const JS = 'public/lib/zen-table.js'
 
 test('页面存在且标题/资源正确', () => {
   assert.ok(existsSync(new URL(HTML, ROOT)), '入口页不存在')
@@ -16,7 +16,7 @@ test('页面存在且标题/资源正确', () => {
     'omm-embed.js', 'omm-desktop.js', 'omm-share.js',
     'zen-style/zen.css', 'zen-style/products/table.css',
     'zen-canvas/layout-engine.js',
-    'zen-canvas/zen-canvas.js', 'zen-table.js',
+    'zen-canvas/zen-canvas.js', 'lib/zen-table.js',
   ]) {
     assert.ok(html.includes(asset), '缺少资源引用: ' + asset)
   }
@@ -25,7 +25,7 @@ test('页面存在且标题/资源正确', () => {
 })
 
 test('产品脚本语法可解析', () => {
-  assert.doesNotThrow(() => new Function(read(JS)), 'zen-table.js 存在语法错误')
+  assert.doesNotThrow(() => new Function(read(JS)), 'lib/zen-table.js 存在语法错误')
 })
 
 test('脚本引用的 DOM id 全部存在', () => {

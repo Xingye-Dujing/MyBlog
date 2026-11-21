@@ -12,7 +12,7 @@ import re
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.30"
+VERSION = "1.0.32"
 
 
 def version_key(value: Any) -> tuple:
@@ -329,7 +329,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "glyph": "视",
         "description": "节点工作流 · 视频分析与处理 · 内置 ffmpeg",
         "entry": "omm-video.html",
-        "version": "1.0.31",
+        "version": "1.0.33",
         "port": 8329,
         "runtime": "video",
         "vendor": [],

@@ -1,8 +1,8 @@
 # ZenPack 工作区包规范
 
 ZenPack 是把 OMM-ZEN 整个工作区搬到另一台设备的可移植文件。它不是新的备份格式：
-打包、校验、差异、合并与恢复全部由 `zen-backup.js` 的 `ZenBackup` 处理，
-`zen-pack.js` 只是增加工作区键目录与文件读写入口的薄包装。
+打包、校验、差异、合并与恢复全部由 `lib/zen-backup.js` 的 `ZenBackup` 处理，
+`lib/zen-pack.js` 只是增加工作区键目录与文件读写入口的薄包装。
 
 ## 文件格式
 

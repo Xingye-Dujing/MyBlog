@@ -1,7 +1,7 @@
-/* zen-backup.js 单元测试 */
+/* lib/zen-backup.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ZenBackup } from '../public/zen-backup.js'
+import { ZenBackup } from '../public/lib/zen-backup.js'
 
 const products = [
   { id: 'writer', name: '所思所想', data: [{ id: 'n1', content: 'a' }] },

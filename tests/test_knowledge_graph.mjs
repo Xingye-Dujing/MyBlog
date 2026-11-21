@@ -11,7 +11,7 @@ const ROOT = new URL('../', import.meta.url)
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8')
 const hub = read('public/omm-hub.js')
 const html = read('public/omm-hub.html')
-const link = read('public/zen-link.js')
+const link = read('public/lib/zen-link.js')
 
 function extractFunction(text, name) {
   const start = text.indexOf('function ' + name + '(')

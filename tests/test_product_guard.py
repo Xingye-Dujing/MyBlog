@@ -37,7 +37,7 @@ class LocalTargetTests(unittest.TestCase):
             "zen-card.js",
         )
         self.assertEqual(
-            g.local_target("public/omm-x.html", "zen-link.js"), "zen-link.js",
+            g.local_target("public/omm-x.html", "lib/zen-link.js"), "lib/zen-link.js",
         )
 
     def test_query_fragment_and_encoding_are_stripped(self):
@@ -49,12 +49,12 @@ class LocalTargetTests(unittest.TestCase):
 
 class LinkCheckTests(unittest.TestCase):
     def setUp(self):
-        self.exists = lambda t: t in {"zen-link.js", "img/ok.png", "json-specs/writer.md"}
+        self.exists = lambda t: t in {"lib/zen-link.js", "img/ok.png", "json-specs/writer.md"}
 
     def test_detects_missing_local_link_once_per_target(self):
         files = {
             "public/omm-x.html":
-                '<link href="nope.css">\n<img src="nope.css">\n<a href="zen-link.js">ok</a>',
+                '<link href="nope.css">\n<img src="nope.css">\n<a href="lib/zen-link.js">ok</a>',
         }
         issues = g.check_links(files, self.exists)
         self.assertEqual(len(issues), 1)
@@ -93,7 +93,7 @@ class BridgeCheckTests(unittest.TestCase):
             if name == omit:
                 continue
             files["public/omm-%s.html" % name] = (
-                '<script type="module" src="zen-link.js"></script>'
+                '<script type="module" src="lib/zen-link.js"></script>'
             )
         return files
 
@@ -102,14 +102,14 @@ class BridgeCheckTests(unittest.TestCase):
 
     def test_missing_product_and_missing_script_are_reported(self):
         files = self._files(omit="writer")
-        files["public/omm-data.html"] = '<script src="zen-link.js"></script>'
+        files["public/omm-data.html"] = '<script src="lib/zen-link.js"></script>'
         issues = g.check_bridge(files, lambda t: True)
         self.assertEqual(len(issues), 2)
         self.assertTrue(all(i.code == "BRIDGE" for i in issues))
 
     def test_single_quoted_module_script_is_accepted(self):
         files = self._files()
-        files["public/omm-writer.html"] = "<script type='module' src='zen-link.js'></script>"
+        files["public/omm-writer.html"] = "<script type='module' src='lib/zen-link.js'></script>"
         self.assertEqual(g.check_bridge(files, lambda t: True), [])
 
 
@@ -197,7 +197,7 @@ class FormatCheckTests(unittest.TestCase):
 
     def test_source_drift_is_reported(self):
         files = self._files()
-        files["public/zen-card.js"] = "zen-card zen-card-pack"
+        files["public/lib/zen-card.js"] = "zen-card zen-card-pack"
         issues = g.check_format(files, lambda t: True)
         self.assertEqual(len(issues), 1)
         self.assertIn("产品源码缺少格式标识: cards", issues[0].message)
@@ -314,7 +314,7 @@ class GenFormatsCheckTests(unittest.TestCase):
             'detection': {'zencard': [{'kind': 'card', 'mode': 'fallback'}]},
             'formats': [{
                 'product': 'zencard', 'label': '卡片', 'kind': 'card',
-                'format': 'zen-card', 'version': 1, 'source': 'public/zen-card.js',
+                'format': 'zen-card', 'version': 1, 'source': 'public/lib/zen-card.js',
                 'validator': 'v_zencard', 'golden': 'zencard-card.json',
                 'fields': [], 'hard': [], 'template': {'format': 'zen-card'},
                 'enums': {}, 'ext': '.json',
@@ -324,7 +324,7 @@ class GenFormatsCheckTests(unittest.TestCase):
         files = {
             'public/json-specs/format-registry.json': text,
             'public/agent_workspace/omm_validators.py': 'def v_zencard(...): pass',
-            'public/zen-card.js': 'zen-card',
+            'public/lib/zen-card.js': 'zen-card',
             'tests/golden_formats/zencard-card.json': '{}',
             'public/agent_workspace/omm_formats_generated.py': gen.render_py(registry),
             'public/json-specs/formats.generated.md': gen.render_md(registry),
@@ -364,7 +364,7 @@ class GenFormatsCheckTests(unittest.TestCase):
 
     def test_format_token_missing_in_source_is_reported(self):
         files, _ = self._fixture()
-        files['public/zen-card.js'] = 'no token here'
+        files['public/lib/zen-card.js'] = 'no token here'
         self.assertTrue(any('格式标识' in i.message
                             for i in g.check_gen_formats(files, lambda t: True)))
 
@@ -442,7 +442,7 @@ class VersionCheckTests(unittest.TestCase):
 
     def test_shared_module_change_suggests_suite_bump(self):
         files = self._files()
-        files["public/zen-card.js"] = "共享模块已修改"
+        files["public/lib/zen-card.js"] = "共享模块已修改"
         self.assertTrue(any("共享模块已变更但套件版本未升" in m for m in self._messages(files)))
 
     def test_downgrade_and_republished_checksum_are_reported(self):

@@ -20,7 +20,7 @@
 ## 工程质量
 
 - 新增 pytest 自动化测试：表格引擎、HTTP API、桌面注册与打包、页面与 AI 桥接线；公开测试集 **292 项通过**，Node 页面专项 8 项通过。
-- 统一守卫的 REGISTRY 现在以 `entry` 字段为入口页权威来源，允许 lambda 使用 `index.html` 这类非约定名；video 的格式源码指向 `zen-video.js`，lambda 分享格式真源指向规范文档。
+- 统一守卫的 REGISTRY 现在以 `entry` 字段为入口页权威来源，允许 lambda 使用 `index.html` 这类非约定名；video 的格式源码指向 `lib/zen-video.js`，lambda 分享格式真源指向规范文档。
 - json-specs 的 lambda / video 文档已纳入总表索引并与 AI 知识副本同步；本地 `catalog.json` 由发布脚本正常生成。
 
 ## 更新方式

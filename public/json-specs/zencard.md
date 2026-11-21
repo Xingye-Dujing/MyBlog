@@ -4,7 +4,7 @@
 > 之间的内容搬运不再为每对产品写一次性转换。任何产品只要能产出或消费 `zen-card`，
 > 就能与整个 OMM-ZEN 生态互通。
 >
-> 本规范与实现同源：`public/zen-card.js`（`create` / `validate` / `parse` / `serialize`
+> 本规范与实现同源：`public/lib/zen-card.js`（`create` / `validate` / `parse` / `serialize`
 > 与各 `from*` / `to*` 转换函数）。字段名、默认值和容错都以该模块为准，
 > `tests/test_zencard.mjs` 逐项验证，共 18 项断言。
 
@@ -116,7 +116,7 @@
 
 ## 4. 与其他产品格式的转换
 
-`zen-card.js` 提供纯函数双向转换，全部通过 `tests/test_zencard.mjs` 验证：
+`lib/zen-card.js` 提供纯函数双向转换，全部通过 `tests/test_zencard.mjs` 验证：
 
 | 方向 | 函数 | 目标格式 |
 |---|---|---|
@@ -143,7 +143,7 @@ Writer 还可通过右键“插入图表…”把 CSV 渲染成自包含 SVG（d
 
 - Hub 读取自身域名下的 `zen.cards.v1`、`zen.inbox.v1`、`zen.clip.v1`；
 - 同时向每个已打开产品的 iframe 发送 `omm:zen-card-request`，产品端通过
-  `zen-link.js` 回传 `omm:zen-card-reply`（携带自己的同类 localStorage 数据）；
+  `lib/zen-link.js` 回传 `omm:zen-card-reply`（携带自己的同类 localStorage 数据）；
 - 卡片按 `id` 去重，最多显示 120 个节点；`links` 形成引用边，共享 `tags` 形成同标签边；
 - 跨 iframe 请求一律用该 iframe 自身 URL 推导的 origin（`frameTargetOrigin`），
   产品端回信用 `omm_hub_origin` 参数或 referrer 推导的明确 origin，不使用通配符。

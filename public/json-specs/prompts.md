@@ -9,7 +9,7 @@
 ---
 
 <a id="zencard"></a>
-## ZenCard（zen-card.js · 跨产品通用知识卡片包 `.json`）
+## ZenCard（lib/zen-card.js · 跨产品通用知识卡片包 `.json`）
 
 ```text
 你要生成一个 ZenCard 知识卡片包（.json，UTF-8），供各 OMM-ZEN 产品导入。只输出 JSON，不要代码围栏/注释/尾逗号。

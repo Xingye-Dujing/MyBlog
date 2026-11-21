@@ -1,7 +1,7 @@
-/* zen-review.js 单元测试 */
+/* lib/zen-review.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ZenReview } from '../public/zen-review.js'
+import { ZenReview } from '../public/lib/zen-review.js'
 
 const data = {
   timeline: [

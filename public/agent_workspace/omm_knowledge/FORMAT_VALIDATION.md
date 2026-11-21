@@ -25,7 +25,7 @@ AI 不要自己写校验逻辑，也不要凭记忆编造导入文件结构。�
 - **所思所想**：`v:2`；节点 id `node-<数字>`；坐标非 0 且在范围内；连线端点存在且不同；图片节点必须 `srcMode:"url"` + https/data URL。
 - **间隔复习 / 网页剪藏**：`format:"zen-card"`、`v:1`；kind/source 用枚举；content 非空；id 唯一；ISO 时间；links 指向真实卡片。
 - **自动化编排**：action 类型只限 addTag/setKind/send/publish/notify/highlight；send 要 to、publish 要 channel。
-- **统一备份**：`format:"zen-backup"`、`v:1`；`products[].id` 即 localStorage 键；`checksum` 必须与 data 的 **FNV-1a base36（UTF-16 码元）** 一致——校验器已内建与 `zen-backup.js` 完全相同的算法，会自动重算并指出正确值。
+- **统一备份**：`format:"zen-backup"`、`v:1`；`products[].id` 即 localStorage 键；`checksum` 必须与 data 的 **FNV-1a base36（UTF-16 码元）** 一致——校验器已内建与 `lib/zen-backup.js` 完全相同的算法，会自动重算并指出正确值。
 - **消息同步 / 文档脱敏**：没有文件导入；校验器会明确报错，不要为它们生成导入文件。
 - **静书房 AI 配置**：可生成配置骨架，但 `apiKey` 必须留空，密钥只能在设置界面填写。
 

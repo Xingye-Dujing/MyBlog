@@ -8,9 +8,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { ZenCard } from '../public/zen-card.js'
-import { ZenBackup } from '../public/zen-backup.js'
-import { ZenFlow } from '../public/zen-flow.js'
+import { ZenCard } from '../public/lib/zen-card.js'
+import { ZenBackup } from '../public/lib/zen-backup.js'
+import { ZenFlow } from '../public/lib/zen-flow.js'
 
 const DIR = new URL('./golden_formats/', import.meta.url)
 const read = (name) => JSON.parse(readFileSync(new URL(name, DIR), 'utf8'))

@@ -1,7 +1,7 @@
-/* search-library.js 单元测试 */
+/* lib/search-library.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SearchLibrary } from '../public/search-library.js'
+import { SearchLibrary } from '../public/lib/search-library.js'
 
 const entries = [
   { query: '量子计算', answer: '量子计算利用叠加态。', sources: [{ url: 'https://a', title: 'A' }], tags: ['科技'], ts: '2026-01-01T00:00:00.000Z' },

@@ -1,9 +1,9 @@
-/* zen-card.js 单元测试（node:test）
+/* lib/zen-card.js 单元测试（node:test）
  * 运行：node tests/test_zencard.mjs
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ZenCard } from '../public/zen-card.js'
+import { ZenCard } from '../public/lib/zen-card.js'
 
 const FIXED = { now: Date.UTC(2026, 0, 2, 3, 4, 5), rand: 0.5 }
 

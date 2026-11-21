@@ -4,10 +4,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { ZenChart } from '../public/zen-chart.js'
-import { ZenBackup } from '../public/zen-backup.js'
-import { ZenSRS } from '../public/zen-srs.js'
-import { SearchLibrary } from '../public/search-library.js'
+import { ZenChart } from '../public/lib/zen-chart.js'
+import { ZenBackup } from '../public/lib/zen-backup.js'
+import { ZenSRS } from '../public/lib/zen-srs.js'
+import { SearchLibrary } from '../public/lib/search-library.js'
 
 const ROOT = new URL('../', import.meta.url)
 const read = (rel) => readFileSync(new URL(rel, ROOT), 'utf8')

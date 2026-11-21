@@ -13,31 +13,31 @@ const PRODUCTS = [
   {
     file: 'public/omm-zencard.html',
     title: '间隔复习',
-    modules: ['zen-card.js', 'zen-srs.js'],
+    modules: ['lib/zen-card.js', 'lib/zen-srs.js'],
     ids: ['review-area', 'card-list', 'add-card', 'import-btn', 'export-btn', 'tabs', 'graph-canvas', 'graph-detail'],
   },
   {
     file: 'public/omm-zenflow.html',
     title: '自动化编排',
-    modules: ['zen-card.js', 'zen-flow.js'],
+    modules: ['lib/zen-card.js', 'lib/zen-flow.js'],
     ids: ['rule-list', 'save-rule', 'add-action', 'run-btn', 'effect-list', 'editor-title'],
   },
   {
     file: 'public/omm-zenclip.html',
     title: '网页剪藏',
-    modules: ['zen-card.js'],
+    modules: ['lib/zen-card.js'],
     ids: ['clip-text', 'make-card', 'preview-card', 'clip-list', 'download-btn'],
   },
   {
     file: 'public/omm-zenreview.html',
     title: '复盘报告',
-    modules: ['zen-card.js', 'zen-review.js'],
+    modules: ['lib/zen-card.js', 'lib/zen-review.js'],
     ids: ['gen-btn', 'report-out', 'range-from', 'range-to', 'copy-btn', 'tocards-btn'],
   },
   {
     file: 'public/omm-zenbackup.html',
     title: '统一备份',
-    modules: ['zen-backup.js'],
+    modules: ['lib/zen-backup.js'],
     ids: ['scan-btn', 'manifest-list', 'pack-btn', 'import-file', 'diff-out', 'restore-btn'],
   },
 ]
@@ -100,13 +100,13 @@ test('既有 12 个产品仍全部引入共享桥接脚本（回归护栏）', (
   names.forEach((n) => {
     const html = read(`public/omm-${n}.html`)
     assert.ok(html.includes('omm-share.js'), `omm-${n}.html 缺少 omm-share.js`)
-    assert.ok(html.includes('zen-link.js'), `omm-${n}.html 缺少 zen-link 桥接`)
+    assert.ok(html.includes('lib/zen-link.js'), `omm-${n}.html 缺少 zen-link 桥接`)
     assert.ok(/<title>/.test(html), `omm-${n}.html 缺少 title`)
   })
 })
 
 test('zen-link 仅信任同源与 loopback origin', () => {
-  const src = read('public/zen-link.js')
+  const src = read('public/lib/zen-link.js')
   const start = src.indexOf('function isTrusted(')
   assert.notEqual(start, -1)
   const open = src.indexOf('{', start)
@@ -127,11 +127,11 @@ test('zen-link 仅信任同源与 loopback origin', () => {
 
 test('核心模块均挂载全局并导出命名符号', () => {
   const mods = {
-    'public/zen-card.js': 'ZenCard',
-    'public/zen-srs.js': 'ZenSRS',
-    'public/zen-flow.js': 'ZenFlow',
-    'public/zen-review.js': 'ZenReview',
-    'public/zen-backup.js': 'ZenBackup',
+    'public/lib/zen-card.js': 'ZenCard',
+    'public/lib/zen-srs.js': 'ZenSRS',
+    'public/lib/zen-flow.js': 'ZenFlow',
+    'public/lib/zen-review.js': 'ZenReview',
+    'public/lib/zen-backup.js': 'ZenBackup',
   }
   for (const [file, name] of Object.entries(mods)) {
     const src = read(file)

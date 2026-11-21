@@ -5,11 +5,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ZenCard } from '../public/zen-card.js'
-import { ZenBackup } from '../public/zen-backup.js'
-import { ZenPack } from '../public/zen-pack.js'
-import { ZenSRS } from '../public/zen-srs.js'
-import { ZenFlow } from '../public/zen-flow.js'
+import { ZenCard } from '../public/lib/zen-card.js'
+import { ZenBackup } from '../public/lib/zen-backup.js'
+import { ZenPack } from '../public/lib/zen-pack.js'
+import { ZenSRS } from '../public/lib/zen-srs.js'
+import { ZenFlow } from '../public/lib/zen-flow.js'
 
 test('ZenCard.create 产出 zen-card v1 且通过自身校验', () => {
   const c = ZenCard.create({ content: '规范卡片', tags: ['a', 'a', ' b '] })

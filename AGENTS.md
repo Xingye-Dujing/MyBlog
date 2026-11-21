@@ -13,10 +13,13 @@
   No inline `<style>`, no new hardcoded colours, no per-product z-index. Radius is fixed 0 and the
   accent is neutral — the hub/installer theme-colour, radius and light/dark settings were deliberately
   removed; do not reintroduce them.
-- Shared JS lives as `public/zen-*.js` classic scripts exposing one global (`ZenCrypto`, `ZenCard`, …).
-  `zen-crypto.js` holds the Base64/PBKDF2 helpers used by the six cloud-sync products; do not
-  re-inline them. A new shared module must be listed in `tests/product_guard.py` `SHARED_MODULES`,
-  which ties it to the suite version.
+- Shared JS lives in `public/lib/` (`zen-*.js`, `data-viz.js`, `search-library.js`) and exposes one
+  global per module (`ZenCrypto`, `ZenCard`, …). Bridge scripts (`omm-embed.js`, `omm-desktop.js`,
+  `omm-share.js`) and `viz-bridge.js` stay at the root: the zenviz-core submodule template references
+  `viz-bridge.js` by bare name. `lib/zen-crypto.js` holds the Base64/PBKDF2 helpers used by the six
+  cloud-sync products; do not re-inline them. A new shared module must be listed in
+  `tests/product_guard.py` `SHARED_MODULES` and staged by `offline.py copy_shared_lib`, which ties
+  it to the suite version.
 
 ## Repo shape
 

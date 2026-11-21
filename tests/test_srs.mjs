@@ -1,7 +1,7 @@
-/* zen-srs.js 单元测试 */
+/* lib/zen-srs.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ZenSRS } from '../public/zen-srs.js'
+import { ZenSRS } from '../public/lib/zen-srs.js'
 
 const T = Date.UTC(2026, 0, 1, 0, 0, 0)
 

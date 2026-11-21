@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import '../public/zen-crypto.js'
+import '../public/lib/zen-crypto.js'
 const C = globalThis.ZenCrypto
 
 const ROOT = new URL('../', import.meta.url)
@@ -31,7 +31,7 @@ test('deriveKey 派生的密钥可完成 AES-GCM 加解密', async () => {
 test('六个云同步产品复用共享实现，不再内联定义', () => {
   for (const name of ['annotate', 'corpus', 'data', 'english', 'planner', 'writer']) {
     const html = read(`public/omm-${name}.html`)
-    assert.ok(html.includes('<script src="zen-crypto.js"></script>'), `${name} 未引入共享模块`)
+    assert.ok(html.includes('<script src="lib/zen-crypto.js"></script>'), `${name} 未引入共享模块`)
     for (const fn of ['function b64(', 'function ub64(', 'function keyFor(']) {
       assert.ok(!html.includes(fn), `${name} 仍有内联 ${fn}`)
     }

@@ -133,7 +133,7 @@ def test_json_input_and_unknown_product():
 
 
 def test_checksum_matches_browser_implementation():
-    # 与 zen-backup.js 用 node 实算的结果一致（含中文）。
+    # 与 lib/zen-backup.js 用 node 实算的结果一致（含中文）。
     assert js_checksum([]) == 'w7k42t'
     assert js_checksum({'a': '中文', 'b': [1, 2]}) == 'xcp1c5'
     data = obj('zenbackup', 'manifest')

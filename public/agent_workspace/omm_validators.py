@@ -4,7 +4,7 @@
 AI 只需要从 omm_format_template 拿骨架、填好内容，再交给 omm_format_validate 校验；
 错误按“路径 + 原因”返回，AI 据此自行修正，不必自己写校验逻辑。
 
-校验规则取自各产品源码（zen-card.js / zen-backup.js / zen-flow.js / json-specs /
+校验规则取自各产品源码（lib/zen-card.js / lib/zen-backup.js / lib/zen-flow.js / json-specs /
 MDFORGE AI 规范），只卡真正会导致导入失败的硬约束；可恢复的偏差给 warning。
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _base36(number: int) -> str:
 
 
 def js_checksum(value: Any) -> str:
-    """与 zen-backup.js 完全一致的 FNV-1a（UTF-16 码元）——用于校验 checksum 字段。"""
+    """与 lib/zen-backup.js 完全一致的 FNV-1a（UTF-16 码元）——用于校验 checksum 字段。"""
     text = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
     h = 2166136261
     for (unit,) in struct.iter_unpack('<H', text.encode('utf-16-le')):
@@ -670,7 +670,7 @@ def v_zenflow(obj: Any, text: str, r: Report) -> str:
             continue
         if not str(rule.get('name') or '').strip():
             r.error('%s.name 不能为空' % path)
-        # 与 zen-flow.js 的 validateRule 一致：至少需要一条 action，否则规则永不触发。
+        # 与 lib/zen-flow.js 的 validateRule 一致：至少需要一条 action，否则规则永不触发。
         actions = rule.get('actions')
         if not isinstance(actions, list) or not actions:
             r.error('%s.actions 至少需要一条 action' % path)

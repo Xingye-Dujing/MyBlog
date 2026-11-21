@@ -1,7 +1,7 @@
-/* data-viz.js 单元测试 */
+/* lib/data-viz.js 单元测试 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { DataViz } from '../public/data-viz.js'
+import { DataViz } from '../public/lib/data-viz.js'
 
 const table = {
   name: '销量',
