@@ -35,8 +35,8 @@ def test_ui_smoke_offline():
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto('http://127.0.0.1:%d/omm-ai.html' % port, wait_until='domcontentloaded')
             page.wait_for_timeout(800)
-            assert page.locator('#productGrid .card').count() == 17
-            assert page.locator('#skillGrid .card').count() == 21
+            assert page.locator('#productGrid .card').count() == 18
+            assert page.locator('#skillGrid .card').count() == 22
             assert 'complete' in page.locator('#metaProvider').inner_text()
             page.fill('#input', '你能做什么？')
             page.click('#btnSend')

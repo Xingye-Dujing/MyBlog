@@ -1,6 +1,6 @@
 # 静书房 / OMM-ZEN 产品总览
 
-共 17 个产品 + 工作台。所有产品页在独立 origin 运行，
+共 18 个产品 + 工作台。所有产品页在独立 origin 运行，
 跨产品内容请通过 ZenCard 与共享频道（documents、notes.english、data.tables）传递。
 
 ## 静 · 静书房（hub）
@@ -312,6 +312,33 @@
 - 常见坑：
   - 不要把摘录的长文直接当作自己的回答。
   - 引用标记使用产品内部的控制字符，不要手改成普通 [n] 文本。
+
+## 视 · 视频工作台（video）
+
+- 用途：节点工作流编排的视频分析与处理台（工作流画布 + 内置轻量 ffmpeg）。
+- 端口/入口：8329 / omm-video.html（video）
+- 共享频道：documents
+- AI：产品自身不含生成式 AI。通过 AI 工作区编排工作流：omm_product_info("video") 查节点与约束，omm_spec_search("视频工作台") 读 json-specs/video.md；生成的工作流 JSON 可用 ZenVideoAI.snapshot()/snapshotMarkdown() 取当前画布，或经 OMMShare 发给用户落库。
+- 功能：
+  - 节点库：视频输入、媒体信息、场景检测、静音检测、黑场检测、批量缩略图、片段裁剪、画面裁切、尺寸缩放、旋转翻转、播放速度、音量调整、去除音轨、淡入淡出、叠加文字、提取音频、视频拼接、编码与格式、导出文件。
+  - 画布操作：点选/拖拽节点、端口连线、自动排布（smart 智能/分层/主线/力导向/径向/时间线）、适应视野、清空、撤销。
+  - 示例工作流：基础剪辑、媒体分析、缩略图与 GIF。
+  - 产物预览与下载；运行进度与状态实时轮询；文件随任务上传到本地工作区。
+- 数据落点：
+  - localStorage：zen.video.canvas.v1（画布 {version,app,nodes[],connections[],view,meta}）、zen.theme（亮暗主题）。
+  - 上传与任务：video-runtime/work/uploads、video-runtime/work/jobs（相对插件目录）。
+- 格式：
+  - AI 工作区工作流 JSON：{format:"omm-video-workflow", version:1, nodes:[{id,type,data}], connections:[{from,to,fromPort,toPort}]}（详见 json-specs/video.md）。
+  - 导出与打开：导出 video-workflow.json；omm-video.js 同时接受工作台自身的画布 JSON，应用后与 AI 生成的文件等价。
+- 最佳实践：
+  - 画布先加节点再连线；分析节点（媒体信息/场景/静音/黑场/缩略图）不改内容，可并联在输入之后。
+  - 运行前确认视频输入节点已导入文件；画布为空或无文件时运行会被拦截。
+  - 把可复用的流程存为示例工作流，导出/打开用工作流 JSON（omm-video-workflow），文件名 video-workflow.json。
+  - 分析节点结果可并联在输入之后并行运行，不改变视频内容；缩略图最多 30 张。
+  - 缺少内置 ffmpeg 或后端未连接时媒体信息与执行结果不可用，先检查健康栏的 ffmpeg 徽标。
+- 常见坑：
+  - 后端未连接时媒体信息与执行结果不可用，检查健康栏的 ffmpeg 徽标。
+  - drawtext 等节点的文本字段按 ffmpeg 表达式写（如 (w-text_w)/2），不要写成带括号的普通文案。
 
 ## 图 · 可视化图表（visualization）
 

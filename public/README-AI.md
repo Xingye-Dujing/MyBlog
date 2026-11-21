@@ -9,7 +9,7 @@
 
 ## 1. 它做什么
 
-- **17 个产品专家技能**：每个产品一个 skill（`omm.zen.<产品id>`），prompt 不只是简介，
+- **18 个产品专家技能**：每个产品一个 skill（`omm.zen.<产品id>`），prompt 不只是简介，
   而是把工作流、数据落点、导入导出格式、AI 规范、**最佳实践**、常见坑编织成可执行指令。
   另有 `omm.zen.hub`（静书房管控）、`omm.zen.cross`（跨产品编排）、`omm.zen.ai`（工作区管家）。
 - **领域只读工具**：`omm_product_list` / `omm_product_info` / `omm_spec_search` /
@@ -34,16 +34,16 @@ public/
 ├── omm-ai.html                    # OMM-ZEN 风格前端（对话/技能/产品/知识/会话/设置）
 ├── agent_workspace/               # 从 ai-agent-framework 原样引入的框架
 │   ├── service.py / agent.py / store.py / tools.py / skills.py / providers/ …
-│   ├── omm_data.py                # 17 个产品的结构化知识（唯一真源）
-│   ├── omm_skills.py              # 20 个技能（产品专家 + 跨产品 + 管控）
+│   ├── omm_data.py                # 18 个产品的结构化知识（唯一真源）
+│   ├── omm_skills.py              # 22 个技能（18 个产品专家 + 静书房管控 + 跨产品编排 + AI 工作区管家 + 学习包设计师）
 │   ├── omm_tools.py               # 9 个领域只读工具（含模板与校验）
-│   ├── omm_validators.py          # 17 产品格式的校验器 + 空白模板 + FNV-1a checksum
+│   ├── omm_validators.py          # 18 产品格式的校验器 + 空白模板 + FNV-1a checksum
 │   ├── omm_host.py                # OMMZenHostAdapter：事实、规范、产物应用
 │   ├── omm_server.py              # Flask create_app(plugin_dir, data_dir)
 │   └── omm_knowledge/             # 规范：json-specs、MDFORGE AI 规范、格式校验说明、PRODUCTS.md
 ├── tests/
 │   ├── test_omm_ai.py             # 知识/技能/工具/产物/路由/Flask/构建契约/前端契约
-│   ├── test_omm_validators.py     # 17 产品模板与硬约束、checksum、工具/接口/前端校验契约
+│   ├── test_omm_validators.py     # 18 产品模板与硬约束、checksum、工具/接口/前端校验契约
 │   ├── test_hub_launch.py         # 静书房真实启动插件并打开页面
 │   ├── test_ui_browser.py         # Playwright 无密钥开箱可用冒烟
 │   └── framework/                 # 框架自带 131 个测试（含 quote style 的 2 个行为测试）
@@ -91,8 +91,8 @@ public/
 误写时用 `python tools/check_quote_style.py --fix` 一键修复（OpenCode 写入钩子也会修）。
 `.workbuddy/`、`data/` 等历史目录在排除表里，不参与扫描。
 
-测试覆盖：产品目录完整性（17 个、端口唯一、每个 ≥5 条最佳实践）、20 个技能深度与可用性、
-9 个领域工具执行、17 产品模板全量可校验与硬约束拒绝用例、FNV-1a checksum 与浏览器一致、
+测试覆盖：产品目录完整性（18 个、端口唯一、每个 ≥5 条最佳实践）、21 个技能深度与可用性、
+9 个领域工具执行、18 产品模板全量可校验与硬约束拒绝用例、FNV-1a checksum 与浏览器一致、
 宿主事实与上下文、产物应用（路径穿越/密钥/卡片/打开产品）、
 离线对话与技能路由、自定义 provider 注册、Flask 全部路由、密钥不回传、
 桌面构建契约、前端 OMM-ZEN 样式与桥接契约，以及静书房真实启动插件的端到端检查。

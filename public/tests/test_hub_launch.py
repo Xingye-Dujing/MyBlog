@@ -86,6 +86,6 @@ def test_hub_starts_ai_plugin(tmp_path, monkeypatch):
         base = record['url'].rsplit('/', 1)[0]
         with urllib.request.urlopen(base + '/api/omm/env', timeout=10) as response:
             env = response.read().decode('utf-8')
-        assert '"products":17' in env or '"products": 17' in env
+        assert '"products":18' in env or '"products": 18' in env
     finally:
         hub.stop_all()

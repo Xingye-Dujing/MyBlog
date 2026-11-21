@@ -4,9 +4,9 @@
 > 功能开发与插件制作看 [`PLUGIN-GUIDE.md`](PLUGIN-GUIDE.md)；
 > 清单字段契约看 [`../plugin-spec.md`](../plugin-spec.md)。
 
-把 `public/` 下的 17 个产品打包成独立桌面程序，并提供三种集成形态：
+把 `public/` 下的 18 个产品打包成独立桌面程序，并提供三种集成形态：
 
-- **OMM-ZEN.exe / .app**：完整离线版，内置全部 17 个插件。
+- **OMM-ZEN.exe / .app**：完整离线版，内置全部 19 个插件。
 - **OMM-ZEN-Framework**：只含工作台框架，产品以插件形式按需安装。
 - **OMM-ZEN-Setup.exe / .app**：在线安装器，勾选要安装的产品，下载框架和对应插件包。
 
@@ -74,7 +74,7 @@
 ### 内置 AI 工作区（`ai`）
 
 静书房还内置一个带 Python 后端的专属 Agent 插件（`omm-ai.html`，端口 8328，runtime `ai`），
-把 `agent-workspace` 框架与 17 个产品的技能/规范打包进工作台。它由 `hub_server._start_ai()`
+把 `agent-workspace` 框架与 18 个产品的技能/规范打包进工作台。它由 `hub_server._start_ai()`
 启动，页面、工具与产物审批都通过 OMM-ZEN 桥接与静书房协同；配置与测试见
 [`public/README-AI.md`](../README-AI.md)。用户导入的 zip 仍只能是 `static`，不能声明 `ai` 运行时。
 

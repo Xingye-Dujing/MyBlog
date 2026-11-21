@@ -37,6 +37,8 @@
   - unsupported（—）
 - [search · 智能搜索](#search)
   - export（.json）
+- [video · 视频工作台](#video)
+  - workflow（.json）
 - [visualization · 可视化图表](#visualization)
   - csv（.json/.csv）
   - properties（.json/.csv）
@@ -601,6 +603,92 @@
     "apiModel": "deepseek-chat"
   },
   "history": []
+}
+```
+
+---
+
+<a id="video"></a>
+
+## video · 视频工作台
+
+### `workflow` · .json
+
+- 契约：format=`omm-video-workflow`，version=`1`
+- 实现源码：`public/omm-video.js`
+- 深度校验器：`v_video`
+- 硬门槛：format="omm-video-workflow"；version 数字 1；nodes 顶层数组；connections 顶层数组
+
+| 字段 | 类型 | 必需 |
+|---|---|---|
+| `nodes` | array | 是 |
+| `connections` | array | 是 |
+
+最小示例：
+
+```json
+{
+  "format": "omm-video-workflow",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n-input-1",
+      "type": "input",
+      "title": "视频输入",
+      "data": {
+        "fileId": "",
+        "filename": ""
+      }
+    },
+    {
+      "id": "n-trim-1",
+      "type": "trim",
+      "title": "片段裁剪",
+      "data": {
+        "start": 0,
+        "duration": 10
+      }
+    },
+    {
+      "id": "n-format-1",
+      "type": "format",
+      "title": "编码与格式",
+      "data": {
+        "format": "mp4",
+        "crf": 23,
+        "preset": "medium"
+      }
+    },
+    {
+      "id": "n-export-1",
+      "type": "export",
+      "title": "导出文件",
+      "data": {
+        "filename": "output.mp4",
+        "format": "mp4"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "n-input-1",
+      "to": "n-trim-1",
+      "fromPort": "right",
+      "toPort": "left"
+    },
+    {
+      "from": "n-trim-1",
+      "to": "n-format-1",
+      "fromPort": "right",
+      "toPort": "left"
+    },
+    {
+      "from": "n-format-1",
+      "to": "n-export-1",
+      "fromPort": "right",
+      "toPort": "left"
+    }
+  ]
 }
 ```
 

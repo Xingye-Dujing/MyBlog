@@ -163,7 +163,7 @@ def test_domain_tools(ws):
     assert {'omm_format_list', 'omm_format_template', 'omm_format_validate'} <= names
     ctx = {'account': 'default'}
     listing = ws.tools.execute('omm_format_list', {}, ctx)
-    assert listing['ok'] and len(listing['products']) == 18
+    assert listing['ok'] and len(listing['products']) == 19
     template = ws.tools.execute('omm_format_template', {'product': 'zencard', 'kind': 'pack'}, ctx)
     assert template['ok'] and template['templates'][0]['kind'] == 'pack'
     good = ws.tools.execute('omm_format_validate', {
@@ -178,7 +178,7 @@ def test_domain_tools(ws):
 
 def test_http_routes(client):
     listing = client.get('/api/omm/formats').get_json()
-    assert listing['ok'] and len(listing['products']) == 18
+    assert listing['ok'] and len(listing['products']) == 19
     detail = client.get('/api/omm/formats?product=mdforge').get_json()
     assert detail['product'] == 'mdforge' and detail['formats']
     template = client.get('/api/omm/template?product=zencard&kind=card').get_json()

@@ -763,6 +763,40 @@ def v_hub(obj: Any, text: str, r: Report) -> str:
     return 'ai-config'
 
 
+def v_video(obj: Any, text: str, r: Report) -> str:
+    if not isinstance(obj, dict):
+        r.error('工作流 JSON 必须是对象')
+        return 'workflow'
+    nodes = obj.get('nodes') if isinstance(obj.get('nodes'), list) else []
+    node_ids = set()
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            r.error('nodes[%d] 必须是对象' % index)
+            continue
+        node_id = str(node.get('id') or '')
+        if not node_id:
+            r.error('nodes[%d].id 缺失或为空' % index)
+        elif node_id in node_ids:
+            r.error('nodes[%d].id 重复：%s' % (index, node_id))
+        node_ids.add(node_id)
+        if not str(node.get('type') or ''):
+            r.error('nodes[%d].type 缺失' % index)
+        if not isinstance(node.get('data'), dict):
+            r.error('nodes[%d].data 必须是对象' % index)
+    connections = obj.get('connections') if isinstance(obj.get('connections'), list) else []
+    for index, conn in enumerate(connections):
+        if not isinstance(conn, dict):
+            r.error('connections[%d] 必须是对象' % index)
+            continue
+        for key in ('from', 'to'):
+            value = str(conn.get(key) or '')
+            if not value:
+                r.error('connections[%d].%s 缺失' % (index, key))
+            elif value not in node_ids:
+                r.error('connections[%d].%s 指向不存在的节点：%s' % (index, key, value))
+    return 'workflow'
+
+
 # Bound from the format registry: which deep validator handles each product is
 # a contract fact, not a second handwritten table that can drift.
 VALIDATORS = {

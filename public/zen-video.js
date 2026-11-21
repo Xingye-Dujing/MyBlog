@@ -382,7 +382,7 @@
     var n = canvas.state.nodes.length
     var rec = canvas.addNode(type, {}, { x: w.x - 120 + (n % 3) * 28, y: w.y - 60 + (n % 3) * 24 })
     canvas.select(rec.id)
-    toast('已添加「' + DEFS[type].label + '」')
+    toast('已添加“' + DEFS[type].label + '”')
   }
 
   // --------------------------------------------------------------------
@@ -391,6 +391,8 @@
   function buildSpec() {
     var data = canvas.toJSON()
     return {
+      format: 'omm-video-workflow',
+      version: 1,
       nodes: data.nodes.map(function (n) {
         var params = Object.assign({}, n.data || {})
         delete params.id
@@ -399,11 +401,169 @@
         delete params.h
         delete params.locked
         delete params.minimized
-        return { id: n.id, op: n.type, data: params }
+        return { id: n.id, type: n.type, data: params }
       }),
       connections: data.connections.map(function (c) {
         return { from: c.from, to: c.to, fromPort: c.fromPort, toPort: c.toPort }
       }),
+    }
+  }
+
+  // 接受两种 JSON 形态：AI 工作区的工作流 JSON（format: omm-video-workflow）
+  // 与工作台自身的画布 JSON（zen-canvas toJSON）。
+  function toCanvasJSON(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj
+    if (obj.format !== 'omm-video-workflow' && obj.app) return obj
+    var nodes = (Array.isArray(obj.nodes) ? obj.nodes : []).map(function (n) {
+      var def = DEFS[n.type]
+      return {
+        id: n.id,
+        type: n.type,
+        x: (n.x != null ? n.x : 100),
+        y: (n.y != null ? n.y : 100),
+        w: (n.w != null ? n.w : (def ? def.w : 240)),
+        h: (n.h != null ? n.h : (def ? def.h : 110)),
+        title: n.title || (def ? def.label : n.type),
+        locked: !!n.locked,
+        minimized: !!n.minimized,
+        data: n.data || {},
+      }
+    })
+    var connections = (Array.isArray(obj.connections) ? obj.connections : []).map(function (c) {
+      return { id: c.id, from: c.from, to: c.to, fromPort: c.fromPort || 'right', toPort: c.toPort || 'left' }
+    })
+    return {
+      version: 1, app: 'video', nodes: nodes, connections: connections,
+      view: { scale: 1, panX: 0, panY: 0 }, meta: {},
+    }
+  }
+
+  function saveWorkflowFile() {
+    var blob = new Blob([JSON.stringify(buildSpec(), null, 2)], { type: 'application/json' })
+    var a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'video-workflow.json'
+    a.click()
+    setTimeout(function () { URL.revokeObjectURL(a.href) }, 1000)
+    toast('已导出工作流 video-workflow.json')
+  }
+
+  // --------------------------------------------------------------------
+  // AI 桥接（window.ZenVideoAI）
+  // --------------------------------------------------------------------
+  function _summary(type, data) {
+    var def = DEFS[type]
+    return def && def.summary ? def.summary(data || {}) : ''
+  }
+  function _meta(type, data) {
+    var def = DEFS[type]
+    return def && def.meta ? def.meta(data || {}) : ''
+  }
+
+  function snapshot() {
+    if (!canvas) {
+      return { version: 1, app: 'video', nodeCount: 0, connectionCount: 0, nodes: [], connections: [], output: [] }
+    }
+    var data = canvas.toJSON()
+    var idToType = {}
+    data.nodes.forEach(function (n) { idToType[n.id] = n.type })
+    return {
+      version: 1,
+      app: 'video',
+      nodeCount: data.nodes.length,
+      connectionCount: data.connections.length,
+      nodes: data.nodes.map(function (n) {
+        return { id: n.id, type: n.type, title: n.title || n.type, summary: _summary(n.type, n.data), data: n.data }
+      }),
+      connections: data.connections.map(function (c) {
+        return { from: c.from, to: c.to, fromPort: c.fromPort, toPort: c.toPort }
+      }),
+      output: data.nodes.filter(function (n) { return n.type === 'export' }).map(function (n) { return n.data }),
+    }
+  }
+
+  function snapshotMarkdown() {
+    if (!canvas) return ''
+    var data = canvas.toJSON()
+    var idToType = {}
+    data.nodes.forEach(function (n) { idToType[n.id] = n.type })
+    var lines = ['视频工作台画布 · ' + data.nodes.length + ' 个节点 · ' + data.connections.length + ' 条连线']
+    data.nodes.forEach(function (n) {
+      var meta = _meta(n.type, n.data)
+      lines.push('- ' + (n.title || n.type) + (meta ? '：' + meta : ''))
+    })
+    if (data.connections.length) {
+      lines.push('连线：' + data.connections.map(function (c) {
+        return (idToType[c.from] || '?') + ' → ' + (idToType[c.to] || '?')
+      }).join(' · '))
+    }
+    return lines.join('\n')
+  }
+
+  window.ZenVideoAI = {
+    snapshot: snapshot,
+    snapshotMarkdown: snapshotMarkdown,
+    workflowSpec: buildSpec,
+    version: 1,
+  }
+
+  // --------------------------------------------------------------------
+  // omm:zen-card-request — 工作台响应 hub 广播（仅接受 loopback parent origin）
+  // --------------------------------------------------------------------
+  ;(function () {
+    function localOrigin(origin) {
+      try {
+        var u = new URL(String(origin || ''))
+        return (u.protocol === 'http:' || u.protocol === 'https:') &&
+          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
+      } catch (e) {
+        return false
+      }
+    }
+    window.addEventListener('message', function (ev) {
+      if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
+      if (window.parent === window) return
+      if (!localOrigin(ev.origin)) return
+      var api = window.ZenVideoAI
+      if (!api || !api.snapshotMarkdown) return
+      var md = api.snapshotMarkdown()
+      if (!md) return
+      var card = {
+        id: 'omm-video-workflow-' + Date.now().toString(36),
+        kind: 'omm.video.workflow',
+        content: md,
+        source: 'omm-video',
+        tags: ['视频工作流', 'AI工作区'],
+      }
+      try {
+        window.parent.postMessage({ type: 'omm:zen-card-reply', token: ev.data.token, cards: [card] }, ev.origin)
+      } catch (e) {}
+    })
+  })()
+
+  // --------------------------------------------------------------------
+  // 发送 AI 工作区（共享频道 documents → AI 插件；不可用时导出 workflow 文件）
+  // --------------------------------------------------------------------
+  function sendToAI() {
+    var api = window.ZenVideoAI
+    if (!api || !api.workflowSpec) { toast('AI 桥接未就绪'); return }
+    var spec = api.workflowSpec()
+    var title = '视频工作台 · ' + ((spec.nodes || []).length) + ' 节点'
+    if (window.OMMShare && window.OMMShare.send) {
+      window.OMMShare.send({
+        to: 'ai',
+        channel: 'documents',
+        format: 'omm.video.workflow',
+        title: title,
+        payload: { version: 1, title: title, canvas: api.snapshot() },
+      }).then(function () {
+        toast('工作流已发给 AI 工作区')
+        if (window.OMMShare.openApp) window.OMMShare.openApp('ai')
+      }, function () {
+        saveWorkflowFile()
+      })
+    } else {
+      saveWorkflowFile()
     }
   }
 
@@ -437,7 +597,7 @@
     var spec = buildSpec()
     if (!spec.nodes.length) { toast('画布是空的，请先添加节点'); return }
     if (!spec.nodes.some(function (n) { return n.op === 'input' && n.data.fileId })) {
-      toast('请先给「视频输入」节点选择文件'); return
+      toast('请先给“视频输入”节点选择文件'); return
     }
     apiPost('/api/run', spec).then(function (res) {
       if (!res.ok) { toast('启动失败：' + (res.error || '')); return }
@@ -620,7 +780,7 @@
     }
     canvas.fitView()
     canvas._changed()
-    toast('已载入「' + name + '」工作流')
+    toast('已载入“' + name + '”工作流')
   }
 
   // --------------------------------------------------------------------
@@ -692,7 +852,7 @@
     // 载入上次画布，否则给一个可直接运行的示例
     var saved = null
     try { saved = JSON.parse(localStorage.getItem('zen.video.canvas.v1') || 'null') } catch (_) {}
-    if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(saved, { history: false })
+    if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(toCanvasJSON(saved), { history: false })
     else applyTemplate('基础剪辑')
 
     // 工具栏
@@ -713,7 +873,8 @@
       var idx = parseInt(pick, 10) - 1
       if (idx >= 0 && idx < names.length) applyTemplate(names[idx])
     })
-    $('btn-save').addEventListener('click', function () { canvas.exportFile('video-workflow.json'); toast('已导出工作流 JSON') })
+    $('btn-save').addEventListener('click', saveWorkflowFile)
+    $('btn-ai').addEventListener('click', sendToAI)
     $('btn-open').addEventListener('click', function () {
       var inp = document.createElement('input')
       inp.type = 'file'
@@ -723,7 +884,7 @@
         if (!f) return
         var reader = new FileReader()
         reader.onload = function () {
-          try { canvas.fromJSON(JSON.parse(reader.result)); toast('工作流已载入') }
+          try { canvas.fromJSON(toCanvasJSON(JSON.parse(reader.result)), { history: false }); toast('工作流已载入') }
           catch (err) { toast('文件解析失败：' + err.message) }
         }
         reader.readAsText(f)
@@ -748,7 +909,7 @@
         '1. 从左侧点选节点（或拖到画布）\n' +
         '2. 从节点右侧圆点拖到下一个节点左侧圆点，串成工作流\n' +
         '3. 选中节点，在右侧设置参数（都有默认值）\n' +
-        '4. 给「视频输入」导入文件，点「运行」\n\n' +
+        '4. 给“视频输入”导入文件，点“运行”\n\n' +
         '分析节点（媒体信息/场景/静音/黑场/缩略图）不改视频内容，可并联在输入之后。\n' +
         '所有处理都基于内置 ffmpeg，无需额外安装。'
       )
