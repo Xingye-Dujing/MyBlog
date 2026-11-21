@@ -15,7 +15,7 @@ test('页面存在且标题/资源正确', () => {
   for (const asset of [
     'omm-embed.js', 'omm-desktop.js', 'omm-share.js',
     'zen-style/zen.css', 'zen-style/product/omm-table.css',
-    'zen-canvas/zen-canvas.css', 'zen-canvas/layout-engine.js',
+    'zen-canvas/layout-engine.js',
     'zen-canvas/zen-canvas.js', 'zen-table.js',
   ]) {
     assert.ok(html.includes(asset), '缺少资源引用: ' + asset)

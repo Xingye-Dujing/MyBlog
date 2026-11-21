@@ -45,7 +45,6 @@ ALL_APPS = [item["entry"] for item in BUILTIN_PLUGINS]
 
 HUB_ASSETS = [
     "omm-hub.html",
-    "omm-hub.css",
     "omm-hub.js",
     "omm-icons.js",
     "omm-embed.js",
@@ -54,7 +53,7 @@ HUB_ASSETS = [
     "plugin-spec.md",
 ]
 
-INSTALLER_ASSETS = ["installer.html", "installer.css", "installer.js", "omm-icons.js"]
+INSTALLER_ASSETS = ["installer.html", "installer.js", "omm-icons.js"]
 
 PLUGIN_ASSETS = [
     "omm-embed.js",
@@ -303,6 +302,7 @@ def stage_installer(dest: Path, common_assets=()) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     for asset in INSTALLER_ASSETS:
         shutil.copy2(ROOT / asset, dest / asset)
+    copy_zen_styles(dest)
     shutil.copy2(ROOT / "plugin-spec.md", dest / "plugin-spec.md")
     _copy_common(dest)
     for asset in common_assets:

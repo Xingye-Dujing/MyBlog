@@ -26,8 +26,6 @@
   var RECENT_KEY = 'omm.hub.recent.v1';
   var WORKSPACE_KEY = 'omm.hub.workspaces.v1';
   var SCREEN_KEY_PREFIX = 'omm.hub.screen-layout.v1.';
-  var DEFAULT_CUSTOM_HEX = '#FF8FC8';
-  var ACCENT_HEX_HINT = '支持 #RGB / #RRGGBB，例如 #FF8FC8；深色主题会自动提亮。';
   /* Allowed values for the "定时快照" interval (in minutes). Shared by the
      settings dropdown, the persisted-appearance whitelist and backup restore.
      Keep in sync with the <option> list in omm-hub.html. */
@@ -64,11 +62,6 @@
     return '每 ' + (minutes / 1440) + ' 天';
   }
   var hubAppearance = {
-    radius: 0,
-    accent: 'amber',
-    accentHex: '',
-    theme: 'light',
-    motion: true,
     topbar: true,
     restore: true,
     sleep: 15,
@@ -143,138 +136,18 @@
     };
   }
 
-  /* Single source of truth for the accent palette.  Every tinted surface reads
-     the --accent* variables derived from here, so UI colours are never
-     hard-coded in the stylesheet.  Young / lively tones were added alongside
-     the four original earthy ones. */
-  var ACCENTS = [
-    { id: 'amber',   name: '琥珀',   light: '#e3a400', dark: '#f2b81c' },
-    { id: 'olive',   name: '橄榄',   light: '#7c7f42', dark: '#aab060' },
-    { id: 'rust',    name: '赭石',   light: '#b56545', dark: '#dd8e6b' },
-    { id: 'blue',    name: '雾蓝',   light: '#5b7692', dark: '#84b0da' },
-    { id: 'coral',   name: '珊瑚',   light: '#f2605a', dark: '#ff7d76' },
-    { id: 'peach',   name: '蜜桃',   light: '#f2914f', dark: '#ffb57c' },
-    { id: 'mint',    name: '薄荷',   light: '#2fb79d', dark: '#55dfc3' },
-    { id: 'sky',     name: '天青',   light: '#359be0', dark: '#6cc2ff' },
-    { id: 'violet',  name: '紫罗兰', light: '#8a6cf0', dark: '#ac91ff' },
-    { id: 'pink',    name: '樱粉',   light: '#f472b6', dark: '#ff9ed2' },
-    { id: 'lime',    name: '青柠',   light: '#86c23c', dark: '#aee465' },
-    { id: 'indigo',  name: '靛蓝',   light: '#4f5bd5', dark: '#7d89ff' },
-  ];
-
-  function normalizeHex(value) {
-    var s = String(value == null ? '' : value).trim().replace(/^#/, '');
-    if (/^[0-9a-fA-F]{3}$/.test(s)) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
-    if (!/^[0-9a-fA-F]{6}$/.test(s)) return '';
-    return '#' + s.toUpperCase();
-  }
-
-  function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(function (v) {
-      var n = Math.max(0, Math.min(255, Math.round(v)));
-      return ('0' + n.toString(16)).slice(-2);
-    }).join('').toUpperCase();
-  }
-
-  /* A custom colour only needs one hex value: the dark variant is derived so
-     it stays legible on the dark shell without a second input. */
-  function accentForDark(hex) {
-    var c = hexToRgb(hex);
-    return rgbToHex(
-      c.r + (255 - c.r) * 0.3,
-      c.g + (255 - c.g) * 0.3,
-      c.b + (255 - c.b) * 0.3
-    );
-  }
-
-  function accentById(id) {
-    if (id === 'custom') {
-      var hex = normalizeHex(hubAppearance.accentHex) || DEFAULT_CUSTOM_HEX;
-      return { id: 'custom', name: '自定义', light: hex, dark: accentForDark(hex) };
-    }
-    for (var i = 0; i < ACCENTS.length; i++) {
-      if (ACCENTS[i].id === id) return ACCENTS[i];
-    }
-    return ACCENTS[0];
-  }
-
-  function hexToRgb(hex) {
-    var s = String(hex || '').replace('#', '');
-    if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
-    var n = parseInt(s, 16) || 0;
-    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-  }
-
-  function accentRgba(hex, alpha) {
-    var c = hexToRgb(hex);
-    return 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + alpha + ')';
-  }
-
-  function accentContrast(hex) {
-    var c = hexToRgb(hex);
-    var lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
-    return lum > 0.66 ? '#26231f' : '#ffffff';
-  }
-
-  /* Publish the whole accent scale as CSS variables.  Both the shell and the
-     shadow-DOM archive panel inherit them automatically. */
-  function applyAccentPalette() {
-    var tone = accentById(hubAppearance.accent);
-    var dark = effectiveTheme() === 'dark';
-    var base = dark ? tone.dark : tone.light;
-    var root = document.documentElement;
-    root.style.setProperty('--accent', base);
-    root.style.setProperty('--accent-soft', accentRgba(base, dark ? 0.26 : 0.16));
-    root.style.setProperty('--accent-wash', accentRgba(base, dark ? 0.13 : 0.08));
-    root.style.setProperty('--accent-line', accentRgba(base, dark ? 0.62 : 0.5));
-    root.style.setProperty('--accent-glow', accentRgba(base, dark ? 0.34 : 0.24));
-    root.style.setProperty('--accent-contrast', accentContrast(base));
-  }
-
-  /* Keep the custom hex field in sync without overwriting what the user is
-     currently typing. */
-  function syncAccentHexControls() {
-    var input = document.getElementById('hub-accent-hex');
-    var preview = document.getElementById('hub-accent-hex-preview');
-    var hex = normalizeHex(hubAppearance.accentHex) || DEFAULT_CUSTOM_HEX;
-    if (input && document.activeElement !== input) {
-      input.value = hubAppearance.accent === 'custom' ? hex.slice(1) : '';
-    }
-    if (preview) {
-      preview.style.setProperty('--swatch', hex);
-      preview.setAttribute('aria-label', '使用这个自定义颜色（' + hex + '）');
-    }
-  }
-
-  function buildAccentSwatches() {
-    var box = document.getElementById('hub-accent-options');
-    if (!box || box.dataset.built === '1') return;
-    box.dataset.built = '1';
-    ACCENTS.concat([{ id: 'custom', name: '自定义颜色', light: '', dark: '' }]).forEach(function (tone) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.dataset.hubAccent = tone.id;
-      btn.title = tone.id === 'custom' ? '使用自定义的颜色' : tone.name;
-      btn.setAttribute('aria-label', tone.id === 'custom' ? '使用自定义的颜色' : '主题色：' + tone.name);
-      if (tone.id === 'custom') btn.classList.add('swatch-custom');
-      if (tone.light) btn.style.setProperty('--swatch-light', tone.light);
-      if (tone.dark) btn.style.setProperty('--swatch-dark', tone.dark);
-      box.appendChild(btn);
-    });
-  }
-
-  function accentBroadcastPayload(theme) {
-    var tone = accentById(hubAppearance.accent);
-    var dark = (theme || effectiveTheme()) === 'dark';
-    var base = dark ? tone.dark : tone.light;
+  /* Appearance is fixed to the OMM-ZEN tokens: no user theme colour, radius or
+     light/dark switch. Embedded products still receive a complete omm:theme
+     payload so their archive panels inherit the same neutral palette. */
+  function accentBroadcastPayload() {
     return {
-      theme: dark ? 'dark' : 'light',
-      accent: base,
-      accentSoft: accentRgba(base, dark ? 0.26 : 0.16),
-      accentWash: accentRgba(base, dark ? 0.13 : 0.08),
-      accentLine: accentRgba(base, dark ? 0.62 : 0.5),
-      accentContrast: accentContrast(base),
-      radius: hubAppearance.radius,
+      theme: 'light',
+      accent: '#000000',
+      accentSoft: 'rgba(0, 0, 0, 0.06)',
+      accentWash: 'rgba(0, 0, 0, 0.03)',
+      accentLine: 'rgba(0, 0, 0, 0.5)',
+      accentContrast: '#ffffff',
+      radius: 0
     };
   }
   var launcherQuery = '';
@@ -1575,22 +1448,11 @@
       if (!raw) return;
       var data = JSON.parse(raw);
       if (!data || typeof data !== 'object') return;
-      hubAppearance.radius = [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0
-        ? Number(data.radius)
-        : 0;
-      hubAppearance.accentHex = normalizeHex(data.accentHex) || '';
-      hubAppearance.accent = (data.accent === 'custom' || ACCENTS.some(function (tone) { return tone.id === data.accent; }))
-        ? data.accent
-        : 'amber';
-      hubAppearance.motion = data.motion !== false;
       hubAppearance.topbar = data.topbar !== false;
       hubAppearance.restore = data.restore !== false;
       hubAppearance.sleep = [0, 5, 15, 30].indexOf(Number(data.sleep)) >= 0
         ? Number(data.sleep)
         : 15;
-      hubAppearance.theme = ['light', 'dark', 'system'].indexOf(data.theme) >= 0
-        ? data.theme
-        : 'light';
       hubAppearance.snap = SNAP_INTERVALS.indexOf(Number(data.snap)) >= 0
         ? Number(data.snap)
         : 0;
@@ -1688,18 +1550,17 @@
     } catch (e) {
       /* ignore */
     }
-    // Mirror the corner radius (and theme) into shared.json so native
-    // surfaces — the update banner, tray menus, dialogs — follow the same
-    // appearance settings.  Silently ignored in plain-browser mode.
+    // Native surfaces read the fixed OMM-ZEN appearance from shared.json.
+    // Silently ignored in plain-browser mode.
     try {
       fetch('/__omm/fs/appearance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          radius: hubAppearance.radius,
-          theme: hubAppearance.theme,
-          accent: hubAppearance.accent,
-          accentHex: hubAppearance.accentHex || '',
+          radius: 0,
+          theme: 'light',
+          accent: '#000000',
+          accentHex: '',
         }),
       }).catch(function () {});
     } catch (e) {
@@ -1707,19 +1568,8 @@
     }
   }
 
-  var darkMedia = window.matchMedia
-    ? window.matchMedia('(prefers-color-scheme: dark)')
-    : null;
-
-  function effectiveTheme() {
-    if (hubAppearance.theme === 'system') {
-      return darkMedia && darkMedia.matches ? 'dark' : 'light';
-    }
-    return hubAppearance.theme === 'dark' ? 'dark' : 'light';
-  }
-
-  function broadcastTheme(theme) {
-    var payload = Object.assign({ type: 'omm:theme' }, accentBroadcastPayload(theme));
+  function broadcastTheme() {
+    var payload = Object.assign({ type: 'omm:theme' }, accentBroadcastPayload());
     frames.forEach(function (frame) {
       try {
         frame.contentWindow.postMessage(payload, frameTargetOrigin(frame));
@@ -1729,22 +1579,9 @@
     });
   }
 
-  function applyTheme() {
-    var theme = effectiveTheme();
-    document.documentElement.dataset.theme = theme;
-    applyAccentPalette();
-    broadcastTheme(theme);
-  }
-
-  if (darkMedia && darkMedia.addEventListener) {
-    darkMedia.addEventListener('change', function () {
-      if (hubAppearance.theme === 'system') applyTheme();
-    });
-  }
 
   function applyHubAppearance() {
     if (!document.documentElement) return;
-    document.documentElement.style.setProperty('--radius', hubAppearance.radius + 'px');
     var a11y = hubAppearance.a11y || normalizeA11y(null);
     document.documentElement.style.setProperty('--ui-scale', String(a11y.fontScale || 1));
     document.body.classList.toggle('hc', !!a11y.highContrast);
@@ -1762,37 +1599,15 @@
         }
       });
     }
-    document.documentElement.dataset.accent = hubAppearance.accent;
-    document.documentElement.dataset.theme = effectiveTheme();
-    applyAccentPalette();
-    var tone = accentById(hubAppearance.accent);
-    var accentName = document.getElementById('hub-accent-name');
-    if (accentName) {
-      accentName.textContent = hubAppearance.accent === 'custom'
-        ? '· 自定义 ' + tone.light
-        : '· ' + tone.name;
-    }
-    syncAccentHexControls();
-    var themeSelect = document.getElementById('hub-theme');
-    if (themeSelect) themeSelect.value = hubAppearance.theme;
+    document.documentElement.dataset.theme = 'light';
     var snapSelect = document.getElementById('hub-snap');
     if (snapSelect) snapSelect.value = String(hubAppearance.snap);
-    document.body.classList.toggle('no-motion', !hubAppearance.motion || !!a11y.reduceMotion);
+    document.body.classList.toggle('no-motion', !!a11y.reduceMotion);
     els.app.classList.toggle('topbar-hidden', !hubAppearance.topbar);
     var restore = document.getElementById('hub-restore');
     if (restore) restore.setAttribute('aria-checked', String(hubAppearance.restore));
     var sleep = document.getElementById('hub-sleep');
     if (sleep) sleep.value = String(hubAppearance.sleep);
-    Array.prototype.forEach.call(document.querySelectorAll('[data-hub-radius]'), function (btn) {
-      btn.classList.toggle('active', Number(btn.dataset.hubRadius) === hubAppearance.radius);
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-hub-accent]'), function (btn) {
-      btn.classList.toggle('active', btn.dataset.hubAccent === hubAppearance.accent);
-      var swatch = accentById(btn.dataset.hubAccent);
-      btn.style.setProperty('--swatch', effectiveTheme() === 'dark' ? swatch.dark : swatch.light);
-    });
-    var motion = document.getElementById('hub-motion');
-    if (motion) motion.setAttribute('aria-checked', String(hubAppearance.motion));
     var topbar = document.getElementById('hub-topbar');
     if (topbar) topbar.setAttribute('aria-checked', String(hubAppearance.topbar));
     var f = hubAppearance.focus || {};
@@ -1826,7 +1641,7 @@
       var node = document.getElementById(pair[0]);
       if (node) node.setAttribute('aria-checked', String(pair[1]));
     });
-    broadcastTheme(effectiveTheme());
+    broadcastTheme();
   }
 
   function cloudConfigFromForm() {
@@ -2076,85 +1891,11 @@
     comboCapturing = false;
   }
 
-  /* Custom hex accent: OMM-ZEN styled, no native colour picker popup. */
-  function bindAccentCustom() {
-    var input = document.getElementById('hub-accent-hex');
-    var applyBtn = document.getElementById('hub-accent-apply');
-    var clearBtn = document.getElementById('hub-accent-clear');
-    var preview = document.getElementById('hub-accent-hex-preview');
-    var hint = document.getElementById('hub-accent-hex-hint');
-    if (!input || !applyBtn || !hint) return;
-
-    function setHint(text, isError) {
-      hint.textContent = text;
-      hint.classList.toggle('error', !!isError);
-    }
-    function currentHex() {
-      return normalizeHex(input.value) || normalizeHex(hubAppearance.accentHex) || DEFAULT_CUSTOM_HEX;
-    }
-    function useHex(hex, message) {
-      hubAppearance.accent = 'custom';
-      hubAppearance.accentHex = hex;
-      input.value = hex.slice(1);
-      saveHubAppearance();
-      applyHubAppearance();
-      setHint('已应用 ' + hex + '；深色主题自动提亮为 ' + accentForDark(hex) + '。', false);
-      if (message) toast(message);
-      /* A finished choice must not leave the control focused. */
-      if (input.blur) input.blur();
-      if (applyBtn.blur) applyBtn.blur();
-      if (preview && preview.blur) preview.blur();
-    }
-    function applyCustom() {
-      var hex = normalizeHex(input.value);
-      if (!hex) {
-        setHint('请输入 3 位或 6 位十六进制色值，例如 #FF8FC8。', true);
-        if (input.focus) input.focus();
-        return;
-      }
-      useHex(hex, '主题色已设为 ' + hex);
-    }
-
-    applyBtn.addEventListener('click', applyCustom);
-    input.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        applyCustom();
-      }
-    });
-    input.addEventListener('input', function () {
-      var hex = normalizeHex(input.value);
-      if (hex && preview) preview.style.setProperty('--swatch', hex);
-      if (hint.classList.contains('error')) setHint(ACCENT_HEX_HINT, false);
-    });
-    if (preview) {
-      preview.addEventListener('click', function () {
-        var hex = currentHex();
-        useHex(hex, '主题色已设为 ' + hex);
-      });
-    }
-    if (clearBtn) {
-      clearBtn.addEventListener('click', function () {
-        hubAppearance.accent = 'amber';
-        hubAppearance.accentHex = '';
-        input.value = '';
-        saveHubAppearance();
-        applyHubAppearance();
-        setHint(ACCENT_HEX_HINT, false);
-        toast('已清除自定义颜色');
-        if (clearBtn.blur) clearBtn.blur();
-      });
-    }
-  }
-
   function bindHubSettings() {
     if (!els.hubSettings) return;
-    /* Build the palette and replace every native select before binding, so the
-       click handlers below see the real controls. */
-    buildAccentSwatches();
+    /* Replace native selects before binding the remaining controls. */
     if (window.OMMUI && window.OMMUI.enhanceSelect) window.OMMUI.enhanceSelect(document);
     applyHubAppearance();
-    bindAccentCustom();
     var settingsClose = document.getElementById('hub-settings-close');
     if (settingsClose) settingsClose.addEventListener('click', closeHubSettings);
     var settingsDone = document.getElementById('hub-settings-done');
@@ -2162,42 +1903,6 @@
     els.hubSettings.addEventListener('click', function (event) {
       if (event.target === els.hubSettings) closeHubSettings();
     });
-    Array.prototype.forEach.call(
-      document.querySelectorAll('[data-hub-radius]'),
-      function (btn) {
-        btn.addEventListener('click', function () {
-          hubAppearance.radius = Number(btn.dataset.hubRadius);
-          saveHubAppearance();
-          applyHubAppearance();
-        });
-      }
-    );
-    Array.prototype.forEach.call(
-      document.querySelectorAll('[data-hub-accent]'),
-      function (btn) {
-        btn.addEventListener('click', function () {
-          hubAppearance.accent = btn.dataset.hubAccent;
-          if (hubAppearance.accent === 'custom' && !normalizeHex(hubAppearance.accentHex)) {
-            hubAppearance.accentHex = DEFAULT_CUSTOM_HEX;
-          }
-          var hint = document.getElementById('hub-accent-hex-hint');
-          if (hint) {
-            hint.textContent = ACCENT_HEX_HINT;
-            hint.classList.remove('error');
-          }
-          saveHubAppearance();
-          applyHubAppearance();
-        });
-      }
-    );
-    var motion = document.getElementById('hub-motion');
-    if (motion) {
-      motion.addEventListener('click', function () {
-        hubAppearance.motion = !hubAppearance.motion;
-        saveHubAppearance();
-        applyHubAppearance();
-      });
-    }
     var topbar = document.getElementById('hub-topbar');
     if (topbar) {
       topbar.addEventListener('click', function () {
@@ -2232,22 +1937,6 @@
         saveHubAppearance();
         applyHubAppearance();
         toast(hubAppearance.sleep ? '隐藏标签 ' + hubAppearance.sleep + ' 分钟后自动休眠' : '已关闭自动休眠');
-      });
-    }
-    var themeSelect = document.getElementById('hub-theme');
-    if (themeSelect) {
-      themeSelect.addEventListener('change', function () {
-        hubAppearance.theme = themeSelect.value;
-        saveHubAppearance();
-        applyTheme();
-        applyHubAppearance();
-        toast(
-          hubAppearance.theme === 'system'
-            ? '将跟随系统的深浅色设置'
-            : hubAppearance.theme === 'dark'
-              ? '已切换到深色主题'
-              : '已切换到浅色主题'
-        );
       });
     }
     var snapSelect = document.getElementById('hub-snap');
@@ -2467,11 +2156,6 @@
       hubAppearance = normalizeAppearance(null);
       saveHubAppearance();
       applyHubAppearance();
-      var accentHint = document.getElementById('hub-accent-hex-hint');
-      if (accentHint) {
-        accentHint.textContent = ACCENT_HEX_HINT;
-        accentHint.classList.remove('error');
-      }
       scheduleLayout();
       toast('外观与偏好已恢复默认');
     });
@@ -2601,13 +2285,6 @@
   function normalizeAppearance(raw) {
     var data = raw && typeof raw === 'object' ? raw : {};
     return {
-      radius: [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0 ? Number(data.radius) : 0,
-      accentHex: normalizeHex(data.accentHex) || '',
-      accent: (data.accent === 'custom' || ACCENTS.some(function (tone) { return tone.id === data.accent; }))
-        ? data.accent
-        : 'amber',
-      theme: ['light', 'dark', 'system'].indexOf(data.theme) >= 0 ? data.theme : 'light',
-      motion: data.motion !== false,
       topbar: data.topbar !== false,
       restore: data.restore !== false,
       sleep: [0, 5, 15, 30].indexOf(Number(data.sleep)) >= 0 ? Number(data.sleep) : 15,
@@ -3924,10 +3601,9 @@
       if (!frame.dataset.url) return;
       appStatus[appId] = 'ready';
       try {
-        // 首次载入也要发完整的强调色 / 圆角配置，否则各产品的归档面板
-        // 只能拿到 theme，用户的自定义外观要等到下次手动切换主题才生效。
+        // 首次载入发送固定的 OMM-ZEN 外观，产品归档面板据此继承同一套令牌。
         frame.contentWindow.postMessage(
-          Object.assign({ type: 'omm:theme' }, accentBroadcastPayload(effectiveTheme())),
+          Object.assign({ type: 'omm:theme' }, accentBroadcastPayload()),
           frameTargetOrigin(frame)
         );
       } catch (e) {

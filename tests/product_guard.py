@@ -92,7 +92,7 @@ FORMAT_CONTRACTS = [
 # Cross-product infrastructure: changing any of these affects every consumer,
 # so it is tied to the SUITE version rather than to individual products.
 SHARED_MODULES = [
-    "public/zen-card.js", "public/zen-link.js", "public/zen-canvas-layout.js",
+    "public/zen-card.js", "public/zen-link.js", "public/zen-canvas/layout-engine.js",
     "public/zen-chart.js", "public/zen-flow.js", "public/zen-srs.js",
     "public/zen-backup.js", "public/zen-pack.js", "public/zen-review.js",
     "public/data-viz.js", "public/search-library.js", "public/viz-bridge.js",

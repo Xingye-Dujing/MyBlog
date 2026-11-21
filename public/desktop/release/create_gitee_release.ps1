@@ -1,5 +1,5 @@
 param(
-  [string]$Tag = 'v1.0.27',
+  [string]$Tag = 'v1.0.28',
   [string]$Notes = '',
   [string]$Target = 'production'
 )

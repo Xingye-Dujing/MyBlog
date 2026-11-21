@@ -18,7 +18,7 @@ function scripts(text) {
 test('Writer 引入深改所需模块与样式', () => {
   assert.ok(src.includes('src="zen-card.js"'))
   assert.ok(src.includes('src="zen-chart.js"'))
-  assert.ok(src.includes('href="writer-zen.css"'))
+  assert.ok(src.includes('href="zen-style/zen.css"'))
   assert.ok(src.includes('id="zw-zen-modal"'))
   assert.ok(src.includes('id="zw-zen-body"'))
   assert.ok(src.includes('id="zw-zen-close"'))

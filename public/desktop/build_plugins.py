@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -162,7 +163,13 @@ def main() -> None:
         json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     template_zip = DIST / "plugin-template.zip"
-    zip_dir(ROOT / "plugin-template", template_zip)
+    # The template page consumes the shared zen-style tree via ../zen-style/*,
+    # so the zip must carry both the template and a copy of that tree.
+    with tempfile.TemporaryDirectory() as tmp:
+        stage = Path(tmp)
+        shutil.copytree(ROOT / "plugin-template", stage / "plugin-template")
+        shutil.copytree(ROOT / "zen-style", stage / "zen-style")
+        zip_dir(stage, template_zip)
     # 发布副本脱离 public/ 目录，相对链接会失效，改成绝对 GitHub 链接。
     spec_text = (ROOT / "plugin-spec.md").read_text(encoding="utf-8")
     spec_base = "https://github.com/Xingye-Dujing/MyBlog/blob/production/public/"

@@ -11,7 +11,7 @@ import { ZenCard } from '../public/zen-card.js'
 import { ZenFlow } from '../public/zen-flow.js'
 import { ZenChart } from '../public/zen-chart.js'
 import { SearchLibrary } from '../public/search-library.js'
-import '../public/zen-canvas-layout.js'
+import '../public/zen-canvas/layout-engine.js'
 
 const ROOT = new URL('../', import.meta.url)
 const read = (rel) => readFileSync(new URL(rel, ROOT), 'utf8')
