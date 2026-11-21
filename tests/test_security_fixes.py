@@ -39,7 +39,7 @@ class SourceHardeningTests(unittest.TestCase):
 
     def test_request_bodies_are_length_checked_before_read(self):
         updater = (ROOT / "public" / "desktop" / "app_updater.py").read_text(encoding="utf-8-sig")
-        latex = (ROOT / "public" / "latex-serve.py").read_text(encoding="utf-8-sig")
+        latex = (ROOT / "public" / "server" / "latex-serve.py").read_text(encoding="utf-8-sig")
         self.assertIn("length > omm_shared.MAX_BODY", updater)
         self.assertIn("n > omm_shared.MAX_BODY", latex)
 

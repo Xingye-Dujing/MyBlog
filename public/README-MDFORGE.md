@@ -3,7 +3,7 @@
 把一份 Markdown 文稿，稳定地铸造为与参考版式严格对应的 **DOCX** 或 **TeX / PDF**。
 
 - 前端：`omm-mdforge.html`，完全沿用 OMM-ZEN 的滑出菜单、底部状态栏、细线分栏、黑白选中态与统一圆角体系；浅色主题纯白、深色主题纯黑，复选框为 omm-planner 同款黑框绿勾。
-- 后端：`mdforge_serve.py`（Flask），提供解析、校验、转换、下载、模板与元信息编辑接口。
+- 后端：`server/mdforge_serve.py`（Flask），提供解析、校验、转换、下载、模板与元信息编辑接口。
 - 排版参考：`格式模板参考.docx` 与 `格式模板参考.tex`。
 - 本机 MiKTeX 已检测到，可直接编译 PDF。
 
@@ -15,7 +15,7 @@
 
 ```bash
 # 在 public/ 目录
-.venv/Scripts/python.exe mdforge_serve.py --open
+.venv/Scripts/python.exe server/mdforge_serve.py --open
 ```
 
 默认地址：<http://127.0.0.1:8140/omm-mdforge.html>
@@ -23,7 +23,7 @@
 也可以指定端口：
 
 ```bash
-.venv/Scripts/python.exe mdforge_serve.py --port 8150
+.venv/Scripts/python.exe server/mdforge_serve.py --port 8150
 ```
 
 如需在新机器/新虚拟环境安装：
@@ -31,7 +31,7 @@
 ```bash
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements-mdforge.txt
-.venv/Scripts/python.exe mdforge_serve.py
+.venv/Scripts/python.exe server/mdforge_serve.py
 ```
 
 > 页面必须通过 Python 服务打开，不能直接双击 HTML，否则 `/api/*` 与 `/samples/*` 不可用。
@@ -314,7 +314,7 @@ edit_metadata("out.docx", {"title": "新标题", "author": "李四"})
 ```text
 public/
 ├── omm-mdforge.html              # OMM-ZEN 风格前端（根目录，与 omm-*.html 一致）
-├── mdforge_serve.py              # Flask 启动器
+├── server/mdforge_serve.py              # Flask 启动器
 ├── pyproject.toml
 ├── requirements-mdforge.txt
 ├── README-MDFORGE.md
@@ -429,6 +429,6 @@ public/
 - 网页端图片按文件名匹配 Markdown 路径，仅支持 PNG/JPG；中文与空格文件名会先 URL 解码。绝对路径与 `..` 越界路径会被校验器拒绝。
 - `latex-figure` 是受信任的 LaTeX 图表代码输入：服务端拒绝外部文件/执行类命令并禁用 shell escape，但不是完整的 TeX 沙箱；不要将服务暴露到公网或用于不可信文稿。
 - 服务为本地开发服务；不要直接暴露到公网。启动器会检测端口占用，避免多个实例同时监听。
-- `pip install` 适合使用 CLI 与库；Web 界面、示例和 `mdforge_serve.py` 仍从仓库目录运行。
+- `pip install` 适合使用 CLI 与库；Web 界面、示例和 `server/mdforge_serve.py` 仍从仓库目录运行。
 - UI 对齐 omm-planner 的黑白体系，不使用蓝色与橄榄色；导出的文档使用标准黑色印刷色。
 - 生成文件的“编辑元信息”只修改 DOCX 核心属性或 TeX/PDF 属性，不改变正文标题；TeX 需要重新编译后新 PDF 才会同步。

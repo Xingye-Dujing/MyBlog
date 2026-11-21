@@ -154,7 +154,7 @@ def copy_video_runtime(dest: Path) -> None:
                 shutil.copy2(f, target / f.name)
     (dest / "video-runtime" / "work" / "uploads").mkdir(parents=True, exist_ok=True)
     (dest / "video-runtime" / "work" / "jobs").mkdir(parents=True, exist_ok=True)
-    backend = ROOT / "video-serve.py"
+    backend = ROOT / "server" / "video-serve.py"
     if backend.is_file():
         shutil.copy2(backend, dest / "video-serve.py")
 
@@ -162,7 +162,7 @@ def copy_video_runtime(dest: Path) -> None:
 def copy_table_runtime(dest: Path) -> None:
     """表格自动化：拷贝 openpyxl 后端与工作目录骨架。"""
     for name in ("table-serve.py", "table_engine.py"):
-        backend = ROOT / name
+        backend = ROOT / "server" / name
         if backend.is_file():
             shutil.copy2(backend, dest / name)
     (dest / "table-runtime" / "work" / "uploads").mkdir(parents=True, exist_ok=True)
@@ -171,7 +171,7 @@ def copy_table_runtime(dest: Path) -> None:
 
 def copy_lambda_runtime(dest: Path) -> None:
     """Lambda 演算计算器：打包后端 lambda-app.py 与内置 extension 二进制、运行状态文件。"""
-    backend = ROOT / "lambda-app.py"
+    backend = ROOT / "server" / "lambda-app.py"
     if backend.is_file():
         shutil.copy2(backend, dest / "lambda-app.py")
     for name in ("extension.exe", "extension"):
@@ -275,8 +275,8 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
     (dest / "vendor").mkdir(parents=True, exist_ok=True)
     shutil.copytree(VENDOR / "fonts", dest / "vendor" / "fonts", dirs_exist_ok=True)
     shutil.copytree(ROOT / "plugin-template", dest / "plugin-template", dirs_exist_ok=True)
-    shutil.copy2(ROOT / "latex-serve.py", dest / "latex-serve.py")
-    backend = ROOT / "video-serve.py"
+    shutil.copy2(ROOT / "server" / "latex-serve.py", dest / "latex-serve.py")
+    backend = ROOT / "server" / "video-serve.py"
     if backend.is_file():
         shutil.copy2(backend, dest / "video-serve.py")
 

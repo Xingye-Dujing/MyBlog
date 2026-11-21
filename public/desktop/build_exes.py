@@ -182,7 +182,7 @@ def build(app_id: str) -> bool:
     if backend == "mdforge":
         shutil.copytree(ROOT / "mdforge-examples", stage / "mdforge-examples", dirs_exist_ok=True)
     elif backend == "latex":
-        shutil.copy2(ROOT / "latex-serve.py", stage / "latex-serve.py")
+        shutil.copy2(ROOT / "server" / "latex-serve.py", stage / "latex-serve.py")
 
     args = [
         sys.executable, "-m", "PyInstaller",

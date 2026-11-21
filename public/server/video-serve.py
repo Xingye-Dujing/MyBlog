@@ -29,8 +29,11 @@ from urllib.parse import parse_qs, unquote, urlparse
 HERE = Path(__file__).resolve().parent
 # 静态资源根目录就是本文件所在目录（public/ 或插件目录）；
 # ffmpeg 与工作目录也相对它解析，保证插件自包含。
-ROOT = HERE
-WORK = HERE / "video-runtime" / "work"
+# Source tree keeps backends in server/; staged bundles keep them beside assets.
+BUNDLE = HERE.parent if (HERE.parent / "video-runtime").is_dir() else HERE
+
+ROOT = BUNDLE
+WORK = ROOT / "video-runtime" / "work"
 UPLOADS = WORK / "uploads"
 JOBS = WORK / "jobs"
 for _d in (WORK, UPLOADS, JOBS):

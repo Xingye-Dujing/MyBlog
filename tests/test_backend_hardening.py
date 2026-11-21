@@ -261,7 +261,7 @@ class LatexCorsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import importlib.util
-        path = ROOT / "public" / "latex-serve.py"
+        path = ROOT / "public" / "server" / "latex-serve.py"
         spec = importlib.util.spec_from_file_location("_omm_latex_serve", path)
         cls.mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.mod)

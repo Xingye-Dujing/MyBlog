@@ -30,8 +30,11 @@ if str(HERE) not in sys.path:
 import openpyxl  # noqa: E402
 import table_engine  # noqa: E402  (needs sys.path from HERE)
 
-ROOT = HERE
-DEFAULT_WORK = HERE / "table-runtime" / "work"
+# Source tree keeps backends in server/; staged bundles keep them beside assets.
+BUNDLE = HERE.parent if (HERE.parent / "table-runtime").is_dir() else HERE
+
+ROOT = BUNDLE
+DEFAULT_WORK = ROOT / "table-runtime" / "work"
 MAX_UPLOAD = 120 * 1024 * 1024
 SAFE_EXT = (".xlsx", ".xlsm")
 LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")

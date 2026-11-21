@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-MODULE_PATH = ROOT / "table-serve.py"
+MODULE_PATH = ROOT / "server" / "table-serve.py"
 spec = importlib.util.spec_from_file_location("table_serve_under_test", str(MODULE_PATH))
 assert spec and spec.loader
 serve = importlib.util.module_from_spec(spec)

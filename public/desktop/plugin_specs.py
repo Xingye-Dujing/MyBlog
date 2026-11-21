@@ -12,7 +12,7 @@ import re
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.32"
+VERSION = "1.0.33"
 
 
 def version_key(value: Any) -> tuple:
@@ -329,7 +329,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "glyph": "视",
         "description": "节点工作流 · 视频分析与处理 · 内置 ffmpeg",
         "entry": "omm-video.html",
-        "version": "1.0.33",
+        "version": "1.0.34",
         "port": 8329,
         "runtime": "video",
         "vendor": [],
@@ -337,7 +337,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "share": {"channels": [{"id": "documents", "role": "publish"}]},
     },
     {
-        # 表格自动化：节点工作流 + openpyxl 本地后端（public/table-serve.py + table_engine.py）。
+        # 表格自动化：节点工作流 + openpyxl 本地后端（public/server/table-serve.py + table_engine.py）。
         # 与视频工作台相同，只在静书房内以插件运行，暂不生成独立 EXE。
         "id": "table",
         "name": "表格自动化",
@@ -351,7 +351,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "share": {"channels": [{"id": "documents", "role": "publish"}]},
     },
     {
-        # Lambda 演算计算器：Flask 后端（public/lambda-app.py + 内置 extension 二进制），
+        # Lambda 演算计算器：Flask 后端（public/server/lambda-app.py + 内置 extension 二进制），
         # 产品页 public/index.html；与视频工作台同为零依赖 Python 后端接入。
         "id": "lambda",
         "name": "Lambda 演算计算器",

@@ -141,7 +141,9 @@ def start_ai(port: int) -> int:
 
 
 def start_latex(port: int) -> int:
-    script = resource_root() / "latex-serve.py"
+    script = resource_root() / "server" / "latex-serve.py"
+    if not script.is_file():
+        script = resource_root() / "latex-serve.py"
     spec = importlib.util.spec_from_file_location("omm_latex_backend", str(script))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[union-attr]

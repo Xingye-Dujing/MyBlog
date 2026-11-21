@@ -188,7 +188,9 @@ class HubServer:
 
     def _start_latex(self, port: int, plugin_dir: Path):
         os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
-        script = self.root / "latex-serve.py"
+        script = self.root / "server" / "latex-serve.py"
+        if not script.is_file():
+            script = self.root / "latex-serve.py"
         if not script.is_file():
             raise RuntimeError("缺少 latex-serve.py")
         spec = importlib.util.spec_from_file_location("omm_latex_plugin_backend", str(script))
@@ -208,7 +210,9 @@ class HubServer:
         )
         if bundled.is_file():
             os.environ["OMM_FFMPEG"] = str(bundled)
-        script = self.root / "video-serve.py"
+        script = self.root / "server" / "video-serve.py"
+        if not script.is_file():
+            script = self.root / "video-serve.py"
         if not script.is_file():
             script = plugin_dir / "video-serve.py"
         if not script.is_file():
@@ -228,6 +232,8 @@ class HubServer:
         os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
         script = plugin_dir / "table-serve.py"
         if not script.is_file():
+            script = self.root / "server" / "table-serve.py"
+        if not script.is_file():
             script = self.root / "table-serve.py"
         if not script.is_file():
             raise RuntimeError("缺少 table-serve.py")
@@ -242,11 +248,13 @@ class HubServer:
         return server
 
     def _start_lambda(self, port: int, plugin_dir: Path):
-        """Lambda 演算计算器：Flask 后端（public/lambda-app.py + 内置 extension 二进制）。"""
+        """Lambda 演算计算器：Flask 后端（public/server/lambda-app.py + 内置 extension 二进制）。"""
         from werkzeug.serving import make_server
 
         os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
-        script = self.root / "lambda-app.py"
+        script = self.root / "server" / "lambda-app.py"
+        if not script.is_file():
+            script = self.root / "lambda-app.py"
         if not script.is_file():
             script = plugin_dir / "lambda-app.py"
         if not script.is_file():

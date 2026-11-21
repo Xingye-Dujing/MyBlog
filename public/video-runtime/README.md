@@ -11,7 +11,7 @@
 
 ## 查找顺序
 
-`video-serve.py` 按以下顺序定位 ffmpeg：
+`server/video-serve.py` 按以下顺序定位 ffmpeg：
 
 1. `OMM_FFMPEG` 环境变量（hub 会指向插件目录里的内置版本）
 2. `<插件目录>/video-runtime/bin/ffmpeg.exe`

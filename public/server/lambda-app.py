@@ -66,9 +66,10 @@ from flask import (Flask, Response, g, has_request_context, jsonify, request,
                    send_from_directory, stream_with_context)
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
-APP_DIR = (Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "web"
+_HERE = Path(__file__).resolve().parent
+APP_DIR = (Path(getattr(sys, "_MEIPASS", _HERE)) / "web"
            if getattr(sys, "frozen", False)
-           else Path(__file__).resolve().parent)
+           else (_HERE.parent if (_HERE.parent / "index.html").is_file() else _HERE))
 RS = "\x1e"                     # 与前端的记录分隔符保持一致 / keep in sync with the frontend
 # 环境变量可能是 0 或负数；统一夹到可用范围，避免 queue/sleep 收到非法值
 # Env values may be zero or negative; clamp them so queue/sleep never see bad values.

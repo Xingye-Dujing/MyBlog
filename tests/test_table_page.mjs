@@ -91,8 +91,8 @@ test('节点类型覆盖规范中的 op', () => {
 })
 
 test('后端不引入 GUI 代码', () => {
-  const engine = read('public/table_engine.py')
-  const serve = read('public/table-serve.py')
+  const engine = read('public/server/table_engine.py')
+  const serve = read('public/server/table-serve.py')
   for (const src of [engine, serve]) {
     assert.ok(!/import tkinter|from tkinter/.test(src), '后端不得依赖 Tkinter')
     assert.ok(!/messagebox|filedialog/.test(src), '后端不得使用 GUI 对话框')

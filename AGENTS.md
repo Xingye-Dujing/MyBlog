@@ -25,7 +25,8 @@
 
 - `production` is the deployed build variant of a personal blog repo that also carries a much larger static product suite. The root `README.md` covers only the blog and lists the differences from `main`.
 - Root `src/` + root `index.html`: Vue 3 + Vite blog SPA. Content is fetched from `public/data/chats.json` and `public/data/comments.json` with `no-cache` (no LocalStorage for content).
-- `public/`: OMM-ZEN product suite. Standalone HTML pages with sibling ES modules; there is no frontend build step for these pages. It also holds the Python desktop launcher (`public/desktop/`), AI workspace backend (`public/agent_workspace/`), and JSON format specs (`public/json-specs/`).
+- `public/`: OMM-ZEN product suite. Standalone HTML pages with ES modules from `public/lib/`; there is no frontend build step for these pages. Shared JS is in `lib/`, Python product backends in `server/`; the Python desktop launcher is `public/desktop/`, AI workspace backend `public/agent_workspace/`, JSON format specs `public/json-specs/`.
+- `public/server/*` backends are staged to the plugin root under their original filenames by `offline.py`; source-tree code finds assets one directory up, staged code finds them beside itself. Keep both paths working when moving a backend.
 - `public/index.html` is currently the Lambda product/plugin page, not the blog. The blog entry is the root `index.html`. `npm run build` emits the blog as `dist/index.html`; test Lambda through the plugin/desktop path.
 - `third_party/zenviz-core/` is a git submodule shared with another product (`profiles/omm` is the OMM profile). Init it with `git submodule update --init` before chart work.
 - `public/dist/` is desktop release output (gitignored); root `dist/` is the web build.
