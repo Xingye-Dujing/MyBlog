@@ -52,7 +52,7 @@ MAX_ZIP_BYTES = 220 * 1024 * 1024
 MAX_UNPACKED_BYTES = 600 * 1024 * 1024
 MAX_FILES = 6000
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
-RUNTIMES = ("static", "mdforge", "latex", "ai", "video")
+RUNTIMES = ("static", "mdforge", "latex", "ai", "video", "lambda")
 
 
 class PluginError(RuntimeError):

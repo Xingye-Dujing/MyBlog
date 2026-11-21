@@ -148,6 +148,24 @@ def copy_video_runtime(dest: Path) -> None:
         shutil.copy2(backend, dest / "video-serve.py")
 
 
+def copy_lambda_runtime(dest: Path) -> None:
+    """Lambda 演算计算器：打包后端 lambda-app.py 与内置 extension 二进制、运行状态文件。"""
+    backend = ROOT / "lambda-app.py"
+    if backend.is_file():
+        shutil.copy2(backend, dest / "lambda-app.py")
+    for name in ("extension.exe", "extension"):
+        src = ROOT / name
+        if src.is_file():
+            shutil.copy2(src, dest / name)
+            break
+    for name in ("fonts", "icon.svg", "sessions.json", "shares.json", "tokens.json", "benchmarks.json"):
+        src = ROOT / name
+        if src.is_dir():
+            shutil.copytree(src, dest / src.name, dirs_exist_ok=True)
+        elif src.is_file():
+            shutil.copy2(src, dest / src.name)
+
+
 def copy_vendor(dest: Path, app_id: str) -> None:
     target = dest / "vendor"
     target.mkdir(parents=True, exist_ok=True)
@@ -209,6 +227,8 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
     copy_vendor(dest, app_id)
     if app_id == "video":
         copy_video_runtime(dest)
+    if app_id == "lambda":
+        copy_lambda_runtime(dest)
     (dest / "plugin.json").write_text(
         json.dumps(manifest(item), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

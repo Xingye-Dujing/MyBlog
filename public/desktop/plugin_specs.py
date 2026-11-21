@@ -65,7 +65,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "id": "ai",
         "name": "AI 工作区",
         "glyph": "智",
-        "description": "静书房专属 Agent · 17 产品技能与最佳实践",
+        "description": "静书房专属 Agent · 19 产品技能与最佳实践",
         "entry": "omm-ai.html",
         "port": 8328,
         "runtime": "ai",
@@ -335,6 +335,19 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "video",
         "vendor": [],
         "order": 121,
+        "share": {"channels": [{"id": "documents", "role": "publish"}]},
+    },
+    {
+        # Lambda 演算计算器：Flask 后端（public/lambda-app.py + 内置 extension 二进制），
+        # 产品页 public/index.html；与视频工作台同为零依赖 Python 后端接入。
+        "id": "lambda",
+        "name": "Lambda 演算计算器",
+        "glyph": "λ",
+        "description": "λ 演算解释器 · 计算器（Flask + extension）",
+        "entry": "index.html",
+        "port": 8330,
+        "runtime": "lambda",
+        "order": 122,
         "share": {"channels": [{"id": "documents", "role": "publish"}]},
     },
 ]

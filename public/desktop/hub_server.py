@@ -223,6 +223,30 @@ class HubServer:
         _serve(server)
         return server
 
+    def _start_lambda(self, port: int, plugin_dir: Path):
+        """Lambda 演算计算器：Flask 后端（public/lambda-app.py + 内置 extension 二进制）。"""
+        from werkzeug.serving import make_server
+
+        os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
+        script = self.root / "lambda-app.py"
+        if not script.is_file():
+            script = plugin_dir / "lambda-app.py"
+        if not script.is_file():
+            raise RuntimeError("缺少 lambda-app.py")
+        for name in ("extension.exe", "extension"):
+            candidate = plugin_dir / name
+            if candidate.is_file():
+                os.environ["LAMBDA_INTERP_BIN"] = str(candidate)
+                break
+        spec = importlib.util.spec_from_file_location("omm_lambda_plugin_backend", str(script))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("无法加载 Lambda 演算计算器后端")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        server = make_server("127.0.0.1", port, module.app, threaded=True)
+        _serve(server)
+        return server
+
     def _url(self, port: int, entry: str) -> str:
         return "http://127.0.0.1:%d/%s" % (port, entry)
 
@@ -266,6 +290,8 @@ class HubServer:
                     return self._start_latex(port, plugin_dir)
                 if runtime == "video":
                     return self._start_video(port, plugin_dir)
+                if runtime == "lambda":
+                    return self._start_lambda(port, plugin_dir)
                 return self._start_static(port, plugin_dir, default_app=plugin_id)
 
             try:
