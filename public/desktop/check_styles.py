@@ -34,7 +34,7 @@ for page in PAGES:
         line = text[: match.start()].count("\n") + 1
         fail(f"{page.name}:{line}: inline <style> block remains")
 
-for css in sorted((STYLE_DIR / "product").glob("*.css")):
+for css in sorted((STYLE_DIR / "products").glob("*.css")):
     body = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8", errors="ignore"), flags=re.S)
     inner = re.sub(r"^\s*@layer\s+[\w.-]+\s*\{", "", body).rstrip()
     if inner.endswith("}"):

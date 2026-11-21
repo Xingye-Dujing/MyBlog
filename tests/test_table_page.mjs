@@ -14,7 +14,7 @@ test('页面存在且标题/资源正确', () => {
   assert.ok(html.includes('<title>表格自动化</title>'))
   for (const asset of [
     'omm-embed.js', 'omm-desktop.js', 'omm-share.js',
-    'zen-style/zen.css', 'zen-style/product/omm-table.css',
+    'zen-style/zen.css', 'zen-style/products/table.css',
     'zen-canvas/layout-engine.js',
     'zen-canvas/zen-canvas.js', 'zen-table.js',
   ]) {

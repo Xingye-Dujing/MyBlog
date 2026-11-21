@@ -285,8 +285,8 @@ def test_frontend_style_and_bridge_contract():
     html = (ROOT / 'omm-ai.html').read_text(encoding='utf-8')
     assert html.index('omm-embed.js') < html.index('omm-desktop.js') < html.index('omm-share.js')
     # OMM-ZEN 样式契约：接入 zen-style 共享系统（zen.css + 产品 css），并按 design token 施工。
-    assert 'zen-style/zen.css' in html and 'zen-style/product/omm-ai.css' in html
-    tokens = (ROOT / 'zen-style' / '00-tokens.css').read_text(encoding='utf-8')
+    assert 'zen-style/zen.css' in html and 'zen-style/products/ai.css' in html
+    tokens = (ROOT / 'zen-style' / 'tokens.css').read_text(encoding='utf-8')
     for token in ('--zen-ink', '--zen-accent', '--zen-radius', '--ink', '--accent', '--radius'):
         assert token in tokens, token
     assert not re.search(r'<script[^>]+src=["\']https?://', html)

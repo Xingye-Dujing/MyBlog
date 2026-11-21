@@ -13,7 +13,7 @@ zen-canvas/
 └── README.md        # 本文件
 ```
 
-画布样式已并入共享样式层 `zen-style/16-feature-zen-canvas.css`，由
+画布样式已并入共享样式层 `zen-style/features/canvas-framework.css`，由
 `zen-style/zen.css` 统一加载；画布产品只需要引用 zen.css，不再单独引入 CSS。
 
 `zen-canvas/layout-engine.js` 是 6 策略自动布局的**唯一实现**，writer 与
@@ -119,6 +119,6 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 ## 7. 变更纪律
 
 - 改画布交互 → 只改 `zen-canvas/zen-canvas.js`；改画布样式 → 改
-  `zen-style/16-feature-zen-canvas.css`。
+  `zen-style/features/canvas-framework.css`。
 - 改自动布局算法 → 只改 `zen-canvas/layout-engine.js`。
 - 产品特有逻辑（节点字段、执行引擎、面板）→ 放在产品自己的 JS 里，不要写进框架。

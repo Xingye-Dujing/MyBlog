@@ -13,7 +13,7 @@
 ## 画布与样式
 
 - video 的通用工作台外壳样式上移到 `zen-canvas/zen-canvas.css`，video 与 table 共用一份画布逻辑与样式，未新增第二套画布实现。
-- 5 个小工具页的 `.panel / .field / .row / .btn` 改为专用 `.zt-*` 类名，样式集中到 `zen-style/15-feature-tool.css`；空的 `zen-style/90-override.css` 与其导入已删除。
+- 5 个小工具页的 `.panel / .field / .row / .btn` 改为专用 `.zt-*` 类名，样式集中到 `zen-style/features/tool.css`；空的 `zen-style/90-override.css` 与其导入已删除。
 - 删除所有未真正使用的空产品样式占位文件（hub / zenclip / zenreview / zenbackup）及对应 `<link>`；`check_styles.py` 改为禁止空占位文件，不再强制每个页面必须有产品 CSS。
 - 保留并纳入一批 UI 修复：annotate / corpus / AI 工作区等产品的迁移后布局修正；Lambda 弹窗按钮补齐可访问名称。
 
