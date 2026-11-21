@@ -35,6 +35,9 @@
 | [Latex](latex.md) | `omm-latex.html` | ZenLatex | 导入 .tex | **LaTeX 源码**（非 JSON） | `.tex` | 无 JSON 文件导入；只吃 `.tex` 文本 |
 | [Redact](redact.md) | `omm-redact.html` | ZenRedact | 导入文本/图片 | **无** | — | 无 JSON 文件导入（仅 txt/docx/pdf/pptx/image） |
 | [Message](message.md) | `omm-message.html` | ZenMessage | — | **无**（Supabase） | — | 无文件导入；消息在云端且加密 |
+| [Table](table.md) | `omm-table.html` | 表格自动化 | 打开 / 导入工作流 | 表格工作流 JSON | `.json` | `format:"omm-table-workflow"` 且 `version:1`，有且只有一个 `file` 节点 |
+| [Video](video.md) | `omm-video.html` | 视频工作台 | 打开 / 导入工作流 | 视频工作流 JSON | `.json` | `format:"omm-video-workflow"` 且 `version:1`，`nodes[]` / `connections[]` |
+| [Lambda](lambda.md) | `index.html` | Lambda 演算计算器 | 导入会话 / 分享 | 会话或分享 JSON | `.json` | `format:"omm-lambda-session"` 或 `omm-lambda-share`，`version:1` |
 
 ---
 
@@ -85,7 +88,10 @@ json-specs/
 ├── visualization.md   ZenViz   右侧属性设置 (.json) + 数据角色模型
 ├── latex.md           ZenLatex 仅 .tex（含 JSON 持久化说明）
 ├── redact.md          ZenRedact 无 JSON 导入（数据模型参考）
-└── message.md         ZenMessage 无文件导入（数据模型/加密说明）
+├── message.md         ZenMessage 无文件导入（数据模型/加密说明）
+├── table.md           表格自动化 工作流 JSON（节点/字段/写回/汇总）
+├── video.md           视频工作台 工作流 JSON（节点/连线）
+└── lambda.md          Lambda 会话 / 分享 JSON
 ```
 
 > Writer 画布规范以 `json-specs/writer.md` 为准；旧文档里提到的根目录 `zencanvas-JSON-spec.md` 已不再单独维护。

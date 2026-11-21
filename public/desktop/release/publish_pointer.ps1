@@ -1,11 +1,11 @@
 param(
-  [string]$Tag = 'v1.0.26',
+  [string]$Tag = 'v1.0.27',
   [string]$PrevTag = 'v1.0.16'
 )
 # Publish the newest catalog.json onto the previous release as well.
 #
 # The desktop programs poll a fixed catalog URL that belongs to their own
-# release (…/releases/download/<their version>/catalog.json).  A program
+# release (鈥?releases/download/<their version>/catalog.json).  A program
 # therefore only ever learns about a new version if the *newest* catalog is
 # also served from the release it was built for.  Overwriting the previous
 # release's catalog.json with the newest one turns every old program into a

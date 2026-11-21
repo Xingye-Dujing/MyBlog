@@ -1,65 +1,81 @@
-# Lambda 演算计算器（λ）产品规范
+# Lambda 演算计算器工作区格式规范
 
-> 用途：让 AI（或任何程序）了解 OMM-ZEN“Lambda 演算计算器”（`public/index.html` +
-> `public/lambda-app.py`，插件 id `lambda`，端口 8330，runtime `lambda`，Flask 后端）。
+> 用途：让 AI（或任何程序）**直接生成可被 Lambda 演算计算器导入的 JSON**。
+> 产品：`public/index.html`（插件 id `lambda`，端口 8330，runtime `lambda`）。
 >
-> 本文是 `omm_data.PRODUCTS['lambda']` 与 `json-specs/lambda.md` 的检索友好镜像；
-> `omm_validators` 会校验 AI 生成的会话 / 分享 JSON。
+> 本文与 `agent_workspace/omm_knowledge/lambda.md` 互补：后者面向 AI 检索，本文是格式合约（字段/默认值/约束），由 `json-specs/format-registry.json` 的 lambda 条目声明，并由 `agent_workspace.omm_validators` 校验。
 
 ---
 
-## 0. 一句话规则
+## 0. 产品表面（AI 的生成目标）
 
-这个 App 能用“AI 生成的 omm-lambda-session / omm-lambda-share JSON”导入的，只有这两种格式（见 json-specs/lambda.md）。AI 不直接驱动后端：只能让用户把生成的会话/分享发到界面上。
+界面侧可消费的两种 JSON：
 
----
+1. **会话快照**（`omm-lambda-session`）—— 用户会话/回放历史的结构化描述，AI 生成时让用户确认后由用户在界面应用。
+2. **分享链接**（`omm-lambda-share`）—— “分享”按钮生成的静态公开渲染页 id。AI 一般不生成，除非用户明确要求分享。
 
-## 1. AI 桥（页面侧）
-
-`public/index.html` 暴露 `window.ZenLambdaAI`：
-
-| 方法 | 返回 |
-|---|---|
-| `snapshot()` | 只读快照：`{version, app:"lambda", sessionCount, sessions:[{id, name, lang, lines}]}`（来自 GET /api/snapshots） |
-| `snapshotMarkdown()` | 给模型看的紧凑摘要（会话列表 + 行数 + 语言） |
-
-- 页面监听工作台广播的 `omm:zen-card-request`，回传 `kind: "omm.lambda.session"` 卡片（通过 `postMessage`，只接受 loopback parent origin）。
-- “发送 AI 工作区”按钮把会话快照通过共享频道 `documents` 发送（`format: "omm.lambda.session"`）；共享空间不可用时导出 `lambda-sessions.json`。
+常见 AI 任务通常是生成 λ 项/统计/评估结论让用户在界面里运行，而不是产出文件。
 
 ---
 
-## 2. 产品表面
+## 1. 会话快照格式（`omm-lambda-session`）
 
-| 能力 | 说明 |
-|---|---|
-| 纯 λ 演算 | α 等价、无捕获替换；归约轨迹；四种策略（应用序/正规序/按名调用/按值调用） |
-| 归约分析 | 正规形与 whnf、redex 矩阵、α/β/η 等价判断与证明、策略/步数/统计/计时/基准 |
-| 简单类型 | Hindley–Milner 推断：let 多态、`(expr : T)` 标注，`:type` 给出 Curry–Howard 命题推导 |
-| 教材库 | 预定义环境（ZERO–Y、PAIR/FST/SND 等）；`lib/prelude.lam`、`lib/scott.lam`（含 Church↔Scott 互转） |
-| 计算器 API | POST /api/eval、/api/race、/api/eval/stream；GET /api/snapshots 列会话；GET /api/gallery 策展示例 |
-| 会话 | 会话编辑器本地持久化，回放可恢复/重命名/删除 |
+```json
+{
+  "format": "omm-lambda-session",
+  "version": 1,
+  "sid": "l-sess-0001",
+  "name": "示例会话",
+  "lang": "both",
+  "code": ["?num = 3", "PLUS ONE TWO"]
+}
+```
+
+| 字段 | 必需 | 校验 / 缺省行为 |
+|---|---|---|
+| `format` | 是 | 必须等于 `"omm-lambda-session"`（硬校验） |
+| `version` | 是 | 必须是数字 `1`（硬校验） |
+| `sid` | 是 | 非空字符串（深度校验）；一般取已保存会话的真实 id（GET /api/snapshots） |
+| `code` | 是 | 非空数组，元素均为字符串（深度校验）；回放历史，按时间顺序排列，≤ 20 行 |
+| `name` | 否 | 字符串（≤ 80 字符）；缺省用 sid 前 8 位 |
+| `lang` | 否 | `"zh" / "en" / "both"`；缺省 `"both"` |
+
+给 AI 的提示词模板：
+
+```text
+你要生成一个 Lambda 演算计算器（public/index.html）的会话快照 JSON 文件（UTF-8）。
+
+硬性要求：
+1. 顶层必须是 { "format": "omm-lambda-session", "version": 1, "sid": "...", "code": [...] }。
+2. sid 必须是现有已保存会话的 id（GET /api/snapshots 可查），不要自造；code 是该会话的回放历史，每行一个 λ 表达式或 :-命令。
+3. name ≤ 80 字符；lang ∈ zh/en/both。
+4. 只输出 JSON 本身，不要 markdown 代码块围栏、不要注释、不要尾随逗号。
+```
 
 ---
 
-## 3. 后端约束
+## 2. 分享格式（`omm-lambda-share`）
 
-- 解释器二进制：`public/extension.exe`（按 `LAMBDA_INTERP_BIN` 解析）。缺失时 GET /api/health 返回 `available: false`，POST /api/eval 返回 500。
-- 步数上限：`:steps` 默认 10000；非终止项被自动停止并给出提示。
-- 写入受限：`:load`/`:save` 限 .lam 非隐藏路径；`:save` 默认关闭（`LAMBDA_ALLOW_SAVE`）。
-- 会话存储：GET /api/snapshots → `{snapshots: [{id, name?, lines, lang, used}]}`（20 行上限、TTL 回收）。
+```json
+{
+  "format": "omm-lambda-share",
+  "version": 1,
+  "id": "ab12cd34ef"
+}
+```
+
+| 字段 | 必需 | 校验 |
+|---|---|---|
+| `format` | 是 | 必须等于 `"omm-lambda-share"`（硬校验） |
+| `version` | 是 | 必须是数字 `1`（硬校验） |
+| `id` | 是 | 非空字符串（深度校验）；一般取界面 POST /api/share 返回的 10 位 hex |
+
+警告：分享页是公开静态渲染，AI 一般不生成，除非用户明确要求。
 
 ---
 
-## 4. 示例请求
+## 3. 常见误区
 
-- “帮我写一个 Church 图灵对（TRUE / FALSE）并给出 λ 项”
-- “给邱奇数 3 乘以 2 的表达式并算出正规形”
-- “分析这段 λ 项：归约轨迹、步数、统计”
-
----
-
-## 5. 常见坑
-
-- 解释器缺失：/api/health 的 available 为 false → /api/eval 500；先检查 extension.exe。
-- 非终止项：不要生成无界项再等待；AI 不要把描述当成执行结果。
-- AI 给出的归约/统计只作解释建议，最终评估结果应以用户实际运行为准。
+- 不要把一句口头描述当成 `omm-lambda-session` 落库；只在用户确认后生成。
+- `code` 元素按回放顺序排列，用户继续操作会追加，不要丢已有行。
+- `sid` 必须是界面生成的（POST /api/session 返回或 GET /api/snapshots 中的 id），不要编造。

@@ -73,6 +73,15 @@ def _ai_backend_args() -> list:
     ]
 
 
+def _table_backend_args() -> list:
+    """表格自动化后端由 hub_server 动态加载；openpyxl 必须显式收进 EXE。"""
+    return [
+        "--hidden-import", "openpyxl",
+        "--hidden-import", "et_xmlfile",
+        "--collect-submodules", "openpyxl",
+    ]
+
+
 def _square_image(source: Path):
     from PIL import Image, ImageOps
 
@@ -201,6 +210,8 @@ def build(app_id: str) -> bool:
         ]
     if backend == "ai":
         args += _ai_backend_args()
+    if backend == "table":
+        args += _table_backend_args()
 
     if IS_MACOS:
         args += [
@@ -317,6 +328,7 @@ def build_hub() -> bool:
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "docs", DATA_SEP, "mdforge/docs"),
     ]
     args += _ai_backend_args()
+    args += _table_backend_args()
 
     if IS_MACOS:
         args += [
@@ -460,6 +472,7 @@ def build_framework() -> bool:
         "--add-data", "%s%s%s" % (ROOT / "mdforge" / "docs", DATA_SEP, "mdforge/docs"),
     ]
     args += _ai_backend_args()
+    args += _table_backend_args()
     args += _webview_args(FRAMEWORK_TARGET)
     args.append(str(entry))
     print("\n=== framework -> %s%s ===" % (name, APP_SUFFIX), flush=True)

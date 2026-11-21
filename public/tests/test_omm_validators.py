@@ -82,6 +82,10 @@ def test_templates_validate_clean():
     ('zencard', 'pack', lambda o: o['cards'][0].update(kind='bogus'), 'kind'),
     ('zenflow', 'rules', lambda o: o[0]['actions'][0].update(type='dropDatabase'), 'type'),
     ('zenbackup', 'manifest', lambda o: o['products'][0].update(checksum='wrong'), 'checksum'),
+    ('table', 'workflow', lambda o: o.update(format='wrong'), 'format'),
+    ('table', 'workflow', lambda o: o['nodes'].append(dict(o['nodes'][0])), '重复'),
+    ('table', 'workflow', lambda o: o['connections'][0].update(to='missing'), '不存在'),
+    ('table', 'workflow', lambda o: o['nodes'][1].update(type='dropDatabase'), '节点类型'),
     ('hub', 'ai-config', lambda o: o.update(apiKey='sk-secret'), 'apiKey'),
 ])
 def test_hard_gates_rejected(pid, kind, mutate, expect):
@@ -163,7 +167,7 @@ def test_domain_tools(ws):
     assert {'omm_format_list', 'omm_format_template', 'omm_format_validate'} <= names
     ctx = {'account': 'default'}
     listing = ws.tools.execute('omm_format_list', {}, ctx)
-    assert listing['ok'] and len(listing['products']) == 20
+    assert listing['ok'] and len(listing['products']) == 21
     template = ws.tools.execute('omm_format_template', {'product': 'zencard', 'kind': 'pack'}, ctx)
     assert template['ok'] and template['templates'][0]['kind'] == 'pack'
     good = ws.tools.execute('omm_format_validate', {
@@ -178,7 +182,7 @@ def test_domain_tools(ws):
 
 def test_http_routes(client):
     listing = client.get('/api/omm/formats').get_json()
-    assert listing['ok'] and len(listing['products']) == 20
+    assert listing['ok'] and len(listing['products']) == 21
     detail = client.get('/api/omm/formats?product=mdforge').get_json()
     assert detail['product'] == 'mdforge' and detail['formats']
     template = client.get('/api/omm/template?product=zencard&kind=card').get_json()

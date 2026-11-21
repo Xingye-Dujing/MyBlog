@@ -108,7 +108,7 @@ HUB_PROMPT = '\n'.join([
 ])
 
 CROSS_PROMPT = '\n'.join([
-    '你是 OMM-ZEN 的跨产品编排专家，负责在 19 个产品之间设计数据流与自动化。',
+    '你是 OMM-ZEN 的跨产品编排专家，负责在 20 个产品之间设计数据流与自动化。',
     '',
     '## 共享频道（只有这些，且最终由用户在“连接规则”里授权）',
     '\n'.join('- %s（%s）：%s，MIME %s' % (key, value['name'], value['role'], value['mime']) for key, value in CHANNELS.items()),
@@ -205,7 +205,7 @@ PRIVACY_RULE = '\n'.join([
 
 
 def build_skills() -> List[SkillSpec]:
-    """构造全部 OMM-ZEN 技能：19 个产品 + 静书房 + 跨产品 + AI 工作区自身 + 学习包设计师。"""
+    """构造全部 OMM-ZEN 技能：20 个产品 + 静书房 + 跨产品 + AI 工作区自身 + 学习包设计师。"""
     skills: List[SkillSpec] = []
     for identifier in PRODUCT_IDS:
         item = PRODUCTS[identifier]

@@ -86,6 +86,7 @@ FORMAT_CONTRACTS = [
     ("planner.md", ["public/omm-planner.html"], ["planners", "version"]),
     ("visualization.md", ["public/omm-visualization.html"],
      ["zenviz-right-properties", "version"]),
+    ("table.md", ["public/zen-table.js"], ["omm-table-workflow", "nodes", "connections"]),
 ]
 
 # Cross-product infrastructure: changing any of these affects every consumer,
@@ -872,10 +873,17 @@ def check_registry(files, exists) -> list[Issue]:
         if rel.startswith("public/omm-") and rel.endswith(".html")
         and (tracked is None or rel in tracked)
     }
+    # 入口页可以是非 omm-<id>.html 的约定名（例如 lambda 的 index.html）。
+    # entry 字段是权威来源；只有既没有约定页、也没有声明入口的产品才算缺页。
+    entry_ids = {
+        item["id"] for item in products
+        if (PUB / str(item.get("entry") or "")).is_file()
+    }
+    declared_ids = html_ids | entry_ids
     for name in sorted(html_ids - all_ids):
         issues.append(Issue("REGISTRY", "public/omm-%s.html" % name, 0,
                             "产品页未在任何注册表登记: %s" % name))
-    for name in sorted(all_ids - html_ids):
+    for name in sorted(all_ids - declared_ids):
         # The snapshot may omit dist/, but source pages are always present.
         if (PUB / ("omm-%s.html" % name)).exists():
             continue
@@ -883,7 +891,14 @@ def check_registry(files, exists) -> list[Issue]:
                             "注册表产品缺少页面: %s" % name))
 
     exe_ids = set(DESKTOP_EXE_NAMES)
-    for name in sorted(exe_ids ^ all_ids):
+    # 带本地后端的产品可以只在静书房里以插件运行，不生成独立 EXE。
+    # 这类 runtime 不要求进入 DESKTOP_EXE_NAMES（video / lambda / table）。
+    plugin_only = {
+        item["id"] for item in products
+        if item.get("runtime") in ("video", "lambda", "table")
+    }
+    expected_exe_ids = all_ids - plugin_only
+    for name in sorted(exe_ids ^ expected_exe_ids):
         issues.append(Issue("REGISTRY", "public/desktop/plugin_specs.py", 0,
                             "桌面程序表与产品注册表不一致: %s" % name))
 

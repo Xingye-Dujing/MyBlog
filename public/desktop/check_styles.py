@@ -5,8 +5,10 @@ Run from the repository root:
     python public/desktop/check_styles.py
 
 Checks that every product page consumes the shared entry, that no product has
-regressed to inline shell CSS, that generated CSS is syntactically balanced,
-and that selected/highlight backgrounds stay warm (no black/blue).
+regressed to inline shell CSS, that no empty product-CSS placeholders remain,
+that CSS is syntactically balanced, and that selected/highlight backgrounds
+stay warm (no black/blue). A page with no product-specific rules simply omits
+the product stylesheet; it does not need an empty placeholder file.
 """
 from __future__ import annotations
 
@@ -28,12 +30,18 @@ for page in PAGES:
     text = page.read_text(encoding="utf-8", errors="ignore")
     if 'href="zen-style/zen.css"' not in text:
         fail(f"{page.name}: missing zen-style/zen.css")
-    product = f'href="zen-style/product/{page.stem}.css"'
-    if product not in text:
-        fail(f"{page.name}: missing product stylesheet")
     for match in re.finditer(r"^\s*<style\b", text, re.M):
         line = text[: match.start()].count("\n") + 1
         fail(f"{page.name}:{line}: inline <style> block remains")
+
+for css in sorted((STYLE_DIR / "product").glob("*.css")):
+    body = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8", errors="ignore"), flags=re.S)
+    inner = re.sub(r"^\s*@layer\s+[\w.-]+\s*\{", "", body).rstrip()
+    if inner.endswith("}"):
+        inner = inner[:-1]
+    if not inner.strip():
+        fail(f"{css.relative_to(ROOT)}: empty placeholder stylesheet")
+        continue
 
 for css in sorted(STYLE_DIR.rglob("*.css")):
     body = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8", errors="ignore"), flags=re.S)

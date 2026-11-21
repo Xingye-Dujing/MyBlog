@@ -148,6 +148,16 @@ def copy_video_runtime(dest: Path) -> None:
         shutil.copy2(backend, dest / "video-serve.py")
 
 
+def copy_table_runtime(dest: Path) -> None:
+    """表格自动化：拷贝 openpyxl 后端与工作目录骨架。"""
+    for name in ("table-serve.py", "table_engine.py"):
+        backend = ROOT / name
+        if backend.is_file():
+            shutil.copy2(backend, dest / name)
+    (dest / "table-runtime" / "work" / "uploads").mkdir(parents=True, exist_ok=True)
+    (dest / "table-runtime" / "work" / "jobs").mkdir(parents=True, exist_ok=True)
+
+
 def copy_lambda_runtime(dest: Path) -> None:
     """Lambda 演算计算器：打包后端 lambda-app.py 与内置 extension 二进制、运行状态文件。"""
     backend = ROOT / "lambda-app.py"
@@ -227,6 +237,8 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
     copy_vendor(dest, app_id)
     if app_id == "video":
         copy_video_runtime(dest)
+    if app_id == "table":
+        copy_table_runtime(dest)
     if app_id == "lambda":
         copy_lambda_runtime(dest)
     (dest / "plugin.json").write_text(

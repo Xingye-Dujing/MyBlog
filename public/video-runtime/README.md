@@ -18,7 +18,7 @@
 3. `<public 根目录>/video-runtime/bin/ffmpeg.exe`
 4. 系统 PATH 中的 `ffmpeg`
 
-前端顶部徽标会显示「ffmpeg 内置 ✓」或「系统」。
+前端顶部徽标会显示“ffmpeg 内置 ✓”或“系统”。
 
 ## 替换方式
 

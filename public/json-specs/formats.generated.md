@@ -42,6 +42,8 @@
   - export（.json）
 - [video · 视频工作台](#video)
   - workflow（.json）
+- [table · 表格自动化](#table)
+  - workflow（.json）
 - [visualization · 可视化图表](#visualization)
   - csv（.json/.csv）
   - properties（.json/.csv）
@@ -474,7 +476,7 @@
 ### `share` · .json
 
 - 契约：format=`omm-lambda-share`，version=`1`
-- 实现源码：`public/index.html`
+- 实现源码：`public/json-specs/lambda.md`
 - 深度校验器：`v_lambda`
 - 硬门槛：format="omm-lambda-share"；version 数字 1；id 非空字符串
 
@@ -675,7 +677,7 @@
 ### `workflow` · .json
 
 - 契约：format=`omm-video-workflow`，version=`1`
-- 实现源码：`public/omm-video.js`
+- 实现源码：`public/zen-video.js`
 - 深度校验器：`v_video`
 - 硬门槛：format="omm-video-workflow"；version 数字 1；nodes 顶层数组；connections 顶层数组
 
@@ -745,6 +747,156 @@
     {
       "from": "n-format-1",
       "to": "n-export-1",
+      "fromPort": "right",
+      "toPort": "left"
+    }
+  ]
+}
+```
+
+---
+
+<a id="table"></a>
+
+## table · 表格自动化
+
+### `workflow` · .json
+
+- 契约：format=`omm-table-workflow`，version=`1`
+- 实现源码：`public/zen-table.js`
+- 深度校验器：`v_table`
+- 硬门槛：format="omm-table-workflow"；version 数字 1；nodes 顶层数组；connections 顶层数组；有且只有一个 file 节点
+
+| 字段 | 类型 | 必需 |
+|---|---|---|
+| `nodes` | array | 是 |
+| `connections` | array | 是 |
+
+最小示例：
+
+```json
+{
+  "format": "omm-table-workflow",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n-file",
+      "type": "file",
+      "title": "Excel 文件与区域",
+      "data": {
+        "fileId": "",
+        "filename": "",
+        "sheetMode": "one",
+        "sheet": "",
+        "selected": [],
+        "rangeMode": "auto",
+        "startCell": "A1",
+        "endCell": "",
+        "headerRow": 0,
+        "overrides": []
+      }
+    },
+    {
+      "id": "n-map",
+      "type": "mapCells",
+      "title": "时间分档",
+      "data": {
+        "columns": "C:AG",
+        "step": 1,
+        "op": "lastTimeLookup",
+        "lookupKind": "time",
+        "lookup": [
+          {
+            "min": "",
+            "max": "18:55",
+            "result": 0
+          },
+          {
+            "min": "18:56",
+            "max": "19:24",
+            "result": 1
+          },
+          {
+            "min": "19:25",
+            "max": "19:54",
+            "result": 1.5
+          },
+          {
+            "min": "19:55",
+            "max": "20:24",
+            "result": 2
+          },
+          {
+            "min": "20:25",
+            "max": "20:54",
+            "result": 2.5
+          },
+          {
+            "min": "20:55",
+            "max": "",
+            "result": 3
+          }
+        ],
+        "defaultResult": 3,
+        "sourceSkipEmpty": true
+      }
+    },
+    {
+      "id": "n-write",
+      "type": "write",
+      "title": "写回（插入空行）",
+      "data": {
+        "columns": "C:AG",
+        "rowMode": "insertBelow",
+        "conflict": "skip",
+        "style": "asc",
+        "skipEmpty": true,
+        "skipZero": true
+      }
+    },
+    {
+      "id": "n-sum",
+      "type": "writeFormula",
+      "title": "行合计",
+      "data": {
+        "kind": "rowSum",
+        "columns": "C:AG",
+        "targetColumn": "AH",
+        "rowMode": "insertBelow",
+        "style": "asc"
+      }
+    },
+    {
+      "id": "n-save",
+      "type": "save",
+      "title": "保存",
+      "data": {
+        "filename": "结果文件.xlsx"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "n-file",
+      "to": "n-map",
+      "fromPort": "right",
+      "toPort": "left"
+    },
+    {
+      "from": "n-map",
+      "to": "n-write",
+      "fromPort": "right",
+      "toPort": "left"
+    },
+    {
+      "from": "n-write",
+      "to": "n-sum",
+      "fromPort": "right",
+      "toPort": "left"
+    },
+    {
+      "from": "n-sum",
+      "to": "n-save",
       "fromPort": "right",
       "toPort": "left"
     }

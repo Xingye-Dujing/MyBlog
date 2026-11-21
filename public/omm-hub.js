@@ -1390,6 +1390,7 @@
     visualization: 'tu biao tb ke shi hua ksh chart',
     writer: 'xie zuo xz chang wen bi ji bj',
     video: 'shi pin sp video ffmpeg jian ji fen xi gong zuo liu clip cut',
+    table: 'biao ge bg excel xlsx zi dong hua gong zuo liu ji suan hui zong write',
     zenflow: 'zi dong bian pai zd flow liu cheng',
     zencard: 'ka pian kp fu xi fx',
   };

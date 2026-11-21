@@ -12,7 +12,7 @@ import re
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.26"
+VERSION = "1.0.27"
 
 
 def version_key(value: Any) -> tuple:
@@ -65,7 +65,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "id": "ai",
         "name": "AI 工作区",
         "glyph": "智",
-        "description": "静书房专属 Agent · 19 产品技能与最佳实践",
+        "description": "静书房专属 Agent · 20 产品技能与最佳实践",
         "entry": "omm-ai.html",
         "port": 8328,
         "runtime": "ai",
@@ -84,7 +84,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "name": "文本标注",
         "glyph": "标",
         "description": "PDF 标注 · 精读 · 批注",
-        "version": "1.0.26",
+        "version": "1.0.27",
         "entry": "omm-annotate.html",
         "port": 8311,
         "runtime": "static",
@@ -233,7 +233,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "name": "可视化图表",
         "glyph": "图",
         "description": "图表与数据可视化",
-        "version": "1.0.26",
+        "version": "1.0.27",
         "entry": "omm-visualization.html",
         "port": 8320,
         "runtime": "static",
@@ -335,6 +335,20 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "runtime": "video",
         "vendor": [],
         "order": 121,
+        "share": {"channels": [{"id": "documents", "role": "publish"}]},
+    },
+    {
+        # 表格自动化：节点工作流 + openpyxl 本地后端（public/table-serve.py + table_engine.py）。
+        # 与视频工作台相同，只在静书房内以插件运行，暂不生成独立 EXE。
+        "id": "table",
+        "name": "表格自动化",
+        "glyph": "表",
+        "description": "Excel 节点工作流 · 逐格/逐列计算 · 写回与汇总",
+        "entry": "omm-table.html",
+        "port": 8331,
+        "runtime": "table",
+        "vendor": [],
+        "order": 123,
         "share": {"channels": [{"id": "documents", "role": "publish"}]},
     },
     {

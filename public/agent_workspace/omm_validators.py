@@ -797,6 +797,157 @@ def v_video(obj: Any, text: str, r: Report) -> str:
     return 'workflow'
 
 
+_TABLE_OPS = {
+    'file', 'mapCells', 'mapColumns', 'formula', 'filter', 'sort', 'dedupe',
+    'join', 'aggregate', 'pivot', 'write', 'writeFormula', 'exportTable',
+    'save', 'preview', 'note',
+}
+_TABLE_ROW_MODES = {'same', 'next', 'insertBelow', 'offset'}
+_TABLE_CONFLICTS = {'skip', 'overwrite', 'error'}
+_TABLE_RANGE = re.compile(r'^[A-Z]{1,3}\d+(?::(?:[A-Z]{1,3}\d*|\d+))?$', re.I)
+
+
+def v_table(obj: Any, text: str, r: Report) -> str:
+    """表格自动化工作流：结构、节点、连线与关键字段的硬校验。"""
+    if not isinstance(obj, dict):
+        r.error('工作流 JSON 必须是对象')
+        return 'workflow'
+    if str(obj.get('format') or '') != 'omm-table-workflow':
+        r.error('format 必须等于 "omm-table-workflow"')
+    if not isinstance(obj.get('version'), int) or isinstance(obj.get('version'), bool) or obj['version'] != 1:
+        r.error('version 必须是数字 1')
+
+    nodes = obj.get('nodes') if isinstance(obj.get('nodes'), list) else []
+    if not nodes:
+        r.error('nodes 必须是非空数组')
+        nodes = []
+    ids = set()
+    file_count = 0
+    for index, node in enumerate(nodes):
+        path = 'nodes[%d]' % index
+        if not isinstance(node, dict):
+            r.error('%s 必须是对象' % path)
+            continue
+        nid = str(node.get('id') or '')
+        if not nid:
+            r.error('%s.id 不能为空' % path)
+        elif nid in ids:
+            r.error('%s.id 重复：%s' % (path, nid))
+        ids.add(nid)
+        op = str(node.get('type') or '')
+        if op not in _TABLE_OPS:
+            r.error('%s.type 不是已知节点类型：%s' % (path, op))
+        if op == 'file':
+            file_count += 1
+        data = node.get('data')
+        if not isinstance(data, dict):
+            r.error('%s.data 必须是对象' % path)
+            continue
+        if op == 'file':
+            if str(data.get('sheetMode') or 'one') not in ('one', 'all', 'selected'):
+                r.error('%s.data.sheetMode 只能是 one / all / selected' % path)
+            if data.get('headerRow') is not None and (
+                not isinstance(data['headerRow'], int) or data['headerRow'] < 0
+            ):
+                r.error('%s.data.headerRow 必须是非负整数' % path)
+            for key in ('startCell', 'endCell'):
+                value = data.get(key)
+                if value in (None, '', 'auto'):
+                    continue
+                if not re.match(r'^[A-Z]{1,3}\d{1,7}$', str(value).replace('$', '').upper()):
+                    r.error('%s.data.%s 必须是 A1 坐标：%s' % (path, key, value))
+        if op in ('mapCells', 'mapColumns', 'write', 'writeFormula', 'aggregate'):
+            for key in ('columns', 'targetColumns', 'valueColumns'):
+                value = data.get(key)
+                if value in (None, ''):
+                    continue
+                text_value = str(value).upper().replace('$', '').replace(' ', '')
+                for part in re.split(r'[,，]', text_value):
+                    if not part:
+                        continue
+                    if ':' in part:
+                        if not re.match(r'^[A-Z]{1,3}:[A-Z]{1,3}$', part):
+                            r.error('%s.data.%s 列范围无效：%s' % (path, key, part))
+                    elif not re.match(r'^[A-Z]{1,3}$', part):
+                        r.error('%s.data.%s 列字母无效：%s' % (path, key, part))
+        if op == 'write' and str(data.get('rowMode') or 'same') not in _TABLE_ROW_MODES:
+            r.error('%s.data.rowMode 无效：%s' % (path, data.get('rowMode')))
+        if op in ('write', 'writeFormula') and str(data.get('conflict') or 'skip') not in _TABLE_CONFLICTS:
+            r.error('%s.data.conflict 只能是 skip / overwrite / error' % path)
+        if op in ('mapCells', 'mapColumns') and data.get('op') in ('lastTimeLookup', 'lookup'):
+            lookup = data.get('lookup')
+            if not isinstance(lookup, list) or not lookup:
+                r.error('%s.data.lookup 必须是非空数组' % path)
+            else:
+                for j, item in enumerate(lookup):
+                    if not isinstance(item, dict) or 'result' not in item:
+                        r.error('%s.data.lookup[%d] 缺少 result' % (path, j))
+        if op in ('mapCells', 'mapColumns', 'formula') and data.get('op') == 'formula':
+            expr = str(data.get('expression') or '')
+            if not expr.strip():
+                r.error('%s.data.expression 不能为空' % path)
+            if re.search(r'__|import|eval|exec|open\(|globals|lambda', expr, re.I):
+                r.error('%s.data.expression 包含不允许的标识符' % path)
+        if op in ('save', 'exportTable'):
+            name = str(data.get('filename') or '')
+            if not name.lower().endswith(('.xlsx', '.xlsm')):
+                r.error('%s.data.filename 必须以 .xlsx / .xlsm 结尾' % path)
+
+    if file_count != 1:
+        r.error('必须有且只有一个 file 节点（当前 %d 个）' % file_count)
+
+    connections = obj.get('connections') if isinstance(obj.get('connections'), list) else []
+    if not isinstance(obj.get('connections'), list):
+        r.error('connections 必须是数组')
+    for index, conn in enumerate(connections):
+        path = 'connections[%d]' % index
+        if not isinstance(conn, dict):
+            r.error('%s 必须是对象' % path)
+            continue
+        for key in ('from', 'to'):
+            value = str(conn.get(key) or '')
+            if not value:
+                r.error('%s.%s 缺失' % (path, key))
+            elif value not in ids:
+                r.error('%s.%s 指向不存在的节点：%s' % (path, key, value))
+        if str(conn.get('from') or '') == str(conn.get('to') or ''):
+            r.error('%s 不能连接节点自身' % path)
+        if str(conn.get('toPort') or 'left') not in ('left', 'top'):
+            r.warn('%s.toPort 建议为 left 或 top' % path)
+
+    # 环检测
+    if ids:
+        indegree = {nid: 0 for nid in ids}
+        adj = {nid: [] for nid in ids}
+        for conn in connections:
+            a, b = str(conn.get('from') or ''), str(conn.get('to') or '')
+            if a in ids and b in ids and a != b:
+                indegree[b] += 1
+                adj[a].append(b)
+        queue = [nid for nid, deg in indegree.items() if deg == 0]
+        visited = 0
+        while queue:
+            cur = queue.pop(0)
+            visited += 1
+            for nxt in adj[cur]:
+                indegree[nxt] -= 1
+                if indegree[nxt] == 0:
+                    queue.append(nxt)
+        if visited != len(ids):
+            r.error('工作流存在循环连线')
+
+    # 除 file / note 外都要有上游
+    upstream = {str(c.get('to')) for c in connections if isinstance(c, dict)}
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            continue
+        op = str(node.get('type') or '')
+        nid = str(node.get('id') or '')
+        if op not in ('file', 'note') and nid not in upstream:
+            r.error('nodes[%d] 没有上游输入：%s' % (index, nid))
+    return 'workflow'
+
+
 def v_lambda(obj: Any, text: str, r: Report) -> str:
     """Lambda 演算计算器：会话快照 / 分享链接。"""
     if not isinstance(obj, dict):

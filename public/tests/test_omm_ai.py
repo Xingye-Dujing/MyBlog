@@ -51,8 +51,8 @@ def client(tmp_path):
 
 # ── 1. 产品知识库 ─────────────────────────────────────────────────────────────
 def test_catalog_completeness():
-    assert len(PRODUCT_IDS) == 19
-    assert len(set(PRODUCT_IDS)) == 19
+    assert len(PRODUCT_IDS) == 20
+    assert len(set(PRODUCT_IDS)) == 20
     assert set(PRODUCTS) == set(PRODUCT_IDS)
     assert 'hub' not in PRODUCTS and 'hub' in ALL
     required = {'name', 'glyph', 'purpose', 'port', 'entry', 'runtime', 'order',
@@ -68,7 +68,7 @@ def test_catalog_completeness():
         assert len(item['pitfalls']) >= 2, identifier
         assert len(item['suggested']) >= 2, identifier
         assert all(channel in CHANNELS for channel in item['channels']), identifier
-    assert len(set(ports)) == 19
+    assert len(set(ports)) == 20
     assert set(CHANNELS) == {'documents', 'notes.english', 'data.tables'}
 
 
@@ -82,7 +82,7 @@ def test_product_lookup_by_name_and_glyph():
 # ── 2. 每个产品的技能 ────────────────────────────────────────────────────────
 def test_skill_coverage_and_depth():
     ids = [skill.id for skill in SKILLS]
-    assert len(ids) == len(set(ids)) == 23
+    assert len(ids) == len(set(ids)) == 24
     for identifier in PRODUCT_IDS:
         assert 'omm.zen.' + identifier in ids
     for extra in ('omm.zen.hub', 'omm.zen.cross', 'omm.zen.ai', 'omm.zen.study'):
@@ -100,7 +100,7 @@ def test_skill_coverage_and_depth():
 def test_skills_available_in_workspace(ws):
     rows = ws.skills.list('default')
     omm_rows = [row for row in rows if row['id'].startswith('omm.zen.')]
-    assert len(omm_rows) == 23
+    assert len(omm_rows) == 24
     assert all(row['available'] for row in omm_rows), [
         (row['id'], row.get('reason')) for row in omm_rows if not row['available']
     ]
@@ -116,7 +116,7 @@ def test_domain_tools_execute(ws):
     assert expected <= names
     ctx = {'account': 'default', 'conversation_id': 'conv_test'}
     result = ws.tools.execute('omm_product_list', {}, ctx)
-    assert result['ok'] and result['count'] == 19
+    assert result['ok'] and result['count'] == 20
     info = ws.tools.execute('omm_product_info', {'product': '文本标注'}, ctx)
     assert info['ok'] and info['name'] == '文本标注' and info['best_practices']
     search = ws.tools.execute('omm_spec_search', {'query': 'zen-card', 'limit': 3}, ctx)
@@ -216,12 +216,12 @@ def test_provider_mapping_registers_custom_catalog(ws):
 # ── 6. Flask 路由 ─────────────────────────────────────────────────────────────
 def test_flask_meta_routes(client):
     env = client.get('/api/omm/env').get_json()
-    assert env['ok'] and env['products'] == 19 and env['skills'] == 23
+    assert env['ok'] and env['products'] == 20 and env['skills'] == 24
     assert 'AI_MD_SPEC.md' in env['knowledge'] and 'PRODUCTS.md' in env['knowledge']
     products = client.get('/api/omm/products').get_json()
-    assert len(products['products']) == 19 and 'documents' in products['channels']
+    assert len(products['products']) == 20 and 'documents' in products['channels']
     skills = client.get('/api/omm/skills').get_json()
-    assert len(skills['skills']) == 23 and all(row['available'] for row in skills['skills'])
+    assert len(skills['skills']) == 24 and all(row['available'] for row in skills['skills'])
     bootstrap = client.get('/api/ai/bootstrap').get_json()
     assert bootstrap['ok'] and bootstrap['default_provider'] == 'complete'
     assert client.get('/api/ai/health').get_json()['ok']
@@ -271,7 +271,8 @@ def test_desktop_registration_contract():
 def test_knowledge_files_bundled():
     expected = ['PRODUCTS.md', 'prompts.md', 'zencard.md', 'writer.md', 'annotate.md', 'corpus.md',
                 'data.md', 'english.md', 'planner.md', 'visualization.md', 'latex.md', 'redact.md',
-                'message.md', 'zenpack.md', 'video.md', 'lambda.md', 'AI_MD_SPEC.md', 'AI_LATEX_FIGURE_SPEC.md',
+                'message.md', 'zenpack.md', 'video.md', 'lambda.md', 'table.md',
+                'AI_MD_SPEC.md', 'AI_LATEX_FIGURE_SPEC.md',
                 'FORMAT_VALIDATION.md', 'plugin-spec.md', 'PLUGIN-GUIDE.md']
     for name in expected:
         assert (KNOWLEDGE_DIR / name).is_file(), name

@@ -2,7 +2,7 @@
 
 AI 不要自己写校验逻辑，也不要凭记忆编造导入文件结构。工作区提供三个工具：
 
-1. `omm_format_list(product?)` — 列出产品支持的导入/导出格式 `kind`。省略 product 时列出全部 20 个入口（19 个产品 + 静书房）。
+1. `omm_format_list(product?)` — 列出产品支持的导入/导出格式 `kind`。省略 product 时列出全部 21 个入口（20 个产品 + 静书房）。
 2. `omm_format_template(product, kind?)` — 返回可直接填充的空白模板（JSON / TeX / Markdown / CSV）。不指定 kind 时返回该产品全部模板。
 3. `omm_format_validate(product, content, kind?)` — 用各产品真实解析规则校验生成内容，返回 `{ok, kind, errors[], warnings[]}`。错误形如 `路径: 原因`，修正后重新校验直到 `ok=true`。
 

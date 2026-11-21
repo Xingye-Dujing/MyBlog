@@ -4,9 +4,9 @@
 > 功能开发与插件制作看 [`PLUGIN-GUIDE.md`](PLUGIN-GUIDE.md)；
 > 清单字段契约看 [`../plugin-spec.md`](../plugin-spec.md)。
 
-把 `public/` 下的 19 个产品打包成独立桌面程序，并提供三种集成形态：
+把 `public/` 下的 20 个产品打包成独立桌面程序，并提供三种集成形态：
 
-- **OMM-ZEN.exe / .app**：完整离线版，内置全部 20 个插件。
+- **OMM-ZEN.exe / .app**：完整离线版，内置全部 21 个插件。
 - **OMM-ZEN-Framework**：只含工作台框架，产品以插件形式按需安装。
 - **OMM-ZEN-Setup.exe / .app**：在线安装器，勾选要安装的产品，下载框架和对应插件包。
 
@@ -74,7 +74,7 @@
 ### 内置 AI 工作区（`ai`）
 
 静书房还内置一个带 Python 后端的专属 Agent 插件（`omm-ai.html`，端口 8328，runtime `ai`），
-把 `agent-workspace` 框架与 19 个产品的技能/规范打包进工作台。它由 `hub_server._start_ai()`
+把 `agent-workspace` 框架与 20 个产品的技能/规范打包进工作台。它由 `hub_server._start_ai()`
 启动，页面、工具与产物审批都通过 OMM-ZEN 桥接与静书房协同；配置与测试见
 [`public/README-AI.md`](../README-AI.md)。用户导入的 zip 仍只能是 `static`，不能声明 `ai` 运行时。
 
@@ -308,7 +308,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File desktop\release\upload_gitee
 Gitee 仓库附件总量只有 **1 GB**，按 Release 累计，不是每个 Release 各自 1 GB。
 当前一个完整版本大致占用：
 
-- Windows 全量（18 个 EXE + 框架 + catalog/模板/规范 + 17 个插件）；
+- Windows 全量（18 个 EXE + 框架 + catalog/模板/规范 + 21 个插件）；
 - macOS 每个产品各有 Intel 与 Apple Silicon 两份 DMG，外加框架 zip，资源数随产品增加；
 - 旧版本还会继续占用配额。新增 5 个产品后附件总量较此前更大，发布前按实际产物体积核对配额。
 
@@ -342,7 +342,7 @@ Intel（`macos-15-intel`）和 Apple Silicon（`macos-15`）两套 `.app`：
 本机 Mac 构建：
 
 ```bash
-python3 -m pip install -r requirements-mdforge.txt pywebview pyinstaller
+python3 -m pip install -r requirements-mdforge.txt -r requirements-table.txt pywebview pyinstaller
 python3 desktop/build_exes.py --clean
 python3 desktop/build_plugins.py --tag v1.0.17
 # 产物：dist/OMM-<App>.app、dist/OMM-ZEN.app、dist/OMM-ZEN-Setup.app

@@ -1,6 +1,6 @@
 # 静书房 / OMM-ZEN 产品总览
 
-共 19 个产品 + 工作台。所有产品页在独立 origin 运行，
+共 20 个产品 + 工作台。所有产品页在独立 origin 运行，
 跨产品内容请通过 ZenCard 与共享频道（documents、notes.english、data.tables）传递。
 
 ## 静 · 静书房（hub）
@@ -340,6 +340,48 @@
 - 常见坑：
   - 不要把摘录的长文直接当作自己的回答。
   - 引用标记使用产品内部的控制字符，不要手改成普通 [n] 文本。
+
+## 表 · 表格自动化（table）
+
+- 用途：Excel 工作簿的可视化数据流自动化：读取区域、逐格/逐列计算、写回与汇总。
+- 端口/入口：8331 / omm-table.html（table）
+- 共享频道：documents
+- AI：产品自身不含生成式 AI。AI 工作区通过 omm_product_info("table") 与 omm_spec_search("表格自动化") 读规范，用 omm_format_template/validate 生成并校验工作流 JSON；用户导入后上传文件运行。ZenTableAI.snapshot()/snapshotMarkdown()/workflowSpec() 可获取当前画布，OMMShare 走 documents 频道发送。
+- 功能：
+  - 节点画布：复用 ZenCanvas，支持拖拽连线、端口连接、自动排布、撤销与适应视野。
+  - 输入节点：上传 .xlsx/.xlsm，自动识别真实数据范围、合并单元格与工作表，支持逐表覆盖区域与表头行。
+  - 逐格计算：对列范围内每一格执行同一规则（取最后时间、时间/数值区间查表、文本处理、条件、数值转换、安全表达式）。
+  - 逐列批量计算：对目标列范围按步长逐列计算，源列可取自左邻列、固定列或按表头匹配，适合工资表几十列结果列。
+  - 整理：筛选（多条件 AND/OR）、排序、按列去重、两表连接（左端口主表、上方端口副表）。
+  - 汇总：按列汇总（姓名取自表头行，可设列偏移）与交叉汇总（行转列、行列合计），可直接导出独立汇总 xlsx。
+  - 写回：同行/下一行/下方插入空行/偏移行；冲突策略为跳过/覆盖/中止；样式可选 ASC 风格、沿用源样式、只写值。
+  - 写公式：行内横向 SUM 与列纵向 SUM（auto = 每表数据末行下一行）。
+  - 试运行与预览节点：先算不写文件，列出冲突与将写入的单元格；支持节点级数据预览与任务取消。
+  - AI 桥：window.ZenTableAI 快照/工作流规范，发送工作流到 AI 工作区并响应 zen-card 广播。
+- 数据落点：
+  - localStorage：zen.table.canvas.v1（画布 {version,app,nodes[],connections[],view,meta}）、zen.theme。
+  - 磁盘：table-runtime/work/uploads 与 table-runtime/work/jobs/<job>/out（相对插件目录）。
+  - 产物通过 /api/file/<job>/<name> 下载，不写用户指定的任意路径；工作流可导出 table-workflow.json。
+- 格式：
+  - AI 工作流 JSON：{format:"omm-table-workflow", version:1, nodes:[{id,type,data}], connections:[{from,to,fromPort,toPort}]}（详见 json-specs/table.md）。
+  - 源文件 .xlsx/.xlsm；输出工作簿与独立汇总表均为 .xlsx。
+  - 画布 JSON（zen-canvas toJSON）也可导入，应用后与 AI 生成的工作流等价。
+- 最佳实践：
+  - 生成工作流时 fileId 必须留空，由用户在工作台导入文件；不要编造文件 id 或工作表真实范围。
+  - 一个工作流只能有一个 file 节点；其余节点必须有上游；save 节点放在链尾，不能出现循环连线。
+  - 加班补贴类任务用 file → mapCells(op=lastTimeLookup) → write(rowMode=insertBelow) → writeFormula(kind=rowSum) → save。
+  - 工资类多列任务用 file(all sheets) → mapColumns(targetColumns/step/sourceMode=left) → write → writeFormula(colSum) → aggregate(columns) → pivot → exportTable → save。
+  - 列范围与公式列必须写成 Excel 列字母或 A1 区域（如 C:AG、E:CG、C6:AG90），步长用 step 字段，不要另造字段。
+  - 查表区间用 lookup:[{min,max,result}]，时间写 HH:MM，下限留空表示 -∞，上限留空表示 +∞，边界为闭区间。
+  - 安全表达式用 [列字母] 引用本行，如 [D]*[C]；只允许 IF/ROUND/ABS/MIN/MAX/SUM/LEN/REGEX 等白名单函数，禁止属性访问与任意调用。
+  - 默认冲突策略是跳过非空；需要覆盖时显式把 write.conflict 设为 overwrite，并提醒用户可能丢失原数据。
+  - 多表且各表布局不同时使用 file.overrides 按工作表覆盖 startCell/endCell/headerRow；名称列不在结果列时设置 aggregate.nameColumnOffset。
+  - 先试运行确认冲突与写入计划，再正式运行；产物只在工作台下载，不要声称已写入用户磁盘路径。
+- 常见坑：
+  - openpyxl 不能同时读取公式与缓存值：引擎用 data_only 工作簿计算、正常工作簿写公式；打开结果后 Excel 会重算公式。
+  - 写入公式以 = 开头，普通文本不要以 = 开头，否则会被当成公式。
+  - 结果写入新插入的空行时不检查冲突；同行/下一行/偏移行会检查，默认跳过非空。
+  - 只支持 .xlsx/.xlsm；.xls 需先另存为 .xlsx。Web 部署没有后端，工作流只能编辑与导入导出，不能运行。
 
 ## 视 · 视频工作台（video）
 

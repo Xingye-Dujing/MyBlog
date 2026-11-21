@@ -223,6 +223,24 @@ class HubServer:
         _serve(server)
         return server
 
+    def _start_table(self, port: int, plugin_dir: Path):
+        """表格自动化：openpyxl 本地后端，只服务回环地址。"""
+        os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
+        script = plugin_dir / "table-serve.py"
+        if not script.is_file():
+            script = self.root / "table-serve.py"
+        if not script.is_file():
+            raise RuntimeError("缺少 table-serve.py")
+        spec = importlib.util.spec_from_file_location("omm_table_plugin_backend", str(script))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("无法加载表格自动化后端")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        module.Handler.root = plugin_dir.resolve()
+        server = _QuietHTTPServer(("127.0.0.1", port), module.Handler)
+        _serve(server)
+        return server
+
     def _start_lambda(self, port: int, plugin_dir: Path):
         """Lambda 演算计算器：Flask 后端（public/lambda-app.py + 内置 extension 二进制）。"""
         from werkzeug.serving import make_server
@@ -290,6 +308,8 @@ class HubServer:
                     return self._start_latex(port, plugin_dir)
                 if runtime == "video":
                     return self._start_video(port, plugin_dir)
+                if runtime == "table":
+                    return self._start_table(port, plugin_dir)
                 if runtime == "lambda":
                     return self._start_lambda(port, plugin_dir)
                 return self._start_static(port, plugin_dir, default_app=plugin_id)
