@@ -797,6 +797,34 @@ def v_video(obj: Any, text: str, r: Report) -> str:
     return 'workflow'
 
 
+def v_lambda(obj: Any, text: str, r: Report) -> str:
+    """Lambda 演算计算器：会话快照 / 分享链接。"""
+    if not isinstance(obj, dict):
+        r.error('Lambda JSON 必须是对象')
+        return 'session'
+    fmt = str(obj.get('format') or '')
+    if fmt == 'omm-lambda-session':
+        sid = obj.get('sid')
+        if not isinstance(sid, str) or not sid.strip():
+            r.error('sid 必须是非空字符串')
+        code = obj.get('code')
+        if not isinstance(code, list) or not code:
+            r.error('code 必须是非空数组')
+        elif not all(isinstance(x, str) for x in code):
+            r.error('code 的元素必须是字符串')
+        if 'name' in obj and not isinstance(obj.get('name'), str):
+            r.error('name 必须是字符串')
+        if 'lang' in obj and obj['lang'] not in ('zh', 'en', 'both'):
+            r.error('lang 必须是 zh / en / both')
+        return 'session'
+    if fmt == 'omm-lambda-share':
+        sid = obj.get('id')
+        if not isinstance(sid, str) or not sid.strip():
+            r.error('id 必须是非空字符串')
+        return 'share'
+    return 'session'
+
+
 # Bound from the format registry: which deep validator handles each product is
 # a contract fact, not a second handwritten table that can drift.
 VALIDATORS = {

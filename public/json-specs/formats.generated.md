@@ -25,6 +25,9 @@
   - wordbook（.json）
 - [hub · 静书房](#hub)
   - ai-config（.json）
+- [lambda · Lambda 演算计算器](#lambda)
+  - session（.json）
+  - share（.json）
 - [latex · LaTeX 编译工作台](#latex)
   - tex（.tex）
 - [mdforge · Markdown 铸造台](#mdforge)
@@ -429,6 +432,63 @@
   "apiModel": "deepseek-chat",
   "apiKey": "",
   "system": ""
+}
+```
+
+---
+
+<a id="lambda"></a>
+
+## lambda · Lambda 演算计算器
+
+### `session` · .json
+
+- 契约：format=`omm-lambda-session`，version=`1`
+- 实现源码：`public/index.html`
+- 深度校验器：`v_lambda`
+- 硬门槛：format="omm-lambda-session"；version 数字 1；sid 非空字符串；code 顶层非空数组，元素均为字符串
+
+| 字段 | 类型 | 必需 |
+|---|---|---|
+| `sid` | string | 是 |
+| `name` | string | 否 |
+| `lang` | string | 否 |
+| `code` | array | 是 |
+
+最小示例：
+
+```json
+{
+  "format": "omm-lambda-session",
+  "version": 1,
+  "sid": "l-sess-0001",
+  "name": "示例会话",
+  "lang": "both",
+  "code": [
+    "?num = 3",
+    "PLUS ONE TWO"
+  ]
+}
+```
+
+### `share` · .json
+
+- 契约：format=`omm-lambda-share`，version=`1`
+- 实现源码：`public/index.html`
+- 深度校验器：`v_lambda`
+- 硬门槛：format="omm-lambda-share"；version 数字 1；id 非空字符串
+
+| 字段 | 类型 | 必需 |
+|---|---|---|
+| `id` | string | 是 |
+
+最小示例：
+
+```json
+{
+  "format": "omm-lambda-share",
+  "version": 1,
+  "id": "ab12cd34ef"
 }
 ```
 

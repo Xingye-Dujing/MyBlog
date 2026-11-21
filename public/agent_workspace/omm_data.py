@@ -196,6 +196,40 @@ PRODUCTS: Dict[str, Dict[str, Any]] = {
         'pitfalls': ['不要把涂鸦的键写成大写。', '词库 A 与涂鸦 B 分开导入，不能合并在一个文件里。'],
         'suggested': ['生成 30 个六级高频词', '给这些单词配涂鸦笔画', '把语料库句子里的生词加入词库'],
     },
+    'lambda': {
+        'id': 'lambda', 'name': 'Lambda 演算计算器', 'glyph': 'λ',
+        'purpose': 'λ 演算解释器 / 计算器（Haskell extension，Flask 封装）。',
+        'port': 8330, 'entry': 'index.html', 'runtime': 'lambda', 'order': 122,
+        'channels': ['documents'],
+        'features': [
+            '纯 λ 演算：α 等价、无捕获替换；归约轨迹；四种策略（应用序/正规序/按名调用/按值调用）。',
+            '正规形与 whnf、redex 矩阵、α/β/η 等价判断与证明展示；策略/步数/统计/计时/基准。',
+            '简单类型推断（Hindley–Milner）：let 多态、(expr : T) 标注与 Curry–Howard 命题推导。',
+            '预定义环境（ZERO–Y、PAIR/FST/SND 等）与教材库（lib/prelude.lam、lib/scott.lam），含 Church↔Scott 互转。',
+            'Web 计算器 API：/api/eval、/api/race、/api/eval/stream；会话编辑器本地持久化，回放可恢复。',
+        ],
+        'storage': [
+            '会话快照 sessions.json（回放历史、20 行上限、TTL 回收）；分享短链 shares.json；token 策展 tokens.json。',
+            ':load/:save 的相对路径根为 INTERP_CWD，限 .lam 非隐藏路径；写入默认关闭（LAMBDA_ALLOW_SAVE）。',
+        ],
+        'formats': [
+            '会话快照格式 omm-lambda-session（见 json-specs/lambda.md）：{format, version:1, sid, name?, lang?, code[]}。',
+            '分享格式 omm-lambda-share：{format, version:1, id}（10 位 hex）。',
+        ],
+        'ai': '产品自身不含生成式 AI。通过 AI 工作区编排：window.ZenLambdaAI.snapshot() 取当前会话列表；omm_product_info("lambda") 查节点与约束；omm_spec_search("Lambda 演算计算器") 读 json-specs/lambda.md。',
+        'best_practices': [
+            '先确认要解释/评估的目标（类型预期、调度偏好、步数上限），再生成 omm-lambda-session；用户确认后应用。',
+            'eval 只改变内存会话；写入（:load/:save）走产物确认或后端接口，不要自动落盘用户文件。',
+            '分享链接（omm-lambda-share）是公开静态渲染，避免放入隐藏路径或非 .lam；AI 工作区不得编造已存在的 sid。',
+            '检查运行态：/api/health 返回 available 与 interpreterPath；无解释器时 /api/eval 返回 500，不要编造结果。',
+            'AI 给出的归约/统计结论只作为解释建议，最终评估结果应以用户实际运行为准。',
+        ],
+        'pitfalls': [
+            '解释器缺失：/api/health 的 available 为 false，此时 /api/eval 返回 500；按提示重新打包或指定 LAMBDA_INTERP_BIN。',
+            '非终止项通过步数上限（默认 10000）终止；AI 不要生成无界项再等待。',
+        ],
+        'suggested': ['帮我设计一个 Church 图灵对（true false）并给出 λ 项', '用 Scott 编码把邱奇数 3 转成 Scott 数并给出归约', '分析这段 λ 项的等价判断与归约轨迹'],
+    },
     'latex': {
         'id': 'latex', 'name': 'LaTeX 编译工作台', 'glyph': 'T', 'purpose': '编写 TeX 并由本地服务实时编译 PDF、预览与排错（ZenLatex）。',
         'port': 8123, 'entry': 'omm-latex.html', 'runtime': 'latex', 'order': 50,

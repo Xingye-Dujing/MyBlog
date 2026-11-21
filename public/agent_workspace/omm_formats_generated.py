@@ -505,6 +505,86 @@ _DATA = json.loads(r'''{
       "enums": {}
     },
     {
+      "product": "lambda",
+      "label": "Lambda 演算计算器",
+      "kind": "session",
+      "format": "omm-lambda-session",
+      "version": 1,
+      "source": "public/index.html",
+      "fields": [
+        {
+          "name": "sid",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "lang",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "code",
+          "type": "array",
+          "required": true
+        }
+      ],
+      "hard": [
+        "format=\"omm-lambda-session\"",
+        "version 数字 1",
+        "sid 非空字符串",
+        "code 顶层非空数组，元素均为字符串"
+      ],
+      "template": {
+        "format": "omm-lambda-session",
+        "version": 1,
+        "sid": "l-sess-0001",
+        "name": "示例会话",
+        "lang": "both",
+        "code": [
+          "?num = 3",
+          "PLUS ONE TWO"
+        ]
+      },
+      "validator": "v_lambda",
+      "golden": null,
+      "ext": ".json",
+      "enums": {}
+    },
+    {
+      "product": "lambda",
+      "label": "Lambda 演算计算器",
+      "kind": "share",
+      "format": "omm-lambda-share",
+      "version": 1,
+      "source": "public/index.html",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "hard": [
+        "format=\"omm-lambda-share\"",
+        "version 数字 1",
+        "id 非空字符串"
+      ],
+      "template": {
+        "format": "omm-lambda-share",
+        "version": 1,
+        "id": "ab12cd34ef"
+      },
+      "validator": "v_lambda",
+      "golden": null,
+      "ext": ".json",
+      "enums": {}
+    },
+    {
       "product": "latex",
       "label": "LaTeX 编译工作台",
       "kind": "tex",
@@ -1394,6 +1474,18 @@ _DATA = json.loads(r'''{
       {
         "kind": "wordbook",
         "mode": "fallback"
+      }
+    ],
+    "lambda": [
+      {
+        "kind": "session",
+        "mode": "format",
+        "value": "omm-lambda-session"
+      },
+      {
+        "kind": "share",
+        "mode": "format",
+        "value": "omm-lambda-share"
       }
     ],
     "latex": [

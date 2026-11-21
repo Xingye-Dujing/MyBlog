@@ -461,6 +461,7 @@
       <button class="ctl" id="share" type="button">分享 / Share</button>
       <button class="ctl" id="export" type="button">导出 / Export</button>
       <button class="ctl" id="static-page" type="button">静态页 / Static page</button>
+      <button class="ctl" id="btn-ai" type="button">发送 AI 工作区 / Send to AI</button>
       <button class="ctl" id="import" type="button">导入 / Import</button>
       <button class="ctl" id="theme-toggle" type="button">深色 / Dark</button>
       <input type="file" id="file" accept=".lam,.txt" hidden>
@@ -780,6 +781,97 @@
       ":q":       {zh:"退出（网页端被拦截）", en:"quit (intercepted on the web)"}
     }
   };
+
+  // --------------------------------------------------------------------
+  // AI 桥接（window.ZenLambdaAI，OMM-ZEN 产品桥）
+  // --------------------------------------------------------------------
+  function zenSnapshot() {
+    var rows = (state && state.sessionRows) || []
+    return {
+      version: 1,
+      app: 'lambda',
+      sessionCount: rows.length,
+      sessions: rows.map(function (row) {
+        return { id: row.id, name: row.name || row.id.slice(0, 8), lang: row.lang, lines: row.lines }
+      }),
+    }
+  }
+  function zenSnapshotMarkdown() {
+    var snap = zenSnapshot()
+    var lines = ['Lambda 演算计算器 · ' + snap.sessionCount + ' 个会话']
+    snap.sessions.forEach(function (s) {
+      lines.push('- ' + s.name + '（' + s.lines + ' 行 · ' + s.lang + '）')
+    })
+    return lines.join('\n')
+  }
+  window.ZenLambdaAI = { snapshot: zenSnapshot, snapshotMarkdown: zenSnapshotMarkdown, version: 1 }
+
+  // omm:zen-card-request — 响应工作台广播（仅接受 loopback parent origin）
+  ;(function () {
+    function localOrigin(origin) {
+      try {
+        var u = new URL(String(origin || ''))
+        return (u.protocol === 'http:' || u.protocol === 'https:') &&
+          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
+      } catch (e) {
+        return false
+      }
+    }
+    window.addEventListener('message', function (ev) {
+      if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
+      if (window.parent === window) return
+      if (!localOrigin(ev.origin)) return
+      var api = window.ZenLambdaAI
+      if (!api || !api.snapshotMarkdown) return
+      var md = api.snapshotMarkdown()
+      if (!md) return
+      var card = {
+        id: 'omm-lambda-session-' + Date.now().toString(36),
+        kind: 'omm.lambda.session',
+        content: md,
+        source: 'lambda',
+        tags: ['Lambda 演算', 'AI工作区'],
+      }
+      try {
+        window.parent.postMessage({ type: 'omm:zen-card-reply', token: ev.data.token, cards: [card] }, ev.origin)
+      } catch (e) {}
+    })
+  })()
+
+  function lambdaDownload(name, text) {
+    try {
+      var a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+      a.download = name
+      a.click()
+      setTimeout(function () { URL.revokeObjectURL(a.href) }, 1000)
+    } catch (e) {}
+  }
+
+  function sendToAI() {
+    var api = window.ZenLambdaAI
+    if (!api || !api.snapshot) { toast('AI 桥接未就绪'); return }
+    var snap = api.snapshot()
+    var title = 'Lambda 演算计算器 · ' + snap.sessionCount + ' 个会话'
+    if (window.OMMShare && window.OMMShare.send) {
+      window.OMMShare.send({
+        to: 'ai', channel: 'documents', format: 'omm.lambda.session',
+        title: title, payload: { version: 1, title: title, canvas: snap },
+      }).then(function () {
+        toast('会话已发给 AI 工作区')
+        if (window.OMMShare.openApp) window.OMMShare.openApp('ai')
+      }, function () {
+        lambdaDownload('lambda-sessions.json', JSON.stringify(snap, null, 2))
+        toast('共享空间不可用，已导出 lambda-sessions.json')
+      })
+    } else {
+      lambdaDownload('lambda-sessions.json', JSON.stringify(snap, null, 2))
+      toast('已导出会话快照，可粘贴到 AI 工作区')
+    }
+  }
+
+  var btn = document.getElementById('btn-ai')
+  if (btn) btn.addEventListener('click', sendToAI)
 
   var state = {
     lang: "both",
