@@ -80,6 +80,8 @@ def main() -> int:
         "test_frontend_bugfixes2.mjs",
         "test_frontend_bugfixes3.mjs",
         "test_security_fixes.mjs",
+        "test_zen_crypto.mjs",
+        "test_design_system.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])
