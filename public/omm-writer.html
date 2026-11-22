@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -12856,8 +12857,7 @@ notify pgrst, 'reload schema';</textarea
         // 15. MENU & DROPDOWN HELPERS
         // ================================================================
         function closeAllDropdowns() {
-          document.querySelectorAll('.dropdown').forEach((d) => d.classList.remove('open'))
-          document.body.classList.remove('submenu-open')
+          window.ZenUI.popover.close()
           document.querySelectorAll('.menu-btn').forEach((b) => {
             // 模式类按钮（聚焦/阅读/涂鸦/全屏）的 active 表示“模式开着”，
             // 不是“菜单展开着”，所以点一下画布不该清掉它们。
@@ -12869,6 +12869,7 @@ notify pgrst, 'reload schema';</textarea
           })
           DOM.contextMenu.classList.remove('open')
           document.getElementById('status-bar').classList.remove('force-visible')
+          document.body.classList.remove('submenu-open')
         }
 
         // 窄窗口下菜单栏会换行，高度不再是固定 48px，
@@ -12886,18 +12887,13 @@ notify pgrst, 'reload schema';</textarea
           closeAllDropdowns()
           if (!wasOpen) {
             updateMenuHeight()
-            const rect = btn.getBoundingClientRect()
-            // 换行后按钮可能落在靠右的行上，下拉面板要夹在视口内
-            const w = dd.getBoundingClientRect().width
-            let left = rect.left
-            if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8
-            if (left < 8) left = 8
-            dd.style.left = left + 'px'
-            dd.style.top = 'calc(var(--menu-h, 48px) + 4px)'
-            dd.classList.add('open')
-            btn.classList.add('active')
-            document.getElementById('status-bar').classList.add('force-visible')
-            document.body.classList.add('submenu-open')
+            window.ZenUI.popover.open(dd, btn, {
+              top: 'calc(var(--menu-h, 48px) + 4px)', pad: 8, activeClass: 'active',
+              onOpen: () => {
+                document.getElementById('status-bar').classList.add('force-visible')
+                document.body.classList.add('submenu-open')
+              },
+            })
           }
         }
 

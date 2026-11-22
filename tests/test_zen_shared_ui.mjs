@@ -119,6 +119,18 @@ test('通用助手统一引用共享 ZenUtil，不再各自实现', () => {
   }
 })
 
+test('下拉浮层统一用共享 ZenUI.popover，不再各自定位', () => {
+  const users = ['mdforge', 'search', 'writer', 'latex', 'visualization']
+  for (const id of users) {
+    const page = `public/omm-${id}.html`
+    const text = read(page)
+    assert.ok(text.includes('zen/components/popover.js'), `${page} 未接入共享 popover`)
+    assert.ok(text.includes('ZenUI.popover.open'), `${page} 未使用 ZenUI.popover.open`)
+    // 私有的浮层定位/互斥实现必须已删除（保留产品自身的副作用编排不算）
+    assert.ok(!/className\s*=\s*['"]dropdown open['"]/.test(text), `${page} 仍自管浮层 open 类`)
+  }
+})
+
 test('Hub 右键菜单使用共享 ZenUI.menu，无私有 ctx-menu', () => {
   const page = read('public/omm-hub.html')
   const js = read('public/omm-hub.js')

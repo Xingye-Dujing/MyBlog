@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -8258,17 +8259,24 @@
         function openDropdown(menu, btn) {
           closeDropdowns()
           const el = document.createElement('div')
-          el.className = 'dropdown open'
+          el.className = 'dropdown'
           el.id = 'dd-' + menu
           el.dataset.menu = menu
           el.innerHTML = menuHtml(menu)
           document.body.appendChild(el)
-          const r = btn.getBoundingClientRect()
-          el.style.left = Math.min(r.left, innerWidth - el.offsetWidth - 8) + 'px'
-          el.style.top = r.bottom + 3 + 'px'
-          setTimeout(() => {
-            document.body.classList.add('submenu-open')
-          }, 0)
+          window.ZenUI.popover.open(el, btn, {
+            gap: 3, pad: 8,
+            onOpen: () => {
+              setTimeout(() => {
+                document.body.classList.add('submenu-open')
+              }, 0)
+            },
+            onClose: () => {
+              document.body.classList.remove('submenu-open')
+              $('.menu-btn.active')?.classList.remove('active')
+              el.remove()
+            },
+          })
           el.addEventListener('click', (e) => {
             const b = e.target.closest('[data-dd]')
             if (!b) return
@@ -8282,9 +8290,7 @@
           el.innerHTML = menuHtml(menu)
         }
         function closeDropdowns() {
-          $$('.dropdown').forEach((e) => e.remove())
-          $('.menu-btn.active')?.classList.remove('active')
-          document.body.classList.remove('submenu-open')
+          window.ZenUI.popover.close()
         }
         function menuHtml(menu) {
           const current = engineInfo[state.engine]

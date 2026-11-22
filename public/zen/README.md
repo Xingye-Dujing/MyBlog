@@ -29,7 +29,8 @@ zen/
 │   ├── layer.js               唯一 shadow 浮层栈
 │   ├── toast.js / dialog.js / select.js / menu.js / shortcuts.js   核心
 │   │     dialog.js 同时提供 ZenUI.modal（通用内容模态壳）与 ZenUI.dialog.pick
-│   └── picker.js / tabs.js / tooltip.js                            可选
+│   └── popover.js / picker.js / tabs.js / tooltip.js                可选
+│         popover.js 只负责锚定定位 / 单开互斥 / 外部点击关闭，内容归产品
 ├── canvas/                 画布能力——可选
 │   ├── canvas.css             统一画布样式包
 │   ├── engine.js              通用画布引擎
@@ -50,6 +51,7 @@ zen/
 | **核心样式** | `zen.css` → `foundation/*` + `components/components.css` | 所有产品 |
 | **核心脚本** | `components/{layer,toast,dialog,select,menu,shortcuts,index}.js` | 所有产品 |
 | **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串/错误分类） | 用到助手的产品 |
+| **可选浮层** | `components/popover.js` → `ZenUI.popover`（锚定/单开/关闭） | 有下拉浮层的产品 |
 | **可选样式包** | `features/*.css`、`canvas/canvas.css` | 只由真正用到的产品 link |
 | **可选脚本** | `components/{picker,tabs,tooltip}.js`、`canvas/{layout,engine}.js` | 只由真正用到的产品加载 |
 | **产品适配器** | `lib/zen-<id>.js`、`products/<id>.css` | 产品自己的业务与外观配置 |
@@ -69,7 +71,7 @@ zen/
 <script src="zen/components/shortcuts.js"></script>
 <script src="zen/components/index.js"></script>
 <!-- 可选：zen/canvas/canvas.css + canvas/layout.js + canvas/engine.js -->
-<!-- 可选：zen/components/picker.js -->
+<!-- 可选：zen/components/popover.js（下拉浮层）、picker.js、tabs.js、tooltip.js -->
 ```
 
 ## 约束

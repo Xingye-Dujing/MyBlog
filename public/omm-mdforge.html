@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -1437,28 +1438,21 @@ template: academic
             return
           }
           closeDropdowns()
-          element.classList.add('open')
-          document.body.classList.add('submenu-open')
-          state.openDropdown = element
-          const rect = anchor.getBoundingClientRect()
-          element.style.left = '0px'
-          element.style.top = '0px'
-          const width = element.offsetWidth
-          const height = element.offsetHeight
-          let left = rect.left + rect.width / 2 - width / 2
-          left = Math.max(8, Math.min(left, window.innerWidth - width - 8))
-          let top = rect.bottom + 6
-          if (top + height > window.innerHeight - 36) {
-            top = Math.max(52, rect.top - height - 6)
-          }
-          element.style.left = `${Math.round(left)}px`
-          element.style.top = `${Math.round(top)}px`
+          window.ZenUI.popover.open(element, anchor, {
+            align: 'center', gap: 6, flip: true, flipMin: 52, pad: 8,
+            onOpen: () => {
+              document.body.classList.add('submenu-open')
+              state.openDropdown = element
+            },
+            onClose: () => {
+              document.body.classList.remove('submenu-open')
+              state.openDropdown = null
+            },
+          })
         }
 
         function closeDropdowns() {
-          $$('.dropdown.open').forEach((item) => item.classList.remove('open'))
-          document.body.classList.remove('submenu-open')
-          state.openDropdown = null
+          window.ZenUI.popover.close()
         }
 
         function setFormat(format) {
