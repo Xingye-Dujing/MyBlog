@@ -12,17 +12,17 @@ def test_build_generates_contract_files():
     files = build('demo', '演示产品', '演', '', 8335, 'documents')
     assert set(files) == {
         'omm-demo.html',
-        'zen-style/products/demo.css',
+        'zen/products/demo.css',
         'tests/test_demo.mjs',
     }
     html = files['omm-demo.html']
     for asset in ('omm-embed.js', 'omm-desktop.js', 'omm-share.js',
-                  'zen-style/zen.css', 'zen-style/products/demo.css'):
+                  'zen/zen.css', 'zen/products/demo.css'):
         assert asset in html
     assert '<style' not in html
     assert '<title>演示产品</title>' in html
-    assert files['zen-style/products/demo.css'].startswith('@layer zen.product {')
-    assert 'zen-style/products/demo.css' in files['tests/test_demo.mjs']
+    assert files['zen/products/demo.css'].startswith('@layer zen.product {')
+    assert 'zen/products/demo.css' in files['tests/test_demo.mjs']
 
 
 def test_build_rejects_invalid_id():

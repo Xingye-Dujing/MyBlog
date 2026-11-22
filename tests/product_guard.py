@@ -92,12 +92,24 @@ FORMAT_CONTRACTS = [
 # Cross-product infrastructure: changing any of these affects every consumer,
 # so it is tied to the SUITE version rather than to individual products.
 SHARED_MODULES = [
-    "public/lib/zen-card.js", "public/lib/zen-link.js", "public/zen-canvas/layout-engine.js",
+    "public/lib/zen-card.js", "public/lib/zen-link.js", "public/zen/canvas/layout.js",
     "public/lib/zen-chart.js", "public/lib/zen-flow.js", "public/lib/zen-srs.js",
     "public/lib/zen-backup.js", "public/lib/zen-pack.js", "public/lib/zen-review.js",
     "public/lib/data-viz.js", "public/lib/search-library.js", "public/viz-bridge.js",
     "public/omm-embed.js", "public/omm-share.js", "public/omm-desktop.js",
     "public/lib/zen-crypto.js",
+    "public/zen/components/layer.js", "public/zen/components/toast.js",
+    "public/zen/components/dialog.js", "public/zen/components/select.js",
+    "public/zen/components/menu.js", "public/zen/components/shortcuts.js",
+    "public/zen/components/tabs.js", "public/zen/components/tooltip.js",
+    "public/zen/components/picker.js", "public/zen/components/index.js", "public/zen/components/components.css",
+    "public/zen/canvas/engine.js", "public/zen/canvas/canvas.css",
+    "public/zen/zen.css",
+    "public/zen/foundation/tokens.css", "public/zen/foundation/base.css",
+    "public/zen/foundation/primitives.css",
+    "public/zen/features/grid.css", "public/zen/features/doc.css",
+    "public/zen/features/learning.css", "public/zen/features/cloud.css",
+    "public/zen/features/tool.css",
 ]
 
 # Products that act as *consumers* of the universal card bridge.  The hub and

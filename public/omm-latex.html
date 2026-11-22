@@ -3,18 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
-    <script src="omm-desktop.js"></script>
+    <script src="zen/components/layer.js"></script>
+    <script src="zen/components/toast.js"></script>
+    <script src="zen/components/dialog.js"></script>
+    <script src="zen/components/select.js"></script>
+    <script src="zen/components/menu.js"></script>
+    <script src="zen/components/shortcuts.js"></script>
+    <script src="zen/components/index.js"></script>
+<script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <script type="module" src="lib/zen-link.js"></script>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>LaTeX 编译工作台</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="zen-style/zen.css">
-  <link rel="stylesheet" href="zen-style/products/latex.css">
+    <link rel="stylesheet" href="zen/zen.css">
+  <link rel="stylesheet" href="zen/features/doc.css" />
+  <link rel="stylesheet" href="zen/products/latex.css">
 <link rel="stylesheet" href="vendor/fonts/literata-full.css" />
     <script src="vendor/pdfjs/3.11.174/build/pdf.min.js"></script>
 
-  </head>
+</head>
   <body>
     <div id="splash" aria-label="启动页">
       <div class="splash-logo">ZENTEX</div>
@@ -66,13 +74,14 @@
             <span class="panel-title">源码</span>
             <div class="panel-head-right">
               <span class="panel-note" id="editor-name">main.tex</span>
-              <select class="ghost-btn editor-setting" id="sel-editor-font" title="编辑器字体">
+              <select class="ghost-btn editor-setting" id="sel-editor-font" title="编辑器字体" data-omm-select>
                 <option value="mono">等宽</option>
                 <option value="literata">Literata</option>
                 <option value="song">宋体</option>
                 <option value="times">Times</option>
               </select>
               <select
+                data-omm-select
                 class="ghost-btn editor-setting editor-size"
                 id="sel-editor-size"
                 title="编辑器字号"
@@ -86,6 +95,7 @@
                 <option value="16">16px</option>
               </select>
               <select
+                data-omm-select
                 class="ghost-btn editor-setting editor-spacing"
                 id="sel-editor-line"
                 title="行间距"
@@ -98,6 +108,7 @@
                 <option value="2.1">行 2.1</option>
               </select>
               <select
+                data-omm-select
                 class="ghost-btn editor-setting editor-spacing"
                 id="sel-editor-letter"
                 title="字间距"
@@ -982,25 +993,25 @@
           if (id === 'delete-template') {
             const t = templateById(state.tplId)
             if (!t || !t.custom) return setStatus('只能删除自定义模板', 'err')
-            if (
-              !window.confirm(
-                '确定删除自定义模板“' + t.name.replace(/\s+/g, ' ') + '”？\n\n删除后不可恢复。',
-              )
-            )
-              return
-            const result = deleteCustomTemplate(t.id)
-            if (!result.ok) return setStatus(result.error || '删除失败', 'err')
-            // 删除模板不会删除当前源码：将当前文档转为普通草稿继续保留。
-            state.tplId = ''
-            state.currentDocId = 'scratch'
-            state.currentDocName = 'main.tex'
-            const title = $id('editor-name')
-            if (title) title.textContent = 'main.tex'
-            saveCurrentDocument()
-            buildDropdowns()
-            closeDropdowns()
-            setStatus('模板已删除 · 当前内容已保留')
-            toast('模板已删除')
+            window.ZenUI.dialog.confirm(
+              '确定删除自定义模板“' + t.name.replace(/\s+/g, ' ') + '”？\n\n删除后不可恢复。',
+              { danger: true },
+            ).then((ok) => {
+              if (!ok) return
+              const result = deleteCustomTemplate(t.id)
+              if (!result.ok) return setStatus(result.error || '删除失败', 'err')
+              // 删除模板不会删除当前源码：将当前文档转为普通草稿继续保留。
+              state.tplId = ''
+              state.currentDocId = 'scratch'
+              state.currentDocName = 'main.tex'
+              const title = $id('editor-name')
+              if (title) title.textContent = 'main.tex'
+              saveCurrentDocument()
+              buildDropdowns()
+              closeDropdowns()
+              setStatus('模板已删除 · 当前内容已保留')
+              toast('模板已删除')
+            })
             return
           }
           switch (id) {
@@ -3171,31 +3182,31 @@
                   }
                   return
                 }
-                if (
-                  !window.confirm(
-                    '确定删除自定义模板“' + t.name.replace(/\s+/g, ' ') + '”？\n\n删除后不可恢复。',
-                  )
-                )
-                  return
-                const result = deleteCustomTemplate(id)
-                if (!result.ok) {
-                  if (msg) {
-                    msg.textContent = result.error || '删除失败'
-                    msg.className = 'template-editor-msg err'
+                window.ZenUI.dialog.confirm(
+                  '确定删除自定义模板“' + t.name.replace(/\s+/g, ' ') + '”？\n\n删除后不可恢复。',
+                  { danger: true },
+                ).then((ok) => {
+                  if (!ok) return
+                  const result = deleteCustomTemplate(id)
+                  if (!result.ok) {
+                    if (msg) {
+                      msg.textContent = result.error || '删除失败'
+                      msg.className = 'template-editor-msg err'
+                    }
+                    return
                   }
-                  return
-                }
-                closeModal()
-                if (state.tplId === id) {
-                  state.tplId = ''
-                  state.currentDocId = 'scratch'
-                  state.currentDocName = 'main.tex'
-                  const title = $id('editor-name')
-                  if (title) title.textContent = 'main.tex'
-                  saveCurrentDocument()
-                }
-                buildDropdowns()
-                toast('模板已删除 · 当前内容已保留')
+                  closeModal()
+                  if (state.tplId === id) {
+                    state.tplId = ''
+                    state.currentDocId = 'scratch'
+                    state.currentDocName = 'main.tex'
+                    const title = $id('editor-name')
+                    if (title) title.textContent = 'main.tex'
+                    saveCurrentDocument()
+                  }
+                  buildDropdowns()
+                  toast('模板已删除 · 当前内容已保留')
+                })
                 return
               }
               if (action === 'reset') {

@@ -172,12 +172,14 @@ def main() -> None:
         json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     template_zip = DIST / "plugin-template.zip"
-    # The template page consumes the shared zen-style tree via ../zen-style/*,
-    # so the zip must carry both the template and a copy of that tree.
+    # The template page consumes the shared visual assets via ../zen/*,
+    # so the zip must carry the template and those trees.
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp)
         shutil.copytree(ROOT / "plugin-template", stage / "plugin-template")
-        shutil.copytree(ROOT / "zen-style", stage / "zen-style")
+        for tree in ("foundation", "features", "products", "components", "canvas"):
+            shutil.copytree(ROOT / "zen" / tree, stage / "zen" / tree)
+        shutil.copy2(ROOT / "zen/zen.css", stage / "zen/zen.css")
         zip_dir(stage, template_zip)
     # 发布副本脱离 public/ 目录，相对链接会失效，改成绝对 GitHub 链接。
     spec_text = (ROOT / "plugin-spec.md").read_text(encoding="utf-8")

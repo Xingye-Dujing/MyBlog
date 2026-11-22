@@ -53,7 +53,7 @@ for (const p of PRODUCTS) {
     assert.ok(existsSync(new URL(p.file, ROOT)), '文件不存在')
     const html = read(p.file)
     assert.ok(html.includes(`<title>${p.title}</title>`), 'title 不匹配')
-    assert.ok(html.includes('zen-style/zen.css'), '未引入共用样式')
+    assert.ok(html.includes('zen/zen.css'), '未引入共用样式')
     assert.ok(html.includes('omm-embed.js'), '未引入 hub 桥接')
     assert.ok(html.includes('omm-share.js'), '未引入共享总线')
   })

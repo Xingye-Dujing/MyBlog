@@ -3,20 +3,26 @@
 > 设计母本：`public/omm-writer.html`。它是目前 OMM-ZEN 里最完善的画布系统，
 > 本框架以它为准抽取，而不是另起炉灶。所有后续画布产品（视频工作流、未来的
 > 数据编排、自动化编排等）都接这一套：**核心改一次，所有产品同时生效**。
+>
+> **底线（不可妥协）**：这里是通用框架，禁止为单一产品写特殊分支或调参。
+> 产品独有的节点类型、布局偏好、折叠表现等只能留在产品自己的 `lib/zen-<id>.js`
+> 或 `zen/products/<id>.css` 中，通过框架提供的配置与回调实现。
 
 ## 1. 目录与职责
 
 ```
-zen-canvas/
-├── zen-canvas.js    # 画布核心：节点 / 连线 / 视口 / 选择 / 历史 / 序列化 / 事件
-├── layout-engine.js # 6 策略自动布局引擎（唯一实现，纯函数）
+zen/canvas/
+├── canvas.css       # 统一画布样式包（可选加载）
+├── engine.js       # 画布核心：节点 / 连线 / 视口 / 选择 / 折叠 / 历史 / 序列化 / 事件
+├── layout.js       # 6 策略自动布局引擎（唯一实现，纯函数）
 └── README.md        # 本文件
 ```
 
-画布样式已并入共享样式层 `zen-style/features/canvas-framework.css`，由
-`zen-style/zen.css` 统一加载；画布产品只需要引用 zen.css，不再单独引入 CSS。
+画布样式是**可选能力包** `zen/canvas/canvas.css`（由原 `canvas.css` 与
+`canvas-framework.css` 合并而来），只由画布产品单独 `<link>`；核心 `zen.css` 不再导入它。
+画布的菜单与 Toast 通过 `ZenUI.menu` / `ZenUI.toast` 渲染在统一 shadow 浮层里，本目录不自带浮层实现。
 
-`zen-canvas/layout-engine.js` 是 6 策略自动布局的**唯一实现**，writer 与
+`zen/canvas/layout.js` 是 6 策略自动布局的**唯一实现**，writer 与
 zenflow 已经验证过；框架只调用，不复制。布局算法改动同样会同步到所有产品。
 
 ## 2. 从 writer 抽取了什么
@@ -62,9 +68,9 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 ## 4. 最小接入示例
 
 ```html
-<link rel="stylesheet" href="../zen-style/zen.css">
-<script src="zen-canvas/layout-engine.js"></script>
-<script src="zen-canvas/zen-canvas.js"></script>
+<link rel="stylesheet" href="../zen/zen.css">
+<script src="zen/canvas/layout.js"></script>
+<script src="zen/canvas/engine.js"></script>
 <div id="canvas-host" style="position:relative;width:100%;height:100%"></div>
 <script>
   const canvas = ZenCanvas.create({
@@ -118,7 +124,7 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 
 ## 7. 变更纪律
 
-- 改画布交互 → 只改 `zen-canvas/zen-canvas.js`；改画布样式 → 改
-  `zen-style/features/canvas-framework.css`。
-- 改自动布局算法 → 只改 `zen-canvas/layout-engine.js`。
+- 改画布交互 → 只改 `zen/canvas/engine.js`；改画布样式 → 改
+  `zen/features/canvas-framework.css`。
+- 改自动布局算法 → 只改 `zen/canvas/layout.js`。
 - 产品特有逻辑（节点字段、执行引擎、面板）→ 放在产品自己的 JS 里，不要写进框架。

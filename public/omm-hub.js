@@ -338,8 +338,7 @@
   /* All shell confirmations go through the OMM-ZEN UI kit instead of the
      browser's native dialog. Returns Promise<boolean>. */
   function ommConfirm(message, opts) {
-    if (window.OMMUI && window.OMMUI.confirm) return window.OMMUI.confirm(message, opts);
-    return Promise.resolve(window.confirm(message));
+    return window.ZenUI.dialog.confirm(message, opts);
   }
 
   function appIconHTML(app) {
@@ -1894,7 +1893,7 @@
   function bindHubSettings() {
     if (!els.hubSettings) return;
     /* Replace native selects before binding the remaining controls. */
-    if (window.OMMUI && window.OMMUI.enhanceSelect) window.OMMUI.enhanceSelect(document);
+    if (window.ZenUI && window.ZenUI.select) window.ZenUI.select.enhance(document);
     applyHubAppearance();
     var settingsClose = document.getElementById('hub-settings-close');
     if (settingsClose) settingsClose.addEventListener('click', closeHubSettings);

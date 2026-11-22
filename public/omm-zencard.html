@@ -3,17 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
-    <script src="omm-desktop.js"></script>
+    <script src="zen/components/layer.js"></script>
+    <script src="zen/components/toast.js"></script>
+    <script src="zen/components/dialog.js"></script>
+    <script src="zen/components/select.js"></script>
+    <script src="zen/components/menu.js"></script>
+    <script src="zen/components/shortcuts.js"></script>
+    <script src="zen/components/index.js"></script>
+<script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <title>间隔复习</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="zen-style/zen.css">
-  <link rel="stylesheet" href="zen-style/products/zencard.css">
+    <link rel="stylesheet" href="zen/zen.css">
+  <link rel="stylesheet" href="zen/features/tool.css" />
+  <link rel="stylesheet" href="zen/products/zencard.css">
 <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
 
-  </head>
+</head>
   <body>
     <div id="app">
       <header class="top">
@@ -46,8 +54,8 @@
               <label class="zt-field"><span>批注</span><input id="new-note" placeholder="可选" /></label>
             </div>
             <div class="zt-row">
-              <label class="zt-field"><span>类型</span><select id="new-kind"></select></label>
-              <label class="zt-field"><span>来源</span><select id="new-source"></select></label>
+              <label class="zt-field"><span>类型</span><select id="new-kind" data-omm-select></select></label>
+              <label class="zt-field"><span>来源</span><select id="new-source" data-omm-select></select></label>
               <label class="zt-field"><span>标签（逗号分隔）</span><input id="new-tags" placeholder="精读,备考" /></label>
             </div>
             <button class="zt-btn primary" id="add-card">添加卡片</button>
@@ -211,13 +219,14 @@
           })
           el.querySelector('[data-act="send"]').addEventListener('click', () => {
             const card = cards.find((c) => c.id === el.dataset.id)
-            const target = prompt('发送到哪个产品？\nwriter / corpus / english / annotate / data', 'writer')
-            if (!target) return
-            if (window.OMMShare && window.OMMShare.send) {
-              window.OMMShare.send({ to: target, format: 'zen-card', title: card.content.slice(0, 30), payload: card })
-                .then(() => toast('已发送给 ' + target))
-                .catch(() => toast('发送失败（离线环境可导出 JSON）'))
-            } else toast('当前环境无法发送，请用“导入导出”')
+            window.ZenUI.dialog.prompt('发送到哪个产品？\nwriter / corpus / english / annotate / data', 'writer').then(function (target) {
+              if (!target) return
+              if (window.OMMShare && window.OMMShare.send) {
+                window.OMMShare.send({ to: target, format: 'zen-card', title: card.content.slice(0, 30), payload: card })
+                  .then(() => toast('已发送给 ' + target))
+                  .catch(() => toast('发送失败（离线环境可导出 JSON）'))
+              } else toast('当前环境无法发送，请用“导入导出”')
+            })
           })
         })
       }

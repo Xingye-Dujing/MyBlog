@@ -14,9 +14,9 @@ test('页面存在且标题/资源正确', () => {
   assert.ok(html.includes('<title>表格自动化</title>'))
   for (const asset of [
     'omm-embed.js', 'omm-desktop.js', 'omm-share.js',
-    'zen-style/zen.css', 'zen-style/products/table.css',
-    'zen-canvas/layout-engine.js',
-    'zen-canvas/zen-canvas.js', 'lib/zen-table.js',
+    'zen/zen.css', 'zen/products/table.css',
+    'zen/canvas/layout.js',
+    'zen/canvas/engine.js', 'lib/zen-table.js',
   ]) {
     assert.ok(html.includes(asset), '缺少资源引用: ' + asset)
   }
@@ -49,7 +49,7 @@ test('脚本引用的 DOM id 全部存在', () => {
 test('接入 ZenCanvas 且没有自行实现画布', () => {
   const js = read(JS)
   assert.ok(js.includes('ZenCanvas.create('))
-  assert.ok(js.includes('ZenCanvasLayout') === false || js.includes('zen-canvas/layout-engine.js'))
+  assert.ok(js.includes('ZenCanvasLayout') === false || js.includes('zen/canvas/layout.js'))
   assert.ok(js.includes('canvas.autoLayout('))
   assert.ok(js.includes('canvas.toJSON('))
   assert.ok(js.includes('registerNodeType') === false || js.includes('nodeTypes'))

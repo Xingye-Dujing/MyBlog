@@ -46,8 +46,8 @@ def test_build_bundles_openpyxl():
 def test_stage_plugin_contains_backend_and_page():
     with tempfile.TemporaryDirectory() as tmp:
         dest = offline.stage_plugin("table", Path(tmp) / "table")
-        for name in ("omm-table.html", "lib/zen-table.js", "zen-canvas/zen-canvas.js",
-                     "zen-style/products/table.css", "table-serve.py",
+        for name in ("omm-table.html", "lib/zen-table.js", "zen/canvas/engine.js",
+                     "zen/products/table.css", "table-serve.py",
                      "table_engine.py", "plugin.json"):
             assert (dest / name).is_file(), name
         assert (dest / "table-runtime" / "work" / "uploads").is_dir()

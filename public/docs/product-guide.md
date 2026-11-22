@@ -24,15 +24,15 @@ python tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --ch
 <script src="omm-embed.js"></script>
 <script src="omm-desktop.js"></script>
 <script src="omm-share.js"></script>
-<link rel="stylesheet" href="zen-style/zen.css">
-<link rel="stylesheet" href="zen-style/products/<id>.css">
+<link rel="stylesheet" href="zen/zen.css">
+<link rel="stylesheet" href="zen/products/<id>.css">
 ```
 
 按需引入 `vendor/fonts/literata-*.css` 与 `zen-*.js` 共享模块。不得内联 `<style>`。
 
 ## 3. 写产品样式
 
-新建 `zen-style/products/<id>.css`，内容包在 `@layer zen.product { … }` 中。
+新建 `zen/products/<id>.css`，内容包在 `@layer zen.product { … }` 中。
 只用 `zen-*` 令牌；公共组件直接复用 `primitives.css` / `features/*`，
 产品专有 class 加产品前缀。
 

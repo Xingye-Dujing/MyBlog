@@ -320,9 +320,7 @@
 
   function removeItem(item) {
     var message = '从共享空间移除“' + item.title + '”？\n不会删除本地的存档文件。'
-    var confirmed = window.OMMUI && window.OMMUI.confirm
-      ? window.OMMUI.confirm(message, { title: '移除共享项目', ok: '移除', danger: true })
-      : Promise.resolve(window.confirm(message))
+    var confirmed = window.ZenUI.dialog.confirm(message, { title: '移除共享项目', ok: '移除', danger: true })
     confirmed.then(function (ok) {
       if (!ok) return
       apiPost('/delete', { id: item.id }).then(function () {

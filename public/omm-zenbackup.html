@@ -3,15 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
-    <script src="omm-desktop.js"></script>
+    <script src="zen/components/layer.js"></script>
+    <script src="zen/components/toast.js"></script>
+    <script src="zen/components/dialog.js"></script>
+    <script src="zen/components/select.js"></script>
+    <script src="zen/components/menu.js"></script>
+    <script src="zen/components/shortcuts.js"></script>
+    <script src="zen/components/index.js"></script>
+<script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <title>统一备份</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="zen-style/zen.css">
+    <link rel="stylesheet" href="zen/zen.css">
+    <link rel="stylesheet" href="zen/features/tool.css" />
 <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
-  </head>
+</head>
   <body>
     <div id="app">
       <header class="top">
@@ -138,12 +146,14 @@
         })
         $('restore-btn').addEventListener('click', () => {
           if (!incoming) return toast('先导入备份')
-          if (!confirm('按导入的备份覆盖本地对应数据？此操作不可撤销。')) return
-          const entries = ZenBackup.restorableEntries(incoming, Object.keys(localStorage))
-          entries.forEach((e) => {
-            try { localStorage.setItem(e.key, e.value) } catch {}
+          window.ZenUI.dialog.confirm('按导入的备份覆盖本地对应数据？此操作不可撤销。', { danger: true }).then((ok) => {
+            if (!ok) return
+            const entries = ZenBackup.restorableEntries(incoming, Object.keys(localStorage))
+            entries.forEach((e) => {
+              try { localStorage.setItem(e.key, e.value) } catch {}
+            })
+            toast('已恢复 ' + entries.length + ' 个键，请刷新页面')
           })
-          toast('已恢复 ' + entries.length + ' 个键，请刷新页面')
         })
         $('zp-collect').addEventListener('click', () => {
           products = ZenPack.scanWorkspace(localStorage)
@@ -167,9 +177,11 @@
         })
         $('zp-restore').addEventListener('click', () => {
           if (!zpIncoming) return toast('先导入 ZenPack')
-          if (!confirm('按 ZenPack 覆盖当前工作区数据？此操作不可撤销。')) return
-          const n = ZenPack.applyPack(zpIncoming, localStorage)
-          toast('已恢复 ' + n + ' 个键，请刷新页面')
+          window.ZenUI.dialog.confirm('按 ZenPack 覆盖当前工作区数据？此操作不可撤销。', { danger: true }).then((ok) => {
+            if (!ok) return
+            const n = ZenPack.applyPack(zpIncoming, localStorage)
+            toast('已恢复 ' + n + ' 个键，请刷新页面')
+          })
         })
       }
       if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')

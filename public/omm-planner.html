@@ -3,20 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
-    <script src="omm-desktop.js"></script>
+    <script src="zen/components/layer.js"></script>
+    <script src="zen/components/toast.js"></script>
+    <script src="zen/components/dialog.js"></script>
+    <script src="zen/components/select.js"></script>
+    <script src="zen/components/menu.js"></script>
+    <script src="zen/components/shortcuts.js"></script>
+    <script src="zen/components/picker.js"></script>
+    <script src="zen/components/index.js"></script>
+<script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <script type="module" src="lib/zen-link.js"></script>
     <script src="vendor/supabase/2/supabase.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>日程安排</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="zen-style/zen.css">
-  <link rel="stylesheet" href="zen-style/products/planner.css">
+    <link rel="stylesheet" href="zen/zen.css">
+  <link rel="stylesheet" href="zen/features/grid.css" />
+  <link rel="stylesheet" href="zen/features/cloud.css" />
+  <link rel="stylesheet" href="zen/products/planner.css">
 <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
     <script src="vendor/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 
-  </head>
+</head>
   <body class="bg-void">
     <!-- ===== Splash ===== -->
     <div id="splash">
@@ -2971,256 +2981,26 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         // 7.5 CUSTOM PICKERS (date & time)
         // ================================================================
+        /* Picker is now the shared OMM-ZEN component: zen/components/picker.js.
+         * Only product-specific labels and positioning are adapted here. */
         const Picker = {
-          ctx: null,
-          open(kind, anchor, value, cb, locked, minDS) {
-            this.close()
-            this.ctx = {
-              kind: kind,
-              anchor: anchor,
-              cb: cb,
-              y: null,
-              m: null,
-              hh: '09',
-              mm: '00',
-              value: value || '',
-              minDS: /^\d{4}-\d{2}-\d{2}$/.test(minDS || '') ? minDS : '',
-            }
-            if (kind === 'date' || kind === 'enddate') {
-              const d = value ? pd(value) : new Date()
-              this.ctx.y = d.getFullYear()
-              this.ctx.m = d.getMonth() + 1
-            }
-            if (kind === 'time' && value && /^\d{2}:\d{2}$/.test(value)) {
-              const p = value.split(':')
-              this.ctx.hh = p[0]
-              this.ctx.mm = p[1]
-            }
-            if (kind === 'multidate') {
-              this.ctx.locked = /^\d{4}-\d{2}-\d{2}$/.test(locked || '') ? locked : ''
-              this.ctx.dates = value ? String(value).split(',').filter(Boolean) : []
-              if (this.ctx.locked && this.ctx.dates.indexOf(this.ctx.locked) < 0) {
-                this.ctx.dates.push(this.ctx.locked)
-              }
-              const first = this.ctx.dates.length ? pd(this.ctx.dates[0]) : new Date()
-              this.ctx.y = first.getFullYear()
-              this.ctx.m = first.getMonth() + 1
-            }
-            const pop = document.getElementById('pop-' + kind)
-            pop._sh = null
-            pop.classList.remove('closing', 'pop-date', 'pop-time')
-            pop.classList.add('open', kind === 'time' ? 'pop-time' : 'pop-date')
-            this.render()
-            placePopup(pop, anchor)
-          },
-          render() {
-            const c = this.ctx
-            if (!c) return
-            const pop = document.getElementById('pop-' + c.kind)
-            const isCal = c.kind === 'date' || c.kind === 'multidate' || c.kind === 'enddate'
-            pop.innerHTML = isCal ? Picker.dateHTML(c) : Picker.timeHTML(c)
-            pop.querySelectorAll('[data-pick]').forEach(function (b) {
-              b.addEventListener('click', function (ev) {
-                ev.stopPropagation()
-                Picker.onPick(b)
-              })
-            })
-            pop.querySelectorAll('.pk-col').forEach(function (colEl) {
-              const act = colEl.querySelector('.pk-opt.active')
-              scrollIntoContainer(act, 'center')
-            })
-          },
-          onPick(b) {
-            const c = this.ctx
-            if (!c) return
-            const v = b.dataset.pick
-            if (c.kind === 'multidate') {
-              if (v === '@ok') {
-                const val = c.dates.slice().sort()
-                this.close()
-                c.cb(val.join(','))
-                return
-              }
-              if (v === '@clear') {
-                c.dates = []
-                this.render()
-                return
-              }
-              if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-                if (v === c.locked) return
-                if (c.minDS && v < c.minDS) return
-                const i = c.dates.indexOf(v)
-                if (i >= 0) c.dates.splice(i, 1)
-                else c.dates.push(v)
-                this.render()
-                return
-              }
-            }
-            if (v === '@clear') {
-              this.close()
-              c.cb('', true)
-              return
-            }
-            if (v === '@nav') {
-              const dir = parseInt(b.dataset.dir, 10)
-              if (c.minDS) {
-                let ty = c.y,
-                  tm = c.m + dir
-                if (tm < 1) {
-                  tm = 12
-                  ty--
-                }
-                if (tm > 12) {
-                  tm = 1
-                  ty++
-                }
-                const curKey = c.y + '-' + pad(c.m)
-                const tgtKey = ty + '-' + pad(tm)
-                const minKey = c.minDS.slice(0, 7)
-                if (tgtKey < minKey && tgtKey < curKey) return
-              }
-              c.m += dir
-              if (c.m < 1) {
-                c.m = 12
-                c.y--
-              }
-              if (c.m > 12) {
-                c.m = 1
-                c.y++
-              }
-              this.render()
-              return
-            }
-            if ((c.kind === 'date' || c.kind === 'enddate') && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
-              this.close()
-              c.cb(v, false)
-              return
-            }
-            if (c.kind === 'time') {
-              if (b.dataset.part === 'h') {
-                c.hh = v
-                this.render()
-                return
-              }
-              c.mm = v
-              this.close()
-              c.cb(c.hh + ':' + v, false)
-            }
-          },
-          dateHTML(c) {
-            const wds = t('wd.row')
-              .split('|')
-              .map(function (w) {
-                return S.lang === 'zh' ? w.charAt(1) : w.charAt(0)
-              })
-            let html =
-              '<div class="pk-head">' +
-              '<div class="pk-nav" data-pick="@nav" data-dir="-1">‹</div>' +
-              '<span class="pk-title">' +
-              c.y +
-              ' / ' +
-              pad(c.m) +
-              '</span>' +
-              '<div class="pk-nav" data-pick="@nav" data-dir="1">›</div></div>'
-            html += '<div class="pk-grid">'
-            weekdayRow().forEach(function (w, i) {
-              html += '<div class="pk-wd">' + esc(wds[i]) + '</div>'
-            })
-            const first = new Date(c.y, c.m - 1, 1)
-            const lead = dowIndex(first)
-            const start = addD(first, -lead)
-            const tds = todayDS()
-            for (let i = 0; i < 42; i++) {
-              const d = addD(start, i)
-              const ds = fmt(d)
-              const cls = ['pk-day']
-              if (d.getMonth() + 1 !== c.m) cls.push('other')
-              if (c.minDS && ds < c.minDS) cls.push('dis')
-              if (ds === tds) cls.push('today')
-              if (c.kind === 'multidate' ? c.dates.indexOf(ds) >= 0 : ds === c.value)
-                cls.push('sel')
-              html +=
-                '<div class="' +
-                cls.join(' ') +
-                '" data-pick="' +
-                ds +
-                '">' +
-                d.getDate() +
-                '</div>'
-            }
-            html += '</div>'
-            if (c.kind === 'multidate') {
-              html +=
-                '<div class="pk-multi-foot">' +
-                '<span class="pk-clear" data-pick="@clear">' +
-                esc(t('picker.clear')) +
-                '</span>' +
-                '<span class="pk-clear pk-done" data-pick="@ok">' +
-                esc(t('picker.done')) +
-                ' (' +
-                c.dates.length +
-                ')</span></div>'
-            }
-            if (c.kind === 'enddate') {
-              html +=
-                '<div class="pk-multi-foot">' +
-                '<span class="pk-clear" data-pick="@clear">' +
-                esc(t('picker.clear')) +
-                '</span></div>'
-            }
-            return html
-          },
-          timeHTML(c) {
-            let hours = '',
-              minutes = ''
-            for (let h = 0; h < 24; h++) {
-              const hv = pad(h)
-              hours +=
-                '<div class="pk-opt' +
-                (hv === c.hh ? ' active' : '') +
-                '" data-pick="' +
-                hv +
-                '" data-part="h">' +
-                hv +
-                '</div>'
-            }
-            for (let m = 0; m < 60; m++) {
-              const mv = pad(m)
-              minutes +=
-                '<div class="pk-opt' +
-                (mv === c.mm ? ' active' : '') +
-                '" data-pick="' +
-                mv +
-                '" data-part="m">' +
-                mv +
-                '</div>'
-            }
-            return (
-              '<div class="pk-cols">' +
-              '<div class="pk-colwrap"><div class="pk-lab">' +
-              esc(t('picker.hour')) +
-              '</div>' +
-              '<div class="pk-col">' +
-              hours +
-              '</div></div>' +
-              '<div class="pk-colwrap"><div class="pk-lab">' +
-              esc(t('picker.minute')) +
-              '</div>' +
-              '<div class="pk-col">' +
-              minutes +
-              '</div></div></div>' +
-              '<div class="pk-clear" data-pick="@clear">' +
-              esc(t('picker.clear')) +
-              '</div>'
-            )
-          },
-          close() {
-            document.querySelectorAll('.picker-pop.open').forEach(function (p) {
-              softHide(p)
-            })
-            this.ctx = null
-          },
+          open: function () { return window.ZenUI.picker.open.apply(null, arguments) },
+          close: function () { return window.ZenUI.picker.close() },
+          get ctx () { return window.ZenUI.picker.ctx },
         }
+        window.ZenUI.picker.configure({
+          labels: function () {
+            return { done: t('picker.done'), clear: t('picker.clear'), hour: t('picker.hour'), minute: t('picker.minute') }
+          },
+          weekdays: function () {
+            var wds = t('wd.row').split('|')
+            return wds.map(function (w) { return S.lang === 'zh' ? w.charAt(1) : w.charAt(0) })
+          },
+          weekStart: function () { return S.weekStart },
+          place: placePopup,
+          scroll: scrollIntoContainer,
+          hide: softHide,
+        })
 
         // ================================================================
         // 8. RENDERER

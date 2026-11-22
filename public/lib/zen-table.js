@@ -4,7 +4,7 @@
  *   1. 用 ZenCanvas.registerNodeType 声明业务节点（字段 + 默认值 + 正文）；
  *   2. 把画布图编译成 omm-table-workflow JSON，调用后端并轮询任务；
  *   3. 渲染节点库 / 检查器 / 数据预览 / 结果面板。
- * 画布的拖拽、连线、缩放、框选、撤销与自动布局全部来自 zen-canvas/。
+ * 画布的拖拽、连线、缩放、框选、撤销与自动布局全部来自 zen/canvas/。
  */
 (function () {
   'use strict'
@@ -476,7 +476,7 @@
     var value = rec.data[fd.key]
     var html = '<label class="field"><span>' + esc(fd.label) + '</span>'
     if (fd.type === 'select') {
-      html += '<select data-key="' + esc(fd.key) + '">'
+      html += '<select data-omm-select data-key="' + esc(fd.key) + '">'
       optionsOf(fd).forEach(function (opt) {
         html += '<option value="' + esc(optionValue(opt)) + '"' +
           (String(value === undefined ? '' : value) === optionValue(opt) ? ' selected' : '') + '>' +
@@ -492,7 +492,7 @@
         '<div class="hintline">' + esc(value || '尚未选择文件') + '</div>'
     } else if (fd.type === 'sheets') {
       var sheets = bookMeta ? bookMeta.sheets.map(function (s) { return s.name }) : []
-      html += '<select data-key="' + esc(fd.key) + '"><option value="">（请先导入 Excel）</option>' +
+      html += '<select data-omm-select data-key="' + esc(fd.key) + '"><option value="">（请先导入 Excel）</option>' +
         sheets.map(function (s) {
           return '<option value="' + esc(s) + '"' + (value === s ? ' selected' : '') + '>' + esc(s) + '</option>'
         }).join('') + '</select>'
@@ -505,7 +505,7 @@
       }).join('') : '<span class="hintline">请先导入 Excel</span>') + '</div>'
     } else if (fd.type === 'factor') {
       var fv = value || {}
-      html += '<div class="field-row"><select data-factor="mode">' +
+      html += '<div class="field-row"><select data-omm-select data-factor="mode">' +
         ['column:乘某一列', 'header:按表头名称', 'constant:固定数值'].map(function (o) {
           var p = o.split(':')
           return '<option value="' + p[0] + '"' + (fv.mode === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'
@@ -517,7 +517,7 @@
         '<div class="field-row"><button class="menu-btn" data-lookup-preset="' + esc(fd.key) + '">载入加班补贴标准</button></div>'
     } else if (fd.type === 'condition') {
       var cond = value || { logic: 'and', rules: [], then: 1, else: 0 }
-      html += '<select data-cond="logic"><option value="and"' + (cond.logic === 'and' ? ' selected' : '') +
+      html += '<select data-omm-select data-cond="logic"><option value="and"' + (cond.logic === 'and' ? ' selected' : '') +
         '>同时满足</option><option value="or"' + (cond.logic === 'or' ? ' selected' : '') + '>满足任一</option></select>' +
         renderTableEditor('cond-rules', ['column', 'op', 'value'], ['列', '比较', '值'], cond.rules || [], true) +
         '<div class="field-row"><input type="text" data-cond="then" placeholder="成立时" value="' + esc(cond.then) + '" />' +
@@ -733,7 +733,7 @@
       host.innerHTML = '<div class="empty">没有可预览的工作表。</div>'
       return
     }
-    host.innerHTML = '<div class="field"><span>预览工作表</span><select id="preview-sheet">' +
+    host.innerHTML = '<div class="field"><span>预览工作表</span><select id="preview-sheet" data-omm-select>' +
       sheets.map(function (s) {
         return '<option value="' + esc(s.name) + '"' + (s.name === name ? ' selected' : '') + '>' +
           esc(s.name) + '</option>'
@@ -1318,7 +1318,11 @@
     $('btn-layout').addEventListener('click', function () { canvas.autoLayout($('strategy').value) })
     $('btn-fit').addEventListener('click', function () { canvas.fitView() })
     $('btn-clear').addEventListener('click', function () {
-      if (window.confirm('清空画布？此操作可撤销（Ctrl+Z）。')) { canvas.clear(); renderResults({ nodes: {}, outputs: [] }) }
+      window.ZenUI.dialog.confirm('清空画布？此操作可撤销（Ctrl+Z）。').then(function (ok) {
+        if (!ok) return
+        canvas.clear()
+        renderResults({ nodes: {}, outputs: [] })
+      })
     })
     $('btn-upload').addEventListener('click', function () { pendingFileNode = null; fileInput.value = ''; fileInput.click() })
     fileInput.addEventListener('change', function () {
@@ -1326,9 +1330,10 @@
     })
     $('btn-template').addEventListener('click', function () {
       var names = Object.keys(TEMPLATES)
-      var pick = window.prompt('选择示例工作流：\n' + names.map(function (n, i) { return (i + 1) + '. ' + n }).join('\n'), '1')
-      var idx = parseInt(pick, 10) - 1
-      if (idx >= 0 && idx < names.length) applyTemplate(names[idx])
+      window.ZenUI.dialog.prompt('选择示例工作流：\n' + names.map(function (n, i) { return (i + 1) + '. ' + n }).join('\n'), '1').then(function (pick) {
+        var idx = parseInt(pick, 10) - 1
+        if (idx >= 0 && idx < names.length) applyTemplate(names[idx])
+      })
     })
     $('btn-save').addEventListener('click', saveWorkflowFile)
     $('btn-ai').addEventListener('click', sendToAI)

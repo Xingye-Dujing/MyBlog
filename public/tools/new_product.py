@@ -21,11 +21,18 @@ HTML = '''<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{name}</title>
     <script src="omm-embed.js"></script>
+    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
+    <link rel="stylesheet" href="zen/zen.css">
+    <script src="zen/components/layer.js"></script>
+    <script src="zen/components/toast.js"></script>
+    <script src="zen/components/dialog.js"></script>
+    <script src="zen/components/select.js"></script>
+    <script src="zen/components/menu.js"></script>
+    <script src="zen/components/shortcuts.js"></script>
+    <script src="zen/components/index.js"></script>
     <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
-    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
-    <link rel="stylesheet" href="zen-style/zen.css">
-    <link rel="stylesheet" href="zen-style/products/{pid}.css">
+    <link rel="stylesheet" href="zen/products/{pid}.css">
     <link rel="icon" href="icon.ico" type="image/x-icon" />
   </head>
   <body>
@@ -59,7 +66,7 @@ HTML = '''<!doctype html>
 '''
 
 CSS = '''@layer zen.product {{
-/* {name} 专有样式；配色与组件复用 zen-style 共享层。 */
+/* {name} 专有样式；配色与组件复用 zen/foundation 共享层。 */
 .mark {{
   display: inline-grid;
   place-items: center;
@@ -82,7 +89,7 @@ const html = readFileSync(new URL('public/omm-{pid}.html', ROOT), 'utf8')
 test('入口页接入统一入口与桥接', () => {{
   for (const asset of [
     'omm-embed.js', 'omm-desktop.js', 'omm-share.js',
-    'zen-style/zen.css', 'zen-style/products/{pid}.css',
+    'zen/zen.css', 'zen/products/{pid}.css',
   ]) assert.ok(html.includes(asset), '缺少 ' + asset)
   assert.ok(!/<style\\b/.test(html), '不得内联样式')
 }})
@@ -95,7 +102,7 @@ def build(pid: str, name: str, glyph: str, desc: str, port: int, channels: str) 
     cls = ''.join(part.capitalize() for part in re.split(r'[-_]', pid))
     files = {
         f'omm-{pid}.html': HTML.format(pid=pid, name=name, glyph=glyph, cls=cls),
-        f'zen-style/products/{pid}.css': CSS.format(name=name),
+        f'zen/products/{pid}.css': CSS.format(name=name),
         f'tests/test_{pid}.mjs': TEST.format(pid=pid, name=name),
     }
     return files

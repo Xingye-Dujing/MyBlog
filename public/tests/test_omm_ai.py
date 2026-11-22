@@ -20,7 +20,7 @@ from agent_workspace.adapters.flask import create_blueprint  # noqa: E402
 from agent_workspace.errors import AIError  # noqa: E402
 from agent_workspace.omm_data import ALL, CHANNELS, PRODUCTS, PRODUCT_IDS, product  # noqa: E402
 from agent_workspace.omm_host import OMMZenHostAdapter, shared_dir  # noqa: E402
-from agent_workspace.omm_server import _resolve_provider, create_app  # noqa: E402
+from agent_workspace.omm_server import _resolve_provider, _safe_asset, create_app  # noqa: E402
 from agent_workspace.omm_skills import SKILLS  # noqa: E402
 from agent_workspace.omm_tools import KNOWLEDGE_DIR  # noqa: E402
 from agent_workspace.service import AgentWorkspace  # noqa: E402
@@ -281,12 +281,34 @@ def test_knowledge_files_bundled():
         assert item['name'] in catalog and identifier in catalog
 
 
+def test_frontend_shared_assets_are_served(client):
+    """后端插件必须显式托管 zen/foundation，否则页面能打开但完全没有样式。"""
+    for path in ('/zen/zen.css', '/zen/products/ai.css',
+                 '/zen/features/grid.css', '/lib/zen-card.js'):
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.status_code)
+        assert 'text/css' in response.content_type or 'javascript' in response.content_type, (
+            path, response.content_type)
+    # 未放开整个插件目录：入口页仍走自己的路由，配置与源码不可被当静态资源读取。
+    assert client.get('/zen/foundation/missing.css').status_code == 404
+    assert client.get('/plugin.json').status_code == 404
+
+
+def test_safe_asset_rejects_traversal(tmp_path):
+    root = tmp_path / 'assets'
+    root.mkdir()
+    (root / 'ok.css').write_text('a{}', encoding='utf-8')
+    assert _safe_asset(root, 'ok.css') == (root / 'ok.css').resolve()
+    assert _safe_asset(root, '../secret.css') is None
+    assert _safe_asset(root, 'missing.css') is None
+
+
 def test_frontend_style_and_bridge_contract():
     html = (ROOT / 'omm-ai.html').read_text(encoding='utf-8')
     assert html.index('omm-embed.js') < html.index('omm-desktop.js') < html.index('omm-share.js')
-    # OMM-ZEN 样式契约：接入 zen-style 共享系统（zen.css + 产品 css），并按 design token 施工。
-    assert 'zen-style/zen.css' in html and 'zen-style/products/ai.css' in html
-    tokens = (ROOT / 'zen-style' / 'tokens.css').read_text(encoding='utf-8')
+    # OMM-ZEN 样式契约：接入 zen/foundation 共享系统（zen.css + 产品 css），并按 design token 施工。
+    assert 'zen/zen.css' in html and 'zen/products/ai.css' in html
+    tokens = (ROOT / 'zen/foundation' / 'tokens.css').read_text(encoding='utf-8')
     for token in ('--zen-ink', '--zen-accent', '--zen-radius', '--ink', '--accent', '--radius'):
         assert token in tokens, token
     assert not re.search(r'<script[^>]+src=["\']https?://', html)

@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STYLE_DIR = ROOT / "zen-style"
+STYLE_DIRS = [ROOT / "zen" / d for d in ("foundation", "features", "products")]
 PAGES = sorted(ROOT.glob("omm-*.html"))
 ERRORS: list[str] = []
 
@@ -28,13 +28,13 @@ def fail(message: str) -> None:
 
 for page in PAGES:
     text = page.read_text(encoding="utf-8", errors="ignore")
-    if 'href="zen-style/zen.css"' not in text:
-        fail(f"{page.name}: missing zen-style/zen.css")
+    if 'href="zen/zen.css"' not in text:
+        fail(f"{page.name}: missing zen/zen.css")
     for match in re.finditer(r"^\s*<style\b", text, re.M):
         line = text[: match.start()].count("\n") + 1
         fail(f"{page.name}:{line}: inline <style> block remains")
 
-for css in sorted((STYLE_DIR / "products").glob("*.css")):
+for css in sorted((ROOT / "zen/products").glob("*.css")):
     body = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8", errors="ignore"), flags=re.S)
     inner = re.sub(r"^\s*@layer\s+[\w.-]+\s*\{", "", body).rstrip()
     if inner.endswith("}"):
@@ -43,7 +43,7 @@ for css in sorted((STYLE_DIR / "products").glob("*.css")):
         fail(f"{css.relative_to(ROOT)}: empty placeholder stylesheet")
         continue
 
-for css in sorted(STYLE_DIR.rglob("*.css")):
+for css in sorted(c for d in STYLE_DIRS for c in d.rglob("*.css")):
     body = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8", errors="ignore"), flags=re.S)
     depth = 0
     for ch in body:
@@ -66,7 +66,7 @@ for css in sorted(STYLE_DIR.rglob("*.css")):
 
 offline = (ROOT / "desktop" / "offline.py").read_text(encoding="utf-8", errors="ignore")
 if "def copy_zen_styles" not in offline or offline.count("copy_zen_styles(dest)") < 3:
-    fail("desktop/offline.py: zen-style staging is incomplete")
+    fail("desktop/offline.py: visual asset staging is incomplete")
 if "def copy_shared_lib" not in offline or offline.count("copy_shared_lib(dest)") < 3:
     fail("desktop/offline.py: shared lib staging is incomplete")
 

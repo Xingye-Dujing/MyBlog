@@ -54,7 +54,7 @@ test('ZenCard 监听 focus-card 且校验父窗口来源', () => {
   assert.ok(zencard.includes("d.type === 'omm:focus-card'"))
   assert.ok(zencard.includes('event.source !== window.parent'))
   assert.ok(zencard.includes('function focusCard(cardId)'))
-  const cardCss = read('public/zen-style/products/zencard.css')
+  const cardCss = read('public/zen/products/zencard.css')
   assert.ok(cardCss.includes('.item.focused'))
 })
 

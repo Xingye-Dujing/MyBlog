@@ -411,7 +411,7 @@ PRODUCTS: Dict[str, Dict[str, Any]] = {
         'formats': [
             'AI 工作流 JSON：{format:"omm-table-workflow", version:1, nodes:[{id,type,data}], connections:[{from,to,fromPort,toPort}]}（详见 json-specs/table.md）。',
             '源文件 .xlsx/.xlsm；输出工作簿与独立汇总表均为 .xlsx。',
-            '画布 JSON（zen-canvas toJSON）也可导入，应用后与 AI 生成的工作流等价。',
+            '画布 JSON（zen/canvas toJSON）也可导入，应用后与 AI 生成的工作流等价。',
         ],
         'ai': '产品自身不含生成式 AI。AI 工作区通过 omm_product_info("table") 与 omm_spec_search("表格自动化") 读规范，用 omm_format_template/validate 生成并校验工作流 JSON；用户导入后上传文件运行。ZenTableAI.snapshot()/snapshotMarkdown()/workflowSpec() 可获取当前画布，OMMShare 走 documents 频道发送。',
         'best_practices': [

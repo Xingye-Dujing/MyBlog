@@ -384,6 +384,10 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
     def apl_font():
         return send_from_directory(str(_public_root()), "APL385.ttf")
 
+    @app.get("/zen/zen.css")
+    def zen_stylesheet():
+        return send_from_directory(str(_public_root()), "zen/zen.css")
+
     @app.get("/vendor/<path:filename>")
     def vendor_asset(filename: str):
         root = (_public_root() / "vendor").resolve()
@@ -391,6 +395,26 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
         if root not in target.parents or not target.is_file():
             abort(404)
         return send_from_directory(str(root), filename)
+
+    # 共享样式与 lib 模块同样放在插件目录里：静态插件由 ShellHandler 直接托管，
+    # 带后端的插件必须显式放行，否则页面能打开但样式和模块全部 404。
+    # 只开放这两棵资源树，不暴露插件配置与后端源码。
+    def _make_asset_handler(tree: str):
+        def handler(filename: str):
+            root = (_public_root() / tree).resolve()
+            target = (root / filename).resolve()
+            if root not in target.parents or not target.is_file():
+                abort(404)
+            return send_from_directory(str(target.parent), target.name)
+        return handler
+
+    for _tree in ("zen/foundation", "zen/features", "zen/products",
+                  "zen/components", "zen/canvas", "lib"):
+        app.add_url_rule(
+            "/" + _tree + "/<path:filename>",
+            "asset_" + _tree.replace("/", "_").replace("-", "_"),
+            _make_asset_handler(_tree),
+        )
 
     @app.get("/api/env")
     def api_env():

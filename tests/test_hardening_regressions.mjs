@@ -11,7 +11,7 @@ import { ZenCard } from '../public/lib/zen-card.js'
 import { ZenFlow } from '../public/lib/zen-flow.js'
 import { ZenChart } from '../public/lib/zen-chart.js'
 import { SearchLibrary } from '../public/lib/search-library.js'
-import '../public/zen-canvas/layout-engine.js'
+import '../public/zen/canvas/layout.js'
 
 const ROOT = new URL('../', import.meta.url)
 const read = (rel) => readFileSync(new URL(rel, ROOT), 'utf8')
@@ -91,7 +91,7 @@ test('toCard 容忍 null 来源并正确读取字符串来源', () => {
   assert.equal(SearchLibrary.toCard({ answer: 'x', sources: ['http://a'] }).ref, 'http://a')
 })
 
-/* --------------------------- zen-canvas-layout -------------------------- */
+/* --------------------------- zen/canvas-layout -------------------------- */
 
 test('导出的 computeRadialOrTimeline 允许省略 opt', () => {
   assert.doesNotThrow(() =>

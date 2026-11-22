@@ -30,6 +30,13 @@ if str(HERE) not in sys.path:
 import openpyxl  # noqa: E402
 import table_engine  # noqa: E402  (needs sys.path from HERE)
 
+try:  # Desktop shell only; absent on the public website.
+    import omm_shared  # type: ignore
+    import omm_share  # type: ignore
+except Exception:  # pragma: no cover
+    omm_shared = None  # type: ignore
+    omm_share = None  # type: ignore
+
 # Source tree keeps backends in server/; staged bundles keep them beside assets.
 BUNDLE = HERE.parent if (HERE.parent / "table-runtime").is_dir() else HERE
 
@@ -217,6 +224,18 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _bridge_body(self) -> Optional[bytes]:
+        """Read a desktop-bridge POST body with the shared size limit."""
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            size = 0
+        limit = getattr(omm_shared, "MAX_BODY", MAX_UPLOAD) if omm_shared else MAX_UPLOAD
+        if size > limit:
+            self._json({"ok": False, "error": "payload too large"}, 413)
+            return None
+        return self.rfile.read(size) if size > 0 else b""
+
     def _reject(self) -> bool:
         if self._trusted():
             return False
@@ -235,6 +254,22 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
         query = parse_qs(parsed.query)
+
+        # 桌面桥：与其它带后端的插件保持同一份 /__omm 契约。
+        if path.startswith("/__omm/share/"):
+            if omm_share is None:
+                self._json({"ok": False, "error": "not found"}, 404)
+                return
+            status, ctype, body = omm_share.handle_get(path, query, "table")
+            self._send(status, body, ctype)
+            return
+        if path.startswith("/__omm/fs/"):
+            if omm_shared is None:
+                self._json({"ok": False, "error": "not found"}, 404)
+                return
+            status, ctype, body = omm_shared.handle_get(path, query, "table")
+            self._send(status, body, ctype)
+            return
 
         if path == "/api/status":
             version = getattr(openpyxl, "__version__", "?")
@@ -312,6 +347,17 @@ class Handler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/__omm/share/") or path.startswith("/__omm/fs/"):
+            handler = omm_share if path.startswith("/__omm/share/") else omm_shared
+            if handler is None:
+                self._json({"ok": False, "error": "not found"}, 404)
+                return
+            body = self._bridge_body()
+            if body is None:
+                return
+            status, ctype, payload = handler.handle_post(path, parse_qs(parsed.query), body, "table")
+            self._send(status, payload, ctype)
+            return
         if path == "/api/upload":
             provided = (parse_qs(parsed.query).get("name") or ["upload.xlsx"])[0]
             name = table_engine.safe_filename(provided, "upload.xlsx")

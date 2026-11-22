@@ -30,9 +30,9 @@
 
 ## 画布框架
 
-`zen-canvas/layout-engine.js` 是 6 策略自动布局的唯一实现；
-`zen-canvas/zen-canvas.js` 提供节点、连线、视口、选择、历史与序列化。
-画布样式已并入 `zen-style/features/canvas-framework.css`，由 `zen.css` 统一加载。
+`zen/canvas/layout.js` 是 6 策略自动布局的唯一实现；
+`zen/canvas/engine.js` 提供节点、连线、视口、选择、历史与序列化。
+画布样式是可选包 `zen/canvas/canvas.css`，只由画布产品单独引用；核心 `zen.css` 不加载它。
 
 ## 新增共享模块的规则
 

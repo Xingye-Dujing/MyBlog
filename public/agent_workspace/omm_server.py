@@ -60,7 +60,8 @@ def _public_root(app: Flask) -> Path:
     return Path(app.config['PUBLIC_ROOT']).resolve()
 
 
-def _safe_vendor(root: Path, filename: str) -> Path | None:
+def _safe_asset(root: Path, filename: str) -> Path | None:
+    """Resolve *filename* inside *root*; never escape the bundled asset tree."""
     target = (root / filename).resolve()
     if root not in target.parents or not target.is_file():
         return None
@@ -164,7 +165,8 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
     def index():
         return _serve('omm-ai.html')
 
-    for _asset in ('omm-desktop.js', 'omm-share.js', 'omm-embed.js', 'omm-icons.js', 'icon.ico'):
+    for _asset in ('omm-desktop.js', 'omm-share.js', 'omm-embed.js', 'omm-icons.js', 'icon.ico',
+                   'zen/zen.css'):
         def _make(name):
             def handler():
                 return _serve(name)
@@ -173,10 +175,27 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
 
     @app.get('/vendor/<path:filename>')
     def vendor(filename: str):
-        target = _safe_vendor(_public_root(app) / 'vendor', filename)
+        target = _safe_asset(_public_root(app) / 'vendor', filename)
         if target is None:
             abort(404)
         return send_from_directory(str(target.parent), target.name)
+
+    # 共享样式与模块树同样放在插件目录里：静态插件由 ShellHandler 直接托管，
+    # 带后端的插件必须显式放行，否则页面能打开但样式和模块全部 404。
+    def _make_asset_handler(tree: str):
+        def handler(filename: str):
+            target = _safe_asset(_public_root(app) / tree, filename)
+            if target is None:
+                abort(404)
+            return send_from_directory(str(target.parent), target.name)
+        return handler
+
+    for _tree in ('zen/foundation', 'zen/features', 'zen/products', 'zen/components', 'zen/canvas', 'lib'):
+        app.add_url_rule(
+            '/' + _tree + '/<path:filename>',
+            'asset_' + _tree.replace('/', '_').replace('-', '_'),
+            _make_asset_handler(_tree),
+        )
 
     # ── 桌面桥（与 mdforge/server.py 保持一致） ───────────────────────────────
     @app.get('/__omm/fs/<path:sub>')

@@ -6,10 +6,10 @@
   `components.md`, `shared-modules.md`, `product-guide.md`, `skills.md`. Read `README.md` and
   `product-guide.md` before adding or changing any product.
 - New product: `python public/tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --channels <频道>`
-  (from repo root). It generates the entry page, `zen-style/products/<id>.css` and a test skeleton,
+  (from repo root). It generates the entry page, `zen/products/<id>.css` and a test skeleton,
   refuses to overwrite, and prints the `BUILTIN_PLUGINS` entry to paste. It does not edit the registry.
-- Styles: one entry `zen-style/zen.css`; shared layers `tokens.css`, `base.css`, `primitives.css`,
-  `features/*.css`; product-only rules in `zen-style/products/<id>.css` wrapped in `@layer zen.product { … }`.
+- Styles: one entry `zen/zen.css`; shared layers `tokens.css`, `base.css`, `primitives.css`,
+  `features/*.css`; product-only rules in `zen/products/<id>.css` wrapped in `@layer zen.product { … }`.
   No inline `<style>`, no new hardcoded colours, no per-product z-index. Radius is fixed 0 and the
   accent is neutral — the hub/installer theme-colour, radius and light/dark settings were deliberately
   removed; do not reintroduce them.

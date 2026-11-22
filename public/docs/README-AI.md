@@ -42,7 +42,7 @@ public/
 │   ├── omm_server.py              # Flask create_app(plugin_dir, data_dir)
 │   └── omm_knowledge/             # 规范：json-specs、MDFORGE AI 规范、格式校验说明、PRODUCTS.md
 ├── docs/                          # OMM-ZEN 设计系统：令牌、组件、共享模块、新产品开发指南
-├── zen-style/                     # 统一样式层：入口、令牌、基础、组件、能力、产品专有
+├── zen/foundation/                     # 统一样式层：入口、令牌、基础、组件、能力、产品专有
 ├── tests/
 │   ├── test_omm_ai.py             # 知识/技能/工具/产物/路由/Flask/构建契约/前端契约
 │   ├── test_omm_validators.py     # 20 产品模板与硬约束、checksum、工具/接口/前端校验契约

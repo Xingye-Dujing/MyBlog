@@ -6,7 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import '../public/zen-canvas/layout-engine.js'
+import '../public/zen/canvas/layout.js'
 const Layout = globalThis.ZenCanvasLayout
 
 const ROOT = new URL('../', import.meta.url)
@@ -72,13 +72,13 @@ test('布局是确定性的：相同输入得到相同坐标', () => {
 })
 
 test('Writer 不再内联布局实现，改为加载通用模块', () => {
-  assert.ok(writer.includes('<script src="zen-canvas/layout-engine.js"></script>'))
+  assert.ok(writer.includes('<script src="zen/canvas/layout.js"></script>'))
   assert.ok(writer.includes('const { computeCanvasLayout, computeRadialOrTimeline } = window.ZenCanvasLayout'))
   assert.doesNotMatch(writer, /function computeCanvasLayout\(/)
   assert.doesNotMatch(writer, /function computeRadialOrTimeline\(/)
 })
 
 test('ZenFlow 流程编辑器同样直接调用通用模块', () => {
-  assert.ok(flow.includes('zen-canvas/layout-engine.js'))
+  assert.ok(flow.includes('zen/canvas/layout.js'))
   assert.ok(flow.includes('ZenCanvasLayout.computeCanvasLayout'))
 })

@@ -4,7 +4,7 @@
  *   1. 用 ZenCanvas.registerNodeType 声明业务节点（字段简单、带默认值）；
  *   2. 把画布图编译成后端工作流 JSON，并轮询执行状态；
  *   3. 渲染节点库 / 检查器 / 结果面板。
- * 所有画布交互本身都在 zen-canvas/ 里，本文件不实现拖拽、连线、缩放。
+ * 所有画布交互本身都在 zen/canvas/ 里，本文件不实现拖拽、连线、缩放。
  */
 (function () {
   'use strict'
@@ -287,7 +287,7 @@
       var value = rec.data[fd.key]
       html += '<label class="field"><span>' + esc(fd.label) + '</span>'
       if (fd.type === 'select') {
-        html += '<select data-key="' + esc(fd.key) + '">'
+        html += '<select data-omm-select data-key="' + esc(fd.key) + '">'
         ;(fd.options || []).forEach(function (opt) {
           var label = (fd.optionsLabel && fd.optionsLabel[opt]) || opt
           html += '<option value="' + esc(opt) + '"' + (String(value) === String(opt) ? ' selected' : '') + '>' + esc(label) + '</option>'
@@ -410,7 +410,7 @@
   }
 
   // 接受两种 JSON 形态：AI 工作区的工作流 JSON（format: omm-video-workflow）
-  // 与工作台自身的画布 JSON（zen-canvas toJSON）。
+  // 与工作台自身的画布 JSON（zen/canvas toJSON）。
   function toCanvasJSON(obj) {
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj
     if (obj.format !== 'omm-video-workflow' && obj.app) return obj
@@ -861,7 +861,11 @@
     $('btn-layout').addEventListener('click', function () { canvas.autoLayout($('strategy').value) })
     $('btn-fit').addEventListener('click', function () { canvas.fitView() })
     $('btn-clear').addEventListener('click', function () {
-      if (window.confirm('清空画布？此操作可撤销（Ctrl+Z）。')) { canvas.clear(); renderResults({ nodes: {} }) }
+      window.ZenUI.dialog.confirm('清空画布？此操作可撤销（Ctrl+Z）。').then(function (ok) {
+        if (!ok) return
+        canvas.clear()
+        renderResults({ nodes: {} })
+      })
     })
     $('btn-upload').addEventListener('click', function () { pendingFileNode = null; fileInput.value = ''; fileInput.click() })
     fileInput.addEventListener('change', function () {
@@ -869,9 +873,10 @@
     })
     $('btn-template').addEventListener('click', function () {
       var names = Object.keys(TEMPLATES)
-      var pick = window.prompt('选择示例工作流：\n' + names.map(function (n, i) { return (i + 1) + '. ' + n }).join('\n'), '1')
-      var idx = parseInt(pick, 10) - 1
-      if (idx >= 0 && idx < names.length) applyTemplate(names[idx])
+      window.ZenUI.dialog.prompt('选择示例工作流：\n' + names.map(function (n, i) { return (i + 1) + '. ' + n }).join('\n'), '1').then(function (pick) {
+        var idx = parseInt(pick, 10) - 1
+        if (idx >= 0 && idx < names.length) applyTemplate(names[idx])
+      })
     })
     $('btn-save').addEventListener('click', saveWorkflowFile)
     $('btn-ai').addEventListener('click', sendToAI)
@@ -905,13 +910,14 @@
       if (e.target === $('preview-modal')) $('preview-close').click()
     })
     $('btn-help').addEventListener('click', function () {
-      window.alert(
+      window.ZenUI.dialog.alert(
         '1. 从左侧点选节点（或拖到画布）\n' +
         '2. 从节点右侧圆点拖到下一个节点左侧圆点，串成工作流\n' +
         '3. 选中节点，在右侧设置参数（都有默认值）\n' +
         '4. 给“视频输入”导入文件，点“运行”\n\n' +
         '分析节点（媒体信息/场景/静音/黑场/缩略图）不改视频内容，可并联在输入之后。\n' +
-        '所有处理都基于内置 ffmpeg，无需额外安装。'
+        '所有处理都基于内置 ffmpeg，无需额外安装。',
+        { title: '使用说明' }
       )
     })
 

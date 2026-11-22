@@ -365,7 +365,7 @@
 - 格式：
   - AI 工作流 JSON：{format:"omm-table-workflow", version:1, nodes:[{id,type,data}], connections:[{from,to,fromPort,toPort}]}（详见 json-specs/table.md）。
   - 源文件 .xlsx/.xlsm；输出工作簿与独立汇总表均为 .xlsx。
-  - 画布 JSON（zen-canvas toJSON）也可导入，应用后与 AI 生成的工作流等价。
+  - 画布 JSON（zen/canvas toJSON）也可导入，应用后与 AI 生成的工作流等价。
 - 最佳实践：
   - 生成工作流时 fileId 必须留空，由用户在工作台导入文件；不要编造文件 id 或工作表真实范围。
   - 一个工作流只能有一个 file 节点；其余节点必须有上游；save 节点放在链尾，不能出现循环连线。

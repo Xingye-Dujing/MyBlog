@@ -1,8 +1,8 @@
 # 组件库
 
-共享组件 class 定义在 `zen-style/primitives.css` 与 `zen-style/features/*.css`。
+共享组件 class 定义在 `zen/foundation/primitives.css` 与 `zen/features/*.css`。
 新产品优先直接使用这些 class；只有产品独有的结构与交互才写进
-`zen-style/products/<id>.css`。
+`zen/products/<id>.css`。
 
 ## 面板与弹窗
 
@@ -40,8 +40,7 @@
 |---|---|
 | `features/grid.css` | 表格、列表、数据视图 |
 | `features/doc.css` | 文档、Markdown、富文本 |
-| `features/canvas.css` | 节点画布产品 |
-| `features/canvas-framework.css` | 使用 `zen-canvas/` 的画布产品 |
+| `canvas/canvas.css` | 使用 `zen/canvas/` 的画布产品（可选包，按需 link） |
 | `features/learning.css` | 词库、卡片、间隔复习 |
 | `features/cloud.css` | 云同步面板与状态 |
 | `features/tool.css` | 小工具页（`.zt-*`） |

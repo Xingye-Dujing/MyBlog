@@ -1,4 +1,5 @@
-@layer zen.feature {
+@layer zen.canvas {
+/* ==== canvas.css (merged optional pack) ==== */
 .ft-color-dot {
 width: 16px;
         height: 16px;
@@ -1411,4 +1412,640 @@ border-color: var(--accent-red);
 .node.zc-node[data-state='done'] {
 border-color: var(--accent-green);
 }
+
+/* ==== canvas-framework.css (merged optional pack) ==== */
+/* zen/canvas.css — OMM-ZEN 通用画布框架样式
+ *
+ * 从 omm-writer.html 的画布样式原样抽取（类名、尺寸、颜色约定保持一致）。
+ * 只把 writer 的私有变量做了跨产品兼容回退：
+ *   --border  -> --line      --text-dim -> --dim      --node-bg -> --panel
+ * 因此本文件既能跑在 writer 的 --bg/--text 体系里，也能跑在 zen/foundation 的 token 体系里
+ * 的 --line/--panel 体系里。所有画布产品共用这一份，改这里即全量同步。
+ */
+.zc-workspace {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  cursor: default;
+  overscroll-behavior: none;
+}
+
+.zc-canvas-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
+  overflow: visible;
+  transform: translate3d(0px, 0px, 0) scale(1);
+  transform-origin: 0 0;
+  background: transparent;
+  backface-visibility: hidden;
+}
+
+.zc-canvas-inner > .node,
+.zc-canvas-inner > .zc-svg-layer {
+  overflow: visible;
+}
+
+/* SVG 连线层 —— 与 writer 的 #svg-layer 完全一致 */
+.zc-svg-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+}
+.zc-svg-layer .conn-line {
+  stroke: var(--conn-color, #555555);
+  stroke-width: var(--conn-width, 2px);
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: stroke 0.15s, stroke-width 0.15s;
+}
+.zc-svg-layer .conn-line.temp {
+  stroke-dasharray: 6 4;
+  stroke: var(--dim, var(--text-dim, rgba(0, 0, 0, 0.35)));
+  stroke-width: 2px;
+}
+.zc-svg-layer .conn-line.selected {
+  stroke: var(--accent, var(--accent-green, #339933));
+  stroke-width: 3px;
+}
+.zc-svg-layer .conn-line.warn {
+  stroke: #c0392b;
+  stroke-dasharray: 4 3;
+}
+.conn-delete-hit {
+  stroke: transparent;
+  stroke-width: 14px;
+  fill: none;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* 节点 —— 类名与 writer 一致，产品只写自己的内容样式 */
+.node.zc-node {
+  position: absolute;
+  min-width: 160px;
+  min-height: 64px;
+  width: 260px;
+  background: var(--node-bg, var(--panel, var(--bg, #fff)));
+  border: 1px solid var(--border, var(--line, #000));
+  border-radius: var(--radius, 0px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-width 0.1s, border-color 0.3s, background 0.3s, border-radius 0.3s;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.node.zc-node.no-bg {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.node.zc-node:hover,
+.node.zc-node:focus-within {
+  border-width: 2px;
+  z-index: 20;
+}
+.node.zc-node.selected {
+  outline: 2px solid var(--accent-green, #339933);
+  outline-offset: 3px;
+}
+.node.zc-node.align-base {
+  box-shadow: inset 0 0 0 2px var(--border, var(--line, #000));
+}
+.node.zc-node.locked {
+  opacity: 0.65;
+  border-style: dashed;
+}
+.node.zc-node.locked .node-header {
+  cursor: default;
+}
+.node.zc-node.locked .node-action-btn:not(.lock-btn) {
+  display: none !important;
+}
+.node.zc-node.locked .node-resize {
+  display: none !important;
+}
+.node.zc-node.locked .node-port {
+  pointer-events: none;
+  opacity: 0.3 !important;
+}
+.node.zc-node.minimized .node-content {
+  display: none;
+}
+
+/* 节点头部：writer 同款 32px / 1px 下边框 / hover 才显示 */
+.node.zc-node .node-header {
+  height: 32px;
+  border-bottom: 1px solid var(--border, var(--line, #000));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px;
+  cursor: grab;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+  opacity: 0;
+  background: var(--bg, var(--panel, #fff));
+  border-top-left-radius: var(--radius, 0px);
+  border-top-right-radius: var(--radius, 0px);
+}
+.node.zc-node.minimized .node-header {
+  border-radius: var(--radius, 0px);
+}
+.node.zc-node .node-header:active {
+  cursor: grabbing;
+}
+.node.zc-node:hover .node-header,
+.node.zc-node:focus-within .node-header,
+.node.zc-node.selected .node-header {
+  opacity: 1;
+}
+.node.zc-node.no-bg .node-header {
+  background: transparent;
+}
+.node.zc-node .node-title {
+  font-size: var(--title-font-size, 10px);
+  letter-spacing: 1px;
+  color: var(--title-color, var(--text, #000));
+  text-transform: uppercase;
+  font-weight: 500;
+  cursor: default;
+  font-family: var(--font-mono, inherit);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.node.zc-node .node-title .title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node.zc-node .node-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.node.zc-node .node-action-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--dim, var(--text-dim, rgba(0, 0, 0, 0.4)));
+  font-size: 12px;
+  font-family: var(--font-mono, inherit);
+  transition: all 0.1s;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius, 0px);
+}
+.node.zc-node .node-action-btn:hover {
+  color: var(--text, #000);
+  border-color: var(--border, var(--line, #000));
+}
+.node.zc-node .node-action-btn.close:hover {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.5);
+}
+.node.zc-node .node-action-btn.lock-btn.locked {
+  color: var(--text, #000);
+  border-color: var(--border, var(--line, #000));
+}
+
+.node.zc-node .node-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  outline: none;
+  overflow-y: auto;
+  font-family: var(--font-mono, inherit);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text, #000);
+  user-select: text;
+  background: transparent;
+  min-height: 40px;
+}
+.node.zc-node .node-content::-webkit-scrollbar {
+  width: 4px;
+}
+.node.zc-node .node-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.node.zc-node .node-content::-webkit-scrollbar-thumb {
+  background: var(--line-soft, var(--border-dim, rgba(0, 0, 0, 0.15)));
+}
+
+.node.zc-node .node-resize {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 5;
+  border-radius: var(--radius, 0px);
+}
+.node.zc-node:hover .node-resize {
+  opacity: 1;
+}
+.node.zc-node .node-resize::before {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    var(--border, var(--line, #000)) 3px,
+    var(--border, var(--line, #000)) 4px
+  );
+  opacity: 0.5;
+}
+.node.zc-node .node-resize:hover::before {
+  opacity: 1;
+}
+
+/* 端口：writer 原样（10px 圆点、hover 显示、命中放大） */
+.node.zc-node .node-port {
+  position: absolute;
+  width: var(--port-size, 10px);
+  height: var(--port-size, 10px);
+  border-radius: 50%;
+  background: var(--port-color, #888888);
+  border: 2px solid var(--bg, #fff);
+  box-shadow: 0 0 0 1px var(--border-dim, var(--line-soft, rgba(0, 0, 0, 0.15)));
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.15s;
+  cursor: crosshair;
+  pointer-events: all;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+}
+.node.zc-node:hover .node-port,
+.node.zc-node:focus-within .node-port,
+.node.zc-node.port-active .node-port {
+  opacity: 0.85;
+}
+.node.zc-node .node-port:hover {
+  transform: translateX(-50%) scale(1.3);
+  opacity: 1 !important;
+  background: var(--text, #1f1f1f);
+}
+.node.zc-node .node-port.top {
+  top: -6px;
+}
+.node.zc-node .node-port.bottom {
+  bottom: -6px;
+}
+.node.zc-node .node-port.left {
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%) scale(0.8);
+}
+.node.zc-node .node-port.left:hover,
+.node.zc-node .node-port.left.dragging,
+.node.zc-node .node-port.left.port-highlight {
+  transform: translateY(-50%) scale(1.3);
+}
+.node.zc-node .node-port.right {
+  top: 50%;
+  left: auto;
+  right: -6px;
+  transform: translateY(-50%) scale(0.8);
+}
+.node.zc-node .node-port.right:hover,
+.node.zc-node .node-port.right.dragging,
+.node.zc-node .node-port.right.port-highlight {
+  transform: translateY(-50%) scale(1.3);
+}
+.node.zc-node .node-port.connected {
+  background: var(--text, #1f1f1f);
+  box-shadow: 0 0 0 2px var(--bg, #fff), 0 0 0 3px var(--text, #000);
+}
+.node.zc-node .node-port.dragging {
+  opacity: 1 !important;
+  transform: translateX(-50%) scale(1.5);
+  background: var(--accent-blue);
+}
+.node.zc-node .node-port.port-highlight {
+  opacity: 1 !important;
+  transform: translateX(-50%) scale(1.5);
+  background: #339933;
+}
+.node.zc-node.no-bg .node-port {
+  border-color: var(--bg, #fff);
+}
+
+/* 框选橡皮筋 / 右键菜单 / 提示 */
+.zc-marquee {
+  position: fixed;
+  display: none;
+  z-index: 500;
+  pointer-events: none;
+  border: 1px solid var(--accent, var(--accent-green, #339933));
+  background: var(--accent-wash, rgba(51, 153, 51, 0.12));
+}
+.zc-context-menu {
+  position: fixed;
+  display: none;
+  z-index: 2500;
+  min-width: 170px;
+  max-width: 280px;
+  padding: 4px;
+  background: var(--panel, var(--bg, #fff));
+  border: 1px solid var(--border, var(--line, #000));
+  border-radius: var(--radius, 0px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+  font-family: var(--font-mono, inherit);
+}
+.zc-context-menu.open {
+  display: block;
+}
+.zc-context-menu .zc-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.zc-context-menu .zc-menu-item:hover {
+  background: var(--hover, rgba(0, 0, 0, 0.05));
+}
+.zc-context-menu .zc-menu-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.zc-context-menu .zc-menu-sep {
+  height: 1px;
+  background: var(--line-soft, var(--border-dim, rgba(0, 0, 0, 0.15)));
+  margin: 4px 2px;
+}
+.zc-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  background: var(--active-bg, #1f1f1f);
+  color: var(--active-text, #fff);
+  padding: 8px 16px;
+  border-radius: var(--radius, 0px);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s;
+  z-index: 3000;
+  max-width: 80vw;
+}
+.zc-toast.show {
+  opacity: 1;
+}
+
+/* ===========================================================================
+ * 通用节点工作台外壳（从 omm-video.css 上移，表格自动化等节点产品共用）。
+ * 仅画布交互本身在 zen/canvas.js；这里只定义页面骨架与面板样式。
+ * =========================================================================== */
+:root {
+--port-size: 10px;
+--port-color: #888888;
+--conn-color: #555555;
+--conn-width: 2px;
+--node-bg: #ffffff;
+--title-font-size: 10px;
+--content-font-size: 14px;
+--content-line-height: 1.8;
+--title-color: #222222;
+}
+
+body.theme-dark {
+--port-color: #aaaaaa;
+--conn-color: #aaaaaa;
+--node-bg: #242424;
+--title-color: #eeeeee;
+}
+
+.top-menu {
+position: relative; z-index: 999; flex: 0 0 auto;
+        min-height: 48px; display: flex; align-items: center; align-content: center;
+        gap: 2px; row-gap: 3px; flex-wrap: wrap;
+        padding: 4px 12px; background: var(--bg);
+        border-bottom: 1px solid var(--border);
+}
+
+.spacer {
+flex: 1;
+}
+
+.sep {
+width: 1px; height: 18px; background: var(--border-dim); margin: 0 2px;
+}
+
+.workspace-body {
+flex: 1 1 auto; min-height: 0; display: grid;
+        grid-template-columns: 196px minmax(0, 1fr) 286px;
+}
+
+.palette, .inspector {
+min-height: 0; overflow-y: auto; background: var(--bg);
+        border-right: 1px solid var(--border);
+}
+
+.inspector {
+border-right: 0; border-left: 1px solid var(--border);
+}
+
+.pane-head {
+position: sticky; top: 0; z-index: 3;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 7px 10px; background: var(--bg);
+        border-bottom: 1px solid var(--border-dim);
+        font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-faint); font-weight: 500;
+}
+
+.pane-head + .pane-head {
+top: auto; border-top: 1px solid var(--border-dim);
+}
+
+.pane-body {
+padding: 10px 12px 18px;
+}
+
+.faint, .hintline {
+color: var(--text-faint); font-size: 10px;
+}
+
+.empty {
+border: 1px dashed var(--border-dim); padding: 20px 12px; margin: 8px 0;
+        text-align: center; color: var(--text-faint); font-size: 10px; line-height: 1.7;
+}
+
+.palette .group-title {
+margin: 12px 0 6px; font-size: 9px; letter-spacing: 1.5px;
+        color: var(--text-faint); text-transform: uppercase;
+}
+
+.palette .group-title:first-child {
+margin-top: 2px;
+}
+
+.palette-item {
+display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 5px 7px; margin-bottom: 3px; text-align: left;
+        border: 1px solid var(--border-dim); background: transparent;
+        color: var(--text); font-size: 11px; cursor: grab;
+        transition: background 0.12s, border-color 0.12s;
+}
+
+.palette-item:hover {
+background: var(--hover); border-color: var(--border);
+}
+
+.palette-item .pi-glyph {
+width: 18px; height: 18px; flex: 0 0 18px; display: inline-flex;
+        align-items: center; justify-content: center; font-size: 9px;
+        border: 1px solid var(--border-dim); color: var(--text-dim);
+}
+
+.palette-item .pi-desc {
+font-size: 9px; color: var(--text-faint); display: block;
+}
+
+.stage {
+position: relative; min-width: 0; display: flex; flex-direction: column; background: var(--bg);
+}
+
+.stage-tools {
+flex: 0 0 auto; display: flex; align-items: center; gap: 2px;
+        padding: 5px 8px; border-bottom: 1px solid var(--border);
+        background: var(--bg); flex-wrap: wrap;
+}
+
+.stage-tools select {
+width: auto; padding: 3px 6px; font-size: 10px;
+        background: transparent; border: 1px solid var(--border-dim); outline: none;
+}
+
+.stage-tools select:focus {
+border-color: var(--text);
+}
+
+.stage-hint {
+position: absolute; left: 12px; bottom: 8px; z-index: 4;
+        font-size: 9px; letter-spacing: 0.5px; color: var(--text-faint); pointer-events: none;
+}
+
+.zc-status {
+font-size: 9px; letter-spacing: 0.5px; color: var(--text-faint);
+}
+
+.zc-status.is-running {
+color: var(--accent);
+}
+
+.zc-status.is-done {
+color: var(--accent-green);
+}
+
+.zc-status.is-error {
+color: var(--accent-red);
+}
+
+.inspector h3.title {
+font-family: var(--font-mono); font-size: 13px; font-weight: 500;
+        letter-spacing: 0.5px; margin-bottom: 2px;
+}
+
+.inspector .node-id {
+font-size: 9px; color: var(--text-faint); margin-bottom: 12px;
+}
+
+.switch-row {
+display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 8px;
+}
+
+.switch-row input {
+width: auto;
+}
+
+.section-title {
+font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-faint); border-top: 1px solid var(--border-dim);
+        padding-top: 10px; margin: 14px 0 10px;
+}
+
+.result-line {
+font-size: 11px; padding: 5px 0; border-bottom: 1px dashed var(--border-dim);
+        word-break: break-all;
+}
+
+.result-line:last-child {
+border-bottom: 0;
+}
+
+.result-line a {
+color: var(--accent-blue); text-decoration: none; margin-right: 8px;
+}
+
+.result-line a:hover {
+text-decoration: underline;
+}
+
+.logbox {
+font: 10px/1.6 var(--font-mono); white-space: pre-wrap; color: var(--text-dim);
+        max-height: 130px; overflow: auto; user-select: text;
+        border: 1px solid var(--border-dim); padding: 6px;
+}
+
+.modal {
+position: fixed; inset: 0; z-index: 5000; display: none;
+        align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.62);
+}
+
+.modal.open {
+display: flex;
+}
+
+.modal .box {
+background: var(--bg); border: 1px solid var(--border);
+        max-width: min(92vw, 960px); max-height: 90vh; padding: 14px;
+        display: flex; flex-direction: column; gap: 10px;
+}
+
+.modal .box-head {
+display: flex; align-items: center; justify-content: space-between;
+        gap: 20px; font-size: 11px; letter-spacing: 0.5px;
+}
+
+@media (max-width: 1100px) {
+.workspace-body {
+grid-template-columns: 162px minmax(0, 1fr) 250px;
+}
+}
+
 }

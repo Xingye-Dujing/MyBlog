@@ -59,6 +59,10 @@
       '<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l5 7-5 13-5-13z" fill="' + RUST + '" stroke="' + INK + '"/><path d="M7 9h10" fill="none" stroke="' + INK + '"/><circle cx="12" cy="13" r="1.4" fill="#ffffff" stroke="none"/></svg>',
     video:
       '<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" fill="#ffffff" stroke="' + INK + '"/><path d="M2.5 8h19M2.5 16h19M7 4.5v3.5M7 16v3.5M17 4.5v3.5M17 16v3.5" fill="none" stroke="' + INK + '"/><path d="M10 10.2l5 2.8-5 2.8z" fill="' + BLUE + '" stroke="' + INK + '"/></svg>',
+    lambda:
+      '<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="2.5" width="15" height="19" rx="2" fill="#ffffff" stroke="' + INK + '"/><rect x="7" y="5" width="10" height="6" rx="0.8" fill="#eef1f7" stroke="' + INK + '"/><path d="M9 9.5L12 6l3 3.5" fill="none" stroke="' + BLUE + '" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="14.5" r="1.1" fill="' + AMBER + '"/><circle cx="12" cy="14.5" r="1.1" fill="' + INK + '"/><circle cx="15" cy="14.5" r="1.1" fill="' + INK + '"/><circle cx="9" cy="18" r="1.1" fill="' + INK + '"/><circle cx="12" cy="18" r="1.1" fill="' + INK + '"/><circle cx="15" cy="18" r="1.1" fill="' + RUST + '"/></svg>',
+    table:
+      '<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3.5" width="18" height="17" fill="#ffffff" stroke="' + INK + '"/><rect x="3" y="3.5" width="18" height="4.5" fill="' + TEAL + '" stroke="' + INK + '"/><path d="M3 8h18M9 8v12.5M15 8v12.5" fill="none" stroke="' + INK + '"/><rect x="9" y="14" width="6" height="6.5" fill="#e8f0e4" stroke="none"/><path d="M10.6 16.4l1.5 1.5 2.4-2.5" fill="none" stroke="' + GREEN + '" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
 
   function escapeText(value) {

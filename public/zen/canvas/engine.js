@@ -1,4 +1,4 @@
-/* zen-canvas.js — OMM-ZEN 通用画布框架
+/* zen/canvas.js — OMM-ZEN 通用画布框架
  *
  * 设计母本：omm-writer.html 的画布系统（是全项目最完善的画布实现）。
  * 抽取原则：
@@ -8,7 +8,7 @@
  *      改为依赖注入：nodeTypes / render / serialize / events / storage；
  *   3. 实例级状态，同一页面可挂多张画布，互不污染。
  *
- * 对外只暴露 ZenCanvas.create(options) -> instance；详见 zen-canvas/README.md。
+ * 对外只暴露 ZenCanvas.create(options) -> instance；详见 zen/canvas/README.md。
  */
 (function (global, factory) {
   'use strict'
@@ -300,8 +300,6 @@
     this.workspace.appendChild(this.inner)
     this.marquee = el('div', 'zc-marquee')
     this.workspace.appendChild(this.marquee)
-    this.menu = el('div', 'zc-context-menu')
-    this.workspace.appendChild(this.menu)
     mount.appendChild(this.workspace)
 
     if (this.opts.nodeTypes) {
@@ -415,7 +413,7 @@
 
   // ---- 节点 CRUDL -----------------------------------------------------
   ZenCanvasInstance.prototype.addNode = function (type, data, pos, opts) {
-    var def = this.types[type] || this.types.markdown || this.types._fallback
+    var def = this.types[type] || this.types._fallback
     if (!def) throw new Error('unknown node type: ' + type)
     data = assign({}, def.defaults || {}, data || {})
     var id = data.id || type + '-' + ++this.nodeSeq
@@ -475,7 +473,7 @@
     nodeRec.el = node
     this.state.nodes.push(nodeRec)
     if (nodeRec.locked) node.classList.add('locked')
-    if (nodeRec.minimized) node.classList.add('minimized')
+    if (nodeRec.minimized) this._applyMinimize(nodeRec, true)
 
     this._initNodeDrag(nodeRec)
     if (this.opts.editable) this._initNodeResize(nodeRec)
@@ -501,6 +499,42 @@
       },
       canvas: self,
     }
+  }
+
+  /* Collapse a node down to its header. Generic behaviour: the node box must
+     shrink with the content, otherwise hiding .node-content leaves an empty
+     body. The original height is kept so expanding restores exact geometry. */
+  ZenCanvasInstance.prototype._applyMinimize = function (rec, minimized) {
+    minimized = !!minimized
+    if (minimized === !!rec.minimized) return this
+    var node = rec.el
+    if (minimized) {
+      rec._restore = {
+        h: node.style.height,
+        minH: node.style.minHeight,
+      }
+      node.classList.add('minimized')
+      node.style.minHeight = '32px'
+      node.style.height = '32px'
+      var content = node.querySelector('.node-content')
+      var resize = node.querySelector('.node-resize')
+      if (content) content.style.display = 'none'
+      if (resize) resize.style.display = 'none'
+    } else {
+      var restore = rec._restore || {}
+      node.classList.remove('minimized')
+      node.style.height = restore.h || ''
+      node.style.minHeight = restore.minH || ''
+      var body = node.querySelector('.node-content')
+      var grip = node.querySelector('.node-resize')
+      if (body) body.style.display = ''
+      if (grip) grip.style.display = ''
+      rec._restore = null
+    }
+    rec.minimized = minimized
+    this.renderConnections()
+    if (typeof this.opts.onMinimize === 'function') this.opts.onMinimize(rec.id, minimized)
+    return this
   }
 
   ZenCanvasInstance.prototype.removeNode = function (id) {
@@ -555,10 +589,7 @@
       rec.locked = !!patch.locked
       rec.el.classList.toggle('locked', rec.locked)
     }
-    if (patch.minimized != null) {
-      rec.minimized = !!patch.minimized
-      rec.el.classList.toggle('minimized', rec.minimized)
-    }
+    if (patch.minimized != null) this._applyMinimize(rec, !!patch.minimized)
     this.refreshNode(id)
     this.emitNodeCommand(rec, 'updated')
     this._changed()
@@ -774,6 +805,21 @@
     return conn
   }
 
+  ZenCanvasInstance.prototype.selectConnection = function (id) {
+    if (!this.state.connections.some(function (c) { return c.id === id })) return this
+    this.state.selectedConnId = id
+    var self = this
+    this.state.selectedNodeIds.forEach(function (nid) {
+      var n = self._nodeEl(nid)
+      if (n) n.classList.remove('selected')
+    })
+    this.state.selectedNodeIds.clear()
+    this.renderConnections()
+    this.opts.onSelectionChange([])
+    this.bus.emit('selection', [])
+    return this
+  }
+
   ZenCanvasInstance.prototype.removeConnection = function (id) {
     var conn = this.state.connections.find(function (c) {
       return c.id === id
@@ -860,6 +906,12 @@
       var path = svgEl('path', 'conn-line' + (self.state.selectedConnId === conn.id ? ' selected' : ''))
       path.dataset.connId = conn.id
       path.setAttribute('d', d)
+      /* The visible stroke is selectable; Delete/Backspace then removes it.
+         The transparent hit path below still removes on a direct click. */
+      path.addEventListener('click', function (e) {
+        e.stopPropagation()
+        self.selectConnection(conn.id)
+      })
       self.svg.appendChild(path)
 
       var hit = svgEl('path', 'conn-delete-hit')
@@ -1064,9 +1116,10 @@
   // ---- 布局 -----------------------------------------------------------
   ZenCanvasInstance.prototype.autoLayout = function (strategy) {
     var self = this
-    var engine = (typeof global !== 'undefined' && global.ZenCanvasLayout) || this.opts.layout
+    var root = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : null)
+    var engine = (root && root.ZenCanvasLayout) || this.opts.layout
     if (!engine || typeof engine.computeCanvasLayout !== 'function') {
-      this.opts.notify('未找到布局引擎（zen-canvas/layout-engine.js）')
+      this.opts.notify('未找到布局引擎（zen/canvas/layout.js）')
       return this
     }
     var list = this.state.nodes.map(function (n) {
@@ -1304,7 +1357,7 @@
       x: rec.el.style.left,
       y: rec.el.style.top,
       w: rec.el.style.width,
-      h: rec.el.style.height,
+      h: rec.minimized && rec._restore ? rec._restore.h : rec.el.style.height,
       title: rec.data.title || def.label || rec.type,
       locked: rec.locked,
       minimized: rec.minimized,
@@ -1518,7 +1571,7 @@
       self2.showContextMenu(e)
     })
     document.addEventListener('mousedown', function (e) {
-      if (!e.target.closest('.zc-context-menu')) self2.menu.classList.remove('open')
+      if (!e.target.closest('.zenui-popmenu')) window.ZenUI.menu.close()
     })
   }
 
@@ -1583,7 +1636,7 @@
         } catch (_) {}
       }
       e.preventDefault()
-      self.menu.classList.remove('open')
+      window.ZenUI.menu.close()
       active = true
       additive = !!(e.shiftKey || e.ctrlKey || e.metaKey)
       base = additive ? new Set(self.state.selectedNodeIds) : new Set()
@@ -1658,7 +1711,6 @@
         self.autoLayout()
       } else if (e.key === 'Escape') {
         self.clearSelection()
-        self.menu.classList.remove('open')
       }
     }
     document.addEventListener('keydown', this._keyHandler)
@@ -1711,43 +1763,13 @@
         items.unshift({ label: '删除节点', danger: true, action: function () { self.deleteSelection() } })
       }
     }
-    this.menu.innerHTML = ''
-    items.forEach(function (item) {
-      if (item.separator || item === '-') {
-        self.menu.appendChild(el('div', 'zc-menu-sep'))
-        return
-      }
-      var row = el('div', 'zc-menu-item' + (item.disabled ? ' disabled' : ''))
-      row.innerHTML = '<span>' + escapeHtml(item.label) + '</span>' + (item.hint ? '<span class="faint">' + escapeHtml(item.hint) + '</span>' : '')
-      if (!item.disabled) {
-        row.addEventListener('click', function (ev) {
-          ev.stopPropagation()
-          self.menu.classList.remove('open')
-          item.action && item.action()
-        })
-      }
-      self.menu.appendChild(row)
-    })
-    var w = 190,
-      h = items.length * 30 + 10
-    this.menu.style.left = Math.min(e.clientX, window.innerWidth - w - 8) + 'px'
-    this.menu.style.top = Math.min(e.clientY, window.innerHeight - h - 8) + 'px'
-    this.menu.classList.add('open')
+    /* Menus are a shared UI concern: delegate to ZenUI so every product gets
+       the same overlay, keyboard handling and focus behaviour. */
+    window.ZenUI.menu.open(items, null, { x: e.clientX, y: e.clientY })
   }
 
-  ZenCanvasInstance.prototype.toast = function (msg) {
-    var t = document.querySelector('.zc-toast')
-    if (!t) {
-      t = el('div', 'zc-toast')
-      document.body.appendChild(t)
-    }
-    t.textContent = msg
-    t.classList.add('show')
-    var self = this
-    clearTimeout(this._toastTimer)
-    this._toastTimer = setTimeout(function () {
-      t.classList.remove('show')
-    }, 2200)
+  ZenCanvasInstance.prototype.toast = function (msg, opts) {
+    return window.ZenUI.toast(msg, opts)
   }
 
   ZenCanvasInstance.prototype.destroy = function () {

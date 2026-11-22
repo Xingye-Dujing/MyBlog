@@ -34,7 +34,7 @@
 **节点对象**（`nodes[]`）：`id` 全局唯一、非空（深度校验）；`type` 必需，是节点 op；`data` 必需，是对象，字段默认值见下表。
 
 **连线对象**（`connections[]`）：`from` / `to` 必需且非空（深度校验），指向已存在的节点 id；
-`fromPort` 默认 `"right"`、`toPort` 默认 `"left"`（与 zen-canvas 连线约定一致）。
+`fromPort` 默认 `"right"`、`toPort` 默认 `"left"`（与 zen/canvas 连线约定一致）。
 
 ---
 

@@ -1,6 +1,6 @@
 # 设计令牌
 
-真源是 `zen-style/tokens.css`。本文只列取值与用途；新增产品只读 `zen-*` 令牌，
+真源是 `zen/foundation/tokens.css`。本文只列取值与用途；新增产品只读 `zen-*` 令牌，
 legacy 别名仅供存量代码使用，新代码不要引用。
 
 ## 颜色（浅色 / 深色）

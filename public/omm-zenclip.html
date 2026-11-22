@@ -3,15 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
-    <script src="omm-desktop.js"></script>
+    <script src="zen/components/layer.js"></script>
+    <script src="zen/components/toast.js"></script>
+    <script src="zen/components/dialog.js"></script>
+    <script src="zen/components/select.js"></script>
+    <script src="zen/components/menu.js"></script>
+    <script src="zen/components/shortcuts.js"></script>
+    <script src="zen/components/index.js"></script>
+<script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <title>网页剪藏</title>
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="zen-style/zen.css">
+    <link rel="stylesheet" href="zen/zen.css">
+    <link rel="stylesheet" href="zen/features/tool.css" />
 <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
-  </head>
+</head>
   <body>
     <div id="app">
       <header class="top">
@@ -29,7 +37,7 @@
             <label class="zt-field"><span>标签（逗号分隔）</span><input id="clip-tags" placeholder="摘录,待读" /></label>
           </div>
           <div class="zt-row">
-            <label class="zt-field"><span>类型</span><select id="clip-kind"></select></label>
+            <label class="zt-field"><span>类型</span><select id="clip-kind" data-omm-select></select></label>
             <label class="zt-field"><span>批注</span><input id="clip-note" placeholder="可选" /></label>
           </div>
           <div class="zt-row tight">
@@ -81,10 +89,12 @@
         box.querySelectorAll('.item').forEach((el) => {
           el.querySelector('[data-act="del"]').addEventListener('click', () => { cards = cards.filter((c) => c.id !== el.dataset.id); save() })
           el.querySelector('[data-act="send"]').addEventListener('click', () => {
-            const target = prompt('发送到哪个产品？', 'writer'); if (!target) return
-            const card = cards.find((c) => c.id === el.dataset.id)
-            if (window.OMMShare?.send) window.OMMShare.send({ to: target, format: 'zen-card', payload: card }).then(() => toast('已发送')).catch(() => toast('发送失败'))
-            else toast('离线环境请用下载卡片包')
+            window.ZenUI.dialog.prompt('发送到哪个产品？', 'writer').then(function (target) {
+              if (!target) return
+              const card = cards.find((c) => c.id === el.dataset.id)
+              if (window.OMMShare?.send) window.OMMShare.send({ to: target, format: 'zen-card', payload: card }).then(() => toast('已发送')).catch(() => toast('发送失败'))
+              else toast('离线环境请用下载卡片包')
+            })
           })
         })
       }
@@ -108,7 +118,7 @@
         const pack = () => ZenCard.serializePack(cards, { name: 'ZenClip 剪藏' }, true)
         $('download-btn').addEventListener('click', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([pack()], { type: 'application/json' })); a.download = 'zenclip-pack.json'; a.click(); URL.revokeObjectURL(a.href) })
         $('copy-btn').addEventListener('click', async () => { try { await navigator.clipboard.writeText(pack()); toast('已复制') } catch { toast('复制失败') } })
-        $('clear-btn').addEventListener('click', () => { if (confirm('清空全部剪藏？')) { cards = []; save() } })
+        $('clear-btn').addEventListener('click', () => { window.ZenUI.dialog.confirm('清空全部剪藏？', { danger: true }).then((ok) => { if (ok) { cards = []; save() } }) })
       }
       if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
       load(); bind(); render()

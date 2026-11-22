@@ -77,7 +77,7 @@ def _copy_referenced_assets(html_name: str, dest: Path) -> None:
     """Copy every top-level JS/CSS file the staged page actually references.
 
     Hard-coded asset lists drift as products add shared modules (lib/zen-link.js,
-    viz-bridge.js, lib/data-viz.js, zen-canvas/layout-engine.js, …), producing EXEs whose
+    viz-bridge.js, lib/data-viz.js, zen/canvas/layout.js, …), producing EXEs whose
     <script src> tags 404. Deriving the list from the page keeps staging honest.
     Vendor/remote paths are handled by copy_vendor and are deliberately skipped.
     """
@@ -107,22 +107,23 @@ def _copy_common(dest: Path) -> None:
 
 
 def copy_zen_styles(dest: Path) -> None:
-    """Stage the layered OMM-ZEN stylesheet referenced as zen-style/*.
+    """Stage the shared visual assets: foundation / features / products.
 
-    _copy_referenced_assets skips paths with a slash, so the shared style tree
-    must be copied explicitly, just like the canvas framework. Every product
-    links zen-style/zen.css; editing that tree then updates all products.
+    _copy_referenced_assets skips paths with a slash, so these trees must be
+    copied explicitly. Every product links zen/zen.css; editing them updates
+    all products at the next build.
     """
-    src = ROOT / "zen-style"
-    if src.is_dir():
-        shutil.copytree(src, dest / "zen-style", dirs_exist_ok=True)
+    for tree in ("foundation", "features", "products"):
+        src = ROOT / "zen" / tree
+        if src.is_dir():
+            shutil.copytree(src, dest / "zen" / tree, dirs_exist_ok=True)
 
 
 def copy_shared_lib(dest: Path) -> None:
     """Stage public/lib/* referenced as lib/<module>.js.
 
     _copy_referenced_assets skips any path containing a slash, so the shared
-    module folder must be copied explicitly, like zen-style and zen-canvas.
+    module folder must be copied explicitly, like zen/ and zen/canvas.
     Internal imports between lib modules stay relative and keep working.
     """
     src = ROOT / "lib"
@@ -130,17 +131,28 @@ def copy_shared_lib(dest: Path) -> None:
         shutil.copytree(src, dest / "lib", dirs_exist_ok=True)
 
 
+def copy_zen_ui(dest: Path) -> None:
+    """Stage the shared OMM-ZEN UI library referenced as zen/components/*.
+
+    Every product links the same component entry (select / dialog / picker),
+    so the library must travel with each plugin directory.
+    """
+    src = ROOT / "zen/components"
+    if src.is_dir():
+        shutil.copytree(src, dest / "zen/components", dirs_exist_ok=True)
+
+
 def copy_canvas_framework(dest: Path) -> None:
-    """Stage the shared canvas framework referenced as zen-canvas/*.
+    """Stage the shared canvas framework referenced as zen/canvas/*.
 
     _copy_referenced_assets deliberately skips paths with a slash (vendor and
     remote URLs), so shared framework folders must be staged explicitly.
-    Every canvas product gets the same copy; editing zen-canvas/ then updates
+    Every canvas product gets the same copy; editing zen/canvas/ then updates
     all of them at the next build.
     """
-    src = ROOT / "zen-canvas"
+    src = ROOT / "zen/canvas"
     if src.is_dir():
-        shutil.copytree(src, dest / "zen-canvas", dirs_exist_ok=True)
+        shutil.copytree(src, dest / "zen/canvas", dirs_exist_ok=True)
 
 
 def copy_video_runtime(dest: Path) -> None:
@@ -217,6 +229,7 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
     _copy_referenced_assets(html_name, dest)
     copy_zen_styles(dest)
+    copy_zen_ui(dest)
     copy_shared_lib(dest)
     copy_canvas_framework(dest)
     copy_vendor(dest, app_id)
@@ -239,6 +252,7 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets(item["entry"], dest)
     copy_zen_styles(dest)
+    copy_zen_ui(dest)
     copy_shared_lib(dest)
     copy_canvas_framework(dest)
     if item.get("apl_font"):
@@ -268,6 +282,7 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets("omm-hub.html", dest)
     copy_zen_styles(dest)
+    copy_zen_ui(dest)
     copy_shared_lib(dest)
     _copy_common(dest)
     for asset in common_assets:
