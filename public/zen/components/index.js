@@ -46,9 +46,9 @@
         for (var j = 0; j < added.length; j++) {
           var node = added[j]
           if (!node || node.nodeType !== 1) continue
-          if (node.matches && node.matches('select[data-zen-select],select[data-omm-select]')) {
+          if (node.matches && node.matches('select[data-zen-select]')) {
             ui.select.enhance(node)
-          } else if (node.querySelector && node.querySelector('select[data-zen-select],select[data-omm-select]')) {
+          } else if (node.querySelector && node.querySelector('select[data-zen-select]')) {
             ui.select.enhance(node)
           }
           if (ui.picker) {

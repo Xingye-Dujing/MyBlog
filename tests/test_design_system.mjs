@@ -102,8 +102,10 @@ test('候选区不再使用浏览器原生 select 弹窗', () => {
   for (const file of files) {
     const text = read(file)
     for (const m of text.matchAll(/<select\b[^>]*>/g)) {
-      assert.ok(/data-(?:zen|omm)-select/.test(m[0]),
+      assert.ok(/data-zen-select/.test(m[0]),
         `${file} 存在未接入 OMM-ZEN UI 的 select: ${m[0].slice(0, 120)}`)
+      assert.ok(!/data-omm-select/.test(m[0]),
+        `${file} 仍使用已废弃的 data-omm-select: ${m[0].slice(0, 120)}`)
     }
   }
 })

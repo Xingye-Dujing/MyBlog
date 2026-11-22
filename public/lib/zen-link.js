@@ -114,7 +114,7 @@ function openPanel() {
     '<textarea id="zlp-text" style="width:100%;min-height:72px;border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:7px;box-sizing:border-box" placeholder="要剪藏的内容"></textarea>' +
     '<div style="display:flex;gap:6px;margin-top:6px">' +
     '<input id="zlp-tags" style="flex:1;border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px" placeholder="标签，逗号分隔" />' +
-    '<select id="zlp-kind" data-omm-select style="border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px">' +
+    '<select id="zlp-kind" data-zen-select style="border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px">' +
     ZenCard.KINDS.map((k) => `<option value="${k}">${k}</option>`).join('') + '</select></div>' +
     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
     '<button class="zlp-send" data-to="" style="padding:5px 9px">存本地</button>' +

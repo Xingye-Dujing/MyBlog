@@ -31,6 +31,18 @@ test('每个产品都引用共享核心资产（含 Lambda 入口页）', () => 
   }
 })
 
+test('无废弃兼容别名回潮', () => {
+  const files = [
+    ...PAGES,
+    'public/lib/zen-table.js', 'public/lib/zen-video.js', 'public/lib/zen-link.js',
+    'public/zen/components/select.js', 'public/zen/components/index.js',
+    'public/zen/components/components.css',
+  ]
+  for (const file of files) {
+    assert.ok(!read(file).includes('data-omm-select'), `${file} 仍使用废弃的 data-omm-select`)
+  }
+})
+
 test('产品不再自带 Toast 节点与 DOM 实现', () => {
   for (const page of PAGES) {
     const text = read(page)

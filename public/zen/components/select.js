@@ -5,7 +5,6 @@
  *
  *   <select data-zen-select> ... </select>
  *
- * `data-omm-select` is accepted as a legacy alias.
  * API: ZenUI.select.enhance(root) · ZenUI.select.close()
  */
 ;(function (global) {
@@ -16,7 +15,7 @@
 
   var active = null
   var wiredLayer = null
-  var SELECTOR = 'select[data-zen-select],select[data-omm-select]'
+  var SELECTOR = 'select[data-zen-select]'
 
   function wireMenu() {
     var l = layer.get()

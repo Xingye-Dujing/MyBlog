@@ -279,7 +279,7 @@
       var value = rec.data[fd.key]
       html += '<label class="field"><span>' + esc(fd.label) + '</span>'
       if (fd.type === 'select') {
-        html += '<select data-omm-select data-key="' + esc(fd.key) + '">'
+        html += '<select data-zen-select data-key="' + esc(fd.key) + '">'
         ;(fd.options || []).forEach(function (opt) {
           var label = (fd.optionsLabel && fd.optionsLabel[opt]) || opt
           html += '<option value="' + esc(opt) + '"' + (String(value) === String(opt) ? ' selected' : '') + '>' + esc(label) + '</option>'

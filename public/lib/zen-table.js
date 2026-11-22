@@ -470,7 +470,7 @@
     var value = rec.data[fd.key]
     var html = '<label class="field"><span>' + esc(fd.label) + '</span>'
     if (fd.type === 'select') {
-      html += '<select data-omm-select data-key="' + esc(fd.key) + '">'
+      html += '<select data-zen-select data-key="' + esc(fd.key) + '">'
       optionsOf(fd).forEach(function (opt) {
         html += '<option value="' + esc(optionValue(opt)) + '"' +
           (String(value === undefined ? '' : value) === optionValue(opt) ? ' selected' : '') + '>' +
@@ -486,7 +486,7 @@
         '<div class="hintline">' + esc(value || '尚未选择文件') + '</div>'
     } else if (fd.type === 'sheets') {
       var sheets = bookMeta ? bookMeta.sheets.map(function (s) { return s.name }) : []
-      html += '<select data-omm-select data-key="' + esc(fd.key) + '"><option value="">（请先导入 Excel）</option>' +
+      html += '<select data-zen-select data-key="' + esc(fd.key) + '"><option value="">（请先导入 Excel）</option>' +
         sheets.map(function (s) {
           return '<option value="' + esc(s) + '"' + (value === s ? ' selected' : '') + '>' + esc(s) + '</option>'
         }).join('') + '</select>'
@@ -499,7 +499,7 @@
       }).join('') : '<span class="hintline">请先导入 Excel</span>') + '</div>'
     } else if (fd.type === 'factor') {
       var fv = value || {}
-      html += '<div class="field-row"><select data-omm-select data-factor="mode">' +
+      html += '<div class="field-row"><select data-zen-select data-factor="mode">' +
         ['column:乘某一列', 'header:按表头名称', 'constant:固定数值'].map(function (o) {
           var p = o.split(':')
           return '<option value="' + p[0] + '"' + (fv.mode === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'
@@ -511,7 +511,7 @@
         '<div class="field-row"><button class="menu-btn" data-lookup-preset="' + esc(fd.key) + '">载入加班补贴标准</button></div>'
     } else if (fd.type === 'condition') {
       var cond = value || { logic: 'and', rules: [], then: 1, else: 0 }
-      html += '<select data-omm-select data-cond="logic"><option value="and"' + (cond.logic === 'and' ? ' selected' : '') +
+      html += '<select data-zen-select data-cond="logic"><option value="and"' + (cond.logic === 'and' ? ' selected' : '') +
         '>同时满足</option><option value="or"' + (cond.logic === 'or' ? ' selected' : '') + '>满足任一</option></select>' +
         renderTableEditor('cond-rules', ['column', 'op', 'value'], ['列', '比较', '值'], cond.rules || [], true) +
         '<div class="field-row"><input type="text" data-cond="then" placeholder="成立时" value="' + esc(cond.then) + '" />' +
@@ -727,7 +727,7 @@
       host.innerHTML = '<div class="empty">没有可预览的工作表。</div>'
       return
     }
-    host.innerHTML = '<div class="field"><span>预览工作表</span><select id="preview-sheet" data-omm-select>' +
+    host.innerHTML = '<div class="field"><span>预览工作表</span><select id="preview-sheet" data-zen-select>' +
       sheets.map(function (s) {
         return '<option value="' + esc(s.name) + '"' + (s.name === name ? ' selected' : '') + '>' +
           esc(s.name) + '</option>'
