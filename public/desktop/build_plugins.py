@@ -28,6 +28,9 @@ DIST = ROOT / "dist"
 OUT = DIST / "plugins"
 REPO = "Xingye-Dujing/my-blog"
 GITHUB_REPO = "Xingye-Dujing/MyBlog"
+# Gitee rejects attachments larger than 100 MB.  Oversized Windows assets are
+# hosted on GitHub instead; catalog entries still pin version and checksum.
+GITEE_MAX_ATTACHMENT = 100 * 1024 * 1024
 
 FRAMEWORKS = {
     "win64": "OMM-ZEN-Framework-win64.zip",
@@ -90,7 +93,8 @@ def main() -> None:
         "version": VERSION,
         "tag": args.tag,
         # macOS assets are too large for Gitee's 1 GB attachment quota and are
-        # hosted on GitHub; Windows/plugins stay on Gitee for fast access.
+        # hosted on GitHub; Windows/plugins stay on Gitee for fast access,
+        # except individual files above GITEE_MAX_ATTACHMENT.
         "base_url": github_base,
         "gitee_url": base,
         # Stable links that always point at the newest release.
@@ -132,16 +136,17 @@ def main() -> None:
         # "url" stays pinned to this release: it carries the SHA-256 of
         # exactly this file.  "latest_url" is the version-independent
         # address for people who just want the newest build.
-        latest_host = gitee_latest if platform == "win64" else github_latest
+        local = DIST / asset
+        size = local.stat().st_size if local.is_file() else 0
+        on_gitee = platform == "win64" and size <= GITEE_MAX_ATTACHMENT
         entry = {
-            "url": (base if platform == "win64" else github_base) + "/" + asset,
-            "latest_url": latest_host + "/" + asset,
+            "url": ((base if on_gitee else github_base) + "/" + asset),
+            "latest_url": ((gitee_latest if on_gitee else github_latest) + "/" + asset),
             "bundle": asset,
         }
-        local = DIST / asset
         if local.is_file():
             entry["sha256"] = sha256(local)
-            entry["size"] = local.stat().st_size
+            entry["size"] = size
         catalog["frameworks"][platform] = entry
 
     for app_id, name in DESKTOP_EXE_NAMES.items():
@@ -149,13 +154,17 @@ def main() -> None:
         if not local.is_file():
             continue
         bundle = name + ".exe"
+        size = local.stat().st_size
+        # The full workbench can exceed Gitee's attachment limit; use GitHub
+        # for those binaries so self-update never points at a missing file.
+        on_gitee = size <= GITEE_MAX_ATTACHMENT
         catalog["apps"][app_id] = {
             "version": VERSION,
-            "url": base + "/" + bundle,
-            "latest_url": gitee_latest + "/" + bundle,
+            "url": ((base if on_gitee else github_base) + "/" + bundle),
+            "latest_url": ((gitee_latest if on_gitee else github_latest) + "/" + bundle),
             "bundle": bundle,
             "sha256": sha256(local),
-            "size": local.stat().st_size,
+            "size": size,
         }
 
     catalog_path = DIST / "catalog.json"
