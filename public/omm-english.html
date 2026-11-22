@@ -576,31 +576,8 @@ notify pgrst, 'reload schema';</textarea
       </div>
     </template>
 
-    <!-- Word drawing enlarged viewer -->
-    <div
-      id="sketch-viewer"
-      class="sketch-viewer"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sketch-viewer-title"
-      aria-hidden="true"
-      inert
-    >
-      <div class="sketch-viewer-head">
-        <div class="sketch-viewer-title" id="sketch-viewer-title">查看绘画</div>
-        <button
-          class="sketch-viewer-close"
-          id="sketch-viewer-close"
-          type="button"
-          title="关闭"
-          aria-label="关闭"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m7 7 10 10"></path>
-            <path d="m17 7-10 10"></path>
-          </svg>
-        </button>
-      </div>
+    <!-- Word drawing enlarged viewer · shell provided by shared ZenUI.modal -->
+    <template id="sketch-viewer-tpl">
       <div class="sketch-viewer-board">
         <canvas
           id="sketch-viewer-canvas"
@@ -608,20 +585,11 @@ notify pgrst, 'reload schema';</textarea
           aria-label="绘画放大预览"
         ></canvas>
       </div>
-    </div>
+    </template>
 
-    <!-- Word drawing editor / viewer -->
-    <div
-      id="sketch-editor"
-      class="sketch-editor"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sketch-title"
-      aria-hidden="true"
-      inert
-    >
+    <!-- Word drawing editor · shell provided by shared ZenUI.modal -->
+    <template id="sketch-editor-tpl">
       <div class="sketch-head">
-        <div class="sketch-title" id="sketch-title">我的绘画</div>
         <button class="sketch-tool" id="sketch-undo" type="button" title="撤销" aria-label="撤销">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M9 8 5 12l4 4"></path>
@@ -733,12 +701,6 @@ notify pgrst, 'reload schema';</textarea
             <path d="M14 11v5"></path>
           </svg>
         </button>
-        <button class="sketch-tool" id="sketch-close" type="button" title="关闭" aria-label="关闭">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m7 7 10 10"></path>
-            <path d="m17 7-10 10"></path>
-          </svg>
-        </button>
       </div>
       <div class="sketch-board">
         <canvas id="sketch-canvas" class="sketch-canvas"></canvas>
@@ -751,7 +713,7 @@ notify pgrst, 'reload schema';</textarea
         </button>
         <button class="mini-btn solid" id="sketch-save" type="button">保存绘画</button>
       </div>
-    </div>
+    </template>
 
     <!-- Word popover -->
     <div id="wpop"></div>
@@ -6925,57 +6887,63 @@ notify pgrst, 'reload schema';</textarea
             drawStroke(ctx, st, rect.width, rect.height),
           )
         }
+        let sketchViewerHandle = null
+        let sketchEditorHandle = null
+        function sketchTpl(id) {
+          const t = document.getElementById(id)
+          return t ? t.innerHTML : ''
+        }
         function openSketchViewer(word) {
           word = String(word || '').trim()
           if (!word || !getDrawing(word)) return
-          const viewer = $('#sketch-viewer')
-          if (!viewer) return
+          if (sketchViewerHandle) sketchViewerHandle.close()
           const active = document.activeElement
           DRAW.viewerReturnFocus =
             active && active !== document.body && typeof active.focus === 'function' ? active : null
-          $('#sketch-viewer-title').textContent = '查看绘画 · ' + word
-          viewer.inert = false
-          viewer.setAttribute('aria-hidden', 'false')
-          viewer.classList.add('open')
-          requestAnimationFrame(() => renderSketchViewer(word))
-          setTimeout(() => {
-            const close = $('#sketch-viewer-close')
-            if (close) close.focus({ preventScroll: true })
-          }, 0)
+          sketchViewerHandle = window.ZenUI.modal.open({
+            title: '查看绘画 · ' + word,
+            width: 'min(1160px, 96vw)',
+            html: sketchTpl('sketch-viewer-tpl'),
+            // Product JS still queries these ids with $()/getElementById; map them
+            // onto the fresh shared host so every open resolves to the live nodes.
+            ids: { title: 'sketch-viewer-title', close: 'sketch-viewer-close' },
+            onMount: function () {
+              requestAnimationFrame(() => renderSketchViewer(word))
+            },
+            onClose: function () {
+              sketchViewerHandle = null
+              const back = DRAW.viewerReturnFocus
+              DRAW.viewerReturnFocus = null
+              if (back && back.isConnected && typeof back.focus === 'function') {
+                requestAnimationFrame(() => {
+                  try {
+                    back.focus({ preventScroll: true })
+                  } catch (_) {
+                    try {
+                      back.focus()
+                    } catch (_) {}
+                  }
+                })
+              }
+            },
+          })
         }
         function closeSketchViewer() {
-          const viewer = $('#sketch-viewer')
-          if (!viewer) return
-          const active = document.activeElement
-          if (active && viewer.contains(active) && typeof active.blur === 'function') active.blur()
-          viewer.classList.remove('open')
-          viewer.setAttribute('aria-hidden', 'true')
-          viewer.inert = true
-          const back = DRAW.viewerReturnFocus
-          DRAW.viewerReturnFocus = null
-          if (back && back.isConnected && typeof back.focus === 'function') {
-            requestAnimationFrame(() => {
-              try {
-                back.focus({ preventScroll: true })
-              } catch (_) {
-                try {
-                  back.focus()
-                } catch (_) {}
-              }
-            })
-          }
+          if (sketchViewerHandle) sketchViewerHandle.close()
+          else window.ZenUI.modal.close()
         }
 
         let _sketchResizeTimer = 0
         let _sketchBoardRO = null
         function onSketchWindowResize() {
-          if (!$('#sketch-editor') || !$('#sketch-editor').classList.contains('open')) return
+          if (!sketchEditorHandle) return
           clearTimeout(_sketchResizeTimer)
           _sketchResizeTimer = setTimeout(() => fitDrawingCanvas(), 60)
         }
         function startSketchBoardWatch() {
           stopSketchBoardWatch()
-          const board = document.querySelector('#sketch-editor .sketch-board')
+          const canvas = document.getElementById('sketch-canvas')
+          const board = canvas ? canvas.parentElement : null
           if (!board) return
           if (typeof ResizeObserver === 'function') {
             try {
@@ -7044,8 +7012,7 @@ notify pgrst, 'reload schema';</textarea
         function openSketch(word, mode) {
           word = String(word || '').trim()
           if (!word) return
-          const wrap = $('#sketch-editor')
-          if (!wrap) return
+          if (sketchEditorHandle) sketchEditorHandle.close()
           const saved = getDrawing(word)
           DRAW.word = word
           DRAW.mode = mode === 'view' ? 'view' : 'edit'
@@ -7063,89 +7030,86 @@ notify pgrst, 'reload schema';</textarea
           DRAW.returnFocus =
             activeBeforeOpen &&
             activeBeforeOpen !== document.body &&
-            !wrap.contains(activeBeforeOpen) &&
             typeof activeBeforeOpen.focus === 'function'
               ? activeBeforeOpen
               : null
-          wrap.classList.toggle('sketch-readonly', DRAW.mode === 'view')
-          wrap.inert = false
-          wrap.setAttribute('aria-hidden', 'false')
-          wrap.classList.add('open')
-          $('#sketch-title').textContent =
-            (DRAW.mode === 'view' ? '查看绘画 · ' : '编辑绘画 · ') + word
-          updateSketchColorUI()
-          $('#sketch-width').value = String(DRAW.width)
-          $('#sketch-width-number').value = String(DRAW.width)
-          $('#sketch-save').style.display = DRAW.mode === 'edit' ? '' : 'none'
-          $('#sketch-view-edit').style.display = DRAW.mode === 'view' ? '' : 'none'
-          $('#sketch-eraser').style.display = DRAW.mode === 'edit' ? '' : 'none'
-          $('#sketch-clear').style.display = DRAW.mode === 'edit' ? '' : 'none'
-          $('#sketch-undo').style.display = DRAW.mode === 'edit' ? '' : 'none'
-          $('#sketch-redo').style.display = DRAW.mode === 'edit' ? '' : 'none'
-          const colorButton = $('#sketch-color')
-          if (colorButton) {
-            colorButton.removeAttribute('disabled')
-            colorButton.setAttribute('aria-disabled', DRAW.mode === 'edit' ? 'false' : 'true')
-            colorButton.tabIndex = DRAW.mode === 'edit' ? 0 : -1
-            colorButton.classList.toggle('disabled', DRAW.mode !== 'edit')
-          }
-          $('#sketch-width').disabled = DRAW.mode !== 'edit'
-          $('#sketch-width-number').disabled = DRAW.mode !== 'edit'
-          $$('#sketch-width-stages .sketch-width-stage').forEach((btn) => {
-            btn.disabled = DRAW.mode !== 'edit'
+          const title = (DRAW.mode === 'view' ? '查看绘画 · ' : '编辑绘画 · ') + word
+          sketchEditorHandle = window.ZenUI.modal.open({
+            title: title,
+            width: 'min(760px, 96vw)',
+            html: sketchTpl('sketch-editor-tpl'),
+            // Product JS queries these ids with $()/getElementById; the title and
+            // × close live on the fresh shared host, the rest stay in the template.
+            ids: { title: 'sketch-title', close: 'sketch-close' },
+            onMount: function () {
+              bindSketchBoard()
+              updateSketchColorUI()
+              $('#sketch-width').value = String(DRAW.width)
+              $('#sketch-width-number').value = String(DRAW.width)
+              $('#sketch-save').style.display = DRAW.mode === 'edit' ? '' : 'none'
+              $('#sketch-view-edit').style.display = DRAW.mode === 'view' ? '' : 'none'
+              $('#sketch-eraser').style.display = DRAW.mode === 'edit' ? '' : 'none'
+              $('#sketch-clear').style.display = DRAW.mode === 'edit' ? '' : 'none'
+              $('#sketch-undo').style.display = DRAW.mode === 'edit' ? '' : 'none'
+              $('#sketch-redo').style.display = DRAW.mode === 'edit' ? '' : 'none'
+              const colorButton = $('#sketch-color')
+              if (colorButton) {
+                colorButton.removeAttribute('disabled')
+                colorButton.setAttribute('aria-disabled', DRAW.mode === 'edit' ? 'false' : 'true')
+                colorButton.tabIndex = DRAW.mode === 'edit' ? 0 : -1
+                colorButton.classList.toggle('disabled', DRAW.mode !== 'edit')
+              }
+              $('#sketch-width').disabled = DRAW.mode !== 'edit'
+              $('#sketch-width-number').disabled = DRAW.mode !== 'edit'
+              $$('#sketch-width-stages .sketch-width-stage').forEach((btn) => {
+                btn.disabled = DRAW.mode !== 'edit'
+              })
+              const closeButton = $('#sketch-close')
+              if (closeButton) {
+                const closeLabel = DRAW.mode === 'edit' ? '取消' : '关闭'
+                closeButton.title = closeLabel
+                closeButton.setAttribute('aria-label', closeLabel)
+              }
+              $('#sketch-hint').textContent =
+                DRAW.mode === 'edit'
+                  ? 'Apple Pencil / 手指直接绘制 · 松手即成一笔'
+                  : '只读显示 · 点“编辑”继续绘制'
+              setTimeout(() => {
+                fitDrawingCanvas()
+                updateSketchToolState()
+                startSketchBoardWatch()
+                // A few engines settle the sheet layout one frame late.
+                if (typeof requestAnimationFrame === 'function') {
+                  requestAnimationFrame(() => fitDrawingCanvas())
+                }
+              }, 0)
+            },
+            onClose: function () {
+              sketchEditorHandle = null
+              DRAW.word = ''
+              DRAW.stroke = null
+              DRAW.eraserCursor = null
+              hideEraserCursor()
+              stopSketchBoardWatch()
+              const returnFocus = DRAW.returnFocus
+              DRAW.returnFocus = null
+              if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+                requestAnimationFrame(() => {
+                  try {
+                    returnFocus.focus({ preventScroll: true })
+                  } catch (_) {
+                    try {
+                      returnFocus.focus()
+                    } catch (_) {}
+                  }
+                })
+              }
+            },
           })
-          const closeButton = $('#sketch-close')
-          if (closeButton) {
-            const closeLabel = DRAW.mode === 'edit' ? '取消' : '关闭'
-            closeButton.title = closeLabel
-            closeButton.setAttribute('aria-label', closeLabel)
-          }
-          $('#sketch-hint').textContent =
-            DRAW.mode === 'edit'
-              ? 'Apple Pencil / 手指直接绘制 · 松手即成一笔'
-              : '只读显示 · 点“编辑”继续绘制'
-          setTimeout(() => {
-            fitDrawingCanvas()
-            updateSketchToolState()
-            startSketchBoardWatch()
-            // A few engines settle the sheet layout one frame late.
-            if (typeof requestAnimationFrame === 'function') {
-              requestAnimationFrame(() => fitDrawingCanvas())
-            }
-          }, 0)
         }
         function closeSketch() {
-          const w = $('#sketch-editor')
-          if (!w) return
-
-          // Remove focus from any descendant before hiding the editor from AT.
-          const active = document.activeElement
-          if (active && w.contains(active) && typeof active.blur === 'function') {
-            active.blur()
-          }
-
-          w.classList.remove('open')
-          w.setAttribute('aria-hidden', 'true')
-          w.inert = true
-          DRAW.word = ''
-          DRAW.stroke = null
-          DRAW.eraserCursor = null
-          hideEraserCursor()
-          stopSketchBoardWatch()
-
-          const returnFocus = DRAW.returnFocus
-          DRAW.returnFocus = null
-          if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
-            requestAnimationFrame(() => {
-              try {
-                returnFocus.focus({ preventScroll: true })
-              } catch (_) {
-                try {
-                  returnFocus.focus()
-                } catch (_) {}
-              }
-            })
-          }
+          if (sketchEditorHandle) sketchEditorHandle.close()
+          else window.ZenUI.modal.close()
         }
         function saveSketch() {
           if (DRAW.mode !== 'edit' || !DRAW.word) return
@@ -7331,7 +7295,7 @@ notify pgrst, 'reload schema';</textarea
           '#1d4ed8',
         ]
         // The delegated listeners below are the primary path. Every control also
-        // gets a direct binding in initSketchBoard() because some in-app engines
+        // gets a direct binding in bindSketchBoard() because some in-app engines
         // (older WeChat X5/XWEB, XBrowser, legacy Android WebView) do not bubble
         // click when the innermost target is an SVG child, which silently kills
         // purely delegated handlers. `stopPropagation` in the capture listener
@@ -7360,19 +7324,8 @@ notify pgrst, 'reload schema';</textarea
           if (document.documentElement.dataset.sketchHandlersReady === '1') return
           document.documentElement.dataset.sketchHandlersReady = '1'
 
-          document.addEventListener(
-            'click',
-            (e) => {
-              const el = delegatedEl(e)
-              if (el && el.closest('#sketch-viewer-close')) {
-                e.preventDefault()
-                e.__zeSketchHandled = '1'
-                closeSketchViewer()
-              }
-            },
-            true,
-          )
-
+          // Viewer / editor close is owned by the shared ZenUI.modal stack
+          // (× / backdrop / Escape); only color-picker behaviour is delegated here.
           document.addEventListener(
             'click',
             (e) => {
@@ -7458,9 +7411,13 @@ notify pgrst, 'reload schema';</textarea
         }
         function initSketchBoard() {
           installSketchDelegatedHandlers()
+        }
+        // Shared hosts are fresh on every open, so the toolbar / canvas
+        // listeners must be wired in the modal's onMount, not once at boot.
+        function bindSketchBoard() {
+          installSketchDelegatedHandlers()
           bindSketchInput($('#sketch-canvas'))
 
-          bindOnce($('#sketch-close'), 'click', closeSketch)
           bindOnce($('#sketch-save'), 'click', saveSketch)
           bindOnce($('#sketch-undo'), 'click', sketchUndo)
           bindOnce($('#sketch-redo'), 'click', sketchRedo)
@@ -7468,7 +7425,6 @@ notify pgrst, 'reload schema';</textarea
           bindOnce($('#sketch-view-edit'), 'click', () => {
             if (DRAW.word) openSketch(DRAW.word, 'edit')
           })
-          bindOnce($('#sketch-viewer-close'), 'click', (e) => zeOnce(e, closeSketchViewer))
 
           initSketchColorPicker()
 
@@ -12548,14 +12504,8 @@ notify pgrst, 'reload schema';</textarea
           const tag = (e.target.tagName || '').toUpperCase()
           const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
           if (e.key === 'Escape') {
-            if ($('#sketch-viewer').classList.contains('open')) {
-              closeSketchViewer()
-              return
-            }
-            if ($('#sketch-editor').classList.contains('open')) {
-              closeSketch()
-              return
-            }
+            // Sketch viewer / editor Escape is handled by the shared ZenUI.layer
+            // stack while their modal is on top; no private branch needed here.
             closePops()
             if (modalIsOpen) {
               modalClose()

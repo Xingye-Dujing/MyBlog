@@ -157,8 +157,10 @@
       <button class="menu-item" type="button" data-preset="focus"><span class="check"></span>专注当前窗格<span class="hint">Esc</span></button>
     </div>
     <div class="popover" id="ctx-menu" hidden></div>
-    <div id="plugin-panel" class="plugin-panel" hidden>
-      <div class="pp-card" role="dialog" aria-modal="true" aria-labelledby="pp-title">
+    <!-- Hub dialogs: the shared ZenUI.modal owns the shell (backdrop, Escape,
+         stacking, focus). Product content is stamped into a hidden holder and
+         mounted into the shared modal on open. -->
+    <template id="hub-plugin-tpl">
         <header class="pp-head">
           <div>
             <div class="pp-title" id="pp-title">插件管理</div>
@@ -174,10 +176,8 @@
           <button class="pp-tab" type="button" data-pp-tab="spec">插件规范</button>
         </nav>
         <div class="pp-body" id="pp-body"></div>
-      </div>
-    </div>
-    <div id="hub-settings" class="plugin-panel" hidden>
-      <div class="pp-card settings-card" role="dialog" aria-modal="true" aria-labelledby="hub-settings-title">
+    </template>
+    <template id="hub-settings-tpl">
         <header class="pp-head">
           <div>
             <div class="pp-title" id="hub-settings-title">设置</div>
@@ -421,22 +421,18 @@
           <button class="pp-btn" type="button" id="hub-settings-reset">恢复外观默认</button>
           <button class="pp-btn primary" type="button" id="hub-settings-done">完成</button>
         </footer>
-      </div>
-    </div>
+    </template>
     <div id="tabs-more" class="popover tabs-more" hidden></div>
     <div id="notify-panel" class="popover notify-panel" hidden>
       <div class="notify-head"><b>通知</b><button class="notify-clear" type="button" id="notify-clear">清空</button></div>
       <div class="notify-list" id="notify-list"></div>
     </div>
-    <div id="command-palette" class="cmdk" hidden>
-      <div class="cmdk-card" role="dialog" aria-modal="true" aria-label="命令面板">
+    <template id="hub-cmdk-tpl">
         <input class="cmdk-input" id="cmdk-input" type="text" placeholder="搜索应用、动作、最近文件或共享项目…" autocomplete="off" spellcheck="false" />
         <div class="cmdk-list" id="cmdk-list"></div>
         <div class="cmdk-foot"><span>↑↓ 选择</span><span>Enter 打开</span><span>Esc 关闭</span><span>Ctrl+K 随时呼出</span></div>
-      </div>
-    </div>
-    <div id="global-search" class="cmdk gsearch" hidden>
-      <div class="cmdk-card gsearch-card" role="dialog" aria-modal="true" aria-label="全局内容搜索">
+    </template>
+    <template id="hub-gsearch-tpl">
         <div class="gsearch-head">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L21 21" /></svg>
           <input class="cmdk-input" id="gsearch-input" type="text" placeholder="搜索所有产品的文档内容…（至少输入 1 个字）" autocomplete="off" spellcheck="false" />
@@ -445,10 +441,8 @@
         <div class="gsearch-meta" id="gsearch-meta"></div>
         <div class="cmdk-list gsearch-list" id="gsearch-list"></div>
         <div class="cmdk-foot"><span>↑↓ 选择</span><span>Enter 打开</span><span>Esc 关闭</span><span>跨产品的存档内容</span></div>
-      </div>
-    </div>
-    <div id="knowledge-graph" class="plugin-panel" hidden>
-      <div class="pp-card graph-card" role="dialog" aria-modal="true" aria-label="知识图谱">
+    </template>
+    <template id="hub-graph-tpl">
         <header class="pp-head">
           <div>
             <div class="pp-title">知识图谱</div>
@@ -464,10 +458,8 @@
             <div class="kg-list" id="kg-list"></div>
           </div>
         </div>
-      </div>
-    </div>
-    <div id="data-flow" class="plugin-panel" hidden>
-      <div class="pp-card flow-card" role="dialog" aria-modal="true" aria-label="数据流">
+    </template>
+    <template id="hub-flow-tpl">
         <header class="pp-head">
           <div>
             <div class="pp-title">数据流</div>
@@ -482,10 +474,8 @@
             <div id="flow-event-list"></div>
           </div>
         </div>
-      </div>
-    </div>
-    <div id="today-panel" class="plugin-panel" hidden>
-      <div class="pp-card today-card" role="dialog" aria-modal="true" aria-label="今日">
+    </template>
+    <template id="hub-today-tpl">
         <header class="pp-head">
           <div>
             <div class="pp-title">今日</div>
@@ -494,10 +484,8 @@
           <button class="pp-close" type="button" id="today-close" title="关闭">×</button>
         </header>
         <div class="pp-body today-body" id="today-body"></div>
-      </div>
-    </div>
-    <div id="timeline-panel" class="plugin-panel" hidden>
-      <div class="pp-card timeline-card" role="dialog" aria-modal="true" aria-label="最近动态">
+    </template>
+    <template id="hub-timeline-tpl">
         <header class="pp-head">
           <div>
             <div class="pp-title">最近动态</div>
@@ -513,8 +501,7 @@
           <button class="pp-tab" type="button" data-tl="notify">通知</button>
         </nav>
         <div class="pp-body tl-body" id="timeline-list"></div>
-      </div>
-    </div>
+    </template>
     <div id="zen-bar" class="zen-bar" hidden role="status" aria-live="polite">
       <div class="zen-ring"><svg viewBox="0 0 44 44" aria-hidden="true">
         <circle class="zen-track" cx="22" cy="22" r="19" />
@@ -540,6 +527,96 @@
 
     <script src="omm-share.js"></script>
     <script src="omm-icons.js"></script>
+
+    <!-- 共享模态的隐藏宿主：omm-hub.js 在初始化时缓存这些 id，桥接脚本接管其 hidden 行为。 -->
+    <div id="plugin-panel" hidden></div>
+    <div id="hub-settings" hidden></div>
+    <div id="command-palette" hidden></div>
+    <div id="global-search" hidden></div>
+    <div id="knowledge-graph" hidden></div>
+    <div id="data-flow" hidden></div>
+    <div id="today-panel" hidden></div>
+    <div id="timeline-panel" hidden></div>
+
     <script src="omm-hub.js"></script>
+    <script>
+    /* Hub dialogs use the shared OMM-ZEN modal stack.
+     * omm-hub.js owns the dialog logic and caches the legacy wrapper ids at init;
+     * each wrapper is recreated here as a hidden holder. Setting holder.hidden=false
+     * mounts its (unchanged) content into a ZenUI.modal, and setting it to true
+     * closes that modal. The shared shell supplies Escape / backdrop / stacking /
+     * focus management, so no private dialog shell is needed. */
+    (function () {
+      'use strict';
+      var modal = window.ZenUI && window.ZenUI.modal;
+      if (!modal) return;
+      var defs = [
+        { id: 'plugin-panel',    tpl: 'hub-plugin-tpl',   title: '插件管理',      width: 'min(880px, 94vw)' },
+        { id: 'hub-settings',    tpl: 'hub-settings-tpl', title: '设置',          width: 'min(450px, 94vw)' },
+        { id: 'command-palette', tpl: 'hub-cmdk-tpl',     title: '命令面板',      width: 'min(640px, 94vw)' },
+        { id: 'global-search',   tpl: 'hub-gsearch-tpl',  title: '全局内容搜索',  width: 'min(760px, 94vw)' },
+        { id: 'knowledge-graph', tpl: 'hub-graph-tpl',    title: '知识图谱',      width: 'min(1100px, 94vw)' },
+        { id: 'data-flow',       tpl: 'hub-flow-tpl',     title: '数据流',        width: 'min(880px, 94vw)' },
+        { id: 'today-panel',     tpl: 'hub-today-tpl',    title: '今日',          width: 'min(560px, 94vw)' },
+        { id: 'timeline-panel',  tpl: 'hub-timeline-tpl', title: '最近动态',      width: 'min(720px, 94vw)' }
+      ];
+      defs.forEach(function (def) {
+        var tpl = document.getElementById(def.tpl);
+        var holder = document.getElementById(def.id);
+        if (!holder) {
+          holder = document.createElement('div');
+          holder.id = def.id;
+          document.body.appendChild(holder);
+        }
+        if (tpl) holder.appendChild(tpl.content.cloneNode(true));
+
+        var open = false;
+        var handle = null;
+        var restore = null;
+
+        function focusInput() {
+          var input = holder.querySelector('input:not([type="hidden"]):not([hidden]), textarea');
+          if (!input || !input.focus) return;
+          try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+        }
+        function openDialog() {
+          if (open) { focusInput(); return; }
+          open = true;
+          holder.removeAttribute('hidden');
+          restore = document.activeElement;
+          handle = modal.open({
+            title: def.title,
+            width: def.width,
+            ids: { title: 'hub-modal-title', body: 'hub-modal-body', foot: 'hub-modal-foot', close: 'hub-modal-close' },
+            onMount: function (body) {
+              body.appendChild(holder);
+              focusInput();
+            },
+            onClose: function () {
+              if (holder.parentNode !== document.body) document.body.appendChild(holder);
+              holder.setAttribute('hidden', '');
+              handle = null;
+              open = false;
+              if (restore && restore.focus) {
+                try { restore.focus({ preventScroll: true }); } catch (e) { restore.focus(); }
+              }
+              restore = null;
+            }
+          });
+        }
+        function closeDialog() {
+          if (!open) return;
+          if (handle) handle.close();
+          else { open = false; holder.setAttribute('hidden', ''); }
+        }
+        Object.defineProperty(holder, 'hidden', {
+          configurable: true,
+          get: function () { return !open; },
+          set: function (value) { if (value) closeDialog(); else openDialog(); }
+        });
+        holder.setAttribute('hidden', '');
+      });
+    })();
+    </script>
   </body>
 </html>
