@@ -131,6 +131,16 @@ test('下拉浮层统一用共享 ZenUI.popover，不再各自定位', () => {
   }
 })
 
+test('Writer 富右键菜单的定位/关闭委托共享 ZenUI.contextMenu', () => {
+  const text = read('public/omm-writer.html')
+  assert.ok(text.includes('zen/components/context-menu.js'), 'Writer 未接入共享 context-menu')
+  assert.ok(text.includes('ZenUI.contextMenu.open'), 'Writer 未使用 ZenUI.contextMenu.open')
+  assert.ok(!text.includes("DOM.contextMenu.classList.remove('open')"),
+    'Writer 仍自行关闭右键菜单')
+  // 菜单内容仍是产品自己的模板与动作分派，不应被移除
+  assert.ok(text.includes('id="context-menu"'), 'Writer 右键菜单模板被误删')
+})
+
 test('Hub 右键菜单使用共享 ZenUI.menu，无私有 ctx-menu', () => {
   const page = read('public/omm-hub.html')
   const js = read('public/omm-hub.js')

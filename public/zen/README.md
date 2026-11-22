@@ -29,8 +29,9 @@ zen/
 │   ├── layer.js               唯一 shadow 浮层栈
 │   ├── toast.js / dialog.js / select.js / menu.js / shortcuts.js   核心
 │   │     dialog.js 同时提供 ZenUI.modal（通用内容模态壳）与 ZenUI.dialog.pick
-│   └── popover.js / picker.js / tabs.js / tooltip.js                可选
-│         popover.js 只负责锚定定位 / 单开互斥 / 外部点击关闭，内容归产品
+│   └── popover.js / context-menu.js / picker.js / tabs.js / tooltip.js  可选
+│         popover.js 负责锚定浮层；context-menu.js 负责富右键菜单的光标定位 /
+│         翻转 / 单开 / 关闭。两者都不拥有菜单内容，DOM、i18n、显隐分组与动作由产品负责
 ├── canvas/                 画布能力——可选
 │   ├── canvas.css             统一画布样式包
 │   ├── engine.js              通用画布引擎
@@ -51,7 +52,7 @@ zen/
 | **核心样式** | `zen.css` → `foundation/*` + `components/components.css` | 所有产品 |
 | **核心脚本** | `components/{layer,toast,dialog,select,menu,shortcuts,index}.js` | 所有产品 |
 | **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串/错误分类） | 用到助手的产品 |
-| **可选浮层** | `components/popover.js` → `ZenUI.popover`（锚定/单开/关闭） | 有下拉浮层的产品 |
+| **可选浮层** | `components/popover.js` → `ZenUI.popover`（锚定浮层）<br>`components/context-menu.js` → `ZenUI.contextMenu`（富右键菜单） | 有对应浮层的产品 |
 | **可选样式包** | `features/*.css`、`canvas/canvas.css` | 只由真正用到的产品 link |
 | **可选脚本** | `components/{picker,tabs,tooltip}.js`、`canvas/{layout,engine}.js` | 只由真正用到的产品加载 |
 | **产品适配器** | `lib/zen-<id>.js`、`products/<id>.css` | 产品自己的业务与外观配置 |
