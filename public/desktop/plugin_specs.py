@@ -329,7 +329,7 @@ BUILTIN_PLUGINS: List[Dict[str, Any]] = [
         "glyph": "视",
         "description": "节点工作流 · 视频分析与处理 · 内置 ffmpeg",
         "entry": "omm-video.html",
-        "version": "1.0.34",
+        "version": "1.0.35",
         "port": 8329,
         "runtime": "video",
         "vendor": [],
