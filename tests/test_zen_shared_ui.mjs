@@ -45,6 +45,21 @@ test('产品不再自带 Toast 节点与 DOM 实现', () => {
   }
 })
 
+test('产品不再自带通用模态壳，统一使用 ZenUI.modal', () => {
+  for (const page of PAGES) {
+    const text = read(page)
+    assert.ok(!/<div[^>]*\bid="modal"/i.test(text), `${page} 仍自带 #modal 壳`)
+    assert.ok(!/id="preview-modal"|id="cat-modal"|id="help-modal"/i.test(text),
+      `${page} 仍自带私有模态壳`)
+    // Writer 的云同步弹窗与画布一起，留待画布迁移时一并处理。
+    if (page.includes('writer')) continue
+    if (/function\s+(?:openModal|showModal|modalOpen)\s*\(/.test(text) ||
+        /\b(?:openModal|showModal)\s*\([^)]*\)\s*\{/.test(text)) {
+      assert.ok(text.includes('ZenUI.modal.open'), `${page} 的模态实现未委托共享组件`)
+    }
+  }
+})
+
 test('产品不使用原生弹窗与原生对话框元素', () => {
   for (const page of PAGES) {
     const text = read(page)

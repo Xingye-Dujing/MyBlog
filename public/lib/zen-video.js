@@ -716,17 +716,24 @@
   }
 
   function openPreview(src) {
-    var modal = $('preview-modal')
-    var box = $('preview-content')
-    box.innerHTML = ''
+    var media = ''
     if (/\.(mp4|webm|mov|mkv)$/i.test(src)) {
-      box.innerHTML = '<video src="' + esc(src) + '" controls autoplay></video>'
+      media = '<video src="' + esc(src) + '" controls autoplay></video>'
     } else if (/\.(mp3|m4a|wav)$/i.test(src)) {
-      box.innerHTML = '<audio src="' + esc(src) + '" controls></audio>'
+      media = '<audio src="' + esc(src) + '" controls></audio>'
     } else {
-      box.innerHTML = '<img src="' + esc(src) + '" alt="预览" />'
+      media = '<img src="' + esc(src) + '" alt="预览" />'
     }
-    modal.classList.add('open')
+    window.ZenUI.modal.open({
+      title: '预览',
+      html: '<div class="zv-preview">' + media + '</div>',
+      foot: '<button class="menu-btn" id="preview-close">关闭</button>',
+      onMount: function (body, foot) {
+        foot.querySelector('#preview-close').addEventListener('click', function () {
+          window.ZenUI.modal.close()
+        })
+      },
+    })
   }
 
   // --------------------------------------------------------------------
@@ -894,13 +901,6 @@
     })
     if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
 
-    $('preview-close').addEventListener('click', function () {
-      $('preview-modal').classList.remove('open')
-      $('preview-content').innerHTML = ''
-    })
-    $('preview-modal').addEventListener('click', function (e) {
-      if (e.target === $('preview-modal')) $('preview-close').click()
-    })
     $('btn-help').addEventListener('click', function () {
       window.ZenUI.dialog.alert(
         '1. 从左侧点选节点（或拖到画布）\n' +

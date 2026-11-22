@@ -1229,8 +1229,7 @@
   }
 
   function showHelp() {
-    $('preview-title').textContent = '表格自动化 · 用法'
-    $('preview-content').innerHTML =
+    var html =
       '<b>三步开始</b><ol>' +
       '<li>点“导入 Excel”，画布里会出现文件节点，工作表与区域自动识别。</li>' +
       '<li>点“示例工作流”选“加班补贴”或“工资计算”，按你的表格改几处参数。</li>' +
@@ -1240,7 +1239,16 @@
       '<b>冲突</b><p>默认跳过非空单元格；试运行会列出所有冲突。要覆盖请在写回节点里改策略。</p>' +
       '<b>逻辑</b><p>逐格计算适合“多列同一规则”；逐列计算适合“每列各取左邻列”。筛选、排序、去重、分组汇总、交叉汇总可以自由组合。</p>' +
       '<b>AI</b><p>点“发送 AI 工作区”让 AI 看懂当前流程；AI 也能生成 omm-table-workflow JSON，用“打开”导入。</p>'
-    $('preview-modal').classList.add('open')
+    window.ZenUI.modal.open({
+      title: '表格自动化 · 用法',
+      html: '<div id="preview-content" class="zt-help">' + html + '</div>',
+      foot: '<button class="menu-btn" id="preview-close">关闭</button>',
+      onMount: function (body, foot) {
+        foot.querySelector('#preview-close').addEventListener('click', function () {
+          window.ZenUI.modal.close()
+        })
+      },
+    })
   }
 
   // ----------------------------------------------------------------------
@@ -1355,12 +1363,6 @@
       localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light')
     })
     if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
-    $('preview-close').addEventListener('click', function () {
-      $('preview-modal').classList.remove('open')
-    })
-    $('preview-modal').addEventListener('click', function (e) {
-      if (e.target === $('preview-modal')) $('preview-close').click()
-    })
     $('btn-help').addEventListener('click', showHelp)
 
     apiGet('/api/status').then(function (s) {

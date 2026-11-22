@@ -346,28 +346,7 @@
         </div>
       </div>
     </section>
-    <div class="cloud-modal" id="cloud-warn-modal" aria-hidden="true">
-      <div
-        class="cloud-modal-card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cloud-warn-title"
-      >
-        <div class="cloud-modal-title" id="cloud-warn-title" data-i18n="sync.warnTitle">
-          开启云同步前请注意
-        </div>
-        <div class="cloud-modal-body" data-i18n="sync.warnBody">
-          云端没有任何历史记录的备份。开启后任何改动都会立刻在全部设备上生效，且无法撤销。请确认后再开启。
-        </div>
-        <div class="cloud-modal-actions">
-          <button class="cloud-btn primary" id="cloud-warn-ok" data-i18n="sync.warnOk">
-            我已知晓，开启</button
-          ><button class="cloud-btn" id="cloud-warn-cancel" data-i18n="sync.warnCancel">
-            取消
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- cloud warning uses ZenUI.dialog.confirm -->
     <section class="subpage hidden" id="settings-page" aria-label="设置页面">
       <div class="subpage-head">
         <div class="subpage-title" data-i18n="settings.title">界面设置</div>
@@ -430,40 +409,15 @@
         </div>
       </div>
     </section>
-    <div
-      id="shortcuts-dialog"
-      class="hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="shortcuts-title"
-    >
-      <div class="sk-card">
-        <div class="confirm-kicker" id="shortcuts-title" data-i18n="hk.kicker">
-          KEYBOARD SHORTCUTS
-        </div>
-        <div class="hk-grid" id="shortcuts-body"></div>
-        <div class="confirm-actions">
-          <button class="confirm-btn" id="shortcuts-close" data-i18n="hk.close">关闭</button>
-        </div>
+    <template id="tpl-shortcuts">
+      <div class="confirm-kicker" id="shortcuts-title">KEYBOARD SHORTCUTS</div>
+      <div class="hk-grid" id="shortcuts-body"></div>
+      <div class="confirm-actions">
+        <button class="confirm-btn" id="shortcuts-close">关闭</button>
       </div>
-    </div>
-    <div
-      id="confirm-dialog"
-      class="hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="confirm-title"
-    >
-      <div class="confirm-card">
-        <div class="confirm-kicker" id="confirm-kicker">MESSAGE ACTION</div>
-        <div class="confirm-title" id="confirm-title">确定删除这条消息吗？</div>
-        <div class="confirm-text" id="confirm-text">删除后将从当前账号的消息记录中移除。</div>
-        <div class="confirm-actions">
-          <button class="confirm-btn" id="confirm-cancel">取消</button>
-          <button class="confirm-btn danger" id="confirm-ok">删除</button>
-        </div>
-      </div>
-    </div>
+    </template>
+
+    <!-- message confirm uses ZenUI.dialog.confirm -->
     <script>
       ;(function () {
         'use strict'
@@ -897,35 +851,15 @@
           return p
         }
         function openWarn(onOk) {
-          const m = $('cloud-warn-modal'),
-            ok = $('cloud-warn-ok'),
-            cc = $('cloud-warn-cancel')
-          if (!m || !ok || !cc) {
-            if (onOk) onOk()
-            return
-          }
-          const done = () => {
-            m.classList.remove('open')
-            m.setAttribute('aria-hidden', 'true')
-            ok.onclick = null
-            cc.onclick = null
-            m.onclick = null
-          }
-          m.onclick = (e) => {
-            if (e.target === m) done()
-          }
-          cc.onclick = done
-          ok.onclick = () => {
-            done()
-            if (onOk) onOk()
-          }
-          m.classList.add('open')
-          m.setAttribute('aria-hidden', 'false')
-          setTimeout(() => {
-            try {
-              ok.focus()
-            } catch {}
-          }, 0)
+          window.ZenUI.dialog
+            .confirm(t('sync.warnBody'), {
+              title: t('sync.warnTitle'),
+              ok: t('sync.warnOk'),
+              cancel: t('sync.warnCancel'),
+            })
+            .then((ok) => {
+              if (ok && onOk) onOk()
+            })
         }
         function setAutoSync(next, silent) {
           const p = prefs()
@@ -1004,18 +938,6 @@
               savePrefs({ remember: on, password: v || prefs().password })
               syncPrefsUi()
             }
-          document.addEventListener('keydown', (e) => {
-            if (e.key !== 'Escape') return
-            const m = $('cloud-warn-modal')
-            if (m && m.classList.contains('open')) {
-              const cc = $('cloud-warn-cancel')
-              if (cc) cc.click()
-              else {
-                m.classList.remove('open')
-                m.setAttribute('aria-hidden', 'true')
-              }
-            }
-          })
         }
         function loadUi() {
           try {
@@ -1881,39 +1803,15 @@
           return r.data[0]
         }
         function confirmDeleteMessage() {
-          return new Promise((resolve) => {
-            const dialog = $('confirm-dialog')
-            $('confirm-kicker').textContent = lang === 'zh' ? '消息操作' : 'MESSAGE ACTION'
-            $('confirm-title').textContent = t('toast.confirmDelete')
-            $('confirm-text').textContent = t('chat.deleteConfirmText')
-            $('confirm-cancel').textContent = t('chat.cancel')
-            $('confirm-ok').textContent = t('chat.delete')
-            dialog.classList.remove('hidden')
-            const finish = (value) => {
-              dialog.classList.add('hidden')
-              cleanup()
-              resolve(value)
-            }
-            const onCancel = () => finish(false)
-            const onOk = () => finish(true)
-            const onBackdrop = (e) => {
-              if (e.target === dialog) finish(false)
-            }
-            const onKey = (e) => {
-              if (e.key === 'Escape') finish(false)
-            }
-            function cleanup() {
-              $('confirm-cancel').removeEventListener('click', onCancel)
-              $('confirm-ok').removeEventListener('click', onOk)
-              dialog.removeEventListener('click', onBackdrop)
-              document.removeEventListener('keydown', onKey)
-            }
-            $('confirm-cancel').addEventListener('click', onCancel)
-            $('confirm-ok').addEventListener('click', onOk)
-            dialog.addEventListener('click', onBackdrop)
-            document.addEventListener('keydown', onKey)
-            setTimeout(() => $('confirm-ok').focus(), 0)
-          })
+          return window.ZenUI.dialog.confirm(
+            t('toast.confirmDelete') + '\n' + t('chat.deleteConfirmText'),
+            {
+              title: lang === 'zh' ? '消息操作' : 'MESSAGE ACTION',
+              ok: t('chat.delete'),
+              cancel: t('chat.cancel'),
+              danger: true,
+            },
+          )
         }
         async function deleteMessage(id) {
           const m = messages.find((x) => x.id === id)
@@ -2298,12 +2196,23 @@
               html += '</div>'
             })
           html += '<div class="hk-section"><div class="hk-note">' + t('hk.note') + '</div></div>'
-          $('shortcuts-body').innerHTML = html
-          $('shortcuts-dialog').classList.remove('hidden')
-          $('shortcuts-close').focus()
+          window.ZenUI.modal.open({
+            title: t('hk.kicker'),
+            html: $('tpl-shortcuts').innerHTML,
+            width: 'min(560px, 96vw)',
+            onMount: (body) => {
+              body.querySelector('#shortcuts-body').innerHTML = html
+              const kicker = body.querySelector('#shortcuts-title')
+              if (kicker) kicker.textContent = t('hk.kicker')
+              const close = body.querySelector('#shortcuts-close')
+              close.textContent = t('hk.close')
+              close.addEventListener('click', closeShortcuts)
+              close.focus()
+            },
+          })
         }
         function closeShortcuts() {
-          $('shortcuts-dialog').classList.add('hidden')
+          window.ZenUI.modal.close()
         }
         function saveConfig() {
           const url = $('sb-url').value.trim().replace(/\/$/, ''),
@@ -2533,19 +2442,10 @@
           }
           $('clear-cache-btn').onclick = clearLocal
           $('shortcuts-open-btn').onclick = openShortcuts
-          $('shortcuts-close').onclick = closeShortcuts
-          $('shortcuts-dialog').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeShortcuts()
-          })
           $('password').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') signin()
           })
           document.addEventListener('keydown', (e) => {
-            // 快捷键说明面板自己先关，别被下面的 Esc 分支抢走
-            if (e.key === 'Escape' && !$('shortcuts-dialog').classList.contains('hidden')) {
-              closeShortcuts()
-              return
-            }
             if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
               const tag = (e.target && e.target.tagName) || ''
               if (

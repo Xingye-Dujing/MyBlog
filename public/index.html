@@ -133,19 +133,6 @@
     <p class="hint" id="foot-hint"></p>
   </footer>
 </div>
-<div class="modal" id="modal" role="dialog" aria-modal="true" aria-hidden="true">
-  <div class="box">
-    <h3 id="modal-title"></h3>
-    <p id="modal-text"></p>
-    <input id="modal-input" type="text" autocomplete="off" spellcheck="false" hidden>
-    <div class="pal-list" id="modal-list" role="listbox" hidden></div>
-    <div class="row">
-      <button class="mini" id="modal-cancel" type="button" aria-label="取消"></button>
-      <button class="mini" id="modal-ok" type="button" aria-label="确定"></button>
-    </div>
-  </div>
-</div>
-
 <script>
 (function(){
   "use strict";
@@ -525,7 +512,7 @@
     }
     setCancelActive(!state.replaying && inflight.length > 0);
   }
-  var dialogOpen = false;       // 是否有弹窗打开 / whether a dialog is open
+  function dialogOpen(){ return !!(window.ZenUI && window.ZenUI.modal && window.ZenUI.modal.isOpen()) }
   var edHist = [""], edHistIdx = 0;  // 编辑器输入撤销栈 / editor input undo history
 
   // 手机屏幕上的提示语要短一些，否则输入框里只剩半句
@@ -685,121 +672,27 @@
 
 
 
-  /* ------------------------------------------------ custom dialog / 对话框 */
-  // 弹窗打开时把背景标记为 inert，关闭时还原 / mark the background inert, restore on close
-  function setBackgroundInert(on){
-    var sibs = (document.body && document.body.children) ? document.body.children : [];
-    var modal = $("modal");
-    Array.prototype.forEach.call(sibs, function(n){
-      if (!n || !n.setAttribute || n === modal) return;
-      if (on){ n.setAttribute("inert", ""); n.setAttribute("aria-hidden", "true"); }
-      else { n.removeAttribute("inert"); n.removeAttribute("aria-hidden"); }
-    });
-  }
-
+  /* 所有弹窗统一走共享 ZenUI 组件；命令面板用共享可搜索选择器。 */
   function dialog(opts){
-    return new Promise(function(resolve){
-      var modal = $("modal"), input = $("modal-input"), listBox = $("modal-list");
-      var trigger = (document.activeElement && document.activeElement.focus)
-                    ? document.activeElement : null;
-      var isList = !!(opts.list && opts.list.length);
-      var listActive = 0;
-      $("modal-title").textContent = opts.title || "";
-      $("modal-text").textContent = opts.message || "";
-      $("modal-text").hidden = !opts.message;
-      input.hidden = !opts.input;
-      input.value = opts.value || "";
-      $("modal-ok").textContent = opts.ok || t("ok");
-      $("modal-cancel").textContent = opts.cancel || t("cancel");
-      if (listBox) listBox.hidden = !isList;
-
-      function renderList(q){
-        if (!isList || !listBox) return;
-        var needle = String(q || "").toLowerCase();
-        var items = opts.list.filter(function(it){
-          return !needle || String(it.label).toLowerCase().indexOf(needle) !== -1 ||
-                 String(it.hint || "").toLowerCase().indexOf(needle) !== -1;
-        }).slice(0, 12);
-        if (listActive >= items.length) listActive = items.length - 1;
-        if (listActive < 0) listActive = 0;
-        listBox.innerHTML = items.length ? items.map(function(it, i){
-          return '<div class="pal-opt' + (i === listActive ? ' active' : '') +
-                 '" role="option" id="pal-opt-' + i + '" data-v="' + esc(it.value) +
-                 '" aria-selected="' + (i === listActive ? "true" : "false") + '">' +
-                 '<span>' + esc(it.label) + '</span><span class="hint">' +
-                 esc(it.hint || "") + '</span></div>';
-        }).join("") : '<div class="pal-empty">' + esc(t("noMatch")) + '</div>';
-        if (listBox.setAttribute) {
-          listBox.setAttribute("aria-activedescendant", items.length ? "pal-opt-" + listActive : "");
-        }
-        listBox._items = items;
-      }
-      function moveList(delta){
-        if (!isList || !listBox) return;
-        var items = listBox._items || [];
-        if (!items.length) return;
-        listActive = (listActive + delta + items.length) % items.length;
-        renderList(input.value);
-      }
-      function finish(value){
-        modal.classList.remove("open");
-        modal.setAttribute("aria-hidden", "true");
-        document.removeEventListener("keydown", onKey, true);
-        modal.removeEventListener("click", onBackdrop);
-        if (input.removeEventListener) input.removeEventListener("input", onInput);
-        if (listBox && listBox.removeEventListener) listBox.removeEventListener("click", onListClick);
-        if (listBox) listBox.hidden = true;
-        setBackgroundInert(false);
-        dialogOpen = false;
-        // 关闭后把焦点还给触发元素 / return focus to the element that opened the dialog
-        if (trigger && trigger.focus) trigger.focus();
-        resolve(value);
-      }
-      function accept(){
-        if (isList && listBox){
-          var it = listBox._items && listBox._items[listActive];
-          finish(it ? it.value : null);
-        } else {
-          finish(opts.input ? input.value.trim() : true);
-        }
-      }
-      function onKey(e){
-        if (e.key === "Escape"){ e.preventDefault(); finish(null); }
-        else if (e.key === "ArrowDown" && isList){ e.preventDefault(); moveList(1); }
-        else if (e.key === "ArrowUp" && isList){ e.preventDefault(); moveList(-1); }
-        else if (e.key === "Enter"){ e.preventDefault(); accept(); }
-        else if (e.key === "Tab"){
-          // 焦点陷阱：Tab 在弹窗内循环 / keep Tab focus inside the dialog
-          var f = [];
-          if (opts.input && !input.hidden) f.push(input);
-          f.push($("modal-ok"), $("modal-cancel"));
-          f = f.filter(function(n){ return n && n.focus; });
-          if (!f.length) return;
-          var first = f[0], last = f[f.length - 1];
-          var ae = document.activeElement;
-          if (e.shiftKey && (ae === first || !ae)){ e.preventDefault(); last.focus(); }
-          else if (!e.shiftKey && (ae === last || !ae)){ e.preventDefault(); first.focus(); }
-        }
-      }
-      function onInput(){ if (isList) renderList(input.value); }
-      function onBackdrop(e){ if (e.target === modal) finish(null); }
-      function onListClick(e){
-        var opt = (e.target && e.target.closest) ? e.target.closest(".pal-opt") : null;
-        if (opt && opt.getAttribute) finish(opt.getAttribute("data-v"));
-      }
-      $("modal-ok").onclick = accept;
-      $("modal-cancel").onclick = function(){ finish(null); };
-      if (listBox && listBox.addEventListener) listBox.addEventListener("click", onListClick);
-      modal.addEventListener("click", onBackdrop);
-      if (input.addEventListener) input.addEventListener("input", onInput);
-      document.addEventListener("keydown", onKey, true);
-      modal.classList.add("open");
-      modal.setAttribute("aria-hidden", "false");
-      dialogOpen = true;
-      setBackgroundInert(true);
-      if (isList) renderList(opts.value || "");
-      (opts.input ? input : $("modal-ok")).focus();
-      if (opts.input && input.select) input.select();
+    opts = opts || {};
+    var title = opts.title || "";
+    var message = opts.message || "";
+    if (opts.list && opts.list.length) {
+      return window.ZenUI.dialog.pick({
+        title: title, message: message, items: opts.list,
+        value: opts.value || "", ok: opts.ok, cancel: opts.cancel,
+      });
+    }
+    if (opts.input) {
+      return window.ZenUI.dialog.prompt(message || title, opts.value || "", {
+        title: title, ok: opts.ok, cancel: opts.cancel,
+      });
+    }
+    if (opts.ok && !opts.cancel) {
+      return window.ZenUI.dialog.alert(message || title, { title: title, ok: opts.ok });
+    }
+    return window.ZenUI.dialog.confirm(message || title, {
+      title: title, ok: opts.ok, cancel: opts.cancel,
     });
   }
   var NARROW_HINT_KEY = "lambda.hint.narrow";
@@ -3507,7 +3400,7 @@
   // 轨迹快捷键：←/→ 单步，空格播放/暂停（输入框内不拦截）
   // Trace shortcuts: ←/→ step, Space plays/pauses (ignored while typing).
   document.addEventListener("keydown", function(e){
-    if (dialogOpen) return;
+    if (dialogOpen()) return;
     // 证明视图渲染的是 renderProof()，没有播放控件；此时不应响应轨迹快捷键
     // The proof view renders renderProof() with no playback controls, so ignore trace keys.
     if (state.tab !== "trace" || !state.selected || !state.selected.trace
@@ -3528,11 +3421,11 @@
       // 一次 Enter 同时 resolve 多个 Promise.
       // Do not stack dialogs: they share one #modal, so lists overwrite each
       // other and a single Enter resolves more than one promise.
-      if (dialogOpen) return;
+      if (dialogOpen()) return;
       openCommandPalette();
       return;
     }
-    if (e.key === "Escape" && !dialogOpen && !ac.classList.contains("open")){
+    if (e.key === "Escape" && !dialogOpen() && !ac.classList.contains("open")){
       if (activeController){ e.preventDefault(); cancelEval(); }
     }
   });

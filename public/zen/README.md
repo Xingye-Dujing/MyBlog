@@ -22,6 +22,7 @@ zen/
 │   ├── components.css         组件外观（由 zen.css 导入）
 │   ├── layer.js               唯一 shadow 浮层栈
 │   ├── toast.js / dialog.js / select.js / menu.js / shortcuts.js   核心
+│   │     dialog.js 同时提供 ZenUI.modal（通用内容模态壳）与 ZenUI.dialog.pick
 │   └── picker.js / tabs.js / tooltip.js                            可选
 ├── canvas/                 画布能力——可选
 │   ├── canvas.css             统一画布样式包

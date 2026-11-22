@@ -861,21 +861,8 @@
     <!-- ===== Multi-selection align bar ===== -->
     <div id="zen-align-bar" role="toolbar" aria-label="Align selected nodes"></div>
 
-    <div id="zen-cloud-modal" aria-hidden="true" inert>
-      <div id="zen-cloud-card" role="dialog" aria-modal="true" aria-labelledby="zen-cloud-title">
-        <div class="zen-cloud-head">
-          <div class="zen-cloud-title" id="zen-cloud-title" data-i18n="sync.title">云同步</div>
-          <button
-            class="zen-cloud-close"
-            id="zen-cloud-close"
-            type="button"
-            data-i18n-title="sync.close"
-            aria-label="关闭"
-          >
-            ×
-          </button>
-        </div>
-        <div class="zen-cloud-body">
+    <!-- ===== Cloud Sync Modal (shared ZenUI.modal templates) ===== -->
+    <template id="zw-cloud-tpl">
           <div class="zen-cloud-status" id="zen-cloud-status" data-i18n="sync.notConfigured">
             未配置 Supabase
           </div>
@@ -1116,19 +1103,14 @@ notify pgrst, 'reload schema';</textarea
             </div>
             <div class="zen-cloud-copy-status" id="zw-sql-copy-status" aria-live="polite"></div>
           </div>
-        </div>
-        <div class="zen-cloud-footer" data-i18n="sync.footer">
-          Supabase Auth 负责身份验证，RLS 负责用户隔离；Writer 数据上传前在浏览器端使用 AES-GCM
-          加密。应用只使用 Publishable key，不需要 service_role / secret key
-        </div>
-      </div>
-    </div>
-
-    <div id="zen-warn-modal" class="zen-warn-modal" aria-hidden="true">
-      <div class="zen-warn-card" role="dialog" aria-modal="true" aria-labelledby="zen-warn-title">
-        <div class="zen-warn-title" id="zen-warn-title" data-i18n="sync.warnTitle">
-          开启云同步前请注意
-        </div>
+    </template>
+    <template id="zw-cloud-foot-tpl">
+      <span data-i18n="sync.footer"
+        >Supabase Auth 负责身份验证，RLS 负责用户隔离；Writer 数据上传前在浏览器端使用 AES-GCM
+        加密。应用只使用 Publishable key，不需要 service_role / secret key</span
+      >
+    </template>
+    <template id="zw-warn-tpl">
         <div class="zen-warn-body" id="zen-warn-body" data-i18n="sync.warnBody">
           开启后，本页的任何改动都会立刻写入云端并覆盖此前保存的云端数据。<br />
           云端不会保留任何历史记录的备份，误删除、误改动都无法回滚，并且会立刻影响到所有登录同一账号的设备。
@@ -1151,8 +1133,7 @@ notify pgrst, 'reload schema';</textarea
             我已了解，开启
           </button>
         </div>
-      </div>
-    </div>
+    </template>
 
     <!-- ===== Workspace ===== -->
     <div id="workspace">
@@ -1208,8 +1189,9 @@ notify pgrst, 'reload schema';</textarea
     <!-- ===== 层级导航：引用节点悬停预览浮层（单例，内容按 hover 目标填充） ===== -->
     <div id="ref-preview" aria-hidden="true"></div>
 
-    <!-- ===== 排布前后对比预览：应用前先看效果 ===== -->
-    <div id="layout-preview-overlay" role="dialog" aria-modal="true" aria-label="Layout preview">
+    <!-- ===== 排布前后对比预览：应用前先看效果 =====
+         外壳由共享 ZenUI.modal 提供；此处只保留内容模板。 -->
+    <template id="layout-preview-tpl">
       <div id="layout-preview-box">
         <div class="lp-title" data-i18n="lp.title">自动排布预览</div>
         <div class="lp-sub" id="lp-strategy"></div>
@@ -1229,10 +1211,11 @@ notify pgrst, 'reload schema';</textarea
           <button type="button" id="lp-apply" class="primary" data-i18n="lp.apply">应用排布</button>
         </div>
       </div>
-    </div>
+    </template>
 
-    <!-- ===== 全文档搜索：跨画布搜节点标题/正文，点击直达 ===== -->
-    <div id="doc-search-overlay" role="dialog" aria-modal="true" aria-label="Search all canvases">
+    <!-- ===== 全文档搜索：跨画布搜节点标题/正文，点击直达 =====
+         外壳由共享 ZenUI.modal 提供；此处只保留内容模板。 -->
+    <template id="doc-search-tpl">
       <div id="doc-search-box">
         <input
           id="doc-search-input"
@@ -1247,55 +1230,36 @@ notify pgrst, 'reload schema';</textarea
         </div>
         <div class="ds-hint" data-i18n="searchAll.hint">Enter opens the first hit · Click a row to jump to that node</div>
       </div>
-    </div>
-
-    <!-- ===== Confirm ===== -->
-    <div id="custom-confirm">
-      <div class="confirm-box">
-        <div class="msg" id="confirm-msg">Purge all nodes?</div>
-        <div class="actions">
-          <button id="confirm-cancel" data-i18n="confirm.cancel">Cancel</button>
-          <button id="confirm-ok" class="confirm" data-i18n="confirm.purge">Purge</button>
-        </div>
-      </div>
-    </div>
+    </template>
 
     <!-- ===== Guard: 是否保存 / 二次确认 =====
          应用内“离开当前画布”的统一拦截。
-         第一段问是否保存；点“否”再弹第二段确认是否真的要放弃改动。 -->
-    <div id="guard-dialog" aria-hidden="true" inert>
-      <div
-        class="confirm-box guard-box"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="guard-title"
-      >
-        <div class="guard-title" id="guard-title">Save before leaving?</div>
-        <div class="msg" id="guard-msg"></div>
-        <div class="guard-actions">
-          <button id="guard-primary" class="primary">Save</button>
-          <button id="guard-no" class="danger">No</button>
-          <button id="guard-cancel" class="guard-cancel">Cancel</button>
-        </div>
+         第一段问是否保存；点“否”再弹第二段确认是否真的要放弃改动。
+         外壳由共享 ZenUI.modal 提供；内容和按钮分别放在两个模板里。 -->
+    <template id="guard-dialog-tpl">
+      <div class="msg" id="guard-msg"></div>
+    </template>
+    <template id="guard-actions-tpl">
+      <div class="guard-actions">
+        <button type="button" id="guard-primary" class="primary">Save</button>
+        <button type="button" id="guard-no" class="danger">No</button>
+        <button type="button" id="guard-cancel" class="guard-cancel">Cancel</button>
       </div>
-    </div>
+    </template>
 
-    <!-- ===== Export Overlay ===== -->
+    <!-- ===== Export Overlay =====
+         非交互进度指示器：导出 PNG/PDF 期间显示，无焦点、无关闭/取消语义，
+         不是对话框，因此保留为普通覆盖层。 -->
     <div id="export-overlay">
       <div class="spinner"></div>
       <span data-i18n="export.exporting">Exporting…</span>
     </div>
 
-    <!-- ===== Shortcuts Modal ===== -->
-    <div id="shortcuts-overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
-      <div id="shortcuts-box">
-        <div class="sc-head">
-          <span class="sc-title" data-i18n="hk.title">Keyboard Shortcuts</span>
-          <button id="shortcuts-close" type="button" aria-label="Close">×</button>
-        </div>
-        <div class="hk-grid" id="shortcuts-body"></div>
-      </div>
-    </div>
+    <!-- ===== Shortcuts Modal =====
+         外壳由共享 ZenUI.modal 提供；快捷键表格在 openShortcuts 中生成。 -->
+    <template id="shortcuts-tpl">
+      <div class="hk-grid" id="shortcuts-body"></div>
+    </template>
 
     <!-- ===== File Input ===== -->
     <input type="file" id="file-input" accept=".zc,.zwlib,.json,.txt" style="display: none" />
@@ -1569,7 +1533,7 @@ notify pgrst, 'reload schema';</textarea
             'hk.rows':
               'General§Undo the last change|{M} Z|Redo it again|{M} Shift + Z|Redo it again|{M} Y|Save the workspace as a .zc file|{M} S|Open a .zc workspace file|{M} O|Open this panel|?|Close every dropdown, hide the floating toolbar, cancel a connection being drawn|Esc|Auto-arrange every node into a tidy top-down tree|{M} Shift + L|Fit the whole canvas into the window|{M} Shift + F~~While the caret is in node body text§Indent the first line|Tab|Unindent the first line|Shift + Tab|Indent the first line|{M} ]|Unindent the first line|{M} [~~While a connection is selected§Delete the selected connection|Delete / Backspace~~While focused in a field§Commit the image URL|Enter|Discard the edit and keep the previous value|Esc|Commit the Markdown or formula source|{M} Enter|Discard the source edit|Esc|Confirm the node title|Enter~~While focused in the cloud-sync dialog§Sign in|Enter',
             'hk.note':
-              '{M} Z / {M} Shift + Z undo and redo the canvas itself — node creation, drag, resize, delete, connections and text edits. Continuous typing is grouped into one step. The history stack is per canvas: switching canvases resets it. {M} S and {M} O fire anywhere, including while you are typing, so the browser default is always suppressed. Esc never closes the confirm dialog — use Cancel or click the backdrop. The first-line indent keys only apply to text, todo and group nodes.',
+              '{M} Z / {M} Shift + Z undo and redo the canvas itself — node creation, drag, resize, delete, connections and text edits. Continuous typing is grouped into one step. The history stack is per canvas: switching canvases resets it. {M} S and {M} O fire anywhere, including while you are typing, so the browser default is always suppressed. Esc also closes the confirm dialog — the same as Cancel or clicking the backdrop. The first-line indent keys only apply to text, todo and group nodes.',
             'ft.style': 'Style',
             'ft.font': 'Font',
             'ft.font.literata': 'Literata',
@@ -1981,7 +1945,7 @@ notify pgrst, 'reload schema';</textarea
             'hk.rows':
               '全局§把工作区存为 .zc 文件|{M} S|打开 .zc 工作区文件|{M} O|打开 / 重新载入本说明|?|关闭所有下拉菜单、收起浮动工具条、取消正在拖的连线|Esc|自动布局：把所有节点排成整齐的下行树|{M} Shift + L|适应：让整张画布铺满窗口|{M} Shift + F~~焦点在节点正文里时§首行缩进|Tab|取消首行缩进|Shift + Tab|首行缩进|{M} ]|取消首行缩进|{M} [~~已选中一条连线时§删除选中的连线|Delete / Backspace~~焦点在输入框上时§确认图片地址|Enter|放弃这次修改|Esc|提交 Markdown / 公式源码|{M} Enter|放弃源码修改|Esc|确认节点标题|Enter~~焦点在云同步弹窗里时§登录|Enter',
             'hk.note':
-              '{M} Z 与 {M} Shift + Z 撤销/重做的是画布本身：新建、拖动、改尺寸、删除、连线以及正文输入都算，连续打字会合并成一步。历史记录按画布独立保存，切换画布会重置。{M} S 与 {M} O 在任何位置都会触发，包括正在打字时，所以浏览器原本的“保存页面 / 打开文件”被完全接管。Esc 不会关闭确认框，请点“取消”或点击遮罩。首行缩进相关的键位只在文本、待办、分组这三类节点的正文里生效。',
+              '{M} Z 与 {M} Shift + Z 撤销/重做的是画布本身：新建、拖动、改尺寸、删除、连线以及正文输入都算，连续打字会合并成一步。历史记录按画布独立保存，切换画布会重置。{M} S 与 {M} O 在任何位置都会触发，包括正在打字时，所以浏览器原本的“保存页面 / 打开文件”被完全接管。Esc 也会关闭确认框，效果等同于点“取消”或点击遮罩。首行缩进相关的键位只在文本、待办、分组这三类节点的正文里生效。',
             'ft.style': '样式',
             'ft.font': '字体',
             'ft.font.literata': 'Literata',
@@ -2267,7 +2231,6 @@ notify pgrst, 'reload schema';</textarea
           // 两处各存一个句柄是“清不干净的在途写入”的常见来源。
           wheelSaveTimer: null,
           notifyTimer: null,
-          confirmResolve: null,
           isPanning: false,
           panStartX: 0,
           panStartY: 0,
@@ -2302,12 +2265,6 @@ notify pgrst, 'reload schema';</textarea
             return document.getElementById('stat-doc')
           },
           get notification() {
-          },
-          get confirmOverlay() {
-            return document.getElementById('custom-confirm')
-          },
-          get confirmMsg() {
-            return document.getElementById('confirm-msg')
           },
           get exportOverlay() {
             return document.getElementById('export-overlay')
@@ -2956,12 +2913,16 @@ notify pgrst, 'reload schema';</textarea
           notify(msg) {
             return window.ZenUI.toast(msg)
           },
-          showConfirm(message) {
-            return new Promise((resolve) => {
-              const overlay = DOM.confirmOverlay
-              DOM.confirmMsg.textContent = message
-              overlay.classList.add('active')
-              AppState.confirmResolve = resolve
+          // 确认框统一走共享 ZenUI.dialog：Escape / 关闭 / 遮罩都会 settle Promise。
+          // 旧壳的固定文案 “Purge / Cancel” 通过 ok/cancel 保留；调用方传入的
+          // title 等选项继续生效（例如基准信息弹窗会带自定义标题）。
+          showConfirm(message, opts) {
+            const o = opts || {}
+            return window.ZenUI.dialog.confirm(message, {
+              title: o.title,
+              ok: o.ok || t('confirm.purge'),
+              cancel: o.cancel || t('confirm.cancel'),
+              danger: !!o.danger,
             })
           },
           showExportOverlay() {
@@ -12894,79 +12855,66 @@ notify pgrst, 'reload schema';</textarea
         // “真的不保存、就要放弃改动吗”。任一段都可以取消留在原地。
         // ================================================================
         const GuardManager = {
-          _resolve: null,
-          _lastFocus: null,
+          _handle: null,
 
           init() {
-            const dlg = document.getElementById('guard-dialog')
-            if (!dlg) return
-            const close = (choice) => {
-              if (!GuardManager._resolve) return
-              const r = GuardManager._resolve
-              GuardManager._resolve = null
-              dlg.classList.remove('active', 'step2')
-              dlg.setAttribute('aria-hidden', 'true')
-              dlg.inert = true
-              r(choice)
-            }
-            const primary = document.getElementById('guard-primary')
-            const no = document.getElementById('guard-no')
-            const cancel = document.getElementById('guard-cancel')
-            if (primary) primary.onclick = () => close('primary')
-            if (no) no.onclick = () => close('no')
-            if (cancel) cancel.onclick = () => close('cancel')
-            // 点遮罩 = 取消（和现有确认框行为一致）
-            dlg.onclick = (e) => {
-              if (e.target === dlg) close('cancel')
-            }
-            document.addEventListener('keydown', (e) => {
-              if (e.key === 'Escape' && dlg.classList.contains('active')) {
-                e.preventDefault()
-                e.stopPropagation()
-                close('cancel')
-              }
-            })
+            // 外壳、焦点、Escape / 遮罩关闭全部由共享 ZenUI.modal 管理；
+            // 每段弹窗的按钮在 onMount 中按当前 spec 接线。
           },
 
           // 弹一段。返回 'primary' | 'no' | 'cancel'
+          // 用 onClose 兜底：Escape / × / 点遮罩一律按“取消”结算，
+          // 保证 confirmLeave 的 await 永远不会悬空。
           ask(spec) {
-            const dlg = document.getElementById('guard-dialog')
-            if (!dlg) return Promise.resolve('primary')
-            const titleEl = document.getElementById('guard-title')
-            const msgEl = document.getElementById('guard-msg')
-            const primary = document.getElementById('guard-primary')
-            const no = document.getElementById('guard-no')
-            const cancel = document.getElementById('guard-cancel')
-            if (titleEl) titleEl.textContent = spec.title || ''
-            if (msgEl) msgEl.textContent = spec.message || ''
-            if (primary) {
-              primary.textContent = spec.primary || t('guard.save')
-              primary.classList.toggle('gbtn-hidden', !spec.primary)
-            }
-            if (no) {
-              no.textContent = spec.no || t('guard.no')
-              no.classList.toggle('gbtn-hidden', !spec.no)
-            }
-            if (cancel) {
-              cancel.textContent = spec.cancel || t('guard.cancel')
-              cancel.classList.toggle('gbtn-hidden', !spec.cancel)
-            }
-            dlg.classList.toggle('step2', !!spec.step2)
+            const s = spec || {}
             closeAllDropdowns()
-            GuardManager._lastFocus = document.activeElement
-            dlg.classList.add('active')
-            dlg.setAttribute('aria-hidden', 'false')
-            dlg.inert = false
-            setTimeout(() => {
-              if (primary && !primary.classList.contains('gbtn-hidden') && primary.focus) {
-                primary.focus()
-              } else if (cancel && cancel.focus) {
-                cancel.focus()
-              }
-            }, 0)
-            return new Promise((resolve) => {
-              GuardManager._resolve = resolve
+            const tpl = document.getElementById('guard-dialog-tpl')
+            const footTpl = document.getElementById('guard-actions-tpl')
+            let settled = false
+            let resolveChoice = null
+            const promise = new Promise((resolve) => {
+              resolveChoice = resolve
             })
+            const finish = (choice) => {
+              if (settled) return
+              settled = true
+              const handle = GuardManager._handle
+              GuardManager._handle = null
+              if (handle) handle.close()
+              resolveChoice(choice)
+            }
+            GuardManager._handle = window.ZenUI.modal.open({
+              title: s.title || '',
+              width: 'min(460px, 92vw)',
+              html: tpl ? tpl.innerHTML : '<div class="msg" id="guard-msg"></div>',
+              foot: footTpl ? footTpl.innerHTML : '',
+              onMount: function (body, footEl) {
+                const msg = body.querySelector('#guard-msg')
+                if (msg) msg.textContent = s.message || ''
+                ;[
+                  ['guard-primary', s.primary || t('guard.save'), 'primary'],
+                  ['guard-no', s.no || t('guard.no'), 'no'],
+                  ['guard-cancel', s.cancel || t('guard.cancel'), 'cancel'],
+                ].forEach((row) => {
+                  const btn = footEl.querySelector('#' + row[0])
+                  if (!btn) return
+                  btn.textContent = row[1]
+                  btn.hidden = !row[1]
+                  btn.addEventListener('click', () => finish(row[2]))
+                })
+                setTimeout(() => {
+                  const first = footEl.querySelector(
+                    '#guard-primary:not([hidden]), #guard-no:not([hidden]), #guard-cancel:not([hidden])',
+                  )
+                  if (first && first.focus) first.focus()
+                }, 0)
+              },
+              onClose: function () {
+                GuardManager._handle = null
+                finish('cancel')
+              },
+            })
+            return promise
           },
 
           // 把所有还在防抖队列里的改动真正写进 IndexedDB
@@ -14177,52 +14125,68 @@ notify pgrst, 'reload schema';</textarea
         // （每张画布读一次），输入防抖 250ms 扫内存缓存。
         // ================================================================
         const DocSearch = {
-          overlay: null,
           input: null,
-          box: null,
           resultsEl: null,
           timer: null,
           index: null, // [{docId, docName, nodeId, title, text}]
+          _handle: null,
           init() {
-            DocSearch.overlay = document.getElementById('doc-search-overlay')
-            DocSearch.input = document.getElementById('doc-search-input')
-            DocSearch.resultsEl = document.getElementById('ds-results')
-            if (!DocSearch.overlay) return
-            DocSearch.input.addEventListener('input', () => {
-              clearTimeout(DocSearch.timer)
-              DocSearch.timer = setTimeout(() => DocSearch.search(DocSearch.input.value), 250)
-            })
-            DocSearch.input.addEventListener('keydown', (e) => {
-              e.stopPropagation()
-              if (e.key === 'Escape') {
-                e.preventDefault()
-                DocSearch.close()
-              } else if (e.key === 'Enter') {
-                e.preventDefault()
-                const first = DocSearch.resultsEl.querySelector('.ds-item')
-                if (first) first.click()
-              }
-            })
-            DocSearch.overlay.addEventListener('mousedown', (e) => {
-              if (e.target === DocSearch.overlay) DocSearch.close()
-            })
+            // 外壳与输入监听器都由 ZenUI.modal.open 的 onMount 在每次打开时接线：
+            // 共享宿主每次都是全新的节点，不能在 init 里绑一次就复用。
           },
           open() {
-            if (!DocSearch.overlay) return
             closeAllDropdowns()
-            DocSearch.overlay.classList.add('active')
+            if (DocSearch._handle) DocSearch._handle.close()
+            const tpl = document.getElementById('doc-search-tpl')
+            DocSearch._handle = window.ZenUI.modal.open({
+              title: t('docs.searchAll'),
+              width: 'min(620px, 94vw)',
+              html: tpl ? tpl.innerHTML : '',
+              onMount: function (body) {
+                DocSearch.input = body.querySelector('#doc-search-input')
+                DocSearch.resultsEl = body.querySelector('#ds-results')
+                if (!DocSearch.input || !DocSearch.resultsEl) return
+                DocSearch.input.placeholder = t('searchAll.placeholder')
+                const hint = body.querySelector('.ds-hint')
+                if (hint) hint.textContent = t('searchAll.hint')
+                DocSearch.input.addEventListener('input', () => {
+                  clearTimeout(DocSearch.timer)
+                  DocSearch.timer = setTimeout(() => DocSearch.search(DocSearch.input.value), 250)
+                })
+                DocSearch.input.addEventListener('keydown', (e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    DocSearch.close()
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const first = DocSearch.resultsEl.querySelector('.ds-item')
+                    if (first) first.click()
+                  }
+                })
+              },
+              onClose: function () {
+                DocSearch._handle = null
+                DocSearch.input = null
+                DocSearch.resultsEl = null
+                clearTimeout(DocSearch.timer)
+              },
+            })
+            if (!DocSearch.input) return
             DocSearch.input.value = ''
             DocSearch.resultsEl.innerHTML =
               '<div class="ds-empty">' + escapeHtml(t('searchAll.empty')) + '</div>'
             // 打开时重建索引：画布数通常在几十级，整轮读库是亚秒级
             DocSearch.rebuild()
-            setTimeout(() => DocSearch.input.focus(), 60)
+            setTimeout(() => {
+              if (DocSearch.input) DocSearch.input.focus()
+            }, 60)
           },
           close() {
-            if (DocSearch.overlay) DocSearch.overlay.classList.remove('active')
+            if (DocSearch._handle) DocSearch._handle.close()
           },
           isOpen() {
-            return DocSearch.overlay && DocSearch.overlay.classList.contains('active')
+            return !!DocSearch._handle
           },
           async rebuild() {
             const idx = await DocManager.indexAsync()
@@ -14269,11 +14233,12 @@ notify pgrst, 'reload schema';</textarea
               })
             }
             DocSearch.index = list
-            // 重建期间用户可能已经又敲了几个字：用最新查询刷一遍结果
-            DocSearch.search(DocSearch.input.value)
+            // 重建期间用户可能已经又敲了几个字：用最新查询刷一遍结果。
+            // 也可能已经按 Escape 关掉了宿主，此时 input 为 null，直接退出。
+            if (DocSearch.input) DocSearch.search(DocSearch.input.value)
           },
           search(q) {
-            if (!DocSearch.index) return
+            if (!DocSearch.index || !DocSearch.resultsEl) return
             const query = String(q || '').trim().toLowerCase()
             if (!query) {
               DocSearch.resultsEl.innerHTML =
@@ -14375,33 +14340,16 @@ notify pgrst, 'reload schema';</textarea
         // 节点画成按类型着色的圆角块，连线画中心到中心的细线。
         // ================================================================
         const LayoutPreview = {
-          el: null,
+          _handle: null,
           _onApply: null,
           init() {
-            LayoutPreview.el = document.getElementById('layout-preview-overlay')
-            if (!LayoutPreview.el) return
-            document.getElementById('lp-apply').addEventListener('click', () => {
-              const cb = LayoutPreview._onApply
-              LayoutPreview.close()
-              if (cb) cb()
-            })
-            document.getElementById('lp-cancel').addEventListener('click', () => {
-              LayoutPreview._onApply = null
-              LayoutPreview.close()
-            })
-            LayoutPreview.el.addEventListener('mousedown', (e) => {
-              if (e.target === LayoutPreview.el) {
-                LayoutPreview._onApply = null
-                LayoutPreview.close()
-              }
-            })
+            // 共享宿主每次打开都是新节点，按钮与画布的监听器放在 onMount 里接线。
           },
           close() {
-            if (LayoutPreview.el) LayoutPreview.el.classList.remove('active')
-            LayoutPreview._onApply = null
+            this._onApply = null
+            if (this._handle) this._handle.close()
           },
           show(st, nodes, nodeList, res, onApply) {
-            if (!LayoutPreview.el) return false
             // “前”：节点当前位置；“后”：计算出的新坐标
             const sizeOf = new Map(nodeList.map((n) => [n.id, n]))
             const before = nodes.map((n) => ({
@@ -14423,17 +14371,6 @@ notify pgrst, 'reload schema';</textarea
             // type 信息在 nodeList 里没有，补一下
             const typeOf = new Map(nodes.map((n) => [n.id, n.dataset.type]))
             after.forEach((a) => (a.type = typeOf.get(a.id) || 'text'))
-            LayoutPreview._draw(
-              document.getElementById('lp-before'),
-              before,
-              AppState.connections,
-            )
-            LayoutPreview._draw(
-              document.getElementById('lp-after'),
-              after,
-              AppState.connections,
-              res.ports,
-            )
             const stKey =
               st === 'force'
                 ? 'menu.autoLayoutForce'
@@ -14446,9 +14383,51 @@ notify pgrst, 'reload schema';</textarea
                       : st === 'spine'
                         ? 'menu.autoLayoutSpine'
                         : 'menu.autoLayout'
-            document.getElementById('lp-strategy').textContent = t(stKey)
+            const strategyLabel = t(stKey)
+            if (LayoutPreview._handle) LayoutPreview._handle.close()
             LayoutPreview._onApply = onApply
-            LayoutPreview.el.classList.add('active')
+            const tpl = document.getElementById('layout-preview-tpl')
+            LayoutPreview._handle = window.ZenUI.modal.open({
+              title: t('lp.title'),
+              width: 'min(760px, 96vw)',
+              html: tpl ? tpl.innerHTML : '',
+              onMount: function (body) {
+                LayoutPreview._draw(
+                  body.querySelector('#lp-before'),
+                  before,
+                  AppState.connections,
+                )
+                LayoutPreview._draw(
+                  body.querySelector('#lp-after'),
+                  after,
+                  AppState.connections,
+                  res.ports,
+                )
+                const strategy = body.querySelector('#lp-strategy')
+                if (strategy) strategy.textContent = strategyLabel
+                const labels = body.querySelectorAll('.lp-label')
+                if (labels[0]) labels[0].textContent = t('lp.before')
+                if (labels[1]) labels[1].textContent = t('lp.after')
+                const cancel = body.querySelector('#lp-cancel')
+                const apply = body.querySelector('#lp-apply')
+                if (cancel) {
+                  cancel.textContent = t('lp.cancel')
+                  cancel.addEventListener('click', () => LayoutPreview.close())
+                }
+                if (apply) {
+                  apply.textContent = t('lp.apply')
+                  apply.addEventListener('click', () => {
+                    const cb = LayoutPreview._onApply
+                    LayoutPreview.close()
+                    if (cb) cb()
+                  })
+                }
+              },
+              onClose: function () {
+                LayoutPreview._handle = null
+                LayoutPreview._onApply = null
+              },
+            })
             return true // 已接管：等用户点应用/取消
           },
           // 缩略图渲染：包围盒归一化 → 等比缩放适配画布 →
@@ -15317,6 +15296,7 @@ notify pgrst, 'reload schema';</textarea
               '</span></div>'
             )
           }
+          let shortcutsHandle = null
           function openShortcuts() {
             const raw = hkExpand(t('hk.rows'))
             let html = ''
@@ -15338,28 +15318,24 @@ notify pgrst, 'reload schema';</textarea
               '<div class="hk-section"><div class="hk-note">' +
               hkExpand(t('hk.note')) +
               '</div></div>'
-            document.getElementById('shortcuts-body').innerHTML = html
-            document.getElementById('shortcuts-overlay').classList.add('active')
-            document.getElementById('shortcuts-close').focus()
+            if (shortcutsHandle) shortcutsHandle.close()
+            const tpl = document.getElementById('shortcuts-tpl')
+            shortcutsHandle = window.ZenUI.modal.open({
+              title: t('hk.title'),
+              width: 'min(720px, 94vw)',
+              html: tpl ? tpl.innerHTML : '<div class="hk-grid" id="shortcuts-body"></div>',
+              onMount: function (body) {
+                const grid = body.querySelector('#shortcuts-body')
+                if (grid) grid.innerHTML = html
+              },
+              onClose: function () {
+                shortcutsHandle = null
+              },
+            })
           }
-          function closeShortcuts() {
-            document.getElementById('shortcuts-overlay').classList.remove('active')
-          }
-          document.getElementById('shortcuts-close').onclick = closeShortcuts
-          document.getElementById('shortcuts-overlay').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeShortcuts()
-          })
 
           // ---- Keyboard shortcuts ----
           document.addEventListener('keydown', (e) => {
-            // Esc 关闭快捷键说明面板（优先级最高）
-            if (
-              e.key === 'Escape' &&
-              document.getElementById('shortcuts-overlay').classList.contains('active')
-            ) {
-              closeShortcuts()
-              return
-            }
             // 画布间导航历史：Alt+← 后退 / Alt+→ 前进（同浏览器习惯）。
             // 文本编辑时让位给光标移动，不接管。
             if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
@@ -15582,22 +15558,6 @@ notify pgrst, 'reload schema';</textarea
               ftBar.classList.remove('visible')
               const sel = window.getSelection()
               if (sel) sel.removeAllRanges()
-            }
-          })
-
-          // ---- Confirm buttons ----
-          document.getElementById('confirm-cancel').addEventListener('click', () => {
-            DOM.confirmOverlay.classList.remove('active')
-            if (AppState.confirmResolve) {
-              AppState.confirmResolve(false)
-              AppState.confirmResolve = null
-            }
-          })
-          document.getElementById('confirm-ok').addEventListener('click', () => {
-            DOM.confirmOverlay.classList.remove('active')
-            if (AppState.confirmResolve) {
-              AppState.confirmResolve(true)
-              AppState.confirmResolve = null
             }
           })
 
@@ -16084,29 +16044,38 @@ notify pgrst, 'reload schema';</textarea
         // ===== 深改：知识卡片 / 内嵌图表 / 时间机器 =====
         const ZenWriterDeep = {
           world: { x: 0, y: 0 },
+          _handle: null,
           esc(s) {
             return String(s == null ? '' : s)
               .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
               .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
           },
           open(title, html) {
-            const modal = document.getElementById('zw-zen-modal')
-            if (!modal) return
-            document.getElementById('zw-zen-title').textContent = title
-            document.getElementById('zw-zen-body').innerHTML = html
-            modal.hidden = false
+            if (this._handle) this._handle.close()
+            const tpl = document.getElementById('zw-zen-modal')
+            this._handle = window.ZenUI.modal.open({
+              title: title,
+              width: 'min(680px, 94vw)',
+              html: tpl ? tpl.innerHTML : '<div class="zw-zen-body" id="zw-zen-body"></div>',
+              // 共享宿主每次新建：把产品 JS 依赖的 id 映射到新的 head/body/close 上。
+              ids: { title: 'zw-zen-title', body: 'zw-zen-body', close: 'zw-zen-close' },
+              onMount: function (body) {
+                const target = body.querySelector('#zw-zen-body') || body
+                target.innerHTML = html
+              },
+              onClose: function () {
+                ZenWriterDeep._handle = null
+              },
+            })
           },
           close() {
-            const modal = document.getElementById('zw-zen-modal')
-            if (modal) modal.hidden = true
+            if (this._handle) {
+              this._handle.close()
+              this._handle = null
+            }
           },
           bindClose() {
-            const modal = document.getElementById('zw-zen-modal')
-            if (!modal || modal.dataset.bound) return
-            modal.dataset.bound = '1'
-            modal.addEventListener('click', (e) => {
-              if (e.target === modal || e.target.closest('#zw-zen-close')) this.close()
-            })
+            // 遮罩 / × / Escape 的关闭由共享 ZenUI.modal 提供，这里无需私有处理器。
           },
           cards() {
             const out = []
@@ -16303,6 +16272,15 @@ notify pgrst, 'reload schema';</textarea
         function E(id) {
           return document.getElementById(id)
         }
+        var cloudHandle = null,
+          warnHandle = null
+        function tpl(id) {
+          var t = E(id)
+          return t ? t.innerHTML : ''
+        }
+        function modalLive(handle) {
+          return !!(handle && handle.el && document.body.contains(handle.el))
+        }
         function lsGet(k) {
           try {
             return localStorage.getItem(k)
@@ -16371,38 +16349,35 @@ notify pgrst, 'reload schema';</textarea
           }
         }
         function openWarn(onOk, onCancel) {
-          var m = E('zen-warn-modal'),
-            ok = E('zw-warn-ok'),
-            cc = E('zw-warn-cancel')
-          if (!m || !ok || !cc) {
-            if (onOk) onOk()
-            return
-          }
-          function done(confirmed) {
-            m.classList.remove('open')
-            m.setAttribute('aria-hidden', 'true')
-            ok.onclick = null
-            cc.onclick = null
-            m.onclick = null
-            if (!confirmed && onCancel) onCancel()
-          }
-          m.onclick = function (e) {
-            if (e.target === m) done(false)
-          }
-          cc.onclick = function () {
-            done(false)
-          }
-          ok.onclick = function () {
-            done(true)
-            if (onOk) onOk()
-          }
-          m.classList.add('open')
-          m.setAttribute('aria-hidden', 'false')
-          setTimeout(function () {
-            try {
-              ok.focus()
-            } catch (_) {}
-          }, 0)
+          var confirmed = false
+          warnHandle = window.ZenUI.modal.open({
+            title: tr('sync.warnTitle'),
+            width: 'min(400px, 92vw)',
+            html: tpl('zw-warn-tpl'),
+            ids: { title: 'zen-warn-title' },
+            onMount: function (body) {
+              var ok = body.querySelector('#zw-warn-ok'),
+                cc = body.querySelector('#zw-warn-cancel')
+              cc.addEventListener('click', function () {
+                window.ZenUI.modal.close()
+              })
+              ok.addEventListener('click', function () {
+                confirmed = true
+                window.ZenUI.modal.close()
+                if (onOk) onOk()
+              })
+              setTimeout(function () {
+                try {
+                  ok.focus()
+                } catch (_) {}
+              }, 30)
+            },
+            onClose: function () {
+              warnHandle = null
+              if (!confirmed && onCancel) onCancel()
+            },
+          })
+          refreshI18n()
         }
         function ensureWarnAck() {
           return new Promise(function (ok) {
@@ -17190,7 +17165,7 @@ notify pgrst, 'reload schema';</textarea
             var remember = E('zw-remember-pw') ? E('zw-remember-pw').checked : false
             savePrefs({ remember: remember, password: remember ? pw : '' })
             unlockPassword = pw
-            E('zw-password').value = ''
+            if (E('zw-password')) E('zw-password').value = ''
             refresh()
             statusKey('sync.loggedInUnlocked')
             labelKey('sync.loggedInUnlocked', true)
@@ -17211,14 +17186,14 @@ notify pgrst, 'reload schema';</textarea
             }
           } catch (e) {
             unlockPassword = ''
-            E('zw-password').value = ''
+            if (E('zw-password')) E('zw-password').value = ''
             var msg = friendly(e)
             setStatus(msg)
             labelKey('sync.errorLabel', false)
           } finally {
             authing = false
             busy(false)
-            E('zw-password').value = ''
+            if (E('zw-password')) E('zw-password').value = ''
           }
         }
         async function syncFromCloud() {
@@ -17282,7 +17257,7 @@ notify pgrst, 'reload schema';</textarea
           unlockPassword = ''
           autoSyncOn = false
           stopWatcher()
-          E('zw-password').value = ''
+          if (E('zw-password')) E('zw-password').value = ''
           var cleared = prefs().remember
           if (cleared) savePrefs({ remember: false, password: '' })
           refresh()
@@ -17292,43 +17267,40 @@ notify pgrst, 'reload schema';</textarea
           labelKey('sync.loggedInLocked', true)
         }
         function openModal() {
-          var m = E('zen-cloud-modal')
-          if (!m) return
-          refresh()
+          cloudHandle = window.ZenUI.modal.open({
+            title: tr('sync.title'),
+            width: 'min(460px, 92vw)',
+            html: tpl('zw-cloud-tpl'),
+            foot: tpl('zw-cloud-foot-tpl'),
+            ids: { title: 'zen-cloud-title', close: 'zen-cloud-close' },
+            onMount: mountCloud,
+            onClose: function () {
+              cloudHandle = null
+              var b = E('zw-sync-btn')
+              if (b && typeof b.focus === 'function') b.focus()
+            },
+          })
           refreshI18n()
-          m.classList.add('open')
-          m.setAttribute('aria-hidden', 'false')
-          m.inert = false
-          setTimeout(function () {
-            var f = cfg().url && cfg().key ? E('zw-password') : E('zw-sb-url')
-            if (f) f.focus()
-          }, 0)
         }
         function closeModal() {
-          var m = E('zen-cloud-modal')
-          if (!m) return
-          var a = document.activeElement
-          if (a && m.contains(a) && typeof a.blur === 'function') a.blur()
-          m.classList.remove('open')
-          m.setAttribute('aria-hidden', 'true')
-          m.inert = true
-          var b = E('zw-sync-btn')
-          if (b && typeof b.focus === 'function') b.focus()
+          window.ZenUI.modal.close()
         }
         function refreshI18n() {
-          var m = E('zen-cloud-modal')
-          if (m) {
+          if (modalLive(cloudHandle)) {
+            var root = cloudHandle.el
+            var title = root.querySelector('.zenui-modal-title')
+            if (title) title.textContent = tr('sync.title')
             var skip = { 'zw-login-only': 1, 'zw-login-pull': 1, 'zw-login-push': 1 }
-            m.querySelectorAll('[data-i18n]').forEach(function (x) {
+            root.querySelectorAll('[data-i18n]').forEach(function (x) {
               if (x.id === 'zen-cloud-status' || skip[x.id]) return
               x.textContent = tr(x.dataset.i18n)
             })
-            m.querySelectorAll('[data-i18n-title]').forEach(function (x) {
+            root.querySelectorAll('[data-i18n-title]').forEach(function (x) {
               var v = tr(x.dataset.i18nTitle)
               x.title = v
               x.setAttribute('aria-label', v)
             })
-            m.querySelectorAll('[data-i18n-placeholder]').forEach(function (x) {
+            root.querySelectorAll('[data-i18n-placeholder]').forEach(function (x) {
               x.placeholder = tr(x.dataset.i18nPlaceholder)
             })
             ;[
@@ -17359,9 +17331,11 @@ notify pgrst, 'reload schema';</textarea
           }
 
           syncPrefsUI()
-          var wm = E('zen-warn-modal')
-          if (wm) {
-            wm.querySelectorAll('[data-i18n]').forEach(function (x) {
+          if (modalLive(warnHandle)) {
+            var wroot = warnHandle.el
+            var wtitle = wroot.querySelector('.zenui-modal-title')
+            if (wtitle) wtitle.textContent = tr('sync.warnTitle')
+            wroot.querySelectorAll('[data-i18n]').forEach(function (x) {
               if (x.id === 'zen-warn-body') x.innerHTML = tr(x.dataset.i18n)
               else x.textContent = tr(x.dataset.i18n)
             })
@@ -17386,13 +17360,9 @@ notify pgrst, 'reload schema';</textarea
               }
             }
           }
-          var c = E('zen-cloud-close')
-          if (c) c.onclick = closeModal
-          var m = E('zen-cloud-modal')
-          if (m)
-            m.onclick = function (e) {
-              if (e.target === m) closeModal()
-            }
+        }
+        function mountCloud(body) {
+          refresh()
           E('zw-save-config').onclick = async function () {
             try {
               var u = (E('zw-sb-url').value || '').trim().replace(/\/$/, ''),
@@ -17493,17 +17463,6 @@ notify pgrst, 'reload schema';</textarea
               e.preventDefault()
               toggleAutoSync()
             }
-          document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Escape') return
-            var wm = E('zen-warn-modal')
-            if (wm && wm.classList.contains('open')) {
-              var cc = E('zw-warn-cancel')
-              if (cc) cc.click()
-              return
-            }
-            var mm = E('zen-cloud-modal')
-            if (mm && mm.classList.contains('open')) closeModal()
-          })
           E('zw-open-sql-auth').onclick = function () {
             hidePanel('zw-config-panel', true)
             hidePanel('zw-auth-panel', true)
@@ -17546,6 +17505,10 @@ notify pgrst, 'reload schema';</textarea
                 console.error('[ZenWriter Sync] lock failed', e)
               })
           }
+          setTimeout(function () {
+            var f = cfg().url && cfg().key ? E('zw-password') : E('zw-sb-url')
+            if (f) f.focus()
+          }, 30)
         }
 
         async function autoLogin() {
@@ -17619,12 +17582,12 @@ notify pgrst, 'reload schema';</textarea
       })()
     </script>
 
-    <!-- ===== Writer 深改：知识卡片 / 图表 / 时间机器 ===== -->
-    <div class="zw-zen-modal" id="zw-zen-modal" hidden>
-      <div class="zw-zen-card" role="dialog" aria-modal="true" aria-label="Writer 扩展面板">
-        <header><span id="zw-zen-title">面板</span><button type="button" class="zw-zen-x" id="zw-zen-close" aria-label="关闭">×</button></header>
-        <div class="zw-zen-body" id="zw-zen-body"></div>
-      </div>
-    </div>
+    <!-- ===== Writer 深改：知识卡片 / 图表 / 时间机器 =====
+         外壳已迁移到共享 ZenUI.modal：标题与关闭按钮由 ids 映射为
+         id="zw-zen-title" / id="zw-zen-close"，内容宿主为 id="zw-zen-body"。
+         本模板只提供面板内容根节点。 -->
+    <template id="zw-zen-modal">
+      <div class="zw-zen-body" id="zw-zen-body"></div>
+    </template>
   </body>
 </html>

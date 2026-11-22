@@ -545,17 +545,9 @@
     />
     <input id="image-file" type="file" accept="image/png,image/jpeg" multiple class="hidden" />
 
-    <div class="overlay" id="help-modal" aria-hidden="true">
-      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="help-title">
-        <div class="modal-head">
-          <div>
-            <div class="modal-kicker">MdForge · Writing Spec</div>
-            <div class="modal-title" id="help-title">Markdown 写作规范</div>
-          </div>
-          <button class="icon-btn" data-close="help" aria-label="关闭">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="help-grid">
+    <template id="tpl-help">
+      <div class="modal-kicker">MdForge · Writing Spec</div>
+      <div class="help-grid">
             <section>
               <div class="section-label">Frontmatter <span>必填 · YAML</span></div>
               <pre class="mini-code">
@@ -644,41 +636,18 @@ template: academic
           <div class="help-foot">
             快捷键：Ctrl+Enter 转换 · Ctrl+Shift+V 校验 · Ctrl+S 存为 MD · Esc 关闭浮层。<br />
             参考版式：A4 · 上下 2.54cm / 左右 3.18cm · 正文五号 · 无编号标题 · 图表题注。
-            <div style="margin-top: 12px; display: flex; gap: 7px; flex-wrap: wrap">
+            <div class="help-foot-actions">
               <button class="btn small" data-action="ai-spec">Markdown AI 规范</button>
               <button class="btn small" data-action="ai-figure-spec">图表重绘 AI 规范</button>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+    </template>
 
-    <div class="overlay" id="confirm-modal" aria-hidden="true">
-      <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirm-msg">
-        <div class="confirm-msg" id="confirm-msg"></div>
-        <div class="confirm-actions">
-          <button class="btn" id="confirm-no">取消</button>
-          <button class="btn primary" id="confirm-yes">确定</button>
-        </div>
-      </div>
-    </div>
+    <!-- confirm uses ZenUI.dialog.confirm -->
 
-    <div class="overlay" id="ai-modal" aria-hidden="true">
-      <div
-        class="modal-box ai-modal-box"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ai-title"
-      >
-        <div class="modal-head">
-          <div>
-            <div class="modal-kicker">MdForge · Upstream Prompt</div>
-            <div class="modal-title" id="ai-title">给 AI 的生成规范</div>
-          </div>
-          <button class="icon-btn" data-close="ai" aria-label="关闭">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="ai-tabs" role="tablist">
+    <template id="tpl-ai">
+      <div class="modal-kicker">MdForge · Upstream Prompt</div>
+      <div class="ai-tabs" role="tablist">
             <button class="ai-tab active" data-ai-spec-kind="md" role="tab" aria-selected="true">
               Markdown 写作规范
             </button>
@@ -696,26 +665,11 @@ template: academic
             </div>
           </div>
           <pre class="ai-spec" id="ai-spec-content">载入中…</pre>
-        </div>
-      </div>
-    </div>
+    </template>
 
-    <div class="overlay" id="file-meta-modal" aria-hidden="true">
-      <div
-        class="modal-box file-meta-box"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="file-meta-title"
-      >
-        <div class="modal-head">
-          <div>
-            <div class="modal-kicker">Generated File · Properties</div>
-            <div class="modal-title" id="file-meta-title">编辑文件元信息</div>
-          </div>
-          <button class="icon-btn" data-close="file-meta" aria-label="关闭">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="file-meta-target">
+    <template id="tpl-file-meta">
+      <div class="modal-kicker">Generated File · Properties</div>
+      <div class="file-meta-target">
             <span class="format-stamp" id="fm-format">DOCX</span>
             <span id="fm-filename">document.docx</span>
           </div>
@@ -765,9 +719,7 @@ template: academic
             <button class="btn" data-close="file-meta">取消</button>
             <button class="btn primary" id="file-meta-save">应用并更新文件</button>
           </div>
-        </div>
-      </div>
-    </div>
+    </template>
 
     <script>
       ;(() => {
@@ -828,7 +780,6 @@ template: academic
           draftTimer: null,
           settings: { ...DEFAULT_SETTINGS },
           openDropdown: null,
-          confirmCallback: null,
           sampleLoading: false,
           aiSpecs: {},
           aiSpecKind: 'md',
@@ -876,21 +827,7 @@ template: academic
           dom.workspace = $('#workspace')
           dom.importFile = $('#import-file')
           dom.imageFile = $('#image-file')
-          dom.helpModal = $('#help-modal')
-          dom.aiModal = $('#ai-modal')
-          dom.aiSpecContent = $('#ai-spec-content')
-          dom.aiTitle = $('#ai-title')
-          dom.aiHint = $('#ai-hint')
-          dom.fileMetaModal = $('#file-meta-modal')
-          dom.fileMetaSave = $('#file-meta-save')
-          dom.fileMetaHint = $('#file-meta-hint')
-          dom.fmRecompile = $('#fm-recompile')
-          dom.fmRecompileRow = $('#fm-recompile-row')
-          dom.fmFormat = $('#fm-format')
-          dom.fmFilename = $('#fm-filename')
-          dom.fmNote = $('#fm-note')
-          dom.confirmModal = $('#confirm-modal')
-          dom.confirmMsg = $('#confirm-msg')
+          // Modal content refs are (re)wired in each ZenUI.modal onMount.
           dom.optStrict = $('#opt-strict')
           dom.optToc = $('#opt-toc')
           dom.optTocTitle = $('#opt-toc-title')
@@ -2441,27 +2378,22 @@ template: academic
         }
 
         function askConfirm(message, callback) {
-          state.confirmCallback = callback
-          dom.confirmMsg.textContent = message
-          dom.confirmModal.classList.add('open')
-          dom.confirmModal.setAttribute('aria-hidden', 'false')
-        }
-
-        function closeConfirm() {
-          dom.confirmModal.classList.remove('open')
-          dom.confirmModal.setAttribute('aria-hidden', 'true')
-          state.confirmCallback = null
+          window.ZenUI.dialog.confirm(message).then((ok) => {
+            if (ok && callback) callback()
+          })
         }
 
         function openHelp() {
           closeDropdowns()
-          dom.helpModal.classList.add('open')
-          dom.helpModal.setAttribute('aria-hidden', 'false')
+          window.ZenUI.modal.open({
+            title: 'Markdown 写作规范',
+            html: $('#tpl-help').innerHTML,
+            width: 'min(760px, 96vw)',
+          })
         }
 
         function closeHelp() {
-          dom.helpModal.classList.remove('open')
-          dom.helpModal.setAttribute('aria-hidden', 'true')
+          window.ZenUI.modal.close()
         }
 
         function insertAtCursor(snippet, selectFrom, selectLength) {
@@ -2585,8 +2517,7 @@ template: academic
         }
 
         function closeAiSpec() {
-          dom.aiModal.classList.remove('open')
-          dom.aiModal.setAttribute('aria-hidden', 'true')
+          window.ZenUI.modal.close()
         }
 
         async function ensureAiSpec(kind) {
@@ -2608,20 +2539,24 @@ template: academic
           const key = kind === 'figure' ? 'figure' : 'md'
           state.aiSpecKind = key
           closeDropdowns()
-          closeHelp()
-          $$('.ai-tab').forEach((btn) => {
-            const active = btn.dataset.aiSpecKind === key
-            btn.classList.toggle('active', active)
-            btn.setAttribute('aria-selected', active ? 'true' : 'false')
+          window.ZenUI.modal.open({
+            title: key === 'figure' ? '给 AI 的图表重绘规范' : '给 AI 的 Markdown 规范',
+            html: $('#tpl-ai').innerHTML,
+            width: 'min(900px, 96vw)',
+            onMount: (body) => {
+              dom.aiSpecContent = body.querySelector('#ai-spec-content')
+              dom.aiHint = body.querySelector('#ai-hint')
+              body.querySelectorAll('.ai-tab').forEach((btn) => {
+                const active = btn.dataset.aiSpecKind === key
+                btn.classList.toggle('active', active)
+                btn.setAttribute('aria-selected', active ? 'true' : 'false')
+              })
+              dom.aiHint.textContent =
+                key === 'figure'
+                  ? '把图表图片和本规范一起发给 AI，让它只输出一个可直接粘贴的 latex-figure 代码块。'
+                  : '让 AI 只输出 Markdown 纯文本，不要解释、不要用代码围栏包裹全文；版式交给 MdForge。'
+            },
           })
-          dom.aiTitle.textContent =
-            key === 'figure' ? '给 AI 的图表重绘规范' : '给 AI 的 Markdown 规范'
-          dom.aiHint.textContent =
-            key === 'figure'
-              ? '把图表图片和本规范一起发给 AI，让它只输出一个可直接粘贴的 latex-figure 代码块。'
-              : '让 AI 只输出 Markdown 纯文本，不要解释、不要用代码围栏包裹全文；版式交给 MdForge。'
-          dom.aiModal.classList.add('open')
-          dom.aiModal.setAttribute('aria-hidden', 'false')
           const seq = ++state.aiSpecSeq
           if (state.aiSpecs[key]) {
             dom.aiSpecContent.textContent = state.aiSpecs[key].content
@@ -2666,8 +2601,7 @@ template: academic
         }
 
         function closeFileMeta() {
-          dom.fileMetaModal.classList.remove('open')
-          dom.fileMetaModal.setAttribute('aria-hidden', 'true')
+          window.ZenUI.modal.close()
         }
 
         function openFileMeta() {
@@ -2677,6 +2611,23 @@ template: academic
             return
           }
           closeDropdowns()
+          window.ZenUI.modal.open({
+            title: '编辑文件元信息',
+            html: $('#tpl-file-meta').innerHTML,
+            width: 'min(600px, 96vw)',
+            onMount: (body) => {
+              dom.fileMetaSave = body.querySelector('#file-meta-save')
+              dom.fileMetaHint = body.querySelector('#file-meta-hint')
+              dom.fmRecompile = body.querySelector('#fm-recompile')
+              dom.fmRecompileRow = body.querySelector('#fm-recompile-row')
+              dom.fmFormat = body.querySelector('#fm-format')
+              dom.fmFilename = body.querySelector('#fm-filename')
+              dom.fmNote = body.querySelector('#fm-note')
+              dom.fileMetaSave.addEventListener('click', saveFileMeta)
+              const first = body.querySelector('[data-file-meta="title"]')
+              if (first) first.focus()
+            },
+          })
           const format = result.format || state.format
           const meta = result.metadata || {}
           const values = {
@@ -2702,12 +2653,6 @@ template: academic
           dom.fileMetaSave.disabled = false
           dom.fileMetaSave.classList.remove('disabled')
           dom.fileMetaSave.textContent = '应用并更新文件'
-          dom.fileMetaModal.classList.add('open')
-          dom.fileMetaModal.setAttribute('aria-hidden', 'false')
-          requestAnimationFrame(() => {
-            const first = $('[data-file-meta="title"]')
-            if (first) first.focus()
-          })
         }
 
         async function saveFileMeta() {
@@ -2966,6 +2911,11 @@ template: academic
               else if (target === 'file-meta') closeFileMeta()
               return
             }
+            const aiKindBtn = event.target.closest('[data-ai-spec-kind]')
+            if (aiKindBtn) {
+              openAiSpec(aiKindBtn.dataset.aiSpecKind)
+              return
+            }
             const copyBtn = event.target.closest('[data-copy-action]')
             if (
               copyBtn &&
@@ -2989,10 +2939,6 @@ template: academic
           dom.pinBtn.addEventListener('click', () => {
             state.settings.menuPinned = !state.settings.menuPinned
             applySettings()
-          })
-
-          $$('[data-ai-spec-kind]').forEach((btn) => {
-            btn.addEventListener('click', () => openAiSpec(btn.dataset.aiSpecKind))
           })
 
           $('#set-theme').addEventListener('click', () => {
@@ -3096,25 +3042,6 @@ template: academic
             if (files.length) closeDropdowns()
           })
 
-          $('#confirm-yes').addEventListener('click', () => {
-            const callback = state.confirmCallback
-            closeConfirm()
-            if (callback) callback()
-          })
-          $('#confirm-no').addEventListener('click', closeConfirm)
-          dom.confirmModal.addEventListener('click', (event) => {
-            if (event.target === dom.confirmModal) closeConfirm()
-          })
-          dom.helpModal.addEventListener('click', (event) => {
-            if (event.target === dom.helpModal) closeHelp()
-          })
-          dom.aiModal.addEventListener('click', (event) => {
-            if (event.target === dom.aiModal) closeAiSpec()
-          })
-          dom.fileMetaModal.addEventListener('click', (event) => {
-            if (event.target === dom.fileMetaModal) closeFileMeta()
-          })
-          dom.fileMetaSave.addEventListener('click', saveFileMeta)
           dom.outputBody.addEventListener('keydown', (event) => {
             const item = event.target.closest('[data-goto-line]')
             if (!item) return
@@ -3128,9 +3055,6 @@ template: academic
             if (event.key === 'Escape') {
               closeDropdowns()
               closeHelp()
-              closeAiSpec()
-              closeFileMeta()
-              closeConfirm()
               return
             }
             const meta = event.ctrlKey || event.metaKey

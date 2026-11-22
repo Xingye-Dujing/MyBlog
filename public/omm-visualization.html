@@ -153,56 +153,6 @@
     <input type="file" id="file-input" accept=".csv,.txt,.xlsx,.xls,.tsv" />
     <input type="file" id="property-import-input" accept=".json,application/json" />
 
-    <div class="modal preview-modal" id="preview-modal" aria-label="图表放大查看">
-      <div class="preview-card">
-        <div class="modal-head">
-          <h3>图表放大查看</h3>
-          <button class="modal-close" id="preview-close" type="button">×</button>
-        </div>
-        <div class="preview-body" id="preview-body"></div>
-      </div>
-    </div>
-    <div class="modal" id="shortcuts-modal" aria-label="快捷键说明">
-      <div class="modal-card">
-        <div class="modal-head">
-          <h3>快捷键</h3>
-          <button class="modal-close" id="shortcuts-close" type="button">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="hk-grid" id="shortcuts-body"></div>
-        </div>
-      </div>
-    </div>
-    <div class="modal" id="data-modal">
-      <div class="modal-card">
-        <div class="modal-head">
-          <h3>数据表</h3>
-          <button class="modal-close" id="data-close">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="modal-grid">
-            <div class="field modal-wide">
-              <label>文本数据</label
-              ><textarea
-                id="paste-data"
-                class="modal-wide"
-                rows="7"
-                placeholder="粘贴带表头的数据，逗号、制表符、分号或空格均可识别"
-              ></textarea>
-            </div>
-            <div id="data-role-fields" class="data-role-fields"></div>
-            <div id="data-role-note" class="data-role-note" aria-live="polite"></div>
-          </div>
-          <div class="modal-gap"></div>
-          <div id="table-wrap"></div>
-        </div>
-        <div class="modal-foot">
-          <button class="ghost-btn" id="parse-paste">解析粘贴数据</button
-          ><button class="ghost-btn" id="data-add-row">+ 行</button
-          ><button class="ghost-btn" id="data-add-col">+ 列</button>
-        </div>
-      </div>
-    </div>
 
     <script>
 /* Paste-parsing for the studio's data panel.
@@ -313,6 +263,7 @@
         'use strict'
         const $ = (s) => document.querySelector(s),
           $$ = (s) => Array.from(document.querySelectorAll(s))
+        let previewOpen = false
         const state = {
           engine: 'echarts',
           category: '论文',
@@ -8252,7 +8203,7 @@
           renderCategories(getActiveCategory())
           renderTypeList(categories[getActiveCategory()] || [])
           renderInspector()
-          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
+          if ($('#data-modal')) syncDataColumnSelects()
           renderChart()
           schedulePersist()
         }
@@ -8286,7 +8237,7 @@
 
           updateMeta()
           renderInspector()
-          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
+          if ($('#data-modal')) syncDataColumnSelects()
           renderEngines()
           renderCategories(state.category)
           renderTypeList(categories[state.category] || [])
@@ -8449,19 +8400,15 @@
                 '</b> 的导出键位不受影响。<br />导出 SVG、打印、以及“样式 → 背景 / 圆角”目前只能点击操作，暂无键位。',
             ),
           ]
-          const grid = $('#shortcuts-body')
-          if (grid) grid.innerHTML = rows.join('')
-          const modal = $('#shortcuts-modal')
-          if (modal) modal.classList.add('open')
+          window.ZenUI.modal.open({
+            title: '快捷键',
+            html: '<div class="hk-grid" id="shortcuts-body">' + rows.join('') + '</div>',
+            ids: { close: 'shortcuts-close' },
+          })
         }
         function closeShortcuts() {
-          const modal = $('#shortcuts-modal')
-          if (modal) modal.classList.remove('open')
+          window.ZenUI.modal.close()
         }
-        $('#shortcuts-close').onclick = closeShortcuts
-        $('#shortcuts-modal').addEventListener('click', (e) => {
-          if (e.target === e.currentTarget) closeShortcuts()
-        })
         // 导出菜单里的“高清 / 透明背景”快捷项：改的是当前图表自己的输出设置
         function toggleExportTransparent() {
           const next = !exportTransparent()
@@ -9084,7 +9031,7 @@
           )
           bindCustomSelects(document)
           $$('.zen-select[data-select-key]')
-            .filter((el) => !el.closest('#data-modal'))
+            .filter((el) => !el.closest('.zenui-modal'))
             .forEach((el) => {
               el.addEventListener('zenchange', () => {
                 const k = el.dataset.selectKey
@@ -12591,7 +12538,7 @@
           }
         }
         function resizeHandler() {
-          if ($('#preview-modal')?.classList.contains('open')) {
+          if (previewOpen) {
             if (fitPreviewFrame()) syncChartSize()
           } else resizeChart()
         }
@@ -12647,52 +12594,59 @@
             reportError('图表尺寸更新失败', e, false)
           }
         }
+        function restoreChartFrame() {
+          const stage = $('#chart-stage'),
+            frame = $('#chart-frame')
+          if (stage && frame && frame.parentElement !== stage) stage.appendChild(frame)
+          fitChartFrame()
+          syncChartSize()
+        }
         function openPreview() {
-          const modal = $('#preview-modal'),
-            body = $('#preview-body'),
-            frame = $('#chart-frame'),
+          const frame = $('#chart-frame'),
             stage = $('#chart-stage')
-          if (!modal || !body || !frame || !stage) {
+          if (!frame || !stage) {
             reportError('图表放大界面不存在', new Error('预览容器或图表容器缺失'), true)
             return
           }
           try {
-            if (frame.parentElement !== body) body.appendChild(frame)
-            modal.classList.add('open')
+            window.ZenUI.modal.open({
+              title: '图表放大查看',
+              html: '',
+              width: 'min(1280px, calc(100vw - 28px))',
+              ids: { body: 'preview-body', close: 'preview-close' },
+              onMount: function (body) {
+                body.classList.add('preview-body')
+                if (frame.parentElement !== body) body.appendChild(frame)
+              },
+              onClose: function () {
+                previewOpen = false
+                const body = $('#preview-body')
+                if (body) body.classList.remove('preview-body')
+                try {
+                  restoreChartFrame()
+                } catch (e) {
+                  reportError('关闭图表放大查看失败', e, true)
+                }
+              },
+            })
+            previewOpen = true
             if (!fitPreviewFrame()) throw new Error('图表放大空间计算失败')
             requestAnimationFrame(() => requestAnimationFrame(() => syncChartSize()))
             setStatus('已打开图表放大查看')
           } catch (e) {
             try {
-              stage.appendChild(frame)
-              fitChartFrame()
-              syncChartSize()
+              restoreChartFrame()
             } catch (re) {
               reportError('图表恢复失败', re, false)
             }
-            modal.classList.remove('open')
+            window.ZenUI.modal.close()
             reportError('图表放大查看失败', e, true)
           }
         }
         function closePreview() {
-          const modal = $('#preview-modal'),
-            body = $('#preview-body'),
-            stage = $('#chart-stage'),
-            frame = $('#chart-frame')
-          try {
-            if (stage && frame && frame.parentElement !== stage) stage.appendChild(frame)
-            if (modal) modal.classList.remove('open')
-            fitChartFrame()
-            syncChartSize()
-          } catch (e) {
-            reportError('关闭图表放大查看失败', e, true)
-          }
+          window.ZenUI.modal.close()
         }
         $('#fullscreen-btn').onclick = openPreview
-        $('#preview-close').onclick = closePreview
-        $('#preview-modal').addEventListener('click', (e) => {
-          if (e.target.id === 'preview-modal') closePreview()
-        })
         window.addEventListener('resize', resizeHandler)
 
         function applyRadius() {
@@ -12723,30 +12677,55 @@
           applyBg(state.bg)
         }
 
-        function openDataModal() {
-          normalizeDataSelection()
-          const title = $('#data-modal .modal-head h3')
-          if (title) title.textContent = `数据表 · ${chartNames[state.type] || '图表'}`
-          renderDataTable()
-          syncDataColumnSelects()
-          bindCustomSelects($('#data-modal'))
-          $('#data-modal').classList.add('open')
-        }
-        function closeDataModal() {
-          $('#data-modal').classList.remove('open')
-        }
-        $('#edit-data-btn').onclick = openDataModal
-        $('#data-close').onclick = closeDataModal
-        $('#data-modal').addEventListener('click', (e) => {
-          if (e.target.id === 'data-modal') closeDataModal()
-        })
-        $('#data-modal').addEventListener('zenchange', (e) => {
+        const DATA_MODAL_HTML =
+          '<div class="modal-grid">' +
+            '<div class="field modal-wide">' +
+              '<label>文本数据</label>' +
+              '<textarea id="paste-data" class="modal-wide" rows="7" placeholder="粘贴带表头的数据，逗号、制表符、分号或空格均可识别"></textarea>' +
+            '</div>' +
+            '<div id="data-role-fields" class="data-role-fields"></div>' +
+            '<div id="data-role-note" class="data-role-note" aria-live="polite"></div>' +
+          '</div>' +
+          '<div class="modal-gap"></div>' +
+          '<div id="table-wrap"></div>'
+        const DATA_MODAL_FOOT =
+          '<button class="ghost-btn" id="parse-paste">解析粘贴数据</button>' +
+          '<button class="ghost-btn" id="data-add-row">+ 行</button>' +
+          '<button class="ghost-btn" id="data-add-col">+ 列</button>'
+        function dataZenChange(e) {
+          const body = $('#data-modal')
           const el = e.target.closest?.('.zen-select[data-select-key]')
-          if (!el || !$('#data-modal').contains(el)) return
+          if (!body || !el || !body.contains(el)) return
           const key = el.dataset.selectKey
           if (!['x-col', 'y-cols', 'target-col', 'y1-col', 'y2-col'].includes(key)) return
           handleDataSelectionChange(key, e.detail?.value ?? (key === 'y-cols' ? [] : ''))
-        })
+        }
+        function openDataModal() {
+          normalizeDataSelection()
+          window.ZenUI.modal.open({
+            title: `数据表 · ${chartNames[state.type] || '图表'}`,
+            html: DATA_MODAL_HTML,
+            foot: DATA_MODAL_FOOT,
+            ids: { body: 'data-modal', close: 'data-close' },
+            onMount: function (body, foot) {
+              renderDataTable()
+              syncDataColumnSelects()
+              bindCustomSelects(body)
+              foot.querySelector('#parse-paste').onclick = parsePasteData
+              foot.querySelector('#data-add-row').onclick = addDataRow
+              foot.querySelector('#data-add-col').onclick = addDataCol
+              body.addEventListener('zenchange', dataZenChange)
+            },
+            onClose: function () {
+              const body = $('#data-modal')
+              if (body) body.removeEventListener('zenchange', dataZenChange)
+            },
+          })
+        }
+        function closeDataModal() {
+          window.ZenUI.modal.close()
+        }
+        $('#edit-data-btn').onclick = openDataModal
         function dataRoleFieldMarkup(role) {
           const multiple = role.multiple === true
           const safeId = String(role.key).replace(/[^a-z0-9-]/gi, '-')
@@ -12918,20 +12897,20 @@
           })
           syncDataColumnSelects()
         }
-        $('#data-add-row').onclick = () => {
+        function addDataRow() {
           state.data.rows.push(new Array(state.data.headers.length).fill(''))
           renderDataTable()
           schedulePersist()
           renderChart(false)
         }
-        $('#data-add-col').onclick = () => {
+        function addDataCol() {
           state.data.headers.push('系列' + state.data.headers.length)
           state.data.rows.forEach((r) => r.push(''))
           renderDataTable()
           schedulePersist()
           renderChart(false)
         }
-        $('#parse-paste').onclick = () => {
+        function parsePasteData() {
           const raw = $('#paste-data').value.trim()
           if (!raw) return
           try {
@@ -14355,7 +14334,7 @@
             closeDataModal()
             closeShortcuts()
             // 图表放大查看也是弹层，Esc 必须能关掉，否则只能用鼠标点 ×
-            if ($('#preview-modal').classList.contains('open')) closePreview()
+            if (previewOpen) closePreview()
           }
         })
 

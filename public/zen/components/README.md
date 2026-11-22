@@ -11,6 +11,7 @@
 | `layer.js` | `ZenUI.layer` | 唯一 shadow 浮层栈：Escape / 外部点击 / 焦点管理 |
 | `toast.js` | `ZenUI.toast` | 统一 Toast，替代各产品的私有提示 |
 | `dialog.js` | `ZenUI.dialog` | `confirm/alert/prompt`，返回 Promise |
+| `dialog.js` | `ZenUI.modal` | 通用内容模态壳与可搜索选择器 `ZenUI.dialog.pick` |
 | `select.js` | `ZenUI.select` | 原生 `<select data-zen-select>` 的候选区 |
 | `menu.js` | `ZenUI.menu` | 下拉 / 右键菜单，替代各产品私有菜单 |
 | `shortcuts.js` | `ZenUI.shortcuts` | 快捷键注册表 |
