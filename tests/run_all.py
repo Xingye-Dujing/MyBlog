@@ -55,6 +55,7 @@ def main() -> int:
         "test_review.mjs",
         "test_backup.mjs",
         "test_products.mjs",
+        "test_table_page.mjs",
         "test_knowledge_graph.mjs",
         "test_chart.mjs",
         "test_writer_deep.mjs",
