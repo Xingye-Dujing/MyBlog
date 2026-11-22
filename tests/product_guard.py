@@ -106,7 +106,7 @@ SHARED_MODULES = [
     "public/zen/canvas/engine.js", "public/zen/canvas/canvas.css",
     "public/zen/zen.css",
     "public/zen/foundation/tokens.css", "public/zen/foundation/base.css",
-    "public/zen/foundation/primitives.css",
+    "public/zen/foundation/primitives.css", "public/zen/foundation/util.js",
     "public/zen/features/grid.css", "public/zen/features/doc.css",
     "public/zen/features/learning.css", "public/zen/features/cloud.css",
     "public/zen/features/tool.css",

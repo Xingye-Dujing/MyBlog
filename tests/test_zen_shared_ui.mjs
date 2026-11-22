@@ -96,3 +96,33 @@ test('zen/ 目录职责单一且名称互不重叠', () => {
   }
   assert.ok(exists('public/zen/zen.css'), '缺少统一样式入口')
 })
+
+test('通用助手统一引用共享 ZenUtil，不再各自实现', () => {
+  const util = read('public/zen/foundation/util.js')
+  for (const key of ['byId', 'tpl', 'setText', 'toggleCls', 'autosize', 'nz', 'low', 'kz', 'nowISO', 'pad', 'str', 'arr', 'isTableMissing']) {
+    assert.ok(util.includes('u.' + key + ' ='), `ZenUtil 缺少 ${key}`)
+  }
+  const migrated = ['annotate', 'corpus', 'data', 'english', 'planner', 'writer']
+  const delegates = ['E', 'tpl', 'setText', 'toggleCls', 'nz', 'low', 'kz', 'nowISO', 'pad', 'isTableMissing', 'autosizeSql']
+  for (const id of migrated) {
+    const page = `public/omm-${id}.html`
+    const text = read(page)
+    assert.ok(text.includes('zen/foundation/util.js'), `${page} 未接入共享 util`)
+    for (const name of delegates) {
+      const re = new RegExp('function\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{([^}]*)\\}', 'g')
+      for (const m of text.matchAll(re)) {
+        // writer/annotate 的 autosizeSql 是产品专有实现（固定高度 / 自动填 SQL），保留
+        if (name === 'autosizeSql' && (id === 'writer' || id === 'annotate')) continue
+        assert.ok(m[1].includes('ZenUtil'), `${page} 的 ${name}() 未委托共享实现`)
+      }
+    }
+  }
+})
+
+test('Hub 右键菜单使用共享 ZenUI.menu，无私有 ctx-menu', () => {
+  const page = read('public/omm-hub.html')
+  const js = read('public/omm-hub.js')
+  assert.ok(!page.includes('id="ctx-menu"'), 'Hub 仍有私有 ctx-menu 节点')
+  assert.ok(!js.includes('data-ctx') && !js.includes('data-tab-ctx'), 'Hub 仍有私有右键菜单绑定')
+  assert.ok(js.includes('ZenUI.menu.open'), 'Hub 未使用共享 ZenUI.menu')
+})

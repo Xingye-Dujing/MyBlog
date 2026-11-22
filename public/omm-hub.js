@@ -625,7 +625,6 @@
     els.dock = document.getElementById('dock');
     els.launcher = document.getElementById('launcher');
     els.layoutMenu = document.getElementById('layout-menu');
-    els.ctxMenu = document.getElementById('ctx-menu');
     els.notifyPanel = document.getElementById('notify-panel');
     els.tabsMore = document.getElementById('tabs-more');
     els.notifyList = document.getElementById('notify-list');
@@ -3219,7 +3218,6 @@
     launcherOpen = false;
     if (els.launcher) els.launcher.hidden = true;
     if (els.layoutMenu) els.layoutMenu.hidden = true;
-    if (els.ctxMenu) els.ctxMenu.hidden = true;
     if (els.notifyPanel) els.notifyPanel.hidden = true;
     if (graphOpen) closeKnowledgeGraph();
     if (flowOpen) closeDataFlow();
@@ -4247,24 +4245,19 @@
   /* ---------------------------------------------------------------- context ui */
 
   function showContextMenu(x, y, appId) {
-    var app = appOf(appId);
-    if (!app) return;
+    if (!appOf(appId)) return;
     closePopovers();
     var open = state.open.indexOf(appId) >= 0;
-    els.ctxMenu.innerHTML =
-      '<button class="menu-item" type="button" data-ctx="open"><span class="check"></span>打开 / 聚焦</button>' +
-      '<button class="menu-item" type="button" data-ctx="right"><span class="check"></span>在右侧分屏</button>' +
-      '<button class="menu-item" type="button" data-ctx="bottom"><span class="check"></span>在下方分屏</button>' +
-      (open ? '<div class="menu-sep"></div><button class="menu-item" type="button" data-ctx="close"><span class="check"></span>关闭</button>' : '');
-    els.ctxMenu.dataset.app = appId;
-    els.ctxMenu.hidden = false;
-    var width = 172;
-    var height = els.ctxMenu.offsetHeight || 120;
-    var left = Math.min(x, window.innerWidth - width - 8);
-    var top = Math.min(y, window.innerHeight - height - 8);
-    els.ctxMenu.style.left = Math.max(8, left) + 'px';
-    els.ctxMenu.style.top = Math.max(8, top) + 'px';
-    els.ctxMenu.style.right = 'auto';
+    var items = [
+      { label: '打开 / 聚焦', action: function () { activateApp(appId); } },
+      { label: '在右侧分屏', action: function () { splitPane(state.focused, 'v', 'right', appId); } },
+      { label: '在下方分屏', action: function () { splitPane(state.focused, 'h', 'bottom', appId); } },
+    ];
+    if (open) {
+      items.push('---');
+      items.push({ label: '关闭', danger: true, action: function () { closeTab(appId); } });
+    }
+    window.ZenUI.menu.open(items, null, { x: x, y: y });
   }
 
   function formatTimeShort(value) {
@@ -5751,37 +5744,34 @@
   }
 
   function showTabMenu(x, y, appId) {
-    var app = appOf(appId);
-    if (!app) return;
+    if (!appOf(appId)) return;
     closePopovers();
     var sleeping = appStatus[appId] === 'sleeping';
-    els.ctxMenu.dataset.tab = appId;
-    delete els.ctxMenu.dataset.app;
-    els.ctxMenu.innerHTML =
-      '<button class="menu-item" type="button" data-tab-ctx="focus"><span class="check"></span>打开 / 聚焦</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="reload"><span class="check"></span>重新加载</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="sleep"><span class="check"></span>' +
-      (sleeping ? '唤醒' : '休眠（释放内存）') +
-      '</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="detach"><span class="check"></span>脱离为独立窗口</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="window"><span class="check"></span>在新窗口打开</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="link"><span class="check"></span>复制应用链接</button>' +
-      '<div class="menu-sep"></div>' +
-      '<button class="menu-item" type="button" data-tab-ctx="move-right"><span class="check"></span>移到右侧分屏</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="move-bottom"><span class="check"></span>移到下方分屏</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="reopen"><span class="check"></span>重新打开已关闭标签</button>' +
-      '<div class="menu-sep"></div>' +
-      '<button class="menu-item" type="button" data-tab-ctx="close-others"><span class="check"></span>关闭其他</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="close-right"><span class="check"></span>关闭右侧</button>' +
-      '<button class="menu-item" type="button" data-tab-ctx="close"><span class="check"></span>关闭</button>';
-    els.ctxMenu.hidden = false;
-    var width = 196;
-    var height = els.ctxMenu.offsetHeight || 230;
-    var left = Math.min(x, window.innerWidth - width - 8);
-    var top = Math.min(y, window.innerHeight - height - 8);
-    els.ctxMenu.style.left = Math.max(8, left) + 'px';
-    els.ctxMenu.style.top = Math.max(8, top) + 'px';
-    els.ctxMenu.style.right = 'auto';
+    var items = [
+      { label: '打开 / 聚焦', action: function () { activateApp(appId); } },
+      { label: '重新加载', action: function () { reloadApp(appId); } },
+      { label: sleeping ? '唤醒' : '休眠（释放内存）', action: function () {
+        if (appStatus[appId] === 'sleeping') activateApp(appId); else sleepApp(appId);
+      } },
+      { label: '脱离为独立窗口', action: function () { detachApp(appId); } },
+      { label: '在新窗口打开', action: function () { openAppWindow(appId); } },
+      { label: '复制应用链接', action: function () { copyAppLink(appId); } },
+      '---',
+      { label: '移到右侧分屏', action: function () {
+        var pane = findPaneByApp(appId) || state.focused;
+        if (pane) splitPane(pane, 'v', 'right', appId);
+      } },
+      { label: '移到下方分屏', action: function () {
+        var pane = findPaneByApp(appId) || state.focused;
+        if (pane) splitPane(pane, 'h', 'bottom', appId);
+      } },
+      { label: '重新打开已关闭标签', action: function () { reopenLastClosed(); } },
+      '---',
+      { label: '关闭其他', action: function () { closeOthers(appId); } },
+      { label: '关闭右侧', action: function () { closeRight(appId); } },
+      { label: '关闭', danger: true, action: function () { closeTab(appId); } },
+    ];
+    window.ZenUI.menu.open(items, null, { x: x, y: y });
   }
 
   function appUrlFor(appId) {
@@ -6329,45 +6319,6 @@
       }
     });
 
-    /* context menu */
-    els.ctxMenu.addEventListener('click', function (event) {
-      var tabItem = event.target.closest('[data-tab-ctx]');
-      if (tabItem) {
-        var tabApp = els.ctxMenu.dataset.tab;
-        var tabAction = tabItem.dataset.tabCtx;
-        els.ctxMenu.hidden = true;
-        if (!tabApp) return;
-        if (tabAction === 'focus') activateApp(tabApp);
-        else if (tabAction === 'reload') reloadApp(tabApp);
-        else if (tabAction === 'sleep') {
-          if (appStatus[tabApp] === 'sleeping') activateApp(tabApp);
-          else sleepApp(tabApp);
-        } else if (tabAction === 'detach') detachApp(tabApp);
-        else if (tabAction === 'window') openAppWindow(tabApp);
-        else if (tabAction === 'link') copyAppLink(tabApp);
-        else if (tabAction === 'move-right') {
-          var pane = findPaneByApp(tabApp) || state.focused;
-          if (pane) splitPane(pane, 'v', 'right', tabApp);
-        } else if (tabAction === 'move-bottom') {
-          var pane2 = findPaneByApp(tabApp) || state.focused;
-          if (pane2) splitPane(pane2, 'h', 'bottom', tabApp);
-        } else if (tabAction === 'reopen') reopenLastClosed();
-        else if (tabAction === 'close-others') closeOthers(tabApp);
-        else if (tabAction === 'close-right') closeRight(tabApp);
-        else if (tabAction === 'close') closeTab(tabApp);
-        return;
-      }
-      var item = event.target.closest('[data-ctx]');
-      if (!item) return;
-      var appId = els.ctxMenu.dataset.app;
-      var action = item.dataset.ctx;
-      els.ctxMenu.hidden = true;
-      if (action === 'open') activateApp(appId);
-      else if (action === 'right') splitPane(state.focused, 'v', 'right', appId);
-      else if (action === 'bottom') splitPane(state.focused, 'h', 'bottom', appId);
-      else if (action === 'close') closeTab(appId);
-    });
-
     /* command palette */
     if (els.cmdk && els.cmdkInput) {
       els.cmdkInput.addEventListener('input', function () {
@@ -6653,7 +6604,6 @@
       if (
         event.target.closest('#launcher') ||
         event.target.closest('#layout-menu') ||
-        event.target.closest('#ctx-menu') ||
         event.target.closest('#notify-panel') ||
         event.target.closest('#notify-btn') ||
         event.target.closest('#tabs-more') ||
@@ -6668,7 +6618,6 @@
       if (
         !els.launcher.hidden ||
         !els.layoutMenu.hidden ||
-        !els.ctxMenu.hidden ||
         (els.notifyPanel && !els.notifyPanel.hidden) ||
         (els.tabsMore && !els.tabsMore.hidden)
       ) {
@@ -6796,8 +6745,7 @@
         if (
           !els.launcher.hidden ||
           !els.layoutMenu.hidden ||
-          !els.ctxMenu.hidden ||
-          (els.notifyPanel && !els.notifyPanel.hidden) ||
+            (els.notifyPanel && !els.notifyPanel.hidden) ||
           graphOpen ||
           flowOpen
         ) {
@@ -6897,7 +6845,7 @@
         } else if (!els.pluginPanel.hidden) {
           closePluginPanel();
           event.preventDefault();
-        } else if (!els.ctxMenu.hidden || !els.layoutMenu.hidden || launcherOpen) {
+        } else if (!els.layoutMenu.hidden || launcherOpen) {
           closePopovers();
           event.preventDefault();
         } else if (zenActive) {

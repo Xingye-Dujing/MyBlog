@@ -21,7 +21,8 @@ zen/
 ├── foundation/             视觉基座——令牌、重置、通用 class 词汇
 │   ├── tokens.css             颜色/字体/间距/层级令牌真源
 │   ├── base.css               基础重置
-│   └── primitives.css         通用组件词汇（panel/dropdown/seg/hint…）
+│   ├── primitives.css         通用组件词汇（panel/dropdown/seg/hint…）
+│   └── util.js                通用无状态助手（ZenUtil：DOM/字符串/错误分类）
 ├── components/             交互组件——JS 与自身样式同放
 │   ├── index.js               核心装配、渐进增强
 │   ├── components.css         组件外观（由 zen.css 导入）
@@ -48,6 +49,7 @@ zen/
 |---|---|---|
 | **核心样式** | `zen.css` → `foundation/*` + `components/components.css` | 所有产品 |
 | **核心脚本** | `components/{layer,toast,dialog,select,menu,shortcuts,index}.js` | 所有产品 |
+| **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串/错误分类） | 用到助手的产品 |
 | **可选样式包** | `features/*.css`、`canvas/canvas.css` | 只由真正用到的产品 link |
 | **可选脚本** | `components/{picker,tabs,tooltip}.js`、`canvas/{layout,engine}.js` | 只由真正用到的产品加载 |
 | **产品适配器** | `lib/zen-<id>.js`、`products/<id>.css` | 产品自己的业务与外观配置 |
@@ -78,3 +80,12 @@ zen/
 4. 新增通用能力必须至少两个产品复用且无业务状态；产品差异通过配置 / 回调实现。
 5. 改共享文件需提升套件版本；`tests/product_guard.py` 的 `SHARED_MODULES` 与
    `desktop/offline.py` 的 `copy_zen_styles` / `copy_zen_ui` / `copy_canvas_framework` 保持同步。
+
+## 边界：什么必须共享，什么留在产品
+
+- **必须共享**：同一交互/视觉机制的重复实现。通用无状态助手统一到 `ZenUtil`；
+  右键/下拉菜单统一到 `ZenUI.menu`；弹窗、Toast、画布、选择器同理。
+- **留在产品**：带业务状态的产品逻辑（云同步 watcher、数据归一化、学习词库语义）
+  与产品独有的外观编排（各自顶部菜单的条目内容、定位与副作用）。这些看似重复，
+  实则行为各异，强行统一只会引入按产品分支——违反“共享库无产品分支”的底线。
+  重复出现时只允许把**无业务状态的那部分**下沉到 `ZenUtil`，状态与编排仍归产品。
