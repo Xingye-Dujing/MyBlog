@@ -141,6 +141,14 @@ test('Writer 富右键菜单的定位/关闭委托共享 ZenUI.contextMenu', () 
   assert.ok(text.includes('id="context-menu"'), 'Writer 右键菜单模板被误删')
 })
 
+test('Writer 的锚定浮层定位/关闭均委托共享组件', () => {
+  const text = read('public/omm-writer.html')
+  assert.ok(text.includes('ZenUI.popover.open'), 'Writer 基准菜单未委托 popover')
+  assert.ok(text.includes('ZenUI.popover.place'), 'Writer 引用预览定位未复用共享几何')
+  assert.ok(!text.includes("this._menu.classList.remove('open')"), 'Writer 基准菜单仍自行关闭')
+  assert.ok(!text.includes("if (!this._menuOpen) return"), 'Writer 基准菜单仍有私有外部关闭逻辑')
+})
+
 test('Hub 右键菜单使用共享 ZenUI.menu，无私有 ctx-menu', () => {
   const page = read('public/omm-hub.html')
   const js = read('public/omm-hub.js')
