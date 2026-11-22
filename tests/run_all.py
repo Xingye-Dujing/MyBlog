@@ -48,6 +48,8 @@ def main() -> int:
         print("\nAI workspace pytest SKIPPED (repo virtualenv not found)")
     failures += run("postMessage protocol (Node)",
                     ["node", "tests/test_message_security.mjs"])
+    failures += run("zenviz-core generated artifact sync (Node)",
+                    ["node", "tests/test_zenviz_core_sync.mjs"])
     zen_tests = [
         "test_zencard.mjs",
         "test_srs.mjs",
