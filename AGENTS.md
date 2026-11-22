@@ -1,5 +1,24 @@
 # AGENTS.md
 
+## Non-negotiable: zero residue, no compatibility shims
+
+This is a hard rule for every change in this repo. Follow it after every migration and before
+every commit:
+
+- **Leave no residue, no abandoned code.** When logic/styles move to a shared asset, delete the
+  old product-owned implementation entirely: private shells, listeners, helper functions, dead
+  event bindings, unused ids/templates, backup files, stale docs. Do not leave commented-out code.
+- **No compatibility concerns.** Do not keep old API aliases, legacy wrappers, or deprecated
+  names "just in case". Update all call sites to the one canonical API and remove the alias.
+- **Delete anything currently unused.** Files, functions, CSS rules, tokens, and docs that no
+  longer have any reference must be removed, not kept for a future that may never come. Verify
+  by grepping all source (HTML/JS/CSS/PY/MD) before deleting.
+- **No redundancy, no duplication.** There must be exactly one implementation of each visual or
+  interaction concern. If two modules do the same job, unify them and delete the copy. Shared
+  code goes in `zen/` or `lib/`; products only configure it.
+- This applies to generated/derived files too: never hand-edit a generated artifact to paper over
+  drift — edit the source and regenerate.
+
 ## Read this first (OMM-ZEN product work)
 
 - `public/docs/` is the design-system contract: `README.md` (hard rules), `design-tokens.md`,

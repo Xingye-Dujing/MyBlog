@@ -135,9 +135,12 @@ test('产品页不内联样式，视觉资产全部来自 zen/', () => {
 
 test('组件词汇集中在共享层', () => {
   const primitives = read('public/zen/foundation/primitives.css')
-  for (const cls of ['panel', 'modal-box', 'menu-btn', 'dropdown', 'dd-item', 'seg', 'hint']) {
+  for (const cls of ['panel', 'menu-btn', 'dropdown', 'dd-item', 'seg', 'hint']) {
     assert.ok(primitives.includes('.' + cls), `共享层缺少组件 ${cls}`)
   }
+  // 模态壳已统一到共享组件（不再有产品私有的 .modal-box）。
+  const components = read('public/zen/components/components.css')
+  assert.ok(components.includes('.zenui-modal'), '共享层缺少模态壳 .zenui-modal')
   for (const file of ['grid', 'doc', 'learning', 'cloud', 'tool']) {
     assert.ok(exists(`public/zen/features/${file}.css`), `缺少能力样式 ${file}`)
   }

@@ -28,6 +28,7 @@
     <script src="vendor/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="vendor/mathjax/3/tex-svg.js"></script>
     <script src="zen/canvas/layout.js"></script>
+    <script src="zen/canvas/engine.js"></script>
     <script>
       MathJax = {
         tex: {
@@ -7066,156 +7067,17 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         const ConnectionManager = {
           getPortPosition(node, portType) {
-            const l = node.offsetLeft,
-              t = node.offsetTop,
-              w = node.offsetWidth,
-              h = node.offsetHeight
-            switch (portType) {
-              case 'top':
-                return { x: l + w / 2, y: t }
-              case 'bottom':
-                return { x: l + w / 2, y: t + h }
-              case 'left':
-                return { x: l, y: t + h / 2 }
-              case 'right':
-                return { x: l + w, y: t + h / 2 }
-              default:
-                return { x: l + w / 2, y: t + h / 2 }
-            }
+            return window.ZenCanvas.geometry.getPortPosition(node, portType)
           },
           _getCurvePath(x1, y1, x2, y2, port1, port2) {
-            const dx = x2 - x1,
-              dy = y2 - y1
-            const absDx = Math.abs(dx),
-              absDy = Math.abs(dy)
-            const h1 = port1 === 'left' || port1 === 'right'
-            const h2 = port2 === 'left' || port2 === 'right'
-            const v1 = port1 === 'top' || port1 === 'bottom'
-            const v2 = port2 === 'top' || port2 === 'bottom'
-            let cp1x, cp1y, cp2x, cp2y
-            // Both horizontal (left↔right)
-            if (h1 && h2) {
-              const mid = (x1 + x2) / 2
-              cp1x = mid
-              cp1y = y1
-              cp2x = mid
-              cp2y = y2
-            }
-            // Both vertical (top↔bottom)
-            else if (v1 && v2) {
-              const mid = (y1 + y2) / 2
-              cp1x = x1
-              cp1y = mid
-              cp2x = x2
-              cp2y = mid
-            }
-            // Horizontal to vertical (e.g., left→top)
-            else if (h1 && v2) {
-              cp1x = x1
-              cp1y = y1 + dy * 0.5
-              cp2x = x1 + dx * 0.5
-              cp2y = y2
-            }
-            // Vertical to horizontal (e.g., top→left)
-            else {
-              cp1x = x1 + dx * 0.5
-              cp1y = y1
-              cp2x = x2
-              cp2y = y1 + dy * 0.5
-            }
-            return `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`
+            return window.ZenCanvas.geometry.getCurvePath(x1, y1, x2, y2, port1, port2)
           },
           // —— 折线路径（横平竖直 + 圆角拐弯）——
           // 自动布局对“16 组端口组合都救不回来”的连线会标记 route:'elbow'
           // 并给出 hint（路线选型）。这里用同一算法 + 当前几何重建路径，
           // 节点挪动后路线跟随移动；box 是两端节点的合并包围盒。
           _getElbowPath(x1, y1, x2, y2, port1, port2, hint, box) {
-            const h = hint || {}
-            const DIR = { top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0] }
-            const d1 = DIR[port1] || [0, 1]
-            const d2 = DIR[port2] || [0, -1]
-            const k = h.k || 0
-            const stub = 26 * (1 + k * 0.6)
-            const p1 = { x: x1, y: y1 }
-            const p2 = { x: x2, y: y2 }
-            const s1 = { x: p1.x + d1[0] * stub, y: p1.y + d1[1] * stub }
-            const s2 = { x: p2.x + d2[0] * stub, y: p2.y + d2[1] * stub }
-            const v1 = d1[1] !== 0
-            const v2 = d2[1] !== 0
-            const laneT = k === 1 ? 0.25 : k === 2 ? 0.75 : k === 3 ? 1.3 : k === 4 ? -0.3 : k === 5 ? 1.6 : k === 6 ? -0.6 : 0.5
-            const b =
-              box || {
-                x0: Math.min(p1.x, p2.x),
-                y0: Math.min(p1.y, p2.y),
-                x1: Math.max(p1.x, p2.x),
-                y1: Math.max(p1.y, p2.y),
-              }
-            const v = h.v || 'lane'
-            let wps
-            if (v === 'path' && Array.isArray(h.pts)) {
-              // 栅格兜底路线：存的是布局时的绝对点，按源端口的位移整体平移。
-              const dx = x1 - (h.ax != null ? h.ax : x1)
-              const dy = y1 - (h.ay != null ? h.ay : y1)
-              wps = [p1, ...h.pts.map((pt) => ({ x: pt[0] + dx, y: pt[1] + dy })), p2]
-            } else if (v === 'lane' && v1 && v2) {
-              const lane = s1.y + (s2.y - s1.y) * laneT
-              wps = [p1, s1, { x: s1.x, y: lane }, { x: s2.x, y: lane }, s2, p2]
-            } else if (v === 'lane' && !v1 && !v2) {
-              const lane = s1.x + (s2.x - s1.x) * laneT
-              wps = [p1, s1, { x: lane, y: s1.y }, { x: lane, y: s2.y }, s2, p2]
-            } else if (v === 'aroundL' || v === 'aroundR') {
-              const m = stub + 30 + k * 70
-              if (v1 && v2) {
-                const laneX = v === 'aroundL' ? b.x0 - m : b.x1 + m
-                wps = [p1, s1, { x: laneX, y: s1.y }, { x: laneX, y: s2.y }, s2, p2]
-              } else if (!v1 && !v2) {
-                const laneY = v === 'aroundL' ? b.y0 - m : b.y1 + m
-                wps = [p1, s1, { x: s1.x, y: laneY }, { x: s2.x, y: laneY }, s2, p2]
-              } else {
-                const cx = v === 'aroundL' ? b.x0 - m : b.x1 + m
-                const cy = v === 'aroundL' ? b.y0 - m : b.y1 + m
-                wps = v1
-                  ? [p1, s1, { x: s1.x, y: cy }, { x: cx, y: cy }, { x: cx, y: s2.y }, s2, p2]
-                  : [p1, s1, { x: cx, y: s1.y }, { x: cx, y: cy }, { x: s2.x, y: cy }, s2, p2]
-              }
-            } else if (v === 'L') {
-              if (v1 && !v2) wps = [p1, s1, { x: s2.x, y: s1.y }, s2, p2]
-              else if (!v1 && v2) wps = [p1, s1, { x: s1.x, y: s2.y }, s2, p2]
-              else if (v1 && v2) {
-                const lane = (s1.y + s2.y) / 2
-                wps = [p1, s1, { x: s1.x, y: lane }, { x: s2.x, y: lane }, s2, p2]
-              } else {
-                const lane = (s1.x + s2.x) / 2
-                wps = [p1, s1, { x: lane, y: s1.y }, { x: lane, y: s2.y }, s2, p2]
-              }
-            } else {
-              wps = [p1, p2]
-            }
-            // 去重 + 圆角（拐角处用二次贝塞尔收出小圆弧）
-            const P = []
-            wps.forEach((p) => {
-              const q = P[P.length - 1]
-              if (!q || Math.hypot(p.x - q.x, p.y - q.y) > 0.5) P.push({ x: p.x, y: p.y })
-            })
-            if (P.length < 2) return this._getCurvePath(x1, y1, x2, y2, port1, port2)
-            const r = 14
-            let d = 'M ' + P[0].x + ' ' + P[0].y
-            for (let i = 1; i < P.length - 1; i++) {
-              const p = P[i]
-              const prev = P[i - 1]
-              const next = P[i + 1]
-              const l1 = Math.hypot(p.x - prev.x, p.y - prev.y) || 1
-              const l2 = Math.hypot(next.x - p.x, next.y - p.y) || 1
-              const rr = Math.min(r, l1 / 2, l2 / 2)
-              const ax = p.x + ((prev.x - p.x) / l1) * rr
-              const ay = p.y + ((prev.y - p.y) / l1) * rr
-              const bx = p.x + ((next.x - p.x) / l2) * rr
-              const by = p.y + ((next.y - p.y) / l2) * rr
-              d += ' L ' + ax + ' ' + ay + ' Q ' + p.x + ' ' + p.y + ' ' + bx + ' ' + by
-            }
-            const last = P[P.length - 1]
-            d += ' L ' + last.x + ' ' + last.y
-            return d
+            return window.ZenCanvas.geometry.getElbowPath(x1, y1, x2, y2, port1, port2, hint, box)
           },
           renderAll() {
             if (AppState.renderPending) return
