@@ -28,13 +28,7 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     })
   }
-  function toast(msg) {
-    var t = $('toast')
-    t.textContent = msg
-    t.classList.add('show')
-    clearTimeout(t._t)
-    t._t = setTimeout(function () { t.classList.remove('show') }, 2300)
-  }
+  function toast(msg) { return window.ZenUI.toast(msg) }
   function f(key, label, type, extra) {
     return Object.assign({ key: key, label: label, type: type || 'text' }, extra || {})
   }

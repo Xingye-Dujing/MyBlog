@@ -25,15 +25,7 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     })
   }
-  function toast(msg) {
-    var t = $('toast')
-    t.textContent = msg
-    t.classList.add('show')
-    clearTimeout(toast._t)
-    toast._t = setTimeout(function () {
-      t.classList.remove('show')
-    }, 2300)
-  }
+  function toast(msg) { return window.ZenUI.toast(msg) }
   function fmtTime(sec) {
     var n = Number(sec || 0)
     if (!isFinite(n)) return '—'

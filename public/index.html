@@ -6,7 +6,16 @@
 <base href="./">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Lambda 演算计算器 · Lambda Calculus</title>
+<link rel="stylesheet" href="zen/zen.css" />
+<link rel="stylesheet" href="zen/products/lambda.css" />
 <script src="omm-embed.js"></script>
+<script src="zen/components/layer.js"></script>
+<script src="zen/components/toast.js"></script>
+<script src="zen/components/dialog.js"></script>
+<script src="zen/components/select.js"></script>
+<script src="zen/components/menu.js"></script>
+<script src="zen/components/shortcuts.js"></script>
+<script src="zen/components/index.js"></script>
 </head>
 <body>
 <a class="skip-link" id="skip-link" href="#cmd">跳到输入框 / skip to input</a>
@@ -17,40 +26,22 @@
       <p class="sub" id="subline">Haskell 解释器 · 归约轨迹 · 语法树 · 类型推断</p>
     </div>
     <div class="controls">
-      <div class="sel" id="sel-lang">
-        <select data-omm-select id="lang" aria-label="language" tabindex="-1" aria-hidden="true">
-          <option value="both">中 / EN</option>
-          <option value="zh">中文</option>
-          <option value="en">English</option>
-        </select>
-        <button class="sel-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span class="sel-label"></span><span class="chev">▾</span>
-        </button>
-        <div class="sel-menu" role="listbox"></div>
-      </div>
-      <div class="sel" id="sel-strategy">
-        <select data-omm-select id="strategy" aria-label="strategy" tabindex="-1" aria-hidden="true">
-          <option value="applicative">应用序 / applicative</option>
-          <option value="normal">正规序 / normal</option>
-          <option value="cbn">按名 / call-by-name</option>
-          <option value="cbv">按值 / call-by-value</option>
-           <option value="need">按需 / call-by-need</option>
-        </select>
-        <button class="sel-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span class="sel-label"></span><span class="chev">▾</span>
-        </button>
-        <div class="sel-menu" role="listbox"></div>
-      </div>
-      <div class="sel" id="sel-encoding">
-        <select data-omm-select id="encoding" aria-label="numeral encoding" tabindex="-1" aria-hidden="true">
-          <option value="church">邱奇 / Church</option>
-          <option value="scott">Scott</option>
-        </select>
-        <button class="sel-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span class="sel-label"></span><span class="chev">▾</span>
-        </button>
-        <div class="sel-menu" role="listbox"></div>
-      </div>
+      <select data-zen-select id="lang" aria-label="language">
+        <option value="both">中 / EN</option>
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <select data-zen-select id="strategy" aria-label="strategy">
+        <option value="applicative">应用序 / applicative</option>
+        <option value="normal">正规序 / normal</option>
+        <option value="cbn">按名 / call-by-name</option>
+        <option value="cbv">按值 / call-by-value</option>
+        <option value="need">按需 / call-by-need</option>
+      </select>
+      <select data-zen-select id="encoding" aria-label="numeral encoding">
+        <option value="church">邱奇 / Church</option>
+        <option value="scott">Scott</option>
+      </select>
       <button class="ctl" id="fast-toggle" type="button" aria-pressed="false">快速 / Fast</button>
       <button class="ctl" id="share" type="button">分享 / Share</button>
       <button class="ctl" id="export" type="button">导出 / Export</button>
@@ -154,7 +145,6 @@
     </div>
   </div>
 </div>
-<div class="toast" id="toast"></div>
 
 <script>
 (function(){
@@ -693,82 +683,15 @@
     return null;
   }
 
-  /* -------------------------------------------------- custom select / 下拉 */
-  function initSelect(wrapId){
-    var wrap = $(wrapId);
-    var sel = wrap.querySelector("select");
-    var btn = wrap.querySelector(".sel-btn");
-    var menu = wrap.querySelector(".sel-menu");
-    var label = btn.querySelector(".sel-label");
 
-    function optId(i){ return wrapId + "-opt-" + i; }
-    function setActiveDesc(i){
-      // 让读屏软件知道当前活动选项 / tell assistive tech which option is active
-      if (menu.setAttribute) menu.setAttribute("aria-activedescendant", optId(i));
-    }
-    function sync(){
-      var opt = sel.options[sel.selectedIndex];
-      label.textContent = opt ? opt.textContent : "";
-    }
-    function paint(){
-      menu.innerHTML = Array.prototype.map.call(sel.options, function(o, i){
-        return '<div class="sel-opt" role="option" id="' + optId(i) + '" data-i="' + i +
-               '" aria-selected="' + (o.selected ? "true" : "false") + '">' +
-               esc(o.textContent) + '</div>';
-      }).join("");
-      setActiveDesc(sel.selectedIndex);
-    }
-    function open(){
-      paint();
-      wrap.classList.add("open");
-      btn.setAttribute("aria-expanded", "true");
-      setActiveDesc(sel.selectedIndex);
-    }
-    function close(){
-      wrap.classList.remove("open");
-      btn.setAttribute("aria-expanded", "false");
-    }
-    function choose(i){
-      if (i < 0 || i >= sel.options.length) return;
-      sel.selectedIndex = i;
-      setActiveDesc(i);
-      sel.dispatchEvent(new Event("change", {bubbles: true}));
-      sync();
-      close();
-      btn.focus();
-    }
-    btn.addEventListener("click", function(e){
-      e.stopPropagation();
-      if (wrap.classList.contains("open")) close(); else open();
-    });
-    btn.addEventListener("keydown", function(e){
-      if (e.key === "ArrowDown" || e.key === "ArrowUp"){
-        e.preventDefault();
-        var n = sel.options.length;
-        choose((sel.selectedIndex + (e.key === "ArrowDown" ? 1 : -1) + n) % n);
-      } else if (e.key === "Escape"){
-        close();
-      }
-    });
-    menu.addEventListener("click", function(e){
-      var opt = e.target.closest(".sel-opt");
-      if (opt) choose(parseInt(opt.dataset.i, 10));
-    });
-    sel.addEventListener("change", sync);
-    document.addEventListener("click", function(e){
-      if (!wrap.contains(e.target)) close();
-    });
-    sync();
-    return {sync: sync, close: close};
-  }
 
   /* ------------------------------------------------ custom dialog / 对话框 */
   // 弹窗打开时把背景标记为 inert，关闭时还原 / mark the background inert, restore on close
   function setBackgroundInert(on){
     var sibs = (document.body && document.body.children) ? document.body.children : [];
-    var modal = $("modal"), toast = $("toast");
+    var modal = $("modal");
     Array.prototype.forEach.call(sibs, function(n){
-      if (!n || !n.setAttribute || n === modal || n === toast) return;
+      if (!n || !n.setAttribute || n === modal) return;
       if (on){ n.setAttribute("inert", ""); n.setAttribute("aria-hidden", "true"); }
       else { n.removeAttribute("inert"); n.removeAttribute("aria-hidden"); }
     });
@@ -879,8 +802,6 @@
       if (opts.input && input.select) input.select();
     });
   }
-
-  var selects = [];
   var NARROW_HINT_KEY = "lambda.hint.narrow";
 
   /* -------------------------------------------- narrow hint / 窄屏一次性提示 */
@@ -951,13 +872,7 @@
   }
   function scrollDown(){ out.scrollTop = out.scrollHeight; }
 
-  function toast(msg){
-    var el = $("toast");
-    el.textContent = msg;
-    el.classList.add("show");
-    clearTimeout(toast._t);
-    toast._t = setTimeout(function(){ el.classList.remove("show"); }, 1600);
-  }
+  function toast(msg) { return window.ZenUI.toast(msg) }
 
   /* ------------------------------------------------------------- terminal / 终端 */
   function echoPrompt(line){
@@ -4030,7 +3945,6 @@
     });
     $("st-strategy").textContent = strategyText($("strategy").value);
     applyFastButton();
-    selects.forEach(function(s){ s.sync(); });
     renderExamples();
   }
 

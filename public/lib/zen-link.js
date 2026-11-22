@@ -46,22 +46,7 @@ function isTrusted(origin) {
   }
 }
 
-function toast(msg) {
-  let box = document.getElementById('zen-link-toast')
-  if (!box) {
-    box = document.createElement('div')
-    box.id = 'zen-link-toast'
-    box.style.cssText =
-      'position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:#2a2a2a;color:#ffffff;' +
-      'padding:7px 14px;border-radius:6px;font:12px/1.5 "Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif;z-index:99999;opacity:0;' +
-      'pointer-events:none;transition:opacity .18s;max-width:80vw'
-    document.body.appendChild(box)
-  }
-  box.textContent = msg
-  box.style.opacity = '1'
-  clearTimeout(toast._t)
-  toast._t = setTimeout(() => { box.style.opacity = '0' }, 1900)
-}
+function toast(msg) { return window.ZenUI.toast(msg) }
 
 function readInbox() {
   try { return JSON.parse(localStorage.getItem(INBOX_KEY) || '[]') } catch { return [] }
