@@ -99,7 +99,7 @@ test('zen/ 目录职责单一且名称互不重叠', () => {
 
 test('通用助手统一引用共享 ZenUtil，不再各自实现', () => {
   const util = read('public/zen/foundation/util.js')
-  for (const key of ['byId', 'tpl', 'setText', 'toggleCls', 'autosize', 'nz', 'low', 'kz', 'nowISO', 'pad', 'str', 'arr', 'isTableMissing']) {
+  for (const key of ['byId', 'tpl', 'setText', 'toggleCls', 'autosize', 'nz', 'low', 'kz', 'nowISO', 'pad', 'str', 'arr', 'isTableMissing', 'esc', 'uid', 'download', 'copy', 'safeName', 'escRe']) {
     assert.ok(util.includes('u.' + key + ' ='), `ZenUtil 缺少 ${key}`)
   }
   const migrated = ['annotate', 'corpus', 'data', 'english', 'planner', 'writer']
@@ -117,6 +117,40 @@ test('通用助手统一引用共享 ZenUtil，不再各自实现', () => {
       }
     }
   }
+})
+
+test('HTML 转义 / uid / 下载 / 复制 / 安全文件名统一委托 ZenUtil', () => {
+  const helpers = ['esc', 'escapeHtml', 'escape', 'uid', 'download', 'copyText', 'safeName', 'escRe', 'escapeRegex']
+  for (const page of PAGES) {
+    const text = read(page)
+    for (const name of helpers) {
+      const fns = new RegExp('function\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\}', 'g')
+      for (const m of text.matchAll(fns)) {
+        assert.ok(/ZenUtil/.test(m[1]), `${page} 的 ${name}() 仍自行实现：${m[1].slice(0, 60)}`)
+      }
+      const arrows = new RegExp('const\\s+' + name + '\\s*=\\s*\\([^)]*\\)\\s*=>\\s*([^\\n]+)', 'g')
+      for (const m of text.matchAll(arrows)) {
+        assert.ok(/ZenUtil/.test(m[1]), `${page} 的 ${name} 箭头实现仍自行处理：${m[1].slice(0, 60)}`)
+      }
+    }
+  }
+})
+
+test('旧 toast 计时器残留已清理', () => {
+  for (const page of PAGES) {
+    const text = read(page)
+    assert.ok(!/\b(?:let|var)\s+(?:toastTimer|notifyTimer)\s*=/.test(text), `${page} 仍有私有 toast 计时器`)
+    assert.ok(!/\bnotifyTimer\s*:\s*null/.test(text), `${page} 仍有 notifyTimer 字段残留`)
+  }
+})
+
+test('安装器外观设置使用共享 ZenUI.modal，无私有对话框', () => {
+  const page = read('public/installer.html')
+  const js = read('public/installer.js')
+  assert.ok(page.includes('zen/components/dialog.js'), '安装器未加载共享 dialog')
+  assert.ok(js.includes('ZenUI.modal.open'), '安装器未使用 ZenUI.modal')
+  assert.ok(!page.includes('id="settings"'), '安装器仍有私有 settings 对话框节点')
+  assert.ok(!js.includes('els.settings'), '安装器仍保留私有对话框引用')
 })
 
 test('下拉浮层统一用共享 ZenUI.popover，不再各自定位', () => {
@@ -147,6 +181,45 @@ test('Writer 的锚定浮层定位/关闭均委托共享组件', () => {
   assert.ok(text.includes('ZenUI.popover.place'), 'Writer 引用预览定位未复用共享几何')
   assert.ok(!text.includes("this._menu.classList.remove('open')"), 'Writer 基准菜单仍自行关闭')
   assert.ok(!text.includes("if (!this._menuOpen) return"), 'Writer 基准菜单仍有私有外部关闭逻辑')
+  // 节点边框 / 节点类型浮层也走共享 popover，保留产品自己的 .active 外观
+  assert.ok(text.includes("openClass: 'active'"), 'Writer 节点浮层未复用共享 popover 外观配置')
+  assert.ok(!text.includes("pop.classList.add('active')"), 'Writer 节点浮层仍自管 open 状态')
+})
+
+test('产品自建浮层/日历/选择器残留已清除', () => {
+  const noPrivate = {
+    'omm-corpus.html': ['initCustomSelects', 'positionCustomSelect', 'closeCustomSelects', 'custom-select-trigger'],
+    'omm-data.html': ['Csel.position', 'Fsel.position', "style.left = '-9999px'"],
+    'omm-english.html': ['renderExamPop', 'function hidePop', 'id="pop-voice"', 'id="pop-exam"', 'EP.y'],
+    'omm-planner.html': ['id="pop-date"', 'id="pop-time"', 'id="pop-multidate"', 'id="pop-enddate"', 'ED_GUARD'],
+    'omm-annotate.html': ['function placePop', 'function closeDrops'],
+    'omm-redact.html': ['dd.style.top =', 'dd.style.left ='],
+  }
+  for (const [page, tokens] of Object.entries(noPrivate)) {
+    const text = read(`public/${page}`)
+    for (const token of tokens) {
+      assert.ok(!text.includes(token), `${page} 仍残留 ${token}`)
+    }
+  }
+  for (const id of ['annotate', 'redact', 'planner', 'data', 'corpus', 'english']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('ZenUI.popover.open'), `omm-${id}.html 未委托 ZenUI.popover`)
+  }
+  assert.ok(read('public/omm-english.html').includes('ZenUI.picker.open'), 'English 未委托 ZenUI.picker')
+})
+
+test('标签切换委托共享 ZenUI.tabs，保留产品自己的面板业务', () => {
+  for (const id of ['zencard', 'ai', 'zenflow', 'mdforge']) {
+    const page = `public/omm-${id}.html`
+    const text = read(page)
+    assert.ok(text.includes('zen/components/tabs.js'), `${page} 未加载共享 tabs`)
+    assert.ok(text.includes('data-zen-tabs'), `${page} 未声明 data-zen-tabs`)
+    assert.ok(text.includes('zen:tab'), `${page} 未订阅 zen:tab 事件`)
+  }
+  const lambda = read('public/index.html')
+  assert.ok(lambda.includes('zen/components/tabs.js'), 'Lambda 页未加载共享 tabs')
+  assert.ok(lambda.includes('data-zen-tabs'), 'Lambda 页未声明 data-zen-tabs')
+  assert.ok(lambda.includes('zen:tab'), 'Lambda 页未订阅 zen:tab 事件')
 })
 
 test('Hub 右键菜单使用共享 ZenUI.menu，无私有 ctx-menu', () => {

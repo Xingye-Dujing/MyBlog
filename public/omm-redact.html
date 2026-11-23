@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -848,17 +850,9 @@
         /* ============================================================
                UTILITY
                ============================================================ */
-        function escapeHtml(s) {
-          return String(s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-        }
+        function escapeHtml(s) { return ZenUtil.esc(s, { apos: false }) }
 
-        function escapeRegex(s) {
-          return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        }
+        function escapeRegex(s) { return ZenUtil.escRe(s) }
 
         function genId() {
           return 'r' + ++S.redactIdCounter
@@ -9617,7 +9611,14 @@
           // Redact style controls
           DOM.redactColorSwatch.addEventListener('click', function (e) {
             e.stopPropagation()
-            DOM.colorPickPanel.classList.toggle('open')
+            if (DOM.colorPickPanel.classList.contains('open')) {
+              window.ZenUI.popover.close()
+            } else {
+              // 面板沿用样式表里的绝对定位；popover 只负责显隐与统一层的外点/Escape 关闭。
+              window.ZenUI.popover.open(DOM.colorPickPanel, DOM.redactColorSwatch, {
+                x: '', top: '',
+              })
+            }
           })
           DOM.colorPickHex.addEventListener('input', function () {
             var v = DOM.colorPickHex.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6)
@@ -9635,7 +9636,7 @@
                 S.redactStyle.color = '#' + v
                 updateColorSwatch()
                 saveSettings()
-                DOM.colorPickPanel.classList.remove('open')
+                window.ZenUI.popover.close(DOM.colorPickPanel)
               }
             }
           })
@@ -9961,16 +9962,7 @@
               redoRedact()
             } else if (k === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
               e.preventDefault()
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
               openShortcuts()
-            } else if (k === 'escape') {
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
             }
           })
 
@@ -10007,20 +9999,6 @@
           // so scrolling does not require a full redraw. Avoid doing any per-scroll
           // canvas work on large documents.
 
-          // Close dropdowns. The temporary submenu state must be cleared together
-          // with the dropdown, otherwise app-layout keeps the 48px top offset.
-          document.addEventListener('click', function (e) {
-            if (
-              !e.target.closest('.dropdown') &&
-              !e.target.closest('#top-menu [data-action="showSettings"]')
-            ) {
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
-            }
-          })
-
           // Settings dropdown items
           document.addEventListener('click', function (e) {
             var item = e.target.closest('.dropdown .dd-item, .dropdown .settings-btn')
@@ -10028,36 +10006,21 @@
             var a = item.dataset.action
             if (a === 'toggleDocxRenderMode') {
               toggleDocxRenderMode()
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
+              window.ZenUI.popover.close()
             } else if (a === 'cycleDocxImportMode') {
               cycleDocxImportMode()
             } else if (a === 'openDocxPdfSettings') {
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
+              window.ZenUI.popover.close()
               openDocxPdfSettings()
             } else if (a === 'settingsToggleTheme') {
               toggleTheme()
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
+              window.ZenUI.popover.close()
             } else if (a === 'setBg') {
               setBg(item.dataset.bg)
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
+              window.ZenUI.popover.close()
             } else if (a === 'toggleImageNavigation') {
               toggleImageNavigation()
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
+              window.ZenUI.popover.close()
             } else if (a === 'toggleLargeImageFilter') {
               toggleLargeImageFilter()
             } else if (a === 'radiusPlus') {
@@ -10068,10 +10031,7 @@
               saveSettings()
               $('#sv-radius').textContent = S.radius + 'px'
             } else if (a === 'showShortcuts') {
-              $$('.dropdown.open').forEach(function (d) {
-                d.classList.remove('open')
-              })
-              document.body.classList.remove('submenu-open')
+              window.ZenUI.popover.close()
               openShortcuts()
             }
           })
@@ -10187,16 +10147,6 @@
             }
           })
 
-          // Close color picker on click outside
-          document.addEventListener('click', function (e) {
-            if (
-              !DOM.colorPickPanel.contains(e.target) &&
-              !DOM.redactColorSwatch.contains(e.target)
-            ) {
-              DOM.colorPickPanel.classList.remove('open')
-            }
-          })
-
           // Sidebar resize — no damping, direct follow
           var sidebarResizeEl = DOM.sidebarResize
           if (sidebarResizeEl) {
@@ -10236,19 +10186,21 @@
 
         function toggleSettingsDropdown() {
           var dd = $('#dd-settings')
-          var open = dd.classList.toggle('open')
-          document.body.classList.toggle('submenu-open', open)
+          var wasOpen = dd.classList.contains('open')
+          window.ZenUI.popover.close()
           $('#sv-theme').textContent = S.theme === 'dark' ? '深色' : '浅色'
           updateDocxRenderModeUI()
           refreshDocxPdfStatus()
-          if (open) {
-            var btn = document.querySelector('#top-menu [data-action="showSettings"]')
-            var r = btn.getBoundingClientRect()
-            dd.style.top = r.bottom + 6 + 'px'
-            dd.style.left =
-              Math.max(8, Math.min(r.left, window.innerWidth - dd.offsetWidth - 8)) + 'px'
-            dd.style.right = 'auto'
-          }
+          if (wasOpen) return
+          document.body.classList.add('submenu-open')
+          window.ZenUI.popover.open(
+            dd,
+            document.querySelector('#top-menu [data-action="showSettings"]'),
+            {
+              gap: 6, pad: 8, flip: true,
+              onClose: function () { document.body.classList.remove('submenu-open') },
+            },
+          )
         }
 
         /* ============================================================

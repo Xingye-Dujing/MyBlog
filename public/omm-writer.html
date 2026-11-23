@@ -2234,7 +2234,6 @@ notify pgrst, 'reload schema';</textarea
           // 防抖定时器统一归 Persistence._timer 管，别在这里再放一份，
           // 两处各存一个句柄是“清不干净的在途写入”的常见来源。
           wheelSaveTimer: null,
-          notifyTimer: null,
           isPanning: false,
           panStartX: 0,
           panStartY: 0,
@@ -2340,12 +2339,7 @@ notify pgrst, 'reload schema';</textarea
           return str
         }
 
-        function escapeHtml(text) {
-          const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
-          return text.replace(/[&<>"']/g, function (m) {
-            return map[m]
-          })
-        }
+        function escapeHtml(text) { return ZenUtil.esc(text) }
 
         // Inline Markdown links are interpolated into innerHTML. Escaping stops
         // attribute breakout but not a javascript:/vbscript: URL, so filter the
@@ -4910,22 +4904,15 @@ notify pgrst, 'reload schema';</textarea
             NodeBorder._markActive(document.getElementById('nbp-swatches'), cur)
             NodeBorder._closePicker()
             NodeBorder._syncSwatch()
-            pop.classList.add('active')
-            // 定位：默认贴在按钮下方，靠近视口边缘时翻转
-            const r = btn.getBoundingClientRect()
-            const pr = pop.getBoundingClientRect()
-            let left = r.left
-            if (left + pr.width > window.innerWidth - 8) left = window.innerWidth - pr.width - 8
-            if (left < 8) left = 8
-            let top = r.bottom + 6
-            if (top + pr.height > window.innerHeight - 8) top = Math.max(8, r.top - pr.height - 6)
-            pop.style.left = left + 'px'
-            pop.style.top = top + 'px'
+            // 定位 / 单开互斥 / 外点 Esc 关闭统一由 ZenUI.popover 负责
+            window.ZenUI.popover.open(pop, btn, {
+              gap: 6, flip: true, openClass: 'active',
+            })
           },
 
           close() {
             const pop = document.getElementById('node-border-pop')
-            if (pop) pop.classList.remove('active')
+            if (pop) window.ZenUI.popover.close(pop)
             NodeBorder._node = null
             NodeBorder._closePicker()
           },
@@ -5072,32 +5059,8 @@ notify pgrst, 'reload schema';</textarea
                 NodeBorder.close()
               })
             }
-            // 点浮层内部不关，点外面才关。
-            // 注意别把触发按钮也算成“外面”：pointerdown 先于 click 跑，
-            // 那样会导致“再点一次按钮关浮层”变成先关后开 = 永远关不掉。
-            // 按钮的开关交给 data-action 的 click 分支处理。
+            // 浮层内部交互：popover 的外点/Esc 关闭由共享层统一处理
             pop.addEventListener('pointerdown', (e) => e.stopPropagation())
-            document.addEventListener('pointerdown', (e) => {
-              if (!NodeBorder.isOpen()) return
-              if (pop.contains(e.target)) return
-              if (e.target.closest && e.target.closest('.border-color-btn')) return
-              NodeBorder.close()
-            })
-            // Esc 关闭。
-            // 用捕获阶段 + stopPropagation：全局 Escape 处理器在冒泡阶段
-            // 跑得比这里晚，不拦住的话同一次 Esc 会顺手把右键菜单、
-            // 下拉栏、连线预览也一起清掉。
-            document.addEventListener(
-              'keydown',
-              (e) => {
-                if (e.key === 'Escape' && NodeBorder.isOpen()) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  NodeBorder.close()
-                }
-              },
-              true,
-            )
           },
         }
 
@@ -7006,21 +6969,15 @@ notify pgrst, 'reload schema';</textarea
             NodeTypeManager._build()
             const list = document.getElementById('ntp-list')
             NodeTypeManager._markCurrent(list, node.dataset.type || 'text')
-            pop.classList.add('active')
-            const r = (anchor || node).getBoundingClientRect()
-            const pr = pop.getBoundingClientRect()
-            let left = r.left
-            if (left + pr.width > window.innerWidth - 8) left = window.innerWidth - pr.width - 8
-            if (left < 8) left = 8
-            let top = r.bottom + 6
-            if (top + pr.height > window.innerHeight - 8) top = Math.max(8, r.top - pr.height - 6)
-            pop.style.left = left + 'px'
-            pop.style.top = top + 'px'
+            // 定位 / 外点 Esc 关闭统一委托 ZenUI.popover
+            window.ZenUI.popover.open(pop, anchor || node, {
+              gap: 6, flip: true, openClass: 'active',
+            })
           },
 
           close() {
             const pop = document.getElementById('node-type-pop')
-            if (pop) pop.classList.remove('active')
+            if (pop) window.ZenUI.popover.close(pop)
             NodeTypeManager._node = null
           },
 
@@ -7044,24 +7001,6 @@ notify pgrst, 'reload schema';</textarea
               })
             }
             pop.addEventListener('pointerdown', (e) => e.stopPropagation())
-            document.addEventListener('pointerdown', (e) => {
-              if (!NodeTypeManager.isOpen()) return
-              if (pop.contains(e.target)) return
-              // 右键菜单项也算“外面”要挡掉，否则点它会先关再开
-              if (e.target.closest && e.target.closest('#ctx-type')) return
-              NodeTypeManager.close()
-            })
-            document.addEventListener(
-              'keydown',
-              (e) => {
-                if (e.key === 'Escape' && NodeTypeManager.isOpen()) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  NodeTypeManager.close()
-                }
-              },
-              true,
-            )
           },
         }
 
@@ -17200,33 +17139,16 @@ notify pgrst, 'reload schema';</textarea
             hidePanel('zw-sql-panel', true)
             refresh()
           }
-          E('zw-copy-sql').onclick = async function () {
+          E('zw-copy-sql').onclick = function () {
             var n = E('zw-sql-copy-status')
             if (n) n.classList.remove('show')
-            try {
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(E('zen-sql-box').value)
-              } else {
-                var t = document.createElement('textarea')
-                t.value = E('zen-sql-box').value
-                t.setAttribute('readonly', '')
-                t.style.position = 'fixed'
-                t.style.left = '-9999px'
-                document.body.appendChild(t)
-                t.select()
-                document.execCommand('copy')
-                t.remove()
-              }
-              if (n) {
-                n.textContent = tr('sync.sqlCopiedInline')
-                n.classList.add('show')
-              }
-            } catch (_) {
-              if (n) {
-                n.textContent = tr('sync.copyFailed')
-                n.classList.add('show')
-              }
-            }
+            ZenUtil.copy(E('zen-sql-box').value,
+              function () {
+                if (n) { n.textContent = tr('sync.sqlCopiedInline'); n.classList.add('show') }
+              },
+              function () {
+                if (n) { n.textContent = tr('sync.copyFailed'); n.classList.add('show') }
+              })
           }
           E('zw-login-only').onclick = function () {
             auth('login')

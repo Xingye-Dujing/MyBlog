@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
@@ -192,12 +193,7 @@
         const $$ = (s) => Array.from(document.querySelectorAll(s))
         const $id = (s) => document.getElementById(s)
         const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
-        const esc = (s) =>
-          String(s == null ? '' : s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
+        const esc = (s) => ZenUtil.esc(s, { apos: false })
 
         /* ===================== 状态 ===================== */
         const state = {
@@ -1100,7 +1096,6 @@
         }
 
         /* ===================== 基础 UI ===================== */
-        let toastTimer = null
         function toast(msg) { return window.ZenUI.toast(msg) }
         function setStatus(msg, kind) {
           $id('status-text').textContent = msg
@@ -1135,27 +1130,8 @@
         function closeModal() {
           window.ZenUI.modal.close()
         }
-        function copyText(text, okMsg) {
-          const done = () => toast(okMsg || '已复制')
-          if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done))
-          } else fallbackCopy(text, done)
-        }
-        function fallbackCopy(text, done) {
-          const ta = document.createElement('textarea')
-          ta.value = text
-          ta.style.position = 'fixed'
-          ta.style.left = '-9999px'
-          document.body.appendChild(ta)
-          ta.select()
-          try {
-            document.execCommand('copy')
-            done()
-          } catch (e) {
-            toast('复制失败，请手动选择')
-          }
-          ta.remove()
-        }
+        function copyText(text, okMsg) { return ZenUtil.copy(text, function(){ toast(okMsg || '已复制') }, function(){ toast('复制失败，请手动选择') }) }
+        
         function downloadBlob(blob, filename) {
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')

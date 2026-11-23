@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
@@ -7621,7 +7622,6 @@
           state.status = msg
           if (notify) toast(msg)
         }
-        let toastTimer = 0
         function toast(msg) { return window.ZenUI.toast(msg) }
         function reportError(context, err, show = true) {
           const message = err && err.message ? err.message : String(err || '未知错误')
@@ -7634,12 +7634,7 @@
         window.addEventListener('unhandledrejection', (e) => {
           reportError('异步操作失败', e.reason, true)
         })
-        function escapeHtml(s) {
-          return String(s).replace(
-            /[&<>"']/g,
-            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m],
-          )
-        }
+        function escapeHtml(s) { return ZenUtil.esc(s) }
         function numeric(v) {
           if (v === null || v === '') return null
           const n = Number(String(v).replace(/,/g, ''))
@@ -8374,12 +8369,7 @@
         }
         /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
            分组 = 生效范围；顺序与 keydown 处理器的判断顺序一致。 */
-        function esc(s) {
-          return String(s == null ? '' : s).replace(
-            /[&<>"']/g,
-            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m],
-          )
-        }
+        function esc(s) { return ZenUtil.esc(s) }
         function hkRow(desc, keys) {
           return `<div class="hk-row"><span>${esc(desc)}</span><span class="hk-key">${esc(keys)}</span></div>`
         }
@@ -13093,11 +13083,7 @@
             reportError('PNG 导出失败', e, true)
           }
         }
-        function safeName(s) {
-          return String(s || 'zenviz')
-            .replace(/[\\/:*?"<>|]/g, '_')
-            .slice(0, 60)
-        }
+        function safeName(s) { return ZenUtil.safeName(s || 'zenviz', { max: 60, fallback: 'zenviz' }) }
         async function svgToCanvas({ transparent = exportTransparent() } = {}) {
           const svgString = getRenderedSVGString({ transparent })
           if (!svgString) throw Error('当前图表没有可栅格化的 SVG 画布')

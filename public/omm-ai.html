@@ -5,13 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI 工作区 · 静书房</title>
 <script src="omm-embed.js"></script>
-<script src="zen/components/layer.js"></script>
+<script src="zen/foundation/util.js"></script>
+    <script src="zen/components/layer.js"></script>
 <script src="zen/components/toast.js"></script>
 <script src="zen/components/dialog.js"></script>
 <script src="zen/components/select.js"></script>
 <script src="zen/components/menu.js"></script>
 <script src="zen/components/shortcuts.js"></script>
 <script src="zen/components/index.js"></script>
+<script src="zen/components/tabs.js"></script>
 <script src="omm-desktop.js"></script>
 <script src="omm-share.js"></script>
 
@@ -21,14 +23,14 @@
 <body>
 <header class="top">
   <div class="brand"><span class="mark">智</span><span class="title">AI 工作区</span><span class="sub">静书房 · OMM-ZEN</span></div>
-  <nav class="tabs" id="tabs">
-    <button type="button" data-tab="chat" class="active">对话</button>
-    <button type="button" data-tab="skills">技能</button>
-    <button type="button" data-tab="products">产品</button>
-    <button type="button" data-tab="knowledge">知识</button>
-    <button type="button" data-tab="validate">校验</button>
-    <button type="button" data-tab="sessions">会话</button>
-    <button type="button" data-tab="settings">设置</button>
+  <nav class="tabs" id="tabs" data-zen-tabs="views" data-zen-tab-item="button[data-tab]" data-zen-tab-active="active">
+    <button type="button" data-tab="chat" data-zen-tab="chat" class="active" aria-selected="true">对话</button>
+    <button type="button" data-tab="skills" data-zen-tab="skills" aria-selected="false">技能</button>
+    <button type="button" data-tab="products" data-zen-tab="products" aria-selected="false">产品</button>
+    <button type="button" data-tab="knowledge" data-zen-tab="knowledge" aria-selected="false">知识</button>
+    <button type="button" data-tab="validate" data-zen-tab="validate" aria-selected="false">校验</button>
+    <button type="button" data-tab="sessions" data-zen-tab="sessions" aria-selected="false">会话</button>
+    <button type="button" data-tab="settings" data-zen-tab="settings" aria-selected="false">设置</button>
   </nav>
   <div class="spacer"></div>
   <div class="actions">
@@ -121,11 +123,7 @@
     liveToken: '', liveResolve: null
   };
 
-  function esc(text) {
-    return String(text == null ? '' : text).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(text) { return ZenUtil.esc(text) }
   function md(text) {
     return esc(text).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -213,17 +211,12 @@
     });
   }
 
-  function switchTab(name) {
-    Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (button) {
-      button.classList.toggle('active', button.dataset.tab === name);
-    });
+  function switchTab(name) { window.ZenUI.tabs.select($('tabs'), name); }
+  $('tabs').addEventListener('zen:tab', function (event) {
+    var name = event.detail.id;
     Array.prototype.forEach.call(document.querySelectorAll('.view'), function (view) {
       view.classList.toggle('active', view.id === 'view-' + name);
     });
-  }
-  $('tabs').addEventListener('click', function (event) {
-    var button = event.target.closest('button[data-tab]');
-    if (button) switchTab(button.dataset.tab);
   });
 
   function addMessage(role, text, tag) {

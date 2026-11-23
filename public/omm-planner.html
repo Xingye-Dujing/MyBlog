@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -736,12 +737,6 @@ notify pgrst, 'reload schema';</textarea
 
     <!-- ===== File Input ===== -->
     <input type="file" id="file-input" accept=".json" style="display: none" />
-
-    <!-- ===== Custom Pickers ===== -->
-    <div class="picker-pop" id="pop-date"></div>
-    <div class="picker-pop" id="pop-time"></div>
-    <div class="picker-pop" id="pop-multidate"></div>
-    <div class="picker-pop" id="pop-enddate"></div>
 
     <!-- ===== Multi-select Pill ===== -->
     <div id="multi-pill">
@@ -1602,7 +1597,6 @@ notify pgrst, 'reload schema';</textarea
           tagFilter: [],
           dragPayload: null,
           swapping: false,
-          notifyTimer: null,
         }
 
         const DOM = {
@@ -1772,12 +1766,7 @@ notify pgrst, 'reload schema';</textarea
           ? '⌘'
           : 'Ctrl'
 
-        function esc(text) {
-          const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
-          return String(text == null ? '' : text).replace(/[&<>"']/g, function (m) {
-            return map[m]
-          })
-        }
+        function esc(text) { return ZenUtil.esc(text) }
 
         // 隐藏条目：除编辑页外，所有视图中的标题统一显示为占位符 •••••
         const HIDDEN_MASK = '•••••'
@@ -1845,9 +1834,7 @@ notify pgrst, 'reload schema';</textarea
           return true
         }
 
-        function uid() {
-          return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
-        }
+        function uid() { return ZenUtil.uid() }
 
         function dowIndex(d) {
           return (d.getDay() - S.weekStart + 7) % 7
@@ -1971,16 +1958,7 @@ notify pgrst, 'reload schema';</textarea
           return (a.created || 0) - (b.created || 0)
         }
 
-        function download(name, content, mime) {
-          const blob = new Blob([content], { type: mime })
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(blob)
-          a.download = name
-          a.click()
-          setTimeout(function () {
-            URL.revokeObjectURL(a.href)
-          }, 3000)
-        }
+        function download(name, content, mime) { return ZenUtil.download(name, content, mime) }
 
         /* 手机布局（单列 + 底部导航 + 单击即聚焦）才用 ≤720px 判定；
            平板保持桌面网格布局，只补触控手势，不要混为一谈 */
@@ -1988,35 +1966,17 @@ notify pgrst, 'reload schema';</textarea
           return window.innerWidth <= 720
         }
 
+        // 编辑器面板与共享 picker 共用同一套锚定几何：交给 ZenUI.popover。
+        const POP_PLACE = { side: 'right', gap: 14, pad: 10, valign: 'top' }
+        // 少数入口（如搜索结果）没有触发元素，用视口中心作锚点避免浮层停在上次的位置。
+        const CENTER_ANCHOR = {
+          getBoundingClientRect: function () {
+            var x = window.innerWidth / 2, y = window.innerHeight / 2
+            return { left: x, right: x, top: y, bottom: y, width: 0, height: 0 }
+          },
+        }
         function placePopup(el, anchor) {
-          const pw = el.offsetWidth || 320
-          const ph = el.offsetHeight || 400
-          const vw = window.innerWidth,
-            vh = window.innerHeight
-          let x,
-            y,
-            origin = 'center center'
-          if (anchor && anchor.getBoundingClientRect && anchor.offsetWidth) {
-            const r = anchor.getBoundingClientRect()
-            x = r.right + 14
-            origin = 'left center'
-            if (x + pw > vw - 10) {
-              x = r.left - pw - 14
-              origin = 'right center'
-            }
-            if (x < 10) {
-              x = Math.min(Math.max(10, r.left), Math.max(10, vw - pw - 10))
-              origin = 'bottom center'
-            }
-            y = r.top - 4
-            if (y + ph > vh - 40) y = Math.max(54, vh - ph - 36)
-          } else {
-            x = (vw - pw) / 2
-            y = Math.max(80, (vh - ph) / 2 - 30)
-          }
-          el.style.left = Math.round(x) + 'px'
-          el.style.top = Math.round(y) + 'px'
-          el.style.transformOrigin = origin
+          window.ZenUI.popover.place(el, anchor, POP_PLACE)
         }
 
         // ================================================================
@@ -2946,7 +2906,6 @@ notify pgrst, 'reload schema';</textarea
           weekStart: function () { return S.weekStart },
           place: placePopup,
           scroll: scrollIntoContainer,
-          hide: softHide,
         })
 
         // ================================================================
@@ -3717,8 +3676,6 @@ notify pgrst, 'reload schema';</textarea
         // ================================================================
         // 9. EDITOR
         // ================================================================
-        let ED_GUARD = false
-        let edGuardTimer = null
         let edSwapTimer = null
         const Editor = {
           open(opts) {
@@ -3805,33 +3762,23 @@ notify pgrst, 'reload schema';</textarea
             Editor.syncTimeRow(ev.type)
             DOM.edDelete.classList.toggle('hidden', !S.editing)
             const pop = DOM.editor
-            pop._sh = null
-            ED_GUARD = true
-            clearTimeout(edGuardTimer)
-            edGuardTimer = setTimeout(function () {
-              ED_GUARD = false
-            }, 80)
             clearTimeout(edSwapTimer)
             const wasOpen = pop.classList.contains('open')
             if (wasOpen) {
               pop.classList.add('closing')
               edSwapTimer = setTimeout(function () {
-                placePopup(pop, S.edAnchor)
-                pop.classList.remove('open', 'closing')
+                pop.classList.remove('closing')
+                window.ZenUI.popover.open(pop, S.edAnchor || CENTER_ANCHOR, POP_PLACE)
                 void pop.offsetWidth
-                pop.classList.add('open')
               }, 150)
             } else {
               pop.classList.remove('closing')
-              pop.classList.add('open')
-              requestAnimationFrame(function () {
-                placePopup(pop, S.edAnchor)
-              })
+              window.ZenUI.popover.open(pop, S.edAnchor || CENTER_ANCHOR, POP_PLACE)
             }
           },
           close() {
             Picker.close()
-            softHide(DOM.editor)
+            window.ZenUI.popover.close(DOM.editor)
             S.editing = null
             const ae = document.activeElement
             if (ae && ae !== document.body && typeof ae.blur === 'function') ae.blur()
@@ -4393,18 +4340,6 @@ notify pgrst, 'reload schema';</textarea
               S.swapping = false
             }, 310)
           }, 170)
-        }
-
-        let SH_TOKEN = 0
-
-        function softHide(el) {
-          if (!el || !el.classList.contains('open')) return
-          const my = ++SH_TOKEN
-          el._sh = my
-          el.classList.add('closing')
-          setTimeout(function () {
-            if (el._sh === my) el.classList.remove('open', 'closing')
-          }, 150)
         }
 
         // ================================================================
@@ -5155,28 +5090,20 @@ notify pgrst, 'reload schema';</textarea
             window.ZenUI.modal.close()
           },
           closeDropdowns() {
-            document.querySelectorAll('.dropdown.open').forEach(function (d) {
-              softHide(d)
-            })
+            window.ZenUI.popover.close()
             document.body.classList.remove('submenu-open')
-            document.querySelectorAll('.menu-btn.active').forEach(function (b) {
-              if (['btn-month', 'btn-week', 'btn-list', 'btn-count'].indexOf(b.id) < 0)
-                b.classList.remove('active')
-            })
           },
           showDropdown(id, btn) {
             const dd = document.getElementById(id)
             const wasOpen = dd.classList.contains('open')
             UIMgr.closeDropdowns()
             if (wasOpen) return
-            dd.classList.add('open')
-            dd._sh = null
-            const rect = btn.getBoundingClientRect()
-            const w = dd.offsetWidth || 300
-            dd.style.top = rect.bottom + 6 + 'px'
-            dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 10)) + 'px'
-            if (btn.classList.contains('menu-btn')) btn.classList.add('active')
             document.body.classList.add('submenu-open')
+            window.ZenUI.popover.open(dd, btn, {
+              gap: 6, pad: 8, flip: true,
+              activeClass: btn.classList.contains('menu-btn') ? 'active' : null,
+              onClose: function () { document.body.classList.remove('submenu-open') },
+            })
           },
           updateSettingsUI() {
             document.getElementById('sv-theme').textContent = t('theme.' + S.theme)
@@ -5982,12 +5909,10 @@ notify pgrst, 'reload schema';</textarea
               return
             }
 
-            const inEditor = !!e.target.closest('#editor')
             const inPop = !!e.target.closest('.picker-pop')
             const inOverlay = !!(
               window.ZenUI.modal.isOpen()
             )
-            const inDD = !!e.target.closest('.dropdown')
 
             /* 触控：点到菜单外面就收起顶部菜单 */
             if (
@@ -5999,18 +5924,6 @@ notify pgrst, 'reload schema';</textarea
               !e.target.closest('#editor')
             ) {
               document.body.classList.remove('tap-menu-open', 'submenu-open')
-            }
-            if (!inOverlay && !inPop && !inEditor) {
-              if (!ED_GUARD && DOM.editor.classList.contains('open')) Editor.close()
-              Picker.close()
-            } else if (inEditor) {
-              Picker.close()
-            }
-            const openerBtn = e.target.closest(
-              '[data-action="showExport"],[data-action="showSettings"],[data-action="showSearch"]',
-            )
-            if (!inDD && !inOverlay && !openerBtn) {
-              UIMgr.closeDropdowns()
             }
             if (inOverlay || inPop) return
 
@@ -6695,16 +6608,8 @@ notify pgrst, 'reload schema';</textarea
 
           document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
-              if (Picker.ctx) {
-                Picker.close()
-                return
-              }
               if (window.ZenUI.modal.isOpen()) {
                 UIMgr.closeModal()
-                return
-              }
-              if (DOM.editor.classList.contains('open')) {
-                Editor.close()
                 return
               }
               if (S.focusMode) {
@@ -6713,9 +6618,7 @@ notify pgrst, 'reload schema';</textarea
               }
               if (S.multiSel.length) {
                 Focus.clear()
-                return
               }
-              UIMgr.closeDropdowns()
               return
             }
             const tag = (e.target.tagName || '').toLowerCase()
@@ -7873,33 +7776,16 @@ notify pgrst, 'reload schema';</textarea
             toggleCls('zp-sql-panel', 'zen-cloud-hidden', true)
             refresh()
           }
-          E('zp-copy-sql').onclick = async function () {
+          E('zp-copy-sql').onclick = function () {
             var n = E('zp-sql-copy-status')
             if (n) n.classList.remove('show')
-            try {
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(E('zen-sql-box').value)
-              } else {
-                var t = document.createElement('textarea')
-                t.value = E('zen-sql-box').value
-                t.setAttribute('readonly', '')
-                t.style.position = 'fixed'
-                t.style.left = '-9999px'
-                document.body.appendChild(t)
-                t.select()
-                document.execCommand('copy')
-                t.remove()
-              }
-              if (n) {
-                n.textContent = tr('sync.sqlCopiedInline')
-                n.classList.add('show')
-              }
-            } catch (_) {
-              if (n) {
-                n.textContent = tr('sync.copyFailed')
-                n.classList.add('show')
-              }
-            }
+            ZenUtil.copy(E('zen-sql-box').value,
+              function () {
+                if (n) { n.textContent = tr('sync.sqlCopiedInline'); n.classList.add('show') }
+              },
+              function () {
+                if (n) { n.textContent = tr('sync.copyFailed'); n.classList.add('show') }
+              })
           }
           E('zp-login-only').onclick = function () {
             auth('login')

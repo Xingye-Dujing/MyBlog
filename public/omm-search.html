@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
@@ -234,7 +235,6 @@
         var abort = null
         var startTime = 0
         var lastRender = 0
-        var toastTimer = 0
         var findText = ''
         var historyFilter = ''
         var kbFilter = ''
@@ -243,16 +243,12 @@
 
         function toast(msg) { return window.ZenUI.toast(msg) }
 
-        function esc(s) {
-          return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-        }
+        function esc(s) { return ZenUtil.esc(s, { apos: false }) }
         function highlight(text, kw) {
           var s = esc(text)
           if (!kw) return s
           try {
-            var re = new RegExp('(' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi')
+            var re = new RegExp('(' + ZenUtil.escRe(kw) + ')', 'gi')
             return s.replace(re, '<mark>$1</mark>')
           } catch (e) { return s }
         }
@@ -843,10 +839,7 @@
         }
 
         /* ---------------- export ---------------- */
-        function safeName() {
-          return String(current && current.query || 'search')
-            .replace(/[\\/:*?"<>|\r\n]/g, '_').slice(0, 40) || 'search'
-        }
+        function safeName() { return ZenUtil.safeName(current && current.query || 'search', { max: 40, fallback: 'search' }) }
         function asJSON() {
           return JSON.stringify({
             engine: 'OMM-ZEN Search', provider: 'DeepSeek',
@@ -913,16 +906,7 @@
                 '<p>' + esc(s.snippet || '') + '</p><u>' + esc(s.url) + '</u></div>'
             }).join('') + '</div></body></html>'
         }
-        function download(filename, content, mime, bom) {
-          var blob = typeof content === 'string'
-            ? new Blob([bom ? '\ufeff' + content : content], { type: mime || 'text/plain;charset=utf-8' })
-            : content
-          var url = URL.createObjectURL(blob)
-          var a = document.createElement('a')
-          a.href = url; a.download = filename
-          document.body.appendChild(a); a.click(); a.remove()
-          setTimeout(function () { URL.revokeObjectURL(url) }, 3000)
-        }
+        function download(filename, content, mime, bom) { return ZenUtil.download(filename, content, mime, bom) }
         function exportAs(fmt) {
           if (!current || !current.query) { toast('暂无可导出的结果'); return }
           var name = safeName()
@@ -933,19 +917,8 @@
           closeDropdowns()
           toast('已导出 ' + fmt.toUpperCase())
         }
-        function fallbackCopy(text, okMsg) {
-          var ta = document.createElement('textarea')
-          ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
-          document.body.appendChild(ta); ta.select()
-          try { document.execCommand('copy'); toast(okMsg || '已复制') } catch (e) { toast('复制失败') }
-          ta.remove()
-        }
-        function copyText(text, okMsg) {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(function () { toast(okMsg || '已复制') })
-              .catch(function () { fallbackCopy(text, okMsg) })
-          } else fallbackCopy(text, okMsg)
-        }
+        
+        function copyText(text, okMsg) { return ZenUtil.copy(text, function(){ toast(okMsg || '已复制') }, function(){ toast('复制失败') }) }
         function copyMarkdown() {
           if (!current || !current.query) { toast('暂无可复制的结果'); return }
           copyText(asMarkdown(), '已复制为 Markdown')
@@ -1166,7 +1139,7 @@
           this.classList.toggle('pinned', on)
         })
 
-        function hideSel() { $('sel-search').classList.remove('show') }
+        function hideSel() { window.ZenUI.popover.close($('sel-search')) }
         document.addEventListener('mouseup', function (e) {
           if (e.target.closest('#sel-search, .dropdown, INPUT, TEXTAREA')) { hideSel(); return }
           setTimeout(function () {
@@ -1177,15 +1150,14 @@
             if (!rect.width && !rect.height) { hideSel(); return }
             selText = text
             var btn = $('sel-search')
-            btn.classList.add('show')
-            btn.style.left = Math.min(window.innerWidth - 130, Math.max(8, rect.left + rect.width / 2 - 55)) + 'px'
-            btn.style.top = Math.max(8, rect.top - 36) + 'px'
+            // 选区锚点 + 视口夹取由共享浮层负责；外点 / 滚动 / Esc 关闭由 layer 统一处理
+            window.ZenUI.popover.open(btn, null, {
+              x: Math.min(window.innerWidth - 130, Math.max(8, rect.left + rect.width / 2 - 55)),
+              y: Math.max(8, rect.top - 36),
+              openClass: 'show', closeOnScroll: true,
+            })
           }, 10)
         })
-        document.addEventListener('mousedown', function (e) {
-          if (!e.target.closest('#sel-search')) hideSel()
-        })
-        window.addEventListener('scroll', hideSel, true)
 
         document.addEventListener('keydown', function (e) {
           var typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName || '')

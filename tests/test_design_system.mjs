@@ -75,7 +75,7 @@ test('所有产品统一接入 OMM-ZEN UI 核心组件（可选件按需加载�
     assert.ok(html.indexOf('zen/components/index.js') < html.indexOf('omm-desktop.js'),
       `${id} 的 zen/ui 必须在桥接脚本之前加载`)
     // 可选组件不得被不需要的产品引用
-    if (!['planner', 'zenreview'].includes(id)) {
+    if (!['planner', 'zenreview', 'english'].includes(id)) {
       assert.ok(!html.includes('zen/components/picker.js'), `${id} 不必要地加载了 picker`)
     }
   }

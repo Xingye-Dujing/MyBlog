@@ -21,7 +21,9 @@
  *   flipMin         minimum top when flipped (default: padTop)
  *   clampTop        clamp a valign:'top' result into the viewport
  *   activeClass     class toggled on the anchor while open
+ *   openClass       class toggled on the popover itself (default 'open')
  *   closeOnWheel    close when the user scrolls outside
+ *   closeOnScroll   close on any scroll event (capture)
  *   onOpen/onClose  hooks(el) for product-owned side effects
  * Depends: zen/components/layer.js (load after it)
  */
@@ -79,10 +81,11 @@
     var job = active
     active = null
     var l = layer.get()
-    job.el.classList.remove('open')
+    job.el.classList.remove(job.opts.openClass || 'open')
     if (job.anchor && job.opts.activeClass) job.anchor.classList.remove(job.opts.activeClass)
     if (job.entry) l.pop(job.entry)
     if (job.onWheel) global.removeEventListener('wheel', job.onWheel, true)
+    if (job.onScroll) global.removeEventListener('scroll', job.onScroll, true)
     l.closePopover = null
     if (job.opts.onClose) job.opts.onClose(job.el)
   }
@@ -92,8 +95,8 @@
     opts = opts || {}
     close()
     var l = layer.get()
-    active = { el: el, anchor: anchor, opts: opts, entry: null, onWheel: null }
-    el.classList.add('open')
+    active = { el: el, anchor: anchor, opts: opts, entry: null, onWheel: null, onScroll: null }
+    el.classList.add(opts.openClass || 'open')
     if (anchor && opts.activeClass && anchor.classList) anchor.classList.add(opts.activeClass)
     place(el, anchor, opts)
 
@@ -110,14 +113,18 @@
     active.entry = entry
     l.push(entry)
     l.closePopover = function () { close(el) }
-    if (opts.closeOnWheel) {
+    if (opts.closeOnWheel || opts.closeOnScroll) {
       active.onWheel = function (event) {
         if (!active || active.el !== el) return
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(el) >= 0) return
         close(el)
       }
-      global.addEventListener('wheel', active.onWheel, true)
+      if (opts.closeOnWheel) global.addEventListener('wheel', active.onWheel, true)
+      if (opts.closeOnScroll) {
+        active.onScroll = active.onWheel
+        global.addEventListener('scroll', active.onScroll, true)
+      } else active.onWheel = null
     }
     if (opts.onOpen) opts.onOpen(el)
     return function () { close(el) }

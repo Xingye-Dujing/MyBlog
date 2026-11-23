@@ -59,7 +59,6 @@
     els.shortcut = document.getElementById('shortcut');
     els.railCount = document.getElementById('rail-count');
     els.railSize = document.getElementById('rail-size');
-    els.settings = document.getElementById('settings');
 
     loadAppearance();
     applyAppearance();
@@ -255,43 +254,77 @@
     if (compact) compact.setAttribute('aria-checked', String(appearance.compact));
   }
 
+  var SETTINGS_HTML =
+    '<div class="settings-body">' +
+      '<div class="settings-sub">只影响安装器界面，不影响已安装产品</div>' +
+      '<section class="setting">' +
+        '<div class="setting-label">圆角</div>' +
+        '<div class="segmented" id="radius-options">' +
+          '<button type="button" data-radius="0">0</button>' +
+          '<button type="button" data-radius="4">4</button>' +
+          '<button type="button" data-radius="8">8</button>' +
+          '<button type="button" data-radius="12">12</button>' +
+          '<button type="button" data-radius="16">16</button>' +
+        '</div>' +
+      '</section>' +
+      '<section class="setting">' +
+        '<div class="setting-label">界面动效</div>' +
+        '<button class="switch" id="motion" type="button" role="switch" aria-checked="true">' +
+          '<span class="switch-track"></span><span>启用过渡与进度动画</span>' +
+        '</button>' +
+      '</section>' +
+      '<section class="setting">' +
+        '<div class="setting-label">紧凑布局</div>' +
+        '<button class="switch" id="compact" type="button" role="switch" aria-checked="false">' +
+          '<span class="switch-track"></span><span>缩小间距，在一屏内看到更多产品</span>' +
+        '</button>' +
+      '</section>' +
+    '</div>'
+  var SETTINGS_FOOT =
+    '<button class="ghost" id="settings-reset" type="button">恢复默认</button>' +
+    '<button class="primary" id="settings-done" type="button">完成</button>'
+
   function bindSettings() {
     function open() {
-      els.settings.hidden = false;
-    }
-    function close() {
-      els.settings.hidden = true;
+      if (window.ZenUI && window.ZenUI.modal.isOpen()) return;
+      window.ZenUI.modal.open({
+        title: '外观设置',
+        html: SETTINGS_HTML,
+        foot: SETTINGS_FOOT,
+        width: 'min(460px, calc(100vw - 28px))',
+        onMount: function (body, foot) {
+          applyAppearance();
+          Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
+            btn.addEventListener('click', function () {
+              appearance.radius = Number(btn.dataset.radius);
+              saveAppearance();
+              applyAppearance();
+            });
+          });
+          document.getElementById('motion').addEventListener('click', function () {
+            appearance.motion = !appearance.motion;
+            saveAppearance();
+            applyAppearance();
+          });
+          document.getElementById('compact').addEventListener('click', function () {
+            appearance.compact = !appearance.compact;
+            saveAppearance();
+            applyAppearance();
+          });
+          document.getElementById('settings-reset').addEventListener('click', function () {
+            appearance = { radius: 0, motion: true, compact: false };
+            saveAppearance();
+            applyAppearance();
+          });
+          document.getElementById('settings-done').addEventListener('click', function () {
+            window.ZenUI.modal.close();
+          });
+        },
+      });
     }
     ['settings-open', 'settings-open-2'].forEach(function (id) {
       var btn = document.getElementById(id);
       if (btn) btn.addEventListener('click', open);
-    });
-    document.getElementById('settings-close').addEventListener('click', close);
-    document.getElementById('settings-done').addEventListener('click', close);
-    els.settings.addEventListener('click', function (event) {
-      if (event.target === els.settings) close();
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
-      btn.addEventListener('click', function () {
-        appearance.radius = Number(btn.dataset.radius);
-        saveAppearance();
-        applyAppearance();
-      });
-    });
-    document.getElementById('motion').addEventListener('click', function () {
-      appearance.motion = !appearance.motion;
-      saveAppearance();
-      applyAppearance();
-    });
-    document.getElementById('compact').addEventListener('click', function () {
-      appearance.compact = !appearance.compact;
-      saveAppearance();
-      applyAppearance();
-    });
-    document.getElementById('settings-reset').addEventListener('click', function () {
-      appearance = { radius: 0, motion: true, compact: false };
-      saveAppearance();
-      applyAppearance();
     });
   }
 

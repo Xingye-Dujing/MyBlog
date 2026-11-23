@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
@@ -10,6 +11,7 @@
     <script src="zen/components/menu.js"></script>
     <script src="zen/components/shortcuts.js"></script>
     <script src="zen/components/index.js"></script>
+<script src="zen/components/tabs.js"></script>
 <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -28,11 +30,11 @@
     <div id="app">
       <header class="top">
         <span class="brand">ZenFlow 自动化编排</span>
-        <nav class="tabs" id="tabs">
-          <button data-view="rules" class="active">规则</button>
-          <button data-view="editor">编辑器</button>
-          <button data-view="flow">流程图</button>
-          <button data-view="run">运行记录</button>
+        <nav class="tabs" id="tabs" data-zen-tabs="views" data-zen-tab-item="button[data-view]" data-zen-tab-active="active">
+          <button data-view="rules" data-zen-tab="rules" class="active" aria-selected="true">规则</button>
+          <button data-view="editor" data-zen-tab="editor" aria-selected="false">编辑器</button>
+          <button data-view="flow" data-zen-tab="flow" aria-selected="false">流程图</button>
+          <button data-view="run" data-zen-tab="run" aria-selected="false">运行记录</button>
         </nav>
         <span class="spacer"></span>
         <div class="actions"><button class="zt-btn sm" id="theme-btn">深浅色</button></div>
@@ -170,7 +172,7 @@
         })
       }
 
-      function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
+      function esc(s) { return ZenUtil.esc(s, { apos: false }) }
 
       function fillSelects() {
         $('w-source').innerHTML = '<option value="">不限</option>' + ZenCard.SOURCES.map((s) => `<option value="${s}">${s}</option>`).join('')
@@ -265,10 +267,12 @@
       }
 
       function bind() {
+        $('tabs').addEventListener('zen:tab', (e) => {
+          document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + e.detail.id))
+        })
         $('tabs').addEventListener('click', (e) => {
+          // tab 状态由共享 ZenUI.tabs 维护；这里只处理本产品业务
           const b = e.target.closest('button[data-view]'); if (!b) return
-          $('tabs').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b))
-          document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + b.dataset.view))
           if (b.dataset.view === 'flow') renderFlow()
         })
         $('flow-relayout').addEventListener('click', renderFlow)

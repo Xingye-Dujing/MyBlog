@@ -5,6 +5,8 @@
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
+    <script src="zen/components/picker.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -719,12 +721,6 @@ notify pgrst, 'reload schema';</textarea
     <!-- Word popover -->
     <div id="wpop"></div>
 
-    <!-- Exam date picker -->
-    <div class="picker-pop" id="pop-exam"></div>
-
-    <!-- Voice picker -->
-    <div class="picker-pop" id="pop-voice"></div>
-
     <!-- Status bar -->
     <div id="status-bar">
       <span id="stat-left"></span>
@@ -804,28 +800,7 @@ notify pgrst, 'reload schema';</textarea
               .filter(Boolean)
           return []
         }
-        function download(name, content, mime) {
-          try {
-            var blob = new Blob([content], { type: mime || 'application/json;charset=utf-8' })
-            var url = URL.createObjectURL(blob)
-            var a = document.createElement('a')
-            a.href = url
-            a.download = name
-            document.body.appendChild(a)
-            a.click()
-            setTimeout(function () {
-              try {
-                a.remove()
-              } catch (e) {}
-              try {
-                URL.revokeObjectURL(url)
-              } catch (e) {}
-            }, 400)
-            return true
-          } catch (e) {
-            return false
-          }
-        }
+        function download(name, content, mime) { return ZenUtil.download(name, content, mime || 'application/json;charset=utf-8') }
         function saveJSON(name, obj) {
           return download(name, JSON.stringify(obj, null, 2), 'application/json')
         }
@@ -5988,12 +5963,7 @@ notify pgrst, 'reload schema';</textarea
         // ============================================================
         const $ = (s) => document.querySelector(s)
         const $$ = (s) => Array.from(document.querySelectorAll(s))
-        function esc(s) {
-          return String(s == null ? '' : s).replace(
-            /[&<>"']/g,
-            (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
-          )
-        }
+        function esc(s) { return ZenUtil.esc(s) }
         function pad(n) { return ZenUtil.pad(n) }
         function dayKey(d) {
           d = d || new Date()
@@ -6200,18 +6170,8 @@ notify pgrst, 'reload schema';</textarea
         }
 
         function download(name, text, mime) {
-          try {
-            const blob = new Blob(['\ufeff' + text], {
-              type: (mime || 'text/plain') + ';charset=utf-8',
-            })
-            const a = document.createElement('a')
-            a.href = URL.createObjectURL(blob)
-            a.download = name
-            a.click()
-            setTimeout(() => URL.revokeObjectURL(a.href), 3000)
-          } catch (e) {
+          if (!ZenUtil.download(name, text, (mime || 'text/plain') + ';charset=utf-8', true))
             notify('当前环境不支持文件下载')
-          }
         }
 
         function countUp(el, to, dur) {
@@ -7780,8 +7740,7 @@ notify pgrst, 'reload schema';</textarea
           $$('#bottom-nav .bn-item').forEach((b) => b.classList.toggle('active', b.dataset.v === v))
           renderView(v)
           if (v !== 'flash') stopFlashStageWatch()
-          closeDrops()
-          closePops()
+          window.ZenUI.popover.close()
         }
         function refreshView() {
           renderView(curView)
@@ -7851,98 +7810,35 @@ notify pgrst, 'reload schema';</textarea
         // ============================================================
         // DROPDOWN / POPOVER MANAGERS
         // ============================================================
+        // 浮层机制由 ZenUI.popover（锚定/单开/外部点击与 Escape）与共享 layer 统一负责；
+        // 这里只保留产品自己的菜单态与回调。
+        const DROP_OPTS = {
+          pad: 8,
+          activeClass: 'active',
+          onOpen: () => document.body.classList.add('submenu-open'),
+          onClose: () => document.body.classList.remove('submenu-open'),
+        }
         function openDrop(anchor, dd) {
           const wasOpen = dd.classList.contains('open')
-          closeDrops()
+          window.ZenUI.popover.close()
           if (wasOpen) return
-          dd.classList.add('open')
-          document.body.classList.add('submenu-open')
-          $$(
-            '#top-menu .menu-btn[data-action="showExportDd"],#top-menu .menu-btn[data-action="showSettings"],#top-menu .menu-btn[data-action="showBridge"]',
-          ).forEach((b) => b.classList.remove('active'))
-          anchor.classList.add('active')
-          const r = anchor.getBoundingClientRect()
-          let x = r.left
-          const w = dd.offsetWidth || 220
-          if (x + w > innerWidth - 10) x = innerWidth - w - 10
-          dd.style.left = Math.max(8, x) + 'px'
-        }
-        function closeDrops() {
-          $$('.dropdown.open').forEach((d) => d.classList.remove('open'))
-          $$(
-            '#top-menu .menu-btn[data-action="showExportDd"],#top-menu .menu-btn[data-action="showSettings"],#top-menu .menu-btn[data-action="showBridge"]',
-          ).forEach((b) => b.classList.remove('active'))
-          document.body.classList.remove('submenu-open')
-        }
-        function closePops() {
-          $$('.picker-pop.open').forEach((p) => p.classList.remove('open'))
+          window.ZenUI.popover.open(dd, anchor, DROP_OPTS)
         }
 
-        const EP = { y: 2026, m: 0 }
         function updateExamLabel() {
           const el = $('#sv-exam')
           if (el) el.textContent = S.set.examDate || '点击选择'
         }
-        function renderExamPop() {
-          const wds = '一二三四五六日'
-            .split('')
-            .map((w) => '<span class="pk-wd">' + w + '</span>')
-            .join('')
-          const first = new Date(EP.y, EP.m, 1)
-          const off = (first.getDay() + 6) % 7
-          const dim = new Date(EP.y, EP.m + 1, 0).getDate()
-          let cells = ''
-          for (let i = 0; i < off; i++) cells += '<span></span>'
-          for (let dnum = 1; dnum <= dim; dnum++) {
-            const ds = EP.y + '-' + pad(EP.m + 1) + '-' + pad(dnum)
-            const cls =
-              'pk-day' + (ds === dayKey() ? ' today' : '') + (ds === S.set.examDate ? ' sel' : '')
-            cells +=
-              '<span class="' +
-              cls +
-              '" data-action="epDay" data-d="' +
-              ds +
-              '">' +
-              dnum +
-              '</span>'
-          }
-          $('#pop-exam').innerHTML =
-            '<div class="pk-head">' +
-            '<span class="pk-nav" data-action="epPrev">' +
-            ICO('chevL') +
-            '</span>' +
-            '<span class="pk-title">' +
-            EP.y +
-            ' 年 ' +
-            pad(EP.m + 1) +
-            ' 月</span>' +
-            '<span class="pk-nav" data-action="epNext">' +
-            ICO('chevR') +
-            '</span>' +
-            '</div>' +
-            '<div class="pk-grid">' +
-            wds +
-            cells +
-            '</div>'
-        }
         function openExamPicker(anchor) {
-          const base = S.set.examDate ? new Date(S.set.examDate + 'T00:00:00') : new Date()
-          if (!isNaN(base)) {
-            EP.y = base.getFullYear()
-            EP.m = base.getMonth()
-          }
-          renderExamPop()
-          const pop = $('#pop-exam')
-          const r = anchor.getBoundingClientRect()
-          pop.classList.add('open')
-          let x = r.left,
-            y = r.bottom + 8
-          const pw = pop.offsetWidth || 240,
-            ph = pop.offsetHeight || 300
-          if (x + pw > innerWidth - 8) x = Math.max(8, innerWidth - pw - 8)
-          if (y + ph > innerHeight - 8) y = Math.max(8, r.top - ph - 8)
-          pop.style.left = x + 'px'
-          pop.style.top = y + 'px'
+          window.ZenUI.picker.open('date', anchor, S.set.examDate || '', (value) => {
+            if (!value) return
+            S.set.examDate = value
+            save()
+            updateExamLabel()
+            window.ZenUI.popover.close()
+            updateHead()
+            notify('考试日期已设为 ' + value)
+          })
         }
 
         // ============================================================
@@ -9246,9 +9142,6 @@ notify pgrst, 'reload schema';</textarea
         }
 
         // ---------- Word popover ----------
-        function hidePop() {
-          $('#wpop').classList.remove('open')
-        }
         function twClick(el) {
           const w = el.dataset.w
           if (!w) return
@@ -9287,16 +9180,7 @@ notify pgrst, 'reload schema';</textarea
               '</div>'
           }
           pop.dataset.w = w
-          pop.classList.add('open')
-          const r = el.getBoundingClientRect()
-          const pw = pop.offsetWidth,
-            ph = pop.offsetHeight
-          let x = r.left,
-            y = r.bottom + 8
-          if (x + pw > innerWidth - 8) x = innerWidth - pw - 8
-          if (y + ph > innerHeight - 8) y = r.top - ph - 8
-          pop.style.left = Math.max(8, x) + 'px'
-          pop.style.top = Math.max(8, y) + 'px'
+          window.ZenUI.popover.open(pop, el, { pad: 8, flip: true })
         }
 
         // ---------- Listening import ----------
@@ -9946,7 +9830,7 @@ notify pgrst, 'reload schema';</textarea
 
             let hintHtml = ''
             if (isSentence) {
-              const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+              const escaped = ZenUtil.escRe(word)
               const exampleHtml = example
                 ? example.replace(new RegExp('\\b' + escaped + '\\w*', 'gi'), '<em>$&</em>')
                 : ''
@@ -9961,7 +9845,7 @@ notify pgrst, 'reload schema';</textarea
             } else {
               if (meaning) hintHtml += '<div class="ty-meaning">' + meaning + '</div>'
               if (example) {
-                const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                const escaped = ZenUtil.escRe(word)
                 const highlighted = example.replace(
                   new RegExp('\\b' + escaped + '\\w*', 'gi'),
                   '<em>$&</em>',
@@ -11495,31 +11379,6 @@ notify pgrst, 'reload schema';</textarea
           showExamPicker(t) {
             openExamPicker(t)
           },
-          epPrev() {
-            EP.m--
-            if (EP.m < 0) {
-              EP.m = 11
-              EP.y--
-            }
-            renderExamPop()
-          },
-          epNext() {
-            EP.m++
-            if (EP.m > 11) {
-              EP.m = 0
-              EP.y++
-            }
-            renderExamPop()
-          },
-          epDay(t) {
-            S.set.examDate = t.dataset.d
-            save()
-            updateExamLabel()
-            closePops()
-            closeDrops()
-            updateHead()
-            notify('考试日期已设为 ' + t.dataset.d)
-          },
 
           modalClose() {
             modalClose()
@@ -11745,14 +11604,22 @@ notify pgrst, 'reload schema';</textarea
             })
           },
 
-          exportFull: () => exportFull(),
+          exportFull: () => {
+            window.ZenUI.popover.close()
+            exportFull()
+          },
           exportBookJson() {
+            window.ZenUI.popover.close()
             exportBook(null, false)
           },
           exportBookTxt() {
+            window.ZenUI.popover.close()
             exportBook(null, true)
           },
-          exportDoodles: () => exportDoodles(),
+          exportDoodles: () => {
+            window.ZenUI.popover.close()
+            exportDoodles()
+          },
           // 导入先弹窗：能粘贴也能选文件。直接点文件选择器的旧路径也还在，
           // 所以没有弹窗的场景（如以后又加快捷入口）照旧能用。
           importDoodles() {
@@ -11845,7 +11712,7 @@ notify pgrst, 'reload schema';</textarea
             S.activeBook = t.dataset.id
             DICT = null
             save()
-            closeDrops()
+            window.ZenUI.popover.close()
             renderWords()
             updateHead()
           },
@@ -12377,7 +12244,7 @@ notify pgrst, 'reload schema';</textarea
             }
           },
           popClose() {
-            hidePop()
+            window.ZenUI.popover.close()
           },
           popSpeak() {
             TT.speak($('#wpop').dataset.w)
@@ -12387,7 +12254,7 @@ notify pgrst, 'reload schema';</textarea
             const hit = dictLookup(w)[0]
             if (hit && addToFav(hit.e)) notify('"' + hit.e[0] + '" 已加入生词本')
             else notify('未找到词条或已在生词本中')
-            hidePop()
+            window.ZenUI.popover.close()
           },
           popWordSay(t) {
             TT.speak(t.dataset.w)
@@ -12440,36 +12307,15 @@ notify pgrst, 'reload schema';</textarea
         // ============================================================
         // EVENT DELEGATION
         // ============================================================
-        const DROP_OPENERS = {
-          showSettings: 1,
-          showExportDd: 1,
-          showBridge: 1,
-          showBookDd: 1,
-          showExamPicker: 1,
-          showVoicePicker: 1,
-        }
-        const CLOSE_AFTER = { exportFull: 1, exportBookJson: 1, exportBookTxt: 1, exportDoodles: 1 }
-
         document.addEventListener('click', (e) => {
           const tw = e.target.closest('.tw')
           if (tw) {
             twClick(tw)
             return
           }
-          const inPop = !!e.target.closest('#wpop')
-          if (!inPop) hidePop()
-          const inPk = !!e.target.closest('.picker-pop')
-          if (!inPk) closePops()
           const t = e.target.closest('[data-action]')
-          if (!t) {
-            if (!e.target.closest('.dropdown')) closeDrops()
-            return
-          }
+          if (!t) return
           const a = t.dataset.action
-          if (!DROP_OPENERS[a]) {
-            if (CLOSE_AFTER[a]) closeDrops()
-            else if (!t.closest('.dropdown') && !inPop && !inPk) closeDrops()
-          }
           if (ACT[a]) {
             try {
               ACT[a](t, e)
@@ -12495,9 +12341,9 @@ notify pgrst, 'reload schema';</textarea
           const tag = (e.target.tagName || '').toUpperCase()
           const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
           if (e.key === 'Escape') {
-            // Sketch viewer / editor Escape is handled by the shared ZenUI.layer
-            // stack while their modal is on top; no private branch needed here.
-            closePops()
+            // Sketch viewer / editor, dropdowns, the word popover and the date
+            // picker all close through the shared ZenUI.layer stack while their
+            // surface is on top; no private branch needed here.
             if (modalIsOpen) {
               modalClose()
               return
@@ -12506,8 +12352,6 @@ notify pgrst, 'reload schema';</textarea
               drawerClose()
               return
             }
-            hidePop()
-            closeDrops()
             if (isInput) e.target.blur()
             return
           }
@@ -13506,33 +13350,16 @@ notify pgrst, 'reload schema';</textarea
             toggleCls('ze-sql-panel', 'zen-cloud-hidden', true)
             refresh()
           }
-          E('ze-copy-sql').onclick = async function () {
+          E('ze-copy-sql').onclick = function () {
             var n = E('ze-sql-copy-status')
             if (n) n.classList.remove('show')
-            try {
-              if (navigator.clipboard && navigator.clipboard.writeText)
-                await navigator.clipboard.writeText(E('zen-sql-box').value)
-              else {
-                var t = document.createElement('textarea')
-                t.value = E('zen-sql-box').value
-                t.setAttribute('readonly', '')
-                t.style.position = 'fixed'
-                t.style.left = '-9999px'
-                document.body.appendChild(t)
-                t.select()
-                document.execCommand('copy')
-                t.remove()
-              }
-              if (n) {
-                n.textContent = 'SQL 已复制'
-                n.classList.add('show')
-              }
-            } catch (_) {
-              if (n) {
-                n.textContent = '复制失败'
-                n.classList.add('show')
-              }
-            }
+            ZenUtil.copy(E('zen-sql-box').value,
+              function () {
+                if (n) { n.textContent = 'SQL 已复制'; n.classList.add('show') }
+              },
+              function () {
+                if (n) { n.textContent = '复制失败'; n.classList.add('show') }
+              })
           }
           E('ze-login-only').onclick = function () {
             auth('login')

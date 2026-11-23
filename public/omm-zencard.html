@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
@@ -10,6 +11,7 @@
     <script src="zen/components/menu.js"></script>
     <script src="zen/components/shortcuts.js"></script>
     <script src="zen/components/index.js"></script>
+<script src="zen/components/tabs.js"></script>
 <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -26,11 +28,11 @@
     <div id="app">
       <header class="top">
         <span class="brand">ZenCard 间隔复习</span>
-        <nav class="tabs" id="tabs">
-          <button data-view="review" class="active">复习</button>
-          <button data-view="library">卡片库</button>
-          <button data-view="graph">关系图</button>
-          <button data-view="io">导入导出</button>
+        <nav class="tabs" id="tabs" data-zen-tabs="views" data-zen-tab-item="button[data-view]" data-zen-tab-active="active">
+          <button data-view="review" data-zen-tab="review" class="active" aria-selected="true">复习</button>
+          <button data-view="library" data-zen-tab="library" aria-selected="false">卡片库</button>
+          <button data-view="graph" data-zen-tab="graph" aria-selected="false">关系图</button>
+          <button data-view="io" data-zen-tab="io" aria-selected="false">导入导出</button>
         </nav>
         <span class="spacer"></span>
         <div class="actions"><button class="zt-btn sm" id="theme-btn">深浅色</button></div>
@@ -270,9 +272,7 @@
         }
       }
 
-      function escape(s) {
-        return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]))
-      }
+      function escape(s) { return ZenUtil.esc(s, { apos: false }) }
 
       function fillSelects() {
         $('new-kind').innerHTML = ZenCard.KINDS.map((k) => `<option value="${k}">${k}</option>`).join('')
@@ -282,13 +282,11 @@
       }
 
       function bind() {
-        $('tabs').addEventListener('click', (e) => {
-          const btn = e.target.closest('button[data-view]')
-          if (!btn) return
-          $('tabs').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn))
-          document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + btn.dataset.view))
-          if (btn.dataset.view === 'review') renderReview()
-          if (btn.dataset.view === 'graph') renderGraph()
+        $('tabs').addEventListener('zen:tab', (e) => {
+          const view = e.detail.id
+          document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view))
+          if (view === 'review') renderReview()
+          if (view === 'graph') renderGraph()
         })
         $('theme-btn').addEventListener('click', () => {
           document.body.classList.toggle('theme-dark')
@@ -350,8 +348,7 @@
         const id = String(cardId || '')
         if (!id || !cards.some((c) => c.id === id)) return false
         $('lib-search').value = ''
-        $('tabs').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.view === 'library'))
-        document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-library'))
+        window.ZenUI.tabs.select($('tabs'), 'library')
         renderLibrary()
         const row = $('card-list').querySelector('[data-id="' + CSS.escape(id) + '"]')
         if (row) {

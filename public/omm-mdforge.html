@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
@@ -11,6 +12,7 @@
     <script src="zen/components/menu.js"></script>
     <script src="zen/components/shortcuts.js"></script>
     <script src="zen/components/index.js"></script>
+    <script src="zen/components/tabs.js"></script>
 <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <script type="module" src="lib/zen-link.js"></script>
@@ -124,11 +126,11 @@
         </section>
 
         <aside id="inspector">
-          <div class="inspector-tabs" role="tablist">
-            <button class="tab active" data-tab="preview" role="tab">预览</button>
-            <button class="tab" data-tab="meta" role="tab">元信息</button>
-            <button class="tab" data-tab="tuning" role="tab">格式</button>
-            <button class="tab" data-tab="output" role="tab">
+          <div class="inspector-tabs" role="tablist" data-zen-tabs="inspector" data-zen-tab-item="button[data-tab]" data-zen-tab-active="active">
+            <button class="tab active" data-tab="preview" data-zen-tab="preview" role="tab" aria-selected="true">预览</button>
+            <button class="tab" data-tab="meta" data-zen-tab="meta" role="tab" aria-selected="false">元信息</button>
+            <button class="tab" data-tab="tuning" data-zen-tab="tuning" role="tab" aria-selected="false">格式</button>
+            <button class="tab" data-tab="output" data-zen-tab="output" role="tab" aria-selected="false">
               输出 <span class="tab-badge hidden" id="output-badge">0</span>
             </button>
           </div>
@@ -1208,14 +1210,7 @@ template: academic
 
         function toast(msg) { return window.ZenUI.toast(msg) }
 
-        function escapeHtml(value) {
-          return String(value == null ? '' : value)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-        }
+        function escapeHtml(value) { return ZenUtil.esc(value) }
 
         function setStatus(text) {
           dom.statLeft.textContent = text
@@ -1356,16 +1351,15 @@ template: academic
         }
 
         function switchTab(tab) {
+          window.ZenUI.tabs.select(document.querySelector('[data-zen-tabs]'), tab)
+        }
+        document.querySelector('[data-zen-tabs]').addEventListener('zen:tab', (event) => {
+          const tab = event.detail.id
           state.tab = tab
-          $$('.tab').forEach((btn) => {
-            const active = btn.dataset.tab === tab
-            btn.classList.toggle('active', active)
-            btn.setAttribute('aria-selected', active ? 'true' : 'false')
-          })
           $$('.tab-panel').forEach((panel) =>
             panel.classList.toggle('active', panel.id === `panel-${tab}`),
           )
-        }
+        })
 
         function setView(view) {
           state.view = view
@@ -2707,23 +2701,11 @@ template: academic
           }
         }
 
-        async function copyText(text) {
-          try {
-            await navigator.clipboard.writeText(text)
-            toast('已复制到剪贴板')
-          } catch (error) {
-            const area = document.createElement('textarea')
-            area.value = text
-            document.body.appendChild(area)
-            area.select()
-            try {
-              document.execCommand('copy')
-              toast('已复制到剪贴板')
-            } catch (err) {
-              toast('复制失败', true)
-            }
-            area.remove()
-          }
+        function copyText(text) {
+          return ZenUtil.copy(text,
+            function () { toast('已复制到剪贴板') },
+            function () { toast('复制失败', true) },
+          )
         }
 
         async function loadEnvironment() {
@@ -2880,11 +2862,6 @@ template: academic
             const viewBtn = event.target.closest('[data-view]')
             if (viewBtn) {
               setView(viewBtn.dataset.view)
-              return
-            }
-            const tabBtn = event.target.closest('[data-tab]')
-            if (tabBtn) {
-              switchTab(tabBtn.dataset.tab)
               return
             }
             const templateItem = event.target.closest('[data-template-name]')

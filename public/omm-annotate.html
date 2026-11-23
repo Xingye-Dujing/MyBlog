@@ -5,6 +5,7 @@
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -987,28 +988,7 @@
               .filter(Boolean)
           return []
         }
-        function download(name, content, mime) {
-          try {
-            var blob = new Blob([content], { type: mime || 'application/json;charset=utf-8' })
-            var url = URL.createObjectURL(blob)
-            var a = document.createElement('a')
-            a.href = url
-            a.download = name
-            document.body.appendChild(a)
-            a.click()
-            setTimeout(function () {
-              try {
-                a.remove()
-              } catch (e) {}
-              try {
-                URL.revokeObjectURL(url)
-              } catch (e) {}
-            }, 400)
-            return true
-          } catch (e) {
-            return false
-          }
-        }
+        function download(name, content, mime) { return ZenUtil.download(name, content, mime || 'application/json;charset=utf-8') }
         function saveJSON(name, obj) {
           return download(name, JSON.stringify(obj, null, 2), 'application/json')
         }
@@ -1862,20 +1842,13 @@
         var spFiltered = []
         var spIdx = 0
         var srIdx = 0
-        var notifyTimer = null
 
         // ================================================================
         // 3. HELPERS
         // ================================================================
         function el(id) { return ZenUtil.byId(id) }
-        function esc(s) {
-          return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
-          })
-        }
-        function uid(p) {
-          return (p || 'x') + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-        }
+        function esc(s) { return ZenUtil.esc(s) }
+        function uid(p) { return ZenUtil.uid(p || 'x') }
         function pad2(n) {
           return n < 10 ? '0' + n : '' + n
         }
@@ -1900,19 +1873,7 @@
         function showConfirm(msg, okText) {
           return window.ZenUI.dialog.confirm(msg, { ok: okText || '确定' })
         }
-        function download(name, content, mime) {
-          var blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' })
-          var url = URL.createObjectURL(blob)
-          var a = document.createElement('a')
-          a.href = url
-          a.download = name
-          document.body.appendChild(a)
-          a.click()
-          setTimeout(function () {
-            document.body.removeChild(a)
-            URL.revokeObjectURL(url)
-          }, 200)
-        }
+        function download(name, content, mime) { return ZenUtil.download(name, content, mime) }
 
         function docById(id) {
           for (var i = 0; i < P.docs.length; i++) if (P.docs[i].id === id) return P.docs[i]
@@ -5905,14 +5866,12 @@
           box.innerHTML = h
         }
 
-        function placePop(pop, rect, w) {
-          var top = rect.bottom + 8
-          var left = clamp(rect.left, 10, Math.max(10, window.innerWidth - w - 10))
-          if (top + pop.offsetHeight > window.innerHeight - 10)
-            top = Math.max(10, rect.top - pop.offsetHeight - 8)
-          pop.style.top = top + 'px'
-          pop.style.left = left + 'px'
+        // 选区没有对应 DOM 节点：把 Range 的矩形包成 getBoundingClientRect 锚点，
+        // 由共享 popover 统一做定位与翻转，产品只负责内容。
+        function rectAnchor(rect) {
+          return { getBoundingClientRect: function () { return rect } }
         }
+        var POP_GEO = { pad: 10, gap: 8, flip: true, flipMin: 10 }
 
         function showSelPop(rect, s, e) {
           var d = curDoc()
@@ -5922,8 +5881,7 @@
           el('sp-quote').textContent = d.text.slice(s, e)
           el('sp-input').value = ''
           renderSpList('')
-          pop.classList.add('open')
-          placePop(pop, rect, 264)
+          window.ZenUI.popover.open(pop, rectAnchor(rect), POP_GEO)
           setTimeout(function () {
             try {
               el('sp-input').focus()
@@ -5932,7 +5890,7 @@
         }
 
         function hideSelPop(keep) {
-          el('sel-pop').classList.remove('open')
+          window.ZenUI.popover.close(el('sel-pop'))
           if (!keep) pendingSel = null
         }
 
@@ -5981,8 +5939,7 @@
           el('mp-note').value = ''
           mpSetSty(mpSty)
           mpSetColor(mpColor)
-          pop.classList.add('open')
-          placePop(pop, rect, 286)
+          window.ZenUI.popover.open(pop, rectAnchor(rect), POP_GEO)
           setTimeout(function () {
             try {
               el('mp-note').focus()
@@ -5990,7 +5947,7 @@
           }, 20)
         }
         function hideMarkPop(keep) {
-          el('mark-pop').classList.remove('open')
+          window.ZenUI.popover.close(el('mark-pop'))
           if (!keep) pendingMark = null
         }
         function saveMark() {
@@ -6126,28 +6083,7 @@
           })
         }
 
-        function copyText(t) {
-          function fallback() {
-            var ta = document.createElement('textarea')
-            ta.value = t
-            ta.style.position = 'fixed'
-            ta.style.left = '-9999px'
-            document.body.appendChild(ta)
-            ta.select()
-            try {
-              document.execCommand('copy')
-              notify('已复制')
-            } catch (e) {
-              notify('复制失败')
-            }
-            ta.remove()
-          }
-          if (navigator.clipboard && navigator.clipboard.writeText)
-            navigator.clipboard.writeText(t).then(function () {
-              notify('已复制')
-            }, fallback)
-          else fallback()
-        }
+        function copyText(t) { return ZenUtil.copy(t, function(){ notify('已复制') }, function(){ notify('复制失败') }) }
 
         function handleMarkAct(act) {
           var m = markById(S.selMark)
@@ -7682,21 +7618,10 @@
         // ================================================================
         // 12. UI MANAGER (menu / dropdowns / pin)
         // ================================================================
-        var SH_TOKEN = 0
-        function softHide(elx) {
-          if (!elx || !elx.classList.contains('open')) return
-          var my = ++SH_TOKEN
-          elx._sh = my
-          elx.classList.add('closing')
-          setTimeout(function () {
-            if (elx._sh === my) elx.classList.remove('open', 'closing')
-          }, 150)
-        }
-
         // ================================================================
         // 12. 候选区 / 自定义选择框
         // ================================================================
-        var sug = { host: null, items: [], idx: -1, onPick: null, keep: false }
+        var sug = { host: null, items: [], idx: -1, onPick: null }
 
         function sugItems() {
           return sug.items || []
@@ -7733,6 +7658,8 @@
             n.classList.toggle('hl', i === sug.idx)
           })
         }
+        var SUG_GEO = { pad: 8, gap: 4, flip: true }
+
         function sugPlace() {
           var p = el('sug')
           var host = sug.host
@@ -7740,18 +7667,21 @@
           var r = host.getBoundingClientRect()
           p.style.minWidth = Math.max(160, Math.min(r.width, 460)) + 'px'
           p.style.maxWidth = '92vw'
-          var top = r.bottom + 4
-          var h = p.offsetHeight
-          if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4)
-          p.style.top = top + 'px'
-          p.style.left = clamp(r.left, 8, Math.max(8, window.innerWidth - p.offsetWidth - 8)) + 'px'
+          window.ZenUI.popover.place(p, host, SUG_GEO)
         }
-        function sugOpen(host, items, onPick, opts) {
+        function sugReset() {
+          var p = el('sug')
+          if (p) p.innerHTML = ''
+          sug.host = null
+          sug.items = []
+          sug.idx = -1
+          sug.onPick = null
+        }
+        function sugOpen(host, items, onPick) {
           sugClose()
           sug.host = host
           sug.items = items || []
           sug.onPick = onPick || null
-          sug.keep = !!(opts && opts.keep)
           sug.idx = -1
           for (var i = 0; i < sug.items.length; i++)
             if (sug.items[i].on) {
@@ -7760,29 +7690,20 @@
             }
           var p = el('sug')
           p.classList.remove('inline')
-          p.classList.add('open')
-          sugRender()
-          sugPlace()
-          if (host.classList) {
-            host.classList.add('open')
-            sug._host = host
+          if (host && host.getBoundingClientRect) {
+            var hr = host.getBoundingClientRect()
+            p.style.minWidth = Math.max(160, Math.min(hr.width, 460)) + 'px'
+            p.style.maxWidth = '92vw'
           }
+          sugRender()
+          window.ZenUI.popover.open(p, host || null, {
+            pad: 8, gap: 4, flip: true, activeClass: 'open',
+            onClose: function () { sugReset() },
+          })
         }
         function sugClose() {
-          var p = el('sug')
-          if (p) {
-            p.classList.remove('open')
-            p.innerHTML = ''
-          }
-          if (sug._host) {
-            sug._host.classList.remove('open')
-            sug._host = null
-          }
-          sug.host = null
-          sug.items = []
-          sug.idx = -1
-          sug.onPick = null
-          sug.keep = false
+          window.ZenUI.popover.close(el('sug'))
+          sugReset()
         }
         function sugPick(i) {
           var x = sugItems()[i]
@@ -7873,15 +7794,8 @@
 
         var UIMgr = {
           closeDropdowns: function () {
-            document.querySelectorAll('.dropdown.open').forEach(function (d) {
-              softHide(d)
-            })
+            window.ZenUI.popover.close()
             document.body.classList.remove('submenu-open')
-            document.querySelectorAll('.menu-btn.active').forEach(function (b) {
-              if (VIEWS.indexOf(String(b.id || '').replace(/^btn-/, '')) < 0)
-                b.classList.remove('active')
-            })
-            // 视图按钮的选中态始终以当前视图为准，避免被误清
             syncViewBtns()
           },
           showDropdown: function (id, btn) {
@@ -7889,22 +7803,16 @@
             var wasOpen = dd.classList.contains('open')
             UIMgr.closeDropdowns()
             if (wasOpen) return
-            dd.classList.add('open')
-            dd._sh = null
-            var rect =
-              btn && btn.getBoundingClientRect
-                ? btn.getBoundingClientRect()
-                : { top: 40, bottom: 48, left: 24, width: 60 }
-            var w = dd.offsetWidth || 300
-            var h = dd.offsetHeight || 260
-            var top = rect.bottom + 6
-            // 下方空间不够时向上翻转，避免贴底或溢出视口
-            if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 6)
-            dd.style.top = Math.max(8, top) + 'px'
-            dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 10)) + 'px'
-            if (btn && btn.classList && btn.classList.contains('menu-btn'))
-              btn.classList.add('active')
             document.body.classList.add('submenu-open')
+            window.ZenUI.popover.open(dd, btn || null, {
+              gap: 6, pad: 8, flip: true,
+              activeClass:
+                btn && btn.classList && btn.classList.contains('menu-btn') ? 'active' : null,
+              onClose: function () {
+                document.body.classList.remove('submenu-open')
+                syncViewBtns()
+              },
+            })
           },
           togglePin: function () {
             S.menuPinned = !S.menuPinned
@@ -8705,15 +8613,8 @@
               return
             }
 
-            var inDD = e.target.closest('.dropdown')
             var inPop = e.target.closest('#sel-pop,#mark-pop')
-            var inMenu = e.target.closest('#top-menu')
             var inModal = e.target.closest('.zenui-modal')
-            var opener = e.target.closest(
-              '[data-action="showExport"],[data-action="showSettings"],[data-action="showSearch"],[data-action="showDocs"],[data-action="showBridge"]',
-            )
-            if (!inDD && !inPop && !inMenu && !inModal && !opener)
-              UIMgr.closeDropdowns()
 
             var target = e.target.closest('[data-action]')
             if (target) {
@@ -8748,8 +8649,6 @@
               })
               return
             }
-            if (e.target.closest('#sug')) return
-            if (el('sug').classList.contains('open')) sugClose()
           })
           el('sug').addEventListener('mousedown', function (e) {
             var it = e.target.closest('.sug-item')
@@ -8776,9 +8675,6 @@
               showSelPop(rect, o.s, o.e)
             }, 10)
           })
-          el('paper-scroll').addEventListener('mousedown', function (e) {
-            if (!e.target.closest('#sel-pop')) hideSelPop()
-          })
 
           // ---- reader: 选中文本 → 批注面板 ----
           el('rv-scroll').addEventListener('mouseup', function (e) {
@@ -8798,9 +8694,6 @@
                 rect = { left: 24, right: 220, top: 120, bottom: 140, width: 196, height: 20 }
               showMarkPop(rect, o.s, o.e)
             }, 10)
-          })
-          el('rv-scroll').addEventListener('mousedown', function (e) {
-            if (!e.target.closest('#mark-pop')) hideMarkPop()
           })
           // ---- reader: 点击已有标记 ----
           el('rv-scroll').addEventListener('click', function (e) {
@@ -10208,33 +10101,16 @@
             toggleCls('zp-sql-panel', 'zen-cloud-hidden', true)
             refresh()
           }
-          E('zp-copy-sql').onclick = async function () {
+          E('zp-copy-sql').onclick = function () {
             var n = E('zp-sql-copy-status')
             if (n) n.classList.remove('show')
-            try {
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(E('zen-sql-box').value)
-              } else {
-                var t = document.createElement('textarea')
-                t.value = E('zen-sql-box').value
-                t.setAttribute('readonly', '')
-                t.style.position = 'fixed'
-                t.style.left = '-9999px'
-                document.body.appendChild(t)
-                t.select()
-                document.execCommand('copy')
-                t.remove()
-              }
-              if (n) {
-                n.textContent = 'SQL 已复制'
-                n.classList.add('show')
-              }
-            } catch (_) {
-              if (n) {
-                n.textContent = '复制失败'
-                n.classList.add('show')
-              }
-            }
+            ZenUtil.copy(E('zen-sql-box').value,
+              function () {
+                if (n) { n.textContent = 'SQL 已复制'; n.classList.add('show') }
+              },
+              function () {
+                if (n) { n.textContent = '复制失败'; n.classList.add('show') }
+              })
           }
           E('zp-login-only').onclick = function () {
             auth('login')

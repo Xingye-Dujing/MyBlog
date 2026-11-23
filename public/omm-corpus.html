@@ -5,6 +5,8 @@
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
+    <script src="zen/components/tooltip.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -1147,28 +1149,7 @@ notify pgrst, 'reload schema';</textarea
               .filter(Boolean)
           return []
         }
-        function download(name, content, mime) {
-          try {
-            var blob = new Blob([content], { type: mime || 'application/json;charset=utf-8' })
-            var url = URL.createObjectURL(blob)
-            var a = document.createElement('a')
-            a.href = url
-            a.download = name
-            document.body.appendChild(a)
-            a.click()
-            setTimeout(function () {
-              try {
-                a.remove()
-              } catch (e) {}
-              try {
-                URL.revokeObjectURL(url)
-              } catch (e) {}
-            }, 400)
-            return true
-          } catch (e) {
-            return false
-          }
-        }
+        function download(name, content, mime) { return ZenUtil.download(name, content, mime || 'application/json;charset=utf-8') }
         function saveJSON(name, obj) {
           return download(name, JSON.stringify(obj, null, 2), 'application/json')
         }
@@ -1633,12 +1614,8 @@ notify pgrst, 'reload schema';</textarea
         const LS = 'omm-corpus-v1'
         const $ = (s) => document.querySelector(s)
         const $$ = (s) => Array.from(document.querySelectorAll(s))
-        const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-        const esc = (s) =>
-          String(s ?? '').replace(
-            /[&<>"']/g,
-            (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
-          )
+        const uid = () => ZenUtil.uid()
+        const esc = (s) => ZenUtil.esc(s)
         const clean = (s) => String(s ?? '').trim()
         const norm = (s) =>
           clean(s)
@@ -2940,111 +2917,6 @@ notify pgrst, 'reload schema';</textarea
           if (v === 'library') renderLibrary()
           if (v === 'ai') renderAiContext()
         }
-        function initCustomSelects() {
-          ;['quick-cat', 'quick-type', 'ed-cat', 'ed-type'].forEach((id) => {
-            const native = document.getElementById(id)
-            if (!native || native.dataset.customized) return
-            native.dataset.customized = '1'
-            native.classList.add('custom-select-native')
-            const wrap = document.createElement('div')
-            wrap.className = 'custom-select'
-            wrap.dataset.for = id
-            native.parentNode.insertBefore(wrap, native)
-            wrap.appendChild(native)
-            const trigger = document.createElement('button')
-            trigger.type = 'button'
-            trigger.className = 'custom-select-trigger'
-            trigger.innerHTML =
-              '<span class="value"></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9l6 6 6-6"/></svg>'
-            const options = document.createElement('div')
-            options.className = 'custom-select-options'
-            wrap.appendChild(trigger)
-            wrap.appendChild(options)
-            trigger.onclick = (e) => {
-              e.stopPropagation()
-              const willOpen = !wrap.classList.contains('open')
-              closeCustomSelects(willOpen ? wrap : null)
-              wrap.classList.toggle('open', willOpen)
-              if (willOpen) positionCustomSelect(wrap)
-            }
-            native.addEventListener('change', () => refreshCustomSelect(id))
-            wrap._refresh = () => refreshCustomSelect(id)
-          })
-        }
-        function positionCustomSelect(wrap) {
-          if (!wrap || !wrap.classList.contains('open')) return
-          const trigger = wrap.querySelector('.custom-select-trigger')
-          const box = wrap.querySelector('.custom-select-options')
-          if (!trigger || !box) return
-          const rect = trigger.getBoundingClientRect()
-          const gap = 4
-          const viewportPad = 8
-          const estimatedHeight = Math.min(320, Math.max(0, box.scrollHeight || 240))
-          let top = rect.bottom + gap
-          if (top + estimatedHeight > window.innerHeight - viewportPad) {
-            const above = rect.top - gap - estimatedHeight
-            if (above >= viewportPad) top = above
-          }
-          const width = rect.width
-          let left = rect.left
-          if (left + width > window.innerWidth - viewportPad)
-            left = Math.max(viewportPad, window.innerWidth - viewportPad - width)
-          box.style.position = 'fixed'
-          box.style.left = left + 'px'
-          box.style.top = Math.max(viewportPad, top) + 'px'
-          box.style.width = width + 'px'
-          box.style.right = 'auto'
-          box.style.zIndex = '50000'
-        }
-
-        function resetCustomSelectPosition(wrap) {
-          const box = wrap?.querySelector('.custom-select-options')
-          if (!box) return
-          box.style.position = ''
-          box.style.left = ''
-          box.style.top = ''
-          box.style.width = ''
-          box.style.right = ''
-          box.style.zIndex = ''
-        }
-
-        function closeCustomSelects(keep) {
-          $$('.custom-select.open').forEach((x) => {
-            if (x !== keep) {
-              x.classList.remove('open')
-              resetCustomSelectPosition(x)
-            }
-          })
-        }
-        function refreshOpenCustomSelects() {
-          $$('.custom-select.open').forEach(positionCustomSelect)
-        }
-        window.addEventListener('resize', refreshOpenCustomSelects)
-        window.addEventListener('scroll', refreshOpenCustomSelects, true)
-
-        function refreshCustomSelect(id) {
-          const native = $('#' + id)
-          const wrap = document.querySelector(`.custom-select[data-for="${id}"]`)
-          if (!native || !wrap) return
-          const trigger = wrap.querySelector('.custom-select-trigger .value')
-          trigger.textContent = native.options[native.selectedIndex]?.text || '请选择'
-          const box = wrap.querySelector('.custom-select-options')
-          box.innerHTML = Array.from(native.options)
-            .map(
-              (o) =>
-                `<button type="button" class="custom-select-option${o.selected ? ' selected' : ''}" data-value="${esc(o.value)}"><span>${esc(o.text)}</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 12l4 4L19 8"/></svg></button>`,
-            )
-            .join('')
-          box.querySelectorAll('.custom-select-option').forEach(
-            (b) =>
-              (b.onclick = (e) => {
-                e.stopPropagation()
-                native.value = b.dataset.value
-                native.dispatchEvent(new Event('change', { bubbles: true }))
-                closeCustomSelects()
-              }),
-          )
-        }
         function populateCats() {
           ;['#quick-cat', '#ed-cat'].forEach((sel) => {
             const s = $(sel)
@@ -3054,10 +2926,6 @@ notify pgrst, 'reload schema';</textarea
           })
           const e = S.entries[0]
           if (e && !$('#quick-cat').value) $('#quick-cat').value = e.categoryId
-          refreshCustomSelect('quick-cat')
-          refreshCustomSelect('ed-cat')
-          refreshCustomSelect('quick-type')
-          refreshCustomSelect('ed-type')
         }
         function renderHome() {
           updateHead()
@@ -3386,32 +3254,20 @@ notify pgrst, 'reload schema';</textarea
           const wasOpen = dd.classList.contains('open')
           closeDrops()
           if (wasOpen) return
-          dd.classList.add('open')
-          document.body.classList.add('submenu-open')
-          $$('#bottom-settings').forEach((b) => b.classList.remove('active'))
-          $$(
-            '#top-menu .menu-btn[data-action="showSettings"],#top-menu .menu-btn#settings-btn',
-          ).forEach((b) => b.classList.remove('active'))
-          if (anchor) anchor.classList.add('active')
-          const r = anchor ? anchor.getBoundingClientRect() : null
-          let x = r ? r.left : 8
-          const w = dd.offsetWidth || 250
-          if (x + w > innerWidth - 10) x = innerWidth - w - 10
-          dd.style.left = Math.max(8, x) + 'px'
-          if (r) {
-            const h = dd.offsetHeight || 300
-            if (r.top > innerHeight / 2) {
-              dd.style.top = Math.max(8, r.top - h - 4) + 'px'
-            } else {
-              dd.style.top = r.bottom + 4 + 'px'
-            }
-          }
+          window.ZenUI.popover.open(dd, anchor || null, {
+            gap: 4,
+            pad: 8,
+            activeClass: 'active',
+            onOpen: () => document.body.classList.add('submenu-open'),
+            onClose: () => {
+              document.body.classList.remove('submenu-open')
+              $('#bottom-settings')?.classList.remove('active')
+              $('#settings-btn')?.classList.remove('active')
+            },
+          })
         }
         function closeDrops() {
-          $$('.dropdown.open').forEach((d) => d.classList.remove('open'))
-          $('#settings-btn')?.classList.remove('active')
-          $('#bottom-settings')?.classList.remove('active')
-          document.body.classList.remove('submenu-open')
+          window.ZenUI.popover.close()
         }
         function openSettings(anchor) {
           applySettings()
@@ -4785,7 +4641,7 @@ ${extra}`
                   }
                   if (
                     new RegExp(
-                      `(^|\\s)${w.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(?=\\s|$)`,
+                      `(^|\\s)${ZenUtil.escRe(w)}(?=\\s|$)`,
                       'i',
                     ).test(en)
                   )
@@ -5454,14 +5310,6 @@ ${extra}`
           openShortcuts()
         }
         if ($('#reset-btn')) $('#reset-btn').onclick = openReset
-        document.addEventListener('click', (e) => {
-          if (
-            !e.target.closest('#dd-settings') &&
-            !e.target.closest('#settings-btn') &&
-            !e.target.closest('#bottom-settings')
-          )
-            closeDrops()
-        })
         $('#font-minus').onclick = () => {
           S.settings.fontScale = Math.max(0.85, +(S.settings.fontScale - 0.05).toFixed(2))
           save()
@@ -5909,8 +5757,6 @@ ${extra}`
           }
         }
         function boot() {
-          initCustomSelects()
-          document.addEventListener('click', closeCustomSelects)
           applySettings()
           populateCats()
           renderAIModelPresets()
@@ -6048,10 +5894,6 @@ ${extra}`
             }
             if (document.querySelector('.zenui-modal.on')) {
               closeModal()
-            }
-            const ddSettings = $('#dd-settings')
-            if (ddSettings && ddSettings.classList.contains('open')) {
-              closeDrops()
             }
           }
         })
@@ -6783,33 +6625,16 @@ ${extra}`
             toggleCls('omm-sql-panel', 'zen-cloud-hidden', true)
             refresh()
           }
-          E('omm-copy-sql').onclick = async function () {
+          E('omm-copy-sql').onclick = function () {
             var n = E('omm-sql-copy-status')
             if (n) n.classList.remove('show')
-            try {
-              if (navigator.clipboard && navigator.clipboard.writeText)
-                await navigator.clipboard.writeText(E('zen-sql-box').value)
-              else {
-                var t = document.createElement('textarea')
-                t.value = E('zen-sql-box').value
-                t.setAttribute('readonly', '')
-                t.style.position = 'fixed'
-                t.style.left = '-9999px'
-                document.body.appendChild(t)
-                t.select()
-                document.execCommand('copy')
-                t.remove()
-              }
-              if (n) {
-                n.textContent = 'SQL 已复制'
-                n.classList.add('show')
-              }
-            } catch (_) {
-              if (n) {
-                n.textContent = '复制失败'
-                n.classList.add('show')
-              }
-            }
+            ZenUtil.copy(E('zen-sql-box').value,
+              function () {
+                if (n) { n.textContent = 'SQL 已复制'; n.classList.add('show') }
+              },
+              function () {
+                if (n) { n.textContent = '复制失败'; n.classList.add('show') }
+              })
           }
           E('omm-login-only').onclick = function () {
             auth('login')

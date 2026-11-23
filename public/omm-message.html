@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
@@ -1405,42 +1406,11 @@
           row.classList.add('target-highlight')
           return true
         }
-        async function copyTextToClipboard(text) {
-          const value = String(text ?? '')
-          if (!value) return false
-
-          try {
-            if (navigator.clipboard && window.isSecureContext) {
-              await navigator.clipboard.writeText(value)
-              return true
-            }
-          } catch (err) {
-            // 继续尝试兼容旧浏览器/非安全上下文的 fallback。
-          }
-
-          try {
-            const textarea = document.createElement('textarea')
-            textarea.value = value
-            textarea.setAttribute('readonly', '')
-            textarea.style.position = 'fixed'
-            textarea.style.top = '0'
-            textarea.style.left = '-9999px'
-            textarea.style.opacity = '0'
-            textarea.style.pointerEvents = 'none'
-            document.body.appendChild(textarea)
-            textarea.focus()
-            textarea.select()
-            const ok = document.execCommand('copy')
-            textarea.remove()
-            return ok
-          } catch (err) {
-            return false
-          }
-        }
-        async function copyMessage(m) {
+        function copyMessage(m) {
           if (!m) return
-          const ok = await copyTextToClipboard(m.text || '')
-          toast(t(ok ? 'toast.messageCopied' : 'toast.copyFailed'))
+          ZenUtil.copy(m.text || '',
+            function () { toast(t('toast.messageCopied')) },
+            function () { toast(t('toast.copyFailed')) })
         }
         function quoteMessage(m) {
           if (!m || !requireCloudAction('quote')) return
@@ -2348,16 +2318,10 @@
             resizeSql()
           }
           $('back-config').onclick = openSync
-          $('copy-sql').onclick = async () => {
-            try {
-              await navigator.clipboard.writeText($('sql-box').value)
-              toast(t('toast.copied'))
-            } catch {
-              const x = $('sql-box')
-              x.select()
-              document.execCommand('copy')
-              toast(t('toast.copied'))
-            }
+          $('copy-sql').onclick = () => {
+            ZenUtil.copy($('sql-box').value,
+              function () { toast(t('toast.copied')) },
+              function () { toast(t('toast.copyFailed')) })
           }
           $('send-btn').onclick = send
           $('message-search').addEventListener('input', (e) => {
