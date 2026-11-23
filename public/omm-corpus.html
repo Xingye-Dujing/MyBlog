@@ -1148,7 +1148,7 @@ notify pgrst, 'reload schema';</textarea
         }
         function download(name, content, mime) { return ZenUtil.download(name, content, mime || 'application/json;charset=utf-8') }
         function saveJSON(name, obj) {
-          return download(name, JSON.stringify(obj, null, 2), 'application/json')
+          return ZenUtil.saveJSON(name, obj)
         }
 
         /* ---------- item 构造 ---------- */
@@ -4789,12 +4789,7 @@ ${extra}`
           }
         }
         function downloadData() {
-          const blob = new Blob([exportData()], { type: 'application/json' })
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(blob)
-          a.download = 'omm-corpus-' + new Date().toISOString().slice(0, 10) + '.json'
-          a.click()
-          setTimeout(() => URL.revokeObjectURL(a.href), 500)
+          ZenUtil.download('omm-corpus-' + ZenUtil.fmtDate(new Date()) + '.json', exportData(), 'application/json')
         }
 
         // ---------- OMM Bridge · 与 Annotate / English 互通 ----------
@@ -5670,18 +5665,13 @@ ${extra}`
           refreshAIContextFromCorpus($('#ai-query').value, true)
           toast('已恢复自动 CONTEXT')
         }
-        $('#ai-copy-context').onclick = async () => {
+        $('#ai-copy-context').onclick = () => {
           const q = clean($('#ai-query').value)
           const entries = selectedAiIds
             .map((id) => S.entries.find((e) => e.id === id))
             .filter(Boolean)
           const s = getCurrentAIContext(q, getActiveMessages(), entries)
-          try {
-            await navigator.clipboard.writeText(s)
-            toast('语料上下文已复制')
-          } catch (e) {
-            toast('复制失败')
-          }
+          ZenUtil.copy(s, function () { toast('语料上下文已复制') }, function () { toast('复制失败') })
         }
         // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
         window.ZenUI.shortcuts.bind({

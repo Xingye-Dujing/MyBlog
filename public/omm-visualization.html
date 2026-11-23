@@ -8415,17 +8415,7 @@
           return setStatus(next ? '导出背景 · 透明' : '导出背景 · 白底')
         }
         function downloadJsonFile(filename, payload) {
-          const blob = new Blob([JSON.stringify(payload, null, 2)], {
-            type: 'application/json;charset=utf-8',
-          })
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = filename
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          setTimeout(() => URL.revokeObjectURL(url), 0)
+          return ZenUtil.saveJSON(filename, payload)
         }
 
         function exportPropertySettings() {
@@ -13236,12 +13226,7 @@
               svgString = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${shot.canvas.width}" height="${shot.canvas.height}" viewBox="0 0 ${shot.canvas.width} ${shot.canvas.height}">${bg}<image href="${png}" width="${shot.canvas.width}" height="${shot.canvas.height}"/></svg>`
             }
 
-            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-            const a = document.createElement('a')
-            a.download = safeName(state.title) + '.svg'
-            a.href = URL.createObjectURL(blob)
-            a.click()
-            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+            ZenUtil.download(safeName(state.title) + '.svg', svgString, 'image/svg+xml;charset=utf-8')
             setStatus('SVG 已导出' + size + (transparent ? ' · 透明背景' : '') + ' · 矢量无限缩放')
           } catch (e) {
             reportError('SVG 导出失败', e, true)
@@ -14243,13 +14228,7 @@
 
         async function exportTeX() {
           try {
-            const tex = buildTeX()
-            const blob = new Blob([tex], { type: 'text/x-tex;charset=utf-8' })
-            const a = document.createElement('a')
-            a.download = safeName(state.title) + '.tex'
-            a.href = URL.createObjectURL(blob)
-            a.click()
-            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+            ZenUtil.download(safeName(state.title) + '.tex', buildTeX(), 'text/x-tex;charset=utf-8')
             setStatus('TeX 已导出 · 请用 XeLaTeX 编译生成矢量图')
           } catch (e) {
             reportError('TeX 导出失败', e, true)

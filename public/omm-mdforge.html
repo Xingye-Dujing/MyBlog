@@ -1123,17 +1123,9 @@ template: academic
             savedAt: new Date().toISOString(),
             tuning: state.tuning,
           }
-          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-          const url = URL.createObjectURL(blob)
-          const anchor = document.createElement('a')
           const safe = String(state.template || 'template').replace(/[^\w.-]+/g, '-')
           const name = `mdforge-format-${state.format}-${safe}.json`
-          anchor.href = url
-          anchor.download = name
-          document.body.appendChild(anchor)
-          anchor.click()
-          anchor.remove()
-          setTimeout(() => URL.revokeObjectURL(url), 1000)
+          ZenUtil.saveJSON(name, payload)
           toast(`已导出格式配置 ${name}`)
         }
 
@@ -2026,15 +2018,7 @@ template: academic
         function downloadMarkdown() {
           let name = state.filename || 'document.md'
           if (!/\.(md|markdown)$/i.test(name)) name = name.replace(/\.[^.]+$/, '') + '.md'
-          const blob = new Blob([dom.editor.value], { type: 'text/markdown;charset=utf-8' })
-          const url = URL.createObjectURL(blob)
-          const anchor = document.createElement('a')
-          anchor.href = url
-          anchor.download = name
-          document.body.appendChild(anchor)
-          anchor.click()
-          anchor.remove()
-          setTimeout(() => URL.revokeObjectURL(url), 500)
+          ZenUtil.download(name, dom.editor.value, 'text/markdown;charset=utf-8')
           toast('Markdown 已下载')
         }
 
@@ -2547,15 +2531,7 @@ template: academic
         async function downloadAiSpec() {
           try {
             const entry = await ensureAiSpec(state.aiSpecKind)
-            const blob = new Blob([entry.content], { type: 'text/markdown;charset=utf-8' })
-            const url = URL.createObjectURL(blob)
-            const anchor = document.createElement('a')
-            anchor.href = url
-            anchor.download = entry.filename || 'AI_MD_SPEC.md'
-            document.body.appendChild(anchor)
-            anchor.click()
-            anchor.remove()
-            setTimeout(() => URL.revokeObjectURL(url), 500)
+            ZenUtil.download(entry.filename || 'AI_MD_SPEC.md', entry.content, 'text/markdown;charset=utf-8')
             toast('AI 规范已下载')
           } catch (error) {
             toast(error.message, true)

@@ -412,13 +412,7 @@
   })()
 
   function lambdaDownload(name, text) {
-    try {
-      var a = document.createElement('a')
-      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-      a.download = name
-      a.click()
-      setTimeout(function () { URL.revokeObjectURL(a.href) }, 1000)
-    } catch (e) {}
+    return ZenUtil.download(name, text, "application/json")
   }
 
   function sendToAI() {
@@ -1006,12 +1000,7 @@
   }
 
   function saveBlob(name, text, type){
-    var blob = new Blob([text], {type: type});
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+    return ZenUtil.download(name, text, type);
   }
 
   // 常见错误码的中英文说明；点击结果行的 meta 徽标即可查看
@@ -3587,10 +3576,7 @@
 
   async function copyShareUrl(url){
     try { history.replaceState(null, "", url.slice(url.indexOf("#"))); } catch(e){}
-    if (navigator.clipboard){
-      try { await navigator.clipboard.writeText(url); toast(t("copiedLink")); }
-      catch(e){ toast(t("shareOk")); }
-    } else toast(t("shareOk"));
+    return ZenUtil.copy(url, function(){ toast(t("copiedLink")) }, function(){ toast(t("shareOk")) });
   }
 
   $("share").addEventListener("click", async function(){
@@ -3629,12 +3615,7 @@
   });
 
   $("export").addEventListener("click", function(){
-    var blob = new Blob([state.codeLines.join("\n") + "\n"], {type:"text/plain;charset=utf-8"});
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "lambda-session-" + fileStamp() + ".lam";
-    a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+    ZenUtil.download("lambda-session-" + fileStamp() + ".lam", state.codeLines.join("\n") + "\n", "text/plain;charset=utf-8");
   });
 
   $("import").addEventListener("click", function(){ $("file").click(); });

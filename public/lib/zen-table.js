@@ -900,12 +900,7 @@
   }
 
   function saveWorkflowFile() {
-    var blob = new Blob([JSON.stringify(buildSpec(), null, 2)], { type: 'application/json' })
-    var a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = 'table-workflow.json'
-    a.click()
-    setTimeout(function () { URL.revokeObjectURL(a.href) }, 1000)
+    ZenUtil.saveJSON('table-workflow.json', buildSpec())
     toast('已导出工作流 table-workflow.json')
   }
 

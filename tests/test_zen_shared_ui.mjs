@@ -350,3 +350,47 @@ test('已下沉的通用助手不留产品私有实现', () => {
   assert.ok(!/new FileReader\(/.test(read('public/omm-english.html')), 'English 仍有内联 FileReader')
   assert.ok(!/classList\.toggle\(\s*['"]theme-dark['"]/.test(read('public/omm-search.html')), 'Search 仍有内联主题切换')
 })
+
+test('blob 文件下载统一委托 ZenUtil.download / saveJSON', () => {
+  const cases = [
+    ['public/index.html', 'ZenUtil.download('],
+    ['public/omm-corpus.html', 'ZenUtil.download('],
+    ['public/omm-latex.html', 'ZenUtil.download('],
+    ['public/omm-redact.html', 'ZenUtil.download('],
+    ['public/omm-mdforge.html', 'ZenUtil.download('],
+    ['public/omm-writer.html', 'ZenUtil.saveJSON('],
+    ['public/omm-visualization.html', 'ZenUtil.saveJSON('],
+    ['public/lib/zen-table.js', 'ZenUtil.saveJSON('],
+    ['public/lib/zen-video.js', 'ZenUtil.saveJSON('],
+  ]
+  for (const [page, token] of cases) {
+    assert.ok(read(page).includes(token), `${page} 未委托共享下载助手`)
+  }
+  for (const id of ['annotate', 'corpus', 'english']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(/function\s+saveJSON\s*\([^)]*\)\s*\{\s*return ZenUtil\.saveJSON\(/.test(text),
+      `${id} 的 saveJSON 未委托共享实现`)
+  }
+  // 产品页与产品专用 lib 不得再自建 blob 下载骨架（index 的 WebM 字符串字面量除外）
+  const pages = [
+    ...['corpus', 'latex', 'redact', 'mdforge', 'writer', 'annotate', 'english',
+      'table', 'video', 'visualization'].map((id) => `public/omm-${id}.html`),
+    'public/lib/zen-table.js', 'public/lib/zen-video.js',
+  ]
+  for (const page of pages) {
+    const text = read(page)
+    const skeleton = /createObjectURL\s*\([^)]*\)[\s\S]{0,400}?\.download\s*=[\s\S]{0,200}?\.click\(\)/
+    assert.ok(!skeleton.test(text), `${page} 仍有自建 blob 下载骨架`)
+  }
+  for (const page of ['public/omm-table.html', 'public/omm-video.html']) {
+    assert.ok(read(page).includes('src="zen/foundation/util.js"'), `${page} 未加载共享 util.js`)
+  }
+})
+
+test('剪贴板写入统一委托 ZenUtil.copy，不再裸用 navigator.clipboard', () => {
+  for (const page of ['public/index.html', 'public/omm-corpus.html']) {
+    const text = read(page)
+    assert.ok(text.includes('ZenUtil.copy('), `${page} 未委托共享剪贴板`)
+    assert.ok(!/navigator\.clipboard\.writeText/.test(text), `${page} 仍有裸剪贴板写入`)
+  }
+})

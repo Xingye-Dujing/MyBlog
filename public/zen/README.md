@@ -22,8 +22,8 @@ zen/
 │   ├── tokens.css             颜色/字体/间距/层级令牌真源
 │   ├── base.css               基础重置
 │   ├── primitives.css         通用组件词汇（panel/dropdown/seg/hint…）
-│   └── util.js                通用无状态助手（ZenUtil：DOM/字符串、转义/uid/下载/复制/文件名/正则、
-│                              clamp/debounce/日期与标签格式化/字符串指纹、文件读取、JSON 存储、拖放接线、错误分类）
+│   └── util.js                通用无状态助手（ZenUtil：DOM/字符串、转义/uid/下载+saveJSON/复制/文件名/正则、
+│                              clamp/debounce/日期与标签格式化/字符串指纹/字节格式化/主题 class、文件读取、JSON 存储、拖放接线、错误分类）
 ├── components/             交互组件——JS 与自身样式同放
 │   ├── index.js               核心装配、渐进增强
 │   ├── components.css         组件外观（由 zen.css 导入）
@@ -55,7 +55,7 @@ zen/
 |---|---|---|
 | **核心样式** | `zen.css` → `foundation/*` + `components/components.css` | 所有产品 |
 | **核心脚本** | `components/{layer,toast,dialog,select,menu,shortcuts,index}.js` | 所有产品 |
-| **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串、转义/uid/下载/复制/文件名/正则、clamp/debounce/日期格式化/字符串指纹、文件读取/JSON 存储/拖放接线、错误分类） | 用到助手的产品 |
+| **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串、转义/uid/下载+saveJSON/复制/文件名/正则、clamp/debounce/日期格式化/字符串指纹/字节格式化/主题 class、文件读取/JSON 存储/拖放接线、错误分类） | 用到助手的产品 |
 | **可选浮层** | `components/popover.js` → `ZenUI.popover`（锚定浮层）<br>`components/context-menu.js` → `ZenUI.contextMenu`（富右键菜单） | 有对应浮层的产品 |
 | **可选样式包** | `features/*.css`、`canvas/canvas.css` | 只由真正用到的产品 link |
 | **可选脚本** | `components/{picker,tabs,tooltip}.js`、`canvas/{layout,engine}.js` | 只由真正用到的产品加载 |
