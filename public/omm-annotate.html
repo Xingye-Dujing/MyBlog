@@ -12,6 +12,7 @@
     <script src="zen/components/menu.js"></script>
     <script src="zen/components/shortcuts.js"></script>
     <script src="zen/components/index.js"></script>
+    <script src="zen/components/tooltip.js"></script>
 <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <script type="module" src="lib/zen-link.js"></script>
@@ -605,8 +606,6 @@
         <div class="mp-btn" data-act="close">取消</div>
       </div>
     </div>
-
-    <div id="tip"></div>
 
     <!-- ===== 统一候选区面板 ===== -->
     <div class="sug" id="sug"></div>
@@ -8732,8 +8731,7 @@
           // ---- reader: hover 显示批注 ----
           el('rv-scroll').addEventListener('mouseover', function (e) {
             var mk = markRectAt(e.clientX, e.clientY) || e.target.closest('.mk[data-mk]')
-            var tip = el('tip')
-            if (!mk) return tip.style.setProperty('display', 'none')
+            if (!mk) return window.ZenUI.tooltip.hide()
             var m = markById(mk.getAttribute('data-mk'))
             var a = m ? null : annById(mk.getAttribute('data-mk'))
             var h = ''
@@ -8759,18 +8757,11 @@
                 h += '<div style="margin-top:4px;color:var(--text-faint)">点击查看笔记</div>'
               }
             }
-            if (!h) return tip.style.setProperty('display', 'none')
-            tip.innerHTML = h
-            tip.style.setProperty('display', 'block')
-            var r = mk.getBoundingClientRect()
-            tip.style.left = clamp(r.left, 8, Math.max(8, window.innerWidth - 280 - 8)) + 'px'
-            var top = r.bottom + 6
-            if (top + tip.offsetHeight > window.innerHeight - 8)
-              top = Math.max(8, r.top - tip.offsetHeight - 6)
-            tip.style.top = top + 'px'
+            if (!h) return window.ZenUI.tooltip.hide()
+            window.ZenUI.tooltip.showAt(h, mk, { side: 'below', gap: 6 })
           })
           el('rv-scroll').addEventListener('mouseout', function () {
-            el('tip').style.setProperty('display', 'none')
+            window.ZenUI.tooltip.hide()
           })
           // ---- 批注面板交互 ----
           el('mark-pop').addEventListener('click', function (e) {
@@ -8852,8 +8843,7 @@
           // ---- hover tooltip ----
           el('paper').addEventListener('mouseover', function (e) {
             var seg = e.target.closest('.seg')
-            var tip = el('tip')
-            if (!seg) return tip.style.setProperty('display', 'none')
+            if (!seg) return window.ZenUI.tooltip.hide()
             var ids = (seg.getAttribute('data-ids') || '').split(' ')
             var h = ''
             ids.forEach(function (id) {
@@ -8869,19 +8859,11 @@
               if (c && c.def) h += '<div>' + esc(c.def) + '</div>'
               if (a.memo) h += '<div style="margin-top:4px">备注：' + esc(a.memo) + '</div>'
             })
-            if (!h) return tip.style.setProperty('display', 'none')
-            tip.innerHTML = h
-            tip.style.setProperty('display', 'block')
-            var r = seg.getBoundingClientRect()
-            var tw = 280
-            tip.style.left = clamp(r.left, 8, Math.max(8, window.innerWidth - tw - 8)) + 'px'
-            var top = r.bottom + 6
-            if (top + tip.offsetHeight > window.innerHeight - 8)
-              top = Math.max(8, r.top - tip.offsetHeight - 6)
-            tip.style.top = top + 'px'
+            if (!h) return window.ZenUI.tooltip.hide()
+            window.ZenUI.tooltip.showAt(h, seg, { side: 'below', gap: 6 })
           })
           el('paper').addEventListener('mouseout', function () {
-            el('tip').style.setProperty('display', 'none')
+            window.ZenUI.tooltip.hide()
           })
 
           // ---- sp input ----

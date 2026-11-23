@@ -206,6 +206,10 @@ test('产品自建浮层/日历/选择器残留已清除', () => {
     assert.ok(text.includes('ZenUI.popover.open'), `omm-${id}.html 未委托 ZenUI.popover`)
   }
   assert.ok(read('public/omm-english.html').includes('ZenUI.picker.open'), 'English 未委托 ZenUI.picker')
+  const annotate = read('public/omm-annotate.html')
+  assert.ok(annotate.includes('zen/components/tooltip.js'), 'Annotate 未加载共享 tooltip')
+  assert.ok(annotate.includes('ZenUI.tooltip.showAt'), 'Annotate 富提示未委托共享 tooltip')
+  assert.ok(!annotate.includes('id="tip"'), 'Annotate 仍有私有 tip 节点')
 })
 
 test('标签切换委托共享 ZenUI.tabs，保留产品自己的面板业务', () => {

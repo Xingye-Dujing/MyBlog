@@ -49,5 +49,34 @@
     })
   }
 
-  ui.tooltip = { enhance: enhance, hide: hide }
+  /* Rich HTML tooltip shown programmatically at an anchor. Products that build
+   * their own markup keep that content; only the surface and placement are
+   * shared. opts: { side:'below'|'above', gap, x, y } */
+  function showAt(html, anchor, opts) {
+    if (timer) { global.clearTimeout(timer); timer = null }
+    var l = layer.get()
+    var o = opts || {}
+    l.tip.innerHTML = html
+    l.tip.hidden = false
+    var rect = (anchor && anchor.getBoundingClientRect)
+      ? anchor.getBoundingClientRect()
+      : { left: o.x || 0, top: o.y || 0, bottom: o.y || 0 }
+    var gap = o.gap != null ? o.gap : 6
+    var left = Math.max(6, Math.min(rect.left, global.innerWidth - l.tip.offsetWidth - 6))
+    var top
+    if (o.side === 'above') {
+      top = rect.top - l.tip.offsetHeight - gap
+      if (top < 6) top = rect.bottom + gap
+    } else {
+      top = rect.bottom + gap
+      if (top + l.tip.offsetHeight > global.innerHeight - 6) {
+        top = Math.max(6, rect.top - l.tip.offsetHeight - gap)
+      }
+    }
+    l.tip.style.left = left + 'px'
+    l.tip.style.top = top + 'px'
+    current = anchor || l.tip
+  }
+
+  ui.tooltip = { enhance: enhance, hide: hide, showAt: showAt }
 })(window)
