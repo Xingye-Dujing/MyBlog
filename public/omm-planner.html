@@ -6606,6 +6606,7 @@ notify pgrst, 'reload schema';</textarea
           )
 
 
+          // 局部业务：Escape 关弹窗 / 退出专注 / 清除多选（保留）
           document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
               if (window.ZenUI.modal.isOpen()) {
@@ -6621,99 +6622,51 @@ notify pgrst, 'reload schema';</textarea
               }
               return
             }
-            const tag = (e.target.tagName || '').toLowerCase()
-            if (
-              tag === 'input' ||
-              tag === 'textarea' ||
-              tag === 'select' ||
-              e.target.isContentEditable
-            )
-              return
-            // 下面这些全是单键 / 方向键，必须放掉带 Ctrl、⌘、Alt 的组合：
-            // 否则 Ctrl+W 会变成"切换视图"而不是关闭标签页，Ctrl+A 也会吃掉全选。
-            if (e.ctrlKey || e.metaKey || e.altKey) return
-            switch (e.key) {
-              case 'ArrowLeft':
-                e.preventDefault()
-                moveSel(-1, 0)
-                break
-              case 'ArrowRight':
-                e.preventDefault()
-                moveSel(1, 0)
-                break
-              case 'ArrowUp':
-                e.preventDefault()
-                moveSel(0, -1)
-                break
-              case 'ArrowDown':
-                e.preventDefault()
-                moveSel(0, 1)
-                break
-              case 'a':
-              case 'A':
-                Nav.go(-1)
-                break
-              case 'd':
-              case 'D':
-                Nav.go(1)
-                break
-              case 'w':
-              case 'W':
-                Nav.cycle(-1)
-                break
-              case 's':
-              case 'S':
-                Nav.cycle(1)
-                break
-              case 't':
-              case 'T':
-                Nav.today()
-                break
-              case 'n':
-              case 'N':
-                if (S.view === 'list' || S.view === 'count') {
-                  notify(t('notify.listReadonly'))
-                  break
-                }
-                Editor.open({
-                  date: S.selDate || todayDS(),
-                  type: S.lastType,
-                  anchor: DOM.calendar.querySelector('.sel'),
-                })
-                break
-              case 'Enter':
-                if (
-                  !DOM.editor.classList.contains('open') &&
-                  !window.ZenUI.modal.isOpen() &&
-                  S.multiSel.length
-                ) {
-                  Focus.enter()
-                }
-                break
-              case 'f':
-              case 'F':
-                if (
-                  !DOM.editor.classList.contains('open') &&
-                  !window.ZenUI.modal.isOpen()
-                ) {
-                  Focus.single()
-                }
-                break
-              case '/':
-                e.preventDefault()
-                SearchMgr.open(document.querySelector('[data-action="showSearch"]'))
-                break
-              case '+':
-              case '=':
-                changeZoom(CONFIG.ZOOM_STEP)
-                break
-              case '-':
-                changeZoom(-CONFIG.ZOOM_STEP)
-                break
-              case '?':
-                StatsMgr.showHelp()
-                break
-            }
+          })
+          // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+          window.ZenUI.shortcuts.bind({
+            'arrowleft': function () { moveSel(-1, 0) },
+            'arrowright': function () { moveSel(1, 0) },
+            'arrowup': function () { moveSel(0, -1) },
+            'arrowdown': function () { moveSel(0, 1) },
+            'a': function () { Nav.go(-1) },
+            'd': function () { Nav.go(1) },
+            'w': function () { Nav.cycle(-1) },
+            's': function () { Nav.cycle(1) },
+            't': function () { Nav.today() },
+            'n': function () {
+              if (S.view === 'list' || S.view === 'count') {
+                notify(t('notify.listReadonly'))
+                return
+              }
+              Editor.open({
+                date: S.selDate || todayDS(),
+                type: S.lastType,
+                anchor: DOM.calendar.querySelector('.sel'),
+              })
+            },
+            'enter': function () {
+              if (
+                !DOM.editor.classList.contains('open') &&
+                !window.ZenUI.modal.isOpen() &&
+                S.multiSel.length
+              ) {
+                Focus.enter()
+              }
+            },
+            'f': function () {
+              if (
+                !DOM.editor.classList.contains('open') &&
+                !window.ZenUI.modal.isOpen()
+              ) {
+                Focus.single()
+              }
+            },
+            '/': function () { SearchMgr.open(document.querySelector('[data-action="showSearch"]')) },
+            '+': function () { changeZoom(CONFIG.ZOOM_STEP) },
+            '=': function () { changeZoom(CONFIG.ZOOM_STEP) },
+            '-': function () { changeZoom(-CONFIG.ZOOM_STEP) },
+            '?': function () { StatsMgr.showHelp() },
           })
         }
 
@@ -6804,20 +6757,17 @@ notify pgrst, 'reload schema';</textarea
         }
         injectIcons()
 
+        var mSheetShell = ZenUI.layer.wireOverlay({
+          el: document.getElementById('m-sheet'),
+          mask: document.getElementById('m-mask'),
+        })
+
         function openSheet() {
-          var mask = document.getElementById('m-mask')
-          var sheet = document.getElementById('m-sheet')
-          if (!sheet) return
-          mask.classList.add('open')
-          sheet.classList.add('open')
+          if (!mSheetShell.isOpen()) mSheetShell.open()
         }
 
         function closeSheet() {
-          var mask = document.getElementById('m-mask')
-          var sheet = document.getElementById('m-sheet')
-          if (!sheet) return
-          mask.classList.remove('open')
-          sheet.classList.remove('open')
+          mSheetShell.close()
         }
 
         document.addEventListener('click', function (e) {
@@ -6843,10 +6793,6 @@ notify pgrst, 'reload schema';</textarea
             if (proxy.closest('#m-sheet')) setTimeout(closeSheet, 160)
             return
           }
-        })
-
-        document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') closeSheet()
         })
 
         var CHROME = {

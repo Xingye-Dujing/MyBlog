@@ -5988,9 +5988,7 @@ notify pgrst, 'reload schema';</textarea
         function pick(a) {
           return a[Math.floor(Math.random() * a.length)]
         }
-        function clamp(v, a, b) {
-          return Math.max(a, Math.min(b, v))
-        }
+        function clamp(v, a, b) { return ZenUtil.clamp(v, a, b) }
         function nkey(w) {
           return String(w || '')
             .trim()
@@ -8208,6 +8206,11 @@ notify pgrst, 'reload schema';</textarea
 
         // ---------- Drawer ----------
         let DR = null
+        const drawerShell = ZenUI.layer.wireOverlay({
+          el: $('#drawer'),
+          mask: $('#drawer-mask'),
+          onClose: function () { DR = null },
+        })
         function openDrawer(entry, bookId) {
           DR = { e: entry, b: bookId }
           const p = progOf(entry[0])
@@ -8305,14 +8308,11 @@ notify pgrst, 'reload schema';</textarea
               ? '<button class="mini-btn danger" data-action="wdDel">删除词条</button>'
               : '') +
             '</div>'
-          $('#drawer').classList.add('open')
-          $('#drawer-mask').classList.add('open')
+          if (!drawerShell.isOpen()) drawerShell.open()
           hydrateSketchPreviews($('#dr-body'))
         }
         function drawerClose() {
-          $('#drawer').classList.remove('open')
-          $('#drawer-mask').classList.remove('open')
-          DR = null
+          drawerShell.close()
         }
 
         // ============================================================
@@ -8595,16 +8595,7 @@ notify pgrst, 'reload schema';</textarea
             .call(files || [])
             .filter((f) => /\.json$/i.test(f.name) || /json/.test(f.type))
           if (!arr.length) return notify('请选择 .json 文件')
-          const texts = []
-          let pending = arr.length
-          arr.forEach((f) => {
-            const rd = new FileReader()
-            rd.onload = () => {
-              texts.push(rd.result)
-              if (--pending <= 0) zbIngestTexts(texts)
-            }
-            rd.readAsText(f)
-          })
+          ZenUtil.readTexts(arr).then(zbIngestTexts)
         }
         function zbIngestTexts(texts) {
           let items = []
@@ -11319,6 +11310,10 @@ notify pgrst, 'reload schema';</textarea
         // ============================================================
         // ACTIONS MAP
         // ============================================================
+        const moreShell = ZenUI.layer.wireOverlay({
+          el: $('#more-sheet'),
+          mask: $('#more-mask'),
+        })
         const ACT = {}
 
         function bindActs(obj) {
@@ -11388,12 +11383,10 @@ notify pgrst, 'reload schema';</textarea
               window.ZEnglishCloudSync.open()
           },
           openMore() {
-            $('#more-mask').classList.add('open')
-            $('#more-sheet').classList.add('open')
+            if (!moreShell.isOpen()) moreShell.open()
           },
           closeMore() {
-            $('#more-mask').classList.remove('open')
-            $('#more-sheet').classList.remove('open')
+            moreShell.close()
           },
           msRestore() {
             ACT.closeMore()
@@ -12337,9 +12330,9 @@ notify pgrst, 'reload schema';</textarea
           setTimeout(() => btn.classList.remove('flash'), 420)
         }
 
-        document.addEventListener('keydown', (e) => {
-          const tag = (e.target.tagName || '').toUpperCase()
-          const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+        // 局部业务键：Escape 关弹窗 / 输入框 blur；答题、打字、帮助面板。
+        // 全局键的修饰键匹配、可编辑目标守卫与 preventDefault 已交给 ZenUI.shortcuts。
+        function onBusinessKey(e) {
           if (e.key === 'Escape') {
             // Sketch viewer / editor, dropdowns, the word popover and the date
             // picker all close through the shared ZenUI.layer stack while their
@@ -12348,80 +12341,9 @@ notify pgrst, 'reload schema';</textarea
               modalClose()
               return
             }
-            if ($('#drawer').classList.contains('open')) {
-              drawerClose()
-              return
-            }
-            if (isInput) e.target.blur()
+            const tag = (e.target.tagName || '').toUpperCase()
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') e.target.blur()
             return
-          }
-          if (isInput || e.ctrlKey || e.metaKey || e.altKey) return
-          if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
-            if (e.key.toLowerCase() === 'd') {
-              e.preventDefault()
-              const stage = document.querySelector('.fc-sketch-stage')
-              if (stage) {
-                const openLeft = stage.classList.contains('sketch-left-open')
-                const openRight = stage.classList.contains('sketch-right-open')
-                toggleFlashSketchSide(openLeft ? 'left' : openRight ? 'right' : 'left')
-              }
-              return
-            }
-            if (e.code === 'Space') {
-              e.preventDefault()
-              Flash.flip()
-              return
-            }
-            if (e.key === '1') {
-              Flash.grade(0)
-              flashGradeBtn(0)
-              return
-            }
-            if (e.key === '2') {
-              Flash.grade(1)
-              flashGradeBtn(1)
-              return
-            }
-            if (e.key === '3') {
-              Flash.grade(2)
-              flashGradeBtn(2)
-              return
-            }
-            if (e.key === 'ArrowLeft') {
-              Flash.grade(0)
-              flashGradeBtn(0)
-              return
-            }
-            if (e.key === 'ArrowRight') {
-              Flash.grade(2)
-              flashGradeBtn(2)
-              return
-            }
-            if (e.key.toLowerCase() === 's') {
-              Flash.speakCurrent()
-              return
-            }
-          }
-          if (curView === 'listen' && Listen.mode === 'play') {
-            if (e.code === 'Space') {
-              e.preventDefault()
-              Listen.toggle()
-              return
-            }
-            if (e.key === 'ArrowRight') {
-              Listen.jump(1)
-              return
-            }
-            if (e.key === 'ArrowLeft') {
-              Listen.jump(-1)
-              return
-            }
-          }
-          if (curView === 'listen' && Listen.mode === 'dict' && Dict.d) {
-            if (e.key.toLowerCase() === 's') {
-              Dict.play(false)
-              return
-            }
           }
           if (
             curView === 'quiz' &&
@@ -12464,6 +12386,102 @@ notify pgrst, 'reload schema';</textarea
           if (e.key === '?') {
             ACT.showHelp()
           }
+        }
+        document.addEventListener('keydown', onBusinessKey)
+
+        // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责。
+        // 同一键在其它视图下交回 onBusinessKey（答题 / 打字 / 帮助），保持原业务动作。
+        window.ZenUI.shortcuts.bind({
+          'd': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              const stage = document.querySelector('.fc-sketch-stage')
+              if (stage) {
+                const openLeft = stage.classList.contains('sketch-left-open')
+                const openRight = stage.classList.contains('sketch-right-open')
+                toggleFlashSketchSide(openLeft ? 'left' : openRight ? 'right' : 'left')
+              }
+              return
+            }
+            onBusinessKey(e)
+          },
+          'space': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.flip()
+              return
+            }
+            if (curView === 'listen' && Listen.mode === 'play') {
+              Listen.toggle()
+              return
+            }
+            onBusinessKey(e)
+          },
+          '1': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.grade(0)
+              flashGradeBtn(0)
+              return
+            }
+            onBusinessKey(e)
+          },
+          '2': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.grade(1)
+              flashGradeBtn(1)
+              return
+            }
+            onBusinessKey(e)
+          },
+          '3': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.grade(2)
+              flashGradeBtn(2)
+              return
+            }
+            onBusinessKey(e)
+          },
+          'arrowleft': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.grade(0)
+              flashGradeBtn(0)
+              return
+            }
+            if (curView === 'listen' && Listen.mode === 'play') {
+              Listen.jump(-1)
+              return
+            }
+            onBusinessKey(e)
+          },
+          'arrowright': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.grade(2)
+              flashGradeBtn(2)
+              return
+            }
+            if (curView === 'listen' && Listen.mode === 'play') {
+              Listen.jump(1)
+              return
+            }
+            onBusinessKey(e)
+          },
+          's': function (e) {
+            if (curView === 'flash' && Flash.started && !Flash.done && !Flash.grading) {
+              Flash.speakCurrent()
+              return
+            }
+            if (curView === 'listen' && Listen.mode === 'dict' && Dict.d) {
+              Dict.play(false)
+              return
+            }
+            onBusinessKey(e)
+          },
+          // 以下为局部业务键，交由共享注册表统一守卫后转交 onBusinessKey
+          'a': onBusinessKey,
+          'b': onBusinessKey,
+          'c': onBusinessKey,
+          '4': onBusinessKey,
+          'backspace': onBusinessKey,
+          'tab': onBusinessKey,
+          '?': onBusinessKey,
         })
 
         // ============================================================

@@ -22,11 +22,13 @@ zen/
 │   ├── tokens.css             颜色/字体/间距/层级令牌真源
 │   ├── base.css               基础重置
 │   ├── primitives.css         通用组件词汇（panel/dropdown/seg/hint…）
-│   └── util.js                通用无状态助手（ZenUtil：DOM/字符串/HTML 转义/uid/下载/复制/文件名/正则/错误分类）
+│   └── util.js                通用无状态助手（ZenUtil：DOM/字符串、转义/uid/下载/复制/文件名/正则、
+│                              clamp/debounce/日期与标签格式化、文件读取、JSON 存储、拖放接线、错误分类）
 ├── components/             交互组件——JS 与自身样式同放
 │   ├── index.js               核心装配、渐进增强
 │   ├── components.css         组件外观（由 zen.css 导入）
-│   ├── layer.js               唯一 shadow 浮层栈
+│   ├── layer.js               唯一 shadow 浮层栈（含 wireOverlay：产品自有抽屉/面板的
+│   │                             遮罩/Esc/入栈机制，内容与 CSS 仍归产品）
 │   ├── toast.js / dialog.js / select.js / menu.js / shortcuts.js   核心
 │   │     dialog.js 同时提供 ZenUI.modal（通用内容模态壳）与 ZenUI.dialog.pick
 │   └── popover.js / context-menu.js / picker.js / tabs.js / tooltip.js  可选
@@ -52,7 +54,7 @@ zen/
 |---|---|---|
 | **核心样式** | `zen.css` → `foundation/*` + `components/components.css` | 所有产品 |
 | **核心脚本** | `components/{layer,toast,dialog,select,menu,shortcuts,index}.js` | 所有产品 |
-| **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串、HTML 转义/uid/下载/复制/安全文件名/正则转义/错误分类） | 用到助手的产品 |
+| **通用助手** | `foundation/util.js` → `ZenUtil`（DOM/字符串、转义/uid/下载/复制/文件名/正则、clamp/debounce/日期格式化、文件读取/JSON 存储/拖放接线、错误分类） | 用到助手的产品 |
 | **可选浮层** | `components/popover.js` → `ZenUI.popover`（锚定浮层）<br>`components/context-menu.js` → `ZenUI.contextMenu`（富右键菜单） | 有对应浮层的产品 |
 | **可选样式包** | `features/*.css`、`canvas/canvas.css` | 只由真正用到的产品 link |
 | **可选脚本** | `components/{picker,tabs,tooltip}.js`、`canvas/{layout,engine}.js` | 只由真正用到的产品加载 |

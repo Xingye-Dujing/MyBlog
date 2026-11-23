@@ -200,7 +200,7 @@
           '用中文、简洁清晰、分点作答；重要事实后紧跟来源引用；同一来源只引用一次。' +
           '不要编造来源，不要输出与问题无关的内容。使用 Markdown 格式（标题、列表、加粗、表格）整理答案。'
 
-        function clone(x) { return JSON.parse(JSON.stringify(x)) }
+        function clone(x) { return ZenUtil.clone(x) }
         function load() {
           try {
             var raw = localStorage.getItem(LS)
@@ -213,7 +213,7 @@
           } catch (e) { return clone(DEFAULT) }
         }
         var S = load()
-        function save() { try { localStorage.setItem(LS, JSON.stringify(S)) } catch (e) {} }
+        function save() { ZenUtil.setJSON(LS, S) }
 
         // 静书房工作台配置过一次密钥后，本产品自动继承。
         try {
@@ -1159,15 +1159,15 @@
           }, 10)
         })
 
+        // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+        window.ZenUI.shortcuts.bind({
+          'mod+k': { run: function () { $('q').focus(); $('q').select() }, allowInput: true },
+          '/': function () { $('q').focus() },
+        })
         document.addEventListener('keydown', function (e) {
-          var typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName || '')
-          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-            e.preventDefault(); $('q').focus(); $('q').select(); return
-          }
           if (e.key === 'Escape') {
-            closeDropdowns(); hideSel(); if (abort) abort.abort(); return
+            closeDropdowns(); hideSel(); if (abort) abort.abort()
           }
-          if (!typing && e.key === '/') { e.preventDefault(); $('q').focus() }
         })
 
         applySettings()

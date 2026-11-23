@@ -2679,9 +2679,7 @@ notify pgrst, 'reload schema';</textarea
           conversations: [],
           activeConvId: '',
         }
-        function clone(x) {
-          return JSON.parse(JSON.stringify(x))
-        }
+        function clone(x) { return ZenUtil.clone(x) }
         function fromRaw(input) {
           try {
             const raw = typeof input === 'string' ? input : JSON.stringify(input ?? null)
@@ -3081,6 +3079,15 @@ notify pgrst, 'reload schema';</textarea
           renderLibrary()
           renderAiContext()
         }
+        const drawerShell = ZenUI.layer.wireOverlay({
+          el: $('#drawer'),
+          mask: $('#drawer-mask'),
+          onClose: function () {
+            $('#drawer').setAttribute('aria-hidden', 'true')
+            editId = null
+            if (isMobile) document.body.style.overflow = ''
+          },
+        })
         function openEditor(id) {
           editId = id || null
           const e = id
@@ -3110,16 +3117,12 @@ notify pgrst, 'reload schema';</textarea
             ? `创建 ${new Date(e.createdAt).toLocaleString()} · 更新 ${new Date(e.updatedAt).toLocaleString()}`
             : '新建后会自动保存到当前浏览器。'
           $('#ed-delete').style.display = id ? 'block' : 'none'
-          $('#drawer-mask').classList.add('open')
-          $('#drawer').classList.add('open')
+          if (!drawerShell.isOpen()) drawerShell.open()
           $('#drawer').setAttribute('aria-hidden', 'false')
           setTimeout(() => $('#ed-en').focus(), 60)
         }
         function closeEditor() {
-          $('#drawer-mask').classList.remove('open')
-          $('#drawer').classList.remove('open')
-          $('#drawer').setAttribute('aria-hidden', 'true')
-          editId = null
+          drawerShell.close()
         }
         function saveEditor(duplicate = false) {
           const en = clean($('#ed-en').value)
@@ -4958,16 +4961,7 @@ ${extra}`
         function zbReadFiles(files) {
           const arr = Array.prototype.slice.call(files || [])
           if (!arr.length) return
-          const texts = []
-          let pending = arr.length
-          arr.forEach((f) => {
-            const rd = new FileReader()
-            rd.onload = () => {
-              texts.push(rd.result)
-              if (--pending <= 0) zbIngestTexts(texts)
-            }
-            rd.readAsText(f)
-          })
+          ZenUtil.readTexts(arr).then(zbIngestTexts)
         }
         function zbIngestTexts(texts) {
           let items = []
@@ -5274,7 +5268,6 @@ ${extra}`
               })[x.dataset.cmd]()),
         )
         $('#drawer-close').onclick = closeEditor
-        $('#drawer-mask').onclick = closeEditor
         $('#ed-save').onclick = () => saveEditor(false)
         $('#ed-duplicate').onclick = () => saveEditor(true)
         $('#ed-delete').onclick = deleteEditor
@@ -5699,6 +5692,21 @@ ${extra}`
             toast('复制失败')
           }
         }
+        // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+        window.ZenUI.shortcuts.bind({
+          'mod+k': {
+            run: function () {
+              switchView('library')
+              setTimeout(() => $('#search-input').focus(), 0)
+            },
+            allowInput: true,
+          },
+          'mod+n': { run: function () { openEditor() }, allowInput: true },
+          '?': function () {
+            closeDrops()
+            openShortcuts()
+          },
+        })
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
             const aiFull = document.querySelector('.ai-focus-fullscreen, .ai-section-fullscreen')
@@ -5707,26 +5715,7 @@ ${extra}`
               e.preventDefault()
               return
             }
-            if ($('#drawer').classList.contains('open')) closeEditor()
-            else closeModal()
-          }
-          if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-            e.preventDefault()
-            switchView('library')
-            setTimeout(() => $('#search-input').focus(), 0)
-          }
-          if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-            e.preventDefault()
-            openEditor()
-          }
-          /* ? 呼出快捷键说明：可打印字符，必须避开正在输入的表单控件 */
-          if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            const tag = (e.target.tagName || '').toLowerCase()
-            if (tag !== 'input' && tag !== 'textarea' && tag !== 'select' && !e.target.isContentEditable) {
-              e.preventDefault()
-              closeDrops()
-              openShortcuts()
-            }
+            closeModal()
           }
         })
         window.CorpusBridge = {
@@ -5810,11 +5799,6 @@ ${extra}`
           if (isMobile) document.body.style.overflow = 'hidden'
           _origOpenEditor(id)
         }
-        const _origCloseEditor = closeEditor
-        closeEditor = function () {
-          _origCloseEditor()
-          if (isMobile) document.body.style.overflow = ''
-        }
         const _origCloseModal = closeModal
         closeModal = function () {
           _origCloseModal()
@@ -5885,13 +5869,8 @@ ${extra}`
           }
         })
 
-        // Handle keyboard on mobile: close drawer when escape
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
-            const drawer = $('#drawer')
-            if (drawer && drawer.classList.contains('open')) {
-              closeEditor()
-            }
             if (document.querySelector('.zenui-modal.on')) {
               closeModal()
             }

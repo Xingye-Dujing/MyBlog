@@ -1474,11 +1474,7 @@
           return autocompleteEl
         }
         function hideAutocomplete() {
-          if (!autocompleteEl) return
-          autocompleteEl.classList.add('hidden')
-          autocompleteItems = []
-          autocompleteIndex = 0
-          autocompleteRange = null
+          if (autocompleteEl) window.ZenUI.popover.close(autocompleteEl)
         }
         function caretBeforeCurrentToken() {
           const src = $id('src')
@@ -1525,13 +1521,34 @@
               })
               .join('') +
             '<div class="autocomplete-hint">↑↓ 选择 · Enter / Tab 补全 · Ctrl/⌘ + Space 调出</div>'
+          /* 光标所在行的测量是产品业务；视口定位、单开与关闭交给共享 popover */
+          const anchor = autocompleteAnchor()
+          if (!anchor) return hideAutocomplete()
+          const wasOpen = !el.classList.contains('hidden')
           el.classList.remove('hidden')
-          positionAutocomplete()
+          if (wasOpen) {
+            window.ZenUI.popover.place(el, anchor, {
+              gap: 3, pad: 8, padBottom: 44, flip: true,
+            })
+          } else {
+            window.ZenUI.popover.open(el, anchor, {
+              gap: 3,
+              pad: 8,
+              padBottom: 44,
+              flip: true,
+              onClose: function () {
+                el.classList.add('hidden')
+                autocompleteItems = []
+                autocompleteIndex = 0
+                autocompleteRange = null
+              },
+            })
+          }
         }
-        function positionAutocomplete() {
-          if (!autocompleteEl || autocompleteEl.classList.contains('hidden')) return
+        /* 测量光标所在行，返回可交给 popover 的合成锚点（测量逻辑留在产品侧） */
+        function autocompleteAnchor() {
           const src = $id('src')
-          if (!src || document.activeElement !== src) return
+          if (!src || document.activeElement !== src) return null
           const rect = src.getBoundingClientRect()
           const cs = getComputedStyle(src)
           const lineHeight = parseFloat(cs.lineHeight) || 18
@@ -1558,17 +1575,28 @@
           document.body.appendChild(measure)
           const textWidth = measure.getBoundingClientRect().width
           measure.remove()
-          let x = rect.left + padLeft + textWidth - src.scrollLeft
-          let y =
-            rect.top + padTop + (lines.length - 1) * lineHeight - src.scrollTop + lineHeight + 3
-          const w = autocompleteEl.offsetWidth || 250
-          const h = autocompleteEl.offsetHeight || 180
-          x = clamp(x, 8, innerWidth - w - 8)
-          if (y + h > innerHeight - 44)
-            y = rect.top + padTop + (lines.length - 1) * lineHeight - src.scrollTop - h - 3
-          y = clamp(y, 8, innerHeight - h - 8)
-          autocompleteEl.style.left = x + 'px'
-          autocompleteEl.style.top = y + 'px'
+          const lineTop = rect.top + padTop + (lines.length - 1) * lineHeight - src.scrollTop
+          const caretX = rect.left + padLeft + textWidth - src.scrollLeft
+          const caretRect = {
+            left: caretX,
+            right: caretX,
+            width: 0,
+            top: lineTop,
+            bottom: lineTop + lineHeight,
+            height: lineHeight,
+          }
+          return { getBoundingClientRect: function () { return caretRect } }
+        }
+        function positionAutocomplete() {
+          if (!autocompleteEl || autocompleteEl.classList.contains('hidden')) return
+          const anchor = autocompleteAnchor()
+          if (!anchor) return
+          window.ZenUI.popover.place(autocompleteEl, anchor, {
+            gap: 3,
+            pad: 8,
+            padBottom: 44,
+            flip: true,
+          })
         }
         function maybeShowAutocomplete() {
           const token = caretBeforeCurrentToken()
@@ -2966,44 +2994,22 @@
           })
           document.addEventListener('click', (e) => {
             if (!e.target.closest('#top-menu') && !e.target.closest('.dropdown')) closeDropdowns()
-            if (!e.target.closest('#src') && !e.target.closest('#editor-autocomplete'))
-              hideAutocomplete()
+          })
+          // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+          window.ZenUI.shortcuts.bind({
+            'mod+enter': { run: function () { compile(false) }, allowInput: true },
+            'mod+shift+s': { run: function () { exportTex() }, allowInput: true },
+            'mod+s': { run: function () { downloadPdf() }, allowInput: true },
+            'mod+o': { run: function () { $id('file-input').click() }, allowInput: true },
+            'mod+\\': { run: function () { setFlip(!state.flip) }, allowInput: true },
+            'mod+0': { run: function () { setFit(true) }, allowInput: true },
+            '?': function () { openModal('使用说明', HELP_HTML) },
           })
           document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-              // 弹窗开着时先关弹窗，否则 Esc 只关下拉菜单 —— 弹窗会关不掉
-              if ($id('modal').classList.contains('open')) return closeModal()
+              // 弹窗是否打开由共享模态栈判定（浮层关闭统一由 layer 管理）
+              if (window.ZenUI.modal.isOpen()) return closeModal()
               return closeDropdowns()
-            }
-            // ? 打开说明。可打印字符，必须避开正在输入的控件
-            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-              const tag = (e.target && e.target.tagName) || ''
-              if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-                e.preventDefault()
-                return openModal('使用说明', HELP_HTML)
-              }
-            }
-            const mod = e.ctrlKey || e.metaKey
-            if (!mod) return
-            const k = e.key.toLowerCase()
-            if (k === 'enter') {
-              e.preventDefault()
-              compile(false)
-            } else if (k === 's' && e.shiftKey) {
-              e.preventDefault()
-              exportTex()
-            } else if (k === 's') {
-              e.preventDefault()
-              downloadPdf()
-            } else if (k === 'o') {
-              e.preventDefault()
-              $id('file-input').click()
-            } else if (k === '\\') {
-              e.preventDefault()
-              setFlip(!state.flip)
-            } else if (k === '0') {
-              e.preventDefault()
-              setFit(true)
             }
           })
 
@@ -3237,9 +3243,6 @@
           })
           $id('modal-close').addEventListener('click', closeModal)
           $id('modal-ok').addEventListener('click', closeModal)
-          $id('modal').addEventListener('click', (e) => {
-            if (e.target === $id('modal')) closeModal()
-          })
           $id('btn-log').addEventListener('click', showLog)
           $id('btn-zoom-out').addEventListener('click', () => zoomBy(-0.12))
           $id('btn-zoom-in').addEventListener('click', () => zoomBy(0.12))

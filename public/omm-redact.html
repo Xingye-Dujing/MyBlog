@@ -858,9 +858,7 @@
           return 'r' + ++S.redactIdCounter
         }
 
-        function clamp01(v) {
-          return v < 0 ? 0 : v > 1 ? 1 : v
-        }
+        function clamp01(v) { return ZenUtil.clamp01(v) }
 
         function makeRedact(nx1, ny1, nx2, ny2, type, pageIdx, wordMatch) {
           return {
@@ -9782,47 +9780,24 @@
             })
           }
 
-          // Drag and drop
-          var da = $('#doc-area')
-          da.addEventListener('dragenter', function (e) {
-            e.preventDefault()
-            dragLeaveCounter = 0
-            showDropZone(true)
-          })
-          da.addEventListener('dragover', function (e) {
-            e.preventDefault()
-          })
-          da.addEventListener('dragleave', function (e) {
-            e.preventDefault()
-            dragLeaveCounter++
-            if (dragLeaveCounter > 1) showDropZone(false)
-          })
-          da.addEventListener('drop', function (e) {
-            e.preventDefault()
-            dragLeaveCounter = 0
+          // Drag and drop: 接线由共享拖放助手负责，文件分类是产品业务
+          function handleDroppedFiles(dropped) {
             showDropZone(false)
-            var dropped = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || [])
             var imageFiles = dropped.filter(isImageFile)
             if (imageFiles.length) loadImageFiles(imageFiles)
             else {
               var f = dropped[0]
               if (f) loadFile(f)
             }
+          }
+          ZenUtil.enableFileDrop($('#doc-area'), handleDroppedFiles, {
+            onEnter: function () { dragLeaveCounter = 0; showDropZone(true) },
+            onLeave: function () { dragLeaveCounter++; if (dragLeaveCounter > 1) showDropZone(false) },
           })
-
-          document.addEventListener('dragover', function (e) {
-            e.preventDefault()
-          })
+          document.addEventListener('dragover', function (e) { e.preventDefault() })
           document.addEventListener('drop', function (e) {
             e.preventDefault()
-            showDropZone(false)
-            var dropped = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || [])
-            var imageFiles = dropped.filter(isImageFile)
-            if (imageFiles.length) loadImageFiles(imageFiles)
-            else {
-              var f = dropped[0]
-              if (f) loadFile(f)
-            }
+            handleDroppedFiles(Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []))
           })
 
           var rightSidebarResizeEl = DOM.rightSidebarResize
@@ -9918,14 +9893,27 @@
             window.ZenUI.modal.close()
           }
 
-          // Keyboard
+          // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+          window.ZenUI.shortcuts.bind({
+            'mod+f': { run: function () { toggleSearch() }, allowInput: true },
+            'alt+arrowdown': {
+              run: function () { if (imageNavState.enabled) imageNext() },
+              allowInput: true,
+            },
+            'alt+arrowup': {
+              run: function () { if (imageNavState.enabled) imagePrev() },
+              allowInput: true,
+            },
+            'mod+z': { run: function () { undoRedact() }, allowInput: true },
+            'mod+y': { run: function () { redoRedact() }, allowInput: true },
+            'r': function () { setTool('rect') },
+            'e': function () { setTool('eraser') },
+            '?': function () { openShortcuts() },
+            // 拦截浏览器保存；preventDefault 由共享注册表负责
+            'mod+s': { run: function () {}, allowInput: true },
+          })
+          // 局部业务：检索栏开启时的 Escape / Enter（输入框内的同名处理留在各输入框 keydown）
           document.addEventListener('keydown', function (e) {
-            // Search shortcuts — always active
-            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-              e.preventDefault()
-              toggleSearch()
-              return
-            }
             if (DOM.searchBar.classList.contains('open')) {
               if (e.key === 'Escape') {
                 toggleSearch()
@@ -9937,32 +9925,6 @@
                 else searchNext()
                 return
               }
-            }
-            if (
-              imageNavState.enabled &&
-              e.altKey &&
-              (e.key === 'ArrowDown' || e.key === 'ArrowUp')
-            ) {
-              e.preventDefault()
-              if (e.key === 'ArrowDown') imageNext()
-              else imagePrev()
-              return
-            }
-            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-              return
-            }
-            var k = e.key.toLowerCase()
-            if (k === 'r' && !e.ctrlKey && !e.metaKey) setTool('rect')
-            else if (k === 'e' && !e.ctrlKey && !e.metaKey) setTool('eraser')
-            else if ((e.ctrlKey || e.metaKey) && k === 'z') {
-              e.preventDefault()
-              undoRedact()
-            } else if ((e.ctrlKey || e.metaKey) && k === 'y') {
-              e.preventDefault()
-              redoRedact()
-            } else if (k === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault()
-              openShortcuts()
             }
           })
 
@@ -10135,15 +10097,6 @@
               setTimeout(function () {
                 DOM.splash.style.display = 'none'
               }, 500)
-            }
-          })
-
-          // Ctrl+S to save words globally
-          document.addEventListener('keydown', function (e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-              if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
-                e.preventDefault()
-              }
             }
           })
 

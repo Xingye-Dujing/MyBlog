@@ -562,9 +562,6 @@
         ><span class="hint">Alt+0</span></div>
     </div>
 
-    <!-- ===== 悬停单元格时的全文预览 ===== -->
-    <div id="cell-preview"></div>
-
     <!-- ===== Custom Select Popup（列类型等，替代浏览器内置 select 的候选区） ===== -->
     <div class="dropdown csel-pop" id="csel-pop"></div>
 
@@ -1948,9 +1945,7 @@ notify pgrst, 'reload schema';</textarea
           if (/^[+-]?0\d/.test(s)) return false
           return isFinite(Number(s))
         }
-        function clamp(v, a, b) {
-          return v < a ? a : v > b ? b : v
-        }
+        function clamp(v, a, b) { return ZenUtil.clamp(v, a, b) }
 
         function notify(msg) { return window.ZenUI.toast(msg) }
         /* 供独立的云同步脚本弹出提示 */
@@ -4895,12 +4890,9 @@ notify pgrst, 'reload schema';</textarea
           DOM.statLeft.innerHTML = parts.join(' &nbsp; ')
         }
 
-        /* ---- 悬停全文预览 ------------------------------------------------ */
-        var cellPreviewKey = ''
+        /* ---- 悬停全文预览（表面与定位交给共享 tooltip） -------------------- */
         function hideCellPreview() {
-          cellPreviewKey = ''
-          var el = document.getElementById('cell-preview')
-          if (el) el.style.display = 'none'
+          window.ZenUI.tooltip.hide()
         }
 
         /* ---- 选中态显示开关 ----------------------------------------------
@@ -6735,20 +6727,23 @@ notify pgrst, 'reload schema';</textarea
             this.apply = applyFn
             this.idx = 0
             this.render()
-            el.classList.add('open')
-            var rect = caretRect(target)
-            var w = el.offsetWidth,
-              h = el.offsetHeight
-            var left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8))
-            var top = rect.bottom + 3
-            if (top + h > window.innerHeight - 8) {
-              var above = rect.top - h - 3
-              top = above >= 8 ? above : Math.max(8, window.innerHeight - h - 8)
-            }
-            el.style.left = left + 'px'
-            el.style.top = top + 'px'
             el.style.minWidth =
               Math.max(160, Math.min(target.getBoundingClientRect().width, 360)) + 'px'
+            /* 光标位置是业务测量结果，作为合成锚点交给共享 popover 做视口定位 */
+            var rect = caretRect(target)
+            var anchor = {
+              getBoundingClientRect: function () {
+                return {
+                  left: rect.left,
+                  right: rect.left,
+                  width: 0,
+                  top: rect.top,
+                  bottom: rect.bottom,
+                  height: rect.bottom - rect.top,
+                }
+              },
+            }
+            window.ZenUI.popover.open(el, anchor, { gap: 3, pad: 8, flip: true })
           },
           render: function () {
             var el = this.getEl()
@@ -6787,7 +6782,7 @@ notify pgrst, 'reload schema';</textarea
           },
           close: function () {
             var el = this.getEl()
-            if (el) el.classList.remove('open')
+            if (el) window.ZenUI.popover.close(el)
             this.target = null
             this.items = []
             this.idx = -1
@@ -7648,6 +7643,10 @@ notify pgrst, 'reload schema';</textarea
         /* ============================================================
            17. ACTIONS
            ============================================================ */
+        var mSheetShell = ZenUI.layer.wireOverlay({
+          el: document.getElementById('m-sheet'),
+          mask: document.getElementById('m-mask'),
+        })
         var ACTIONS = {
           enter: function () {
             DOM.splash.classList.add('fade-out')
@@ -8573,12 +8572,10 @@ notify pgrst, 'reload schema';</textarea
             UIMgr.closeModal()
           },
           mMore: function () {
-            DOM.mMask.classList.add('open')
-            DOM.mSheet.classList.add('open')
+            if (!mSheetShell.isOpen()) mSheetShell.open()
           },
           mClose: function () {
-            DOM.mMask.classList.remove('open')
-            DOM.mSheet.classList.remove('open')
+            mSheetShell.close()
           },
           cloudSync: function () {
             if (window.ZDCloudSync && typeof window.ZDCloudSync.open === 'function')
@@ -9030,8 +9027,6 @@ notify pgrst, 'reload schema';</textarea
           DOM.cselPop = document.getElementById('csel-pop')
           DOM.fselPop = document.getElementById('fsel-pop')
           DOM.filterList = document.getElementById('filter-list')
-          DOM.mMask = document.getElementById('m-mask')
-          DOM.mSheet = document.getElementById('m-sheet')
 
           /* 确认弹层改用共享 ZenUI.dialog，取消 / 遮罩由共享层结算 */
 
@@ -9075,10 +9070,8 @@ notify pgrst, 'reload schema';</textarea
             true,
           )
 
-          /* 悬停单元格 → 即时显示全文预览浮层（开关在“样式 → 显示”里） */
-          var cpEl = document.getElementById('cell-preview')
-          var cpW = 0,
-            cpH = 0
+          /* 悬停单元格 → 即时显示全文预览浮层（开关在“样式 → 显示”里）
+             表面与视口定位交给共享 tooltip，这里只提供全文内容与光标位置 */
           DOM.gridScroll.addEventListener('mousemove', function (e) {
             if (
               S.cellPreview === false ||
@@ -9103,21 +9096,10 @@ notify pgrst, 'reload schema';</textarea
               hideCellPreview()
               return
             }
-            var key = cell.dataset.r + ':' + cell.dataset.c + ':' + txt
-            if (key !== cellPreviewKey) {
-              cpEl.textContent = txt
-              cpEl.style.display = 'block'
-              cpW = cpEl.offsetWidth
-              cpH = cpEl.offsetHeight
-              cellPreviewKey = key
-            }
-            var x = e.clientX + 14,
-              y = e.clientY + 16
-            if (x + cpW > window.innerWidth - 8) x = e.clientX - cpW - 14
-            if (y + cpH > window.innerHeight - 8) y = e.clientY - cpH - 12
-            /* 翻转之后再夹一次，鼠标贴边时浮层不会溢出视口 */
-            cpEl.style.left = Math.max(8, Math.min(x, window.innerWidth - cpW - 8)) + 'px'
-            cpEl.style.top = Math.max(8, Math.min(y, window.innerHeight - cpH - 8)) + 'px'
+            window.ZenUI.tooltip.showAt(esc(txt), null, {
+              x: e.clientX + 14,
+              y: e.clientY + 16,
+            })
           })
           DOM.gridScroll.addEventListener('mouseleave', hideCellPreview)
           DOM.gridScroll.addEventListener('scroll', hideCellPreview)
@@ -9780,25 +9762,99 @@ notify pgrst, 'reload schema';</textarea
             if (!el.dataset || el.dataset.ff !== 'val') return
             sugKeydown(e, el)
           })
-          /* 点击候选项 / 点击别处关闭 */
+          /* 点击候选项（外部点击 / Esc 关闭已由共享 popover 负责） */
           document.addEventListener('mousedown', function (e) {
             var it = e.target.closest('.sug-item')
             if (it) {
               e.preventDefault()
               Sug.setIdx(+it.dataset.si)
               Sug.accept()
-              return
             }
-            if (!e.target.closest('.sug')) Sug.close()
           })
           window.addEventListener('resize', function () {
             Sug.close()
           })
 
           /* keyboard */
+          /* 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责。
+             焦点在云同步弹窗内时交给弹窗自身的键位与浏览器处理，不进入网格快捷键。 */
+          function gk(handler) {
+            return function (e) {
+              if (inCloudModal(e.target)) return
+              handler(e)
+            }
+          }
+          /* 网格导航类快捷键与网格键盘处理共用同一份可操作性检查 */
+          function gridReady() {
+            if (S.view !== 'grid' || S.editing) return false
+            /* 一旦开始用键盘操作表格，选中高亮立即回来 */
+            if (DOM.gridScroll.classList.contains('sel-off')) {
+              activateSelection()
+              renderGrid()
+            }
+            return true
+          }
+          function navGk(handler) {
+            return gk(function (e) {
+              if (!gridReady()) return
+              handler(e)
+            })
+          }
+          window.ZenUI.shortcuts.bind({
+            /* Ctrl+Z / Ctrl+Shift+Z：撤销 / 重做（任何位置） */
+            'mod+z': { run: gk(function () { doUndo() }), allowInput: true },
+            'mod+shift+z': { run: gk(function () { doRedo() }), allowInput: true },
+            /* ? 打开使用说明。可打印字符，要避开正在输入的控件 */
+            '?': gk(function () { UIMgr.closeDropdowns(); openHelp() }),
+            /* Ctrl+F / Ctrl+G：查找 / 定位到单元格 */
+            'mod+f': { run: gk(function () { if (S.view === 'grid') ACTIONS.showFind() }), allowInput: true },
+            'mod+g': { run: gk(function () { if (S.view === 'grid') ACTIONS.showGoto() }), allowInput: true },
+            /* Ctrl+S：挡掉浏览器的“保存网页”，立刻把当前内容写进本地存储 */
+            'mod+s': { run: gk(function () { Store.persist(); Settings.save(); notify(T('msg.saved')) }), allowInput: true },
+            /* Ctrl+Delete / Ctrl+Backspace：删除选中的整行 / 整列 */
+            'mod+delete': { run: gk(function () { if (S.view === 'grid') delSelectedLine() }), allowInput: true },
+            'mod+backspace': { run: gk(function () { if (S.view === 'grid') delSelectedLine() }), allowInput: true },
+            /* ---- 选区 / 排版快捷键 ---- */
+            'mod+a': navGk(function () { selectAllCells() }),
+            'mod+shift+a': navGk(function () { S.sel2 = null; renderGrid(); renderStatus() }),
+            'mod+home': navGk(function () {
+              S.sel = { r: 0, c: 0 }
+              S.sel2 = null
+              renderGrid()
+              renderStatus()
+              scrollToCell(S.sel.r, S.sel.c)
+              /* 滚动事件是异步的，这里立即重画一次，选中的格子不会晚一帧才出现 */
+              renderGrid()
+            }),
+            'mod+end': navGk(function () {
+              var t = Store.active()
+              S.sel = { r: t.rows.length - 1, c: t.cols.length - 1 }
+              S.sel2 = null
+              renderGrid()
+              renderStatus()
+              scrollToCell(S.sel.r, S.sel.c)
+              /* 滚动事件是异步的，这里立即重画一次，选中的格子不会晚一帧才出现 */
+              renderGrid()
+            }),
+            'alt+0': navGk(function () { applyAlign(null) }),
+            'alt+1': navGk(function () { applyAlign(AL_CODES[0]) }),
+            'alt+2': navGk(function () { applyAlign(AL_CODES[1]) }),
+            'alt+3': navGk(function () { applyAlign(AL_CODES[2]) }),
+            'alt+4': navGk(function () { applyAlign(AL_CODES[3]) }),
+            'alt+5': navGk(function () { applyAlign(AL_CODES[4]) }),
+            'alt+6': navGk(function () { applyAlign(AL_CODES[5]) }),
+            'alt+7': navGk(function () { applyAlign(AL_CODES[6]) }),
+            'alt+8': navGk(function () { applyAlign(AL_CODES[7]) }),
+            'alt+9': navGk(function () { applyAlign(AL_CODES[8]) }),
+            'alt+l': navGk(function () { alignQuick('l') }),
+            'alt+e': navGk(function () { alignQuick('c') }),
+            'alt+r': navGk(function () { alignQuick('r') }),
+            'alt+f': navGk(function () { autoFit('both') }),
+            'alt+w': navGk(function () { autoFit('width') }),
+            'alt+h': navGk(function () { autoFit('height') }),
+          })
           document.addEventListener('keydown', function (e) {
-            /* 焦点在云同步弹窗内：交给弹窗自身的键位（Esc 关闭、Enter 登录）与浏览器处理，
-               避免方向键 / Ctrl+Z / Ctrl+F / 输入被网格逻辑劫持 */
+            /* 焦点在云同步弹窗内：交给弹窗自身的键位（Esc 关闭、Enter 登录）与浏览器处理 */
             if (inCloudModal(e.target)) return
             var tag = (e.target.tagName || '').toLowerCase()
             var typing = tag === 'input' || tag === 'textarea' || tag === 'select'
@@ -9806,101 +9862,9 @@ notify pgrst, 'reload schema';</textarea
               if (S.modalOpen) UIMgr.closeModal()
               return
             }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-              if (typing && e.target === DOM.cellEditor) return
-              e.preventDefault()
-              if (e.shiftKey) doRedo()
-              else doUndo()
-              return
-            }
-            /* ? 打开使用说明。可打印字符，要避开正在输入的控件与云同步弹窗 */
-            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing) {
-              e.preventDefault()
-              UIMgr.closeDropdowns()
-              openHelp()
-              return
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && S.view === 'grid') {
-              e.preventDefault()
-              ACTIONS.showFind()
-              return
-            }
-            /* Ctrl+G：定位到单元格 */
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g' && S.view === 'grid') {
-              e.preventDefault()
-              ACTIONS.showGoto()
-              return
-            }
-            /* Ctrl+S：挡掉浏览器的“保存网页”，立刻把当前内容写进本地存储 */
-            if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
-              e.preventDefault()
-              Store.persist()
-              Settings.save()
-              notify(T('msg.saved'))
-              return
-            }
-            /* Ctrl+Delete / Ctrl+Backspace：删除选中的整行 / 整列
-               （整行选区删行，整列选区删列，否则按范围更大的那一维处理） */
-            if (
-              (e.ctrlKey || e.metaKey) &&
-              (e.key === 'Delete' || e.key === 'Backspace') &&
-              S.view === 'grid'
-            ) {
-              e.preventDefault()
-              delSelectedLine()
-              return
-            }
             if (typing) return
-            if (S.view !== 'grid' || S.editing) return
-            /* 一旦开始用键盘操作表格，选中高亮立即回来 */
-            if (DOM.gridScroll.classList.contains('sel-off')) {
-              activateSelection()
-              renderGrid()
-            }
-            var t = Store.active()
-            /* ---- 选区 / 排版快捷键 ---- */
-            var mod = e.ctrlKey || e.metaKey
-            if (mod && !e.altKey && e.key.toLowerCase() === 'a') {
-              e.preventDefault()
-              if (e.shiftKey) {
-                S.sel2 = null
-                renderGrid()
-                renderStatus()
-              } else selectAllCells()
-              return
-            }
-            if (mod && !e.altKey && (e.key === 'Home' || e.key === 'End')) {
-              e.preventDefault()
-              S.sel =
-                e.key === 'Home'
-                  ? { r: 0, c: 0 }
-                  : { r: t.rows.length - 1, c: t.cols.length - 1 }
-              S.sel2 = null
-              renderGrid()
-              renderStatus()
-              scrollToCell(S.sel.r, S.sel.c)
-              /* 滚动事件是异步的，这里立即重画一次，选中的格子不会晚一帧才出现 */
-              renderGrid()
-              return
-            }
-            if (e.altKey && !mod && /^[0-9]$/.test(e.key)) {
-              e.preventDefault()
-              applyAlign(e.key === '0' ? null : AL_CODES[+e.key - 1])
-              return
-            }
-            if (e.altKey && !mod && e.key.length === 1) {
-              var ak = e.key.toLowerCase()
-              if (ak === 'l' || ak === 'e' || ak === 'r') {
-                e.preventDefault()
-                alignQuick(ak === 'l' ? 'l' : ak === 'e' ? 'c' : 'r')
-                return
-              }
-              if (ak === 'f' || ak === 'w' || ak === 'h') {
-                e.preventDefault()
-                autoFit(ak === 'f' ? 'both' : ak === 'w' ? 'width' : 'height')
-                return
-              }
-            }
+            if (!gridReady()) return
+            /* ---- 网格业务导航：方向键 / Enter / F2 / Tab / Delete / 键入即编辑 ---- */
             if (e.key === 'ArrowDown') {
               e.preventDefault()
               moveSel(1, 0, e.shiftKey)

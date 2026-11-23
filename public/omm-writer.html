@@ -15102,100 +15102,32 @@ notify pgrst, 'reload schema';</textarea
           }
 
           // ---- Keyboard shortcuts ----
-          document.addEventListener('keydown', (e) => {
+          // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责；
+          // 文本编辑时让位给光标移动的键位交给可编辑目标守卫处理。
+          window.ZenUI.shortcuts.bind({
             // 画布间导航历史：Alt+← 后退 / Alt+→ 前进（同浏览器习惯）。
-            // 文本编辑时让位给光标移动，不接管。
-            if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-              const tag = (e.target && e.target.tagName) || ''
-              const typing =
-                tag === 'INPUT' ||
-                tag === 'TEXTAREA' ||
-                tag === 'SELECT' ||
-                !!e.target?.closest?.('.node-content[contenteditable="true"]')
-              if (!typing) {
-                e.preventDefault()
-                NavHistory.go(e.key === 'ArrowLeft' ? 'back' : 'fwd')
-                return
-              }
-            }
+            'alt+arrowleft': function () { NavHistory.go('back') },
+            'alt+arrowright': function () { NavHistory.go('fwd') },
             // 基准：Ctrl/⌘+Alt+B 一键恢复（布局记忆），Ctrl/⌘+Alt+S 存基准。
-            // 放在撤销分支之前 —— 那个分支刻意排除了 Alt。
-            if ((e.ctrlKey || e.metaKey) && e.altKey) {
-              const k = (e.key || '').toLowerCase()
-              if (k === 'b') {
-                e.preventDefault()
-                BaselineManager.restoreBaseline()
-                return
-              }
-              if (k === 's') {
-                e.preventDefault()
-                BaselineManager.setBaseline()
-                return
-              }
-            }
-            // 撤销 / 重做：接管浏览器的原生 undo（否则和画布历史打架），
-            // 输入框里的文本编辑也一起走画布历史，所以任何位置都触发。
-            if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-              const k = (e.key || '').toLowerCase()
-              if (k === 'z' || k === 'y') {
-                e.preventDefault()
-                if (k === 'y') History.redo()
-                else if (e.shiftKey) History.redo()
-                else History.undo()
-                return
-              }
-              // 接管浏览器原生查找，改为聚焦大纲里的搜索框
-              if (k === 'f' && !e.shiftKey) {
-                e.preventDefault()
-                SearchManager.focusInput()
-                return
-              }
-              // Ctrl/⌘+Shift+F：全文档搜索（跨画布）
-              if (k === 'f' && e.shiftKey) {
-                e.preventDefault()
-                DocSearch.open()
-                return
-              }
-              // 自动布局 / 适应：走 Ctrl/⌘+Shift，避开 ⌘L 聚焦地址栏、
-              // ⌘F 原生查找、以及 Ctrl/Cmd 方向缩放。
-              if (e.shiftKey && (k === 'l' || k === 'f')) {
-                e.preventDefault()
-                if (k === 'l') {
-                  CanvasManager.autoLayout()
-                } else {
-                  CanvasManager.fitView()
-                  notify(t('notify.fitApplied'))
-                }
-                return
-              }
-              // Ctrl/⌘+A：全选画布上的节点。输入框里保持浏览器原生的全选文本。
-              if (k === 'a') {
-                const tag = (e.target && e.target.tagName) || ''
-                const typing =
-                  tag === 'INPUT' ||
-                  tag === 'TEXTAREA' ||
-                  tag === 'SELECT' ||
-                  !!e.target?.closest?.('.node-content[contenteditable="true"]')
-                if (!typing) {
-                  e.preventDefault()
-                  SelectionManager.selectAll()
-                  return
-                }
-              }
-            }
-            if (e.key === '?') {
-              const tag = (e.target && e.target.tagName) || ''
-              const typing =
-                tag === 'INPUT' ||
-                tag === 'TEXTAREA' ||
-                tag === 'SELECT' ||
-                !!e.target?.closest?.('.node-content[contenteditable="true"]')
-              if (!typing) {
-                e.preventDefault()
-                openShortcuts()
-                return
-              }
-            }
+            'mod+alt+b': function () { BaselineManager.restoreBaseline() },
+            'mod+alt+s': function () { BaselineManager.setBaseline() },
+            // 撤销 / 重做：接管浏览器的原生 undo（否则和画布历史打架），任何位置都触发。
+            'mod+z': { run: function () { History.undo() }, allowInput: true },
+            'mod+shift+z': { run: function () { History.redo() }, allowInput: true },
+            'mod+y': { run: function () { History.redo() }, allowInput: true },
+            // 接管浏览器原生查找，改为聚焦大纲里的搜索框
+            'mod+f': function () { SearchManager.focusInput() },
+            // Ctrl/⌘+Shift+F：全文档搜索（跨画布）
+            'mod+shift+f': function () { DocSearch.open() },
+            // 自动布局 / 适应视图
+            'mod+shift+l': function () { CanvasManager.autoLayout() },
+            'shift+l': function () { CanvasManager.autoLayout() },
+            'shift+f': function () { CanvasManager.fitView(); notify(t('notify.fitApplied')) },
+            // Ctrl/⌘+A：全选画布上的节点。输入框里保持浏览器原生的全选文本。
+            'mod+a': function () { SelectionManager.selectAll() },
+            '?': function () { openShortcuts() },
+          })
+          document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
               closeAllDropdowns()
               DOM.floatingToolbar.classList.remove('visible')
@@ -16024,21 +15956,8 @@ notify pgrst, 'reload schema';</textarea
         function modalLive(handle) {
           return !!(handle && handle.el && document.body.contains(handle.el))
         }
-        function lsGet(k) {
-          try {
-            return localStorage.getItem(k)
-          } catch (_) {
-            return null
-          }
-        }
-        function lsSet(k, v) {
-          try {
-            localStorage.setItem(k, v)
-            return true
-          } catch (_) {
-            return false
-          }
-        }
+        function lsGet(k) { return ZenUtil.lsGet(k, null) }
+        function lsSet(k, v) { return ZenUtil.lsSet(k, v) }
         function lsDel(k) {
           try {
             localStorage.removeItem(k)

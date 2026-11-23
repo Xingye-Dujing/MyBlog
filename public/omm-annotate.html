@@ -1848,9 +1848,7 @@
         function el(id) { return ZenUtil.byId(id) }
         function esc(s) { return ZenUtil.esc(s) }
         function uid(p) { return ZenUtil.uid(p || 'x') }
-        function pad2(n) {
-          return n < 10 ? '0' + n : '' + n
-        }
+        function pad2(n) { return ZenUtil.pad(n) }
         function nowStr() {
           var d = new Date()
           return (
@@ -1865,9 +1863,7 @@
             pad2(d.getMinutes())
           )
         }
-        function clamp(v, a, b) {
-          return Math.max(a, Math.min(b, v))
-        }
+        function clamp(v, a, b) { return ZenUtil.clamp(v, a, b) }
         function notify(msg) { return window.ZenUI.toast(msg) }
         function showConfirm(msg, okText) {
           return window.ZenUI.dialog.confirm(msg, { ok: okText || '确定' })
@@ -5778,16 +5774,7 @@
             return /\.json$/i.test(f.name) || /json/.test(f.type)
           })
           if (!arr.length) return notify('请选择 .json 文件')
-          var texts = []
-          var pending = arr.length
-          arr.forEach(function (f) {
-            var fr = new FileReader()
-            fr.onload = function () {
-              texts.push(String(fr.result))
-              if (--pending <= 0) bridgeIngestTexts(texts)
-            }
-            fr.readAsText(f, 'utf-8')
-          })
+          ZenUtil.readTexts(arr).then(bridgeIngestTexts)
         }
         function bridgeIngestTexts(texts) {
           if (!OMM) return
@@ -7843,6 +7830,11 @@
         // ================================================================
         // 13. ACTIONS
         // ================================================================
+        var mSheetShell = ZenUI.layer.wireOverlay({
+          el: el('m-sheet'),
+          mask: el('m-mask'),
+          openClass: 'on',
+        })
         var ACTIONS = {
           enter: function () {
             el('splash').classList.add('fade-out')
@@ -8320,12 +8312,10 @@
             notify('样式已重置')
           },
           mMore: function () {
-            el('m-mask').classList.add('on')
-            el('m-sheet').classList.add('on')
+            if (!mSheetShell.isOpen()) mSheetShell.open()
           },
           mClose: function () {
-            el('m-mask').classList.remove('on')
-            el('m-sheet').classList.remove('on')
+            mSheetShell.close()
           },
           mToggleMenu: function () {
             document.body.classList.toggle('m-nav-open')
@@ -9015,13 +9005,69 @@
           })
 
           // ---- keyboard ----
-          document.addEventListener('keydown', function (e) {
-            // 正文编辑态里 Ctrl/⌘+S 保存的是正文，而不是导出项目备份
-            if (rvEditing() && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-              e.preventDefault()
-              rvCommitEdit()
+          // 阅读视图选中文本后的 H/U/S/N 快速标记：view / 选区守卫与业务动作留在 run 内
+          function readerQuickMark(e) {
+            if (S.view !== 'reader') return
+            var mo = selOffsets()
+            if (!mo) return
+            var key = e.key.toLowerCase()
+            if (key === 'n') {
+              var ms = window.getSelection()
+              showMarkPop(ms.getRangeAt(0).getBoundingClientRect(), mo.s, mo.e)
               return
             }
+            var d0 = curDoc()
+            if (!d0) return
+            var nm = {
+              id: uid('k'),
+              doc: d0.id,
+              start: mo.s,
+              end: mo.e,
+              quote: d0.text.slice(mo.s, mo.e),
+              sty: key === 'h' ? 'hl' : key === 'u' ? 'ul' : 'st',
+              color: mpColor,
+              text: '',
+              ts: nowStr(),
+            }
+            P.marks.push(nm)
+            S.selMark = nm.id
+            S.selAnn = null
+            try {
+              window.getSelection().removeAllRanges()
+            } catch (err) {}
+            afterMarkChange(nm.start, nm.end)
+            notify('已标记 · ' + MKSTY[nm.sty])
+          }
+          // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+          window.ZenUI.shortcuts.bind({
+            'mod+s': {
+              run: function () {
+                // 正文编辑态保存正文，否则导出项目备份（沿用原判断顺序）
+                if (rvEditing()) rvCommitEdit()
+                else Export.json()
+              },
+              allowInput: true,
+            },
+            '?': function () {
+              UIMgr.closeDropdowns()
+              openHelpModal()
+            },
+            'mod+f': {
+              run: function () {
+                ACTIONS.showSearch(el('top-menu').querySelector('[data-action="showSearch"]'))
+              },
+              allowInput: true,
+            },
+            'mod+[': function () { setRail('left') },
+            'mod+]': function () { setRail('right') },
+            'h': readerQuickMark,
+            'u': readerQuickMark,
+            's': readerQuickMark,
+            'n': readerQuickMark,
+            'alt+arrowleft': function () { stepDoc(-1) },
+            'alt+arrowright': function () { stepDoc(1) },
+          })
+          document.addEventListener('keydown', function (e) {
             if (el('sug').classList.contains('open')) {
               if (e.key === 'ArrowDown') {
                 e.preventDefault()
@@ -9052,88 +9098,6 @@
               if (el('sel-pop').classList.contains('open')) return hideSelPop()
               UIMgr.closeDropdowns()
               return
-            }
-            var tag = (e.target.tagName || '').toLowerCase()
-            var typing = tag === 'input' || tag === 'textarea' || tag === 'select'
-            // ? 呼出本说明（与顶栏“说明”同一个面板）。可打印字符，要避开输入态
-            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing) {
-              e.preventDefault()
-              UIMgr.closeDropdowns()
-              openHelpModal()
-              return
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-              e.preventDefault()
-              ACTIONS.showSearch(el('top-menu').querySelector('[data-action="showSearch"]'))
-              return
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-              e.preventDefault()
-              Export.json()
-              return
-            }
-            if (typing) return
-            // 侧栏折叠：Ctrl/⌘ + [ / ]
-            if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
-              if (e.key === '[') {
-                e.preventDefault()
-                setRail('left')
-                return
-              }
-              if (e.key === ']') {
-                e.preventDefault()
-                setRail('right')
-                return
-              }
-            }
-            // 阅读视图：选中文本后 H/U/S/N 快速标记
-            if (
-              S.view === 'reader' &&
-              !e.ctrlKey &&
-              !e.metaKey &&
-              !e.altKey &&
-              'husn'.indexOf(e.key.toLowerCase()) >= 0 &&
-              e.key.length === 1
-            ) {
-              var mo = selOffsets()
-              if (mo) {
-                e.preventDefault()
-                var key = e.key.toLowerCase()
-                if (key === 'n') {
-                  var ms = window.getSelection()
-                  showMarkPop(ms.getRangeAt(0).getBoundingClientRect(), mo.s, mo.e)
-                  return
-                }
-                var d0 = curDoc()
-                if (!d0) return
-                var nm = {
-                  id: uid('k'),
-                  doc: d0.id,
-                  start: mo.s,
-                  end: mo.e,
-                  quote: d0.text.slice(mo.s, mo.e),
-                  sty: key === 'h' ? 'hl' : key === 'u' ? 'ul' : 'st',
-                  color: mpColor,
-                  text: '',
-                  ts: nowStr(),
-                }
-                P.marks.push(nm)
-                S.selMark = nm.id
-                S.selAnn = null
-                try {
-                  window.getSelection().removeAllRanges()
-                } catch (err) {}
-                afterMarkChange(nm.start, nm.end)
-                notify('已标记 · ' + MKSTY[nm.sty])
-                return
-              }
-            }
-            if (e.altKey && e.key === 'ArrowLeft') {
-              e.preventDefault()
-              stepDoc(-1)
-            } else if (e.altKey && e.key === 'ArrowRight') {
-              e.preventDefault()
-              stepDoc(1)
             }
           })
 

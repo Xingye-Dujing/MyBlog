@@ -69,8 +69,8 @@
       let cards = []
       function toast(msg) { return window.ZenUI.toast(msg) }
       function esc(s) { return ZenUtil.esc(s, { apos: false }) }
-      function load() { try { cards = JSON.parse(localStorage.getItem(KEY) || '[]').map(ZenCard.create) } catch { cards = [] } }
-      function save() { localStorage.setItem(KEY, JSON.stringify(cards)); render() }
+      function load() { cards = ZenUtil.getJSON(KEY, []).map(ZenCard.create) }
+      function save() { ZenUtil.setJSON(KEY, cards); render() }
       function build() {
         return ZenCard.fromWebSelection({ text: $('clip-text').value }, {
           url: $('clip-url').value.trim(), note: $('clip-note').value.trim(),
@@ -116,8 +116,8 @@
           $('preview-code').textContent = ZenCard.serialize(card, true) + '\n\n--- Markdown ---\n\n' + ZenCard.toMarkdown(card)
         })
         const pack = () => ZenCard.serializePack(cards, { name: 'ZenClip 剪藏' }, true)
-        $('download-btn').addEventListener('click', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([pack()], { type: 'application/json' })); a.download = 'zenclip-pack.json'; a.click(); URL.revokeObjectURL(a.href) })
-        $('copy-btn').addEventListener('click', async () => { try { await navigator.clipboard.writeText(pack()); toast('已复制') } catch { toast('复制失败') } })
+        $('download-btn').addEventListener('click', () => ZenUtil.download('zenclip-pack.json', pack(), 'application/json'))
+        $('copy-btn').addEventListener('click', () => ZenUtil.copy(pack(), function () { toast('已复制') }, function () { toast('复制失败') }))
         $('clear-btn').addEventListener('click', () => { window.ZenUI.dialog.confirm('清空全部剪藏？', { danger: true }).then((ok) => { if (ok) { cards = []; save() } }) })
       }
       if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')

@@ -3364,40 +3364,40 @@
     if (!ac.contains(e.target) && e.target !== cmd) closeAc();
   });
 
-  // 轨迹快捷键：←/→ 单步，空格播放/暂停（输入框内不拦截）
-  // Trace shortcuts: ←/→ step, Space plays/pauses (ignored while typing).
-  document.addEventListener("keydown", function(e){
+  // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+  function traceKey(e){
     if (dialogOpen()) return;
     // 证明视图渲染的是 renderProof()，没有播放控件；此时不应响应轨迹快捷键
     // The proof view renders renderProof() with no playback controls, so ignore trace keys.
     if (state.tab !== "trace" || !state.selected || !state.selected.trace
         || state.selected.leftTrace) return;
-    var ae = document.activeElement;
-    if (ae && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(ae.tagName)) return;
     var n = state.selected.trace.length;
-    if (e.key === "ArrowLeft"){ e.preventDefault(); stopPlay(); state.tracePos = Math.max(0, state.tracePos - 1); renderPanel(); }
-    else if (e.key === "ArrowRight"){ e.preventDefault(); stopPlay(); state.tracePos = Math.min(n - 1, state.tracePos + 1); renderPanel(); }
-    else if (e.key === " "){ e.preventDefault(); if (state.playing){ stopPlay(); renderPanel(); } else startPlay(); }
+    if (e.key === "ArrowLeft"){ stopPlay(); state.tracePos = Math.max(0, state.tracePos - 1); renderPanel(); }
+    else if (e.key === "ArrowRight"){ stopPlay(); state.tracePos = Math.min(n - 1, state.tracePos + 1); renderPanel(); }
+    else if (e.key === " "){ if (state.playing){ stopPlay(); renderPanel(); } else startPlay(); }
+  }
+  function openPalette(){
+    // 对话框共享浮层栈，不叠加，避免 Promise 错配。
+    // Dialogs share the overlay stack; never stack them (one Enter resolves one).
+    if (dialogOpen()) return;
+    openCommandPalette();
+  }
+  window.ZenUI.shortcuts.bind({
+    // 轨迹快捷键：←/→ 单步，空格播放/暂停（输入框内不拦截）
+    // Trace shortcuts: ←/→ step, Space plays/pauses (ignored while typing).
+    "arrowleft": traceKey,
+    "arrowright": traceKey,
+    "space": traceKey,
+    // 全局快捷键：命令面板 / global shortcuts: palette
+    "mod+k": { run: openPalette, allowInput: true },
+    "mod+p": { run: openPalette, allowInput: true },
   });
-
-  // 全局快捷键：命令面板与取消求值 / global shortcuts: palette and cancel
+  // 取消求值 / cancel
   document.addEventListener("keydown", function(e){
-    if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K" || e.key === "p" || e.key === "P")){
-      e.preventDefault();
-      // 已有弹窗时不再叠加：多个 dialog 共用同一个 #modal，会导致列表互相覆盖、
-      // 一次 Enter 同时 resolve 多个 Promise.
-      // Do not stack dialogs: they share one #modal, so lists overwrite each
-      // other and a single Enter resolves more than one promise.
-      if (dialogOpen()) return;
-      openCommandPalette();
-      return;
-    }
     if (e.key === "Escape" && !dialogOpen() && !ac.classList.contains("open")){
       if (activeController){ e.preventDefault(); cancelEval(); }
     }
   });
-
-  selects = [initSelect("sel-lang"), initSelect("sel-strategy"), initSelect("sel-encoding")];
 
   var tabEls = document.querySelectorAll(".tab");
   Array.prototype.forEach.call(tabEls, function(b){

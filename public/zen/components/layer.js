@@ -221,5 +221,51 @@
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur() } catch (e) { /* ignore */ }
   }
 
-  global.ZenUI.layer = { get: get, blurAll: blurAll }
+  /* Wire a product-owned overlay (drawer / bottom sheet) into the shared stack.
+   * The product keeps its markup, CSS, content and class vocabulary; only the
+   * mechanism — stacked Escape / outside-click plus open/close state — is shared.
+   *
+   * API: ZenUI.layer.wireOverlay(opts) -> { open, close, isOpen, unbind }
+   * opts: { el, mask, openClass, onOpen, onClose }
+   */
+  function wireOverlay(opts) {
+    var o = opts || {}
+    var el = o.el
+    var mask = o.mask
+    var cls = o.openClass || 'open'
+    var entry = null
+    function set(on) {
+      if (el) el.classList.toggle(cls, on)
+      if (mask) mask.classList.toggle(cls, on)
+      if (on) {
+        entry = {
+          escape: setFalse,
+          outside: function (event) {
+            if (mask && event.target === mask) setFalse()
+          },
+        }
+        get().push(entry)
+        if (o.onOpen) o.onOpen()
+      } else {
+        if (entry) get().pop(entry)
+        entry = null
+        if (o.onClose) o.onClose()
+      }
+    }
+    function setFalse() { set(false) }
+    return {
+      open: function () { set(true) },
+      close: setFalse,
+      isOpen: function () { return !!entry },
+      unbind: function () { if (entry) get().pop(entry); entry = null },
+    }
+  }
+
+  global.ZenUI.layer = {
+    get: get,
+    blurAll: blurAll,
+    wireOverlay: wireOverlay,
+    // True only once the layer exists and has a live surface; no initialization side effect.
+    hasOpen: function () { return !!(instance && instance.stack.length) },
+  }
 })(window)

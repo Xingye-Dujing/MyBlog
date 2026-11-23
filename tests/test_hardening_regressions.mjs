@@ -150,7 +150,7 @@ test('ZenReview 导出只追加新报告卡片，不写回剪藏并集', () => {
   assert.ok(at >= 0, 'tocards 事件处理器未找到')
   const block = src.slice(at, at + 700)
   assert.doesNotMatch(block, /cards\(\)\.concat/)
-  assert.match(block, /localStorage\.getItem\('zen\.cards\.v1'\)/)
+  assert.match(block, /(?:localStorage\.getItem|ZenUtil\.getJSON)\('zen\.cards\.v1'/)
 })
 
 test('Hub 设置备份导出前清空 WebDAV 密码', () => {

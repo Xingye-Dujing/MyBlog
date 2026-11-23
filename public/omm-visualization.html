@@ -14295,38 +14295,21 @@
           schedulePersist()
           setStatus('工作区已重置')
         }
+        // 全局快捷键委托 ZenUI.shortcuts：修饰键 / 输入框守卫 / preventDefault 由共享注册表统一负责
+        window.ZenUI.shortcuts.bind({
+          'mod+p': { run: () => exportPNG(), allowInput: true },
+          'mod+shift+p': { run: () => exportPDF(), allowInput: true },
+          'i': () => $('#file-input').click(),
+          'd': () => openDataModal(),
+          '?': () => openShortcuts(),
+        })
         document.addEventListener('keydown', (e) => {
-          const mod = e.metaKey || e.ctrlKey
-          const k = (e.key || '').toLowerCase()
-          // 右侧属性栏与数据表里有不少输入框；I / D / ? 是可打印字符，
-          // 不挡住的话在这些框里打字就会误触发导入、编辑数据或说明面板。
-          const tag = (e.target && e.target.tagName) || ''
-          const typing =
-            tag === 'INPUT' ||
-            tag === 'TEXTAREA' ||
-            tag === 'SELECT' ||
-            !!e.target?.isContentEditable
-          if (mod && k === 'p' && !e.shiftKey) {
-            e.preventDefault()
-            exportPNG()
-            return
-          }
-          if (mod && e.shiftKey && k === 'p') {
-            e.preventDefault()
-            exportPDF()
-            return
-          }
-          if (!typing) {
-            if (!mod && !e.altKey && k === 'i') $('#file-input').click()
-            if (!mod && !e.altKey && k === 'd') openDataModal()
-            if (!mod && !e.altKey && e.key === '?') openShortcuts()
-          }
           if (e.key === 'Escape') {
             closeDropdowns()
             closeDataModal()
             closeShortcuts()
             // 图表放大查看也是弹层，Esc 必须能关掉，否则只能用鼠标点 ×
-            if (previewOpen) closePreview()
+            if ($('#preview-modal').classList.contains('open')) closePreview()
           }
         })
 

@@ -799,22 +799,8 @@
           }
         }
 
-        function lsGet(k, fb) {
-          try {
-            const v = localStorage.getItem(k)
-            return v === null || v === undefined ? fb : v
-          } catch {
-            return fb
-          }
-        }
-        function lsSet(k, v) {
-          try {
-            localStorage.setItem(k, v)
-            return true
-          } catch {
-            return false
-          }
-        }
+        function lsGet(k, fb) { return ZenUtil.lsGet(k, fb) }
+        function lsSet(k, v) { return ZenUtil.lsSet(k, v) }
         function lsDel(k) {
           try {
             localStorage.removeItem(k)
@@ -2409,20 +2395,11 @@
           $('password').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') signin()
           })
+          // 全局快捷键委托共享注册表：修饰键匹配 / 可编辑目标守卫 / 阻止默认行为由 ZenUI.shortcuts 负责
+          window.ZenUI.shortcuts.bind({
+            '?': function () { openShortcuts() },
+          })
           document.addEventListener('keydown', (e) => {
-            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-              const tag = (e.target && e.target.tagName) || ''
-              if (
-                tag !== 'INPUT' &&
-                tag !== 'TEXTAREA' &&
-                tag !== 'SELECT' &&
-                !e.target.isContentEditable
-              ) {
-                e.preventDefault()
-                openShortcuts()
-                return
-              }
-            }
             if (e.key === 'Escape') {
               if (editingId) {
                 clearEditMode()

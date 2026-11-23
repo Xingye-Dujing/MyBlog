@@ -233,3 +233,74 @@ test('Hub 右键菜单使用共享 ZenUI.menu，无私有 ctx-menu', () => {
   assert.ok(!js.includes('data-ctx') && !js.includes('data-tab-ctx'), 'Hub 仍有私有右键菜单绑定')
   assert.ok(js.includes('ZenUI.menu.open'), 'Hub 未使用共享 ZenUI.menu')
 })
+
+test('全局键盘快捷键统一委托 ZenUI.shortcuts，不再手写修饰键判断', () => {
+  const users = ['index', 'annotate', 'corpus', 'data', 'english', 'latex', 'mdforge',
+    'message', 'planner', 'redact', 'search', 'visualization', 'writer']
+  for (const id of users) {
+    const page = id === 'index' ? 'public/index.html' : `public/omm-${id}.html`
+    const text = read(page)
+    assert.ok(text.includes('ZenUI.shortcuts.bind'), `${page} 未委托 ZenUI.shortcuts`)
+  }
+  // 死代码：Lambda 页旧的 select/modal/toast 自建 CSS 与 initSelect 调用已删除
+  const lambda = read('public/index.html')
+  const lambdaCss = read('public/zen/products/lambda.css')
+  assert.ok(!lambda.includes('initSelect('), 'Lambda 仍保留 initSelect 死调用')
+  assert.ok(!/\.modal\s*\{|\.toast\s*\{|(?<![\w-])\.sel(-btn|-menu|-opt)?\s*\{/.test(lambdaCss),
+    'lambda.css 仍有自建 modal/toast/select 死样式')
+})
+
+test('ZenUtil 提供通用文件读取 / JSON 存储 / 拖放接线', () => {
+  const util = read('public/zen/foundation/util.js')
+  for (const key of ['clamp', 'clamp01', 'clone', 'lsGet', 'lsSet', 'lsDel', 'debounce',
+    'fmtDate', 'fileStamp', 'tags', 'saveJSON', 'readText', 'readTexts',
+    'getJSON', 'setJSON', 'removeJSON', 'enableFileDrop']) {
+    assert.ok(util.includes('u.' + key + ' ='), `ZenUtil 缺少 ${key}`)
+  }
+})
+
+test('可视化生成物的快捷键来自 transform overlay', () => {
+  const html = read('public/omm-visualization.html')
+  assert.ok(html.includes('ZenUI.shortcuts.bind'), '生成物未委托共享快捷键')
+  assert.ok(!html.includes('const mod = e.metaKey'), '生成物仍有手写修饰键判断')
+})
+
+test('共享快捷键匹配 space / Shift 标点 / 字面 +', () => {
+  const src = read('public/zen/components/shortcuts.js')
+  assert.ok(src.includes("k === ' '"), '共享快捷键未归一化空格键')
+  assert.ok(src.includes('SHIFTED'), '共享快捷键未处理 Shift 标点')
+  assert.ok(src.includes("=== '+'"), '共享快捷键未处理字面 +')
+  assert.ok(src.includes('hasOpen()'), '共享快捷键未避开已打开的浮层')
+  const layer = read('public/zen/components/layer.js')
+  assert.ok(layer.includes('wireOverlay'), '共享层缺少通用抽屉/面板接线')
+  assert.ok(layer.includes('hasOpen:'), '共享层缺少 hasOpen 查询')
+})
+
+test('抽屉/底部面板的开合机制委托共享 ZenUI.layer.wireOverlay', () => {
+  for (const id of ['annotate', 'data', 'corpus', 'english', 'planner']) {
+    const page = `public/omm-${id}.html`
+    const text = read(page)
+    assert.ok(text.includes('ZenUI.layer.wireOverlay'), `${page} 未委托共享抽屉接线`)
+    assert.ok(text.includes('isOpen()'), `${page} 未防止抽屉重复入栈`)
+  }
+})
+
+test('自建浮层定位残留已清除', () => {
+  const data = read('public/omm-data.html')
+  assert.ok(data.includes('ZenUI.tooltip.showAt'), 'Data 单元格预览未走共享 tooltip')
+  assert.ok(!data.includes('cell-preview'), 'Data 仍有私有预览节点')
+  const latex = read('public/omm-latex.html')
+  assert.ok(latex.includes('ZenUI.popover.place'), 'LaTeX 补全未复用共享定位')
+  assert.ok(!latex.includes('id="editor-autocomplete"'), 'LaTeX 仍有私有补全节点')
+})
+
+test('多文件读取与拖放接线委托共享 ZenUtil', () => {
+  for (const id of ['annotate', 'corpus', 'english']) {
+    const page = `public/omm-${id}.html`
+    const text = read(page)
+    assert.ok(text.includes('ZenUtil.readTexts'), `${page} 未委托共享文件读取`)
+    assert.ok(!/let pending = arr\.length|var pending = arr\.length/.test(text), `${page} 仍有自建 pending 计数器`)
+  }
+  const redact = read('public/omm-redact.html')
+  assert.ok(redact.includes('ZenUtil.enableFileDrop'), 'Redact 未委托共享拖放接线')
+})

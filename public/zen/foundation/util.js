@@ -114,4 +114,154 @@
   u.escRe = function (value) {
     return u.str(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
+
+  /* Constrain a number to [a, b]; clamp01 is the common [0, 1] case. */
+  u.clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)) }
+  u.clamp01 = function (v) { return u.clamp(v, 0, 1) }
+
+  /* Structured deep clone of JSON-safe data. undefined stays undefined. */
+  u.clone = function (value) {
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value))
+  }
+
+  /* localStorage access that never throws (private mode / quota / disabled).
+   * Values are raw strings; JSON parsing stays with the product. */
+  function storage() {
+    try { return global.localStorage } catch (e) { return null }
+  }
+  u.lsGet = function (key, fallback) {
+    try {
+      var s = storage()
+      var v = s && s.getItem(key)
+      return v === null || v === undefined ? fallback : v
+    } catch (e) { return fallback }
+  }
+  u.lsSet = function (key, value) {
+    try {
+      var s = storage()
+      if (!s) return false
+      s.setItem(key, value)
+      return true
+    } catch (e) { return false }
+  }
+  u.lsDel = function (key) {
+    try {
+      var s = storage()
+      if (!s) return false
+      s.removeItem(key)
+      return true
+    } catch (e) { return false }
+  }
+
+  /* Generic closure factories / formatters used by more than one product. */
+  u.debounce = function (fn, ms) {
+    var timer = null
+    return function () {
+      var self = this, args = arguments
+      if (timer) global.clearTimeout(timer)
+      timer = global.setTimeout(function () { fn.apply(self, args) }, ms)
+    }
+  }
+
+  /* yyyy-mm-dd; a non-date value falls back to its first 10 characters. */
+  u.fmtDate = function (value) {
+    if (!value) return ''
+    var d = new Date(value)
+    if (isNaN(d.getTime())) return u.str(value).slice(0, 10)
+    return d.getFullYear() + '-' + u.pad(d.getMonth() + 1) + '-' + u.pad(d.getDate())
+  }
+
+  /* Sortable file-name timestamp: yyyyMMdd-HHmm (optionally :ss). */
+  u.fileStamp = function (date, withSeconds) {
+    var d = date || new Date()
+    var out = d.getFullYear() + u.pad(d.getMonth() + 1) + u.pad(d.getDate()) +
+      '-' + u.pad(d.getHours()) + u.pad(d.getMinutes())
+    return withSeconds ? out + u.pad(d.getSeconds()) : out
+  }
+
+  /* Normalize a tag array or a delimited string (ASCII + common CJK separators). */
+  u.tags = function (value) {
+    if (Array.isArray(value)) return value.map(u.nz).filter(Boolean)
+    if (typeof value === 'string') {
+      return value.split(/[,，;；、|]/).map(u.nz).filter(Boolean)
+    }
+    return []
+  }
+
+  /* Save a pretty-printed JSON document through the shared download helper. */
+  u.saveJSON = function (name, obj, mime) {
+    return u.download(name, JSON.stringify(obj, null, 2), mime || 'application/json;charset=utf-8')
+  }
+
+  /* Read one / many File objects as text. Products keep their own parsing,
+   * validation and normalization; this only replaces the FileReader skeleton. */
+  u.readText = function (file, encoding) {
+    if (file && typeof file.text === 'function') return file.text()
+    return new Promise(function (resolve, reject) {
+      try {
+        var reader = new FileReader()
+        reader.onload = function () { resolve(String(reader.result || '')) }
+        reader.onerror = function () { reject(reader.error || new Error('read failed')) }
+        reader.readAsText(file, encoding || 'utf-8')
+      } catch (e) { reject(e) }
+    })
+  }
+  u.readTexts = function (files, encoding) {
+    return Promise.all(u.arr(files).map(function (f) { return u.readText(f, encoding) }))
+  }
+
+  /* JSON-in-localStorage with the same never-throw contract as lsGet/lsSet. */
+  u.getJSON = function (key, fallback) {
+    var raw = u.lsGet(key, null)
+    if (raw === null || raw === undefined) return fallback
+    try { return JSON.parse(raw) } catch (e) { return fallback }
+  }
+  u.setJSON = function (key, value) {
+    try { return u.lsSet(key, JSON.stringify(value)) } catch (e) { return false }
+  }
+  u.removeJSON = function (key) { return u.lsDel(key) }
+
+  /* Wire file drag & drop on a target. Only the wiring is shared: the product
+   * callback decides which files are accepted and what to do with them.
+   * opts: { highlight: 'class', onEnter, onLeave } — highlight is toggled on
+   * the target; the hooks let a product drive its own visual feedback.
+   * Returns an unbind function. */
+  u.enableFileDrop = function (target, onFiles, opts) {
+    if (!target) return function () {}
+    var o = opts || {}
+    var depth = 0
+    function over(e) {
+      if (!e.dataTransfer) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      if (depth++ === 0) {
+        if (o.highlight) target.classList.add(o.highlight)
+        if (o.onEnter) o.onEnter(e)
+      }
+    }
+    function leave(e) {
+      if (--depth <= 0) {
+        depth = 0
+        if (o.highlight) target.classList.remove(o.highlight)
+        if (o.onLeave) o.onLeave(e)
+      }
+    }
+    function drop(e) {
+      if (!e.dataTransfer) return
+      e.preventDefault()
+      depth = 0
+      if (o.highlight) target.classList.remove(o.highlight)
+      if (typeof onFiles === 'function') onFiles(Array.prototype.slice.call(e.dataTransfer.files || []))
+    }
+    target.addEventListener('dragenter', over)
+    target.addEventListener('dragover', over)
+    target.addEventListener('dragleave', leave)
+    target.addEventListener('drop', drop)
+    return function unbind() {
+      target.removeEventListener('dragenter', over)
+      target.removeEventListener('dragover', over)
+      target.removeEventListener('dragleave', leave)
+      target.removeEventListener('drop', drop)
+    }
+  }
 })(window)

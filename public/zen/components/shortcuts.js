@@ -17,6 +17,8 @@
   var wired = false
 
   function normalize(key) {
+    // A literal '+' is the key itself, not a modifier separator.
+    if (String(key) === '+') return { mod: false, shift: false, alt: false, main: '+' }
     var parts = String(key).toLowerCase().split('+').map(function (s) { return s.trim() }).filter(Boolean)
     var mod = parts.indexOf('mod') >= 0 || parts.indexOf('ctrl') >= 0 || parts.indexOf('meta') >= 0
     var shift = parts.indexOf('shift') >= 0
@@ -27,14 +29,28 @@
     return { mod: mod, shift: shift, alt: alt, main: main }
   }
 
+  /* Canonical key names so products can bind readable 'space' / 'escape'
+   * instead of quoting the raw event.key values ' ' / 'Esc'. */
+  function keyName(event) {
+    var k = String(event.key || '').toLowerCase()
+    if (k === ' ' || k === 'spacebar') return 'space'
+    if (k === 'esc') return 'escape'
+    return k
+  }
+
+  /* Printable punctuation that requires Shift on a US layout. The resulting
+   * character already implies Shift, so the modifier is not matched for them. */
+  var SHIFTED = /[~!@#$%^&*()_+{}|:"<>?]/
+
   function matches(event, spec) {
     var mod = event.ctrlKey || event.metaKey
     if (!!mod !== spec.mod) return false
-    if (!!event.shiftKey !== spec.shift) return false
     if (!!event.altKey !== spec.alt) return false
-    var key = String(event.key || '').toLowerCase()
-    if (spec.main === 'del') spec.main = 'delete'
-    return key === spec.main
+    var key = keyName(event)
+    var main = spec.main === 'del' ? 'delete' : spec.main
+    if (main.length === 1 && SHIFTED.test(main)) return key === main
+    if (!!event.shiftKey !== spec.shift) return false
+    return key === main
   }
 
   function editable(target) {
@@ -47,6 +63,9 @@
     if (wired) return
     wired = true
     document.addEventListener('keydown', function (event) {
+      // An open shared surface (menu / select / picker / modal / sheet) owns
+      // the keyboard until it closes; global product shortcuts stay dormant.
+      if (ui.layer && ui.layer.hasOpen && ui.layer.hasOpen()) return
       for (var i = bindings.length - 1; i >= 0; i--) {
         var b = bindings[i]
         if (!matches(event, b.spec)) continue

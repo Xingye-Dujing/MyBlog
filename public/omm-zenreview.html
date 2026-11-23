@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
@@ -71,7 +72,7 @@
       function parseArr(id) { try { const v = JSON.parse($(id).value || '[]'); return Array.isArray(v) ? v : [] } catch { return [] } }
       function cards() {
         const out = []
-        ;['zen.cards.v1', 'zen.clip.v1'].forEach((k) => { try { out.push(...JSON.parse(localStorage.getItem(k) || '[]')) } catch {} })
+        ;['zen.cards.v1', 'zen.clip.v1'].forEach((k) => { out.push(...ZenUtil.getJSON(k, [])) })
         return out.map(ZenCard.create)
       }
       function data() { return { timeline: parseArr('tl-json'), planner: parseArr('pl-json'), cards: cards() } }
@@ -139,17 +140,17 @@
           toast('报告已生成')
         })
         $('pull-btn').addEventListener('click', pullFromHub)
-        $('copy-btn').addEventListener('click', async () => { if (!last) return toast('先生成报告'); try { await navigator.clipboard.writeText(last); toast('已复制') } catch { toast('复制失败') } })
-        $('download-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([last], { type: 'text/markdown' })); a.download = 'review.md'; a.click(); URL.revokeObjectURL(a.href) })
+        $('copy-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); ZenUtil.copy(last, function () { toast('已复制') }, function () { toast('复制失败') }) })
+        $('download-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); ZenUtil.download('review.md', last, 'text/markdown') })
         $('tocards-btn').addEventListener('click', () => {
           if (!last) return toast('先生成报告')
           const card = ZenCard.create({ source: 'manual', kind: 'note', content: last, note: '复盘报告', tags: ['复盘'] })
           // cards() 是 zen.cards.v1 + zen.clip.v1 的并集（供报告统计用），不能写回
           // 卡片库，否则每次导出都会把剪藏卡片复制进 ZenCard。只追加新报告卡片。
           let list = []
-          try { const raw = JSON.parse(localStorage.getItem('zen.cards.v1') || '[]'); if (Array.isArray(raw)) list = raw } catch {}
+          const raw = ZenUtil.getJSON('zen.cards.v1', []); if (Array.isArray(raw)) list = raw
           list.push(card)
-          localStorage.setItem('zen.cards.v1', JSON.stringify(list))
+          ZenUtil.setJSON('zen.cards.v1', list)
           toast('已存入 ZenCard 卡片库')
         })
       }

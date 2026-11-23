@@ -122,8 +122,8 @@
 
       function toast(msg) { return window.ZenUI.toast(msg) }
       function load() {
-        try { cards = JSON.parse(localStorage.getItem(CARD_KEY) || '[]') } catch { cards = [] }
-        try { srs = JSON.parse(localStorage.getItem(SRS_KEY) || '[]') } catch { srs = [] }
+        cards = ZenUtil.getJSON(CARD_KEY, [])
+        srs = ZenUtil.getJSON(SRS_KEY, [])
         cards = cards.map((c) => ZenCard.create(c))
         srs = ZenSRS.fromCards(cards, Date.now()).map((s) => {
           const old = srs.find((x) => x && x.id === s.id)
@@ -131,8 +131,8 @@
         })
       }
       function save() {
-        localStorage.setItem(CARD_KEY, JSON.stringify(cards))
-        localStorage.setItem(SRS_KEY, JSON.stringify(srs))
+        ZenUtil.setJSON(CARD_KEY, cards)
+        ZenUtil.setJSON(SRS_KEY, srs)
       }
 
       function renderStats() {
@@ -308,13 +308,10 @@
           toast('已添加卡片')
         })
         $('export-btn').addEventListener('click', () => {
-          const blob = new Blob([ZenCard.serializePack(cards, { name: 'ZenCard 导出' }, true)], { type: 'application/json' })
-          const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
-          a.download = 'zencard-pack.json'; a.click(); URL.revokeObjectURL(a.href)
+          ZenUtil.download('zencard-pack.json', ZenCard.serializePack(cards, { name: 'ZenCard 导出' }, true), 'application/json')
         })
         $('copy-btn').addEventListener('click', async () => {
-          try { await navigator.clipboard.writeText(ZenCard.serializePack(cards, { name: 'ZenCard 导出' }, true)); toast('已复制') }
-          catch { toast('复制失败') }
+          ZenUtil.copy(ZenCard.serializePack(cards, { name: 'ZenCard 导出' }, true), function () { toast('已复制') }, function () { toast('复制失败') })
         })
         $('import-btn').addEventListener('click', () => {
           try {
@@ -329,9 +326,7 @@
           $('import-text').value = await f.text(); $('import-btn').click()
         })
         $('srs-export').addEventListener('click', () => {
-          const blob = new Blob([ZenSRS.serialize(srs)], { type: 'application/json' })
-          const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
-          a.download = 'zen-srs.json'; a.click(); URL.revokeObjectURL(a.href)
+          ZenUtil.download('zen-srs.json', ZenSRS.serialize(srs), 'application/json')
         })
         $('srs-import').addEventListener('change', async (e) => {
           const f = e.target.files[0]; if (!f) return
