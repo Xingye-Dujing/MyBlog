@@ -955,17 +955,10 @@
   }
 
   ;(function () {
-    function localOrigin(origin) {
-      try {
-        var u = new URL(String(origin || ''))
-        return (u.protocol === 'http:' || u.protocol === 'https:') &&
-          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
-      } catch (e) { return false }
-    }
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
       if (window.parent === window) return
-      if (!localOrigin(ev.origin)) return
+      if (!ZenUtil.isLocalOrigin(ev.origin)) return
       var api = window.ZenTableAI
       if (!api || !api.snapshotMarkdown) return
       var md = api.snapshotMarkdown()

@@ -366,10 +366,11 @@ test('blob 文件下载统一委托 ZenUtil.download / saveJSON', () => {
   for (const [page, token] of cases) {
     assert.ok(read(page).includes(token), `${page} 未委托共享下载助手`)
   }
+  assert.ok(/function\s+saveJSON\s*\([^)]*\)\s*\{\s*return ZenUtil\.saveJSON\(/.test(
+    read('public/lib/omm-bridge.js')), '共享桥的 saveJSON 未委托共享实现')
   for (const id of ['annotate', 'corpus', 'english']) {
     const text = read(`public/omm-${id}.html`)
-    assert.ok(/function\s+saveJSON\s*\([^)]*\)\s*\{\s*return ZenUtil\.saveJSON\(/.test(text),
-      `${id} 的 saveJSON 未委托共享实现`)
+    assert.ok(text.includes('src="lib/omm-bridge.js"'), `${id} 未加载共享桥（含 saveJSON 委托）`)
   }
   // 产品页与产品专用 lib 不得再自建 blob 下载骨架（index 的 WebM 字符串字面量除外）
   const pages = [
@@ -404,4 +405,36 @@ test('云同步 AES-GCM 信封统一委托 ZenCrypto.seal/unseal', () => {
     assert.ok(!/crypto\.subtle\.(encrypt|decrypt)/.test(text), `${id} 仍有内联加解密`)
     assert.ok(!/\bfunction (b64|ub64|keyFor)\s*\(/.test(text), `${id} 仍有内联加密原语`)
   }
+})
+
+test('三端 OMMBridge 下沉到共享库，产品只声明 data-self', () => {
+  const lib = read('public/lib/omm-bridge.js')
+  assert.ok(lib.includes('window.OMMBridge = {'), '共享桥未暴露 OMMBridge')
+  assert.ok(lib.includes("script.getAttribute('data-self')"), '共享桥未从 data-self 读取自身 id')
+  assert.ok(lib.includes("'omm-annotate'"), '共享桥应保留 APPS/FILES 中的产品名映射')
+  for (const id of ['annotate', 'corpus', 'english']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('src="lib/omm-bridge.js"'), `${id} 未加载共享桥`)
+    assert.ok(text.includes(`data-self="omm-${id}"`), `${id} 未声明自身 id`)
+    assert.ok(!/<script id="omm-bridge-core">[\s\S]{200,}<\/script>/.test(text),
+      `${id} 仍内联整块桥实现`)
+    assert.ok(!/\bfunction (itWord|itSent|itDoc|take|watch|deliver)\s*\(/.test(text),
+      `${id} 仍有内联桥函数`)
+  }
+})
+
+test('loopback origin / lsDel / fileStamp 等小助手不再自行实现', () => {
+  const util = read('public/zen/foundation/util.js')
+  assert.ok(util.includes('u.isLocalOrigin ='), 'ZenUtil 缺少 isLocalOrigin')
+  for (const page of ['public/index.html', 'public/lib/zen-table.js', 'public/lib/zen-video.js']) {
+    const text = read(page)
+    assert.ok(text.includes('ZenUtil.isLocalOrigin('), `${page} 未委托 isLocalOrigin`)
+    assert.ok(!/\bfunction localOrigin\s*\(/.test(text), `${page} 仍有内联 localOrigin`)
+  }
+  for (const page of ['public/omm-message.html', 'public/omm-writer.html']) {
+    assert.ok(/function lsDel\(k\) \{ return ZenUtil\.lsDel\(k\) \}/.test(read(page)),
+      `${page} 未委托 lsDel`)
+  }
+  assert.ok(/function fileStamp\(\)\{ return ZenUtil\.fileStamp\(null, true\) \}/.test(
+    read('public/index.html')), 'index 未委托 fileStamp')
 })

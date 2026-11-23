@@ -97,7 +97,7 @@ SHARED_MODULES = [
     "public/lib/zen-backup.js", "public/lib/zen-pack.js", "public/lib/zen-review.js",
     "public/lib/data-viz.js", "public/lib/search-library.js", "public/viz-bridge.js",
     "public/omm-embed.js", "public/omm-share.js", "public/omm-desktop.js",
-    "public/lib/zen-crypto.js",
+    "public/lib/zen-crypto.js", "public/lib/omm-bridge.js",
     "public/zen/components/layer.js", "public/zen/components/toast.js",
     "public/zen/components/dialog.js", "public/zen/components/select.js",
     "public/zen/components/menu.js", "public/zen/components/popover.js",

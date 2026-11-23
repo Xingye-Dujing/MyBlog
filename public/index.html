@@ -381,19 +381,10 @@
 
   // omm:zen-card-request — 响应工作台广播（仅接受 loopback parent origin）
   ;(function () {
-    function localOrigin(origin) {
-      try {
-        var u = new URL(String(origin || ''))
-        return (u.protocol === 'http:' || u.protocol === 'https:') &&
-          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
-      } catch (e) {
-        return false
-      }
-    }
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
       if (window.parent === window) return
-      if (!localOrigin(ev.origin)) return
+      if (!ZenUtil.isLocalOrigin(ev.origin)) return
       var api = window.ZenLambdaAI
       if (!api || !api.snapshotMarkdown) return
       var md = api.snapshotMarkdown()
@@ -1047,11 +1038,7 @@
 
   // 导出文件名带时间戳，避免多次导出后无法区分
   // Timestamp exported files so repeated exports stay distinguishable.
-  function fileStamp(){
-    var d = new Date();
-    return String(d.getFullYear()) + ZenUtil.pad(d.getMonth() + 1) + ZenUtil.pad(d.getDate()) + "-" +
-           ZenUtil.pad(d.getHours()) + ZenUtil.pad(d.getMinutes()) + ZenUtil.pad(d.getSeconds());
-  }
+  function fileStamp(){ return ZenUtil.fileStamp(null, true) }
 
   function addActions(lineEl, obj, source){
     // 手动单步的输出没有 trace，补一个单步对比 / synthesize a one-step trace

@@ -77,6 +77,16 @@
       /schema cache|Could not find the table/i.test(err.message || '')))
   }
 
+  /* Loopback-origin check used by the zen-card postMessage handshake.
+   * Pure URL parsing: no product state, the caller decides what to trust. */
+  u.isLocalOrigin = function (origin) {
+    try {
+      var x = new URL(String(origin || ''))
+      return (x.protocol === 'http:' || x.protocol === 'https:') &&
+        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(x.hostname) >= 0
+    } catch (e) { return false }
+  }
+
   /* HTML escaping. The 5th entity (apostrophe) is opt-out for legacy callers
    * that only escape the 4 core entities; no product branching lives here. */
   u.esc = function (value, opts) {
