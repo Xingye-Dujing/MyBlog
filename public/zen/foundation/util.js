@@ -17,11 +17,49 @@
   u.tpl = function (id) { var t = u.byId(id); return t ? t.innerHTML : '' }
   u.setText = function (id, v) { var e = u.byId(id); if (e) e.textContent = v }
   u.toggleCls = function (id, cls, on) { var e = u.byId(id); if (e) e.classList.toggle(cls, !!on) }
-  u.autosize = function (id) {
-    var x = u.byId(id)
+  /* Grow an input/textarea to fit its content. Optional bounds keep the
+   * mechanism generic; the product decides min/max and any extra padding. */
+  u.autosize = function (id, opts) {
+    var x = typeof id === 'string' ? u.byId(id) : id
     if (!x) return
+    var o = opts || {}
     x.style.height = 'auto'
-    x.style.height = x.scrollHeight + 'px'
+    var h = x.scrollHeight + (o.extra || 0)
+    if (o.min) h = Math.max(o.min, h)
+    if (o.max) h = Math.min(o.max, h)
+    x.style.height = h + 'px'
+  }
+
+  /* Human-readable byte size (B / KB / MB / GB). decimals defaults to 1. */
+  u.formatBytes = function (bytes, decimals) {
+    var n = Number(bytes) || 0
+    var d = decimals == null ? 1 : decimals
+    if (n < 1024) return n + ' B'
+    if (n < 1048576) return (n / 1024).toFixed(d) + ' KB'
+    if (n < 1073741824) return (n / 1048576).toFixed(d) + ' MB'
+    return (n / 1073741824).toFixed(d) + ' GB'
+  }
+
+  /* Product-level dark-mode class handling (no design-system theme UI).
+   * key/class are caller-supplied so no product convention is hardcoded. */
+  u.themeApply = function (on, cls) {
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle(cls || 'theme-dark', !!on)
+    }
+  }
+  u.themeInit = function (key, cls) {
+    var on = u.lsGet(key || 'zen.theme', '') === 'dark'
+    u.themeApply(on, cls)
+    return on
+  }
+  u.themeToggle = function (key, cls) {
+    key = key || 'zen.theme'
+    var name = cls || 'theme-dark'
+    var on = !(typeof document !== 'undefined' && document.body &&
+      document.body.classList.contains(name))
+    u.themeApply(on, name)
+    u.lsSet(key, on ? 'dark' : 'light')
+    return on
   }
 
   /* strings / ids */
@@ -113,6 +151,20 @@
   /* Escape a literal for use inside a RegExp constructor. */
   u.escRe = function (value) {
     return u.str(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  /* djb2 string hash (32-bit). Generic fingerprinting used for change
+   * detection; no product state, the caller decides what string to hash. */
+  u.hashStr = function (value) {
+    var s = u.str(value)
+    var h = 5381
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+    return h
+  }
+  /* Length-prefixed fingerprint: cheap tamper/change check for stored blobs. */
+  u.fingerprint = function (value) {
+    var s = u.str(value)
+    return s.length + ':' + u.hashStr(s)
   }
 
   /* Constrain a number to [a, b]; clamp01 is the common [0, 1] case. */

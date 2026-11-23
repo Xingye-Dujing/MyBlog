@@ -779,16 +779,13 @@ notify pgrst, 'reload schema';</textarea
         function nowISO() { return ZenUtil.nowISO() }
         function fileStamp() {
           var d = new Date()
-          function p(x) {
-            return (x < 10 ? '0' : '') + x
-          }
           return (
             d.getFullYear() +
-            p(d.getMonth() + 1) +
-            p(d.getDate()) +
+            ZenUtil.pad(d.getMonth() + 1) +
+            ZenUtil.pad(d.getDate()) +
             '-' +
-            p(d.getHours()) +
-            p(d.getMinutes())
+            ZenUtil.pad(d.getHours()) +
+            ZenUtil.pad(d.getMinutes())
           )
         }
         function tags(v) {
@@ -1136,12 +1133,8 @@ notify pgrst, 'reload schema';</textarea
 
         /* ---------- 跨应用直传（同源 localStorage 收件箱 + BroadcastChannel） ---------- */
         function readBox() {
-          try {
-            var a = JSON.parse(localStorage.getItem(INBOX) || '[]')
-            return Array.isArray(a) ? a : []
-          } catch (e) {
-            return []
-          }
+          var a = ZenUtil.getJSON(INBOX, [])
+          return Array.isArray(a) ? a : []
         }
         function writeBox(a) {
           try {
@@ -5927,7 +5920,7 @@ notify pgrst, 'reload schema';</textarea
 
         let _saveT = null
         function serializeS() {
-          const clone = JSON.parse(JSON.stringify(S))
+          const clone = ZenUtil.clone(S)
           Object.keys(clone.books).forEach((k) => {
             if (clone.books[k].builtin && k !== 'fav') clone.books[k].w = null
           })
@@ -5938,7 +5931,7 @@ notify pgrst, 'reload schema';</textarea
             return serializeS()
           },
           replace(data) {
-            const obj = JSON.parse(JSON.stringify(data))
+            const obj = ZenUtil.clone(data)
             S = Object.assign(defaults(), obj)
             S.set = Object.assign(defaults().set, obj.set || {})
             S = seed(S)
@@ -6208,7 +6201,7 @@ notify pgrst, 'reload schema';</textarea
         function applyAll() {
           const b = document.body,
             st = S.set
-          b.classList.toggle('theme-dark', st.theme === 'dark')
+          ZenUtil.themeApply(st.theme === 'dark')
           b.className = b.className.replace(/bg-\w+/g, '').trim()
           b.classList.add(st.bg)
           b.classList.toggle('menu-pinned', !!st.pinned)
@@ -6434,7 +6427,7 @@ notify pgrst, 'reload schema';</textarea
           return d && Array.isArray(d.strokes) ? d : null
         }
         function cloneStrokes(strokes) {
-          return JSON.parse(JSON.stringify(strokes || []))
+          return ZenUtil.clone(strokes || [])
         }
         function drawingThemeColor() {
           return document.body.classList.contains('theme-dark') ? '#ffffff' : '#000000'
@@ -7125,11 +7118,7 @@ notify pgrst, 'reload schema';</textarea
           return set
         }
         function importDoodlesFile(file) {
-          const rd = new FileReader()
-          rd.onload = () => {
-            applyDoodlesText(rd.result)
-          }
-          rd.readAsText(file)
+          ZenUtil.readText(file).then((text) => applyDoodlesText(text))
         }
         // “导入涂鸦”先进这个弹窗：既能粘贴 JSON，也能点按钮选文件。
         // 两边格式一样，所以小程序导出的文件直接拖进来就能用。
@@ -9551,10 +9540,9 @@ notify pgrst, 'reload schema';</textarea
           notify('"' + b.name + '" 已导出')
         }
         function importBackupFile(file) {
-          const rd = new FileReader()
-          rd.onload = () => {
+          ZenUtil.readText(file).then((text) => {
             try {
-              const obj = JSON.parse(rd.result)
+              const obj = JSON.parse(text)
               if (!obj.books || !obj.prog) throw 0
               confirmBox('导入该备份将覆盖当前全部数据，继续？', () => {
                 S = Object.assign(defaults(), obj)
@@ -9569,8 +9557,7 @@ notify pgrst, 'reload schema';</textarea
             } catch (e) {
               notify('备份文件格式不正确')
             }
-          }
-          rd.readAsText(file)
+          })
         }
 
         // ============================================================
@@ -12516,20 +12503,18 @@ notify pgrst, 'reload schema';</textarea
           $('#fi-vocab').addEventListener('change', (ev) => {
             const f = ev.target.files[0]
             if (!f) return
-            const rd = new FileReader()
-            rd.onload = () => {
+            ZenUtil.readText(f).then((text) => {
               const ta = $('#im-text')
               if (ta) {
-                ta.value = rd.result
+                ta.value = text
                 const nm = $('#im-name')
                 if (nm && !nm.value) nm.value = f.name.replace(/\.[^.]+$/, '')
               } else {
                 showImportModal(f.name.replace(/\.[^.]+$/, ''))
-                $('#im-text').value = rd.result
+                $('#im-text').value = text
               }
               notify('文件已读取：' + f.name)
-            }
-            rd.readAsText(f)
+            })
             ev.target.value = ''
           })
           $('#fi-doodles').addEventListener('change', (ev) => {
@@ -12584,13 +12569,11 @@ notify pgrst, 'reload schema';</textarea
           $('#fi-ls-subs').addEventListener('change', (ev) => {
             const f = ev.target.files[0]
             if (!f) return
-            const rd = new FileReader()
-            rd.onload = () => {
+            ZenUtil.readText(f).then((text) => {
               const ta = $('#ls-text')
-              if (ta) ta.value = rd.result
+              if (ta) ta.value = text
               notify('字幕已读取：' + f.name)
-            }
-            rd.readAsText(f)
+            })
             ev.target.value = ''
           })
 
@@ -12772,9 +12755,7 @@ notify pgrst, 'reload schema';</textarea
           try {
             s = localStorage.getItem(DATA_KEY) || ''
           } catch (_) {}
-          var h = 5381
-          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-          return s.length + ':' + h
+          return ZenUtil.fingerprint(s)
         }
         function stopWatcher() {
           if (pollTimer) clearInterval(pollTimer)
@@ -12891,23 +12872,9 @@ notify pgrst, 'reload schema';</textarea
           return Date.now()
         }
         function cfg() {
-          try {
-            return JSON.parse(
-              localStorage.getItem(CFG_KEY) ||
-                localStorage.getItem('zenglish-supabase-config-v1') ||
-                '{}',
-            )
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(CFG_KEY, ZenUtil.getJSON('zenglish-supabase-config-v1', {}))
         }
-        function meta() {
-          try {
-            return JSON.parse(localStorage.getItem(META_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
-        }
+        function meta() { return ZenUtil.getJSON(META_KEY, {}) }
         function mark(ts) {
           try {
             localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
@@ -12924,7 +12891,7 @@ notify pgrst, 'reload schema';</textarea
 
         function normalizeData(d) {
           if (!isPlainObject(d)) throw new Error('云端数据无效')
-          var out = JSON.parse(JSON.stringify(d))
+          var out = ZenUtil.clone(d)
           out.v = Number(out.v || 1)
           out.set = isPlainObject(out.set) ? out.set : {}
           out.notes = isPlainObject(out.notes) ? out.notes : {}

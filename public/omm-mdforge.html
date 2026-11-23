@@ -849,14 +849,8 @@ template: academic
         }
 
         function loadSettings() {
-          try {
-            const raw = localStorage.getItem(SETTINGS_KEY)
-            if (!raw) return { ...DEFAULT_SETTINGS }
-            const parsed = JSON.parse(raw)
-            return { ...DEFAULT_SETTINGS, ...(parsed && typeof parsed === 'object' ? parsed : {}) }
-          } catch (error) {
-            return { ...DEFAULT_SETTINGS }
-          }
+          const parsed = ZenUtil.getJSON(SETTINGS_KEY, null)
+          return { ...DEFAULT_SETTINGS, ...(parsed && typeof parsed === 'object' ? parsed : {}) }
         }
 
         function saveSettings() {
@@ -878,7 +872,7 @@ template: academic
             '--fscale',
             String(Math.max(0.85, Math.min(1.2, Number(s.fscale) || 1))),
           )
-          document.body.classList.toggle('theme-night', s.theme === 'night')
+          ZenUtil.themeApply(s.theme === 'night', 'theme-night')
           ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach((name) => {
             document.body.classList.toggle(name, s.bg === name)
           })
@@ -904,7 +898,7 @@ template: academic
 
         function updateDate() {
           const now = new Date()
-          const value = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
+          const value = `${now.getFullYear()}.${ZenUtil.pad(now.getMonth() + 1)}.${ZenUtil.pad(now.getDate())}`
           dom.chDate.textContent = value
         }
 
@@ -984,13 +978,8 @@ template: academic
         }
 
         function readTuningStore() {
-          try {
-            const raw = localStorage.getItem(TUNING_KEY)
-            const parsed = raw ? JSON.parse(raw) : {}
-            return parsed && typeof parsed === 'object' ? parsed : {}
-          } catch (error) {
-            return {}
-          }
+          const parsed = ZenUtil.getJSON(TUNING_KEY, {})
+          return parsed && typeof parsed === 'object' ? parsed : {}
         }
 
         function readStoredTuning(format, template) {
@@ -1027,7 +1016,7 @@ template: academic
           const entry = readStoredTuning(state.format, state.template)
           if (entry && entry.savedAt) {
             const saved = new Date(entry.savedAt)
-            const time = `${String(saved.getHours()).padStart(2, '0')}:${String(saved.getMinutes()).padStart(2, '0')}`
+            const time = `${ZenUtil.pad(saved.getHours())}:${ZenUtil.pad(saved.getMinutes())}`
             dom.tuningState.textContent = `自动保存于本机 · ${saved.getMonth() + 1}/${saved.getDate()} ${time}`
           } else {
             dom.tuningState.textContent = '当前为模板默认格式 · 修改后自动保存'
@@ -1804,11 +1793,9 @@ template: academic
           })
         }
 
-        function imageSizeLabel(size) {
+        function sizeLabel(size) {
           if (!size && size !== 0) return ''
-          if (size < 1024) return `${size} B`
-          if (size < 1024 * 1024) return `${(size / 1024).toFixed(0)} KB`
-          return `${(size / 1024 / 1024).toFixed(1)} MB`
+          return ZenUtil.formatBytes(size)
         }
 
         function renderAttachments() {
@@ -1824,7 +1811,7 @@ template: academic
               <div class="attach-item">
                 <img class="attach-thumb" src="${image.url}" alt="" />
                 <span class="attach-name" title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</span>
-                <span class="attach-size">${escapeHtml(imageSizeLabel(image.size))}</span>
+                <span class="attach-size">${escapeHtml(sizeLabel(image.size))}</span>
                 <button class="attach-latex" data-redraw-image="${index}" title="替换为 LaTeX 图表代码">LaTeX</button>
                 <button class="attach-insert" data-insert-image="${index}" title="在光标处插入图片语法">插入</button>
                 <button class="attach-remove" data-remove-image="${index}" title="移除">×</button>
@@ -1908,21 +1895,15 @@ template: academic
             }
             localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
             const time = new Date(payload.savedAt)
-            dom.saveHint.textContent = `UTF-8 · MD · 草稿 ${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
+            dom.saveHint.textContent = `UTF-8 · MD · 草稿 ${ZenUtil.pad(time.getHours())}:${ZenUtil.pad(time.getMinutes())}`
           } catch (error) {
             dom.saveHint.textContent = 'UTF-8 · MD · 草稿未保存'
           }
         }
 
         function loadDraft() {
-          try {
-            const raw = localStorage.getItem(DRAFT_KEY)
-            if (!raw) return null
-            const parsed = JSON.parse(raw)
-            return parsed && typeof parsed.text === 'string' ? parsed : null
-          } catch (error) {
-            return null
-          }
+          const parsed = ZenUtil.getJSON(DRAFT_KEY, null)
+          return parsed && typeof parsed.text === 'string' ? parsed : null
         }
 
         async function restoreDraftImages(draft) {
@@ -2005,7 +1986,7 @@ template: academic
           state.images = []
           renderAttachments()
           const today = new Date()
-          const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+          const date = `${today.getFullYear()}-${ZenUtil.pad(today.getMonth() + 1)}-${ZenUtil.pad(today.getDate())}`
           const template = state.template || 'academic'
           const text = `---\ntitle: 未命名文稿\nauthor: ${yamlValue('')}\ndate: ${yamlValue(date)}\ntemplate: ${yamlValue(template)}\n---\n\n# 引言\n\n从这里开始写作。\n`
           setEditorValue(text)
@@ -2075,13 +2056,6 @@ template: academic
             </div>`
         }
 
-        function bytesLabel(bytes) {
-          if (!bytes && bytes !== 0) return ''
-          if (bytes < 1024) return `${bytes} B`
-          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-          return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-        }
-
         function renderOutput() {
           const result = state.result
           const issues = state.issues || []
@@ -2143,7 +2117,7 @@ template: academic
                     result.tex
                       ? `
                     <details>
-                      <summary>TeX 源码 <span>${escapeHtml(bytesLabel(new Blob([result.tex]).size))}</span></summary>
+                      <summary>TeX 源码 <span>${escapeHtml(sizeLabel(new Blob([result.tex]).size))}</span></summary>
                       <pre class="code-view">${escapeHtml(result.tex)}</pre>
                     </details>`
                       : ''

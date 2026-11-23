@@ -722,7 +722,7 @@
     } catch(e){}
   }
   function loadLocal(){
-    try { return JSON.parse(localStorage.getItem(LS) || "null"); } catch(e){ return null; }
+    return ZenUtil.getJSON(LS, null);
   }
 
   /* ----------------------------------------------------------------- theme / 主题 */
@@ -1060,9 +1060,8 @@
   // Timestamp exported files so repeated exports stay distinguishable.
   function fileStamp(){
     var d = new Date();
-    function p(n){ return (n < 10 ? "0" : "") + n; }
-    return String(d.getFullYear()) + p(d.getMonth() + 1) + p(d.getDate()) + "-" +
-           p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+    return String(d.getFullYear()) + ZenUtil.pad(d.getMonth() + 1) + ZenUtil.pad(d.getDate()) + "-" +
+           ZenUtil.pad(d.getHours()) + ZenUtil.pad(d.getMinutes()) + ZenUtil.pad(d.getSeconds());
   }
 
   function addActions(lineEl, obj, source){
@@ -3186,8 +3185,7 @@
 
   /* ---------------------------------------------------------------- events / 事件 */
   cmd.addEventListener("input", function(){
-    cmd.style.height = "auto";
-    cmd.style.height = Math.min(cmd.scrollHeight, 120) + "px";
+    ZenUtil.autosize(cmd, {max:120});
     pushEditor(cmd.value);
     syncEditor();
     openAc();
@@ -3643,14 +3641,12 @@
   $("file").addEventListener("change", function(){
     var f = this.files && this.files[0];
     if (!f) return;
-    var reader = new FileReader();
-    reader.onload = async function(){
-      var lines = String(reader.result || "").split(/\r?\n/).filter(function(l){ return l.trim(); });
+    ZenUtil.readText(f, "utf-8").then(async function(text){
+      var lines = String(text || "").split(/\r?\n/).filter(function(l){ return l.trim(); });
       for (var i = 0; i < lines.length; i++) await exec(lines[i]);
       toast(t("importOk") + " · " + lines.length);
       refreshEnv();
-    };
-    reader.readAsText(f, "utf-8");
+    });
     this.value = "";
   });
 

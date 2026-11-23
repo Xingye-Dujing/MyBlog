@@ -2286,7 +2286,7 @@ notify pgrst, 'reload schema';</textarea
               'bg-cross',
               'bg-diagonal',
             )
-            document.body.classList.toggle('theme-dark', S.theme === 'dark')
+            ZenUtil.themeApply(S.theme === 'dark')
             document.body.classList.add(S.bg)
             document.documentElement.style.setProperty('--zoom', S.zoom)
             document.documentElement.style.setProperty('--radius', S.radius + 'px')
@@ -2623,7 +2623,7 @@ notify pgrst, 'reload schema';</textarea
             this.persist()
           },
         }
-        Store.persist = debounce(function () {
+        Store.persist = ZenUtil.debounce(function () {
           Store.saveDoc()
         }, CONFIG.AUTO_SAVE_DELAY)
 
@@ -2875,14 +2875,6 @@ notify pgrst, 'reload schema';</textarea
               notify(t('count.deleted'))
             })
           },
-        }
-
-        function debounce(fn, ms) {
-          let timer = null
-          return function () {
-            clearTimeout(timer)
-            timer = setTimeout(fn, ms)
-          }
         }
 
         // ================================================================
@@ -4931,10 +4923,9 @@ notify pgrst, 'reload schema';</textarea
               })
           },
           importJSON(file) {
-            const reader = new FileReader()
-            reader.onload = function (ev) {
+            ZenUtil.readText(file).then(function (text) {
               try {
-                const data = JSON.parse(ev.target.result)
+                const data = JSON.parse(text)
                 let added = 0
                 if (data && data.version === 2 && Array.isArray(data.planners)) {
                   data.planners.forEach(function (srcP) {
@@ -5028,8 +5019,9 @@ notify pgrst, 'reload schema';</textarea
               } catch (_) {
                 notify(t('notify.invalidFile'))
               }
-            }
-            reader.readAsText(file)
+            }, function () {
+              notify(t('notify.invalidFile'))
+            })
           },
           clearAll() {
             showConfirm(t('confirm.clearAll'), t('confirm.ok')).then(function (ok) {
@@ -7087,9 +7079,7 @@ notify pgrst, 'reload schema';</textarea
               '|' +
               (localStorage.getItem('zp-settings-v1') || '')
           } catch (_) {}
-          var h = 5381
-          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-          return s.length + ':' + h
+          return ZenUtil.fingerprint(s)
         }
         function stopWatcher() {
           if (pollTimer) clearInterval(pollTimer)
@@ -7184,11 +7174,7 @@ notify pgrst, 'reload schema';</textarea
           return key
         }
         function cfg() {
-          try {
-            return JSON.parse(localStorage.getItem(CFG_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(CFG_KEY, {})
         }
         function statusKey(k) {
           state.statusKey = k
@@ -7221,11 +7207,7 @@ notify pgrst, 'reload schema';</textarea
           return Date.now()
         }
         function meta() {
-          try {
-            return JSON.parse(localStorage.getItem(META_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(META_KEY, {})
         }
         function mark(ts) {
           try {
@@ -7250,7 +7232,7 @@ notify pgrst, 'reload schema';</textarea
         function mergeData(a, b) {
           if (!a) return b
           if (!b) return a
-          var o = JSON.parse(JSON.stringify(b))
+          var o = ZenUtil.clone(b)
           o.planners = o.planners || []
           ;(a.planners || []).forEach(function (p) {
             if (
@@ -7397,7 +7379,7 @@ notify pgrst, 'reload schema';</textarea
         }
         function writeLocal(d) {
           try {
-            var copy = JSON.parse(JSON.stringify(d || {}))
+            var copy = ZenUtil.clone(d || {})
             var settings = copy.settings
             delete copy.settings
             localStorage.setItem(DATA_KEY, JSON.stringify(copy))

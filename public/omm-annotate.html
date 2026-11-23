@@ -966,16 +966,13 @@
         function nowISO() { return ZenUtil.nowISO() }
         function fileStamp() {
           var d = new Date()
-          function p(x) {
-            return (x < 10 ? '0' : '') + x
-          }
           return (
             d.getFullYear() +
-            p(d.getMonth() + 1) +
-            p(d.getDate()) +
+            ZenUtil.pad(d.getMonth() + 1) +
+            ZenUtil.pad(d.getDate()) +
             '-' +
-            p(d.getHours()) +
-            p(d.getMinutes())
+            ZenUtil.pad(d.getHours()) +
+            ZenUtil.pad(d.getMinutes())
           )
         }
         function tags(v) {
@@ -1323,12 +1320,8 @@
 
         /* ---------- 跨应用直传（同源 localStorage 收件箱 + BroadcastChannel） ---------- */
         function readBox() {
-          try {
-            var a = JSON.parse(localStorage.getItem(INBOX) || '[]')
-            return Array.isArray(a) ? a : []
-          } catch (e) {
-            return []
-          }
+          var a = ZenUtil.getJSON(INBOX, [])
+          return Array.isArray(a) ? a : []
         }
         function writeBox(a) {
           try {
@@ -1974,8 +1967,7 @@
             } catch (e) {}
           },
           apply: function () {
-            document.body.classList.remove('theme-dark')
-            if (S.theme === 'dark') document.body.classList.add('theme-dark')
+            ZenUtil.themeApply(S.theme === 'dark')
             ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach(function (c) {
               document.body.classList.remove(c)
             })
@@ -7139,8 +7131,7 @@
             if (done) notify('已导入 ' + done + ' 份材料')
           }
           texts.forEach(function (f) {
-            var fr = new FileReader()
-            fr.onload = function () {
+            ZenUtil.readText(f, 'utf-8').then(function (text) {
               P.docs.push({
                 id: uid('d'),
                 title: f.name.replace(/\.(txt|md)$/i, ''),
@@ -7148,23 +7139,21 @@
                 type: '其他',
                 date: '',
                 note: '由文件导入：' + f.name,
-                text: String(fr.result || ''),
+                text: String(text || ''),
                 kind: 'text',
               })
               if (!S.docId) S.docId = P.docs[P.docs.length - 1].id
               done++
               finish()
-            }
-            fr.readAsText(f, 'utf-8')
+            })
           })
           if (rest.length) {
-            var fr2 = new FileReader()
-            fr2.onload = function () {
+            ZenUtil.readText(rest[0], 'utf-8').then(function (text) {
               try {
-                var o = JSON.parse(String(fr2.result))
+                var o = JSON.parse(String(text || ''))
                 /* OMM 互通包优先：转成学习笔记 / 材料 */
                 if (o && o.omm === 'bridge') {
-                  bridgeIngestTexts([String(fr2.result)])
+                  bridgeIngestTexts([String(text || '')])
                   return finish()
                 }
                 var pr = o && o.project ? o.project : o
@@ -7193,8 +7182,7 @@
                 notify('项目文件解析失败')
                 finish()
               }
-            }
-            fr2.readAsText(rest[0], 'utf-8')
+            })
           } else if (!texts.length && !pdfs.length) {
             notify('未选择可导入的文件')
           }
@@ -9415,9 +9403,7 @@
               '|' +
               (localStorage.getItem(SETTINGS_KEY) || '')
           } catch (_) {}
-          var h = 5381
-          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-          return s.length + ':' + h
+          return ZenUtil.fingerprint(s)
         }
         function stopWatcher() {
           if (pollTimer) clearInterval(pollTimer)
@@ -9525,13 +9511,7 @@
             return '本机存储写入失败，请清理浏览器存储空间或退出无痕模式后重试'
           return /^\[object /.test(m) ? '操作失败，请重试或查看浏览器控制台日志' : m
         }
-        function cfg() {
-          try {
-            return JSON.parse(localStorage.getItem(CFG_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
-        }
+        function cfg() { return ZenUtil.getJSON(CFG_KEY, {}) }
         function statusKey(text) {
           state.statusKey = text
           var e = E('zen-cloud-status')
@@ -9559,13 +9539,7 @@
         function now() {
           return Date.now()
         }
-        function meta() {
-          try {
-            return JSON.parse(localStorage.getItem(META_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
-        }
+        function meta() { return ZenUtil.getJSON(META_KEY, {}) }
         function mark(ts) {
           try {
             localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
@@ -9585,7 +9559,7 @@
         }
         function writeLocal(d) {
           try {
-            var copy = JSON.parse(JSON.stringify(d || {}))
+            var copy = ZenUtil.clone(d || {})
             var settings = copy.settings
             delete copy.settings
             localStorage.setItem(DATA_KEY, JSON.stringify(copy))
@@ -9988,8 +9962,7 @@
           var x = E('zen-sql-box')
           if (!x) return
           if (!x.value) x.value = buildSql()
-          x.style.height = 'auto'
-          x.style.height = x.scrollHeight + 'px'
+          ZenUtil.autosize(x)
         }
         function setup() {
           var b = E('zp-sync-btn')

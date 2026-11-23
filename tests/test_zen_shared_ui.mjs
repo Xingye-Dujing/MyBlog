@@ -254,7 +254,8 @@ test('ZenUtil 提供通用文件读取 / JSON 存储 / 拖放接线', () => {
   const util = read('public/zen/foundation/util.js')
   for (const key of ['clamp', 'clamp01', 'clone', 'lsGet', 'lsSet', 'lsDel', 'debounce',
     'fmtDate', 'fileStamp', 'tags', 'saveJSON', 'readText', 'readTexts',
-    'getJSON', 'setJSON', 'removeJSON', 'enableFileDrop']) {
+    'getJSON', 'setJSON', 'removeJSON', 'enableFileDrop', 'hashStr', 'fingerprint',
+    'formatBytes', 'themeApply', 'themeInit', 'themeToggle']) {
     assert.ok(util.includes('u.' + key + ' ='), `ZenUtil 缺少 ${key}`)
   }
 })
@@ -303,4 +304,49 @@ test('多文件读取与拖放接线委托共享 ZenUtil', () => {
   }
   const redact = read('public/omm-redact.html')
   assert.ok(redact.includes('ZenUtil.enableFileDrop'), 'Redact 未委托共享拖放接线')
+})
+
+test('主题应用与初始化统一委托 ZenUtil.theme*，不再直接操作 theme-dark', () => {
+  const initIds = ['zenbackup', 'zencard', 'zenclip', 'zenflow', 'zenreview']
+  for (const id of initIds) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('ZenUtil.themeInit()'), `${id} 未委托主题初始化`)
+    assert.ok(text.includes('ZenUtil.themeToggle()'), `${id} 未委托主题切换`)
+  }
+  const applyIds = ['corpus', 'annotate', 'data', 'english', 'message', 'planner',
+    'writer', 'redact', 'mdforge', 'search']
+  for (const id of applyIds) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('ZenUtil.themeApply('), `${id} 未委托主题应用`)
+  }
+  assert.ok(read('public/omm-mdforge.html').includes("ZenUtil.themeApply(s.theme === 'night', 'theme-night')"),
+    'mdforge night 主题未委托共享应用')
+  // 任何产品都不应再直接 toggle/add/remove 'theme-dark'
+  for (const id of [...initIds, ...applyIds, 'ai', 'hub', 'latex', 'table', 'video',
+    'visualization', 'zenbackup']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(!/classList\.(?:add|remove|toggle)\(\s*['"]theme-dark['"]/.test(text),
+      `${id} 仍直接操作 theme-dark class`)
+  }
+})
+
+test('字节格式化与 textarea autosize 统一委托共享助手', () => {
+  for (const id of ['redact', 'writer', 'mdforge']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('ZenUtil.formatBytes('), `${id} 未委托字节格式化`)
+  }
+  for (const [id, token] of [['annotate', 'ZenUtil.autosize('], ['message', 'ZenUtil.autosize('],
+    ['index', 'ZenUtil.autosize(']]) {
+    const page = id === 'index' ? 'public/index.html' : `public/omm-${id}.html`
+    assert.ok(read(page).includes(token), `${page} 未委托 autosize`)
+  }
+})
+
+test('已下沉的通用助手不留产品私有实现', () => {
+  assert.ok(!/function\s+debounce\s*\(/.test(read('public/omm-planner.html')), 'Planner 仍有自建 debounce')
+  assert.ok(!/function\s+fmtDate\s*\(/.test(read('public/omm-search.html')), 'Search 仍有自建 fmtDate')
+  assert.ok(!/JSON\.parse\(JSON\.stringify/.test(read('public/omm-annotate.html')), 'Annotate 仍有内联深克隆')
+  assert.ok(!/5381/.test(read('public/omm-corpus.html')), 'Corpus 仍有内联哈希')
+  assert.ok(!/new FileReader\(/.test(read('public/omm-english.html')), 'English 仍有内联 FileReader')
+  assert.ok(!/classList\.toggle\(\s*['"]theme-dark['"]/.test(read('public/omm-search.html')), 'Search 仍有内联主题切换')
 })

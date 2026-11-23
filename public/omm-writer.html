@@ -2548,7 +2548,7 @@ notify pgrst, 'reload schema';</textarea
           },
           apply() {
             // Theme
-            document.body.classList.toggle('theme-dark', AppState.theme === 'dark')
+            ZenUtil.themeApply(AppState.theme === 'dark')
             // Background
             document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
             document.body.classList.add(AppState.bg)
@@ -2627,17 +2627,16 @@ notify pgrst, 'reload schema';</textarea
           if (!ts) return '--'
           try {
             const d = new Date(ts)
-            const p = (n) => String(n).padStart(2, '0')
             return (
               d.getFullYear() +
               '-' +
-              p(d.getMonth() + 1) +
+              ZenUtil.pad(d.getMonth() + 1) +
               '-' +
-              p(d.getDate()) +
+              ZenUtil.pad(d.getDate()) +
               ' ' +
-              p(d.getHours()) +
+              ZenUtil.pad(d.getHours()) +
               ':' +
-              p(d.getMinutes())
+              ZenUtil.pad(d.getMinutes())
             )
           } catch (_) {
             return '--'
@@ -2650,7 +2649,7 @@ notify pgrst, 'reload schema';</textarea
           },
           toggleTheme() {
             AppState.theme = AppState.theme === 'dark' ? 'light' : 'dark'
-            document.body.classList.toggle('theme-dark', AppState.theme === 'dark')
+            ZenUtil.themeApply(AppState.theme === 'dark')
             Settings.save()
             UIManager.updateSettingsUI()
             ConnectionManager.renderAll()
@@ -2755,7 +2754,7 @@ notify pgrst, 'reload schema';</textarea
           setBg(bg, el) {
             document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
             document.body.classList.add(bg)
-            if (AppState.theme === 'dark') document.body.classList.add('theme-dark')
+            ZenUtil.themeApply(AppState.theme === 'dark')
             AppState.bg = bg
             document
               .querySelectorAll('#dd-bg .dd-item')
@@ -3067,7 +3066,7 @@ notify pgrst, 'reload schema';</textarea
           settingsSetBg(bg) {
             document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
             document.body.classList.add(bg)
-            if (AppState.theme === 'dark') document.body.classList.add('theme-dark')
+            ZenUtil.themeApply(AppState.theme === 'dark')
             AppState.bg = bg
             document.querySelectorAll('#sv-bg-options .settings-bg-dot').forEach((d) => {
               d.classList.toggle('active', d.dataset.bg === bg)
@@ -3077,7 +3076,7 @@ notify pgrst, 'reload schema';</textarea
           },
           settingsToggleTheme() {
             AppState.theme = AppState.theme === 'dark' ? 'light' : 'dark'
-            document.body.classList.toggle('theme-dark', AppState.theme === 'dark')
+            ZenUtil.themeApply(AppState.theme === 'dark')
             Settings.save()
             UIManager.updateSettingsUI()
             ConnectionManager.renderAll()
@@ -3585,9 +3584,7 @@ notify pgrst, 'reload schema';</textarea
           async fingerprint() {
             const lib = await this.library()
             const s = JSON.stringify(lib)
-            let h = 5381
-            for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-            return s.length + ':' + h
+            return ZenUtil.fingerprint(s)
           },
 
           async estimate() {
@@ -3627,13 +3624,7 @@ notify pgrst, 'reload schema';</textarea
             return result
           }
 
-          const lsGet = (k) => {
-            try {
-              return localStorage.getItem(k)
-            } catch (_) {
-              return null
-            }
-          }
+          const lsGet = (k) => ZenUtil.lsGet(k, null)
           let legacyIndex = null
           try {
             const raw = lsGet('zc-docs')
@@ -4029,10 +4020,7 @@ notify pgrst, 'reload schema';</textarea
           },
 
           formatSize(bytes) {
-            const b = Number(bytes) || 0
-            if (b < 1024) return b + ' B'
-            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB'
-            return (b / (1024 * 1024)).toFixed(2) + ' MB'
+            return ZenUtil.formatBytes(bytes)
           },
 
           // 把选好的文件写进节点
@@ -4251,12 +4239,12 @@ notify pgrst, 'reload schema';</textarea
               for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i)
                 if (!k || k.indexOf('zc-doc:') !== 0) continue
-                try {
-                  const d = JSON.parse(localStorage.getItem(k))
-                  ;(d.nodes || []).forEach((n) => {
+                const d = ZenUtil.getJSON(k, null)
+                if (d && Array.isArray(d.nodes)) {
+                  d.nodes.forEach((n) => {
                     if (n && n.assetId) ids.add(n.assetId)
                   })
-                } catch (_) {}
+                }
               }
             } catch (_) {}
             await AssetStore.gc(ids)
@@ -14310,10 +14298,9 @@ notify pgrst, 'reload schema';</textarea
         function handleFileLoad(e) {
           const file = e.target.files[0]
           if (!file) return
-          const reader = new FileReader()
-          reader.onload = async (ev) => {
+          ZenUtil.readText(file).then(async (text) => {
             try {
-              const data = JSON.parse(ev.target.result)
+              const data = JSON.parse(text)
               const n = await DocManager.importObject(data, file.name)
               if (n > 0) {
                 notify(t('notify.loadedNodes', n))
@@ -14324,8 +14311,9 @@ notify pgrst, 'reload schema';</textarea
             } catch (_) {
               notify(t('notify.invalidFile'))
             }
-          }
-          reader.readAsText(file)
+          }, () => {
+            notify(t('notify.invalidFile'))
+          })
           e.target.value = ''
         }
 
@@ -15760,10 +15748,8 @@ notify pgrst, 'reload schema';</textarea
           cards() {
             const out = []
             ;['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach((key) => {
-              try {
-                const raw = JSON.parse(localStorage.getItem(key) || '[]')
-                if (Array.isArray(raw)) raw.forEach((c) => out.push(c))
-              } catch (_) {}
+              const raw = ZenUtil.getJSON(key, [])
+              if (Array.isArray(raw)) raw.forEach((c) => out.push(c))
             })
             const seen = Object.create(null)
             return out.filter((c) => {
@@ -15776,8 +15762,7 @@ notify pgrst, 'reload schema';</textarea
            * 不依赖 zen-srs.js，避免给 Writer 增加新的模块依赖。 */
           dueCardIds(now) {
             const out = Object.create(null)
-            let states = []
-            try { states = JSON.parse(localStorage.getItem('zen.srs.v1') || '[]') } catch (_) {}
+            let states = ZenUtil.getJSON('zen.srs.v1', [])
             const t = typeof now === 'number' ? now : Date.now()
             if (Array.isArray(states)) states.forEach((s) => {
               if (s && s.id && Number(s.due) <= t) out[String(s.id)] = 1
@@ -16406,10 +16391,8 @@ notify pgrst, 'reload schema';</textarea
         function tr(key) {
           var args = [].slice.call(arguments, 1),
             lang = 'zh'
-          try {
-            var saved = JSON.parse(lsGet('zc-settings') || '{}')
-            lang = saved.lang === 'zh' ? 'zh' : 'en'
-          } catch (_) {}
+          var saved = ZenUtil.getJSON('zc-settings', {}) || {}
+          lang = saved.lang === 'zh' ? 'zh' : 'en'
           var dict = SYNC_I18N[lang] || SYNC_I18N.en
           var str =
             dict[key] !== undefined
@@ -16423,11 +16406,7 @@ notify pgrst, 'reload schema';</textarea
           return str
         }
         function cfg() {
-          try {
-            return JSON.parse(lsGet(CFG_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(CFG_KEY, {})
         }
         function statusKey(k) {
           state.statusKey = k
@@ -16460,11 +16439,7 @@ notify pgrst, 'reload schema';</textarea
           return Date.now()
         }
         function meta() {
-          try {
-            return JSON.parse(lsGet(META_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(META_KEY, {})
         }
         function mark(ts) {
           try {
@@ -16662,7 +16637,7 @@ notify pgrst, 'reload schema';</textarea
         // 免得云端漏发一张画布就把本机的删了。索引/设置一起写，
         // 保证 activeId、meta 和正文始终一致。
         async function writeLocal(d) {
-          var copy = JSON.parse(JSON.stringify(d || {}))
+          var copy = ZenUtil.clone(d || {})
           var settings = copy.settings && typeof copy.settings === 'object' ? copy.settings : {}
           delete copy.settings
 

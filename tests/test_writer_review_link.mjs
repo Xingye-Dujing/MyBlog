@@ -100,9 +100,14 @@ test('dueCardIds 只选出期到期的卡片', () => {
     { id: 'due1', due: 100 }, { id: 'due2', due: 200 }, { id: 'future', due: 9999 },
   ]) }
   const localStorage = { getItem: (k) => (k in store ? store[k] : null) }
-  const fn = new Function('localStorage', 'Number', 'Object', 'Date',
+  const ZenUtil = { getJSON: (k, fb) => {
+    const v = localStorage.getItem(k)
+    if (v === null) return fb
+    try { return JSON.parse(v) } catch (e) { return fb }
+  } }
+  const fn = new Function('localStorage', 'ZenUtil', 'Number', 'Object', 'Date',
     extractFunction(writer, 'dueCardIds') + '\nreturn dueCardIds;'
-  )(localStorage, Number, Object, { now: () => 500 })
+  )(localStorage, ZenUtil, Number, Object, { now: () => 500 })
   const due = fn(500)
   assert.ok(due.due1 && due.due2)
   assert.ok(!due.future)
@@ -110,8 +115,13 @@ test('dueCardIds 只选出期到期的卡片', () => {
 
 test('dueCardIds 对损坏的 SRS 数据容错', () => {
   const localStorage = { getItem: () => '{not-json' }
-  const fn = new Function('localStorage', 'Number', 'Object', 'Date',
+  const ZenUtil = { getJSON: (k, fb) => {
+    const v = localStorage.getItem(k)
+    if (v === null) return fb
+    try { return JSON.parse(v) } catch (e) { return fb }
+  } }
+  const fn = new Function('localStorage', 'ZenUtil', 'Number', 'Object', 'Date',
     extractFunction(writer, 'dueCardIds') + '\nreturn dueCardIds;'
-  )(localStorage, Number, Object, Date)
+  )(localStorage, ZenUtil, Number, Object, Date)
   assert.deepEqual(Object.keys(fn(Date.now())), [])
 })

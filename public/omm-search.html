@@ -202,15 +202,12 @@
 
         function clone(x) { return ZenUtil.clone(x) }
         function load() {
-          try {
-            var raw = localStorage.getItem(LS)
-            if (!raw) return clone(DEFAULT)
-            var o = JSON.parse(raw) || {}
-            return {
-              settings: Object.assign({}, DEFAULT.settings, o.settings || {}),
-              history: Array.isArray(o.history) ? o.history : []
-            }
-          } catch (e) { return clone(DEFAULT) }
+          var o = ZenUtil.getJSON(LS, null)
+          if (!o) return clone(DEFAULT)
+          return {
+            settings: Object.assign({}, DEFAULT.settings, o.settings || {}),
+            history: Array.isArray(o.history) ? o.history : []
+          }
         }
         var S = load()
         function save() { ZenUtil.setJSON(LS, S) }
@@ -255,12 +252,6 @@
         function hostOf(url) {
           try { return new URL(url).hostname } catch (e) { return String(url || '').slice(0, 40) }
         }
-        function fmtDate(v) {
-          if (!v) return ''
-          var d = new Date(v)
-          if (isNaN(d.getTime())) return String(v).slice(0, 10)
-          return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
-        }
         function fmtTime(ms) {
           if (ms < 1000) return ms + ' ms'
           return (ms / 1000).toFixed(1) + ' s'
@@ -272,7 +263,7 @@
         /* ---------------- settings ---------------- */
         function applySettings() {
           var st = S.settings
-          document.body.classList.toggle('theme-dark', st.theme === 'dark')
+          ZenUtil.themeApply(st.theme === 'dark')
           document.body.classList.remove('bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal')
           if (st.bg && st.bg !== 'void') document.body.classList.add('bg-' + st.bg)
           document.documentElement.style.setProperty('--fscale', String(st.fontScale || 1))
@@ -731,7 +722,7 @@
               '<div class="s-meta">' +
                 (isCited ? '<span class="tag cited">已引用</span>' : '') +
                 '<span>' + highlight(s.site || hostOf(s.url), findText) + '</span>' +
-                (s.date ? '<span>' + esc(fmtDate(s.date)) + '</span>' : '') +
+                (s.date ? '<span>' + esc(ZenUtil.fmtDate(s.date)) + '</span>' : '') +
                 '<span class="s-url">' + highlight(hostOf(s.url) + '/' + String(s.url).split('/').slice(3).join('/').slice(0, 48), findText) + '</span>' +
                 '<button class="src-copy" data-copy="' + n + '" title="复制链接">复制</button>' +
               '</div>' +
@@ -866,7 +857,7 @@
             lines.push((i + 1) + '. **' + (s.title || s.url) + '**')
             lines.push('   - 网址：' + s.url)
             if (s.site) lines.push('   - 站点：' + s.site)
-            if (s.date) lines.push('   - 发布：' + fmtDate(s.date))
+            if (s.date) lines.push('   - 发布：' + ZenUtil.fmtDate(s.date))
             if (s.snippet) lines.push('   - 摘要：' + s.snippet.replace(/\s+/g, ' ').slice(0, 300))
             lines.push('')
           })
@@ -877,7 +868,7 @@
         function asCSV() {
           var rows = [['序号', '标题', '网址', '站点', '发布时间', '摘要'].map(csvCell).join(',')]
           current.sources.forEach(function (s, i) {
-            rows.push([i + 1, s.title, s.url, s.site, fmtDate(s.date), s.snippet].map(csvCell).join(','))
+            rows.push([i + 1, s.title, s.url, s.site, ZenUtil.fmtDate(s.date), s.snippet].map(csvCell).join(','))
           })
           return '\ufeff' + rows.join('\r\n')
         }
@@ -902,7 +893,7 @@
             '<h2>智能摘要</h2><div class="a">' + mdToHtml(buildCitedText(current.answer, current.annotations)) + '</div>' +
             '<h2>结果来源（' + current.sources.length + '）</h2>' + current.sources.map(function (s, i) {
               return '<div class="s"><b>' + (i + 1) + '. <a href="' + esc(s.url) + '">' + esc(s.title || s.url) + '</a></b>' +
-                '<p>' + esc(s.site || '') + (s.date ? ' · ' + esc(fmtDate(s.date)) : '') + '</p>' +
+                '<p>' + esc(s.site || '') + (s.date ? ' · ' + esc(ZenUtil.fmtDate(s.date)) : '') + '</p>' +
                 '<p>' + esc(s.snippet || '') + '</p><u>' + esc(s.url) + '</u></div>'
             }).join('') + '</div></body></html>'
         }
@@ -1107,10 +1098,9 @@
         $('kb-import').addEventListener('change', function (e) {
           var f = e.target.files && e.target.files[0]
           if (!f || !window.SearchLibrary) return
-          var reader = new FileReader()
-          reader.onload = function () {
+          ZenUtil.readText(f).then(function (text) {
             try {
-              var incoming = window.SearchLibrary.unpack(String(reader.result))
+              var incoming = window.SearchLibrary.unpack(String(text))
               incoming.forEach(function (entry) {
                 S.history = S.history.filter(function (h) { return h.query !== entry.query })
                 S.history.push(entry)
@@ -1118,8 +1108,7 @@
               save(); renderHistory(); renderSuggestions(); renderKB()
               toast('已导入 ' + incoming.length + ' 条')
             } catch (err) { toast('导入失败：' + err.message) }
-          }
-          reader.readAsText(f)
+          })
           e.target.value = ''
         })
         $('set-save').addEventListener('click', function () {

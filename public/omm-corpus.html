@@ -1128,16 +1128,13 @@ notify pgrst, 'reload schema';</textarea
         function nowISO() { return ZenUtil.nowISO() }
         function fileStamp() {
           var d = new Date()
-          function p(x) {
-            return (x < 10 ? '0' : '') + x
-          }
           return (
             d.getFullYear() +
-            p(d.getMonth() + 1) +
-            p(d.getDate()) +
+            ZenUtil.pad(d.getMonth() + 1) +
+            ZenUtil.pad(d.getDate()) +
             '-' +
-            p(d.getHours()) +
-            p(d.getMinutes())
+            ZenUtil.pad(d.getHours()) +
+            ZenUtil.pad(d.getMinutes())
           )
         }
         function tags(v) {
@@ -1485,12 +1482,8 @@ notify pgrst, 'reload schema';</textarea
 
         /* ---------- 跨应用直传（同源 localStorage 收件箱 + BroadcastChannel） ---------- */
         function readBox() {
-          try {
-            var a = JSON.parse(localStorage.getItem(INBOX) || '[]')
-            return Array.isArray(a) ? a : []
-          } catch (e) {
-            return []
-          }
+          var a = ZenUtil.getJSON(INBOX, [])
+          return Array.isArray(a) ? a : []
         }
         function writeBox(a) {
           try {
@@ -2845,7 +2838,7 @@ notify pgrst, 'reload schema';</textarea
         }
         function applySettings() {
           const st = S.settings || {}
-          document.body.classList.toggle('theme-dark', st.theme === 'dark')
+          ZenUtil.themeApply(st.theme === 'dark')
           ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach((c) =>
             document.body.classList.remove(c),
           )
@@ -5396,9 +5389,7 @@ ${extra}`
         $('#file-input').onchange = (e) => {
           const f = e.target.files?.[0]
           if (!f) return
-          const r = new FileReader()
-          r.onload = () => openData('import', r.result)
-          r.readAsText(f)
+          ZenUtil.readText(f).then((text) => openData('import', text))
         }
         $('#home-ai-search').onclick = () => doRetrieve('#home-ai-q', '#home-ai-result')
         $('#home-ai-ask').onclick = openAIFromHome
@@ -6039,9 +6030,7 @@ ${extra}`
           try {
             s = localStorage.getItem(DATA_KEY) || ''
           } catch (_) {}
-          var h = 5381
-          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-          return s.length + ':' + h
+          return ZenUtil.fingerprint(s)
         }
         function stopWatcher() {
           if (pollTimer) clearInterval(pollTimer)
@@ -6143,20 +6132,8 @@ ${extra}`
         function now() {
           return Date.now()
         }
-        function cfg() {
-          try {
-            return JSON.parse(localStorage.getItem(CFG_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
-        }
-        function meta() {
-          try {
-            return JSON.parse(localStorage.getItem(META_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
-        }
+        function cfg() { return ZenUtil.getJSON(CFG_KEY, {}) }
+        function meta() { return ZenUtil.getJSON(META_KEY, {}) }
         function mark(ts) {
           try {
             localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
@@ -6179,7 +6156,7 @@ ${extra}`
               return window.OmmCorpusStore.normalize(d)
             } catch (_) {}
           }
-          var out = JSON.parse(JSON.stringify(d))
+          var out = ZenUtil.clone(d)
           out.version = Number(out.version || 2)
           if (!Array.isArray(out.categories)) out.categories = []
           if (!Array.isArray(out.entries)) out.entries = []

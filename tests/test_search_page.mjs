@@ -49,7 +49,7 @@ test('新搜索与清空历史都会刷新知识库', () => {
 
 test('导出卡片包与导入回历史都接入', () => {
   assert.ok(src.includes("window.SearchLibrary.pack(S.history, '搜索知识库')"))
-  assert.ok(src.includes('window.SearchLibrary.unpack(String(reader.result))'))
+  assert.ok(/window\.SearchLibrary\.unpack\(String\((?:text|reader\.result)\)\)/.test(src))
 })
 
 test('主脚本语法可解析', () => {

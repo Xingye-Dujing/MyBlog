@@ -282,10 +282,7 @@
         $('flow-new').addEventListener('click', () => {
           resetEditor(); document.querySelector('[data-view="editor"]').click()
         })
-        $('theme-btn').addEventListener('click', () => {
-          document.body.classList.toggle('theme-dark')
-          localStorage.setItem('zen.theme', document.body.classList.contains('theme-dark') ? 'dark' : 'light')
-        })
+        $('theme-btn').addEventListener('click', () => ZenUtil.themeToggle())
         $('add-action').addEventListener('click', () => {
           const type = $('a-type').value
           const value = $('a-value').value.trim()
@@ -312,8 +309,8 @@
         })
         $('cancel-edit').addEventListener('click', () => { resetEditor(); document.querySelector('[data-view="rules"]').click() })
         $('run-btn').addEventListener('click', () => {
-          let cards = []
-          try { cards = JSON.parse(localStorage.getItem(CARD_KEY) || '[]').map(ZenCard.create) } catch { cards = [] }
+          let cards = ZenUtil.getJSON(CARD_KEY, [])
+          cards = Array.isArray(cards) ? cards.map(ZenCard.create) : []
           if (!cards.length) { toast('卡片库为空，先去 ZenCard 添加'); return }
           const out = ZenFlow.run(rules, cards, { now: Date.now() })
           $('run-summary').textContent = `处理 ${out.cards.length} 张卡片，触发 ${out.fired.length} 条规则，产生 ${out.effects.length} 个动作。`
@@ -339,7 +336,7 @@
         })
       }
 
-      if (localStorage.getItem('zen.theme') === 'dark') document.body.classList.add('theme-dark')
+      ZenUtil.themeInit()
       $('flow-strategy').value = localStorage.getItem(FLOW_STRATEGY_KEY) || 'smart'
       load(); fillSelects(); renderActions(); resetEditor(); bind(); renderRules()
     </script>

@@ -792,11 +792,7 @@
           return text || t('status.error')
         }
         function cfg() {
-          try {
-            return JSON.parse(localStorage.getItem(LS.cfg) || '{}')
-          } catch {
-            return {}
-          }
+          return ZenUtil.getJSON(LS.cfg, {})
         }
 
         function lsGet(k, fb) { return ZenUtil.lsGet(k, fb) }
@@ -927,16 +923,14 @@
             }
         }
         function loadUi() {
-          try {
-            ui = Object.assign(ui, JSON.parse(localStorage.getItem(LS.ui) || '{}'))
-          } catch {}
+          ui = Object.assign(ui, ZenUtil.getJSON(LS.ui, {}))
           applyUi()
         }
         function saveUi() {
           if (!lsSet(LS.ui, JSON.stringify(ui))) toast(t('toast.storageFull'))
         }
         function applyUi() {
-          document.body.classList.toggle('theme-dark', ui.theme === 'dark')
+          ZenUtil.themeApply(ui.theme === 'dark')
           document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
           document.body.classList.add(ui.bg)
           document.documentElement.style.setProperty('--fscale', ui.fscale)
@@ -1037,15 +1031,13 @@
           } catch {}
         }
         function loadCache() {
-          try {
-            const a = JSON.parse(localStorage.getItem(LS.cache) || '[]')
-            const f = JSON.parse(localStorage.getItem(LS.cache + '-favorites') || '[]')
-            favoriteIds = new Set(Array.isArray(f) ? f : [])
-            if (Array.isArray(a)) {
-              messages = a.map(normalizeMessage)
-              renderMessages()
-            }
-          } catch {}
+          const a = ZenUtil.getJSON(LS.cache, [])
+          const f = ZenUtil.getJSON(LS.cache + '-favorites', [])
+          favoriteIds = new Set(Array.isArray(f) ? f : [])
+          if (Array.isArray(a)) {
+            messages = a.map(normalizeMessage)
+            renderMessages()
+          }
         }
         function device() {
           if (!deviceId) {
@@ -2197,9 +2189,8 @@
         function autoSizeSql() {
           const x = $('sql-box')
           if (!x) return
-          x.style.height = 'auto'
           x.style.overflow = 'hidden'
-          x.style.height = Math.max(220, x.scrollHeight + 2) + 'px'
+          ZenUtil.autosize(x, { min: 220, extra: 2 })
         }
         function clearLocal() {
           lsDel(LS.cache)
@@ -2212,15 +2203,12 @@
         function resizeSql() {
           const e = $('sql-box')
           if (!e) return
-          e.style.height = 'auto'
-          e.style.height = Math.max(140, e.scrollHeight) + 'px'
+          ZenUtil.autosize(e, { min: 140 })
         }
         function autoResizeMessageInput() {
           const input = $('message-input')
           if (!input) return
-          input.style.height = 'auto'
-          input.style.height =
-            Math.max(parseFloat(getComputedStyle(input).minHeight) || 0, input.scrollHeight) + 'px'
+          ZenUtil.autosize(input, { min: parseFloat(getComputedStyle(input).minHeight) || 0 })
         }
         function clearTextSelection() {
           const selection = window.getSelection?.()

@@ -2302,7 +2302,7 @@ notify pgrst, 'reload schema';</textarea
             ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach(function (c) {
               document.body.classList.remove(c)
             })
-            document.body.classList.toggle('theme-dark', S.theme === 'dark')
+            ZenUtil.themeApply(S.theme === 'dark')
             document.body.classList.add(S.bg)
             document.documentElement.style.setProperty('--zoom', S.zoom)
             document.documentElement.style.setProperty('--radius', S.radius + 'px')
@@ -5241,8 +5241,8 @@ notify pgrst, 'reload schema';</textarea
           if (!force && S.sortSnap) return
           var t = Store.active()
           S.sortSnap = {
-            rows: JSON.parse(JSON.stringify(t.rows)),
-            cols: JSON.parse(JSON.stringify(t.cols)),
+            rows: ZenUtil.clone(t.rows),
+            cols: ZenUtil.clone(t.cols),
             colW: (t.colW || []).slice(),
           }
         }
@@ -7152,20 +7152,19 @@ notify pgrst, 'reload schema';</textarea
             fr3.readAsArrayBuffer(file)
             return
           }
-          var fr2 = new FileReader()
-          fr2.onload = function () {
-            var text = String(fr2.result || '')
-            try {
-              var tables = parseAutoText(text, ext)
-              finish(tables)
-            } catch (e) {
-              notify(T('msg.importFail') + ' · ' + (e.message || ''))
-            }
-          }
-          fr2.onerror = function () {
-            notify(T('msg.importFail'))
-          }
-          fr2.readAsText(file, 'utf-8')
+          ZenUtil.readText(file).then(
+            function (text) {
+              try {
+                var tables = parseAutoText(text, ext)
+                finish(tables)
+              } catch (e) {
+                notify(T('msg.importFail') + ' · ' + (e.message || ''))
+              }
+            },
+            function () {
+              notify(T('msg.importFail'))
+            },
+          )
         }
 
         function parseAutoText(text, ext) {
@@ -7957,7 +7956,7 @@ notify pgrst, 'reload schema';</textarea
             var nt = {
               id: uid(),
               name: t.name + '_filter',
-              cols: JSON.parse(JSON.stringify(t.cols)),
+              cols: ZenUtil.clone(t.cols),
               rows: rows.map(function (i) {
                 return t.rows[i].slice()
               }),
@@ -10284,18 +10283,13 @@ notify pgrst, 'reload schema';</textarea
           var lbl = E('zp-sync-label')
           if (lbl) lbl.textContent = v
         }
-        function hashStr(s) {
-          var h = 5381
-          for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-          return s.length + ':' + h
-        }
         /* 表格内容指纹：只反映正文数据，切换视图 / 改主题等外观操作不会影响它 */
         function docHash() {
           var s = ''
           try {
             s = localStorage.getItem(DATA_KEY) || ''
           } catch (_) {}
-          return hashStr(s)
+          return ZenUtil.hashStr(s)
         }
         /* 外观设置指纹 */
         function setHash() {
@@ -10303,7 +10297,7 @@ notify pgrst, 'reload schema';</textarea
           try {
             s = localStorage.getItem(SET_KEY) || ''
           } catch (_) {}
-          return hashStr(s)
+          return ZenUtil.hashStr(s)
         }
         function dataHash() {
           return docHash() + '/' + setHash()
@@ -10438,11 +10432,7 @@ notify pgrst, 'reload schema';</textarea
           return key
         }
         function cfg() {
-          try {
-            return JSON.parse(localStorage.getItem(CFG_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(CFG_KEY, {})
         }
         function statusKey(k) {
           state.statusKey = k
@@ -10475,11 +10465,7 @@ notify pgrst, 'reload schema';</textarea
           return Date.now()
         }
         function meta() {
-          try {
-            return JSON.parse(localStorage.getItem(META_KEY) || '{}')
-          } catch (_) {
-            return {}
-          }
+          return ZenUtil.getJSON(META_KEY, {})
         }
         function mark(ts) {
           try {
@@ -10513,7 +10499,7 @@ notify pgrst, 'reload schema';</textarea
         function mergeData(a, b) {
           if (!a) return b
           if (!b) return a
-          var o = JSON.parse(JSON.stringify(b))
+          var o = ZenUtil.clone(b)
           o.tables = o.tables || []
           ;(a.tables || []).forEach(function (t) {
             if (
@@ -10667,7 +10653,7 @@ notify pgrst, 'reload schema';</textarea
         }
         function writeLocal(d) {
           try {
-            var copy = JSON.parse(JSON.stringify(d || {}))
+            var copy = ZenUtil.clone(d || {})
             var settings = copy.settings
             delete copy.settings
             localStorage.setItem(DATA_KEY, JSON.stringify(copy))
