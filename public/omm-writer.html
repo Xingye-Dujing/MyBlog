@@ -16578,40 +16578,11 @@ notify pgrst, 'reload schema';</textarea
             !!session,
           )
         }
-        var b64 = ZenCrypto.bytesToBase64
-        var ub64 = ZenCrypto.base64ToBytes
-        var keyFor = ZenCrypto.deriveKey
-
         async function enc(data, pw) {
-          var salt = crypto.getRandomValues(new Uint8Array(16)),
-            iv = crypto.getRandomValues(new Uint8Array(12)),
-            k = await keyFor(pw, salt),
-            ct = await crypto.subtle.encrypt(
-              { name: 'AES-GCM', iv: iv },
-              k,
-              new TextEncoder().encode(JSON.stringify({ v: 1, data: data })),
-            )
-          return JSON.stringify({
-            v: 1,
-            alg: 'AES-GCM',
-            kdf: 'PBKDF2-SHA256',
-            iter: 310000,
-            salt: b64(salt),
-            iv: b64(iv),
-            cipher: b64(ct),
-          })
+          return ZenCrypto.seal(data, pw)
         }
         async function dec(payload, pw) {
-          var o = typeof payload === 'string' ? JSON.parse(payload) : payload
-          if (!o || o.v !== 1 || o.alg !== 'AES-GCM') throw new Error(tr('sync.unsupportedFormat'))
-          var k = await keyFor(pw, new Uint8Array(ub64(o.salt))),
-            pt = await crypto.subtle.decrypt(
-              { name: 'AES-GCM', iv: new Uint8Array(ub64(o.iv)) },
-              k,
-              ub64(o.cipher),
-            ),
-            x = JSON.parse(new TextDecoder().decode(pt))
-          return x.data
+          return ZenCrypto.unseal(payload, pw, { msgUnsupported: function () { return tr('sync.unsupportedFormat') } })
         }
         async function remote() {
           var r = await sb

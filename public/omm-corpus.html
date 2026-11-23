@@ -6220,44 +6220,13 @@ ${extra}`
             !!session,
           )
         }
-        var b64 = ZenCrypto.bytesToBase64
-        var ub64 = ZenCrypto.base64ToBytes
-        var keyFor = ZenCrypto.deriveKey
-
         async function enc(data, pw) {
-          var salt = crypto.getRandomValues(new Uint8Array(16)),
-            iv = crypto.getRandomValues(new Uint8Array(12)),
-            k = await keyFor(pw, salt),
-            safe = normalizeData(data),
-            ct = await crypto.subtle.encrypt(
-              { name: 'AES-GCM', iv: iv },
-              k,
-              new TextEncoder().encode(JSON.stringify({ v: 2, data: safe })),
-            )
-          return JSON.stringify({
-            v: 2,
-            alg: 'AES-GCM',
-            kdf: 'PBKDF2-SHA256',
-            iter: 310000,
-            salt: b64(salt),
-            iv: b64(iv),
-            cipher: b64(ct),
-          })
+          return ZenCrypto.seal(data, pw, { version: 2, normalize: normalizeData })
         }
         async function dec(payload, pw) {
-          var o = typeof payload === 'string' ? JSON.parse(payload) : payload
-          if (!o || (o.v !== 1 && o.v !== 2) || o.alg !== 'AES-GCM')
-            throw new Error('云端数据格式不支持')
-          var k = await keyFor(pw, new Uint8Array(ub64(o.salt))),
-            pt = await crypto.subtle.decrypt(
-              { name: 'AES-GCM', iv: new Uint8Array(ub64(o.iv)) },
-              k,
-              ub64(o.cipher),
-            ),
-            x = JSON.parse(new TextDecoder().decode(pt)),
-            d = normalizeData(x && x.data)
-          if (!validateData(d)) throw new Error('云端数据无效')
-          return d
+          return ZenCrypto.unseal(payload, pw, {
+            accept: [1, 2], normalize: normalizeData, validate: validateData
+          })
         }
         async function remote() {
           var r = await sb

@@ -419,6 +419,7 @@
     </template>
 
     <!-- message confirm uses ZenUI.dialog.confirm -->
+    <script src="lib/zen-crypto.js"></script>
     <script>
       ;(function () {
         'use strict'
@@ -1050,69 +1051,24 @@
           $('device-text').textContent = deviceName ? deviceName.toUpperCase() : ''
           $('status-device').textContent = deviceName || ''
         }
-        function b64(bytes) {
-          let s = ''
-          const a = new Uint8Array(bytes)
-          for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i])
-          return btoa(s)
-        }
-        function ub64(s) {
-          const b = atob(s),
-            a = new Uint8Array(b.length)
-          for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i)
-          return a
-        }
-        async function keyFor(pw, salt) {
-          const base = await crypto.subtle.importKey(
-            'raw',
-            new TextEncoder().encode(pw),
-            'PBKDF2',
-            false,
-            ['deriveKey'],
-          )
-          return crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
-            base,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt', 'decrypt'],
-          )
-        }
         async function enc(data) {
-          const salt = crypto.getRandomValues(new Uint8Array(16)),
-            iv = crypto.getRandomValues(new Uint8Array(12)),
-            key = await keyFor(password, salt),
-            plain = typeof data === 'string' ? data : JSON.stringify({ __zmsg: 1, ...data }),
-            ct = await crypto.subtle.encrypt(
-              { name: 'AES-GCM', iv },
-              key,
-              new TextEncoder().encode(plain),
-            )
-          return JSON.stringify({
-            v: 1,
-            alg: 'AES-GCM',
-            kdf: 'PBKDF2-SHA256',
-            iter: 310000,
-            salt: b64(salt),
-            iv: b64(iv),
-            cipher: b64(ct),
+          return ZenCrypto.seal(data, password, {
+            encode: function (body) {
+              return typeof body === 'string' ? body : JSON.stringify({ __zmsg: 1, ...body })
+            }
           })
         }
         async function dec(payload) {
-          const o = typeof payload === 'string' ? JSON.parse(payload) : payload
-          if (!o || o.v !== 1 || o.alg !== 'AES-GCM') throw new Error(t('sync.invalidMessage'))
-          const key = await keyFor(password, ub64(o.salt)),
-            pt = await crypto.subtle.decrypt(
-              { name: 'AES-GCM', iv: ub64(o.iv) },
-              key,
-              ub64(o.cipher),
-            )
-          const text = new TextDecoder().decode(pt)
-          try {
-            const data = JSON.parse(text)
-            if (data && data.__zmsg === 1) return data
-          } catch {}
-          return text
+          return ZenCrypto.unseal(payload, password, {
+            decode: function (text) {
+              try {
+                const data = JSON.parse(text)
+                if (data && data.__zmsg === 1) return data
+              } catch (_) {}
+              return text
+            },
+            msgUnsupported: function () { return t('sync.invalidMessage') }
+          })
         }
         function messageFromPayload(decoded, base) {
           if (decoded && typeof decoded === 'object' && decoded.__zmsg === 1) {

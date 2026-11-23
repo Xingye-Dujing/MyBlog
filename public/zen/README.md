@@ -59,6 +59,7 @@ zen/
 | **可选浮层** | `components/popover.js` → `ZenUI.popover`（锚定浮层）<br>`components/context-menu.js` → `ZenUI.contextMenu`（富右键菜单） | 有对应浮层的产品 |
 | **可选样式包** | `features/*.css`、`canvas/canvas.css` | 只由真正用到的产品 link |
 | **可选脚本** | `components/{picker,tabs,tooltip}.js`、`canvas/{layout,engine}.js` | 只由真正用到的产品加载 |
+| **共用加密** | `lib/zen-crypto.js` → `ZenCrypto`（字节/Base64、PBKDF2 派生、AES-GCM 信封 seal/unseal） | 七个云同步产品按需引入 |
 | **产品适配器** | `lib/zen-<id>.js`、`products/<id>.css` | 产品自己的业务与外观配置 |
 
 核心入口不会全量导入 `features/`：不用画布的产品不再下载画布样式，没有日期输入的产品不再加载 picker。
@@ -91,7 +92,9 @@ zen/
 ## 边界：什么必须共享，什么留在产品
 
 - **必须共享**：同一交互/视觉机制的重复实现。通用无状态助手统一到 `ZenUtil`；
-  右键/下拉菜单统一到 `ZenUI.menu`；弹窗、Toast、画布、选择器同理。
+  右键/下拉菜单统一到 `ZenUI.menu`；弹窗、Toast、画布、选择器同理。云同步的
+  AES-GCM 信封（salt/iv 生成、PBKDF2 派生、加解密与 base64 封装）统一到 `ZenCrypto.seal/unseal`，
+  信封格式不再由产品各自拼装。
 - **留在产品**：带业务状态的产品逻辑（云同步 watcher、数据归一化、学习词库语义）
   与产品独有的外观编排（各自顶部菜单的条目内容、定位与副作用）。这些看似重复，
   实则行为各异，强行统一只会引入按产品分支——违反“共享库无产品分支”的底线。

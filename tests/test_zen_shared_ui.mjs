@@ -394,3 +394,14 @@ test('剪贴板写入统一委托 ZenUtil.copy，不再裸用 navigator.clipboar
     assert.ok(!/navigator\.clipboard\.writeText/.test(text), `${page} 仍有裸剪贴板写入`)
   }
 })
+
+test('云同步 AES-GCM 信封统一委托 ZenCrypto.seal/unseal', () => {
+  for (const id of ['annotate', 'corpus', 'data', 'english', 'planner', 'writer', 'message']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('src="lib/zen-crypto.js"'), `${id} 未加载共用加密模块`)
+    assert.ok(text.includes('ZenCrypto.seal('), `${id} 未委托共享封装`)
+    assert.ok(text.includes('ZenCrypto.unseal('), `${id} 未委托共享解封`)
+    assert.ok(!/crypto\.subtle\.(encrypt|decrypt)/.test(text), `${id} 仍有内联加解密`)
+    assert.ok(!/\bfunction (b64|ub64|keyFor)\s*\(/.test(text), `${id} 仍有内联加密原语`)
+  }
+})
