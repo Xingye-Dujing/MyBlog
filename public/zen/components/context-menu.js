@@ -55,6 +55,7 @@
     if (!el) return function () {}
     opts = opts || {}
     close()
+    if (layer.get().closePopMenu) layer.get().closePopMenu()
     if (opts.beforeOpen) opts.beforeOpen(el, { x: x, y: y })
     var l = layer.get()
     active = { el: el, opts: opts, entry: null }

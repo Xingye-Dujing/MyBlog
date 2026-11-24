@@ -19,6 +19,7 @@
    发现两处做同一件事就合并并删除副本。生成物出现漂移时改源再重新生成，绝不手改生成物掩盖问题。
 2e. 画布的右键菜单、右键拖动与视口适应只有共享引擎一份实现；产品只配置（如 `contextMenu:false`、
    `pan:false`），不得再开第二个菜单、监听 `mousedown` 做右键平移或私算居中偏移。
+   `ZenUI.menu` 与 `ZenUI.contextMenu` 在共享浮层层互斥，任何时刻只允许一个菜单存在。
 3. 跨产品通信只走 `OMMShare` / `OMMDesktop` / ZenCard 与共享频道，不直接读写别的产品数据。
 4. 所有产品使用同一组桥接脚本与 origin 校验；不得使用通配符 `postMessage`。
 5. 新增产品必须在 `desktop/plugin_specs.py` 注册，并补齐规范与 AI 知识镜像。

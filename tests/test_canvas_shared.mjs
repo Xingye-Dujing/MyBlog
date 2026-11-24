@@ -728,6 +728,7 @@ test('ZenChart draws negative bars from zeroY with positive height', () => {
 
 test('shared canvas owns right-drag pan and never closes menus from document pointerdown', () => {
   assert.doesNotMatch(engineSource, /_menuOutsideHandler/)
+  assert.doesNotMatch(engineSource, /ZenUI\.menu\.close/)
   assert.doesNotMatch(engineSource, /document\.addEventListener\(\s*['"]pointerdown/)
   const { canvas: ZenCanvas, document, window } = canvasContext()
   let opened = 0

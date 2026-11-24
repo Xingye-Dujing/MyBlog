@@ -64,7 +64,8 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
   产品不再保留第二套 SelectionManager / ConnectionManager / fitView 实现。
 - **右键菜单单一归属**：引擎默认用 `ZenUI.menu` 弹出菜单；自带富菜单的产品传
   `contextMenu:false`，由自己的 `ZenUI.contextMenu` 弹唯一一份菜单，并把“全选/适应/排布”
-  等画布动作接到引擎方法上。禁止两个菜单同时出现；拖完右键的 `contextmenu` 由引擎吞掉。
+  等画布动作接到引擎方法上。共享浮层层让两类菜单互相关闭，禁止两个菜单同时出现；
+  拖完右键的 `contextmenu` 由引擎吞掉。
 - **菜单点击禁止提前关闭**：浮层的 outside / Escape 只有 `ZenUI.layer` 一份实现。
   任何代码都不得在 document 的 `pointerdown` 里调用 `ZenUI.menu.close()`：shadow DOM 事件
   会被 retarget 成层宿主，菜单会在 `click` 触发 action 之前关闭。

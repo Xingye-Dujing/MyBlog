@@ -225,6 +225,70 @@ window.canvas = ZenCanvas.create({
 </script></body></html>'''
 
 
+MUTEX_MENU_PAGE = r'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<link rel="stylesheet" href="zen/zen.css">
+<script src="zen/foundation/util.js"></script>
+<script src="zen/components/layer.js"></script>
+<script src="zen/components/toast.js"></script>
+<script src="zen/components/menu.js"></script>
+<script src="zen/components/context-menu.js"></script>
+</head><body>
+<button id="open-rich" type="button">rich</button>
+<button id="open-simple" type="button">simple</button>
+<div id="rich"><button id="rich-act" type="button">rich action</button></div>
+<script>
+window.richHits = 0; window.simpleHits = 0;
+document.getElementById('rich-act').addEventListener('click', function () { window.richHits += 1 });
+document.getElementById('open-rich').addEventListener('click', function () {
+  ZenUI.contextMenu.open(document.getElementById('rich'), 20, 40);
+});
+document.getElementById('open-simple').addEventListener('click', function () {
+  ZenUI.menu.open([{ label: 'simple', action: function () { window.simpleHits += 1 } }], null, { x: 20, y: 40 });
+});
+</script></body></html>'''
+
+
+def test_simple_and_rich_menus_are_mutually_exclusive():
+    playwright = pytest.importorskip('playwright.sync_api')
+    handler = functools.partial(QuietHandler, directory=str(PUBLIC))
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = 'http://127.0.0.1:%d' % server.server_address[1]
+    try:
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 900, 'height': 600})
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.route('**/__menu_mutex_test__.html', lambda route: route.fulfill(
+                status=200, content_type='text/html; charset=utf-8', body=MUTEX_MENU_PAGE,
+            ))
+            page.goto(base + '/__menu_mutex_test__.html', wait_until='load')
+
+            page.locator('#open-rich').click()
+            assert page.evaluate("document.getElementById('rich').classList.contains('open')")
+            assert page.evaluate("document.querySelector('#zen-ui-layer').shadowRoot.querySelector('.zenui-popmenu').hidden")
+
+            page.locator('#open-simple').click()
+            assert not page.evaluate("document.getElementById('rich').classList.contains('open')")
+            assert page.locator('.zenui-popmenu').is_visible()
+            page.locator('.zenui-popmenu .zenui-option').click()
+            assert page.evaluate('window.simpleHits') == 1
+
+            page.locator('#open-rich').click()
+            assert page.evaluate("document.getElementById('rich').classList.contains('open')")
+            assert page.evaluate("document.querySelector('#zen-ui-layer').shadowRoot.querySelector('.zenui-popmenu').hidden")
+            page.locator('#rich-act').click()
+            assert page.evaluate('window.richHits') == 1
+            assert not errors, errors[:3]
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_canvas_menu_click_and_right_drag_in_browser():
     playwright = pytest.importorskip('playwright.sync_api')
     handler = functools.partial(QuietHandler, directory=str(PUBLIC))

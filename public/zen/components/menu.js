@@ -80,6 +80,7 @@
     var l = layer.get()
     opts = opts || {}
     if (l.closeMenu) l.closeMenu()
+    if (l.closeContextMenu) l.closeContextMenu()
     close()
     var html = ''
     var valid = []

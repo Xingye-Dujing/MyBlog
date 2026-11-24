@@ -12,7 +12,7 @@ import re
 from typing import Any, Dict, List
 
 PLUGIN_API = 1
-VERSION = "1.0.44"
+VERSION = "1.0.45"
 
 
 def version_key(value: Any) -> tuple:

@@ -2158,7 +2158,6 @@
       ws.focus()
       e.preventDefault()
       if (ws.setPointerCapture) ws.setPointerCapture(e.pointerId)
-      window.ZenUI.menu.close()
       var additive = !!(e.shiftKey || e.ctrlKey || e.metaKey)
       self.state.marqueeDrag = {
         pointerId: e.pointerId,
