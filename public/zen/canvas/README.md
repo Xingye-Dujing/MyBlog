@@ -60,13 +60,18 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
    - `layout` —— 可替换布局引擎
 4. **序列化与撤销**：`toJSON()` 是唯一数据契约；`undo/redo` 基于快照；
    `fromJSON()` 在清空画布前完整校验，非法数据抛错且不会破坏当前状态。
-5. **数据载入只有一个实现**：`ZenCanvas.normalizeSpec(data, config)` 是画布 JSON
+5. **接入方式只有一种**：新产品用 `create({ mount })` 自建 DOM；迁移中的产品可用
+   `create({ adopt: { workspace, inner, svg } })` 接管已有的同构 DOM，再对已渲染的节点
+   调用 `canvas.adoptNode(node, type, data)`，交互逻辑仍是同一套引擎。`pan:false` 让
+   自带视口手势的产品只关闭引擎的平移/缩放，不影响选择、连线与节点交互。
+   writer 与 table/video 现在都跑在这套引擎上，产品代码只负责节点正文与业务数据。
+6. **数据载入只有一个实现**：`ZenCanvas.normalizeSpec(data, config)` 是画布 JSON
    与工作流 JSON 的唯一校验/归一化入口，`fromJSON()` 内部也调用它。坐标统一用
    `parseFloat` 归一化，因此 `toJSON()` 输出的 CSS 像素字符串（`"80px"`）可以原样回载。
    产品不得自带第二套校验器：通用检查（根节点、版本、规模、id、类型、端口、重复、
    环路）都在共享层；产品只通过 `config` 提供 `format` / `types` / `validate`
    业务规则回调（`table` / `video` 均按此接入）。
-6. **样式以 writer 为准**：默认色板就是 writer 的 `--bg/--text/--border`、
+7. **样式以 writer 为准**：默认色板就是 writer 的 `--bg/--text/--border`、
    `--accent-green`（选中/连线），`--radius` 默认 0，1px 线框、hover 才显头部、
    圆点端口全部继承。对其他产品线只做变量回退（`--line/--panel/--dim`），
    但任何产品不得覆盖成与 writer 不同的圆角或强调色。
@@ -107,9 +112,9 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 
 | 方法 | 说明 |
 |---|---|
-| `addNode(type, data, pos, opts)` / `updateNode(id, patch)` / `removeNode(id)` | 节点 CRUD |
+| `addNode(type, data, pos, opts)` / `adoptNode(node, type, data, opts)` / `updateNode(id, patch)` / `removeNode(id)` | 节点 CRUD（`adoptNode` 接管已渲染的 DOM） |
 | `getNodes()` / `getNode(id)` / `getSelection()` / `select/selectAll/clearSelection` | 查询与选择 |
-| `addConnection(from,to,fromPort,toPort)` / `removeConnection(id)` / `getConnections()` | 连线 |
+| `addConnection(from,to,fromPort,toPort)` / `replaceConnections(list)` / `removeConnection(id)` / `getConnections()` | 连线 |
 | `setNodeStatus(id, text, state)` | 节点状态徽标（`running/done/error/idle`） |
 | `renderConnections()` / `refreshNode(id)` | 强制重绘 |
 | `screenToWorld / worldToScreen / zoomAt / zoomBy / panBy / fitView / focusNode / setView` | 视口 |

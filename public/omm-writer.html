@@ -1881,6 +1881,9 @@
           return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
         }
 
+        // 画布交互统一走共享引擎；产品只提供节点正文与业务数据。
+        let ZenWriterCanvas = null
+
         // ================================================================
         const AppState = {
           theme: 'light',
@@ -1941,6 +1944,17 @@
           switchingCanvas: false,
           switchPromise: null,
         }
+
+        // 连线集合直接由共享画布持有；产品代码对 AppState.connections 的
+        // 读写就是引擎状态的读写，不再有第二份需要同步的副本。
+        Object.defineProperty(AppState, 'connections', {
+          configurable: true,
+          get() { return ZenWriterCanvas ? ZenWriterCanvas.state.connections : (this._connections || []) },
+          set(list) {
+            if (ZenWriterCanvas) ZenWriterCanvas.state.connections = list || []
+            else this._connections = list || []
+          },
+        })
 
         const DOM = {
           get workspace() {
@@ -5166,12 +5180,11 @@
               NodeManager.refreshRefNode(node)
             }
 
-            // Init behaviors
-            NodeManager._initDrag(node)
-            NodeManager._initResize(node)
+            // 通用交互（拖拽 / 缩放 / 端口 / 选择）统一由共享画布接管；
+            // 产品这里只保留正文编辑与节点专属按钮的行为。
             NodeManager._initNodeEvents(node)
             NodeManager._initTitleEdit(node)
-            NodeManager._initPortEvents(node)
+            ZenWriterCanvas.adoptNode(node, type, data, { change: false })
 
             if (type === 'text' && !data)
               setTimeout(() => node.querySelector('.node-content').focus(), 50)
@@ -6049,107 +6062,6 @@
               }
             })
           },
-          // ---- Drag ----
-          _initDrag(node) {
-            const header = node.querySelector('.node-header')
-            let sx,
-              sy,
-              ox,
-              oy,
-              dragging = false,
-              moveList = null
-            header.addEventListener('mousedown', (e) => {
-              if (
-                e.target.closest('.node-action-btn') ||
-                e.target.closest('.node-title-edit') ||
-                e.target.closest('.node-port') ||
-                node.classList.contains('locked')
-              )
-                return
-              // 按住 Alt：把这个节点设为 / 取消对齐基准，不改变当前多选
-              if (e.altKey) {
-                AlignBase.toggleNode(node)
-                e.preventDefault()
-                return
-              }
-              // 按住 Shift / Ctrl / Cmd：只做加选/减选，不进入拖动
-              if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                SelectionManager.toggle(node)
-                e.preventDefault()
-                return
-              }
-              // 普通左键：没选中的话就把它单独选中，选中的保持整组一起拖
-              if (!SelectionManager.isSelected(node)) {
-                SelectionManager.clear()
-                SelectionManager.select(node)
-              }
-              moveList = SelectionManager.collectMoveNodes(node)
-              dragging = true
-              sx = e.clientX
-              sy = e.clientY
-              ox = node.offsetLeft
-              oy = node.offsetTop
-              node.style.zIndex = ++AppState.zCounter
-              e.preventDefault()
-            })
-            document.addEventListener('mousemove', (e) => {
-              if (!dragging) return
-              const newLeft = ox + (e.clientX - sx) / AppState.scale
-              const newTop = oy + (e.clientY - sy) / AppState.scale
-              const dx = newLeft - parseFloat(node.style.left || 0)
-              const dy = newTop - parseFloat(node.style.top || 0)
-              moveList.forEach((n) => {
-                if (n === node) {
-                  n.style.left = newLeft + 'px'
-                  n.style.top = newTop + 'px'
-                  return
-                }
-                if (n.classList.contains('locked')) return
-                n.style.left = parseFloat(n.style.left) + dx + 'px'
-                n.style.top = parseFloat(n.style.top) + dy + 'px'
-              })
-              ConnectionManager.renderAll()
-            })
-            document.addEventListener('mouseup', () => {
-              if (dragging) {
-                dragging = false
-                debouncedAutoSave(true)
-                ConnectionManager.renderAll()
-              }
-            })
-          },
-          // ---- Resize ----
-          _initResize(node) {
-            const handle = node.querySelector('.node-resize')
-            let sx,
-              sy,
-              ow,
-              oh,
-              resizing = false
-            handle.addEventListener('mousedown', (e) => {
-              if (node.classList.contains('locked')) return
-              resizing = true
-              sx = e.clientX
-              sy = e.clientY
-              ow = node.offsetWidth
-              oh = node.offsetHeight
-              e.preventDefault()
-              e.stopPropagation()
-            })
-            document.addEventListener('mousemove', (e) => {
-              if (!resizing) return
-              node.style.width = Math.max(200, ow + e.clientX - sx) + 'px'
-              node.style.height = Math.max(100, oh + e.clientY - sy) + 'px'
-              ConnectionManager.renderAll()
-            })
-            document.addEventListener('mouseup', () => {
-              if (resizing) {
-                resizing = false
-                debouncedAutoSave(true)
-                ConnectionManager.renderAll()
-              }
-            })
-          },
           // ---- Node events (close, minimize) ----
           _initNodeEvents(node) {
             const content = getNodeContent(node)
@@ -6159,11 +6071,7 @@
             closeBtn.addEventListener('click', (e) => {
               e.stopPropagation()
               const id = node.id
-              AppState.connections = AppState.connections.filter(
-                (c) => c.from !== id && c.to !== id,
-              )
-              node.remove()
-              ConnectionManager.renderAll()
+              ZenWriterCanvas.removeNode(id)
               UIManager.updateStats()
               ImageManager.gc()
               debouncedAutoSave(true)
@@ -6293,37 +6201,6 @@
               })
               input.addEventListener('blur', confirm)
               input.addEventListener('mousedown', (ev) => ev.stopPropagation())
-            })
-          },
-          // ---- Ports ----
-          _initPortEvents(node) {
-            const ports = node.querySelectorAll('.node-port')
-            ports.forEach((port) => {
-              port.addEventListener('mousedown', (e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                const nodeId = port.dataset.nodeId
-                const portType = port.dataset.port
-                const pos = ConnectionManager.getPortPosition(node, portType)
-                AppState.portDrag = {
-                  nodeId,
-                  portType,
-                  startX: pos.x,
-                  startY: pos.y,
-                  node: node,
-                  port: port,
-                }
-                port.classList.add('dragging')
-                const svg = DOM.svgLayer
-                AppState.tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-                AppState.tempLine.setAttribute('class', 'conn-line temp')
-                const sx = AppState.portDrag.startX,
-                  sy = AppState.portDrag.startY
-                AppState.tempLine.setAttribute('d', `M ${sx} ${sy} L ${sx} ${sy}`)
-                svg.appendChild(AppState.tempLine)
-                document.body.style.cursor = 'crosshair'
-                notify(t('notify.dragToConnect'))
-              })
             })
           },
           // ---- Context menu actions ----
@@ -6814,167 +6691,26 @@
         // 10. CONNECTION MANAGER
         // ================================================================
         const ConnectionManager = {
+          // 连线渲染与几何全部来自共享画布；这里只做委托。
+          renderAll() { ZenWriterCanvas.renderConnections() },
+          clearAll() { ZenWriterCanvas.replaceConnections([]) },
           getPortPosition(node, portType) {
             return window.ZenCanvas.geometry.getPortPosition(node, portType)
           },
           _getCurvePath(x1, y1, x2, y2, port1, port2) {
             return window.ZenCanvas.geometry.getCurvePath(x1, y1, x2, y2, port1, port2)
           },
-          // —— 折线路径（横平竖直 + 圆角拐弯）——
-          // 自动布局对“16 组端口组合都救不回来”的连线会标记 route:'elbow'
-          // 并给出 hint（路线选型）。这里用同一算法 + 当前几何重建路径，
-          // 节点挪动后路线跟随移动；box 是两端节点的合并包围盒。
           _getElbowPath(x1, y1, x2, y2, port1, port2, hint, box) {
             return window.ZenCanvas.geometry.getElbowPath(x1, y1, x2, y2, port1, port2, hint, box)
           },
-          renderAll() {
-            if (AppState.renderPending) return
-            AppState.renderPending = true
-            requestAnimationFrame(() => {
-              AppState.renderPending = false
-              // 重建期偶尔会混进一条脏连线数据；一帧抛错会让整张画布
-              // 的连线都不画，看起来就像“连线全没了”。逐条隔离掉。
-              try {
-                ConnectionManager._renderNow()
-              } catch (e) {
-                console.warn('[ZenWriter] connection render failed', e)
-              }
-            })
-          },
-          _renderNow() {
-            const svg = DOM.svgLayer
-            const existing = svg.querySelectorAll('.conn-line:not(.temp)')
-            existing.forEach((el) => el.remove())
-            const deleteHits = svg.querySelectorAll('.conn-delete-hit')
-            deleteHits.forEach((el) => el.remove())
-
-            // Mark nodes with connections
-            getNodes().forEach((n) => n.classList.remove('has-conn'))
-            AppState.connections.forEach((conn) => {
-              if (!conn || typeof conn.from !== 'string' || typeof conn.to !== 'string') return
-              const fn = getNodeById(conn.from)
-              const tn = getNodeById(conn.to)
-              if (fn) fn.classList.add('has-conn')
-              if (tn) tn.classList.add('has-conn')
-            })
-
-            AppState.connections.forEach((conn) => {
-              if (!conn || typeof conn.from !== 'string' || typeof conn.to !== 'string') return
-              const fromNode = getNodeById(conn.from)
-              const toNode = getNodeById(conn.to)
-              if (!fromNode || !toNode) return
-
-              // Skip rendering if either endpoint is hidden (hidden-by-group-conn)
-              const fromHidden = fromNode.classList.contains('hidden-by-group-conn')
-              const toHidden = toNode.classList.contains('hidden-by-group-conn')
-              if (fromHidden || toHidden) {
-                return // connection not drawn
-              }
-
-              const fromPort = conn.fromPort || 'bottom'
-              const toPort = conn.toPort || 'top'
-              const fromPos = ConnectionManager.getPortPosition(fromNode, fromPort)
-              const toPos = ConnectionManager.getPortPosition(toNode, toPort)
-              const fromX = fromPos.x,
-                fromY = fromPos.y
-              const toX = toPos.x,
-                toY = toPos.y
-              // 折线兜底的连线按 route:'elbow' 画正交折线；其余走贝塞尔
-              let d
-              if (conn.route === 'elbow') {
-                const rect = (n) => ({
-                  x: n.offsetLeft,
-                  y: n.offsetTop,
-                  w: n.offsetWidth,
-                  h: n.offsetHeight,
-                })
-                const fr = rect(fromNode)
-                const tr = rect(toNode)
-                const box = {
-                  x0: Math.min(fr.x, tr.x),
-                  y0: Math.min(fr.y, tr.y),
-                  x1: Math.max(fr.x + fr.w, tr.x + tr.w),
-                  y1: Math.max(fr.y + fr.h, tr.y + tr.h),
-                }
-                d = ConnectionManager._getElbowPath(
-                  fromX,
-                  fromY,
-                  toX,
-                  toY,
-                  fromPort,
-                  toPort,
-                  conn.routeHint || {},
-                  box,
-                )
-              }
-              if (!d) {
-                d = ConnectionManager._getCurvePath(fromX, fromY, toX, toY, fromPort, toPort)
-              }
-
-              const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-              path.setAttribute('class', 'conn-line')
-              path.dataset.connId = conn.id
-              path.setAttribute('d', d)
-              svg.appendChild(path)
-
-              const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-              hit.setAttribute('class', 'conn-delete-hit')
-              hit.dataset.connId = conn.id
-              hit.setAttribute('d', d)
-              hit.addEventListener('click', (e) => {
-                e.stopPropagation()
-                const id = hit.dataset.connId
-                AppState.selectedConnId = id
-                AppState.connections = AppState.connections.filter((c) => c.id !== id)
-                ConnectionManager.renderAll()
-                debouncedAutoSave()
-                notify(t('notify.connectionDeleted'))
-              })
-              hit.addEventListener('mouseenter', () => {
-                path.style.stroke = 'var(--zen-red)'
-                path.style.strokeWidth = '4px'
-              })
-              hit.addEventListener('mouseleave', () => {
-                path.style.stroke = ''
-                path.style.strokeWidth = ''
-              })
-              svg.appendChild(hit)
-            })
-          },
-          clearAll() {
-            AppState.connections = []
-            ConnectionManager.renderAll()
-            debouncedAutoSave(true)
-            notify(t('notify.allConnectionsCleared'))
-            window.ZenUI.contextMenu.close()
-          },
         }
 
-        // ==== AUTO-LAYOUT CORE ====
-        // 纯函数布局引擎已迁移至 public/zen/canvas/layout.js（原样抽取，逻辑未改）。
-        // Writer 与 ZenFlow 流程编辑器直接调用同一模块：
-        //   window.ZenCanvasLayout.computeCanvasLayout(nodes, conns, opts)
-        //   window.ZenCanvasLayout.computeRadialOrTimeline(nodes, conns, mode, opts)
-        // 本处保留 computeCanvasLayout / computeRadialOrTimeline 的局部别名（见 IIFE 顶部）。
-
-
-        // ================================================================
-        // 11. CANVAS MANAGER
-        // ================================================================
         const CanvasManager = {
           screenToWorld(clientX, clientY) {
-            const rect = DOM.workspace.getBoundingClientRect()
-            return {
-              x: (clientX - rect.left - AppState.panX) / AppState.scale,
-              y: (clientY - rect.top - AppState.panY) / AppState.scale,
-            }
+            return ZenWriterCanvas.screenToWorld(clientX, clientY)
           },
           worldToScreen(x, y) {
-            const rect = DOM.workspace.getBoundingClientRect()
-            return {
-              x: rect.left + AppState.panX + x * AppState.scale,
-              y: rect.top + AppState.panY + y * AppState.scale,
-            }
+            return ZenWriterCanvas.worldToScreen(x, y)
           },
           resetToInitialWorld() {
             const rect = DOM.workspace.getBoundingClientRect()
@@ -7999,6 +7735,13 @@
           applyTransform() {
             const inner = DOM.canvasInner
             inner.style.transform = `translate3d(${AppState.panX}px, ${AppState.panY}px, 0) scale(${AppState.scale})`
+            // 镜头状态同步给共享画布：命中检测、框选与连线都以此为准。
+            if (ZenWriterCanvas) {
+              const view = ZenWriterCanvas.getView()
+              if (view.scale !== AppState.scale || view.panX !== AppState.panX || view.panY !== AppState.panY) {
+                ZenWriterCanvas.setView({ scale: AppState.scale, panX: AppState.panX, panY: AppState.panY })
+              }
+            }
             ConnectionManager.renderAll()
             // 笔迹用的是同一套世界坐标，节点动了它也得跟着重画
             DoodleManager.render()
@@ -8248,222 +7991,27 @@
         // 选中集合存 AppState.selectedNodeIds（一组节点 id）。
         // ================================================================
         const SelectionManager = {
-          _box: null,
-          _active: false,
-          _additive: false,
-          _base: null,
-          _startX: 0,
-          _startY: 0,
-
-          init() {
-            const ws = DOM.workspace
-            ws.addEventListener('mousedown', (e) => this._onDown(e))
-            document.addEventListener('mousemove', (e) => this._onMove(e))
-            document.addEventListener('mouseup', () => this._onUp())
-          },
-
-          // 选中集合变化 → 多选对齐工具条跟着显隐 / 重定位
+          // 选择机制统一由共享画布引擎承担；产品只保留多选对齐栏的刷新。
           _changed() {
             if (window.AlignManager) window.AlignManager.scheduleRefresh()
           },
-
-          _onDown(e) {
-            if (e.button !== 0) return
-            if (AppState.doodleMode) return
-            const target = e.target
-            if (!target || !target.closest) return
-            // 节点 / 端口 / 右键菜单自己会处理，空白才走框选
-            if (target.closest('.node')) return
-            if (target.closest('.node-port')) return
-            if (target.closest('#context-menu')) return
-            // 原生默认会 blur 掉正在编辑的节点文本；我们下面 preventDefault
-            // 挡住浏览器自带的选中拖拽，所以这里手动把焦点收走，行为保持一致。
-            const ae = document.activeElement
-            if (ae && ae !== document.body && typeof ae.blur === 'function') {
-              try {
-                ae.blur()
-              } catch (_) {}
-            }
-            e.preventDefault()
-            window.ZenUI.contextMenu.close()
-            this._additive = !!(e.shiftKey || e.ctrlKey || e.metaKey)
-            this._base = this._additive ? new Set(AppState.selectedNodeIds) : new Set()
-            if (!this._additive) this.clear()
-            this._startX = e.clientX
-            this._startY = e.clientY
-            this._active = true
-            this._ensureBox()
-          },
-
-          _ensureBox() {
-            if (this._box) {
-              this._box.style.display = 'none'
-              return
-            }
-            const box = document.createElement('div')
-            box.id = 'zw-marquee'
-            document.body.appendChild(box)
-            this._box = box
-          },
-
-          _onMove(e) {
-            if (!this._active || !this._box) return
-            const x0 = Math.min(this._startX, e.clientX)
-            const y0 = Math.min(this._startY, e.clientY)
-            const x1 = Math.max(this._startX, e.clientX)
-            const y1 = Math.max(this._startY, e.clientY)
-            this._box.style.left = x0 + 'px'
-            this._box.style.top = y0 + 'px'
-            this._box.style.width = x1 - x0 + 'px'
-            this._box.style.height = y1 - y0 + 'px'
-            this._box.style.display = 'block'
-            const a = CanvasManager.screenToWorld(x0, y0)
-            const b = CanvasManager.screenToWorld(x1, y1)
-            const next = new Set(this._base)
-            getNodes().forEach((n) => {
-              if (n.classList.contains('locked')) return
-              const nl = parseFloat(n.style.left) || 0
-              const nt = parseFloat(n.style.top) || 0
-              const nw = n.offsetWidth || parseFloat(n.style.width) || 0
-              const nh = n.offsetHeight || parseFloat(n.style.height) || 0
-              if (nl < b.x && nl + nw > a.x && nt < b.y && nt + nh > a.y) next.add(n.id)
-            })
-            this._apply(next)
-          },
-
-          _onUp() {
-            if (!this._active) return
-            this._active = false
-            if (this._box) this._box.style.display = 'none'
-          },
-
-          // 把 idSet 同步到 DOM 的 .selected 类
-          _apply(idSet) {
-            AppState.selectedNodeIds = idSet
-            if (!AppState.selectionPrimaryId || !idSet.has(AppState.selectionPrimaryId)) {
-              AppState.selectionPrimaryId = idSet.values().next().value || null
-            }
-            getNodes().forEach((n) => n.classList.toggle('selected', idSet.has(n.id)))
-            this._changed()
-          },
-
-          clear() {
-            if (!AppState.selectedNodeIds) AppState.selectedNodeIds = new Set()
-            AppState.selectedNodeIds.clear()
-            AppState.selectionPrimaryId = null
-            getNodes().forEach((n) => n.classList.remove('selected'))
-            this._changed()
-          },
-
+          init() {},
+          clear() { ZenWriterCanvas.clearSelection() },
+          select(node) { if (node) ZenWriterCanvas.select(node.id) },
+          toggle(node) { if (node) ZenWriterCanvas.toggleSelect(node.id) },
           isSelected(node) {
-            return AppState.selectedNodeIds.has(node.id)
+            return !!node && ZenWriterCanvas.getSelection().indexOf(node.id) >= 0
           },
-
-          select(node) {
-            if (!node || node.classList.contains('locked')) return
-            AppState.selectedNodeIds.add(node.id)
-            AppState.selectionPrimaryId = node.id
-            node.classList.add('selected')
-            this._changed()
+          selectAll() { ZenWriterCanvas.selectAll() },
+          deleteSelected() { ZenWriterCanvas.deleteSelection() },
+          collectMoveNodes(node) {
+            const ids = ZenWriterCanvas.getSelection().slice()
+            if (node && ids.indexOf(node.id) < 0) ids.push(node.id)
+            return ids.map((id) => document.getElementById(id)).filter(Boolean)
           },
-
-          deselect(node) {
-            if (!node) return
-            AppState.selectedNodeIds.delete(node.id)
-            if (AppState.selectionPrimaryId === node.id) {
-              AppState.selectionPrimaryId = AppState.selectedNodeIds.values().next().value || null
-            }
-            node.classList.remove('selected')
-            this._changed()
-          },
-
-          toggle(node) {
-            if (!node || node.classList.contains('locked')) return
-            if (this.isSelected(node)) this.deselect(node)
-            else this.select(node)
-          },
-
-          selectAll() {
-            const next = new Set(AppState.selectedNodeIds)
-            getNodes().forEach((n) => {
-              if (n.classList.contains('locked')) return
-              n.classList.add('selected')
-              next.add(n.id)
-            })
-            AppState.selectedNodeIds = next
-            if (!AppState.selectionPrimaryId || !next.has(AppState.selectionPrimaryId)) {
-              AppState.selectionPrimaryId = next.values().next().value || null
-            }
-            this._changed()
-          },
-
-          // 拖动时要一起移动的所有节点：当前选中的每一个，
-          // 外加其中“分组节点”的连接子节点（任一方向），去重。
-          collectMoveNodes(primary) {
-            const ids = new Set(AppState.selectedNodeIds)
-            ids.add(primary.id)
-            AppState.connections.forEach((c) => {
-              const fSel = ids.has(c.from)
-              const tSel = ids.has(c.to)
-              if (!fSel && !tSel) return
-              const groupEl = fSel ? document.getElementById(c.from) : document.getElementById(c.to)
-              const other = fSel ? c.to : c.from
-              if (groupEl && groupEl.dataset.type === 'group') ids.add(other)
-            })
-            const list = []
-            ids.forEach((id) => {
-              const el = document.getElementById(id)
-              if (el) list.push(el)
-            })
-            if (!list.includes(primary)) list.push(primary)
-            return list
-          },
-
-          deleteSelected() {
-            const ids = new Set(AppState.selectedNodeIds)
-            if (!ids.size) return false
-            AppState.connections = AppState.connections.filter(
-              (c) => !ids.has(c.from) && !ids.has(c.to),
-            )
-            ids.forEach((id) => {
-              const el = document.getElementById(id)
-              if (el) el.remove()
-            })
-            this.clear()
-            ConnectionManager.renderAll()
-            UIManager.updateStats()
-            ImageManager.gc()
-            debouncedAutoSave(true)
-            notify(t('notify.nodeRemoved'))
-            this._changed()
-            return true
-          },
+          _apply() {},
         }
 
-        // ================================================================
-        // 11.36 ALIGN MANAGER — 多选节点一键对齐 / 分布 / 统一尺寸
-        // ------------------------------------------------------------
-        // 选中 >= 2 个节点时，选区上沿自动浮出一条图标工具条；右键菜单里
-        // 也放了同一组按钮。两边共用 data-action="zwAlign:<mode>"，
-        // 由全局 click 委托统一派发，不在 switch 里堆十个 case。
-        //
-        // 两种基准：
-        //   1) 未设基准时 = 选中节点的包围盒：
-        //      左/右/上/下贴包围盒边，居中贴包围盒中线；
-        //      分布保持首尾不动，中间按中心点等距插值。
-        //   2) 设了基准节点时 = 以该节点为唯一参照，它本身一个像素都不动：
-        //      左/右/上/下 = 全部贴基准对应的边；
-        //      水平/竖直居中 = 全部取基准的中线；
-        //      统一宽高 = 全部取基准的尺寸；
-        //      分布 = 以基准为原点，按现有左右（上下）顺序向两侧等边距展开。
-        // 只移动选中的节点；锁定节点不参与，也不会被移动。分组节点的
-        // 连接子节点不跟着走（对齐是逐个节点的位置操作，连线会自动重绘）。
-        // 落盘 + 撤销都走 debouncedAutoSave(true)：History 挂在那里。
-        // ================================================================
-        // 11.35 ALIGN BASE —— 对齐基准
-        // 悬浮对齐条 / 右键对齐使用：基准节点保持原地，其它选中节点按它对齐。
-        // 基准用单色内框 + BASE 标记（不使用紫色）。
-        // ================================================================
         const AlignBase = {
           _menu: null,
           _menuOpen: false,
@@ -8487,10 +8035,10 @@
             }
             AppState.alignBaseId = node.id
             this.refresh()
-            notify(t('notify.alignBaseSet') + ' · ' + (getTitleText(node) || node.id))
+            notify(t('notify.alignBaseSet') + ' 路 ' + (getTitleText(node) || node.id))
             return true
           },
-          // Alt + 点击节点：直接设成基准；已经是它则取消。不动当前多选。
+          // Alt + 点击节点：直接设为基准，已经是它则取消；不改变当前多选。
           toggleNode(node) {
             if (!node || !node.id) return
             if (AppState.alignBaseId === node.id) this.clear()
@@ -8513,7 +8061,7 @@
             this._menu = menu
             // 外部点击 / Escape / 滚动关闭统一由 ZenUI.popover 负责
           },
-          // 面板列表：选中的节点排前面，其余节点按画布顺序跟在后面，
+          // 面板列表：选中的节点排在前面，其余节点按画布顺序跟在后面。
           // 所以基准可以是任意一个节点，而不只是最后点选的那个。
           _buildMenu() {
             if (!this._menu) return
@@ -8613,6 +8161,7 @@
             if (window.AlignManager) window.AlignManager.scheduleRefresh()
           },
         }
+
 
         const AlignManager = {
           PREFIX: 'zwAlign:',
@@ -15145,101 +14694,6 @@
         }
 
         // ================================================================
-        // 18. PORT DRAG GLOBAL EVENTS (mousemove/mouseup)
-        // ================================================================
-        function bindPortDragEvents() {
-          document.addEventListener('mousemove', (e) => {
-            if (!AppState.portDrag || !AppState.tempLine) return
-            if (AppState.portDragPending) return
-            AppState.portDragPending = true
-            requestAnimationFrame(() => {
-              AppState.portDragPending = false
-              const world = CanvasManager.screenToWorld(e.clientX, e.clientY)
-              const x = world.x
-              const y = world.y
-              const sx = AppState.portDrag.startX,
-                sy = AppState.portDrag.startY
-              const dx = x - sx,
-                dy = y - sy
-              const fromPort = AppState.portDrag.portType || 'bottom'
-              const d = ConnectionManager._getCurvePath(
-                sx,
-                sy,
-                x,
-                y,
-                fromPort,
-                fromPort === 'top'
-                  ? 'bottom'
-                  : fromPort === 'bottom'
-                    ? 'top'
-                    : fromPort === 'left'
-                      ? 'right'
-                      : 'left',
-              )
-              AppState.tempLine.setAttribute('d', d)
-              document
-                .querySelectorAll('.node-port')
-                .forEach((p) => p.classList.remove('port-highlight'))
-              const target = getPortAt(e.clientX, e.clientY)
-              if (target && target.dataset.nodeId !== AppState.portDrag.nodeId) {
-                target.classList.add('port-highlight')
-                target.style.transform = ''
-                if (target.classList.contains('top') || target.classList.contains('bottom')) {
-                  target.style.transform = 'translateX(-50%) scale(1.5)'
-                }
-              }
-            })
-          })
-
-          document.addEventListener('mouseup', (e) => {
-            if (!AppState.portDrag) return
-            if (AppState.tempLine) {
-              AppState.tempLine.remove()
-              AppState.tempLine = null
-            }
-            document.querySelectorAll('.node-port').forEach((p) => {
-              p.classList.remove('dragging', 'port-highlight')
-              p.style.transform = ''
-            })
-            document.body.style.cursor = 'default'
-
-            const target = getPortAt(e.clientX, e.clientY)
-            if (target && target.dataset.nodeId !== AppState.portDrag.nodeId) {
-              const fromId = AppState.portDrag.nodeId
-              const toId = target.dataset.nodeId
-              const fromPort = AppState.portDrag.portType || 'bottom'
-              const toPort = target.dataset.port || 'top'
-              const exists = AppState.connections.some(
-                (c) =>
-                  c.from === fromId &&
-                  c.to === toId &&
-                  c.fromPort === fromPort &&
-                  c.toPort === toPort,
-              )
-              if (!exists) {
-                const conn = {
-                  id: 'conn-' + ++AppState.connIdCounter,
-                  from: fromId,
-                  to: toId,
-                  fromPort: fromPort,
-                  toPort: toPort,
-                }
-                AppState.connections.push(conn)
-                ConnectionManager.renderAll()
-                debouncedAutoSave()
-                notify(t('notify.connected'))
-              } else {
-                notify(t('notify.alreadyConnected'))
-              }
-            } else {
-              notify(t('notify.connectionCancelled'))
-            }
-            AppState.portDrag = null
-            ConnectionManager.renderAll()
-          })
-        }
-
-        // ================================================================
         // 19. RESIZE & MUTATION OBSERVERS
         // ================================================================
         function initObservers() {
@@ -15277,6 +14731,26 @@
         // 20. INITIALIZATION
         // ================================================================
         async function init() {
+          // 画布交互统一由共享引擎承担；产品只提供节点正文与业务数据。
+          ZenWriterCanvas = window.ZenCanvas.create({
+            scope: 'writer',
+            // writer 保留自己的视口/滚轮/触控手势；引擎只接管节点与连线交互。
+            pan: false,
+            adopt: { workspace: DOM.workspace, inner: DOM.canvasInner, svg: DOM.svgLayer },
+            nodeTypes: ['text', 'todo', 'group', 'markdown', 'math', 'image', 'canvas'].reduce(
+              (types, type) => ((types[type] = { label: type }), types),
+              {},
+            ),
+          })
+          ZenWriterCanvas.bus.on('selection', (ids) => {
+            AppState.selectedNodeIds = new Set(ids)
+            if (window.AlignManager) window.AlignManager.scheduleRefresh()
+          })
+          ZenWriterCanvas.bus.on('viewport', (view) => {
+            AppState.scale = view.scale
+            AppState.panX = view.panX
+            AppState.panY = view.panY
+          })
           // 1) 先把旧 LocalStorage 数据搬进 IndexedDB。
           //    只在 IndexedDB 还是空的时候搬，旧键一律不删。
           let migration = { migrated: false, docs: 0, from: '', reason: '' }
@@ -15383,7 +14857,6 @@
           DocReorder.init()
           installUnloadGuard()
           bindGlobalEvents()
-          bindPortDragEvents()
           initObservers()
           // 大纲要读节点，所以放在画布内容建好之后再初始化
           OutlineManager.init()
@@ -15420,8 +14893,7 @@
               SelectionManager.init()
               AlignManager.init()
               bindGlobalEvents()
-              bindPortDragEvents()
-            } catch (__) {}
+                } catch (__) {}
           })
         }
 

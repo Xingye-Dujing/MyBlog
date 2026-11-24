@@ -297,36 +297,65 @@
     this._muted = false
 
     // ---- DOM（writer 同构：workspace > canvas-inner > svg-layer + nodes）----
+    // 默认自建 DOM；adopt 模式直接接管产品已有的同构 DOM，让迁移中的产品
+    // 复用同一套交互引擎，而不必先重写自己的节点渲染与样式。
+    var adopt = this.opts.adopt
+    this._adopted = !!(adopt && adopt.workspace && adopt.inner && adopt.svg)
     var mount = this.opts.mount || document.body
-    this.workspace = el('div', 'zc-workspace')
-    this.workspace.dataset.zenCanvas = this.scope
-    this.workspace.tabIndex = 0
-    this.workspace.setAttribute('role', 'region')
-    this.workspace.setAttribute('aria-label', '画布工作区')
-    this.instructionsId = this._id('instructions')
-    this.statusId = this._id('status')
-    this.workspace.setAttribute('aria-describedby', this.instructionsId)
-    this.inner = el('div', 'zc-canvas-inner')
-    this.svg = svgEl('svg', 'zc-svg-layer')
-    this.svg.setAttribute('width', '10000')
-    this.svg.setAttribute('height', '10000')
-    this.svg.setAttribute('aria-hidden', 'true')
-    this.inner.appendChild(this.svg)
-    this.workspace.appendChild(this.inner)
-    this.marquee = el('div', 'zc-marquee')
-    this.marquee.setAttribute('aria-hidden', 'true')
-    this.workspace.appendChild(this.marquee)
-    this.instructions = el('div', 'zc-sr-only')
-    this.instructions.id = this.instructionsId
-    this.instructions.textContent = 'Tab 聚焦节点，方向键移动，Enter 或 Space 选择，Delete 删除。端口按 Enter 或 Space 开始键盘连线。'
-    this.status = el('div', 'zc-canvas-status')
-    this.status.id = this.statusId
-    this.status.setAttribute('role', 'status')
-    this.status.setAttribute('aria-live', 'polite')
-    this.status.setAttribute('aria-atomic', 'true')
-    this.workspace.appendChild(this.instructions)
-    this.workspace.appendChild(this.status)
-    mount.appendChild(this.workspace)
+    if (this._adopted) {
+      this.workspace = adopt.workspace
+      this.inner = adopt.inner
+      this.svg = adopt.svg
+      this.svg.classList.add('zc-svg-layer')
+      this.svg.setAttribute('width', '10000')
+      this.svg.setAttribute('height', '10000')
+      this.workspace.dataset.zenCanvas = this.scope
+      this.instructionsId = this._id('instructions')
+      this.statusId = this._id('status')
+      this.marquee = this.workspace.querySelector('.zc-marquee') || el('div', 'zc-marquee')
+      this.marquee.setAttribute('aria-hidden', 'true')
+      if (!this.marquee.parentNode) this.workspace.appendChild(this.marquee)
+      this.instructions = this.workspace.querySelector('.zc-sr-only') || el('div', 'zc-sr-only')
+      this.instructions.id = this.instructionsId
+      this.instructions.textContent = 'Tab 聚焦节点，方向键移动，Enter 或 Space 选择，Delete 删除。端口按 Enter 或 Space 开始键盘连线。'
+      if (!this.instructions.parentNode) this.workspace.appendChild(this.instructions)
+      this.status = this.workspace.querySelector('.zc-canvas-status') || el('div', 'zc-canvas-status')
+      this.status.id = this.statusId
+      this.status.setAttribute('role', 'status')
+      this.status.setAttribute('aria-live', 'polite')
+      this.status.setAttribute('aria-atomic', 'true')
+      if (!this.status.parentNode) this.workspace.appendChild(this.status)
+    } else {
+      this.workspace = el('div', 'zc-workspace')
+      this.workspace.dataset.zenCanvas = this.scope
+      this.workspace.tabIndex = 0
+      this.workspace.setAttribute('role', 'region')
+      this.workspace.setAttribute('aria-label', '画布工作区')
+      this.instructionsId = this._id('instructions')
+      this.statusId = this._id('status')
+      this.workspace.setAttribute('aria-describedby', this.instructionsId)
+      this.inner = el('div', 'zc-canvas-inner')
+      this.svg = svgEl('svg', 'zc-svg-layer')
+      this.svg.setAttribute('width', '10000')
+      this.svg.setAttribute('height', '10000')
+      this.svg.setAttribute('aria-hidden', 'true')
+      this.inner.appendChild(this.svg)
+      this.workspace.appendChild(this.inner)
+      this.marquee = el('div', 'zc-marquee')
+      this.marquee.setAttribute('aria-hidden', 'true')
+      this.workspace.appendChild(this.marquee)
+      this.instructions = el('div', 'zc-sr-only')
+      this.instructions.id = this.instructionsId
+      this.instructions.textContent = 'Tab 聚焦节点，方向键移动，Enter 或 Space 选择，Delete 删除。端口按 Enter 或 Space 开始键盘连线。'
+      this.status = el('div', 'zc-canvas-status')
+      this.status.id = this.statusId
+      this.status.setAttribute('role', 'status')
+      this.status.setAttribute('aria-live', 'polite')
+      this.status.setAttribute('aria-atomic', 'true')
+      this.workspace.appendChild(this.instructions)
+      this.workspace.appendChild(this.status)
+      mount.appendChild(this.workspace)
+    }
 
     if (this.opts.nodeTypes) {
       Object.keys(this.opts.nodeTypes).forEach(function (key) {
@@ -584,6 +613,36 @@
     this.emitNodeCommand(nodeRec, 'created')
     if (!opts || opts.change !== false) this._changed()
     return nodeRec
+  }
+
+  /* 接管产品已经渲染好的节点 DOM：产品只保留自己的正文渲染，
+     拖拽 / 缩放 / 端口 / 选择 / 删除等交互统一由本引擎接管。 */
+  ZenCanvasInstance.prototype.adoptNode = function (node, type, data, opts) {
+    if (!node || !type) return null
+    var def = this.types[type] || this.types._fallback
+    if (!def) throw new Error('unknown node type: ' + type)
+    var id = String(node.dataset.nodeId || node.id || (type + '-' + ++this.nodeSeq))
+    if (this._nodeById(id)) return this._nodeById(id)
+    var num = parseInt(String(id).split('-').pop(), 10)
+    if (!isNaN(num) && num > this.nodeSeq) this.nodeSeq = num
+    var nodeData = assign({}, def.defaults || {}, data || {}, { id: id })
+    var rec = {
+      id: id, type: type, data: nodeData, el: node,
+      locked: node.classList.contains('locked'),
+      minimized: node.classList.contains('minimized'),
+    }
+    node.dataset.nodeId = id
+    node.setAttribute('data-node-id', id)
+    node.dataset.type = type
+    this.state.nodes.push(rec)
+    this._initNodeDrag(rec)
+    if (this.opts.editable) this._initNodeResize(rec)
+    this._initPortEvents(rec)
+    this._initNodeActions(rec)
+    this.refreshNode(id)
+    this.emitNodeCommand(rec, 'created')
+    if (!opts || opts.change !== false) this._changed()
+    return rec
   }
 
   ZenCanvasInstance.prototype._nodeApi = function (rec) {
@@ -1120,6 +1179,26 @@
     return this.state.connections.slice()
   }
 
+  /* 用产品已有的连线数据整体替换画布连线（载入文档时用），不重建节点 DOM。 */
+  ZenCanvasInstance.prototype.replaceConnections = function (list, opts) {
+    var self = this
+    var replaced = this.state.connections.slice()
+    this.state.connections = []
+    ;(list || []).forEach(function (c) {
+      if (!c || !self._nodeById(c.from) || !self._nodeById(c.to)) return
+      var conn = assign({}, c)
+      if (conn.id == null) conn.id = 'conn-' + ++self.connSeq
+      var num = parseInt(String(conn.id).split('-').pop(), 10)
+      if (!isNaN(num) && num > self.connSeq) self.connSeq = num
+      self.state.connections.push(conn)
+    })
+    this.renderConnections()
+    replaced.forEach(function (c) { self.bus.emit('disconnect', c) })
+    this.state.connections.forEach(function (c) { self.bus.emit('connect', c) })
+    if (!opts || opts.change !== false) this._changed()
+    return this
+  }
+
   ZenCanvasInstance.prototype._portAt = function (cx, cy) {
     var ports = this.workspace.querySelectorAll('.node-port')
     var r2 = this.opts.portHitRadius * this.opts.portHitRadius
@@ -1323,6 +1402,7 @@
   }
 
   ZenCanvasInstance.prototype.beginPan = function (x, y, pointerId) {
+    if (this.opts.pan === false) return this
     var s = this.state
     s.isPanning = true
     s.panPointerId = pointerId == null ? null : pointerId
@@ -1335,6 +1415,7 @@
   }
 
   ZenCanvasInstance.prototype.movePan = function (x, y) {
+    if (this.opts.pan === false) return
     var s = this.state
     if (!s.isPanning) return
     var dx = x - s.panStartX,
@@ -1347,6 +1428,7 @@
   }
 
   ZenCanvasInstance.prototype.endPan = function () {
+    if (this.opts.pan === false) return
     var s = this.state
     if (!s.isPanning) return
     s.isPanning = false
@@ -1365,12 +1447,14 @@
   }
 
   ZenCanvasInstance.prototype.panBy = function (dx, dy) {
+    if (this.opts.pan === false) return this
     this.state.panX += dx
     this.state.panY += dy
     this.applyTransform()
   }
 
   ZenCanvasInstance.prototype.zoomAt = function (clientX, clientY, factor) {
+    if (this.opts.pan === false) return this
     var s = this.state
     var next = clamp(s.scale * factor, this.opts.minScale, this.opts.maxScale)
     if (next === s.scale) return
@@ -1869,6 +1953,7 @@
     document.addEventListener('pointercancel', this._pointerCancelHandler)
     document.addEventListener('pointerdown', this._menuOutsideHandler)
 
+    // 滚轮 / 触控板判定：产品自带视口处理时可以关掉引擎这一路，避免双份缩放。
     // 滚轮 / 触控板判定：完全沿用 writer 的“滚动流”判定
     var lastWheelAt = 0,
       lastWheelDeltaY = 0,
@@ -1882,7 +1967,7 @@
       steps = clamp(steps, 0.02, 4)
       return Math.pow(1.12, -Math.sign(e.deltaY) * steps)
     }
-    this.workspace.addEventListener(
+    if (this.opts.pan !== false) this.workspace.addEventListener(
       'wheel',
       function (e) {
         var el0 = e.target
@@ -2215,7 +2300,7 @@
     if (this.state.portDrag) this._clearPortDrag(false)
     if (this._ro) this._ro.disconnect()
     if (this._mo) this._mo.disconnect()
-    this.workspace.remove()
+    if (!this._adopted) this.workspace.remove()
     this.bus.emit('destroy', {})
   }
 

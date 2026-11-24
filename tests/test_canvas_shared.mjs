@@ -344,6 +344,64 @@ test('clearSelection and selectConnection also clear the DOM selected state', ()
   assert.equal(canvas.getNodeElement('note-2').classList.contains('selected'), false)
 })
 
+test('adopt mode reuses product DOM for the same interaction engine', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const mount = new FakeElement('div')
+  const workspace = new FakeElement('div')
+  const inner = new FakeElement('div')
+  const svg = new FakeElement('svg')
+  inner.appendChild(svg)
+  workspace.appendChild(inner)
+  mount.appendChild(workspace)
+
+  const legacyNode = (id) => {
+    const node = new FakeElement('div')
+    node.id = id
+    const part = (cls) => {
+      const child = new FakeElement('div')
+      child.className = cls
+      child.matches = (selector) => selector.split('.').filter(Boolean).some((c) => child.className.includes(c))
+      return child
+    }
+    node.appendChild(part('node-header'))
+    node.appendChild(part('node-resize'))
+    return node
+  }
+  const nodeA = legacyNode('legacy-1')
+  const nodeB = legacyNode('legacy-2')
+  inner.appendChild(nodeA)
+  inner.appendChild(nodeB)
+
+  const canvas = ZenCanvas.create({
+    scope: 'legacy',
+    mount,
+    adopt: { workspace, inner, svg },
+    pan: false,
+    nodeTypes: { note: { label: 'Note', ports: ['left', 'right'], render() {} } },
+  })
+  assert.equal(canvas.workspace, workspace)
+  assert.equal(canvas.opts.pan, false)
+
+  canvas.adoptNode(nodeA, 'note', {}, { change: false })
+  canvas.adoptNode(nodeB, 'note', {}, { change: false })
+  assert.deepEqual(JSON.parse(JSON.stringify(canvas.getNodes().map((n) => n.id))), ['legacy-1', 'legacy-2'])
+
+  canvas.select('legacy-1')
+  assert.equal(nodeA.classList.contains('selected'), true)
+  canvas.clearSelection()
+  assert.equal(nodeA.classList.contains('selected'), false)
+
+  canvas.replaceConnections(
+    [{ id: 'c1', from: 'legacy-1', to: 'legacy-2', fromPort: 'right', toPort: 'left' }],
+    { change: false },
+  )
+  assert.equal(canvas.getConnections().length, 1)
+  canvas.replaceConnections([], { change: false })
+  assert.equal(canvas.getConnections().length, 0)
+  canvas.destroy()
+  assert.equal(mount.children.length, 1)
+})
+
 test('Writer connection layer reuses the shared canvas SVG styles', () => {
   assert.match(writerHtml, /<svg id="svg-layer" class="zc-svg-layer"><\/svg>/)
   assert.doesNotMatch(canvasCss, /#svg-layer/)

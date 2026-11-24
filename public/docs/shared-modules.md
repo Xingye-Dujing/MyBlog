@@ -58,6 +58,10 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
   `config` 提供 `format`、`types` 与 `validate` 业务规则回调。
 - writer 的 SVG 层直接带共享类 `zc-svg-layer`，连线样式只来自 `zen/canvas/canvas.css`；
   共享层不写 `#svg-layer` 等产品私有选择器，writer 专有规则留在 `zen/products/writer.css`。
+- writer 也跑在 `ZenCanvas` 上：`adopt` 接管其原有 DOM，`adoptNode()` 接管已渲染的节点；
+  选择、连线、节点拖拽/缩放、框选与端口交互与 table/video 共用同一套引擎，产品不再保留
+  第二套 SelectionManager / ConnectionManager 实现。`pan:false` 让 writer 保留自己的
+  视口与触控手势，产品自己的正文渲染、图片、涂鸦、文档与云同步仍留在产品层。
 
 ## 新增共享模块的规则
 
