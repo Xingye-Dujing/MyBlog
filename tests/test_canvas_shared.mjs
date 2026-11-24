@@ -159,6 +159,7 @@ function canvasContext() {
   return {
     canvas: context.ZenCanvas,
     document,
+    window,
     flushRaf() {
       const pending = raf.splice(0)
       pending.forEach((fn) => fn())
@@ -723,4 +724,55 @@ test('ZenChart draws negative bars from zeroY with positive height', () => {
   assert.equal(heights.length, 2)
   assert.ok([...allNegative.matchAll(/<rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"[^>]*><title>s: -\d+/g)]
     .every((match) => Number(match[2]) > 0))
+})
+
+test('shared canvas owns right-drag pan and never closes menus from document pointerdown', () => {
+  assert.doesNotMatch(engineSource, /_menuOutsideHandler/)
+  assert.doesNotMatch(engineSource, /document\.addEventListener\(\s*['"]pointerdown/)
+  const { canvas: ZenCanvas, document, window } = canvasContext()
+  let opened = 0
+  window.ZenUI.menu.open = () => { opened += 1 }
+  const mount = new FakeElement('div')
+  const canvas = ZenCanvas.create({
+    scope: 'right-drag', mount, pan: false,
+    nodeTypes: { note: { label: 'Note', render() {} } },
+  })
+
+  const down = pointer(canvas.workspace, 'pointerdown', { button: 2, pointerId: 3, clientX: 10, clientY: 10 })
+  assert.equal(down.defaultPrevented, true)
+  pointer(document, 'pointermove', { pointerId: 3, clientX: 30, clientY: 25 })
+  assert.equal(canvas.state.panX, 20)
+  assert.equal(canvas.state.panY, 15)
+  pointer(document, 'pointerup', { pointerId: 3 })
+  assert.equal(canvas.state.isPanning, false)
+
+  // 刚拖完的 contextmenu 必须被吞掉，产品的 document 监听也不能收到。
+  assert.equal(pointer(canvas.workspace, 'contextmenu', {}).propagationStopped, true)
+  assert.equal(opened, 0)
+
+  // 产品自带富菜单时引擎不弹第二份菜单。
+  const rich = ZenCanvas.create({
+    scope: 'rich-menu', mount, contextMenu: false,
+    nodeTypes: { note: { label: 'Note', render() {} } },
+  })
+  pointer(rich.workspace, 'contextmenu', {})
+  assert.equal(opened, 0)
+})
+
+test('fitView centers the node bounds at the viewport, including the inner layout origin', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const mount = new FakeElement('div')
+  const canvas = ZenCanvas.create({
+    scope: 'fit', mount,
+    nodeTypes: { note: { label: 'Note', render() {} } },
+  })
+  canvas.addNode('note', {}, { x: 0, y: 0 })
+  canvas.addNode('note', {}, { x: 100, y: 50 })
+  canvas.inner.offsetLeft = 14
+  canvas.inner.offsetTop = 12
+  canvas.fitView({ minScale: 0.005 })
+
+  assert.ok(Math.abs(canvas.state.scale - 0.1875) < 1e-9)
+  assert.ok(Math.abs(canvas.state.panX - (120 - 14 - 170 * canvas.state.scale)) < 1e-9)
+  assert.ok(Math.abs(canvas.state.panY - (55 - 12 - 80 * canvas.state.scale)) < 1e-9)
 })

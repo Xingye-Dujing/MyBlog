@@ -46,8 +46,9 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
 ## 画布框架
 
 `zen/canvas/layout.js` 是 6 策略自动布局的唯一实现；
-`zen/canvas/engine.js` 提供节点、连线、视口、选择、历史、序列化与数据载入校验。
-画布样式是可选包 `zen/canvas/canvas.css`，只由画布产品单独引用；核心 `zen.css` 不加载它。
+`zen/canvas/engine.js` 提供节点、连线、视口（含右键拖动与适应视野）、选择、历史、
+序列化与数据载入校验。画布样式是可选包 `zen/canvas/canvas.css`，只由画布产品单独引用；
+核心 `zen.css` 不加载它。
 
 写入要求（画布产品共用，禁止各自实现）：
 
@@ -59,9 +60,20 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
 - writer 的 SVG 层直接带共享类 `zc-svg-layer`，连线样式只来自 `zen/canvas/canvas.css`；
   共享层不写 `#svg-layer` 等产品私有选择器，writer 专有规则留在 `zen/products/writer.css`。
 - writer 也跑在 `ZenCanvas` 上：`adopt` 接管其原有 DOM，`adoptNode()` 接管已渲染的节点；
-  选择、连线、节点拖拽/缩放、框选与端口交互与 table/video 共用同一套引擎，产品不再保留
-  第二套 SelectionManager / ConnectionManager 实现。`pan:false` 让 writer 保留自己的
-  视口与触控手势，产品自己的正文渲染、图片、涂鸦、文档与云同步仍留在产品层。
+  选择、连线、节点拖拽/缩放、框选、右键拖动、视口换算与适应视野与 table/video 共用同一套引擎，
+  产品不再保留第二套 SelectionManager / ConnectionManager / fitView 实现。
+- **右键菜单单一归属**：引擎默认用 `ZenUI.menu` 弹出菜单；自带富菜单的产品传
+  `contextMenu:false`，由自己的 `ZenUI.contextMenu` 弹唯一一份菜单，并把“全选/适应/排布”
+  等画布动作接到引擎方法上。禁止两个菜单同时出现；拖完右键的 `contextmenu` 由引擎吞掉。
+- **菜单点击禁止提前关闭**：浮层的 outside / Escape 只有 `ZenUI.layer` 一份实现。
+  任何代码都不得在 document 的 `pointerdown` 里调用 `ZenUI.menu.close()`：shadow DOM 事件
+  会被 retarget 成层宿主，菜单会在 `click` 触发 action 之前关闭。
+- **右键拖动始终由引擎负责**，即使产品接管滚轮/触控手势。`pan:false` 只关闭引擎的
+  滚轮与触控视口手势，不关闭右键平移；产品不得再用 `mousedown` 实现右键拖动。
+- **视口换算以共享层为真源**：`fitView()` / `focusNode()` / `screenToWorld()` 等必须扣除
+  内层画布在工作区里的布局原点（`inner.offsetLeft/offsetTop`），按节点包围盒与视口中心
+  计算，产品不得再用 `--menu-h` 之类的私有偏移把内容挪离屏幕中心。
+- 产品自己的正文渲染、图片、涂鸦、文档、云同步与滚轮/触控手势仍留在产品层。
 
 ## 新增共享模块的规则
 

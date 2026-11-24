@@ -1310,19 +1310,27 @@
   }
 
   // ---- 画布变换（writer 同款数学）------------------------------------
+  /* 内层画布在工作区里不一定是 (0,0)：writer 的 workspace 有内边距。
+     所有屏幕/世界坐标换算都要扣掉这个布局原点，否则居中与命中会偏。 */
+  ZenCanvasInstance.prototype.innerOrigin = function () {
+    return { x: num(this.inner.offsetLeft, 0), y: num(this.inner.offsetTop, 0) }
+  }
+
   ZenCanvasInstance.prototype.screenToWorld = function (clientX, clientY) {
     var rect = this.workspace.getBoundingClientRect()
+    var origin = this.innerOrigin()
     return {
-      x: (clientX - rect.left - this.state.panX) / this.state.scale,
-      y: (clientY - rect.top - this.state.panY) / this.state.scale,
+      x: (clientX - rect.left - origin.x - this.state.panX) / this.state.scale,
+      y: (clientY - rect.top - origin.y - this.state.panY) / this.state.scale,
     }
   }
 
   ZenCanvasInstance.prototype.worldToScreen = function (x, y) {
     var rect = this.workspace.getBoundingClientRect()
+    var origin = this.innerOrigin()
     return {
-      x: rect.left + this.state.panX + x * this.state.scale,
-      y: rect.top + this.state.panY + y * this.state.scale,
+      x: rect.left + origin.x + this.state.panX + x * this.state.scale,
+      y: rect.top + origin.y + this.state.panY + y * this.state.scale,
     }
   }
 
@@ -1349,11 +1357,12 @@
   ZenCanvasInstance.prototype.fitView = function (opts) {
     opts = opts || {}
     var rect = this.workspace.getBoundingClientRect()
+    var origin = this.innerOrigin()
     var MARGIN = 40
     if (!this.state.nodes.length) {
       this.state.scale = 1
-      this.state.panX = rect.width / 2 - 300
-      this.state.panY = rect.height / 2 - 200
+      this.state.panX = rect.width / 2 - origin.x - 300
+      this.state.panY = rect.height / 2 - origin.y - 200
       this.applyTransform()
       return this
     }
@@ -1379,8 +1388,8 @@
     var fit = Math.min(aw / cw, ah / ch)
     var minScale = typeof opts.minScale === 'number' ? Math.max(0.005, opts.minScale) : this.opts.minScale
     this.state.scale = Math.min(1, Math.max(minScale, fit))
-    this.state.panX = rect.width / 2 - ((minX + maxX) / 2) * this.state.scale
-    this.state.panY = rect.height / 2 - ((minY + maxY) / 2) * this.state.scale
+    this.state.panX = rect.width / 2 - origin.x - ((minX + maxX) / 2) * this.state.scale
+    this.state.panY = rect.height / 2 - origin.y - ((minY + maxY) / 2) * this.state.scale
     this.applyTransform()
     return this
   }
@@ -1389,20 +1398,20 @@
     var node = this._nodeEl(id)
     if (!node) return this
     var rect = this.workspace.getBoundingClientRect()
+    var origin = this.innerOrigin()
     var w = node.offsetWidth,
       h = node.offsetHeight
     var l = num(node.style.left, node.offsetLeft)
     var t = num(node.style.top, node.offsetTop)
     var scale = clamp(Math.min((rect.width * 0.8) / w, (rect.height * 0.7) / h), this.opts.minScale, 1.4)
     this.state.scale = scale
-    this.state.panX = rect.width / 2 - (l + w / 2) * scale
-    this.state.panY = rect.height / 2 - (t + h / 2) * scale
+    this.state.panX = rect.width / 2 - origin.x - (l + w / 2) * scale
+    this.state.panY = rect.height / 2 - origin.y - (t + h / 2) * scale
     this.applyTransform()
     return this
   }
 
   ZenCanvasInstance.prototype.beginPan = function (x, y, pointerId) {
-    if (this.opts.pan === false) return this
     var s = this.state
     s.isPanning = true
     s.panPointerId = pointerId == null ? null : pointerId
@@ -1415,7 +1424,6 @@
   }
 
   ZenCanvasInstance.prototype.movePan = function (x, y) {
-    if (this.opts.pan === false) return
     var s = this.state
     if (!s.isPanning) return
     var dx = x - s.panStartX,
@@ -1428,7 +1436,6 @@
   }
 
   ZenCanvasInstance.prototype.endPan = function () {
-    if (this.opts.pan === false) return
     var s = this.state
     if (!s.isPanning) return
     s.isPanning = false
@@ -1459,8 +1466,9 @@
     var next = clamp(s.scale * factor, this.opts.minScale, this.opts.maxScale)
     if (next === s.scale) return
     var rect = this.workspace.getBoundingClientRect()
-    var mx = clientX - rect.left,
-      my = clientY - rect.top
+    var origin = this.innerOrigin()
+    var mx = clientX - rect.left - origin.x,
+      my = clientY - rect.top - origin.y
     var cx = (mx - s.panX) / s.scale
     var cy = (my - s.panY) / s.scale
     s.scale = next
@@ -1923,15 +1931,14 @@
     this._pointerCancelHandler = function (e) {
       self._handlePointerUp(e, true)
     }
-    this._menuOutsideHandler = function (e) {
-      if (!e.target.closest || !e.target.closest('.zenui-popmenu')) window.ZenUI.menu.close()
-    }
     this.workspace.addEventListener('pointerdown', function (e) {
       if (e.button === 2) {
         self.beginPan(e.clientX, e.clientY, e.pointerId)
         e.preventDefault()
         return
       }
+      // 右键拖动始终由引擎负责；pan:false 只交出滚轮与触控手势。
+      if (self.opts.pan === false) return
       if (e.pointerType !== 'touch' || e.isPrimary === false) return
       if (e.target.closest && e.target.closest('.node-content')) return
       self._touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -1951,7 +1958,6 @@
     document.addEventListener('pointermove', this._pointerMoveHandler, { passive: false })
     document.addEventListener('pointerup', this._pointerUpHandler)
     document.addEventListener('pointercancel', this._pointerCancelHandler)
-    document.addEventListener('pointerdown', this._menuOutsideHandler)
 
     // 滚轮 / 触控板判定：产品自带视口处理时可以关掉引擎这一路，避免双份缩放。
     // 滚轮 / 触控板判定：完全沿用 writer 的“滚动流”判定
@@ -2004,11 +2010,13 @@
     var self2 = this
     this.workspace.addEventListener('contextmenu', function (e) {
       e.preventDefault()
-      if (!self2.opts.contextMenu) return
       if (self2.state.panWasDragging) {
         self2.state.panWasDragging = false
+        // 右键拖完不弹任何菜单：产品自己的 document 监听也不能再收到。
+        e.stopPropagation()
         return
       }
+      if (!self2.opts.contextMenu) return
       self2.showContextMenu(e)
     })
   }
@@ -2296,7 +2304,6 @@
     document.removeEventListener('pointermove', this._pointerMoveHandler)
     document.removeEventListener('pointerup', this._pointerUpHandler)
     document.removeEventListener('pointercancel', this._pointerCancelHandler)
-    document.removeEventListener('pointerdown', this._menuOutsideHandler)
     if (this.state.portDrag) this._clearPortDrag(false)
     if (this._ro) this._ro.disconnect()
     if (this._mo) this._mo.disconnect()

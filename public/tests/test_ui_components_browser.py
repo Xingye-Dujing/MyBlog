@@ -201,3 +201,68 @@ def test_shared_overlays_keyboard_focus_and_responsive_width():
     finally:
         server.shutdown()
         server.server_close()
+
+
+CANVAS_MENU_PAGE = r'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<link rel="stylesheet" href="zen/zen.css">
+<link rel="stylesheet" href="zen/canvas/canvas.css">
+<script src="zen/foundation/util.js"></script>
+<script src="zen/components/layer.js"></script>
+<script src="zen/components/toast.js"></script>
+<script src="zen/components/menu.js"></script>
+<script src="zen/canvas/engine.js"></script>
+</head><body><div id="host"></div>
+<script>
+window.hits = 0;
+window.canvas = ZenCanvas.create({
+  scope: 'browser-regression', mount: document.getElementById('host'), pan: false,
+  nodeTypes: { note: { label: 'Note', render() {} } },
+  onContextMenu: function () {
+    return [{ label: '全选', action: function () { window.hits += 1 } }]
+  },
+});
+</script></body></html>'''
+
+
+def test_canvas_menu_click_and_right_drag_in_browser():
+    playwright = pytest.importorskip('playwright.sync_api')
+    handler = functools.partial(QuietHandler, directory=str(PUBLIC))
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = 'http://127.0.0.1:%d' % server.server_address[1]
+    try:
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 900, 'height': 600})
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.route('**/__canvas_menu_test__.html', lambda route: route.fulfill(
+                status=200, content_type='text/html; charset=utf-8', body=CANVAS_MENU_PAGE,
+            ))
+            page.goto(base + '/__canvas_menu_test__.html', wait_until='load')
+            page.wait_for_function('window.canvas && window.canvas.workspace')
+
+            # A real click on the shadow-DOM option must reach the action:
+            # no document pointerdown handler may close the menu first.
+            page.mouse.click(400, 300, button='right')
+            option = page.locator('.zenui-popmenu .zenui-option')
+            option.wait_for(state='visible')
+            option.click()
+            assert page.evaluate('window.hits') == 1
+            assert page.evaluate('ZenUI.layer.get().stack.length') == 0
+
+            # Right-drag pan is engine-owned even when pan:false disables wheel/touch.
+            before = page.evaluate("document.querySelector('.zc-canvas-inner').style.transform")
+            page.mouse.move(400, 300)
+            page.mouse.down(button='right')
+            page.mouse.move(500, 360, steps=6)
+            page.mouse.up(button='right')
+            after = page.evaluate("document.querySelector('.zc-canvas-inner').style.transform")
+            assert before != after
+            assert not errors, errors[:3]
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()

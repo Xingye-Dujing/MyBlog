@@ -728,6 +728,16 @@
 
     <!-- ===== Context Menu ===== -->
     <div id="context-menu">
+      <div class="dd-item" data-action="ctxSelectAll">
+        <span data-i18n="ctx.selectAll">Select All</span>
+      </div>
+      <div class="dd-item" data-action="ctxFitView">
+        <span data-i18n="ctx.fitView">Fit View</span>
+      </div>
+      <div class="dd-item" data-action="ctxAutoLayout">
+        <span data-i18n="ctx.autoLayout">Auto Layout</span>
+      </div>
+      <div class="dd-divider"></div>
       <div class="dd-item" data-action="ctxNewText">
         <span data-i18n="ctx.newText">New Text Node</span>
       </div>
@@ -1248,6 +1258,9 @@
             'ft.color.green': 'Green',
             'ft.color.orange': 'Orange',
             'ft.clr.title': 'Clear formatting',
+            'ctx.selectAll': 'Select All',
+            'ctx.fitView': 'Fit View',
+            'ctx.autoLayout': 'Auto Layout',
             'ctx.newText': 'New Text Node',
             'ctx.newImage': 'New Image Node',
             'ctx.newMarkdown': 'New Markdown Node',
@@ -1659,6 +1672,9 @@
             'ft.color.green': '绿色',
             'ft.color.orange': '橙色',
             'ft.clr.title': '清除格式',
+            'ctx.selectAll': '全选',
+            'ctx.fitView': '适应视野',
+            'ctx.autoLayout': '自动排布',
             'ctx.newText': '新建文本节点',
             'ctx.newImage': '新建图片节点',
             'ctx.newMarkdown': '新建 Markdown 节点',
@@ -1923,9 +1939,6 @@
           alignBaseId: null,
           clipboardNode: null,
           ctxNode: null,
-          ctxLeftPress: false,
-          ctxLeftStartX: 0,
-          ctxLeftStartY: 0,
           portDrag: null,
           tempLine: null,
           // 防抖定时器统一归 Persistence._timer 管，别在这里再放一份，
@@ -6720,68 +6733,14 @@
             CanvasManager.applyTransform()
           },
 
-          // 适应：把全部可见节点整体缩放、居中，一次装进窗口。
-          // 适应：把整张画布（所有节点）缩放到窗口里并居中。
-          // opts.minScale 可以放宽缩放下限 —— 自动排布用它，保证排完之后
-          // “所有节点都能看见”，哪怕画布很大。
+          // 适应：包围盒与居中规则只有共享引擎一份，产品只负责落盘。
+          // opts.minScale 可放宽下限 —— 自动排布用它保证所有节点都可见。
           fitView(opts) {
-            const rect = DOM.workspace.getBoundingClientRect()
-            const menuH =
-              parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--menu-h')) ||
-              0
-            const MARGIN = 40
-            const boxes = []
-            getNodes().forEach((n) => {
-              // 折叠分组里的子节点是 display:none，宽高量到 0；
-              // 计入包围盒会把画面往错误方向撑，直接跳过。
-              const w = n.offsetWidth || parseFloat(n.style.width) || 0
-              const h = n.offsetHeight || parseFloat(n.style.height) || 0
-              if (!w && !h) return
-              const l = parseFloat(n.style.left)
-              const t = parseFloat(n.style.top)
-              boxes.push({
-                x: isNaN(l) ? n.offsetLeft || 0 : l,
-                y: isNaN(t) ? n.offsetTop || 0 : t,
-                w,
-                h,
-              })
-            })
-            if (boxes.length === 0) {
+            if (getNodes().length === 0) {
               CanvasManager.resetToInitialWorld()
-              CanvasManager.scheduleViewSave()
-              return
+            } else {
+              ZenWriterCanvas.fitView(opts)
             }
-            let minX = Infinity,
-              minY = Infinity,
-              maxX = -Infinity,
-              maxY = -Infinity
-            boxes.forEach((b) => {
-              minX = Math.min(minX, b.x)
-              minY = Math.min(minY, b.y)
-              maxX = Math.max(maxX, b.x + b.w)
-              maxY = Math.max(maxY, b.y + b.h)
-            })
-            const contentW = Math.max(1, maxX - minX)
-            const contentH = Math.max(1, maxY - minY)
-            const availW = Math.max(1, rect.width - 2 * MARGIN)
-            const availH = Math.max(1, rect.height - menuH - 2 * MARGIN)
-            const fit = Math.min(availW / contentW, availH / contentH)
-            // 只缩不放：已经装得下就保持 100%，不会突然逼近；
-            // 下限默认跟缩放按钮一致（免得小到看不清），自动排布会传一个
-            // 更小的下限，保证“适应”真的把所有节点都装进来。
-            const minScale =
-              opts && typeof opts.minScale === 'number'
-                ? Math.max(0.005, opts.minScale)
-                : CONFIG.MIN_SCALE
-            const scale = Math.min(1, Math.max(minScale, fit))
-            const cx = (minX + maxX) / 2
-            const cy = (minY + maxY) / 2
-            // 在“菜单栏以下”这条可用带里居中，而不是整个视口。
-            const bandCentreY = (menuH + MARGIN + (rect.height - MARGIN)) / 2
-            AppState.scale = scale
-            AppState.panX = rect.width / 2 - cx * scale
-            AppState.panY = bandCentreY - cy * scale
-            CanvasManager.applyTransform()
             CanvasManager.scheduleViewSave()
           },
 
@@ -7846,43 +7805,10 @@
             }, 160)
           },
 
-          // 把某个节点摆到视野中央（大纲跳转用）。
-          // 顺带照顾两种情况：节点现在小到看不清就放大一点，
-          // 大到装不下就缩小到刚好装下。
+          // 把某个节点摆到视野中央（大纲跳转用），几何同样交给共享引擎。
           focusNode(node) {
             if (!node) return
-            const rect = DOM.workspace.getBoundingClientRect()
-            // 顶部被菜单栏压着，可用高度要减掉它
-            const menuH =
-              parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--menu-h')) ||
-              0
-            const vw = rect.width
-            const vh = Math.max(120, rect.height - menuH)
-
-            const nw = node.offsetWidth || parseFloat(node.style.width) || 400
-            const nh = node.offsetHeight || parseFloat(node.style.height) || 300
-            const left = parseFloat(node.style.left) || node.offsetLeft || 0
-            const top = parseFloat(node.style.top) || node.offsetTop || 0
-
-            let scale = AppState.scale
-            const screenW = nw * scale
-            const screenH = nh * scale
-            // 太小 -> 提到至少看得清
-            if (screenW < 140 || screenH < 80) {
-              scale = Math.max(scale, 180 / Math.max(nw, 1))
-            }
-            // 太大 -> 缩到装得下（留出边距）
-            if (screenW > vw * 0.85 || screenH > vh * 0.8) {
-              scale = Math.min(scale, (vw * 0.8) / Math.max(nw, 1), (vh * 0.7) / Math.max(nh, 1))
-            }
-            scale = Math.min(CONFIG.MAX_SCALE, Math.max(CONFIG.MIN_SCALE, scale))
-
-            AppState.scale = scale
-            // 在“菜单栏以下”这条可用带里居中，而不是整个视口，
-            // 否则节点会往菜单栏底下钻
-            AppState.panX = vw / 2 - (left + nw / 2) * scale
-            AppState.panY = menuH + vh / 2 - (top + nh / 2) * scale
-            CanvasManager.applyTransform()
+            ZenWriterCanvas.focusNode(node.id)
             CanvasManager.scheduleViewSave()
           },
 
@@ -7909,21 +7835,8 @@
               return Math.pow(1.12, -Math.sign(e.deltaY) * steps)
             }
 
-            workspace.addEventListener('mousedown', (e) => {
-              if (e.button === 2) {
-                CanvasManager.beginPan(e.clientX, e.clientY)
-                e.preventDefault()
-              }
-            })
-
-            document.addEventListener('mousemove', (e) => {
-              CanvasManager.movePan(e.clientX, e.clientY)
-            })
-
-            document.addEventListener('mouseup', () => {
-              CanvasManager.endPan()
-            })
-
+            // 右键拖动由共享画布引擎接管（pointerdown + pointermove），
+            // 这里只保留 writer 自己的滚轮/触控手势。
             workspace.addEventListener(
               'wheel',
               (e) => {
@@ -7967,15 +7880,6 @@
               },
               { passive: false },
             )
-
-            workspace.addEventListener('contextmenu', (e) => {
-              if (AppState.panWasDragging) {
-                AppState.panWasDragging = false
-                e.preventDefault()
-                e.stopPropagation()
-                return
-              }
-            })
           },
         }
 
@@ -14065,6 +13969,18 @@
                 Exporter.exportPNG()
                 break
               // Context menu actions
+              case 'ctxSelectAll':
+                SelectionManager.selectAll()
+                window.ZenUI.contextMenu.close()
+                break
+              case 'ctxFitView':
+                CanvasManager.fitView()
+                window.ZenUI.contextMenu.close()
+                break
+              case 'ctxAutoLayout':
+                CanvasManager.autoLayout('smart')
+                window.ZenUI.contextMenu.close()
+                break
               case 'ctxNewText': {
                 const world = CanvasManager.screenToWorld(AppState.ctxX, AppState.ctxY)
                 NodeManager.createNodeAt(world.x, world.y, 'text')
@@ -14615,33 +14531,7 @@
           })
 
           // ---- Context menu (right-click) ----
-          document.addEventListener('mousedown', (e) => {
-            if (e.button !== 0 || !DOM.contextMenu.classList.contains('open')) return
-            // Do not close on the initial press. A click must remain a click so
-            // the context menu can still be used. Only a real drag closes it.
-            if (e.target.closest('#context-menu')) {
-              AppState.ctxLeftPress = false
-              return
-            }
-            AppState.ctxLeftPress = true
-            AppState.ctxLeftStartX = e.clientX
-            AppState.ctxLeftStartY = e.clientY
-          })
-
-          document.addEventListener('mousemove', (e) => {
-            if (!AppState.ctxLeftPress || !DOM.contextMenu.classList.contains('open')) return
-            const dx = e.clientX - AppState.ctxLeftStartX
-            const dy = e.clientY - AppState.ctxLeftStartY
-            if (Math.hypot(dx, dy) > CONFIG.PAN_THRESHOLD) {
-              AppState.ctxLeftPress = false
-              window.ZenUI.contextMenu.close()
-            }
-          })
-
-          document.addEventListener('mouseup', (e) => {
-            if (e.button === 0) AppState.ctxLeftPress = false
-          })
-
+          // 外部点击 / 拖走关闭由共享 ZenUI.layer 统一负责，这里只编排显隐与定位。
           document.addEventListener('contextmenu', (e) => {
             if (AppState.panWasDragging) {
               AppState.panWasDragging = false
@@ -14734,8 +14624,11 @@
           // 画布交互统一由共享引擎承担；产品只提供节点正文与业务数据。
           ZenWriterCanvas = window.ZenCanvas.create({
             scope: 'writer',
-            // writer 保留自己的视口/滚轮/触控手势；引擎只接管节点与连线交互。
+            // 右键拖动与适应视野统一走引擎；writer 保留滚轮/触控手势与自己的富菜单。
             pan: false,
+            contextMenu: false,
+            minScale: CONFIG.MIN_SCALE,
+            maxScale: CONFIG.MAX_SCALE,
             adopt: { workspace: DOM.workspace, inner: DOM.canvasInner, svg: DOM.svgLayer },
             nodeTypes: ['text', 'todo', 'group', 'markdown', 'math', 'image', 'canvas'].reduce(
               (types, type) => ((types[type] = { label: type }), types),
@@ -14750,6 +14643,8 @@
             AppState.scale = view.scale
             AppState.panX = view.panX
             AppState.panY = view.panY
+            // 引擎驱动的平移/适应也要走产品的收尾（连线、笔迹、对齐条）。
+            CanvasManager.applyTransform()
           })
           // 1) 先把旧 LocalStorage 数据搬进 IndexedDB。
           //    只在 IndexedDB 还是空的时候搬，旧键一律不删。

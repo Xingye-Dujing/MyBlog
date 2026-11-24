@@ -32,6 +32,19 @@ test('右键菜单含三个新动作', () => {
   }
 })
 
+test('右键只有产品富菜单，画布动作由引擎统一承担', () => {
+  for (const action of ['ctxSelectAll', 'ctxFitView', 'ctxAutoLayout']) {
+    assert.ok(src.includes(`data-action="${action}"`), `缺少菜单项 ${action}`)
+    assert.ok(src.includes(`case '${action}':`), `缺少分发分支 ${action}`)
+  }
+  assert.match(src, /contextMenu: false/)
+  assert.match(src, /ZenWriterCanvas\.fitView\(opts\)/)
+  assert.match(src, /ZenWriterCanvas\.focusNode\(node\.id\)/)
+  assert.doesNotMatch(src, /ctxLeftPress|bandCentreY/)
+  assert.doesNotMatch(src, /workspace\.addEventListener\('contextmenu'/)
+  assert.doesNotMatch(src, /mousedown', \(e\) => \{\s*if \(e\.button === 2\)/)
+})
+
 test('ZenWriterDeep 提供三个入口且挂载全局', () => {
   assert.ok(src.includes('const ZenWriterDeep = {'))
   assert.ok(src.includes('openCardPicker(world)'))
