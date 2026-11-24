@@ -9,7 +9,6 @@
 """
 from __future__ import annotations
 
-import functools
 import http.server
 import json
 import os
@@ -26,8 +25,6 @@ PUBLIC = ROOT / "public"
 PAGES = sorted(
     p.name for p in PUBLIC.glob("omm-*.html")
 )
-
-EXPECTED_404 = ("/api/", "/__omm/")
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -74,6 +71,13 @@ class BrowserCase:
     def assert_no_script_errors(self):
         self.assertEqual(self._errors, [], "页面存在未捕获脚本异常: %s" % self._errors[:3])
 
+    def select_zen_option(self, selector, value, label):
+        """Use the shared select's visible trigger and shadow-DOM option list."""
+        select = self.page.locator(selector)
+        select.locator("xpath=..").locator(".zenui-select-trigger").click()
+        self.page.locator(".zenui-option", has_text=label).click()
+        self.assertEqual(select.input_value(), value)
+
 class ChainTest(BrowserCase, unittest.TestCase):
     """Online chains: the suite runs against the local static server."""
 
@@ -82,6 +86,7 @@ class ChainTest(BrowserCase, unittest.TestCase):
         self.assertGreaterEqual(len(PAGES), 18, "产品页数量异常")
         for name in PAGES:
             with self.subTest(page=name):
+                self._errors.clear()
                 self.open(name)
                 self.assertTrue(self.page.title(), "%s 没有 title" % name)
                 self.assert_no_script_errors()
@@ -114,7 +119,7 @@ class ChainTest(BrowserCase, unittest.TestCase):
 
         self.page.fill("#r-name", "E2E 自动化规则")
         self.page.fill("#w-tag", "e2e")
-        self.page.select_option("#a-type", "notify")
+        self.select_zen_option("#a-type", "notify", "通知")
         self.page.fill("#a-value", "hello")
         self.page.click("#add-action")
         self.page.click("#save-rule")
@@ -159,7 +164,8 @@ class ChainTest(BrowserCase, unittest.TestCase):
             self.page.wait_for_timeout(300)
             self.assertNotIn("尚未导入", self.page.locator("#zp-diff").inner_text())
             self.page.click("#zp-restore")
-            self.page.wait_for_timeout(300)
+            self.page.locator(".zenui-ok").click()
+            self.page.wait_for_function("localStorage.getItem('zen.cards.v1') !== null")
             restored = json.loads(self.page.evaluate("localStorage.getItem('zen.cards.v1') || '[]'"))
             self.assertTrue(any("搬家卡片" in c.get("content", "") for c in restored))
         self.assert_no_script_errors()
@@ -220,7 +226,7 @@ class OfflineChainTest(BrowserCase, unittest.TestCase):
         self.page.click('[data-view="editor"]')
         self.page.fill("#r-name", "离线规则")
         self.page.fill("#w-tag", "offline")
-        self.page.select_option("#a-type", "notify")
+        self.select_zen_option("#a-type", "notify", "通知")
         self.page.fill("#a-value", "hello")
         self.page.click("#add-action")
         self.page.click("#save-rule")
