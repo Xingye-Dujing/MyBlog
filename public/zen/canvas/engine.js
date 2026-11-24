@@ -1087,11 +1087,12 @@
     if (!this.state.connections.some(function (c) { return c.id === id })) return this
     this.state.selectedConnId = id
     var self = this
-    this.state.selectedNodeIds.forEach(function (nid) {
+    var selected = Array.from(this.state.selectedNodeIds)
+    this.state.selectedNodeIds.clear()
+    selected.forEach(function (nid) {
       var n = self._nodeById(nid)
       if (n) self._syncNodeSelection(n)
     })
-    this.state.selectedNodeIds.clear()
     this.renderConnections()
     this.status.textContent = '已选择连线'
     this.opts.onSelectionChange([])
@@ -1470,12 +1471,13 @@
 
   ZenCanvasInstance.prototype.clearSelection = function () {
     var self = this
-    this.state.selectedNodeIds.forEach(function (id) {
+    var selected = Array.from(this.state.selectedNodeIds)
+    this.state.selectedNodeIds.clear()
+    this.state.selectedConnId = null
+    selected.forEach(function (id) {
       var n = self._nodeById(id)
       if (n) self._syncNodeSelection(n)
     })
-    this.state.selectedNodeIds.clear()
-    this.state.selectedConnId = null
     this._selectionChanged()
     return this
   }

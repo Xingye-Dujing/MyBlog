@@ -322,6 +322,28 @@ test('CSS pixel coordinates from toJSON round-trip through the shared loader', (
   assert.equal(canvas.getConnections().length, 1)
 })
 
+test('clearSelection and selectConnection also clear the DOM selected state', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const { canvas } = makeCanvas(ZenCanvas)
+  canvas.addNode('note', { text: 'A' })
+  canvas.addNode('note', { text: 'B' })
+  canvas.select('note-1')
+  canvas.select('note-2')
+  assert.equal(canvas.getNodeElement('note-1').classList.contains('selected'), true)
+
+  canvas.clearSelection()
+  assert.deepEqual(JSON.parse(JSON.stringify(canvas.getSelection())), [])
+  assert.equal(canvas.getNodeElement('note-1').classList.contains('selected'), false)
+  assert.equal(canvas.getNodeElement('note-2').classList.contains('selected'), false)
+
+  canvas.select('note-1')
+  canvas.select('note-2')
+  canvas.addConnection('note-1', 'note-2')
+  canvas.selectConnection(canvas.getConnections()[0].id)
+  assert.equal(canvas.getNodeElement('note-1').classList.contains('selected'), false)
+  assert.equal(canvas.getNodeElement('note-2').classList.contains('selected'), false)
+})
+
 test('Writer connection layer reuses the shared canvas SVG styles', () => {
   assert.match(writerHtml, /<svg id="svg-layer" class="zc-svg-layer"><\/svg>/)
   assert.doesNotMatch(canvasCss, /#svg-layer/)
