@@ -110,8 +110,8 @@ test('Hub 数据流面板转义插件 manifest 的 role / id', () => {
   const src = read('public/omm-hub.js')
   const at = src.indexOf("class=\"flow-chip '")
   const block = src.slice(at, at + 260)
-  assert.match(block, /kgEscape\(a\.role\)/)
-  assert.match(block, /kgEscape\(a\.id\)/)
+  assert.match(block, /esc\(a\.role\)/)
+  assert.match(block, /esc\(a\.id\)/)
 })
 
 /* ------------------------- postMessage 目标约束 -------------------------- */
@@ -119,7 +119,7 @@ test('Hub 数据流面板转义插件 manifest 的 role / id', () => {
 test('卡片请求按已校验的请求方 origin 回传，而非 referrer', () => {
   const src = read('public/lib/zen-link.js')
   const reply = src.slice(src.indexOf("type: 'omm:zen-card-reply'"))
-  assert.match(reply.slice(0, 200), /e\.origin/)
+  assert.match(reply.slice(0, 200), /(?:event|e)\.origin/)
   assert.doesNotMatch(reply.slice(0, 200), /parentTarget\(\)/)
 })
 

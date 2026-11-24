@@ -62,9 +62,9 @@ class Client:
     def __init__(self, base):
         self.base = base
 
-    def request(self, path, data=None, headers=None):
+    def request(self, path, data=None, headers=None, method=None):
         request = urllib.request.Request(self.base + path, data=data, headers=headers or {},
-                                         method="POST" if data is not None else "GET")
+                                         method=method or ("POST" if data is not None else "GET"))
         try:
             with urllib.request.urlopen(request, timeout=10) as response:
                 return response.status, response.read(), dict(response.headers)
@@ -79,13 +79,10 @@ class Client:
 
 @pytest.fixture()
 def video_server(tmp_path, monkeypatch):
-    uploads = tmp_path / "work" / "uploads"
-    jobs = tmp_path / "work" / "jobs"
+    uploads = tmp_path / "video-runtime" / "work" / "uploads"
+    jobs = tmp_path / "video-runtime" / "work" / "jobs"
     uploads.mkdir(parents=True)
     jobs.mkdir(parents=True)
-    monkeypatch.setattr(video_serve, "WORK", tmp_path / "work")
-    monkeypatch.setattr(video_serve, "UPLOADS", uploads)
-    monkeypatch.setattr(video_serve, "JOBS", jobs)
     monkeypatch.setattr(video_serve, "MAX_UPLOAD", 2 * 1024 * 1024 * 1024)
     monkeypatch.setattr(video_serve, "MAX_BODY", 2 * 1024 * 1024)
     monkeypatch.setattr(video_serve, "MAX_NODES", 200)
@@ -100,6 +97,11 @@ def video_server(tmp_path, monkeypatch):
     thread.join(timeout=5)
 
 
+def video_spec(nodes, connections):
+    return {"format": "omm-video-workflow", "version": 1,
+            "nodes": nodes, "connections": connections}
+
+
 # ---------------------------------------------------------------------------
 # video 路径、HTTP 与任务规模
 # ---------------------------------------------------------------------------
@@ -109,11 +111,11 @@ def test_video_upload_id_is_generated_contained_and_not_symlink(video_server, mo
     _client, uploads, _jobs = video_server
     fid = "a" * 12 + "_clip.mp4"
     (uploads / fid).write_bytes(b"media")
-    assert video_serve.resolve_upload(fid) == (uploads / fid).resolve()
+    assert video_serve.resolve_upload(fid, video_serve.Handler.root) == (uploads / fid).resolve()
     for bad in ("../clip.mp4", str((uploads / fid).resolve()), "not-generated_clip.mp4",
                 "a" * 12 + "_../clip.mp4", "a" * 12 + "_dir/clip.mp4"):
         with pytest.raises(RuntimeError):
-            video_serve.resolve_upload(bad)
+            video_serve.resolve_upload(bad, video_serve.Handler.root)
     outside = uploads.parent / "outside.mp4"
     outside.write_bytes(b"outside")
     link = uploads / ("b" * 12 + "_link.mp4")
@@ -123,18 +125,28 @@ def test_video_upload_id_is_generated_contained_and_not_symlink(video_server, mo
         original = Path.is_symlink
         monkeypatch.setattr(Path, "is_symlink", lambda path: path == link or original(path))
     with pytest.raises(RuntimeError, match="符号链接"):
-        video_serve.resolve_upload(link.name)
+        video_serve.resolve_upload(link.name, video_serve.Handler.root)
 
 
 def test_video_http_loopback_guards_cors_and_limits(video_server, monkeypatch):
     client, uploads, _jobs = video_server
     status, body, headers = client.json("/api/job/missing", headers={
-        "Origin": "http://127.0.0.1:9999",
+        "Origin": client.base,
     })
     assert status == 404
-    assert headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:9999"
+    assert headers.get("Access-Control-Allow-Origin") == client.base
     assert headers.get("Access-Control-Allow-Origin") != "*"
 
+    status, _body, headers = client.json("/api/job/missing", headers={
+        "Origin": "http://127.0.0.1:8300",
+        "Sec-Fetch-Site": "same-site",
+    })
+    assert status == 404 and headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:8300"
+
+    status, _body, _headers = client.json("/api/job/missing", headers={
+        "Origin": "http://127.0.0.1:9999",
+    })
+    assert status == 403
     status, _body, _headers = client.json("/api/job/missing", headers={
         "Origin": "https://evil.example",
     })
@@ -153,11 +165,10 @@ def test_video_http_loopback_guards_cors_and_limits(video_server, monkeypatch):
     assert not list(uploads.iterdir())
 
     monkeypatch.setattr(video_serve, "MAX_NODES", 1)
-    spec = {
-        "nodes": [{"id": "in", "type": "input", "data": {"fileId": "x"}},
-                  {"id": "p", "type": "probe", "data": {}}],
-        "connections": [{"from": "in", "to": "p"}],
-    }
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": "x"}},
+        {"id": "p", "type": "probe", "data": {}},
+    ], [{"from": "in", "to": "p"}])
     status, payload, _headers = client.json("/api/run", spec, {"Content-Type": "application/json"})
     assert status == 400 and "节点过多" in payload["error"]
 
@@ -169,14 +180,11 @@ def test_video_http_loopback_guards_cors_and_limits(video_server, monkeypatch):
 
 def test_video_http_failed_job_stops_downstream(video_server):
     client, _uploads, _jobs = video_server
-    spec = {
-        "nodes": [
-            {"id": "in", "type": "input", "data": {"fileId": "a" * 12 + "_missing.mp4"}},
-            {"id": "fmt", "type": "format", "data": {"format": "mp4"}},
-            {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "final.mp4"}},
-        ],
-        "connections": [{"from": "in", "to": "fmt"}, {"from": "fmt", "to": "out"}],
-    }
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": "a" * 12 + "_missing.mp4"}},
+        {"id": "fmt", "type": "format", "data": {"format": "mp4"}},
+        {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "final.mp4"}},
+    ], [{"from": "in", "to": "fmt"}, {"from": "fmt", "to": "out"}])
     status, started, _headers = client.json("/api/run", spec, {"Content-Type": "application/json"})
     assert status == 200 and started["ok"]
     deadline = time.time() + 5
@@ -251,14 +259,11 @@ def test_video_node_failure_stops_downstream_and_marks_job_error(video_server, m
             "audio": "aac", "raw": ""}
     monkeypatch.setattr(video_serve, "probe", lambda _path: dict(info))
     monkeypatch.setattr(video_serve, "run_ffmpeg", lambda *args, **kwargs: (1, "ffmpeg failed"))
-    spec = {
-        "nodes": [
-            {"id": "in", "type": "input", "data": {"fileId": fid}},
-            {"id": "fmt", "type": "format", "data": {"format": "mp4"}},
-            {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "final.mp4"}},
-        ],
-        "connections": [{"from": "in", "to": "fmt"}, {"from": "fmt", "to": "out"}],
-    }
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": fid}},
+        {"id": "fmt", "type": "format", "data": {"format": "mp4"}},
+        {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "final.mp4"}},
+    ], [{"from": "in", "to": "fmt"}, {"from": "fmt", "to": "out"}])
     job = {"spec": spec, "status": "running", "progress": 0, "duration": 0,
            "nodes": {node["id"]: {"status": "pending", "progress": 0, "log": ""}
                      for node in spec["nodes"]}, "error": None, "cancelled": False}
@@ -436,3 +441,234 @@ def test_table_factor_header_and_pivot_rowkeys_string_or_array():
     assert result.columns == ["姓名", "部门", "S1", "S2"]
     assert result.rows[0].values["姓名"] == "甲"
     assert result.rows[0].values["S2"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Handler.root、Range、原子发布、工作流图与任务回收
+# ---------------------------------------------------------------------------
+
+
+def test_video_paths_follow_handler_root(video_server):
+    client, uploads, _jobs = video_server
+    status, payload, _headers = client.request(
+        "/api/upload?name=clip.mp4", b"media", {"Content-Type": "application/octet-stream"})
+    assert status == 200
+    assert json.loads(payload)["fileId"].endswith("_clip.mp4")
+    assert (uploads / json.loads(payload)["fileId"]).read_bytes() == b"media"
+    status, payload, _headers = client.request("/api/status")
+    assert json.loads(payload)["workdir"] == str(video_serve.work_root(video_serve.Handler.root))
+
+
+def test_video_range_streaming_head_suffix_and_416(video_server, monkeypatch):
+    client, _uploads, jobs = video_server
+    target = jobs / ("a" * 12) / "out" / "clip.mp4"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"0123456789")
+    url = "/api/file/" + "a" * 12 + "/clip.mp4"
+
+    def forbidden_read_bytes(_self):
+        raise AssertionError("媒体响应不得整文件读入内存")
+
+    monkeypatch.setattr(Path, "read_bytes", forbidden_read_bytes)
+    cases = [
+        ("bytes=2-5", 206, b"2345", "bytes 2-5/10"),
+        ("bytes=6-", 206, b"6789", "bytes 6-9/10"),
+        ("bytes=-4", 206, b"6789", "bytes 6-9/10"),
+        ("bytes=-99", 206, b"0123456789", "bytes 0-9/10"),
+    ]
+    for value, expected_status, expected_body, expected_range in cases:
+        status, body, headers = client.request(url, headers={"Range": value})
+        assert status == expected_status and body == expected_body
+        assert headers["Content-Range"] == expected_range
+        assert headers["Accept-Ranges"] == "bytes"
+    for value in ("bytes=10-", "bytes=8-2", "bytes=-0", "bytes=", "bytes=1-2,4-5"):
+        status, _body, headers = client.request(url, headers={"Range": value})
+        assert status == 416
+        assert headers["Content-Range"] == "bytes */10"
+    status, body, headers = client.request(url, headers={"Range": "bytes=2-5"}, method="HEAD")
+    assert status == 206 and body == b"" and headers["Content-Length"] == "4"
+    status, body, headers = client.request(url, method="HEAD")
+    assert status == 200 and body == b"" and headers["Content-Length"] == "10"
+    status, _body, headers = client.request(url + "?download=1", headers={"Range": "bytes=0-1"})
+    assert status == 206 and headers["Content-Disposition"].startswith("attachment;")
+
+
+def test_video_static_never_exposes_state_or_backend(video_server):
+    client, _uploads, _jobs = video_server
+    root = video_serve.Handler.root
+    (root / "sessions.json").write_text("{}", encoding="utf-8")
+    (root / "server").mkdir()
+    (root / "server" / "private.py").write_text("secret", encoding="utf-8")
+    (root / "video-serve.py").write_text("secret", encoding="utf-8")
+    for path in ("/sessions.json", "/server/private.py", "/video-serve.py", "/video-runtime/work/uploads/x"):
+        status, _body, _headers = client.request(path)
+        assert status == 403, path
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda spec: spec.update(format="other"), "format"),
+    (lambda spec: spec.update(version=2), "version"),
+    (lambda spec: spec["connections"][0].update(toPort="top"), "端口"),
+    (lambda spec: spec["connections"].append({"from": "in", "to": "p"}), "重复连线"),
+])
+def test_video_workflow_contract_validation(mutate, message):
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": "a" * 12 + "_clip.mp4"}},
+        {"id": "p", "type": "probe", "data": {}},
+    ], [{"from": "in", "to": "p"}])
+    mutate(spec)
+    with pytest.raises(ValueError, match=message):
+        video_serve._validate_spec(spec)
+
+
+def test_video_non_concat_rejects_multiple_upstream_and_concat_requires_two():
+    nodes = [
+        {"id": "a", "type": "input", "data": {}},
+        {"id": "b", "type": "input", "data": {}},
+        {"id": "p", "type": "probe", "data": {}},
+        {"id": "c", "type": "concat", "data": {}},
+    ]
+    with pytest.raises(ValueError, match="probe"):
+        video_serve._validate_spec(video_spec(nodes, [
+            {"from": "a", "to": "p"}, {"from": "b", "to": "p"},
+        ]))
+    with pytest.raises(ValueError, match="concat"):
+        video_serve._validate_spec(video_spec(nodes, [{"from": "a", "to": "c"}]))
+    assert video_serve._validate_spec(video_spec(nodes[:3], []))["nodes"][2]["id"] == "p"
+
+
+def test_video_unconnected_probe_runs_with_file_id(video_server, monkeypatch):
+    client, uploads, _jobs = video_server
+    fid = "d" * 12 + "_clip.mp4"
+    (uploads / fid).write_bytes(b"media")
+    monkeypatch.setattr(video_serve, "probe", lambda _path: {
+        "duration": 1, "video": {"width": 640, "height": 360, "fps": 25}, "audio": None, "raw": ""})
+    spec = video_spec([{"id": "p", "type": "probe", "data": {"fileId": fid}}], [])
+    status, started, _headers = client.json("/api/run", spec, {"Content-Type": "application/json"})
+    assert status == 200 and started["ok"]
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        _status, job, _headers = client.json("/api/job/" + started["jobId"])
+        if job["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert job["status"] == "done" and job["nodes"]["p"]["result"]["probe"]["duration"] == 1
+
+
+def test_video_success_publishes_complete_output_without_staging(video_server, monkeypatch):
+    client, uploads, jobs = video_server
+    fid = "e" * 12 + "_clip.mp4"
+    (uploads / fid).write_bytes(b"media")
+    monkeypatch.setattr(video_serve, "probe", lambda _path: {
+        "duration": 1, "video": {"width": 640, "height": 360, "fps": 25}, "audio": None, "raw": ""})
+
+    def ffmpeg(_job, _nid, args, *_rest):
+        Path(args[-1]).write_bytes(b"complete")
+        return 0, ""
+
+    monkeypatch.setattr(video_serve, "run_ffmpeg", ffmpeg)
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": fid}},
+        {"id": "fmt", "type": "format", "data": {"format": "mp4"}},
+        {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "final.mp4"}},
+    ], [{"from": "in", "to": "fmt"}, {"from": "fmt", "to": "out"}])
+    status, started, _headers = client.json("/api/run", spec, {"Content-Type": "application/json"})
+    assert status == 200
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        _status, job, _headers = client.json("/api/job/" + started["jobId"])
+        if job["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert job["status"] == "done"
+    assert job["outputs"][0]["name"] == "final.mp4"
+    status, body, _headers = client.request(job["outputs"][0]["url"])
+    assert status == 200 and body == b"complete"
+    assert not (jobs / started["jobId"] / ".staging").exists()
+
+
+def test_video_outputs_are_staged_and_failure_cleans_committed_files(video_server, monkeypatch):
+    client, uploads, jobs = video_server
+    fid = "e" * 12 + "_clip.mp4"
+    (uploads / fid).write_bytes(b"media")
+    monkeypatch.setattr(video_serve, "probe", lambda _path: {
+        "duration": 1, "video": {"width": 640, "height": 360, "fps": 25}, "audio": None, "raw": ""})
+    calls = []
+
+    def ffmpeg(_job, _nid, args, *_rest):
+        calls.append(args)
+        if len(calls) == 2:
+            return 1, "failed"
+        Path(args[-1]).write_bytes(b"complete")
+        return 0, ""
+
+    monkeypatch.setattr(video_serve, "run_ffmpeg", ffmpeg)
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": fid}},
+        {"id": "one", "type": "format", "data": {"format": "mp4"}},
+        {"id": "two", "type": "format", "data": {"format": "mp4"}},
+        {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "two.mp4"}},
+    ], [{"from": "in", "to": "one"}, {"from": "one", "to": "two"}, {"from": "two", "to": "out"}])
+    status, started, _headers = client.json("/api/run", spec, {"Content-Type": "application/json"})
+    assert status == 200
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        _status, job, _headers = client.json("/api/job/" + started["jobId"])
+        if job["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert job["status"] == "error"
+    assert not (jobs / started["jobId"]).exists()
+
+
+def test_video_cancel_cleans_partial_output(video_server, monkeypatch):
+    _client, uploads, jobs = video_server
+    fid = "f" * 12 + "_clip.mp4"
+    (uploads / fid).write_bytes(b"media")
+    monkeypatch.setattr(video_serve, "probe", lambda _path: {
+        "duration": 1, "video": {"width": 640, "height": 360, "fps": 25}, "audio": None, "raw": ""})
+    jid = "1" * 12
+    spec = video_spec([
+        {"id": "in", "type": "input", "data": {"fileId": fid}},
+        {"id": "out", "type": "export", "data": {"format": "mp4", "filename": "partial.mp4"}},
+    ], [{"from": "in", "to": "out"}])
+    job = {"spec": spec, "status": "running", "progress": 0, "duration": 0,
+           "nodes": {node["id"]: {"status": "pending", "progress": 0, "log": ""}
+                     for node in spec["nodes"]}, "outputs": [], "error": None, "cancelled": False}
+    video_serve._jobs[jid] = job
+
+    def ffmpeg(current, _nid, args, *_rest):
+        Path(args[-1]).write_bytes(b"partial")
+        current["cancelled"] = True
+        return 0, ""
+
+    monkeypatch.setattr(video_serve, "run_ffmpeg", ffmpeg)
+    video_serve.execute_job(jid, video_serve.Handler.root)
+    assert job["status"] == "cancelled"
+    assert not (jobs / jid).exists()
+
+
+def test_video_job_ttl_capacity_and_detached_snapshot(video_server, monkeypatch):
+    client, _uploads, jobs = video_server
+    now = time.time()
+    video_serve._jobs.clear()
+    video_serve._jobs["a" * 12] = {
+        "id": "a" * 12, "status": "done", "createdAt": now - 10, "finishedAt": now - 10,
+        "progress": 1, "nodes": {"n": {"status": "done", "result": {"rows": [1]}}}, "outputs": []}
+    (jobs / ("a" * 12)).mkdir(parents=True)
+    status, payload, _headers = client.json("/api/job/" + "a" * 12)
+    assert status == 200
+    payload["nodes"]["n"]["result"]["rows"].append(2)
+    assert video_serve._jobs["a" * 12]["nodes"]["n"]["result"]["rows"] == [1]
+
+    monkeypatch.setattr(video_serve, "JOB_TTL", 1)
+    status, _payload, _headers = client.json("/api/job/" + "a" * 12)
+    assert status == 404 and "a" * 12 not in video_serve._jobs
+    assert not (jobs / ("a" * 12)).exists()
+
+    video_serve._jobs.clear()
+    video_serve._jobs["b" * 12] = {"status": "running", "createdAt": now}
+    video_serve._jobs["c" * 12] = {"status": "done", "createdAt": now - 5, "finishedAt": now - 5}
+    monkeypatch.setattr(video_serve, "MAX_JOBS", 2)
+    assert video_serve._prune_jobs_locked(now) == ["c" * 12]
+    assert set(video_serve._jobs) == {"b" * 12}

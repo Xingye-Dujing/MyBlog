@@ -65,7 +65,7 @@
       '<button class="zen-cloud-btn" id="' + p + '-upload-now" type="button"' + i18n('sync.uploadNow') + '>' + text('上传本地', 'uploadNow') + '</button>',
       '<button class="zen-cloud-btn" id="' + p + '-lock" type="button"' + i18n('sync.lock') + '>' + text('锁定数据', 'lock') + '</button></div></div>',
       '<div class="zen-cloud-hidden" id="' + p + '-sql-panel">',
-      '<div class="zen-cloud-label" style="margin-bottom: 6px"' + i18n('sync.sqlEditor') + '>' + text('SQL 编辑器', 'sqlEditor') + '</div>',
+      '<div class="zen-cloud-label zen-cloud-sql-label"' + i18n('sync.sqlEditor') + '>' + text('SQL 编辑器', 'sqlEditor') + '</div>',
       '<textarea id="zen-sql-box" readonly spellcheck="false">' + sql + '</textarea>',
       '<div class="zen-cloud-actions"><button class="zen-cloud-btn primary" id="' + p + '-copy-sql" type="button"' + i18n('sync.copySql') + '>' + text('复制 SQL', 'copySql') + '</button>',
       '<button class="zen-cloud-btn" id="' + p + '-back-config" type="button"' + i18n('sync.backConfig') + '>' + text('返回设置', 'backConfig') + '</button></div>',
@@ -173,13 +173,81 @@
       })
     }
     api.now = function () { return Date.now() }
+    api.workspace = function (userId) {
+      var project = String((api.cfg().url || '').trim()).replace(/\/+$/, '').toLowerCase()
+      var id = String(userId == null ? '' : userId)
+      return {
+        project: project,
+        userId: id,
+        key: project + '\n' + id,
+      }
+    }
+    api.workspaceMeta = function (userId) {
+      var m = api.meta()
+      return m.workspaceKey === api.workspace(userId).key ? m : {}
+    }
+    api.workspaceNeedsConfirmation = function (userId) {
+      var key = api.workspace(userId).key
+      var previous = api.meta().workspaceKey
+      return !previous || previous !== key
+    }
+    api.bindWorkspace = function (userId) {
+      var w = api.workspace(userId)
+      var next = {
+        workspaceKey: w.key,
+        workspaceProject: w.project,
+        workspaceUserId: w.userId,
+        updatedAt: 0,
+        syncedDocHash: '',
+        syncedSetHash: '',
+      }
+      localStorage.setItem(metaKey, JSON.stringify(next))
+      return next
+    }
+    api.confirmWorkspace = function (userId) {
+      if (!api.workspaceNeedsConfirmation(userId)) return Promise.resolve(true)
+      var title = typeof c.workspaceTitle === 'function'
+        ? c.workspaceTitle()
+        : (c.workspaceTitle || '切换云工作区')
+      var body = typeof c.workspaceBody === 'function'
+        ? c.workspaceBody()
+        : (c.workspaceBody || '当前本机数据属于另一个 Supabase 项目或账号。继续将把当前工作区的同步基线重置；只有在你明确选择“上传本地”或开启立即同步时，本机数据才会写入新账号。是否继续？')
+      return global.ZenUI.dialog.confirm(body, {
+        title: title,
+        ok: typeof c.workspaceOk === 'function' ? c.workspaceOk() : (c.workspaceOk || '继续'),
+        cancel: typeof c.workspaceCancel === 'function' ? c.workspaceCancel() : (c.workspaceCancel || '取消'),
+        danger: true,
+      }).then(function (ok) {
+        if (ok) api.bindWorkspace(userId)
+        return !!ok
+      })
+    }
+    api.mark = function (ts, extra) {
+      var m = api.meta()
+      var s = c.session()
+      if (s && s.user && s.user.id) {
+        var w = api.workspace(s.user.id)
+        m.workspaceKey = w.key
+        m.workspaceProject = w.project
+        m.workspaceUserId = w.userId
+      }
+      m.updatedAt = ts || api.now()
+      Object.keys(extra || {}).forEach(function (k) { m[k] = extra[k] })
+      localStorage.setItem(metaKey, JSON.stringify(m))
+      return m
+    }
     api.remote = function () {
       var client = c.client()
-      if (!client || !c.session()) return Promise.resolve(null)
+      var current = c.session()
+      if (!client || !current) return Promise.resolve(null)
       return client.from(c.table)
         .select('payload,client_updated_at')
-        .eq('user_id', c.session().user.id)
+        .eq('user_id', current.user.id)
         .maybeSingle()
+        .then(function (result) {
+          if (result && result.error) throw result.error
+          return result ? result.data : null
+        })
     }
     api.closeModal = function () { global.ZenUI.modal.close() }
     api.setStatusText = function (v) {

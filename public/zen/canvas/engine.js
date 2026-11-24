@@ -60,11 +60,6 @@
     var n = parseFloat(v)
     return isNaN(n) ? fallback : n
   }
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    })
-  }
   function el(tag, cls, html) {
     var n = document.createElement(tag)
     if (cls) n.className = cls
@@ -284,11 +279,17 @@
       panY: 0,
       portDrag: null,
       tempLine: null,
+      nodeDrag: null,
+      resize: null,
+      marqueeDrag: null,
       renderPending: false,
       portDragPending: false,
       isPanning: false,
+      panPointerId: null,
       clipboard: null,
     }
+    this._touchPointers = new Map()
+    this._pinch = null
     this._history = []
     this._future = []
     this._snapshot = null
@@ -298,14 +299,32 @@
     var mount = this.opts.mount || document.body
     this.workspace = el('div', 'zc-workspace')
     this.workspace.dataset.zenCanvas = this.scope
+    this.workspace.tabIndex = 0
+    this.workspace.setAttribute('role', 'region')
+    this.workspace.setAttribute('aria-label', '画布工作区')
+    this.instructionsId = this._id('instructions')
+    this.statusId = this._id('status')
+    this.workspace.setAttribute('aria-describedby', this.instructionsId)
     this.inner = el('div', 'zc-canvas-inner')
     this.svg = svgEl('svg', 'zc-svg-layer')
     this.svg.setAttribute('width', '10000')
     this.svg.setAttribute('height', '10000')
+    this.svg.setAttribute('aria-hidden', 'true')
     this.inner.appendChild(this.svg)
     this.workspace.appendChild(this.inner)
     this.marquee = el('div', 'zc-marquee')
+    this.marquee.setAttribute('aria-hidden', 'true')
     this.workspace.appendChild(this.marquee)
+    this.instructions = el('div', 'zc-sr-only')
+    this.instructions.id = this.instructionsId
+    this.instructions.textContent = 'Tab 聚焦节点，方向键移动，Enter 或 Space 选择，Delete 删除。端口按 Enter 或 Space 开始键盘连线。'
+    this.status = el('div', 'zc-canvas-status')
+    this.status.id = this.statusId
+    this.status.setAttribute('role', 'status')
+    this.status.setAttribute('aria-live', 'polite')
+    this.status.setAttribute('aria-atomic', 'true')
+    this.workspace.appendChild(this.instructions)
+    this.workspace.appendChild(this.status)
     mount.appendChild(this.workspace)
 
     if (this.opts.nodeTypes) {
@@ -344,6 +363,48 @@
     return this.state.nodes.map(function (n) {
       return n.el
     })
+  }
+
+  ZenCanvasInstance.prototype._nodeLabel = function (rec, selected) {
+    var def = this.types[rec.type] || {}
+    return (selected ? '已选中，' : '') + '节点：' + (rec.data.title || def.label || rec.type)
+  }
+
+  ZenCanvasInstance.prototype._syncNodeSelection = function (rec) {
+    var selected = this.state.selectedNodeIds.has(rec.id)
+    rec.el.classList.toggle('selected', selected)
+    rec.el.dataset.selected = String(selected)
+    rec.el.setAttribute('aria-current', selected ? 'true' : 'false')
+    rec.el.setAttribute('aria-label', this._nodeLabel(rec, selected))
+  }
+
+  ZenCanvasInstance.prototype._syncNodeState = function (rec) {
+    var node = rec.el
+    var lock = node.querySelector('[data-act="lock"]')
+    var minimize = node.querySelector('[data-act="minimize"]')
+    var remove = node.querySelector('[data-act="remove"]')
+    node.classList.toggle('locked', rec.locked)
+    if (lock) {
+      lock.classList.toggle('locked', rec.locked)
+      lock.setAttribute('aria-pressed', String(rec.locked))
+      lock.setAttribute('aria-label', rec.locked ? '解锁' : '锁定')
+      lock.title = rec.locked ? '解锁' : '锁定'
+      lock.textContent = rec.locked ? '●' : '○'
+    }
+    if (minimize) {
+      minimize.setAttribute('aria-expanded', String(!rec.minimized))
+      minimize.setAttribute('aria-label', rec.minimized ? '展开' : '折叠')
+      minimize.title = rec.minimized ? '展开' : '折叠'
+      minimize.textContent = rec.minimized ? '+' : '−'
+      minimize.disabled = rec.locked
+    }
+    if (remove) remove.disabled = rec.locked
+    Array.prototype.forEach.call(node.querySelectorAll('.node-port'), function (port) {
+      port.disabled = rec.locked
+      port.tabIndex = rec.locked ? -1 : 0
+      port.setAttribute('aria-disabled', String(rec.locked))
+    })
+    this._syncNodeSelection(rec)
   }
 
   // ---- 变更通知 -------------------------------------------------------
@@ -428,11 +489,17 @@
     if (this._nodeById(id)) return this._nodeById(id)
 
     var self = this
-    var nodeRec = { id: id, type: type, data: data, locked: !!data.locked, minimized: !!data.minimized }
+    var nodeRec = { id: id, type: type, data: data, locked: !!data.locked, minimized: false }
     var node = el('div', 'node zc-node')
+    var contentId = this._id('content-' + id)
     node.id = this._id(id)
     node.dataset.type = type
     node.dataset.nodeId = id
+    node.dataset.selected = 'false'
+    node.tabIndex = 0
+    node.setAttribute('role', 'group')
+    node.setAttribute('aria-roledescription', '画布节点')
+    node.setAttribute('aria-keyshortcuts', 'ArrowUp ArrowDown ArrowLeft ArrowRight Enter Space Delete')
     node.style.left = (pos && pos.x != null ? pos.x : 120 + this.state.nodes.length * 28) + 'px'
     node.style.top = (pos && pos.y != null ? pos.y : 120 + this.state.nodes.length * 22) + 'px'
     node.style.width = (data.w || def.w) + 'px'
@@ -441,30 +508,53 @@
 
     var header = el('div', 'node-header')
     var title = el('span', 'node-title')
-    title.innerHTML =
-      '<span class="zc-node-glyph">' + escapeHtml(def.glyph || '·') + '</span>' +
-      '<span class="title-text">' + escapeHtml(data.title || def.label) + '</span>' +
-      '<span class="zc-status" data-role="status"></span>'
+    var glyph = el('span', 'zc-node-glyph')
+    glyph.textContent = def.glyph || '·'
+    var titleText = el('span', 'title-text')
+    titleText.textContent = data.title || def.label
+    var status = el('span', 'zc-status')
+    status.dataset.role = 'status'
+    title.appendChild(glyph)
+    title.appendChild(titleText)
+    title.appendChild(status)
     var actions = el('div', 'node-actions')
     if (this.opts.editable) {
-      actions.innerHTML =
-        '<div class="node-action-btn lock-btn" data-act="lock" title="锁定">○</div>' +
-        '<div class="node-action-btn minimize" data-act="minimize" title="折叠">−</div>' +
-        '<div class="node-action-btn close" data-act="remove" title="删除">×</div>'
+      var makeAction = function (act, cls, label, text) {
+        var button = el('button', 'node-action-btn ' + cls)
+        button.type = 'button'
+        button.dataset.act = act
+        button.title = label
+        button.setAttribute('aria-label', label)
+        button.textContent = text
+        return button
+      }
+      var minimizeButton = makeAction('minimize', 'minimize', '折叠', '−')
+      minimizeButton.setAttribute('aria-controls', contentId)
+      minimizeButton.setAttribute('aria-expanded', 'true')
+      actions.appendChild(makeAction('lock', 'lock-btn', '锁定', '○'))
+      actions.appendChild(minimizeButton)
+      actions.appendChild(makeAction('remove', 'close', '删除', '×'))
     }
     header.appendChild(title)
     header.appendChild(actions)
     node.appendChild(header)
 
     ;(def.ports || DEFAULT_PORTS).forEach(function (pt) {
-      var port = el('div', 'node-port ' + pt)
+      var direction = pt === 'left' || pt === 'top' ? '输入' : '输出'
+      var port = el('button', 'node-port ' + pt)
+      port.type = 'button'
       port.dataset.port = pt
       port.dataset.nodeId = id
-      port.title = pt === 'left' || pt === 'top' ? '输入端口' : '输出端口'
+      port.title = direction + '端口'
+      port.setAttribute('aria-label', (data.title || def.label) + '，' + direction + '端口')
+      port.setAttribute('aria-pressed', 'false')
+      port.tabIndex = 0
+      port.disabled = nodeRec.locked
       node.appendChild(port)
     })
 
     var content = el('div', 'node-content')
+    content.id = contentId
     content.dataset.role = 'content'
     try {
       def.render(data, content, this._nodeApi(nodeRec))
@@ -474,12 +564,16 @@
     }
     node.appendChild(content)
 
-    if (this.opts.editable) node.appendChild(el('div', 'node-resize'))
+    if (this.opts.editable) {
+      var resize = el('div', 'node-resize')
+      resize.setAttribute('aria-hidden', 'true')
+      node.appendChild(resize)
+    }
     this.inner.appendChild(node)
     nodeRec.el = node
     this.state.nodes.push(nodeRec)
     if (nodeRec.locked) node.classList.add('locked')
-    if (nodeRec.minimized) this._applyMinimize(nodeRec, true)
+    if (data.minimized) this._applyMinimize(nodeRec, true)
 
     this._initNodeDrag(nodeRec)
     if (this.opts.editable) this._initNodeResize(nodeRec)
@@ -538,6 +632,7 @@
       rec._restore = null
     }
     rec.minimized = minimized
+    this._syncNodeState(rec)
     this.renderConnections()
     if (typeof this.opts.onMinimize === 'function') this.opts.onMinimize(rec.id, minimized)
     return this
@@ -547,6 +642,9 @@
     var self = this
     var rec = this._nodeById(id)
     if (!rec) return this
+    if (this.state.nodeDrag && this.state.nodeDrag.rec === rec) this.state.nodeDrag = null
+    if (this.state.resize && this.state.resize.rec === rec) this.state.resize = null
+    if (this.state.portDrag && this.state.portDrag.nodeId === id) this._clearPortDrag(false)
     if (this.state.alignBaseId === id) this.setAlignBase(null)
     rec.el.remove()
     this.state.nodes = this.state.nodes.filter(function (n) {
@@ -580,6 +678,7 @@
       rec.data.title = patch.title
       var t = rec.el.querySelector('.title-text')
       if (t) t.textContent = patch.title
+      this._syncNodeSelection(rec)
     }
     if (patch.data) {
       rec.data = assign({}, rec.data, patch.data)
@@ -601,6 +700,7 @@
       rec.el.classList.toggle('locked', rec.locked)
     }
     if (patch.minimized != null) this._applyMinimize(rec, !!patch.minimized)
+    this._syncNodeState(rec)
     this.refreshNode(id)
     this.emitNodeCommand(rec, 'updated')
     this._changed()
@@ -615,6 +715,7 @@
     badge.textContent = text || ''
     badge.dataset.state = state || 'idle'
     badge.className = 'zc-status' + (state ? ' is-' + state : '')
+    node.dataset.state = state || 'idle'
     return this
   }
 
@@ -624,6 +725,7 @@
     var def = this.types[rec.type] || {}
     var summary = rec.el.querySelector('[data-role="summary"]')
     if (summary) summary.textContent = def.summary ? def.summary(rec.data) : ''
+    this._syncNodeState(rec)
     this.renderConnections()
     return this
   }
@@ -657,8 +759,15 @@
     this.state.selectedNodeIds.clear()
     this.state.selectedConnId = null
     this.state.alignBaseId = null
-    this.state.portDrag = null
+    if (this.state.portDrag) this._clearPortDrag(false)
+    this.state.nodeDrag = null
+    this.state.resize = null
+    this.state.marqueeDrag = null
     this.state.tempLine = null
+    this._touchPointers.clear()
+    this._pinch = null
+    this.state.isPanning = false
+    this.state.panPointerId = null
     this.svg.innerHTML = ''
     this._selectionChanged()
     this._changed()
@@ -670,18 +779,22 @@
     var self = this
     var node = rec.el
     var header = node.querySelector('.node-header')
-    var sx, sy, ox, oy, dragging, list
-    header.addEventListener('mousedown', function (e) {
-      if (e.button !== 0) return
+    header.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || e.isPrimary === false) return
       if (e.target.closest('.node-action-btn') || e.target.closest('.node-port')) return
-      if (rec.locked) return
       if (e.altKey) {
+        if (!self.state.selectedNodeIds.has(rec.id)) {
+          self.clearSelection()
+          self.select(rec.id)
+        }
         self.setAlignBase(rec.id)
+        node.focus()
         e.preventDefault()
         return
       }
       if (e.shiftKey || e.ctrlKey || e.metaKey) {
         self.toggleSelect(rec.id)
+        if (self.state.selectedNodeIds.has(rec.id)) node.focus()
         e.preventDefault()
         return
       }
@@ -689,38 +802,22 @@
         self.clearSelection()
         self.select(rec.id)
       }
-      list = self._collectMoveNodes(rec.id)
-      dragging = true
-      sx = e.clientX
-      sy = e.clientY
-      ox = num(node.style.left, 0)
-      oy = num(node.style.top, 0)
+      node.focus()
       node.style.zIndex = ++self.zCounter
+      if (rec.locked) return
+      self.state.nodeDrag = {
+        pointerId: e.pointerId,
+        rec: rec,
+        node: node,
+        list: self._collectMoveNodes(rec.id),
+        startX: e.clientX,
+        startY: e.clientY,
+        originX: num(node.style.left, 0),
+        originY: num(node.style.top, 0),
+      }
       e.preventDefault()
-    })
-    document.addEventListener('mousemove', function (e) {
-      if (!dragging) return
-      var nl = ox + (e.clientX - sx) / self.state.scale
-      var nt = oy + (e.clientY - sy) / self.state.scale
-      var dx = nl - num(node.style.left, 0)
-      var dy = nt - num(node.style.top, 0)
-      list.forEach(function (n) {
-        if (!n) return
-        if (n === node) {
-          n.style.left = nl + 'px'
-          n.style.top = nt + 'px'
-        } else if (!n.classList.contains('locked')) {
-          n.style.left = num(n.style.left, 0) + dx + 'px'
-          n.style.top = num(n.style.top, 0) + dy + 'px'
-        }
-      })
-      self.renderConnections()
-    })
-    document.addEventListener('mouseup', function () {
-      if (!dragging) return
-      dragging = false
-      self.renderConnections()
-      self._changed()
+      e.stopPropagation()
+      if (header.setPointerCapture) header.setPointerCapture(e.pointerId)
     })
   }
 
@@ -729,28 +826,20 @@
     var node = rec.el
     var handle = node.querySelector('.node-resize')
     if (!handle) return
-    var sx, sy, ow, oh, resizing
-    handle.addEventListener('mousedown', function (e) {
-      if (e.button !== 0 || rec.locked) return
-      resizing = true
-      sx = e.clientX
-      sy = e.clientY
-      ow = node.offsetWidth
-      oh = node.offsetHeight
+    handle.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || e.isPrimary === false || rec.locked) return
+      self.state.resize = {
+        pointerId: e.pointerId,
+        rec: rec,
+        node: node,
+        startX: e.clientX,
+        startY: e.clientY,
+        width: node.offsetWidth,
+        height: node.offsetHeight,
+      }
       e.preventDefault()
       e.stopPropagation()
-    })
-    document.addEventListener('mousemove', function (e) {
-      if (!resizing) return
-      node.style.width = Math.max(160, ow + (e.clientX - sx)) + 'px'
-      node.style.height = Math.max(64, oh + (e.clientY - sy)) + 'px'
-      self.renderConnections()
-    })
-    document.addEventListener('mouseup', function () {
-      if (!resizing) return
-      resizing = false
-      self.renderConnections()
-      self._changed()
+      if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId)
     })
   }
 
@@ -758,41 +847,211 @@
     var self = this
     var ports = rec.el.querySelectorAll('.node-port')
     Array.prototype.forEach.call(ports, function (port) {
-      port.addEventListener('mousedown', function (e) {
-        if (e.button !== 0) return
+      port.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0 || e.isPrimary === false || port.disabled) return
         e.stopPropagation()
         e.preventDefault()
-        var pt = port.dataset.port
-        var pos = getPortPosition(rec.el, pt)
-        self.state.portDrag = { nodeId: rec.id, portType: pt, startX: pos.x, startY: pos.y, port: port }
-        port.classList.add('dragging')
-        var line = svgEl('path', 'conn-line temp')
-        line.setAttribute('d', 'M ' + pos.x + ' ' + pos.y + ' L ' + pos.x + ' ' + pos.y)
-        self.svg.appendChild(line)
-        self.state.tempLine = line
-        document.body.style.cursor = 'crosshair'
-        self.bus.emit('portDragStart', self.state.portDrag)
+        self.select(rec.id)
+        self._startPortDrag(rec, port, e.pointerId)
+        if (port.setPointerCapture) port.setPointerCapture(e.pointerId)
+      })
+      port.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        e.stopPropagation()
+        self._activatePort(rec, port)
+      })
+      port.addEventListener('click', function (e) {
+        if (e.detail === 0) self._activatePort(rec, port)
+      })
+      port.addEventListener('focus', function () {
+        if (!self.state.selectedNodeIds.has(rec.id)) {
+          self.clearSelection()
+          self.select(rec.id)
+        }
+        if (self.state.portDrag && self.state.portDrag.keyboard) {
+          self._updateKeyboardPortTarget(port)
+        }
       })
     })
+  }
+
+  ZenCanvasInstance.prototype._startPortDrag = function (rec, port, pointerId) {
+    this._clearPortDrag(false)
+    var pt = port.dataset.port
+    var pos = getPortPosition(rec.el, pt)
+    this.state.portDrag = {
+      nodeId: rec.id,
+      portType: pt,
+      startX: pos.x,
+      startY: pos.y,
+      port: port,
+      pointerId: pointerId,
+      keyboard: false,
+    }
+    port.classList.add('dragging')
+    rec.el.classList.add('port-active')
+    var line = svgEl('path', 'conn-line temp')
+    line.setAttribute('d', 'M ' + pos.x + ' ' + pos.y + ' L ' + pos.x + ' ' + pos.y)
+    this.svg.appendChild(line)
+    this.state.tempLine = line
+    this._portDragCursor = document.body.style.cursor
+    document.body.style.cursor = 'crosshair'
+    this.bus.emit('portDragStart', this.state.portDrag)
+  }
+
+  ZenCanvasInstance.prototype._beginKeyboardConnection = function (rec, port) {
+    var self = this
+    this.select(rec.id)
+    this._startPortDrag(rec, port, null)
+    this.state.portDrag.keyboard = true
+    this.workspace.dataset.connecting = 'true'
+    Array.prototype.forEach.call(this.workspace.querySelectorAll('.node-port'), function (item) {
+      item.setAttribute('aria-describedby', self.statusId)
+    })
+    port.setAttribute('aria-pressed', 'true')
+    this.status.textContent = '连接模式：从“' + this._nodeLabel(rec, false) + '”开始。Tab 到目标端口，按 Enter 或 Space 连接；Escape 取消。'
+    this.bus.emit('portDragStart', this.state.portDrag)
+  }
+
+  ZenCanvasInstance.prototype._activatePort = function (rec, port) {
+    if (port.disabled) return
+    var drag = this.state.portDrag
+    if (!drag || !drag.keyboard) {
+      this._beginKeyboardConnection(rec, port)
+      return
+    }
+    if (drag.nodeId === rec.id && drag.port === port) {
+      this._clearPortDrag(true)
+      return
+    }
+    this._completePortConnection(port)
+  }
+
+  ZenCanvasInstance.prototype._updateKeyboardPortTarget = function (port) {
+    var drag = this.state.portDrag
+    if (!drag || !drag.keyboard || !this.state.tempLine) return
+    var target = this._nodeById(port.dataset.nodeId)
+    if (!target || target.locked) return
+    var pos = getPortPosition(target.el, port.dataset.port)
+    this.state.tempLine.setAttribute(
+      'd',
+      getCurvePath(drag.startX, drag.startY, pos.x, pos.y, drag.portType, OPPOSITE[drag.portType] || 'left')
+    )
+  }
+
+  ZenCanvasInstance.prototype._completePortConnection = function (target) {
+    var drag = this.state.portDrag
+    if (!drag) return
+    if (!target || target.disabled) {
+      this._clearPortDrag(true, { connected: false })
+      return
+    }
+    var targetRec = this._nodeById(target.dataset.nodeId)
+    if (!targetRec || targetRec.locked || targetRec.id === drag.nodeId) {
+      this._clearPortDrag(true, { connected: false })
+      return
+    }
+    var conn = this.addConnection(drag.nodeId, targetRec.id, drag.portType, target.dataset.port)
+    this._clearPortDrag(true, { connected: !!conn, target: targetRec.id })
+    target.focus()
+  }
+
+  ZenCanvasInstance.prototype._clearPortDrag = function (emit, payload) {
+    var drag = this.state.portDrag
+    if (this.state.tempLine) {
+      this.state.tempLine.remove()
+      this.state.tempLine = null
+    }
+    Array.prototype.forEach.call(this.workspace.querySelectorAll('.node-port'), function (port) {
+      port.classList.remove('dragging', 'port-highlight')
+      port.setAttribute('aria-pressed', 'false')
+      port.removeAttribute('aria-describedby')
+    })
+    this.state.nodes.forEach(function (rec) {
+      rec.el.classList.remove('port-active')
+    })
+    this.workspace.dataset.connecting = 'false'
+    this.status.textContent = this._selectionMessage()
+    document.body.style.cursor = this._portDragCursor || ''
+    this._portDragCursor = null
+    this.state.portDrag = null
+    if (emit && drag) this.bus.emit('portDragEnd', payload || {})
+  }
+
+  ZenCanvasInstance.prototype._selectionMessage = function () {
+    var count = this.state.selectedNodeIds.size
+    return count ? '已选择 ' + count + ' 个节点' : '画布已就绪'
+  }
+
+  ZenCanvasInstance.prototype._moveSelectionBy = function (dx, dy) {
+    var self = this
+    var moved = false
+    this.state.selectedNodeIds.forEach(function (id) {
+      var rec = self._nodeById(id)
+      if (!rec || rec.locked) return
+      rec.el.style.left = num(rec.el.style.left, 0) + dx + 'px'
+      rec.el.style.top = num(rec.el.style.top, 0) + dy + 'px'
+      moved = true
+    })
+    if (!moved) return
+    this.renderConnections()
+    this._changed()
   }
 
   ZenCanvasInstance.prototype._initNodeActions = function (rec) {
     var self = this
     var node = rec.el
     var actions = node.querySelector('.node-actions')
-    if (!actions) return
-    actions.addEventListener('click', function (e) {
-      var btn = e.target.closest('[data-act]')
-      if (!btn) return
-      e.stopPropagation()
-      var act = btn.dataset.act
-      if (act === 'remove') self.removeNode(rec.id)
-      else if (act === 'minimize') self.updateNode(rec.id, { minimized: !rec.minimized })
-      else if (act === 'lock') self.updateNode(rec.id, { locked: !rec.locked })
-      self.emitNodeCommand(rec, act)
-    })
-    node.addEventListener('mousedown', function () {
+    if (actions) {
+      actions.addEventListener('pointerdown', function (e) {
+        e.stopPropagation()
+        if (!self.state.selectedNodeIds.has(rec.id)) {
+          self.clearSelection()
+          self.select(rec.id)
+        }
+      })
+      actions.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-act]')
+        if (!btn || btn.disabled) return
+        e.stopPropagation()
+        var act = btn.dataset.act
+        if (act === 'remove') self.removeNode(rec.id)
+        else if (act === 'minimize') self.updateNode(rec.id, { minimized: !rec.minimized })
+        else if (act === 'lock') self.updateNode(rec.id, { locked: !rec.locked })
+        self.emitNodeCommand(rec, act)
+      })
+    }
+    node.addEventListener('pointerdown', function () {
       node.style.zIndex = ++self.zCounter
+    })
+    node.addEventListener('focus', function () {
+      if (!self.state.selectedNodeIds.has(rec.id)) {
+        self.clearSelection()
+        self.select(rec.id)
+      }
+    })
+    node.addEventListener('keydown', function (e) {
+      if (e.target !== node || e.defaultPrevented) return
+      var step = e.shiftKey ? 10 : 1
+      if (e.key === 'ArrowLeft') self._moveSelectionBy(-step, 0)
+      else if (e.key === 'ArrowRight') self._moveSelectionBy(step, 0)
+      else if (e.key === 'ArrowUp') self._moveSelectionBy(0, -step)
+      else if (e.key === 'ArrowDown') self._moveSelectionBy(0, step)
+      else if (e.key === 'Enter' || e.key === ' ') {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) self.toggleSelect(rec.id)
+        else {
+          self.clearSelection()
+          self.select(rec.id)
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        self.deleteSelection()
+      } else if (e.key === 'Escape') {
+        if (self.state.portDrag) self._clearPortDrag(true)
+        else self.clearSelection()
+      } else return
+      e.preventDefault()
+      e.stopPropagation()
     })
     node.addEventListener('dblclick', function (e) {
       if (e.target.closest('.node-header')) return
@@ -828,11 +1087,12 @@
     this.state.selectedConnId = id
     var self = this
     this.state.selectedNodeIds.forEach(function (nid) {
-      var n = self._nodeEl(nid)
-      if (n) n.classList.remove('selected')
+      var n = self._nodeById(nid)
+      if (n) self._syncNodeSelection(n)
     })
     this.state.selectedNodeIds.clear()
     this.renderConnections()
+    this.status.textContent = '已选择连线'
     this.opts.onSelectionChange([])
     this.bus.emit('selection', [])
     return this
@@ -863,6 +1123,7 @@
     var r2 = this.opts.portHitRadius * this.opts.portHitRadius
     for (var i = 0; i < ports.length; i++) {
       var p = ports[i]
+      if (p.disabled) continue
       var rect = p.getBoundingClientRect()
       var dx = cx - (rect.left + rect.width / 2)
       var dy = cy - (rect.top + rect.height / 2)
@@ -939,13 +1200,11 @@
         e.stopPropagation()
         self.removeConnection(conn.id)
       })
-      hit.addEventListener('mouseenter', function () {
-        path.style.stroke = '#c0392b'
-        path.style.strokeWidth = '4px'
+      hit.addEventListener('pointerenter', function () {
+        path.classList.add('remove-hover')
       })
-      hit.addEventListener('mouseleave', function () {
-        path.style.stroke = ''
-        path.style.strokeWidth = ''
+      hit.addEventListener('pointerleave', function () {
+        path.classList.remove('remove-hover')
       })
       self.svg.appendChild(hit)
     })
@@ -1061,9 +1320,10 @@
     return this
   }
 
-  ZenCanvasInstance.prototype.beginPan = function (x, y) {
+  ZenCanvasInstance.prototype.beginPan = function (x, y, pointerId) {
     var s = this.state
     s.isPanning = true
+    s.panPointerId = pointerId == null ? null : pointerId
     s.panStartX = x
     s.panStartY = y
     s.panStartPX = s.panX
@@ -1088,6 +1348,7 @@
     var s = this.state
     if (!s.isPanning) return
     s.isPanning = false
+    s.panPointerId = null
     this.workspace.style.cursor = 'default'
     if (s.panWasDragging) this._changed(false)
   }
@@ -1185,8 +1446,9 @@
   ZenCanvasInstance.prototype.select = function (id) {
     var rec = this._nodeById(id)
     if (!rec) return this
+    this.state.selectedConnId = null
     this.state.selectedNodeIds.add(id)
-    rec.el.classList.add('selected')
+    this._syncNodeSelection(rec)
     this._selectionChanged()
     return this
   }
@@ -1200,7 +1462,7 @@
   ZenCanvasInstance.prototype.deselect = function (id) {
     var rec = this._nodeById(id)
     this.state.selectedNodeIds.delete(id)
-    if (rec) rec.el.classList.remove('selected')
+    if (rec) this._syncNodeSelection(rec)
     this._selectionChanged()
     return this
   }
@@ -1208,8 +1470,8 @@
   ZenCanvasInstance.prototype.clearSelection = function () {
     var self = this
     this.state.selectedNodeIds.forEach(function (id) {
-      var n = self._nodeEl(id)
-      if (n) n.classList.remove('selected')
+      var n = self._nodeById(id)
+      if (n) self._syncNodeSelection(n)
     })
     this.state.selectedNodeIds.clear()
     this.state.selectedConnId = null
@@ -1219,9 +1481,10 @@
 
   ZenCanvasInstance.prototype.selectAll = function () {
     var self = this
+    this.state.selectedConnId = null
     this.state.nodes.forEach(function (n) {
       self.state.selectedNodeIds.add(n.id)
-      n.el.classList.add('selected')
+      self._syncNodeSelection(n)
     })
     this._selectionChanged()
     return this
@@ -1233,6 +1496,7 @@
 
   ZenCanvasInstance.prototype._selectionChanged = function () {
     this.renderConnections()
+    if (!this.state.portDrag) this.status.textContent = this._selectionMessage()
     this.opts.onSelectionChange(this.getSelection())
     this.bus.emit('selection', this.getSelection())
   }
@@ -1518,21 +1782,44 @@
   // ---- 事件绑定 -------------------------------------------------------
   ZenCanvasInstance.prototype._bindCanvasEvents = function () {
     var self = this
-    // 右键平移（writer 同款）
-    this.workspace.addEventListener('mousedown', function (e) {
+    this._pointerMoveHandler = function (e) {
+      self._handlePointerMove(e)
+    }
+    this._pointerUpHandler = function (e) {
+      self._handlePointerUp(e, false)
+    }
+    this._pointerCancelHandler = function (e) {
+      self._handlePointerUp(e, true)
+    }
+    this._menuOutsideHandler = function (e) {
+      if (!e.target.closest || !e.target.closest('.zenui-popmenu')) window.ZenUI.menu.close()
+    }
+    this.workspace.addEventListener('pointerdown', function (e) {
       if (e.button === 2) {
-        self.beginPan(e.clientX, e.clientY)
+        self.beginPan(e.clientX, e.clientY, e.pointerId)
         e.preventDefault()
+        return
       }
+      if (e.pointerType !== 'touch' || e.isPrimary === false) return
+      if (e.target.closest && e.target.closest('.node-content')) return
+      self._touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (self._touchPointers.size === 1) {
+        self.beginPan(e.clientX, e.clientY, e.pointerId)
+      } else if (self._touchPointers.size === 2) {
+        self.endPan()
+        var points = Array.from(self._touchPointers.values())
+        self._pinch = {
+          distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
+          mid: { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 },
+        }
+      }
+      e.preventDefault()
+      if (self.workspace.setPointerCapture) self.workspace.setPointerCapture(e.pointerId)
     })
-    document.addEventListener('mousemove', function (e) {
-      self.movePan(e.clientX, e.clientY)
-      self._updatePortDrag(e)
-    })
-    document.addEventListener('mouseup', function (e) {
-      self.endPan()
-      self._finishPortDrag(e)
-    })
+    document.addEventListener('pointermove', this._pointerMoveHandler, { passive: false })
+    document.addEventListener('pointerup', this._pointerUpHandler)
+    document.addEventListener('pointercancel', this._pointerCancelHandler)
+    document.addEventListener('pointerdown', this._menuOutsideHandler)
 
     // 滚轮 / 触控板判定：完全沿用 writer 的“滚动流”判定
     var lastWheelAt = 0,
@@ -1580,58 +1867,6 @@
       { passive: false }
     )
 
-    // 双指触摸：单指拖画布 / 双指捏合缩放
-    var touches = {}
-    var lastDist = 0
-    var lastMid = null
-    this.workspace.addEventListener('touchstart', function (e) {
-      Array.prototype.forEach.call(e.changedTouches, function (t) {
-        touches[t.identifier] = { x: t.clientX, y: t.clientY }
-      })
-      var ids = Object.keys(touches)
-      if (ids.length === 1) self.beginPan(touches[ids[0]].x, touches[ids[0]].y)
-      else if (ids.length === 2) {
-        self.state.isPanning = false
-        var a = touches[ids[0]],
-          b = touches[ids[1]]
-        lastDist = Math.hypot(a.x - b.x, a.y - b.y)
-        lastMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-      }
-    }, { passive: true })
-    this.workspace.addEventListener('touchmove', function (e) {
-      Array.prototype.forEach.call(e.changedTouches, function (t) {
-        if (touches[t.identifier]) touches[t.identifier] = { x: t.clientX, y: t.clientY }
-      })
-      var ids = Object.keys(touches)
-      if (ids.length === 1 && self.state.isPanning) {
-        self.movePan(touches[ids[0]].x, touches[ids[0]].y)
-      } else if (ids.length === 2 && lastMid) {
-        var a = touches[ids[0]],
-          b = touches[ids[1]]
-        var dist = Math.hypot(a.x - b.x, a.y - b.y)
-        var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-        self.panBy(mid.x - lastMid.x, mid.y - lastMid.y)
-        if (lastDist > 0) self.zoomAt(mid.x, mid.y, dist / lastDist)
-        lastDist = dist
-        lastMid = mid
-      }
-      e.preventDefault()
-    }, { passive: false })
-    var endTouch = function (e) {
-      Array.prototype.forEach.call(e.changedTouches, function (t) {
-        delete touches[t.identifier]
-      })
-      var ids = Object.keys(touches)
-      if (ids.length === 1) self.rebasePan(touches[ids[0]].x, touches[ids[0]].y)
-      else if (ids.length === 0) {
-        self.endPan()
-        lastDist = 0
-        lastMid = null
-      }
-    }
-    this.workspace.addEventListener('touchend', endTouch, { passive: true })
-    this.workspace.addEventListener('touchcancel', endTouch, { passive: true })
-
     // 右键菜单
     var self2 = this
     this.workspace.addEventListener('contextmenu', function (e) {
@@ -1643,21 +1878,114 @@
       }
       self2.showContextMenu(e)
     })
-    document.addEventListener('mousedown', function (e) {
-      if (!e.target.closest('.zenui-popmenu')) window.ZenUI.menu.close()
-    })
+  }
+
+  ZenCanvasInstance.prototype._handlePointerMove = function (e) {
+    if (this._touchPointers.has(e.pointerId)) {
+      this._touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (this._touchPointers.size === 2 && this._pinch) {
+        var points = Array.from(this._touchPointers.values())
+        var distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
+        var mid = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
+        this.panBy(mid.x - this._pinch.mid.x, mid.y - this._pinch.mid.y)
+        if (this._pinch.distance > 0) this.zoomAt(mid.x, mid.y, distance / this._pinch.distance)
+        this._pinch = { distance: distance, mid: mid }
+        e.preventDefault()
+        return
+      }
+    }
+    if (this.state.isPanning && (this.state.panPointerId == null || this.state.panPointerId === e.pointerId)) {
+      this.movePan(e.clientX, e.clientY)
+    }
+    var drag = this.state.nodeDrag
+    if (drag && drag.pointerId === e.pointerId) {
+      var nl = drag.originX + (e.clientX - drag.startX) / this.state.scale
+      var nt = drag.originY + (e.clientY - drag.startY) / this.state.scale
+      var dx = nl - num(drag.node.style.left, 0)
+      var dy = nt - num(drag.node.style.top, 0)
+      drag.list.forEach(function (node) {
+        if (!node || node.classList.contains('locked')) return
+        if (node === drag.node) {
+          node.style.left = nl + 'px'
+          node.style.top = nt + 'px'
+        } else {
+          node.style.left = num(node.style.left, 0) + dx + 'px'
+          node.style.top = num(node.style.top, 0) + dy + 'px'
+        }
+      })
+      this.renderConnections()
+      e.preventDefault()
+      return
+    }
+    var resize = this.state.resize
+    if (resize && resize.pointerId === e.pointerId) {
+      resize.node.style.width = Math.max(160, resize.width + (e.clientX - resize.startX) / this.state.scale) + 'px'
+      resize.node.style.height = Math.max(64, resize.height + (e.clientY - resize.startY) / this.state.scale) + 'px'
+      this.renderConnections()
+      e.preventDefault()
+      return
+    }
+    if (this.state.portDrag && !this.state.portDrag.keyboard && this.state.portDrag.pointerId === e.pointerId) {
+      this._updatePortDrag(e)
+      e.preventDefault()
+      return
+    }
+    var marquee = this.state.marqueeDrag
+    if (marquee && marquee.pointerId === e.pointerId) {
+      this._updateMarquee(marquee, e.clientX, e.clientY)
+      e.preventDefault()
+    }
+  }
+
+  ZenCanvasInstance.prototype._handlePointerUp = function (e, cancelled) {
+    if (this._touchPointers.has(e.pointerId)) {
+      this._touchPointers.delete(e.pointerId)
+      if (this._touchPointers.size === 1) {
+        var remainingEntry = Array.from(this._touchPointers.entries())[0]
+        var remaining = remainingEntry[1]
+        this._pinch = null
+        this.beginPan(remaining.x, remaining.y, remainingEntry[0])
+      } else if (this._touchPointers.size === 0) {
+        this._pinch = null
+        this.endPan()
+      }
+    }
+    if (this.state.isPanning && this.state.panPointerId === e.pointerId) this.endPan()
+    var drag = this.state.nodeDrag
+    if (drag && drag.pointerId === e.pointerId) {
+      this.state.nodeDrag = null
+      this.renderConnections()
+      if (!cancelled) this._changed()
+    }
+    var resize = this.state.resize
+    if (resize && resize.pointerId === e.pointerId) {
+      this.state.resize = null
+      this.renderConnections()
+      if (!cancelled) this._changed()
+    }
+    if (this.state.portDrag && !this.state.portDrag.keyboard && this.state.portDrag.pointerId === e.pointerId) {
+      if (cancelled) this._clearPortDrag(true, { cancelled: true })
+      else this._finishPortDrag(e)
+    }
+    var marquee = this.state.marqueeDrag
+    if (marquee && marquee.pointerId === e.pointerId) {
+      this.state.marqueeDrag = null
+      this.marquee.style.display = 'none'
+    }
   }
 
   ZenCanvasInstance.prototype._updatePortDrag = function (e) {
     var s = this.state
-    if (!s.portDrag || !s.tempLine) return
+    if (!s.portDrag || !s.tempLine || s.portDrag.keyboard) return
     if (s.portDragPending) return
     s.portDragPending = true
+    var cx = e.clientX
+    var cy = e.clientY
     var self = this
     requestAnimationFrame(function () {
       s.portDragPending = false
       if (!s.portDrag || !s.tempLine) return
-      var world = self.screenToWorld(e.clientX, e.clientY)
+      var world = self.screenToWorld(cx, cy)
       var sx = s.portDrag.startX,
         sy = s.portDrag.startY
       var fp = s.portDrag.portType || 'right'
@@ -1665,125 +1993,110 @@
       Array.prototype.forEach.call(self.workspace.querySelectorAll('.node-port'), function (p) {
         p.classList.remove('port-highlight')
       })
-      var target = self._portAt(e.clientX, e.clientY)
+      var target = self._portAt(cx, cy)
       if (target && target.dataset.nodeId !== s.portDrag.nodeId) target.classList.add('port-highlight')
     })
   }
 
   ZenCanvasInstance.prototype._finishPortDrag = function (e) {
-    var s = this.state
-    if (!s.portDrag) return
-    var self = this
-    if (s.tempLine) {
-      s.tempLine.remove()
-      s.tempLine = null
-    }
-    Array.prototype.forEach.call(this.workspace.querySelectorAll('.node-port'), function (p) {
-      p.classList.remove('dragging', 'port-highlight')
-    })
-    document.body.style.cursor = 'default'
+    var drag = this.state.portDrag
+    if (!drag || drag.keyboard) return
     var target = this._portAt(e.clientX, e.clientY)
-    if (target && target.dataset.nodeId !== s.portDrag.nodeId) {
-      this.addConnection(s.portDrag.nodeId, target.dataset.nodeId, s.portDrag.portType, target.dataset.port)
-    }
-    s.portDrag = null
-    this.bus.emit('portDragEnd', {})
+    this._completePortConnection(target)
   }
 
   ZenCanvasInstance.prototype._bindSelectionEvents = function () {
     var self = this
     var ws = this.workspace
-    var active = false,
-      additive = false,
-      base = new Set(),
-      sx = 0,
-      sy = 0
-    ws.addEventListener('mousedown', function (e) {
-      if (e.button !== 0) return
+    ws.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || e.isPrimary === false) return
+      if (e.pointerType === 'touch' && self.state.isPanning) return
       var t = e.target
       if (!t || !t.closest) return
-      if (t.closest('.node') || t.closest('.node-port') || t.closest('.zc-context-menu')) return
-      if (document.activeElement && document.activeElement.blur) {
-        try {
-          document.activeElement.blur()
-        } catch (_) {}
-      }
+      if (t.closest('.node') || t.closest('.node-port') || t.closest('.zenui-popmenu')) return
+      ws.focus()
       e.preventDefault()
+      if (ws.setPointerCapture) ws.setPointerCapture(e.pointerId)
       window.ZenUI.menu.close()
-      active = true
-      additive = !!(e.shiftKey || e.ctrlKey || e.metaKey)
-      base = additive ? new Set(self.state.selectedNodeIds) : new Set()
-      sx = e.clientX
-      sy = e.clientY
+      var additive = !!(e.shiftKey || e.ctrlKey || e.metaKey)
+      self.state.marqueeDrag = {
+        pointerId: e.pointerId,
+        additive: additive,
+        base: additive ? new Set(self.state.selectedNodeIds) : new Set(),
+        startX: e.clientX,
+        startY: e.clientY,
+      }
       if (!additive) self.clearSelection()
     })
-    document.addEventListener('mousemove', function (e) {
-      if (!active) return
-      var x0 = Math.min(sx, e.clientX),
-        y0 = Math.min(sy, e.clientY)
-      var x1 = Math.max(sx, e.clientX),
-        y1 = Math.max(sy, e.clientY)
-      var box = self.marquee
-      box.style.display = 'block'
-      box.style.left = x0 + 'px'
-      box.style.top = y0 + 'px'
-      box.style.width = x1 - x0 + 'px'
-      box.style.height = y1 - y0 + 'px'
-      self._silent(function () {
-        self.clearSelection()
-        base.forEach(function (id) {
-          self.select(id)
-        })
-        self.state.nodes.forEach(function (n) {
-          var r = n.el.getBoundingClientRect()
-          if (r.right < x0 || r.left > x1 || r.bottom < y0 || r.top > y1) return
-          self.select(n.id)
-        })
+  }
+
+  ZenCanvasInstance.prototype._updateMarquee = function (marquee, clientX, clientY) {
+    var self = this
+    var x0 = Math.min(marquee.startX, clientX),
+      y0 = Math.min(marquee.startY, clientY)
+    var x1 = Math.max(marquee.startX, clientX),
+      y1 = Math.max(marquee.startY, clientY)
+    var box = this.marquee
+    box.style.display = 'block'
+    box.style.left = x0 + 'px'
+    box.style.top = y0 + 'px'
+    box.style.width = x1 - x0 + 'px'
+    box.style.height = y1 - y0 + 'px'
+    this._silent(function () {
+      self.clearSelection()
+      marquee.base.forEach(function (id) {
+        self.select(id)
       })
-      self._selectionChanged()
+      self.state.nodes.forEach(function (n) {
+        var r = n.el.getBoundingClientRect()
+        if (r.right < x0 || r.left > x1 || r.bottom < y0 || r.top > y1) return
+        self.select(n.id)
+      })
     })
-    document.addEventListener('mouseup', function () {
-      if (!active) return
-      active = false
-      self.marquee.style.display = 'none'
-    })
+    this._selectionChanged()
   }
 
   ZenCanvasInstance.prototype._bindGlobalEvents = function () {
     var self = this
     this._keyHandler = function (e) {
-      if (!self.workspace.isConnected) return
+      if (!self.workspace.isConnected || e.defaultPrevented) return
+      if (!self.workspace.contains(e.target)) return
       var tag = (e.target.tagName || '').toLowerCase()
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return
+      var key = String(e.key || '')
       var mod = e.ctrlKey || e.metaKey
-      if (mod && e.key.toLowerCase() === 'z') {
+      if (mod && key.toLowerCase() === 'z') {
         e.preventDefault()
         if (e.shiftKey) self.redo()
         else self.undo()
-      } else if (mod && e.key.toLowerCase() === 'y') {
+      } else if (mod && key.toLowerCase() === 'y') {
         e.preventDefault()
         self.redo()
-      } else if (mod && e.key.toLowerCase() === 'a') {
+      } else if (mod && key.toLowerCase() === 'a') {
         e.preventDefault()
         self.selectAll()
-      } else if (mod && e.key.toLowerCase() === 'c') {
+      } else if (mod && key.toLowerCase() === 'c') {
         e.preventDefault()
         self.copySelection()
-      } else if (mod && e.key.toLowerCase() === 'v') {
+      } else if (mod && key.toLowerCase() === 'v') {
         e.preventDefault()
         self.paste()
-      } else if (mod && e.key.toLowerCase() === 'd') {
+      } else if (mod && key.toLowerCase() === 'd') {
         e.preventDefault()
         self.duplicate()
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      } else if (key === 'Delete' || key === 'Backspace') {
         e.preventDefault()
         self.deleteSelection()
-      } else if (e.key === 'f' || e.key === 'F') {
+      } else if (key === 'f' || key === 'F') {
+        e.preventDefault()
         self.fitView()
-      } else if (e.key === 'l' || e.key === 'L') {
+      } else if (key === 'l' || key === 'L') {
+        e.preventDefault()
         self.autoLayout()
-      } else if (e.key === 'Escape') {
-        self.clearSelection()
+      } else if (key === 'Escape') {
+        e.preventDefault()
+        if (self.state.portDrag) self._clearPortDrag(true, { cancelled: true })
+        else self.clearSelection()
       }
     }
     document.addEventListener('keydown', this._keyHandler)
@@ -1847,6 +2160,11 @@
 
   ZenCanvasInstance.prototype.destroy = function () {
     document.removeEventListener('keydown', this._keyHandler)
+    document.removeEventListener('pointermove', this._pointerMoveHandler)
+    document.removeEventListener('pointerup', this._pointerUpHandler)
+    document.removeEventListener('pointercancel', this._pointerCancelHandler)
+    document.removeEventListener('pointerdown', this._menuOutsideHandler)
+    if (this.state.portDrag) this._clearPortDrag(false)
     if (this._ro) this._ro.disconnect()
     if (this._mo) this._mo.disconnect()
     this.workspace.remove()

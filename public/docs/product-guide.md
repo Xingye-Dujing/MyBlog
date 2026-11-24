@@ -22,6 +22,15 @@ python tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --ch
 
 ```html
 <script src="omm-embed.js"></script>
+<script src="zen/foundation/util.js"></script>
+<script src="zen/components/layer.js"></script>
+<script src="zen/components/popover.js"></script>
+<script src="zen/components/toast.js"></script>
+<script src="zen/components/dialog.js"></script>
+<script src="zen/components/select.js"></script>
+<script src="zen/components/menu.js"></script>
+<script src="zen/components/shortcuts.js"></script>
+<script src="zen/components/index.js"></script>
 <script src="omm-desktop.js"></script>
 <script src="omm-share.js"></script>
 <link rel="stylesheet" href="zen/zen.css">
@@ -55,7 +64,14 @@ AI、最佳实践、坑、示例请求）。技能会自动衍生，不要手改
 python -c "from agent_workspace.omm_data import product_index_md; from pathlib import Path; Path('agent_workspace/omm_knowledge/PRODUCTS.md').write_text(product_index_md(), encoding='utf-8')"
 ```
 
-## 6. 测试与发布
+## 6. 共享能力接线
+
+- CSV/TSV 导入导出只调用 `ZenCSV.parse()` / `ZenCSV.stringify()`，不维护产品私有分隔符解析器。
+- 卡片桥接加载 `lib/zen-link.js` 即可；发送目标由共享频道权限解析，只读采集页用
+  `data-zen-link-ui="false"` 隐藏悬浮入口。
+- 存档、共享面板、日期选择器与候选区只复用 `ZenUI`；视觉进入 `zen/`，产品不注入私有浮层样式。
+
+## 7. 测试与发布
 
 1. 在 `tests/` 增加产品专项测试（DOM id、脚本语法、桥接与 origin 校验）。
 2. 运行守卫与样式审计：`python ../tests/product_guard.py --check`、

@@ -105,6 +105,17 @@ test('merge：按 id 与指纹去重', () => {
   assert.equal(out[1].content, 'other')
 })
 
+test('merge：同 id 后到更新覆盖旧卡，不同批注不按内容误去重', () => {
+  const old = ZenCard.create({ id: 'same', content: '原文', tags: ['旧'] }, FIXED)
+  const updated = ZenCard.create({ id: 'same', content: '原文', tags: ['新'], note: '规则批注' }, FIXED)
+  const annotated = ZenCard.create({ id: 'other', content: '原文', note: '另一条批注' }, FIXED)
+  const out = ZenCard.merge([old, updated, annotated])
+  assert.equal(out.length, 2)
+  assert.equal(out.find((card) => card.id === 'same').note, '规则批注')
+  assert.deepEqual(out.find((card) => card.id === 'same').tags, ['新'])
+  assert.ok(out.some((card) => card.id === 'other'))
+})
+
 test('Corpus 转换：entry <-> card', () => {
   const entry = {
     id: 'ex-1',

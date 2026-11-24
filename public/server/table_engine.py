@@ -17,6 +17,7 @@ import math
 import operator
 import os
 import re
+import tempfile
 from copy import copy as shallow_copy
 from dataclasses import dataclass, field
 from datetime import datetime, time as dtime
@@ -75,6 +76,24 @@ _COL_RE = re.compile(r"^([A-Z]{1,3})(\d+)$")
 _TIME_RE = re.compile(r"(\d{1,2}):(\d{2})(?::(\d{2}))?")
 _SAFE_EXT = (".xlsx", ".xlsm")
 _LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
+NODE_PORTS = {
+    "file": ("right",),
+    "mapCells": ("left", "right"),
+    "mapColumns": ("left", "right"),
+    "formula": ("left", "right"),
+    "filter": ("left", "right"),
+    "sort": ("left", "right"),
+    "dedupe": ("left", "right"),
+    "join": ("left", "top", "right"),
+    "aggregate": ("left", "right"),
+    "pivot": ("left", "right"),
+    "write": ("left", "right"),
+    "writeFormula": ("left", "right"),
+    "exportTable": ("left", "right"),
+    "save": ("left",),
+    "preview": ("left", "right"),
+    "note": (),
+}
 
 # ---------------------------------------------------------------------------
 # 基础解析
@@ -746,8 +765,15 @@ class Engine:
 
     # ---- 图校验 ----
     def _validate(self) -> List[Dict[str, Any]]:
-        raw_nodes = self.spec.get("nodes") if isinstance(self.spec.get("nodes"), list) else []
-        raw_conns = self.spec.get("connections") if isinstance(self.spec.get("connections"), list) else []
+        if self.spec.get("format") != "omm-table-workflow":
+            return [{"message": "工作流 format 必须是 omm-table-workflow"}]
+        version = self.spec.get("version")
+        if isinstance(version, bool) or not isinstance(version, (int, float)) or version != 1:
+            return [{"message": "工作流 version 必须是数字 1"}]
+        raw_nodes = self.spec.get("nodes")
+        raw_conns = self.spec.get("connections")
+        if not isinstance(raw_nodes, list) or not isinstance(raw_conns, list):
+            return [{"message": "工作流缺少 nodes/connections 数组"}]
         ids, nodes = set(), {}
         errors: List[Dict[str, Any]] = []
         for i, node in enumerate(raw_nodes):
@@ -755,8 +781,8 @@ class Engine:
                 errors.append({"message": "nodes[%d] 必须是对象" % i})
                 continue
             nid = str(node.get("id") or "")
-            if not nid:
-                errors.append({"message": "nodes[%d] 缺少 id" % i})
+            if not nid or len(nid) > 120 or re.search(r"[\x00-\x1f]", nid):
+                errors.append({"message": "nodes[%d] 的 id 为空或过长" % i})
                 continue
             if nid in ids:
                 errors.append({"message": "节点 id 重复：%s" % nid, "node": nid})
@@ -766,15 +792,34 @@ class Engine:
             if ntype not in self.NODE_TYPES:
                 errors.append({"message": "未知节点类型：%s" % ntype, "node": nid})
             data = node.get("data") if isinstance(node.get("data"), dict) else {}
+            if node.get("data") is not None and not isinstance(node.get("data"), dict):
+                errors.append({"message": "节点 data 必须是对象：%s" % nid, "node": nid})
             nodes[nid] = {"id": nid, "type": ntype, "data": data}
+        edges: List[Tuple[str, str, str, str]] = []
+        edge_keys: Set[Tuple[str, str, str, str]] = set()
+        port_errors: List[Dict[str, Any]] = []
         for i, conn in enumerate(raw_conns):
             if not isinstance(conn, dict):
                 errors.append({"message": "connections[%d] 必须是对象" % i})
                 continue
-            for key in ("from", "to"):
-                value = str(conn.get(key) or "")
-                if value not in ids:
-                    errors.append({"message": "连线 %s 指向不存在的节点：%s" % (key, value)})
+            source, target = str(conn.get("from") or ""), str(conn.get("to") or "")
+            if source not in ids or target not in ids:
+                errors.append({"message": "连线指向不存在的节点：%s -> %s" % (source, target)})
+                continue
+            if source == target:
+                errors.append({"message": "节点不能连接自身：%s" % source, "node": source})
+                continue
+            from_port = str(conn.get("fromPort") or "right")
+            to_port = str(conn.get("toPort") or "left")
+            if from_port not in NODE_PORTS.get(nodes[source]["type"], ()):
+                port_errors.append({"message": "连线输出端口不合法：%s.%s" % (source, from_port)})
+            if to_port not in NODE_PORTS.get(nodes[target]["type"], ()):
+                port_errors.append({"message": "连线输入端口不合法：%s.%s" % (target, to_port)})
+            edge = (source, target, from_port, to_port)
+            if edge in edge_keys:
+                errors.append({"message": "重复连线：%s -> %s" % (source, target)})
+            edge_keys.add(edge)
+            edges.append(edge)
         if errors:
             return errors
         self.nodes = nodes
@@ -784,12 +829,10 @@ class Engine:
             return errors
         indegree = {nid: 0 for nid in nodes}
         adj: Dict[str, List[str]] = {nid: [] for nid in nodes}
-        for conn in raw_conns:
-            a, b = str(conn.get("from") or ""), str(conn.get("to") or "")
-            if a in ids and b in ids and a != b:
-                indegree[b] += 1
-                adj[a].append(b)
-        queue = [nid for nid, d in indegree.items() if d == 0]
+        for source, target, _from_port, _to_port in edges:
+            indegree[target] += 1
+            adj[source].append(target)
+        queue = [nid for nid, degree in indegree.items() if degree == 0]
         order: List[str] = []
         while queue:
             cur = queue.pop(0)
@@ -801,16 +844,23 @@ class Engine:
         if len(order) != len(nodes):
             errors.append({"message": "工作流存在循环连线，请检查节点连接"})
             return errors
+        errors.extend(port_errors)
         self.order = order
         for nid, node in nodes.items():
-            if node["type"] == "file":
+            incoming = [edge for edge in edges if edge[1] == nid]
+            ntype = node["type"]
+            if ntype in ("file", "note"):
+                if incoming:
+                    errors.append({"message": "%s 节点不能有上游输入" % ntype, "node": nid})
                 continue
-            upstream = [c for c in raw_conns if str(c.get("to")) == nid]
-            if not upstream and node["type"] not in ("note",):
-                errors.append({
-                    "message": "节点没有上游输入：%s" % (node["data"].get("title") or node["type"]),
-                    "node": nid,
-                })
+            if ntype == "join":
+                left = sum(edge[3] == "left" for edge in incoming)
+                top = sum(edge[3] == "top" for edge in incoming)
+                if left != 1 or top != 1 or len(incoming) != 2:
+                    errors.append({"message": "连接节点必须各接一个左端口和一个上方端口", "node": nid})
+                continue
+            if len(incoming) != 1 or incoming[0][3] != "left":
+                errors.append({"message": "节点没有上游输入，且必须只能有一个左端口输入：%s" % nid, "node": nid})
         return errors
 
     # ---- 主流程 ----
@@ -890,6 +940,13 @@ class Engine:
         except WorkflowError as exc:
             return {
                 "ok": False, "cancelled": False, "error": exc.as_dict(), "errors": [exc.as_dict()],
+                "nodes": self.node_results, "outputs": [], "conflicts": self.conflicts[:1000],
+                "warnings": self.warnings, "dryRun": self.dry_run,
+            }
+        except Exception as exc:
+            return {
+                "ok": False, "cancelled": bool(self.cancelled()),
+                "error": {"message": str(exc)}, "errors": [{"message": str(exc)}],
                 "nodes": self.node_results, "outputs": [], "conflicts": self.conflicts[:1000],
                 "warnings": self.warnings, "dryRun": self.dry_run,
             }
@@ -1521,6 +1578,25 @@ class Engine:
             raise WorkflowError("存在不允许覆盖的非空单元格，已中止保存（未写出文件）",
                                 hint="把写回节点的冲突策略改为“覆盖已有值”或“跳过已有值”。")
 
+    def _atomic_save(self, workbook: Any, path: str) -> None:
+        """Write beside the destination and publish only a complete workbook."""
+        directory = os.path.abspath(self.out_dir)
+        os.makedirs(directory, exist_ok=True)
+        destination = os.path.abspath(path)
+        if os.path.commonpath([directory, destination]) != directory:
+            raise WorkflowError("输出路径越界")
+        fd, temporary = tempfile.mkstemp(prefix=".omm-table-", suffix=".tmp", dir=directory)
+        os.close(fd)
+        try:
+            workbook.save(temporary)
+            self._raise_if_cancelled()
+            os.replace(temporary, destination)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+
     def _apply_all(self) -> None:
         self._raise_if_cancelled()
         assert self.book is not None
@@ -1594,9 +1670,8 @@ class Engine:
                     filename += ".xlsx"
                 if not self.out_dir:
                     raise WorkflowError("未配置输出目录")
-                os.makedirs(self.out_dir, exist_ok=True)
                 path = os.path.join(self.out_dir, filename)
-                book.wb.save(path)
+                self._atomic_save(book.wb, path)
                 self.outputs_files.append({
                     "name": filename, "path": path, "kind": "workbook",
                     "url": "/api/file/%s" % filename,
@@ -1641,16 +1716,22 @@ class Engine:
                 cell.alignment = Alignment(horizontal="center", vertical="center")
         if not self.out_dir:
             raise WorkflowError("未配置输出目录")
-        os.makedirs(self.out_dir, exist_ok=True)
         path = os.path.join(self.out_dir, exp["filename"])
-        wb.save(path)
-        wb.close()
+        try:
+            self._atomic_save(wb, path)
+        finally:
+            wb.close()
         return path
 
 
 # ---------------------------------------------------------------------------
 # 对外 API
 # ---------------------------------------------------------------------------
+
+
+def validate_workflow(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Validate the wire contract without opening a workbook or starting a job."""
+    return Engine(spec)._validate()
 
 
 def run_workflow(spec: Dict[str, Any], options: Optional[Dict[str, Any]] = None,

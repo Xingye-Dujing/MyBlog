@@ -24,30 +24,8 @@
   window.__ommShareLoaded = true
 
   var API = '/__omm/share'
-  var HUB_ORIGIN = (function () {
-    try {
-      var raw = new URLSearchParams(location.search).get('omm_hub_origin')
-      if (!raw) return ''
-      var parsed = new URL(raw)
-      if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsed.hostname) >= 0) {
-        return parsed.origin
-      }
-    } catch (e) { /* ignore */ }
-    return ''
-  })()
 
-  function parentTargetOrigin() { return HUB_ORIGIN || location.origin }
-  function isTrustedParentOrigin(origin) {
-    if (HUB_ORIGIN) return origin === HUB_ORIGIN
-    try {
-      var u = new URL(String(origin || ''))
-      return (u.protocol === 'http:' || u.protocol === 'https:') &&
-        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
-    } catch (e) {
-      return false
-    }
-  }
+  function parentTargetOrigin() { return ZenUtil.parentTargetOrigin() }
 
   function detectAppId() {
     var marked = document.querySelector('[data-omm-app]')
@@ -126,6 +104,25 @@
       return item.consume
     })
   }
+
+  /* Products use the same resolved policy to offer send targets. Keeping this
+   * query on the bridge prevents each product from maintaining a stale list of
+   * peer names or claiming a channel the current policy does not allow. */
+  function availableTargets(space, ownApp) {
+    var found = Object.create(null)
+    ;((space && space.channels) || []).forEach(function (channel) {
+      var own = (channel.apps || []).find(function (item) { return item.app === ownApp })
+      if (!own || !own.publish) return
+      ;(channel.apps || []).forEach(function (item) {
+        if (!item.consume || item.app === ownApp) return
+        if (!found[item.app]) found[item.app] = { id: item.app, name: item.name || item.app, channels: [] }
+        if (found[item.app].channels.indexOf(channel.id) < 0) found[item.app].channels.push(channel.id)
+      })
+    })
+    return Object.keys(found).sort().map(function (id) { return found[id] })
+  }
+
+  function targets() { return availableTargets(state.space, APP) }
 
   /* -------------------------------------------------------------------- api */
 
@@ -363,12 +360,16 @@
         try {
           var buffer = await fetchFile(item.id)
           if (window.OMMDesktop && window.OMMDesktop.loadBlob) {
-            window.OMMDesktop.loadBlob(item.title || 'shared', item.type, buffer)
+            var loaded = await window.OMMDesktop.loadBlob(item.title || 'shared', item.type, buffer)
+            if (!loaded || !loaded.ok) {
+              state.toast('收到共享文件，但当前应用没有可用的载入入口', 'error')
+              return false
+            }
             notifyReceived(message, item)
-          } else {
-            state.toast('收到共享文件，但当前应用无法自动载入', 'error')
+            return true
           }
-          return true
+          state.toast('收到共享文件，但当前应用无法自动载入', 'error')
+          return false
         } catch (err) {
           state.toast('共享文件读取失败：' + (err && err.message ? err.message : err), 'error')
           return false
@@ -569,54 +570,6 @@
 
   /* -------------------------------------------------------------------- UI */
 
-  var CSS = [
-    '.osh{display:flex;flex-direction:column;gap:6px;font-size:11.5px}',
-    '.osh-item input[data-pick]{margin-right:6px;vertical-align:-2px;accent-color:var(--omm-ink,#1a1a1a)}',
-    '.osh-preview{margin-top:5px;padding:5px 7px;border:1px dashed var(--omm-line-soft,#d9d9d9);background:var(--omm-soft,#f5f5f5);font:10.5px/1.5 var(--omm-font,"Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif);white-space:pre-wrap;word-break:break-all;max-height:150px;overflow:auto;color:var(--omm-ink,#1a1a1a)}',
-    '.osh-batch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 7px;border:1px solid var(--omm-ink,#1a1a1a);background:var(--omm-soft,#f5f5f5);font-size:10.5px;margin-bottom:5px}',
-    '.osh-batch button{border:1px solid var(--omm-line-soft,#d9d9d9);background:var(--omm-paper,#ffffff);padding:2px 7px;font-size:10.5px;cursor:pointer;color:var(--omm-ink,#1a1a1a)}',
-    '.osh-batch button:hover{border-color:var(--omm-ink,#1a1a1a)}',
-    '.osh-batch button.danger{color:#8f2f27}',
-    '.osh-lead{color:var(--omm-dim, #666666);font-size:11px;line-height:1.55;margin:0 0 2px;padding:5px 8px;background:var(--omm-soft, #f5f5f5);border-left:2px solid var(--omm-line-soft, #d9d9d9)}',
-    '.osh-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
-    '.osh-summary{margin-left:auto;color:var(--omm-dim, #666666);font-size:10.5px}',
-    '.osh-chips{display:flex;gap:4px;flex-wrap:wrap;margin:2px 0}',
-    '.osh-chip{border:1px solid var(--omm-line-soft, #c8c8c8);background:var(--omm-paper, #ffffff);color:var(--omm-dim, #666666);font:inherit;font-size:10.5px;',
-    '  padding:2px 8px;cursor:pointer;border-radius:var(--omm-radius,0px)}',
-    '.osh-chip:hover{border-color:var(--omm-ink, #1a1a1a);color:var(--omm-ink, #1a1a1a)}',
-    '.osh-chip[aria-pressed="true"]{background:var(--omm-ink, #1a1a1a);border-color:var(--omm-ink, #1a1a1a);color:var(--omm-paper, #ffffff)}',
-    '.osh-list{border:1px solid var(--omm-line-soft, #d9d9d9);border-radius:var(--omm-radius,0px)}',
-    '.osh-empty{padding:20px 10px;text-align:center;color:var(--omm-dim, #666666);font-size:11.5px;line-height:1.7;white-space:pre-line}',
-    '.osh-foot{margin-top:5px;color:var(--omm-dim, #666666);font-size:10.5px}',
-    '.osh-rules{display:flex;flex-direction:column;gap:2px}',
-    '.osh-rule{border:1px solid var(--omm-line-soft, #d9d9d9);padding:7px 8px;margin-bottom:6px;border-radius:var(--omm-radius,0px)}',
-    '.osh-rule-head{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}',
-    '.osh-rule-head b{font-size:11.5px}',
-    '.osh-rule-head span{color:var(--omm-dim, #666666);font-size:10.5px}',
-    '.osh-member{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:2px 0;font-size:11px}',
-    '.osh-member b{font-weight:600;min-width:88px}',
-    '.osh-member label{display:flex;align-items:center;gap:4px;color:var(--omm-dim, #666666);cursor:pointer}',
-    '.osh-member input[type="checkbox"]{-webkit-appearance:none;appearance:none;width:13px;height:13px;',
-    '  margin:0;border:1px solid var(--omm-ink, #1a1a1a);background:var(--omm-paper, #ffffff);position:relative;cursor:pointer;',
-    '  border-radius:var(--omm-radius,0px)}',
-    '.osh-member input[type="checkbox"]:checked{background:var(--omm-soft, #f5f5f5)}',
-    '.osh-member input[type="checkbox"]:checked::after{content:"";position:absolute;left:3px;top:0;',
-    '  width:4px;height:8px;border:solid var(--omm-ink, #1a1a1a);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}',
-    '.osh-note{color:var(--omm-dim, #666666);font-size:10.5px;line-height:1.55;margin:0 0 6px}',
-    '.osh-target{white-space:nowrap}',
-  ].join('')
-
-  function injectCss(root) {
-    var scope = root.getRootNode ? root.getRootNode() : document
-    if (!scope || !scope.querySelector) return
-    if (scope.querySelector('#omm-share-css')) return
-    var style = document.createElement('style')
-    style.id = 'omm-share-css'
-    style.textContent = CSS
-    if (scope === document) document.head.appendChild(style)
-    else scope.appendChild(style)
-  }
-
   function mountPanel(root, options) {
     var opts = options || {}
     if (!root) return null
@@ -629,7 +582,6 @@
     state.root = root
     state.isHub = !!opts.isHub
     state.toast = opts.toast || function () {}
-    injectCss(root)
 
     root.innerHTML =
       '<div class="osh">' +
@@ -1042,8 +994,7 @@
           if (!document.hidden) pollInbox()
         })
         window.addEventListener('message', function (event) {
-          if (event.source !== window.parent) return
-          if (!isTrustedParentOrigin(event.origin)) return
+          if (!ZenUtil.isTrustedParentMessage(event)) return
           var data = event.data
           if (data && data.type === 'omm:share-nudge') pollInbox()
         })
@@ -1068,6 +1019,7 @@
     send: send,
     openArtifact: openArtifact,
     openApp: openApp,
+    targets: targets,
     onArtifact: onArtifact,
     pollInbox: pollInbox,
     mountPanel: mountPanel,

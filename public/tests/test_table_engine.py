@@ -640,3 +640,65 @@ def test_missing_upload_file(tmp_path):
     result = run(spec(nodes, conns), tmp_path, resolver=lambda x: os.path.join(str(tmp_path), "no.xlsx"))
     assert not result["ok"]
     assert "找不到输入文件" in result["error"]["message"]
+
+
+def test_atomic_save_cleans_temporary_file_on_failure(simple, tmp_path, monkeypatch):
+    nodes, conns = chain("file", "save")
+    nodes[0]["data"] = {"fileId": "x", "sheetMode": "one", "sheet": "S", "rangeMode": "auto"}
+    nodes[1]["data"] = {"filename": "broken.xlsx"}
+    from openpyxl.workbook.workbook import Workbook
+
+    def broken_save(_self, _path):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Workbook, "save", broken_save)
+    result = run(spec(nodes, conns), tmp_path, resolver=lambda _fid: str(simple))
+    assert not result["ok"] and "disk full" in result["error"]["message"]
+    assert not (tmp_path / "broken.xlsx").exists()
+    assert not list(tmp_path.glob(".omm-table-*.tmp"))
+
+
+def test_atomic_save_does_not_publish_after_cancel(simple, tmp_path, monkeypatch):
+    nodes, conns = chain("file", "save")
+    nodes[0]["data"] = {"fileId": "x", "sheetMode": "one", "sheet": "S", "rangeMode": "auto"}
+    nodes[1]["data"] = {"filename": "cancelled.xlsx"}
+    state = {"cancelled": False}
+    from openpyxl.workbook.workbook import Workbook
+    original = Workbook.save
+
+    def save_then_cancel(self, path):
+        original(self, path)
+        state["cancelled"] = True
+
+    monkeypatch.setattr(Workbook, "save", save_then_cancel)
+    result = run(spec(nodes, conns), tmp_path, resolver=lambda _fid: str(simple),
+                 cancelled=lambda: state["cancelled"])
+    assert result["cancelled"] is True
+    assert not (tmp_path / "cancelled.xlsx").exists()
+    assert not list(tmp_path.glob(".omm-table-*.tmp"))
+
+
+@pytest.mark.parametrize("mutate,expected", [
+    (lambda data: data.update(format="other"), "format"),
+    (lambda data: data.update(version=2), "version"),
+    (lambda data: data["connections"][0].update(toPort="top"), "端口"),
+    (lambda data: data["connections"].append(dict(data["connections"][0])), "重复连线"),
+    (lambda data: data["connections"].append({"from": "n0", "to": "n1", "fromPort": "left"}), "输出端口"),
+])
+def test_wire_contract_validation(simple, tmp_path, mutate, expected):
+    nodes, conns = chain("file", "preview")
+    nodes[0]["data"] = {"fileId": "x", "sheetMode": "one", "sheet": "S", "rangeMode": "auto"}
+    data = spec(nodes, conns)
+    mutate(data)
+    result = run(data, tmp_path, resolver=lambda _fid: str(simple))
+    assert not result["ok"] and expected in str(result.get("errors") or result.get("error"))
+
+
+def test_duplicate_connection_is_rejected(simple, tmp_path):
+    nodes = [
+        {"id": "f", "type": "file", "data": {"fileId": "x", "sheet": "S"}},
+        {"id": "p", "type": "preview", "data": {}},
+    ]
+    data = spec(nodes, [{"from": "f", "to": "p"}, {"from": "f", "to": "p", "fromPort": "right", "toPort": "left"}])
+    result = run(data, tmp_path, resolver=lambda _fid: str(simple))
+    assert not result["ok"] and "重复" in str(result["errors"])

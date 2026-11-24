@@ -132,9 +132,13 @@ class StagedAssetsTests(unittest.TestCase):
     def test_copy_zen_styles_includes_css_entry(self):
         with tempfile.TemporaryDirectory() as folder:
             dest = Path(folder)
-            offline.copy_zen_styles(dest)
+            (dest / "zen" / "products").mkdir(parents=True)
+            (dest / "zen" / "products" / "lambda.css").write_text("stale", encoding="utf-8")
+            offline.copy_zen_styles(dest, "table")
             self.assertTrue((dest / "zen" / "zen.css").is_file())
             self.assertTrue((dest / "zen" / "foundation" / "tokens.css").is_file())
+            self.assertTrue((dest / "zen" / "products" / "table.css").is_file())
+            self.assertFalse((dest / "zen" / "products" / "lambda.css").exists())
 
     def test_asset_checker_follows_css_imports_fonts_and_nested_scripts(self):
         with tempfile.TemporaryDirectory() as folder:

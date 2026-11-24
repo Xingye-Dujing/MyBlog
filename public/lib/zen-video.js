@@ -12,10 +12,13 @@
   var API = ''
   var canvas = null
   var jobId = null
-  var pollTimer = null
   var selectedId = null
   var fileInput = document.getElementById('file-input')
   var pendingFileNode = null
+  var workflowRevision = 0
+  var activeRevision = -1
+  var uploadGeneration = 0
+  var starting = false
 
   function $(id) {
     return document.getElementById(id)
@@ -53,9 +56,9 @@
     probe: {
       label: '媒体信息', category: '分析', glyph: '析', ports: ['left', 'right'], kind: 'k-analysis',
       w: 250, h: 132,
-      defaults: {},
-      fields: [],
-      summary: function () { return '读取时长 / 分辨率 / 编码 / 帧率' },
+      defaults: { fileId: '', filename: '' },
+      fields: [f('fileId', '视频文件', 'file', { hint: '连接上游时忽略此项；未连线时可直接选择文件。' })],
+      summary: function (d) { return d.filename || '读取时长 / 分辨率 / 编码 / 帧率' },
       meta: function () { return '分析节点 · 不改变视频内容' },
     },
     scene: {
@@ -290,7 +293,8 @@
         })
         html += '</select>'
       } else if (fd.type === 'checkbox') {
-        html += '<label class="switch-row"><input type="checkbox" data-key="' + esc(fd.key) + '"' + (value ? ' checked' : '') + ' /> 启用</label>'
+        html += '<button type="button" class="switch" role="switch" data-zen-switch data-key="' + esc(fd.key) + '" aria-checked="' + (value ? 'true' : 'false') + '">' +
+          '<span class="switch-track" aria-hidden="true"></span><span>启用</span></button>'
       } else if (fd.type === 'range') {
         html += '<input type="range" data-key="' + esc(fd.key) + '" min="' + fd.min + '" max="' + fd.max + '" step="' + fd.step + '" value="' + esc(value != null ? value : fd.min) + '" />' +
           '<div class="hintline" data-range-label="' + esc(fd.key) + '">' + esc(value != null ? value : fd.min) + '</div>'
@@ -314,7 +318,8 @@
       var handler = function () {
         var key = input.dataset.key
         var val
-        if (input.type === 'checkbox') val = input.checked
+        if (input.hasAttribute('data-zen-switch')) val = window.ZenUI.switch.isOn(input)
+        else if (input.type === 'checkbox') val = input.checked
         else if (input.type === 'range' || input.type === 'number') val = Number(input.value)
         else val = input.value
         var patch = {}
@@ -323,7 +328,8 @@
         var label = body.querySelector('[data-range-label="' + key + '"]')
         if (label) label.textContent = val
       }
-      input.addEventListener(input.type === 'range' ? 'input' : 'change', handler)
+      input.addEventListener(input.hasAttribute('data-zen-switch') ? 'click' :
+        (input.type === 'range' ? 'input' : 'change'), handler)
     })
     var fileBtn = body.querySelector('[data-file-key]')
     if (fileBtn) {
@@ -415,7 +421,7 @@
     if (obj.app !== 'video' && obj.format !== 'omm-video-workflow') invalid('不是视频工作流')
     if (obj.app && obj.app !== 'video') invalid('应用标识不匹配')
     if (obj.format && obj.format !== 'omm-video-workflow') invalid('格式标识不匹配')
-    if (obj.version != null && Number(obj.version) !== 1) invalid('版本不受支持')
+    if (obj.version != null && (typeof obj.version !== 'number' || obj.version !== 1)) invalid('版本不受支持')
     if (!Array.isArray(obj.nodes) || !Array.isArray(obj.connections)) invalid('缺少 nodes/connections 数组')
     if (obj.nodes.length > 500 || obj.connections.length > 1000) invalid('工作流规模过大')
     var ids = Object.create(null)
@@ -464,6 +470,18 @@
       next[current].forEach(function (id) { if (--indegree[id] === 0) queue.push(id) })
     }
     if (visited !== nodes.length) invalid('工作流存在循环连线')
+    nodes.forEach(function (node) {
+      var incoming = connections.filter(function (connection) { return connection.to === node.id })
+      if (node.type === 'input') {
+        if (incoming.length) invalid('input 节点不能有上游输入')
+      } else if (node.type === 'probe') {
+        if (incoming.length > 1) invalid('probe 节点最多接受一个上游输入')
+      } else if (node.type === 'concat') {
+        if (incoming.length < 2) invalid('concat 节点至少需要 2 个上游输入')
+      } else if (incoming.length !== 1) {
+        invalid('节点必须且只能有一个上游输入：' + node.id)
+      }
+    })
     var view = obj.view && typeof obj.view === 'object' ? obj.view : {}
     var scale = finite(view.scale, 1)
     if (scale <= 0) invalid('视图缩放必须大于 0')
@@ -495,8 +513,6 @@
       return { version: 1, app: 'video', nodeCount: 0, connectionCount: 0, nodes: [], connections: [], output: [] }
     }
     var data = canvas.toJSON()
-    var idToType = {}
-    data.nodes.forEach(function (n) { idToType[n.id] = n.type })
     return {
       version: 1,
       app: 'video',
@@ -588,68 +604,123 @@
     }
   }
 
-  function apiGet(path) {
-    return fetch(API + path).then(function (r) { return r.json() })
-  }
+  function apiGet(path) { return ZenJob.get(API, path) }
   function apiPost(path, body, raw) { return ZenJob.post(API, path, body, raw) }
 
   function uploadFile(file, nodeId) {
+    var generation = ++uploadGeneration
     toast('正在上传 ' + file.name + ' …')
     apiPost('/api/upload?name=' + encodeURIComponent(file.name), file, true).then(function (res) {
-      if (!res.ok) { toast('上传失败：' + (res.error || '未知错误')); return }
+      if (generation !== uploadGeneration) return
       var id = nodeId
+      if (id && !canvas.getNode(id)) return
       if (!id) {
         var existing = canvas.getNodes().find(function (n) { return n.type === 'input' })
         id = existing ? existing.id : canvas.addNode('input', {}, { x: 140, y: 160 }).id
       }
       canvas.updateNode(id, { data: { fileId: res.fileId, filename: res.name } })
       toast('已导入 ' + res.name)
-    }).catch(function (e) { toast('上传失败：' + e.message) })
+    }).catch(function (e) {
+      if (generation === uploadGeneration) toast('上传失败：' + ZenJob.message(e, '未知错误'))
+    })
+  }
+
+  function setRunning(running) {
+    $('btn-run').disabled = running
+    $('btn-stop').disabled = !running
+    $('job-state').textContent = running ? '运行中' : '待命'
+    if (!running) $('stat-progress').textContent = '进度：—'
+  }
+
+  function clearNodeStates() {
+    canvas.getNodes().forEach(function (rec) {
+      var el = canvas.getNodeElement(rec.id)
+      if (!el) return
+      delete el.dataset.state
+      var badge = el.querySelector('[data-role="status"]')
+      if (badge) { badge.textContent = ''; badge.className = 'zc-status' }
+      var bar = el.querySelector('[data-role="progress"]')
+      if (bar) {
+        bar.classList.remove('active')
+        if (bar.firstElementChild) bar.firstElementChild.style.width = '0%'
+      }
+      var result = el.querySelector('[data-role="result"]')
+      if (result) result.textContent = ''
+    })
+  }
+
+  function clearWorkflowState() {
+    workflowRevision += 1
+    clearNodeStates()
+    $('result-body').innerHTML = '<div class="empty">工作流已变化，旧结果已清除。</div>'
+    $('job-state').textContent = jobId ? '旧任务运行中' : '待命'
+    if (!jobId) {
+      $('stat-job').textContent = '任务：无'
+      $('stat-progress').textContent = '进度：—'
+    }
   }
 
   function run() {
-    if (jobId) { toast('任务正在运行'); return }
+    if (jobId || starting) { toast('任务正在运行'); return }
     var spec = buildSpec()
     if (!spec.nodes.length) { toast('画布是空的，请先添加节点'); return }
-    if (!spec.nodes.some(function (n) { return n.type === 'input' && n.data.fileId })) {
+    if (!spec.nodes.some(function (n) { return n.type === 'input' && n.data.fileId }) &&
+        !spec.nodes.some(function (n) { return n.type === 'probe' && n.data.fileId })) {
       toast('请先给“视频输入”节点选择文件'); return
     }
+    var revision = workflowRevision
+    starting = true
+    $('btn-run').disabled = true
     apiPost('/api/run', spec).then(function (res) {
-      if (!res.ok) { toast('启动失败：' + (res.error || '')); return }
+      starting = false
       jobId = res.jobId
-      $('btn-run').disabled = true
-      $('btn-stop').disabled = false
-      $('job-state').textContent = '运行中'
+      activeRevision = revision
+      setRunning(true)
       $('stat-job').textContent = '任务：' + jobId
-      poll()
-    }).catch(function (e) { toast('无法连接后端：' + e.message) })
+      ZenJob.poll(API, jobId, {
+        onState: function (s) {
+          if (jobId !== res.jobId || activeRevision !== workflowRevision) return
+          Object.keys(s.nodes || {}).forEach(function (id) { applyNodeState(id, s.nodes[id]) })
+          $('stat-progress').textContent = '进度：' + Math.round((s.progress || 0) * 100) + '%'
+          $('job-state').textContent = '运行中'
+          $('stat-job').textContent = '任务：' + jobId
+        },
+        onError: function () {
+          if (jobId === res.jobId && activeRevision === workflowRevision) {
+            $('job-state').textContent = '连接中断，正在重试'
+          }
+        },
+        onFinish: function (s, error) {
+          if (jobId !== res.jobId) return
+          var stale = activeRevision !== workflowRevision
+          jobId = null
+          setRunning(false)
+          $('stat-job').textContent = '任务：无'
+          if (error) {
+            $('job-state').textContent = '任务已回收'
+            toast(ZenJob.message(error, '任务查询失败'))
+            return
+          }
+          if (stale) {
+            $('job-state').textContent = '工作流已变化'
+            toast('工作流已变化，旧任务结果已忽略')
+            return
+          }
+          renderResults(s)
+          $('job-state').textContent = s.status === 'done' ? '完成' : s.status === 'cancelled' ? '已停止' : '失败'
+          toast(s.status === 'done' ? '工作流执行完成' : '工作流结束：' + (s.error || s.status))
+        },
+      })
+    }).catch(function (e) {
+      starting = false
+      $('btn-run').disabled = false
+      toast('无法连接后端：' + ZenJob.message(e, '启动失败'))
+    })
   }
 
-  function stop() { return ZenJob.cancel(API, jobId, toast) }
-
-  function poll() {
-    clearTimeout(pollTimer)
-    if (!jobId) return
-    apiGet('/api/job/' + jobId).then(function (s) {
-      if (!s.ok) return
-      Object.keys(s.nodes || {}).forEach(function (id) {
-        applyNodeState(id, s.nodes[id])
-      })
-      $('stat-progress').textContent = '进度：' + Math.round((s.progress || 0) * 100) + '%'
-      $('job-state').textContent = s.status === 'done' ? '完成' : s.status === 'error' ? '失败' : s.status === 'cancelled' ? '已停止' : '运行中'
-      $('stat-job').textContent = '任务：' + jobId
-      if (s.status === 'running') {
-        pollTimer = setTimeout(poll, 600)
-      } else {
-        renderResults(s)
-        jobId = null
-        $('btn-run').disabled = false
-        $('btn-stop').disabled = true
-        toast(s.status === 'done' ? '工作流执行完成' : '工作流结束：' + (s.error || s.status))
-      }
-    }).catch(function (e) {
-      $('job-state').textContent = '连接中断'
-      pollTimer = setTimeout(poll, 1500)
+  function stop() {
+    return ZenJob.cancel(API, jobId, toast).catch(function (e) {
+      toast('停止失败：' + ZenJob.message(e, '无法连接后端'))
     })
   }
 
@@ -671,7 +742,7 @@
     var result = el.querySelector('[data-role="result"]')
     if (!result) return
     if (st.status === 'error') {
-      result.innerHTML = '<span style="color:#c0392b">' + esc(st.error || '执行失败') + '</span>'
+      result.innerHTML = '<span class="is-error">' + esc(st.error || '执行失败') + '</span>'
     } else if (st.status === 'done' || st.status === 'running') {
       var r = st.result || {}
       if (r.probe && r.probe.video) {
@@ -703,7 +774,7 @@
       if (st.status !== 'done' && st.status !== 'error') return
       var rec = byId[id]
       var label = rec ? (DEFS[rec.type] ? DEFS[rec.type].label : rec.type) : id
-      html += '<div class="section-title" style="margin-top:6px">' + esc(label) + '</div>'
+      html += '<div class="section-title result-section">' + esc(label) + '</div>'
       var r = st.result || {}
       if (r.probe) {
         html += '<div class="result-line">时长 ' + fmtTime(r.probe.duration) + '</div>'
@@ -720,10 +791,10 @@
       }
       if (st.output) {
         var isMedia = /\.(mp4|webm|mov|mkv|mp3|m4a|gif)$/i.test(st.output)
-        html += '<div class="result-line"><a href="' + esc(API + st.output) + '" download>下载 ↧</a> ' +
+        html += '<div class="result-line"><a href="' + esc(API + st.output + '?download=1') + '" download>下载 ↧</a> ' +
           (isMedia ? '<a href="#" data-preview="' + esc(API + st.output) + '">预览 ↗</a>' : '') + '</div>'
       }
-      if (st.error) html += '<div class="result-line" style="color:#c0392b">' + esc(st.error) + '</div>'
+      if (st.error) html += '<div class="result-line is-error">' + esc(st.error) + '</div>'
       if (st.status === 'error' && st.log) html += '<div class="logbox">' + esc(st.log.slice(-700)) + '</div>'
     })
     host.innerHTML = html || '<div class="empty">没有产生可展示的结果。</div>'
@@ -888,7 +959,6 @@
       window.ZenUI.dialog.confirm('清空画布？此操作可撤销（Ctrl+Z）。').then(function (ok) {
         if (!ok) return
         canvas.clear()
-        renderResults({ nodes: {} })
       })
     })
     $('btn-upload').addEventListener('click', function () { pendingFileNode = null; fileInput.value = ''; fileInput.click() })
@@ -940,7 +1010,6 @@
 
     // 后端与 ffmpeg 状态
     apiGet('/api/status').then(function (s) {
-      if (!s.ok) return
       var b = s.runtime && s.runtime.bundled
       $('runtime-badge').textContent = 'ffmpeg ' + (b ? '内置' : '系统') + ' ✓'
       $('stat-runtime').textContent = (b ? '内置 ffmpeg · ' : '系统 ffmpeg · ') + (s.runtime.version || '').slice(0, 42)
@@ -951,6 +1020,7 @@
 
     canvas.bus.on('change', function () {
       $('stat-nodes').textContent = '节点 ' + canvas.state.nodes.length + ' · 连线 ' + canvas.state.connections.length
+      clearWorkflowState()
     })
     $('stat-nodes').textContent = '节点 ' + canvas.state.nodes.length + ' · 连线 ' + canvas.state.connections.length
   }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="mdforge">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
@@ -1342,7 +1342,7 @@ template: academic
           $$('.view-btn').forEach((btn) =>
             btn.classList.toggle('active', btn.dataset.view === view),
           )
-          if (view === 'preview') switchTab(state.tab)
+          if (view === 'preview') switchTab('preview')
           requestAnimationFrame(updateLineNumbers)
         }
 
@@ -1854,34 +1854,50 @@ template: academic
         }
 
         function saveDraft() {
+          clearTimeout(state.draftTimer)
+          state.draftTimer = null
+          const payload = {
+            text: dom.editor.value,
+            filename: state.filename,
+            format: state.format,
+            template: state.template,
+            images: [],
+            imagesOmitted: true,
+            savedAt: Date.now(),
+          }
           try {
             const totalData = state.images.reduce(
               (sum, image) => sum + (image.dataUrl ? image.dataUrl.length : 0),
               0,
             )
             const includeImages = totalData < 3.6 * 1024 * 1024
-            const payload = {
-              text: dom.editor.value,
-              filename: state.filename,
-              format: state.format,
-              template: state.template,
-              images: includeImages
-                ? state.images
-                    .filter((image) => image.dataUrl)
-                    .map((image) => ({
-                      name: image.name,
-                      type: image.file.type,
-                      dataUrl: image.dataUrl,
-                    }))
-                : [],
-              imagesOmitted: !includeImages || state.images.some((image) => !image.dataUrl),
-              savedAt: Date.now(),
-            }
+            payload.images = includeImages
+              ? state.images
+                  .filter((image) => image.dataUrl)
+                  .map((image) => ({
+                    name: image.name,
+                    type: image.file.type,
+                    dataUrl: image.dataUrl,
+                  }))
+              : []
+            payload.imagesOmitted = !includeImages || state.images.some((image) => !image.dataUrl)
             localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
             const time = new Date(payload.savedAt)
-            dom.saveHint.textContent = `UTF-8 · MD · 草稿 ${ZenUtil.pad(time.getHours())}:${ZenUtil.pad(time.getMinutes())}`
+            dom.saveHint.textContent = payload.imagesOmitted
+              ? `UTF-8 · MD · 正文已保存 · 图片未保存`
+              : `UTF-8 · MD · 草稿 ${ZenUtil.pad(time.getHours())}:${ZenUtil.pad(time.getMinutes())}`
+            dom.saveHint.dataset.state = payload.imagesOmitted ? 'warning' : 'saved'
           } catch (error) {
-            dom.saveHint.textContent = 'UTF-8 · MD · 草稿未保存'
+            payload.images = []
+            payload.imagesOmitted = true
+            try {
+              localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
+              dom.saveHint.textContent = 'UTF-8 · MD · 正文已保存 · 图片未保存'
+              dom.saveHint.dataset.state = 'warning'
+            } catch (fallbackError) {
+              dom.saveHint.textContent = 'UTF-8 · MD · 正文未保存'
+              dom.saveHint.dataset.state = 'error'
+            }
           }
         }
 
@@ -3068,17 +3084,13 @@ template: academic
           bindMetaForm()
           bindTuningForm()
           setView('split')
-          setTabPreview()
+          switchTab('preview')
           await loadEnvironment()
           syncTuning(true)
           await restoreSession()
           renderAttachments()
           renderOutput()
           updateIssuesBadge()
-        }
-
-        function setTabPreview() {
-          switchTab('preview')
         }
 
         document.addEventListener('DOMContentLoaded', boot)

@@ -394,22 +394,25 @@ class ShellHandler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: D401 - keep desktop logs quiet
         pass
 
+    def _reply_bytes(self, status: int, content_type: str, body: bytes) -> None:
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            # Browsers routinely abandon update probes when navigating away.
+            # A disconnected client is not a server failure.
+            pass
+
     def reply_json(self, status: int, payload: Dict[str, Any]) -> None:
-        body = _json_bytes(payload)
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._reply_bytes(status, "application/json; charset=utf-8", _json_bytes(payload))
 
     def reply_raw(self, status: int, content_type: str, body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._reply_bytes(status, content_type, body)
 
     def _default_app_id(self) -> str:
         return (self._default_app or os.environ.get("OMM_APP_ID") or "app").strip() or "app"

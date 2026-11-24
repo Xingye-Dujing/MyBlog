@@ -76,19 +76,19 @@
     select.value = opt.value
     try { select.dispatchEvent(new Event('change', { bubbles: true })) } catch (e) { /* ignore */ }
     active.sync()
-    close()
-    window.setTimeout(layer.blurAll, 0)
+    close(true)
   }
 
-  function close() {
+  function close(restoreFocus) {
     if (!active) return
     var l = layer.get()
-    var entry = active.entry
+    var job = active
+    var entry = job.entry
+    active = null
     l.menu.hidden = true
     if (entry) l.pop(entry)
-    try { active.trigger.setAttribute('aria-expanded', 'false') } catch (e) { /* ignore */ }
-    active = null
-    layer.blurAll()
+    try { job.trigger.setAttribute('aria-expanded', 'false') } catch (e) { /* ignore */ }
+    if (restoreFocus !== false) layer.restoreFocus(job.trigger)
   }
 
   function open(select, trigger, sync) {
@@ -118,10 +118,11 @@
       outside: function (event) {
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(l.menu) >= 0 || path.indexOf(trigger) >= 0) return
-        close()
+        close(false)
       },
-      escape: close,
+      escape: function () { close(true) },
       key: function (event) {
+        if (event.key === 'Tab') { close(true); return }
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault(); event.stopImmediatePropagation()
           var count = select.options.length
@@ -134,6 +135,7 @@
       },
     }
     l.push(active.entry)
+    layer.restoreFocus(trigger)
   }
 
   function enhance(root) {
@@ -152,11 +154,24 @@
       trigger.className = 'zenui-select-trigger'
       trigger.setAttribute('aria-haspopup', 'listbox')
       trigger.setAttribute('aria-expanded', 'false')
-      ;['aria-label', 'aria-labelledby', 'title'].forEach(function (name) {
-        var value = select.getAttribute(name)
-        if (value == null) trigger.removeAttribute(name)
-        else trigger.setAttribute(name, value)
-      })
+      function syncAccessibleName() {
+        ;['aria-label', 'aria-labelledby', 'title'].forEach(function (name) {
+          var value = select.getAttribute(name)
+          if (value == null) trigger.removeAttribute(name)
+          else trigger.setAttribute(name, value)
+        })
+        if (select.hasAttribute('aria-label') || select.hasAttribute('aria-labelledby') || select.hasAttribute('title')) return
+        var names = []
+        if (select.labels) Array.prototype.forEach.call(select.labels, function (label) {
+          Array.prototype.forEach.call(label.childNodes, function (node) {
+            if (node === select || (node.nodeType === 1 && node.contains(select))) return
+            if (node.textContent) names.push(node.textContent.trim())
+          })
+        })
+        var name = names.join(' ').trim()
+        if (name) trigger.setAttribute('aria-label', name)
+      }
+      syncAccessibleName()
       trigger.disabled = !!select.disabled
       var label = document.createElement('span')
       trigger.appendChild(label)
@@ -169,11 +184,7 @@
         label.textContent = currentLabel(select)
         trigger.disabled = !!select.disabled
         trigger.setAttribute('aria-disabled', String(!!select.disabled))
-        ;['aria-label', 'aria-labelledby', 'title'].forEach(function (name) {
-          var value = select.getAttribute(name)
-          if (value == null) trigger.removeAttribute(name)
-          else trigger.setAttribute(name, value)
-        })
+        syncAccessibleName()
       }
       sync()
       select.addEventListener('change', sync)

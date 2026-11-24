@@ -318,21 +318,9 @@ test('CountStore 从云信封写回 counts；旧快照缺 counts 保留本地', 
   deepEqual(JSON.parse(values.get('zp-count-v1')).records.map((x) => x.id), ['cloud'])
 })
 
-test('Planner 云快照 counts 按 id 合并，旧远端不清空本地', () => {
-  const api = compileFunctions(plannerSource, ['mergeCounts', 'mergeData'], {
-    ZenUtil: { clone: (value) => structuredClone(value) },
-  })
-  const local = { planners: [{ id: 'p1' }], counts: [{ id: 'same', title: 'local' }, { id: 'local', title: 'keep' }] }
-  const remote = { planners: [{ id: 'p1' }], counts: [{ id: 'same', title: 'remote' }, { id: 'remote', title: 'new' }] }
-  const merged = api.mergeData(local, remote)
-  deepEqual(merged.counts.map((x) => x.id), ['same', 'remote', 'local'])
-  assert.equal(merged.counts[0].title, 'remote')
-  deepEqual(api.mergeData(local, { planners: [{ id: 'p1' }] }).counts, local.counts)
-})
-
-test('云写回保留旧快照缺失的 counts，并同步独立计数存储', () => {
+test('Planner 云写回以远端 counts 为准，不复活本地已删除项', () => {
   const writes = {}
-  const api = compileFunctions(plannerSource, ['mergeCounts', 'localData', 'writeLocal'], {
+  const api = compileFunctions(plannerSource, ['writeLocal'], {
     DATA_KEY: 'zp-data-v2',
     tr: (key) => key,
     now: () => 123,
@@ -347,10 +335,32 @@ test('云写回保留旧快照缺失的 counts，并同步独立计数存储', (
       setItem: (key, value) => { writes[key] = value },
     },
   })
+  api.writeLocal({ planners: [{ id: 'p1' }], counts: [] })
+  deepEqual(JSON.parse(writes['zp-data-v2']).counts, [])
+  deepEqual(JSON.parse(writes['zp-count-v1']).records, [])
   api.writeLocal({ planners: [{ id: 'p1' }] })
-  const doc = JSON.parse(writes['zp-data-v2'])
-  deepEqual(doc.counts.map((x) => x.id), ['local'])
-  deepEqual(JSON.parse(writes['zp-count-v1']).records.map((x) => x.id), ['local'])
+  deepEqual(JSON.parse(writes['zp-data-v2']).counts, [])
+})
+
+test('Planner 云写回保留远端 client_updated_at 与完整 counts', () => {
+  const writes = {}
+  const marks = []
+  const api = compileFunctions(plannerSource, ['writeLocal'], {
+    DATA_KEY: 'zp-data-v2',
+    tr: (key) => key,
+    now: () => 123,
+    mark: (ts) => marks.push(ts),
+    ZenUtil: { clone: (value) => structuredClone(value) },
+    localStorage: {
+      getItem: () => null,
+      setItem: (key, value) => { writes[key] = value },
+    },
+  })
+  const counts = [{ id: 'remote', title: 'remote only' }]
+  api.writeLocal({ planners: [{ id: 'p1' }], counts }, 456)
+  deepEqual(marks, [456])
+  deepEqual(JSON.parse(writes['zp-data-v2']).counts, counts)
+  deepEqual(JSON.parse(writes['zp-count-v1']).records, counts)
 })
 
 test('saveDoc 同步 flush 暴露存储失败，pagehide/beforeunload 都接线', () => {
@@ -367,7 +377,7 @@ test('saveDoc 同步 flush 暴露存储失败，pagehide/beforeunload 都接线'
     { setItem: (_key, value) => { saved = value } },
   )
   assert.equal(successful.call({
-    planners: [{ id: 'p1' }], activeId: 'p1', eventsBy: {}, recursBy: {},
+    planners: [{ id: 'p1' }], activeId: 'p1', eventsBy: {}, recursBy: {}, isLocked: () => false,
   }), true)
   deepEqual(JSON.parse(saved).counts, [{ id: 'c1' }])
 
@@ -379,13 +389,15 @@ test('saveDoc 同步 flush 暴露存储失败，pagehide/beforeunload 都接线'
     { setItem() { throw new Error('quota') } },
   )
   const result = save.call({
-    planners: [{ id: 'p1' }], activeId: 'p1', eventsBy: {}, recursBy: {},
+    planners: [{ id: 'p1' }], activeId: 'p1', eventsBy: {}, recursBy: {}, isLocked: () => false,
   })
   assert.equal(result, false)
   deepEqual(notices, ['notify.saveFailed'])
   const flush = new Function('Store', fnSource(plannerSource, 'flushSaveDoc') + '\nreturn flushSaveDoc')
   let flushed = 0
-  assert.equal(flush({ flushSaveDoc: () => { flushed++; return true } })(), true)
+  assert.equal(flush({ isLocked: () => false, flushSaveDoc: () => { flushed++; return true } })(), true)
+  assert.equal(flushed, 1)
+  assert.equal(flush({ isLocked: () => true, flushSaveDoc: () => { flushed++; return true } })(), false)
   assert.equal(flushed, 1)
   assert.match(plannerSource, /window\.addEventListener\('pagehide', flushSaveDoc\)/)
   assert.match(plannerSource, /window\.addEventListener\('beforeunload', flushSaveDoc\)/)

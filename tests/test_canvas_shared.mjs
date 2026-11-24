@@ -8,6 +8,8 @@ import { ZenChart } from '../public/lib/zen-chart.js'
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8')
 const engineSource = read('public/zen/canvas/engine.js')
+const canvasCss = read('public/zen/canvas/canvas.css')
+const writerCss = read('public/zen/products/writer.css')
 const selectSource = read('public/zen/components/select.js')
 
 class FakeElement {
@@ -72,18 +74,27 @@ class FakeElement {
   setAttribute(name, value) { this.attributes[name] = String(value) }
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null }
   removeAttribute(name) { delete this.attributes[name] }
+  hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) }
+  setPointerCapture() {}
+  releasePointerCapture() {}
   addEventListener(name, fn) { (this.listeners[name] || (this.listeners[name] = [])).push(fn) }
   removeEventListener(name, fn) { this.listeners[name] = (this.listeners[name] || []).filter((item) => item !== fn) }
   dispatchEvent(event) { (this.listeners[event.type] || []).forEach((fn) => fn(event)) }
   matches(selector) {
-    if (selector.startsWith('.')) return this.classList.contains(selector.slice(1))
-    if (selector.startsWith('[')) {
-      const match = selector.match(/^\[([^=\]]+)(?:=["']([^"']*)["'])?\]$/)
-      if (!match) return false
-      const value = this.dataset[match[1].replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase())]
-      return match[2] == null ? value != null : String(value) === match[2]
-    }
-    return this.tagName === selector.toUpperCase()
+    return String(selector).split(',').some((part) => {
+      const simple = part.trim()
+      const tag = simple.match(/^[a-z][\w-]*/i)
+      if (tag && this.tagName !== tag[0].toUpperCase()) return false
+      const classes = [...simple.matchAll(/\.([\w-]+)/g)]
+      if (classes.some((match) => !this.classList.contains(match[1]))) return false
+      const attrs = [...simple.matchAll(/\[([\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]+)))?\]/g)]
+      return attrs.every((match) => {
+        const key = match[1].replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+        const value = match[2] ?? match[3] ?? match[4]
+        const current = this.dataset[key]
+        return value == null ? current != null : String(current) === value
+      })
+    })
   }
   closest(selector) {
     for (let node = this; node; node = node.parentNode) if (node.matches(selector)) return node
@@ -105,7 +116,10 @@ class FakeElement {
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null }
   getBoundingClientRect() { return { left: 0, top: 0, right: 240, bottom: 110, width: 240, height: 110 } }
   scrollIntoView() {}
-  focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this }
+  focus() {
+    if (this.ownerDocument) this.ownerDocument.activeElement = this
+    this.dispatchEvent({ type: 'focus' })
+  }
   blur() {}
   set innerHTML(value) { this._html = String(value); this.children = []; this.textContent = '' }
   get innerHTML() { return this._html || '' }
@@ -124,22 +138,31 @@ class FakeDocument {
   createElementNS(_namespace, tag) { return this.createElement(tag) }
   addEventListener(name, fn) { (this.listeners[name] || (this.listeners[name] = [])).push(fn) }
   removeEventListener(name, fn) { this.listeners[name] = (this.listeners[name] || []).filter((item) => item !== fn) }
+  dispatchEvent(event) { (this.listeners[event.type] || []).forEach((fn) => fn(event)) }
   querySelectorAll(selector) { return selector === 'select[data-zen-select]' ? this.selects || [] : [] }
   matches() { return false }
 }
 
 function canvasContext() {
   const document = new FakeDocument()
-  const window = { ZenUI: { menu: { close() {} }, toast() {} } }
+  const window = { ZenUI: { menu: { close() {}, open() {} }, toast() {} } }
+  const raf = []
   const context = {
     window,
     document,
     console,
-    requestAnimationFrame: () => 0,
+    requestAnimationFrame: (fn) => { raf.push(fn); return raf.length },
     setTimeout: () => 0,
   }
   vm.runInNewContext(engineSource, context)
-  return { canvas: context.ZenCanvas, document }
+  return {
+    canvas: context.ZenCanvas,
+    document,
+    flushRaf() {
+      const pending = raf.splice(0)
+      pending.forEach((fn) => fn())
+    },
+  }
 }
 
 function makeCanvas(ZenCanvas) {
@@ -162,6 +185,43 @@ function makeCanvas(ZenCanvas) {
     },
   })
   return { canvas, selections, inspectorId: () => inspectorId }
+}
+
+function pointer(target, type, init = {}) {
+  const event = {
+    type,
+    target,
+    button: 0,
+    pointerId: 7,
+    pointerType: 'mouse',
+    isPrimary: true,
+    clientX: 0,
+    clientY: 0,
+    defaultPrevented: false,
+    preventDefault() { this.defaultPrevented = true },
+    stopPropagation() { this.propagationStopped = true },
+    ...init,
+  }
+  target.dispatchEvent(event)
+  return event
+}
+
+function keydown(target, key, init = {}) {
+  const event = {
+    type: 'keydown',
+    target,
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    defaultPrevented: false,
+    preventDefault() { this.defaultPrevented = true },
+    stopPropagation() { this.propagationStopped = true },
+    ...init,
+  }
+  target.dispatchEvent(event)
+  return event
 }
 
 function sampleJSON() {
@@ -259,11 +319,215 @@ test('removeNode and clear publish empty selection so inspectors drop dead bindi
   assert.deepEqual(Array.from(canvas.getConnections()), [])
 })
 
+test('ZenCanvas nodes and ports expose semantic keyboard controls', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const { canvas } = makeCanvas(ZenCanvas)
+  const rec = canvas.addNode('note', { title: 'A', locked: true, minimized: true }, { x: 10, y: 20 })
+  const node = rec.el
+
+  assert.equal(node.tabIndex, 0)
+  assert.equal(node.getAttribute('role'), 'group')
+  assert.match(node.getAttribute('aria-label'), /节点：A/)
+  assert.equal(node.classList.contains('minimized'), true)
+  assert.equal(node.style.height, '32px')
+
+  const actions = node.querySelector('.node-actions')
+  const lock = node.querySelector('[data-act="lock"]')
+  const minimize = node.querySelector('[data-act="minimize"]')
+  const remove = node.querySelector('[data-act="remove"]')
+  for (const button of [lock, minimize, remove]) {
+    assert.equal(button.tagName, 'BUTTON')
+    assert.equal(button.type, 'button')
+    assert.ok(button.getAttribute('aria-label'))
+  }
+  assert.equal(lock.getAttribute('aria-pressed'), 'true')
+  assert.equal(minimize.getAttribute('aria-expanded'), 'false')
+  assert.equal(minimize.disabled, true)
+  assert.equal(remove.disabled, true)
+  assert.equal(node.querySelector('.node-port.right').tagName, 'BUTTON')
+  assert.equal(node.querySelector('.node-port.right').disabled, true)
+
+  actions.dispatchEvent({ type: 'click', target: lock, stopPropagation() {} })
+  assert.equal(rec.locked, false)
+  assert.equal(lock.getAttribute('aria-pressed'), 'false')
+  assert.equal(node.querySelector('.node-port.right').disabled, false)
+
+  actions.dispatchEvent({ type: 'click', target: minimize, stopPropagation() {} })
+  assert.equal(rec.minimized, false)
+  assert.equal(minimize.getAttribute('aria-expanded'), 'true')
+})
+
+test('ZenCanvas pointer drag, resize and port linking work for mouse and touch', () => {
+  assert.doesNotMatch(engineSource, /addEventListener\(['"](?:mouse|touch)(?:down|move|up|start|end|cancel)['"]/)
+  for (const pointerType of ['mouse', 'touch']) {
+    const { canvas: ZenCanvas, flushRaf } = canvasContext()
+    const { canvas } = makeCanvas(ZenCanvas)
+    const source = canvas.addNode('note', { title: 'Source' }, { x: 10, y: 20 })
+    const target = canvas.addNode('note', { title: 'Target' }, { x: 300, y: 40 })
+    const header = source.el.querySelector('.node-header')
+
+    pointer(header, 'pointerdown', { pointerType, clientX: 100, clientY: 100 })
+    assert.ok(canvas.state.nodeDrag)
+    pointer(canvas.workspace.ownerDocument, 'pointermove', { pointerType, clientX: 130, clientY: 125 })
+    assert.equal(source.el.style.left, '40px')
+    assert.equal(source.el.style.top, '45px')
+    pointer(canvas.workspace.ownerDocument, 'pointerup', { pointerType, clientX: 130, clientY: 125 })
+    assert.equal(canvas.state.nodeDrag, null)
+
+    const handle = source.el.querySelector('.node-resize')
+    pointer(handle, 'pointerdown', { pointerType, clientX: 200, clientY: 200 })
+    pointer(canvas.workspace.ownerDocument, 'pointermove', { pointerType, clientX: 250, clientY: 230 })
+    pointer(canvas.workspace.ownerDocument, 'pointerup', { pointerType, clientX: 250, clientY: 230 })
+    assert.equal(source.el.style.width, '290px')
+    assert.equal(source.el.style.height, '140px')
+
+    const sourcePort = source.el.querySelector('.node-port.right')
+    const targetPort = target.el.querySelector('.node-port.left')
+    canvas._portAt = () => targetPort
+    pointer(sourcePort, 'pointerdown', { pointerType, clientX: 250, clientY: 90 })
+    assert.equal(canvas.state.portDrag.keyboard, false)
+    pointer(canvas.workspace.ownerDocument, 'pointermove', { pointerType, clientX: 300, clientY: 90 })
+    flushRaf()
+    pointer(canvas.workspace.ownerDocument, 'pointerup', { pointerType, clientX: 300, clientY: 90 })
+    assert.equal(canvas.state.portDrag, null)
+    assert.equal(canvas.getConnections().length, 1)
+    assert.equal(canvas.getConnections()[0].from, source.id)
+    assert.equal(canvas.getConnections()[0].to, target.id)
+  }
+})
+
+test('ZenCanvas touch pan and pinch use the same pointer stream', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const { canvas } = makeCanvas(ZenCanvas)
+  const document = canvas.workspace.ownerDocument
+  pointer(canvas.workspace, 'pointerdown', { pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 10 })
+  pointer(document, 'pointermove', { pointerType: 'touch', pointerId: 1, clientX: 40, clientY: 25 })
+  assert.equal(canvas.state.panX, 30)
+  assert.equal(canvas.state.panY, 15)
+  pointer(document, 'pointerup', { pointerType: 'touch', pointerId: 1, clientX: 40, clientY: 25 })
+  assert.equal(canvas.state.isPanning, false)
+
+  pointer(canvas.workspace, 'pointerdown', { pointerType: 'touch', pointerId: 1, clientX: 0, clientY: 100 })
+  pointer(canvas.workspace, 'pointerdown', { pointerType: 'touch', pointerId: 2, clientX: 100, clientY: 100 })
+  assert.ok(canvas._pinch)
+  pointer(document, 'pointermove', { pointerType: 'touch', pointerId: 1, clientX: 50, clientY: 100 })
+  assert.equal(canvas.state.scale, 0.5)
+  pointer(document, 'pointerup', { pointerType: 'touch', pointerId: 1, clientX: 50, clientY: 100 })
+  assert.equal(canvas.state.isPanning, true)
+  pointer(document, 'pointermove', { pointerType: 'touch', pointerId: 2, clientX: 120, clientY: 110 })
+  assert.equal(canvas.state.panX, 85)
+  pointer(document, 'pointerup', { pointerType: 'touch', pointerId: 2, clientX: 120, clientY: 110 })
+})
+
+test('ZenCanvas supports node keyboard movement, selection, deletion and scoped shortcuts', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const { canvas } = makeCanvas(ZenCanvas)
+  const document = canvas.workspace.ownerDocument
+  const first = canvas.addNode('note', { title: 'A' }, { x: 10, y: 20 })
+  const second = canvas.addNode('note', { title: 'B' }, { x: 100, y: 120 })
+  const node = first.el
+
+  node.focus()
+  assert.deepEqual(Array.from(canvas.getSelection()), [first.id])
+  keydown(node, 'ArrowRight')
+  keydown(node, 'ArrowDown', { shiftKey: true })
+  assert.equal(node.style.left, '11px')
+  assert.equal(node.style.top, '30px')
+
+  canvas.clearSelection()
+  keydown(node, 'Enter')
+  assert.deepEqual(Array.from(canvas.getSelection()), [first.id])
+  canvas.clearSelection()
+  keydown(node, ' ')
+  assert.deepEqual(Array.from(canvas.getSelection()), [first.id])
+
+  keydown(document, 'a', { ctrlKey: true, target: node })
+  assert.deepEqual(Array.from(canvas.getSelection()).sort(), [first.id, second.id].sort())
+  keydown(document, 'd', { ctrlKey: true, target: node })
+  assert.equal(canvas.getNodes().length, 4)
+  keydown(document, 'z', { ctrlKey: true, target: node })
+  assert.equal(canvas.getNodes().length, 2)
+
+  const outside = document.createElement('button')
+  keydown(document, 'a', { ctrlKey: true, target: outside })
+  assert.deepEqual(Array.from(canvas.getSelection()), [])
+
+  const currentNode = canvas.getNodeElement(first.id)
+  currentNode.focus()
+  const input = document.createElement('input')
+  currentNode.querySelector('.node-content').appendChild(input)
+  keydown(document, 'a', { ctrlKey: true, target: input })
+  assert.deepEqual(Array.from(canvas.getSelection()), [first.id])
+
+  keydown(currentNode, 'Delete')
+  assert.equal(canvas.getNode(first.id), null)
+  assert.equal(canvas.getNode(second.id).id, second.id)
+})
+
+test('ZenCanvas ports provide a keyboard connection mode with Escape cancellation', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const { canvas } = makeCanvas(ZenCanvas)
+  const source = canvas.addNode('note', { title: 'Source' }, { x: 10, y: 20 })
+  const target = canvas.addNode('note', { title: 'Target' }, { x: 300, y: 40 })
+  const sourcePort = source.el.querySelector('.node-port.right')
+  const targetPort = target.el.querySelector('.node-port.left')
+
+  keydown(sourcePort, 'Enter')
+  assert.equal(canvas.state.portDrag.keyboard, true)
+  assert.equal(canvas.workspace.dataset.connecting, 'true')
+  assert.equal(sourcePort.getAttribute('aria-pressed'), 'true')
+  assert.match(canvas.status.textContent, /Tab.*Enter.*Space.*Escape/)
+  targetPort.dispatchEvent({ type: 'focus' })
+  assert.notEqual(canvas.state.tempLine.getAttribute('d'), 'M 250 75 L 250 75')
+  keydown(targetPort, ' ')
+  assert.equal(canvas.getConnections().length, 1)
+  assert.equal(canvas.state.portDrag, null)
+  assert.equal(canvas.workspace.dataset.connecting, 'false')
+
+  keydown(sourcePort, 'Enter')
+  keydown(canvas.workspace.ownerDocument, 'Escape', { target: sourcePort })
+  assert.equal(canvas.state.portDrag, null)
+  assert.equal(canvas.getConnections().length, 1)
+})
+
+test('shared canvas CSS owns generic nodes while Writer private rules live in the product layer', () => {
+  for (const selector of ['#outline', '.nbp-', '.node-markdown', '.node-todo', '.ft-color-dot', '#floating-toolbar']) {
+    assert.doesNotMatch(canvasCss, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `shared canvas CSS retains ${selector}`)
+    assert.match(writerCss, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `Writer CSS is missing ${selector}`)
+  }
+  assert.doesNotMatch(canvasCss, /\.zc-context-menu|\.zc-toast/)
+  assert.doesNotMatch(writerCss, /\.zc-context-menu|\.zc-toast/)
+  assert.doesNotMatch(canvasCss, /accent-green|#339933/)
+  assert.match(canvasCss, /--port-color: var\(--zen-canvas-port\)/)
+  assert.match(canvasCss, /--conn-color: var\(--zen-canvas-conn\)/)
+  assert.match(canvasCss, /--node-bg: var\(--zen-canvas-node\)/)
+  assert.match(canvasCss, /--title-color: var\(--zen-canvas-title\)/)
+  assert.match(canvasCss, /\.node\.selected \{\s*outline: 2px solid var\(--zen-accent\)/)
+  assert.match(canvasCss, /\.node\[data-state='done'\] \{\s*border-color: var\(--zen-accent\)/)
+  assert.equal((canvasCss.match(/\.node\.zc-node \{/g) || []).length, 1)
+  assert.doesNotMatch(canvasCss, /\.node\.zc-node \{\s*position: absolute/)
+  assert.match(canvasCss, /:focus-visible/)
+  assert.match(canvasCss, /@media \(prefers-reduced-motion: reduce\)/)
+
+  const mobileStart = canvasCss.indexOf('@media (max-width: 760px)')
+  const mobileEnd = canvasCss.indexOf('@media (max-width: 420px)', mobileStart)
+  const mobile = canvasCss.slice(mobileStart, mobileEnd)
+  assert.match(mobile, /\.workspace-body \{\s*display: flex;\s*flex-direction: column;/)
+  assert.match(mobile, /#canvas-host \{\s*min-height: 320px;/)
+
+  const coarseStart = canvasCss.indexOf('@media (hover: none), (pointer: coarse)')
+  const coarseEnd = canvasCss.indexOf('@media (prefers-reduced-motion: reduce)', coarseStart)
+  const coarse = canvasCss.slice(coarseStart, coarseEnd)
+  assert.match(coarse, /\.node \.node-header \{\s*opacity: 1;/)
+  assert.match(coarse, /\.node \.node-port \{\s*opacity: 0\.85;/)
+  assert.match(coarse, /\.node \.node-resize \{\s*opacity: 1;/)
+})
+
 function selectHarness() {
   const document = new FakeDocument()
   const menu = new FakeElement('div')
   menu.hidden = true
-  const layer = { menu, get: () => layer, push() {}, pop() {}, blurAll() {} }
+  const layer = { menu, get: () => layer, push() {}, pop() {}, blurAll() {}, restoreFocus() {} }
   const window = {
     ZenUI: { layer },
     ZenUtil: { esc: (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;') },

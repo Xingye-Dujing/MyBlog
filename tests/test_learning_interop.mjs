@@ -470,7 +470,7 @@ test('旧圆角持久化值在读取/序列化时移除', () => {
     } }) },
     ZenUtil: { clone: plain },
   }
-  const englishApi = loadFunctions(english, ['defaults', 'seed', 'load', 'serializeS'], englishContext)
+  const englishApi = loadFunctions(english, ['defaults', 'isRecord', 'safeDict', 'safeId', 'normalizeSrs', 'normalizeState', 'seed', 'load', 'serializeS'], englishContext)
   const loaded = englishApi.load()
   assert.equal(Object.hasOwn(loaded.set, 'radius'), false)
   englishContext.S = loaded
@@ -504,6 +504,53 @@ test('Corpus AI 分隔条只有 pointer 捕获、键盘和持久化宽度', () =
 
 /* --------------------------------- zen-link --------------------------------- */
 
+test('共享目标由当前频道权限解析，不维护硬编码产品名单', () => {
+  const source = read('public/omm-share.js')
+  const availableTargets = vm.runInNewContext(
+    '(' + extractFunction(source, 'availableTargets') + ')', { Object },
+  )
+  const space = {
+    channels: [
+      {
+        id: 'documents',
+        apps: [
+          { app: 'annotate', name: '文本标注', publish: true, consume: true },
+          { app: 'writer', name: '所思所想', publish: true, consume: true },
+          { app: 'zencard', name: '间隔复习', publish: true, consume: true },
+          { app: 'search', name: '智能搜索', publish: true, consume: false },
+        ],
+      },
+      {
+        id: 'notes.english',
+        apps: [
+          { app: 'annotate', name: '文本标注', publish: true, consume: true },
+          { app: 'corpus', name: '英语语料库', publish: true, consume: true },
+          { app: 'writer', name: '所思所想', publish: false, consume: true },
+        ],
+      },
+    ],
+  }
+  assert.deepEqual(plain(availableTargets(space, 'annotate')), [
+    { id: 'corpus', name: '英语语料库', channels: ['notes.english'] },
+    { id: 'writer', name: '所思所想', channels: ['documents', 'notes.english'] },
+    { id: 'zencard', name: '间隔复习', channels: ['documents'] },
+  ])
+  assert.deepEqual(plain(availableTargets(space, 'missing')), [])
+})
+
+test('ZenLink 面板使用共享 popover 与 CSS，不注入私有浮层样式', () => {
+  const source = read('public/lib/zen-link.js')
+  const styles = read('public/zen/components/components.css')
+  assert.ok(source.includes('ZenUI.popover.open(panel, trigger'))
+  assert.ok(source.includes('OMMShare.targets()'))
+  assert.doesNotMatch(source, /style\.cssText|z-index\s*:|['"]zencard['"],\s*['"]writer['"]/)
+  assert.doesNotMatch(source, /innerHTML\s*=\s*[^\n]*selected/)
+  assert.ok(styles.includes('.zenlink-panel.open'))
+  assert.ok(styles.includes('var(--zen-z-popover)'))
+  assert.ok(read('public/omm-message.html').includes('zen/components/popover.js'))
+  assert.doesNotMatch(read('public/zen/products/planner.css'), /zen-link-toast|#zen-link-panel/)
+})
+
 let zenLinkCase = 0
 async function loadZenLink(search, { topLevel = false } = {}) {
   const saved = new Map()
@@ -525,12 +572,16 @@ async function loadZenLink(search, { topLevel = false } = {}) {
     const document = {
       readyState: 'loading', location, body: { appendChild: () => {} },
       getElementById: () => null,
+      querySelector: () => null,
       addEventListener: (type, fn) => { docListeners[type] = fn },
       dispatchEvent: (event) => { events.push(event); return true },
-      createElement: () => ({ style: {}, dataset: {}, setAttribute: () => {}, remove: () => {} }),
+      createElement: () => ({
+        style: {}, dataset: {}, className: '', setAttribute: () => {},
+        addEventListener: () => {}, remove: () => {},
+      }),
     }
     const window = {
-      parent: topLevel ? null : parent, location,
+      parent: topLevel ? null : parent, location, localStorage: storage,
       ZenUI: { toast: (message) => toasts.push(message) },
       OMMShare: { onArtifact: (fn) => { artifacts.push(fn); return () => {} } },
       addEventListener: (type, fn) => { winListeners[type] = fn },

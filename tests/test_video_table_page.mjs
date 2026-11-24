@@ -7,6 +7,15 @@ import vm from 'node:vm'
 const ROOT = new URL('../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, ROOT), 'utf8')
 const flush = async () => { await Promise.resolve(); await Promise.resolve() }
+const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve() }
+function deferred() {
+  let resolve
+  const promise = new Promise((done) => { resolve = done })
+  return { promise, resolve }
+}
+function response(payload, status = 200) {
+  return { status, ok: status >= 200 && status < 300, text: () => Promise.resolve(JSON.stringify(payload)) }
+}
 
 function decode(value) {
   return String(value || '').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
@@ -107,6 +116,10 @@ function harness(product) {
       toast(message) { toasts.push(String(message)) },
       dialog: { confirm: () => Promise.resolve(true), prompt: () => Promise.resolve('1'), alert: () => Promise.resolve() },
       modal: { open() {}, close() {} },
+      switch: {
+        isOn(el) { return el.getAttribute('aria-checked') === 'true' },
+        set(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false') },
+      },
     },
     ZenUtil: {
       saveJSON(name, data) { saves.push({ name, data }) },
@@ -114,24 +127,22 @@ function harness(product) {
         return event.source === parent && event.origin === 'http://127.0.0.1:8300'
       },
     },
-    ZenJob: {
-      post(api, path, body) {
-        return fetch(api + path, { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body || {}) })
-          .then((response) => response.json())
-      },
-      cancel() { return Promise.resolve() },
-      addAtCenter() {},
-    },
     OMMShare: {
       send(options) { sent = options; return Promise.resolve({ id: 'message-1' }) },
       openApp(target) { opened.push(target) },
     },
     addEventListener(name, fn) { (windowListeners[name] ||= []).push(fn) },
+    setTimeout() { return 1 },
+    clearTimeout() {},
   }
 
   const canvasOptions = {}
+  const canvasListeners = {}
   const canvas = {
-    state: { nodes: [], connections: [] }, bus: { on() {} },
+    state: { nodes: [], connections: [] }, bus: {
+      on(name, fn) { (canvasListeners[name] ||= []).push(fn) },
+      emit(name, payload) { (canvasListeners[name] || []).forEach((fn) => fn(payload)) },
+    },
     typesByCategory() {
       const groups = {}
       Object.values(canvasOptions.nodeTypes || {}).forEach((def) => { (groups[def.category] ||= []).push(def) })
@@ -177,13 +188,17 @@ function harness(product) {
   class FileReader {
     readAsText(file) { this.result = file.content; if (this.onload) this.onload() }
   }
-  function fetch(path, options = {}) {
+  let fetchOverride = null
+  function defaultFetch(path, options = {}) {
     requests.push({ path, options })
     let payload = { ok: true }
     if (path === '/api/status') payload = { ok: true, runtime: { version: 'test', bundled: true }, openpyxl: '3.1', sheets: [] }
     else if (path === '/api/run') payload = { ok: true, jobId: 'job-1' }
     else if (path === '/api/job/job-1') payload = { ok: true, status: 'done', progress: 1, nodes: {}, outputs: [], conflicts: [], warnings: [] }
-    return Promise.resolve({ json: () => Promise.resolve(payload) })
+    return Promise.resolve({ status: 200, ok: true, text: () => Promise.resolve(JSON.stringify(payload)) })
+  }
+  function fetch(path, options = {}) {
+    return fetchOverride ? fetchOverride(path, options) : defaultFetch(path, options)
   }
   const storage = new Map()
   const localStorage = {
@@ -196,6 +211,8 @@ function harness(product) {
     ZenJob: window.ZenJob, OMMShare: window.OMMShare,
     setTimeout() { return 1 }, clearTimeout() {},
   }
+  vm.runInNewContext(read('public/lib/zen-job.js'), context, { filename: 'zen-job.js' })
+  context.ZenJob = window.ZenJob
   vm.runInNewContext(read(`public/lib/zen-${id}.js`), context, { filename: `zen-${id}.js` })
   ;(documentListeners.DOMContentLoaded || []).forEach((fn) => fn())
   init = true
@@ -210,6 +227,8 @@ function harness(product) {
     parentMessages, fromJSONCalls, opened, setCanvas,
     get sent() { return sent },
     setSender(fn) { window.OMMShare.send = fn },
+    setFetch(fn) { fetchOverride = fn },
+    change() { canvas.bus.emit('change') },
     setImport(value) { importFile = { name: 'workflow.json', content: typeof value === 'string' ? value : JSON.stringify(value) } },
     message(data) { (windowListeners.message || []).forEach((fn) => fn(data)) },
     assertReady() { assert.equal(init, true) },
@@ -233,7 +252,7 @@ test('video 合法 input(fileId) 可提交，无文件 input 在本地拦截', a
   const h = harness('video')
   h.setCanvas([{ id: 'in', type: 'input', data: { fileId: 'abcdef123456_clip.mp4', filename: 'clip.mp4' } }])
   h.elements.get('btn-run').click()
-  await flush()
+  await settle()
   const request = h.requests.find((item) => item.path === '/api/run')
   assert.ok(request)
   const spec = JSON.parse(request.options.body)
@@ -252,7 +271,7 @@ test('table 合法 file(fileId) 可提交，无文件 file 在本地拦截', asy
   const h = harness('table')
   h.setCanvas([{ id: 'file', type: 'file', data: { fileId: 'abcdef123456_book.xlsx', filename: 'book.xlsx' } }])
   h.elements.get('btn-run').click()
-  await flush()
+  await settle()
   const request = h.requests.find((item) => item.path === '/api/run')
   assert.ok(request)
   assert.equal(JSON.parse(request.options.body).spec.nodes[0].data.fileId, 'abcdef123456_book.xlsx')
@@ -280,6 +299,11 @@ for (const id of ['video', 'table']) {
     h.elements.get('btn-open').click()
     assert.equal(h.fromJSONCalls.length, 0)
     assert.deepEqual(h.canvas.toJSON().nodes, baseline)
+
+    h.setImport({ app: id, version: '1', nodes: baseline, connections: [] })
+    h.elements.get('btn-open').click()
+    assert.equal(h.fromJSONCalls.length, 0)
+    assert.ok(h.toasts.some((message) => message.includes('版本不受支持')))
   })
 
   test(`${id} 卡片消息同时校验 parent source 与 origin`, () => {
@@ -371,9 +395,198 @@ test('table factor header 模式写入 factor.header', () => {
   assert.equal(node.data.factor.header, '新表头')
 })
 
+test('video 导入校验与后端一致：probe 多上游和单输入 concat 被拒绝', () => {
+  const h = harness('video')
+  const baseline = [{ id: 'a', type: 'input', data: { fileId: 'aaaaaaaaaaaa_a.mp4' } }]
+  h.setCanvas(baseline)
+  h.setImport({ app: 'video', nodes: [
+    { id: 'a', type: 'input', data: {} },
+    { id: 'b', type: 'input', data: {} },
+    { id: 'p', type: 'probe', data: {} },
+  ], connections: [{ from: 'a', to: 'p' }, { from: 'b', to: 'p' }] })
+  h.elements.get('btn-open').click()
+  assert.equal(h.fromJSONCalls.length, 0)
+  h.setImport({ app: 'video', nodes: [
+    { id: 'a', type: 'input', data: {} },
+    { id: 'c', type: 'concat', data: {} },
+  ], connections: [{ from: 'a', to: 'c' }] })
+  h.elements.get('btn-open').click()
+  assert.equal(h.fromJSONCalls.length, 0)
+  assert.deepEqual(h.canvas.toJSON().nodes, baseline)
+})
+
 test('video 0 音量摘要与 pivot 字符串摘要不再回退为默认值', () => {
   const video = read('public/lib/zen-video.js')
   const table = read('public/lib/zen-table.js')
   assert.ok(video.includes("(d.factor == null ? 1 : d.factor) + '× 音量'"))
   assert.ok(table.includes('rowKeysText(d.rowKeys)'))
+})
+
+for (const id of ['video', 'table']) {
+  test(`${id} 页面声明应用身份、共享开关且无内联样式`, () => {
+    const html = read(`public/omm-${id}.html`)
+    const js = read(`public/lib/zen-${id}.js`)
+    assert.ok(html.includes(`data-omm-app="${id}"`))
+    assert.ok(html.includes('zen/components/switch.js'))
+    assert.ok(!/\sstyle=/.test(html))
+    assert.ok(js.includes('data-zen-switch'))
+    assert.ok(!/type="checkbox"/.test(js))
+    assert.ok(!/#c0392b/i.test(js))
+  })
+
+  test(`${id} 工作流变化后忽略旧任务结果并恢复控件`, async () => {
+    const h = harness(id)
+    const node = { id: 'source', type: id === 'video' ? 'input' : 'file',
+      data: { fileId: 'abcdef123456_file', filename: 'file' } }
+    h.setCanvas([node])
+    const pending = deferred()
+    h.setFetch((path) => {
+      if (path === '/api/run') return Promise.resolve(response({ ok: true, jobId: 'job-1' }))
+      if (path === '/api/job/job-1') return pending.promise
+      return Promise.resolve(response({ ok: true }))
+    })
+    h.elements.get('btn-run').click()
+    await settle()
+    assert.equal(h.elements.get('btn-run').disabled, true)
+    h.change()
+    assert.ok(h.elements.get('result-body').innerHTML.includes('旧结果已清除'))
+    pending.resolve(response({ ok: true, jobId: 'job-1', status: 'done', progress: 1,
+      nodes: {}, outputs: [{ name: 'stale.bin', url: '/api/file/job-1/stale.bin' }] }))
+    await settle()
+    assert.equal(h.elements.get('btn-run').disabled, false)
+    assert.equal(h.elements.get('btn-stop').disabled, true)
+    assert.ok(!h.elements.get('result-body').innerHTML.includes('stale.bin'))
+    assert.ok(h.toasts.some((message) => message.includes('旧任务结果已忽略')))
+  })
+
+  test(`${id} 任务 404 是终态并恢复运行控件`, async () => {
+    const h = harness(id)
+    h.setCanvas([{ id: 'source', type: id === 'video' ? 'input' : 'file',
+      data: { fileId: 'abcdef123456_file', filename: 'file' } }])
+    h.setFetch((path) => {
+      if (path === '/api/run') return Promise.resolve(response({ ok: true, jobId: 'job-1' }))
+      if (path === '/api/job/job-1') return Promise.resolve(response({ ok: false, error: '任务不存在' }, 404))
+      return Promise.resolve(response({ ok: true }))
+    })
+    h.elements.get('btn-run').click()
+    await settle()
+    assert.equal(h.elements.get('btn-run').disabled, false)
+    assert.equal(h.elements.get('btn-stop').disabled, true)
+    assert.ok(h.toasts.some((message) => message.includes('任务不存在')))
+  })
+
+  test(`${id} 旧上传响应不能覆盖较新的上传`, async () => {
+    const h = harness(id)
+    const type = id === 'video' ? 'input' : 'file'
+    const node = { id: 'source', type, data: { fileId: '', filename: '' } }
+    h.setCanvas([node])
+    const first = deferred()
+    const second = deferred()
+    const queue = [first, second]
+    h.setFetch((path) => {
+      if (path.startsWith('/api/upload?')) return queue.shift().promise
+      if (path.startsWith('/api/book?')) return Promise.resolve(response({ ok: true, sheets: [] }))
+      return Promise.resolve(response({ ok: true }))
+    })
+    const input = h.elements.get('file-input')
+    input.files = [{ name: 'old.bin' }]
+    input.dispatch('change')
+    input.files = [{ name: 'new.bin' }]
+    input.dispatch('change')
+    second.resolve(response({ ok: true, fileId: 'bbbbbbbbbbbb_new.bin', name: 'new.bin' }))
+    await settle()
+    assert.equal(node.data.fileId, 'bbbbbbbbbbbb_new.bin')
+    first.resolve(response({ ok: true, fileId: 'aaaaaaaaaaaa_old.bin', name: 'old.bin' }))
+    await settle()
+    assert.equal(node.data.fileId, 'bbbbbbbbbbbb_new.bin')
+    assert.equal(node.data.filename, 'new.bin')
+  })
+}
+
+function jobRuntime(fetchImpl) {
+  const timers = []
+  let sequence = 0
+  const window = {
+    setTimeout(fn, delay) { const timer = { id: ++sequence, fn, delay, cancelled: false }; timers.push(timer); return timer.id },
+    clearTimeout(id) { const timer = timers.find((item) => item.id === id); if (timer) timer.cancelled = true },
+  }
+  const context = { window, fetch: fetchImpl, document: { addEventListener() {} } }
+  vm.runInNewContext(read('public/lib/zen-job.js'), context, { filename: 'zen-job.js' })
+  return {
+    job: window.ZenJob,
+    nextTimer() {
+      const timer = timers.shift()
+      assert.ok(timer && !timer.cancelled, '应存在待执行轮询定时器')
+      timer.fn()
+    },
+    pendingTimers() { return timers.filter((timer) => !timer.cancelled).length },
+  }
+}
+
+test('ZenJob 统一拒绝 HTTP、JSON 业务错误与非法 JSON', async () => {
+  const payloads = [
+    response({ ok: false, error: '后端拒绝' }, 400),
+    response({ ok: false, error: '服务器错误' }, 500),
+    { status: 200, ok: true, text: () => Promise.resolve('not-json') },
+  ]
+  const runtime = jobRuntime(() => Promise.resolve(payloads.shift()))
+  for (const expected of ['后端拒绝', '服务器错误', '请求失败']) {
+    await assert.rejects(runtime.job.post('', '/api/run', {}), (error) => error.message.includes(expected))
+  }
+  const success = jobRuntime(() => Promise.resolve(response({ ok: true, jobId: 'abc' })))
+  assert.equal((await success.job.post('', '/api/run', {})).jobId, 'abc')
+})
+
+test('ZenJob 取消失败不假成功', async () => {
+  const calls = []
+  const runtime = jobRuntime((path) => {
+    calls.push(path)
+    return Promise.resolve(response({ ok: false, error: '任务已结束' }, 409))
+  })
+  await assert.rejects(runtime.job.cancel('', 'abc', () => {}), /任务已结束/)
+  assert.deepEqual(calls, ['/api/cancel/abc'])
+  const unconfirmed = jobRuntime(() => Promise.resolve(response({ ok: true, cancelled: false })))
+  await assert.rejects(unconfirmed.job.cancel('', 'abc', () => {}), /未确认取消/)
+  const toasts = []
+  const confirmed = jobRuntime(() => Promise.resolve(response({ ok: true, cancelled: true })))
+  await confirmed.job.cancel('', 'abc', (message) => toasts.push(message))
+  assert.deepEqual(toasts, ['已请求停止'])
+})
+
+test('ZenJob 轮询去重、重试且仅结束一次', async () => {
+  const first = deferred()
+  const second = deferred()
+  const third = deferred()
+  const queue = [first, second, third]
+  const paths = []
+  const runtime = jobRuntime((path) => { paths.push(path); return queue.shift().promise })
+  const states = []
+  let finishes = 0
+  runtime.job.poll('', 'abc', {
+    onState(state) { states.push(state.status) },
+    onFinish() { finishes += 1 },
+  })
+  assert.deepEqual(paths, ['/api/job/abc'])
+  first.resolve(response({ ok: true, status: 'running' }))
+  await settle()
+  assert.equal(runtime.pendingTimers(), 1)
+  runtime.nextTimer()
+  second.resolve(response({ ok: false, error: '暂时失败' }, 500))
+  await settle()
+  assert.equal(finishes, 0)
+  runtime.nextTimer()
+  third.resolve(response({ ok: true, status: 'done' }))
+  await settle()
+  assert.deepEqual(states, ['running', 'done'])
+  assert.equal(finishes, 1)
+  assert.equal(runtime.pendingTimers(), 0)
+})
+
+test('ZenJob 404 轮询直接终态', async () => {
+  const runtime = jobRuntime(() => Promise.resolve(response({ ok: false, error: '任务不存在' }, 404)))
+  let finished = null
+  runtime.job.poll('', 'abc', { onFinish(_state, error) { finished = error } })
+  await settle()
+  assert.equal(finished.status, 404)
+  assert.equal(runtime.pendingTimers(), 0)
 })

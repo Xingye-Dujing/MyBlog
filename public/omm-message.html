@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="message">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -205,14 +206,8 @@
         <span data-i18n="mobile.settings">设置</span>
       </button>
     </nav>
-    <section class="subpage hidden" id="sync-page" aria-label="云同步页面">
-      <div class="subpage-head">
-        <div class="subpage-title" data-i18n="sync.title">云同步</div>
-        <button class="subpage-back" data-action="closeSubpage" aria-label="关闭">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
-        </button>
-      </div>
-      <div class="subpage-body">
+    <template id="tpl-sync">
+      <div class="msg-modal-body">
         <div class="sub-panel">
           <div class="zen-cloud-status" id="cloud-status">未配置 Supabase</div>
           <div id="config-panel">
@@ -349,16 +344,10 @@
           加密后写入数据库，并通过 Realtime 推送到其它在线设备。
         </div>
       </div>
-    </section>
-    <!-- cloud warning uses ZenUI.dialog.confirm -->
-    <section class="subpage hidden" id="settings-page" aria-label="设置页面">
-      <div class="subpage-head">
-        <div class="subpage-title" data-i18n="settings.title">界面设置</div>
-        <button class="subpage-back" data-action="closeSubpage" aria-label="关闭">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
-        </button>
-      </div>
-      <div class="subpage-body">
+    </template>
+
+    <template id="tpl-settings">
+      <div class="msg-modal-body">
         <div class="sub-panel">
           <div class="settings-grid">
             <div class="setting-row">
@@ -400,16 +389,12 @@
           </div>
         </div>
       </div>
-    </section>
-    <template id="tpl-shortcuts">
-      <div class="confirm-kicker" id="shortcuts-title">KEYBOARD SHORTCUTS</div>
-      <div class="hk-grid" id="shortcuts-body"></div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="shortcuts-close">关闭</button>
-      </div>
     </template>
 
+
+
     <!-- message confirm uses ZenUI.dialog.confirm -->
+    <script src="lib/zen-cloud.js"></script>
     <script src="lib/zen-crypto.js"></script>
     <script>
       ;(function () {
@@ -566,6 +551,11 @@
               '云端没有任何历史记录的备份。开启后任何改动都会立刻在全部设备上生效，且无法撤销。请确认后再开启。',
             'sync.warnOk': '我已知晓，开启',
             'sync.warnCancel': '取消',
+            'sync.workspaceTitle': '切换云工作区',
+            'sync.workspaceBody': '当前本机缓存属于另一个 Supabase 项目或账号。继续后会清空当前消息视图，仅加载新工作区的消息。是否继续？',
+            'sync.workspaceOk': '继续',
+            'sync.workspaceCancel': '取消',
+            'sync.workspaceConfirmRequired': '云工作区已切换，请手动解锁并确认后再同步',
             'sync.autoOn': '自动云同步已开启',
             'sync.autoOff': '已切换为手动同步',
             'sync.manualHint': '当前为手动同步，需要时点击“立即同步”',
@@ -727,6 +717,11 @@
               'There is no backup of any history in the cloud. Once enabled, every change takes effect on all devices immediately and cannot be undone. Confirm before continuing.',
             'sync.warnOk': 'I UNDERSTAND, TURN ON',
             'sync.warnCancel': 'CANCEL',
+            'sync.workspaceTitle': 'SWITCH CLOUD WORKSPACE',
+            'sync.workspaceBody': 'The local cache belongs to another Supabase project or account. Continuing clears this message view and loads only the new workspace. Continue?',
+            'sync.workspaceOk': 'CONTINUE',
+            'sync.workspaceCancel': 'CANCEL',
+            'sync.workspaceConfirmRequired': 'The cloud workspace changed. Unlock and confirm it manually before syncing',
             'sync.autoOn': 'Auto sync enabled',
             'sync.autoOff': 'Switched to manual sync',
             'sync.manualHint': 'Manual mode. Tap Sync Now when needed',
@@ -741,6 +736,26 @@
         }
         const TABLE = 'zmessage_messages'
         const META_TABLE = 'zmessage_message_meta'
+        var zenCloud = ZenCloud.create({
+          prefix: 'zm',
+          cfgKey: LS.cfg,
+          metaKey: 'zmsg-sync-meta-v1',
+          table: TABLE,
+          client: function () { return sb },
+          session: function () { return session },
+          t: function (key, fallback) { return t(key) || fallback },
+          warnTitle: function () { return t('sync.warnTitle') },
+          workspaceTitle: function () { return t('sync.workspaceTitle') },
+          workspaceBody: function () { return t('sync.workspaceBody') },
+          workspaceOk: function () { return t('sync.workspaceOk') },
+          workspaceCancel: function () { return t('sync.workspaceCancel') },
+          statusId: 'cloud-status',
+        })
+        var cfg = zenCloud.cfg
+        var prefs = zenCloud.prefs
+        var savePrefs = zenCloud.savePrefs
+        var patchCfg = zenCloud.patchCfg
+        var openWarn = zenCloud.openWarn
         let sb = null,
           session = null,
           channel = null,
@@ -755,6 +770,7 @@
           deviceName = '',
           ui = { bg: 'bg-void', fscale: 1, pinned: true },
           editingId = null,
+          pendingQuoteId = null,
           favoriteIds = new Set(),
           favoriteFilter = false,
           searchQuery = '',
@@ -781,10 +797,6 @@
           const text = m || (/^\[object /.test(all) ? '' : all)
           return text || t('status.error')
         }
-        function cfg() {
-          return ZenUtil.getJSON(LS.cfg, {})
-        }
-
         function lsGet(k, fb) { return ZenUtil.lsGet(k, fb) }
         function lsSet(k, v) { return ZenUtil.lsSet(k, v) }
         function lsDel(k) { return ZenUtil.lsDel(k) }
@@ -821,8 +833,25 @@
           metaAvailable = false
           favoriteFilter = false
           searchQuery = ''
+          pendingQuoteId = null
           if ($('message-search')) $('message-search').value = ''
           renderMessages()
+        }
+        function setEditingLocked(locked) {
+          const main = $('main')
+          if (main) main.inert = !!locked
+          const input = $('message-input')
+          if (input) input.disabled = !!locked
+          const send = $('send-btn')
+          if (send) send.disabled = !!locked || !password || busy
+          const menu = $('top-menu')
+          if (menu) {
+            menu.inert = false
+            menu.querySelectorAll('[data-action], #pin-btn').forEach((el) => {
+              el.inert = !!locked && !['sync', 'settings', 'showChat'].includes(el.dataset.action)
+            })
+          }
+          document.body.classList.toggle('cloud-locked', !!locked)
         }
         function clearActiveCache() {
           if (activeCacheKey) {
@@ -831,48 +860,6 @@
           }
           activeCacheKey = null
           resetMessageView()
-        }
-        function saveCfg(v) {
-          lsSet(LS.cfg, JSON.stringify(v))
-        }
-        function prefs() {
-          const c = cfg()
-          return {
-            remember: !!c.remember,
-            autoSync: !!c.autoSync,
-            warnAck: !!c.warnAck,
-            password: typeof c.password === 'string' ? c.password : '',
-          }
-        }
-        function savePrefs(next) {
-          const p = prefs(),
-            c = Object.assign(cfg(), next)
-          delete c.remember
-          delete c.autoSync
-          delete c.warnAck
-          delete c.password
-          if (next.remember !== undefined) p.remember = !!next.remember
-          if (next.autoSync !== undefined) p.autoSync = !!next.autoSync
-          if (next.warnAck !== undefined) p.warnAck = !!next.warnAck
-          if (next.password !== undefined) p.password = next.password
-          c.remember = p.remember
-          c.autoSync = p.autoSync
-          c.warnAck = p.warnAck
-          if (p.remember && p.password) c.password = p.password
-          else delete c.password
-          saveCfg(c)
-          return p
-        }
-        function openWarn(onOk) {
-          window.ZenUI.dialog
-            .confirm(t('sync.warnBody'), {
-              title: t('sync.warnTitle'),
-              ok: t('sync.warnOk'),
-              cancel: t('sync.warnCancel'),
-            })
-            .then((ok) => {
-              if (ok && onOk) onOk()
-            })
         }
         function setAutoSync(next, silent) {
           const p = prefs()
@@ -986,9 +973,12 @@
           }
           $('status-device').textContent = deviceName || ''
           $('status-count').textContent = String(messages.length)
-          $('menu-pin-btn').textContent = ui.pinned ? t('settings.on') : t('settings.off')
-          $('lang-btn').textContent = lang === 'zh' ? 'EN' : '中'
-          $('font-value').textContent = Math.round(ui.fscale * 100) + '%'
+          const pinBtn = $('menu-pin-btn')
+          if (pinBtn) pinBtn.textContent = ui.pinned ? t('settings.on') : t('settings.off')
+          const langBtn = $('lang-btn')
+          if (langBtn) langBtn.textContent = lang === 'zh' ? 'EN' : '中'
+          const fontValue = $('font-value')
+          if (fontValue) fontValue.textContent = Math.round(ui.fscale * 100) + '%'
           if ($('status-center'))
             $('status-center').textContent = t('side.messages') + ' ' + messages.length
           $$('.bg-dot').forEach((e) => {
@@ -1019,7 +1009,8 @@
           $('compose-info').textContent = window.matchMedia('(max-width: 720px)').matches
             ? t('chat.hotkeyMobile')
             : t('chat.hotkey')
-          $('menu-pin-btn').textContent = ui.pinned ? t('settings.on') : t('settings.off')
+          const pinBtn = $('menu-pin-btn')
+          if (pinBtn) pinBtn.textContent = ui.pinned ? t('settings.on') : t('settings.off')
         }
         function connState() {
           if (!session) return cfg().url && cfg().key ? t('status.configured') : t('status.offline')
@@ -1104,7 +1095,8 @@
             lsSet(LS.device + '-id', deviceId)
           }
           deviceName = lsGet(LS.device + '-name', '') || ''
-          $('device-name').value = deviceName
+          const nameInput = $('device-name')
+          if (nameInput) nameInput.value = deviceName
           $('side-device').textContent = deviceName || '—'
           $('device-text').textContent = deviceName ? deviceName.toUpperCase() : ''
           $('status-device').textContent = deviceName || ''
@@ -1170,6 +1162,7 @@
             session = null
             activeCacheKey = null
             resetMessageView()
+            setEditingLocked(true)
           } else if (session) activeCacheKey = cacheKey(cacheIdentity())
           setConn()
         }
@@ -1228,6 +1221,7 @@
         }
         function setEditMode(m) {
           editingId = m.id
+          pendingQuoteId = null
           const input = $('message-input')
           input.value = m.text
           $('edit-state').textContent = t('chat.editing')
@@ -1459,6 +1453,7 @@
             .map((line) => '> ' + line)
             .join('\n')
           input.value = quote + (quote ? '\n\n' : '')
+          pendingQuoteId = m.id
           clearEditMode()
           autoResizeMessageInput()
           input.focus()
@@ -1940,11 +1935,17 @@
           if (r.error) throw r.error
           session = r.data.session || null
           if (!session) throw new Error(t('sync.loginFailed'))
+          if (zenCloud.workspaceNeedsConfirmation(session.user.id)) {
+            resetMessageView()
+            setEditingLocked(true)
+            return false
+          }
           password = pw
           activateCacheIdentity()
           loadCache()
           deviceName = lsGet(LS.device + '-name', '') || deviceName
           syncPrefsUi()
+          setEditingLocked(false)
           setConn()
           return true
         }
@@ -1969,6 +1970,14 @@
             if (r.error) throw r.error
             session = r.data.session || null
             if (!session) throw new Error(t('sync.loginFailed'))
+            var workspaceOk = await zenCloud.confirmWorkspace(session.user.id)
+            if (!workspaceOk) {
+              password = ''
+              resetMessageView()
+              setEditingLocked(true)
+              setConn()
+              return
+            }
             password = pw
             activateCacheIdentity()
             loadCache()
@@ -1977,6 +1986,7 @@
             savePrefs({ remember: remember, password: pw })
             if (!remember) $('password').value = ''
             syncPrefsUi()
+            setEditingLocked(false)
             setConn()
             if (prefs().autoSync) {
               await fetchHistory()
@@ -2010,8 +2020,10 @@
           const body = lines.slice(i).join('\n').trim()
           const text = body || raw
           const quoteText = quoteLines.join('\n').trim()
-          const candidates = quoteText ? messages.filter((m) => m.text === quoteText) : []
-          const quoteTarget = candidates.length ? candidates[candidates.length - 1] : null
+          const candidates = !pendingQuoteId && quoteText ? messages.filter((m) => m.text === quoteText) : []
+          const quoteTarget = pendingQuoteId
+            ? messages.find((m) => m.id === pendingQuoteId) || null
+            : candidates.length ? candidates[candidates.length - 1] : null
           busy = true
           $('send-btn').disabled = true
           try {
@@ -2047,6 +2059,7 @@
               editedAt: 0,
             })
             input.value = ''
+            pendingQuoteId = null
             autoResizeMessageInput()
             toast(t('toast.sent'))
           } catch (e) {
@@ -2113,15 +2126,12 @@
           clearActiveCache()
           clearEditMode()
           $('message-input').value = ''
-          $('password').value = ''
+          if ($('password')) $('password').value = ''
+          setEditingLocked(true)
           syncPrefsUi()
-          closeSubpage()
-          $('config-panel').classList.remove('hidden')
-          $('auth-panel').classList.add('hidden')
-          $('sql-panel').classList.add('hidden')
           setConn()
           toast(t('toast.loggedOut'))
-          openSync(true)
+          openSync()
         }
         function lock() {
           password = ''
@@ -2135,10 +2145,11 @@
             } catch {}
             channel = null
           }
-          $('password').value = ''
+          if ($('password')) $('password').value = ''
           clearEditMode()
           $('message-input').value = ''
           resetMessageView()
+          setEditingLocked(true)
           syncPrefsUi()
           setConn()
           toast(cleared ? t('sync.lockedCleared') : t('toast.locked'))
@@ -2166,64 +2177,135 @@
           )
           if (m) m.classList.add('active')
         }
-        function openSync(force = false) {
+        let modalHandle = null
+        function mountCloud() {
+          applyI18n()
+          bindSyncPrefs()
+          $('save-config').onclick = saveConfig
+          $('login').onclick = signin
+          $('reload').onclick = reloadCloud
+          $('logout').onclick = logout
+          $('lock').onclick = lock
+          $('open-dashboard').onclick = () =>
+            window.open('https://supabase.com/dashboard', '_blank', 'noopener')
+          $('open-sql').onclick = () => {
+            $('config-panel').classList.add('hidden')
+            $('auth-panel').classList.add('hidden')
+            $('sql-panel').classList.remove('hidden')
+            $('sql-box').value = sqlText()
+            autoSizeSql()
+            resizeSql()
+          }
+          $('open-sql-auth').onclick = () => {
+            $('config-panel').classList.add('hidden')
+            $('auth-panel').classList.add('hidden')
+            $('sql-panel').classList.remove('hidden')
+            $('sql-box').value = sqlText()
+            autoSizeSql()
+            resizeSql()
+          }
+          $('back-config').onclick = openSync
+          $('copy-sql').onclick = () => {
+            ZenUtil.copy($('sql-box').value,
+              function () { toast(t('toast.copied')) },
+              function () { toast(t('toast.copyFailed')) })
+          }
           const c = cfg()
           $('config-panel').classList.toggle('hidden', !!(c.url && c.key))
           $('auth-panel').classList.toggle('hidden', !(c.url && c.key))
           $('sql-panel').classList.add('hidden')
           $('cloud-status').textContent = connState()
+          $('device-name').value = deviceName
           syncPrefsUi()
-          $('sync-page').classList.remove('hidden')
-          $('settings-page').classList.add('hidden')
+          setTimeout(() => {
+            const f = c.url && c.key ? $('password') : $('sb-url')
+            f && f.focus()
+          }, 30)
+        }
+        function mountSettings() {
+          applyI18n()
+          $('menu-pin-btn').onclick = () => {
+            ui.pinned = !ui.pinned
+            saveUi()
+            applyUi()
+          }
+          $('font-down').onclick = () => {
+            ui.fscale = Math.max(0.85, +(ui.fscale - 0.05).toFixed(2))
+            saveUi()
+            applyUi()
+          }
+          $('font-up').onclick = () => {
+            ui.fscale = Math.min(1.4, +(ui.fscale + 0.05).toFixed(2))
+            saveUi()
+            applyUi()
+          }
+          $$('.bg-dot').forEach(
+            (e) =>
+              (e.onclick = () => {
+                ui.bg = e.dataset.bg
+                saveUi()
+                applyUi()
+              }),
+          )
+          $('lang-btn').onclick = () => {
+            lang = lang === 'zh' ? 'en' : 'zh'
+            lsSet(LS.ui + '-lang', lang)
+            applyI18n()
+            applyUi()
+            renderMessages()
+          }
+          $('clear-cache-btn').onclick = clearLocal
+          $('shortcuts-open-btn').onclick = openShortcuts
+        }
+        function openSync() {
+          if (modalHandle) window.ZenUI.modal.close()
           document.body.classList.add('subpage-open')
           setMenuActive('sync')
           applyI18n()
           applyUi()
-          setTimeout(() => {
-            const f = c.url && c.key ? $('password') : $('sb-url')
-            f && f.focus()
-          }, 0)
+          modalHandle = window.ZenUI.modal.open({
+            title: t('sync.title'),
+            width: 'min(760px, 96vw)',
+            html: $('tpl-sync').innerHTML,
+            ids: { title: 'msg-sync-title', close: 'msg-sync-close' },
+            onMount: mountCloud,
+            onClose: () => {
+              modalHandle = null
+              document.body.classList.remove('subpage-open')
+              setMenuActive('chat')
+              applyUi()
+            },
+          })
         }
         function closeSubpage() {
-          $$('.subpage').forEach((e) => e.classList.add('hidden'))
-          document.body.classList.remove('subpage-open')
-          setMenuActive('chat')
-          applyI18n()
-          applyUi()
+          if (modalHandle) window.ZenUI.modal.close()
         }
         function openSettings() {
-          $$('.subpage').forEach((e) => e.classList.add('hidden'))
-          $('settings-page').classList.remove('hidden')
+          if (modalHandle) window.ZenUI.modal.close()
           document.body.classList.add('subpage-open')
           setMenuActive('settings')
           applyI18n()
           applyUi()
-        }
-        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
-           文案在 I18N 的 hk.rows / hk.note 里，格式为
-           “标题§说明|键位|说明|键位”，段落之间用 ~~ 分隔。 */
-        function openShortcuts() {
-          var sections = window.ZenUI.shortcuts.parseRows(String(t('hk.rows')))
-          var body = window.ZenUI.shortcuts.grid(sections.concat([
-            window.ZenUI.shortcuts.note(t('hk.note')),
-          ]))
-          window.ZenUI.modal.open({
-            title: t('hk.kicker'),
-            html: $('tpl-shortcuts').innerHTML,
-            width: 'min(560px, 96vw)',
-            onMount: (bodyRoot) => {
-              bodyRoot.querySelector('#shortcuts-body').innerHTML = body
-              const kicker = bodyRoot.querySelector('#shortcuts-title')
-              if (kicker) kicker.textContent = t('hk.kicker')
-              const close = bodyRoot.querySelector('#shortcuts-close')
-              close.textContent = t('hk.close')
-              close.addEventListener('click', closeShortcuts)
-              close.focus()
+          modalHandle = window.ZenUI.modal.open({
+            title: t('settings.title'),
+            width: 'min(620px, 96vw)',
+            html: $('tpl-settings').innerHTML,
+            ids: { title: 'msg-settings-title', close: 'msg-settings-close' },
+            onMount: mountSettings,
+            onClose: () => {
+              modalHandle = null
+              document.body.classList.remove('subpage-open')
+              setMenuActive('chat')
+              applyUi()
             },
           })
         }
-        function closeShortcuts() {
-          window.ZenUI.modal.close()
+        function openShortcuts() {
+          const sections = window.ZenUI.shortcuts.parseRows(String(t('hk.rows')))
+          const body = window.ZenUI.shortcuts.grid(sections.concat([
+            window.ZenUI.shortcuts.note(t('hk.note')),
+          ]))
+          window.ZenUI.shortcuts.help({ title: t('hk.kicker'), body })
         }
         function saveConfig() {
           const url = $('sb-url').value.trim().replace(/\/$/, ''),
@@ -2236,9 +2318,9 @@
           const prevCfg = cfg()
 
           const changed = prevCfg.url !== url || prevCfg.key !== key || prevCfg.email !== email
-          savePrefs(
+          patchCfg(
             changed
-              ? { url: url, key: key, email: email, remember: false, password: '' }
+              ? { url: url, key: key, email: email, remember: false, password: undefined }
               : { url: url, key: key, email: email },
           )
           if (changed) {
@@ -2254,6 +2336,7 @@
           session = null
           realtimeReady = false
           password = ''
+          setEditingLocked(true)
           setConn()
           toast(t('toast.saved'))
           openSync()
@@ -2295,18 +2378,6 @@
             clearTextSelection()
           })
           document.addEventListener('click', (e) => {
-            if (
-              !e.target.closest('.subpage') &&
-              !e.target.closest('#top-menu') &&
-              !e.target.closest('.mobile-nav')
-            ) {
-              $$('.subpage:not(.hidden)').forEach((x) => x.classList.add('hidden'))
-              if (document.body.classList.contains('subpage-open')) {
-                document.body.classList.remove('subpage-open')
-                setMenuActive('chat')
-                applyUi()
-              }
-            }
             const a = e.target.closest('[data-action]')
             if (!a) return
             const act = a.dataset.action
@@ -2317,9 +2388,6 @@
               document
                 .querySelector('.chat')
                 ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
-            if (act === 'closeSubpage') {
-              closeSubpage()
             }
             if (act === 'quoteMessage') {
               const m = messages.find((x) => x.id === a.dataset.messageId)
@@ -2341,35 +2409,6 @@
               applyUi()
             }
           })
-          $('save-config').onclick = saveConfig
-          $('login').onclick = signin
-          $('reload').onclick = reloadCloud
-          $('logout').onclick = logout
-          $('lock').onclick = lock
-          $('open-dashboard').onclick = () =>
-            window.open('https://supabase.com/dashboard', '_blank', 'noopener')
-          $('open-sql').onclick = () => {
-            $('config-panel').classList.add('hidden')
-            $('auth-panel').classList.add('hidden')
-            $('sql-panel').classList.remove('hidden')
-            $('sql-box').value = sqlText()
-            autoSizeSql()
-            resizeSql()
-          }
-          $('open-sql-auth').onclick = () => {
-            $('config-panel').classList.add('hidden')
-            $('auth-panel').classList.add('hidden')
-            $('sql-panel').classList.remove('hidden')
-            $('sql-box').value = sqlText()
-            autoSizeSql()
-            resizeSql()
-          }
-          $('back-config').onclick = openSync
-          $('copy-sql').onclick = () => {
-            ZenUtil.copy($('sql-box').value,
-              function () { toast(t('toast.copied')) },
-              function () { toast(t('toast.copyFailed')) })
-          }
           $('send-btn').onclick = send
           $('message-search').addEventListener('input', (e) => {
             searchQuery = e.target.value || ''
@@ -2385,6 +2424,7 @@
           })
           $('cancel-edit').onclick = () => {
             clearEditMode()
+            pendingQuoteId = null
             $('message-input').value = ''
             autoResizeMessageInput()
             renderMessages()
@@ -2405,38 +2445,6 @@
             }
           })
           autoResizeMessageInput()
-          $('menu-pin-btn').onclick = () => {
-            ui.pinned = !ui.pinned
-            saveUi()
-            applyUi()
-          }
-          $('font-down').onclick = () => {
-            ui.fscale = Math.max(0.85, +(ui.fscale - 0.05).toFixed(2))
-            saveUi()
-            applyUi()
-          }
-          $('font-up').onclick = () => {
-            ui.fscale = Math.min(1.4, +(ui.fscale + 0.05).toFixed(2))
-            saveUi()
-            applyUi()
-          }
-          $$('.bg-dot').forEach(
-            (e) =>
-              (e.onclick = () => {
-                ui.bg = e.dataset.bg
-                saveUi()
-                applyUi()
-              }),
-          )
-          $('lang-btn').onclick = () => {
-            lang = lang === 'zh' ? 'en' : 'zh'
-            lsSet(LS.ui + '-lang', lang)
-            applyI18n()
-            applyUi()
-            renderMessages()
-          }
-          $('clear-cache-btn').onclick = clearLocal
-          $('shortcuts-open-btn').onclick = openShortcuts
           $('password').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') signin()
           })
@@ -2453,7 +2461,7 @@
                 renderMessages()
                 return
               }
-              closeSubpage()
+              if (modalHandle) closeSubpage()
             }
           })
           window.addEventListener('resize', () => {
@@ -2470,17 +2478,13 @@
             lsDel(LS.cache)
             lsDel(LS.cache + '-favorites')
             bind()
-            bindSyncPrefs()
             applyI18n()
             syncPrefsUi()
             resetMessageView()
+            setEditingLocked(true)
             const c = cfg()
             if (c.url && c.key) {
               await connect()
-              if (session) {
-                $('config-panel').classList.add('hidden')
-                $('auth-panel').classList.remove('hidden')
-              }
               const p = prefs()
 
               if (!password && p.remember && p.password) {

@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import mimetypes
 import os
@@ -27,25 +28,64 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
+_DESKTOP = HERE.parent / "desktop"
+if _DESKTOP.is_dir() and str(_DESKTOP) not in sys.path:
+    sys.path.insert(0, str(_DESKTOP))
+
+try:  # Desktop shell only; absent on the public website.
+    import omm_shared  # type: ignore
+    import omm_share  # type: ignore
+except Exception:  # pragma: no cover
+    omm_shared = None  # type: ignore
+    omm_share = None  # type: ignore
+
 # 静态资源根目录就是本文件所在目录（public/ 或插件目录）；
 # ffmpeg 与工作目录也相对它解析，保证插件自包含。
 # Source tree keeps backends in server/; staged bundles keep them beside assets.
 BUNDLE = HERE.parent if (HERE.parent / "video-runtime").is_dir() else HERE
 
 ROOT = BUNDLE
-WORK = ROOT / "video-runtime" / "work"
-UPLOADS = WORK / "uploads"
-JOBS = WORK / "jobs"
-for _d in (WORK, UPLOADS, JOBS):
-    _d.mkdir(parents=True, exist_ok=True)
-
 MAX_UPLOAD = 2 * 1024 * 1024 * 1024
 MAX_BODY = 2 * 1024 * 1024
 MAX_NODES = 200
 MAX_CONNECTIONS = 500
-LOOPBACK = ("127.0.0.1", "localhost", "::1")
+JOB_TTL = 60 * 60
+MAX_JOBS = 100
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+HUB_ORIGINS = {
+    "http://127.0.0.1:8300",
+    "http://localhost:8300",
+    "http://[::1]:8300",
+}
 SUPPORTED_FORMATS = ("mp4", "mkv", "webm", "mov", "gif", "mp3", "m4a", "wav")
+NODE_PORTS = {
+    "input": ("right",),
+    "probe": ("left", "right"),
+    "scene": ("left", "right"),
+    "silence": ("left", "right"),
+    "black": ("left", "right"),
+    "thumbnail": ("left", "right"),
+    "trim": ("left", "right"),
+    "crop": ("left", "right"),
+    "scale": ("left", "right"),
+    "rotate": ("left", "right"),
+    "speed": ("left", "right"),
+    "volume": ("left", "right"),
+    "mute": ("left", "right"),
+    "fade": ("left", "right"),
+    "drawtext": ("left", "right"),
+    "audio": ("left", "right"),
+    "concat": ("left", "right"),
+    "format": ("left", "right"),
+    "export": ("left",),
+}
 _FID_RE = re.compile(r"^[0-9a-f]{12}_.+$")
+_JOB_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+_BLOCKED_STATIC_DIRS = {
+    "server", "desktop", "tests", "agent_workspace", "table-runtime",
+    "video-runtime", "node_modules", ".git", "sharepages",
+}
+_BLOCKED_STATIC_FILES = {"sessions.json", "shares.json", "tokens.json"}
 
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
 _TIME_RE = re.compile(r"time=\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
@@ -59,6 +99,25 @@ _BLACK_RE = re.compile(r"black_(start|end):\s*([\d.]+)")
 _jobs: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
 _ffmpeg_cache: Optional[str] = None
+
+
+def work_root(root: Optional[Path] = None) -> Path:
+    if root is None:
+        handler = globals().get("Handler")
+        root = getattr(handler, "root", ROOT) if handler else ROOT
+    return (Path(root) if root else ROOT) / "video-runtime" / "work"
+
+
+def uploads_dir(root: Optional[Path] = None) -> Path:
+    path = work_root(root) / "uploads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def jobs_dir(root: Optional[Path] = None) -> Path:
+    path = work_root(root) / "jobs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -162,16 +221,93 @@ def is_loopback_host(host: str) -> bool:
         return False
 
 
-def is_loopback_origin(origin: str) -> bool:
+def _canonical_origin(value: str) -> str:
     try:
-        parsed = urlparse(str(origin or ""))
+        parsed = urlparse(str(value or ""))
         if parsed.scheme not in ("http", "https") or parsed.username or parsed.password:
-            return False
+            return ""
         if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-            return False
-        return (parsed.hostname or "").lower() in LOOPBACK
+            return ""
+        host = (parsed.hostname or "").lower()
+        if host not in LOOPBACK:
+            return ""
+        if ":" in host:
+            host = "[" + host + "]"
+        port = parsed.port
+        if port is not None and not 0 <= port <= 65535:
+            return ""
+        default = 443 if parsed.scheme == "https" else 80
+        return "%s://%s%s" % (parsed.scheme, host, "" if port in (None, default) else ":%d" % port)
+    except Exception:
+        return ""
+
+
+def trusted_origin(origin: str, host: str) -> bool:
+    """Only the page's own origin or the explicit desktop Hub may call the API."""
+    candidate = _canonical_origin(origin)
+    if not candidate or not is_loopback_host(host):
+        return False
+    try:
+        parsed = urlparse("//" + host)
+        request_origin = "http://%s%s" % (
+            "[" + parsed.hostname + "]" if ":" in (parsed.hostname or "") else parsed.hostname,
+            "" if parsed.port in (None, 80) else ":%d" % parsed.port,
+        )
     except Exception:
         return False
+    return candidate == request_origin or candidate in HUB_ORIGINS
+
+
+def _static_allowed(relative: str) -> bool:
+    parts = Path(relative.replace("\\", "/")).parts
+    if any(part.lower() in _BLOCKED_STATIC_DIRS for part in parts):
+        return False
+    name = parts[-1].lower() if parts else ""
+    return name not in _BLOCKED_STATIC_FILES and not name.endswith((".py", ".pyc", ".pyo"))
+
+
+def _contained_file(base: Path, candidate: Path) -> Optional[Path]:
+    try:
+        base = base.resolve(strict=True)
+        relative = candidate.relative_to(base)
+        current = base
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                return None
+        target = candidate.resolve(strict=True)
+        target.relative_to(base)
+        return target if target.is_file() else None
+    except (FileNotFoundError, NotADirectoryError, ValueError, OSError):
+        return None
+
+
+def _prune_jobs_locked(now: Optional[float] = None) -> List[str]:
+    stamp = time.time() if now is None else now
+    removed: List[str] = []
+    expired = [jid for jid, job in _jobs.items()
+               if job.get("status") != "running" and
+               stamp - float(job.get("finishedAt") or job.get("createdAt") or stamp) >= JOB_TTL]
+    for jid in expired:
+        removed.append(jid)
+        _jobs.pop(jid, None)
+    terminal = sorted(
+        ((float(job.get("finishedAt") or job.get("createdAt") or 0), jid)
+         for jid, job in _jobs.items() if job.get("status") != "running"),
+        reverse=True,
+    )
+    for _stamp, jid in terminal:
+        if len(_jobs) < MAX_JOBS:
+            break
+        removed.append(jid)
+        _jobs.pop(jid, None)
+    return removed
+
+
+def _remove_job_dirs(root: Path, job_ids: List[str]) -> None:
+    for jid in job_ids:
+        if _JOB_ID_RE.fullmatch(jid):
+            shutil.rmtree(jobs_dir(root) / jid, ignore_errors=True)
 
 
 def _safe_name(name: str) -> str:
@@ -179,24 +315,21 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^\w.\-()（） ]", "_", name)[:160] or "file"
 
 
-def resolve_upload(fid: str) -> Path:
+def resolve_upload(fid: str, root: Optional[Path] = None) -> Path:
     """只接受本服务生成的 fileId，并拒绝路径穿越与符号链接。"""
     fid = str(fid or "")
-    if len(fid) > 160 or not _FID_RE.fullmatch(fid) or fid != _safe_name(fid):
+    base = uploads_dir(root)
+    if len(fid) > 160 or not _FID_RE.fullmatch(fid) or fid != _safe_name(fid) or "\\" in fid:
         raise RuntimeError("非法 fileId")
-    candidate = UPLOADS / fid
+    candidate = base / fid
     if candidate.is_symlink():
         raise RuntimeError("上传文件不能是符号链接")
-    try:
-        resolved = candidate.resolve(strict=True)
-        resolved.relative_to(UPLOADS.resolve())
-    except FileNotFoundError:
-        raise RuntimeError("找不到上传文件：%s" % fid)
-    except ValueError:
-        raise RuntimeError("上传文件路径越界")
-    if not resolved.is_file():
-        raise RuntimeError("上传文件不是普通文件")
-    return resolved
+    target = _contained_file(base, candidate)
+    if target is None:
+        if not candidate.exists():
+            raise RuntimeError("找不到上传文件：%s" % fid)
+        raise RuntimeError("上传文件路径越界或不是普通文件")
+    return target
 
 
 def _output_filename(name: str, fmt: str) -> str:
@@ -212,6 +345,11 @@ def _output_filename(name: str, fmt: str) -> str:
 def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(spec, dict):
         raise ValueError("工作流必须是对象")
+    if spec.get("format") != "omm-video-workflow":
+        raise ValueError("工作流 format 必须是 omm-video-workflow")
+    version = spec.get("version")
+    if isinstance(version, bool) or not isinstance(version, (int, float)) or version != 1:
+        raise ValueError("工作流 version 必须是数字 1")
     nodes = spec.get("nodes")
     connections = spec.get("connections")
     if not isinstance(nodes, list) or not isinstance(connections, list):
@@ -221,14 +359,13 @@ def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
     if len(connections) > MAX_CONNECTIONS:
         raise ValueError("工作流连线过多（最多 %d）" % MAX_CONNECTIONS)
     ids: Set[str] = set()
-    allowed = {"input", "probe", "scene", "silence", "black", "thumbnail", "trim", "crop",
-               "scale", "rotate", "speed", "volume", "mute", "fade", "drawtext", "audio",
-               "concat", "format", "export"}
+    by_id: Dict[str, Dict[str, Any]] = {}
+    allowed = set(NODE_PORTS)
     for index, node in enumerate(nodes):
         if not isinstance(node, dict):
             raise ValueError("nodes[%d] 必须是对象" % index)
         nid = str(node.get("id") or "")
-        op = str(node.get("type") or node.get("op") or "")
+        op = str(node.get("type") or "")
         if not nid or len(nid) > 120 or re.search(r"[\x00-\x1f]", nid):
             raise ValueError("节点 id 为空或过长")
         if nid in ids:
@@ -238,9 +375,11 @@ def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         if node.get("data") is not None and not isinstance(node.get("data"), dict):
             raise ValueError("节点 data 必须是对象：%s" % nid)
         ids.add(nid)
-    edge_keys: Set[str] = set()
+        by_id[nid] = node
+    edge_keys: Set[Tuple[str, str, str, str]] = set()
     indegree = {nid: 0 for nid in ids}
     next_nodes: Dict[str, List[str]] = {nid: [] for nid in ids}
+    incoming: Dict[str, List[Tuple[str, str, str]]] = {nid: [] for nid in ids}
     for index, conn in enumerate(connections):
         if not isinstance(conn, dict):
             raise ValueError("connections[%d] 必须是对象" % index)
@@ -250,13 +389,18 @@ def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         if source == target:
             raise ValueError("节点不能连接自身")
         from_port, to_port = str(conn.get("fromPort") or "right"), str(conn.get("toPort") or "left")
-        key = source + "\x00" + target + "\x00" + from_port + "\x00" + to_port
+        if from_port not in NODE_PORTS[str(by_id[source].get("type"))]:
+            raise ValueError("连线输出端口不合法：%s.%s" % (source, from_port))
+        if to_port not in NODE_PORTS[str(by_id[target].get("type"))]:
+            raise ValueError("连线输入端口不合法：%s.%s" % (target, to_port))
+        key = (source, target, from_port, to_port)
         if key in edge_keys:
             raise ValueError("重复连线")
         edge_keys.add(key)
         indegree[target] += 1
         next_nodes[source].append(target)
-    queue = [nid for nid, degree in indegree.items() if degree == 0]
+        incoming[target].append((source, from_port, to_port))
+    queue = [nid for nid in by_id if indegree[nid] == 0]
     visited = 0
     while queue:
         current = queue.pop(0)
@@ -267,6 +411,20 @@ def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
                 queue.append(target)
     if visited != len(ids):
         raise ValueError("工作流存在循环连线")
+    for nid, node in by_id.items():
+        op = str(node.get("type"))
+        count = len(incoming[nid])
+        if op == "input":
+            if count:
+                raise ValueError("input 节点不能有上游输入")
+        elif op == "probe":
+            if count > 1:
+                raise ValueError("probe 节点最多接受一个上游输入")
+        elif op == "concat":
+            if count < 2:
+                raise ValueError("concat 节点至少需要 2 个上游输入")
+        elif count != 1:
+            raise ValueError("节点 %s 必须且只能有一个上游输入" % nid)
     return spec
 
 
@@ -666,19 +824,31 @@ def build_args(op: str, p: Dict[str, Any], src: Optional[str], extra: List[str],
     raise RuntimeError("未知节点类型：%s" % op)
 
 
-def execute_job(job_id: str) -> None:
-    job = _jobs[job_id]
-    nodes = job["spec"].get("nodes") or []
-    edges = job["spec"].get("connections") or []
-    by_id = {str(n.get("id")): n for n in nodes}
+def execute_job(job_id: str, root: Optional[Path] = None) -> None:
+    root = Path(root) if root else Path(getattr(Handler, "root", ROOT))
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return
+        spec = copy.deepcopy(job["spec"])
+    nodes = spec.get("nodes") or []
+    edges = spec.get("connections") or []
+    by_id = {str(node.get("id")): node for node in nodes}
     order = _toposort(nodes, edges)
     outputs: Dict[str, str] = {}
     media_outputs: Dict[str, Dict[str, Any]] = {}
-    jobdir = JOBS / job_id
+    jobdir = jobs_dir(root) / job_id
     outdir = jobdir / "out"
+    staging = jobdir / ".staging"
     outdir.mkdir(parents=True, exist_ok=True)
+    staging.mkdir(parents=True, exist_ok=True)
     results: Dict[str, Any] = {}
     failed = False
+
+    def cancelled() -> bool:
+        with _lock:
+            current = _jobs.get(job_id)
+            return current is None or bool(current.get("cancelled"))
 
     def input_media(nid: str) -> List[Dict[str, Any]]:
         ordered = sorted((edge for edge in edges if str(edge.get("to")) == nid),
@@ -691,21 +861,36 @@ def execute_job(job_id: str) -> None:
         failed = True
         with _lock:
             state.update({"status": "error", "error": message, "log": log[-3000:]})
-            job["error"] = "节点 %s：%s" % (nid, message)
+            current = _jobs.get(job_id)
+            if current is not None:
+                current["error"] = "节点 %s：%s" % (nid, message)
+
+    def publish(path: Path, name: str, kind: str) -> str:
+        destination = outdir / name
+        os.replace(path, destination)
+        url = "/api/file/%s/%s" % (job_id, quote(name))
+        with _lock:
+            current = _jobs.get(job_id)
+            if current is not None and kind != "intermediate":
+                current.setdefault("outputs", []).append({"name": name, "url": url, "kind": kind})
+        return str(destination)
 
     try:
         for idx, nid in enumerate(order):
-            if job.get("cancelled"):
+            if cancelled():
                 break
             node = by_id[nid]
-            op = str(node.get("op") or node.get("type") or "probe")
-            params = node.get("data") if isinstance(node.get("data"), dict) else (node.get("params") or {})
-            params = dict(params or {})
+            op = str(node.get("type") or "")
+            params = node.get("data") if isinstance(node.get("data"), dict) else {}
+            params = dict(params)
             with _lock:
-                state = job["nodes"].setdefault(nid, {"status": "running", "progress": 0, "log": ""})
+                current = _jobs.get(job_id)
+                if current is None:
+                    return
+                state = current["nodes"].setdefault(nid, {"status": "running", "progress": 0, "log": ""})
                 state.update({"status": "running", "error": None})
-            job["current"] = nid
-            job["progress"] = round(idx / max(1, len(order)), 3)
+                current["current"] = nid
+                current["progress"] = round(idx / max(1, len(order)), 3)
 
             ins = _inputs_for(nid, edges, outputs)
             medias = input_media(nid)
@@ -713,16 +898,45 @@ def execute_job(job_id: str) -> None:
 
             if op == "input":
                 fid = str(params.get("fileId") or "")
-                upload = resolve_upload(fid)
+                upload = resolve_upload(fid, root)
                 info = probe(str(upload))
                 if info.get("error"):
                     raise RuntimeError("节点 %s：%s" % (nid, info["error"]))
                 outputs[nid] = str(upload)
                 media_outputs[nid] = info
                 results[nid] = {"probe": info}
-                job["duration"] = info.get("duration", 0)
                 with _lock:
+                    current = _jobs.get(job_id)
+                    if current is not None:
+                        current["duration"] = info.get("duration", 0)
                     state.update({"status": "done", "progress": 1, "result": results[nid]})
+                continue
+
+            # probe 是只读分析节点：可接上游，也可直接使用自身 fileId；
+            # 未填写时明确回落到工作流中唯一的带文件 input。
+            if op == "probe" and not ins:
+                fid = str(params.get("fileId") or "")
+                if not fid:
+                    candidates = [str(n.get("data", {}).get("fileId") or "")
+                                  for n in nodes if str(n.get("type")) == "input"
+                                  and isinstance(n.get("data"), dict)]
+                    candidates = [value for value in candidates if value]
+                    if len(candidates) == 1:
+                        fid = candidates[0]
+                if not fid:
+                    fail(nid, state, "probe 未连接上游，且没有可用的 fileId")
+                    break
+                upload = resolve_upload(fid, root)
+                info = probe(str(upload))
+                if info.get("error"):
+                    fail(nid, state, info["error"], info.get("raw", ""))
+                    break
+                outputs[nid] = str(upload)
+                media_outputs[nid] = info
+                results[nid] = {"probe": info}
+                with _lock:
+                    state.update({"status": "done", "progress": 1, "result": results[nid],
+                                  "log": info.get("raw", "")[-3000:], "error": None})
                 continue
 
             src = ins[0] if ins else None
@@ -733,7 +947,8 @@ def execute_job(job_id: str) -> None:
             default_fmt = "mp3" if op == "audio" else "mp4"
             fmt = _ext(params.get("format") or default_fmt, default_fmt)
             out_name = "%s_%d.%s" % (re.sub(r"[^a-zA-Z0-9_-]", "_", nid), idx, fmt)
-            out_path = str(outdir / out_name)
+            temporary = staging / (".omm-" + uuid.uuid4().hex + "." + fmt)
+            out_path = str(temporary)
 
             if op in ("probe", "scene", "silence", "black"):
                 if op == "probe":
@@ -749,7 +964,7 @@ def execute_job(job_id: str) -> None:
                     args, _ = build_args(op, params, src, ins[1:], out_path, src_info)
                     code, log = run_ffmpeg(job, nid, args, job.get("duration", 0), op, analysis)
                     results[nid] = _analysis_result(analysis, op)
-                if job.get("cancelled"):
+                if cancelled():
                     with _lock:
                         state.update({"status": "cancelled", "progress": state.get("progress", 0)})
                     break
@@ -774,7 +989,7 @@ def execute_job(job_id: str) -> None:
                         state.update({"status": "done", "progress": 1})
                     continue
             code, log = run_ffmpeg(job, nid, args, job.get("duration", 0))
-            if job.get("cancelled"):
+            if cancelled():
                 with _lock:
                     state.update({"status": "cancelled", "progress": state.get("progress", 0)})
                 break
@@ -782,150 +997,240 @@ def execute_job(job_id: str) -> None:
                 fail(nid, state, "ffmpeg 退出码 %d" % code, log)
                 break
 
-            produced = out_path
+            produced = temporary
             if op == "thumbnail":
-                made = sorted(str(path) for path in outdir.glob(out_name.split(".")[0] + "_*.jpg"))
+                made = sorted(staging.glob(temporary.stem + "_*.jpg"))
                 if not made:
                     fail(nid, state, "未生成缩略图", log)
                     break
-                results[nid] = {"images": ["/api/file/%s/%s" % (job_id, quote(Path(path).name))
-                                           for path in made]}
-                produced = src
-            elif not Path(produced).is_file():
-                fail(nid, state, "ffmpeg 未生成输出文件", log)
-                break
-            if op == "export":
-                filename = _output_filename(params.get("filename") or out_name, fmt)
-                final = outdir / filename
-                if final != Path(produced):
-                    shutil.copy2(produced, final)
-                produced = str(final)
-            out_info = src_info if op == "thumbnail" else probe(produced)
-            if out_info.get("error"):
-                fail(nid, state, out_info["error"], out_info.get("raw", ""))
-                break
-            outputs[nid] = produced
+                images = []
+                base_name = "%s_%d" % (re.sub(r"[^a-zA-Z0-9_-]", "_", nid), idx)
+                for index, path in enumerate(made, start=1):
+                    name = "%s_%02d.jpg" % (base_name, index)
+                    publish(path, name, "thumbnail")
+                    images.append("/api/file/%s/%s" % (job_id, quote(name)))
+                results[nid] = {"images": images}
+                produced_path = src
+                out_info = src_info or {}
+            else:
+                if not produced.is_file():
+                    fail(nid, state, "ffmpeg 未生成输出文件", log)
+                    break
+                out_info = probe(str(produced))
+                if out_info.get("error"):
+                    fail(nid, state, out_info["error"], out_info.get("raw", ""))
+                    break
+                filename = (_output_filename(params.get("filename") or out_name, fmt)
+                            if op == "export" else out_name)
+                produced_path = publish(produced, filename, "video" if op == "export" else "intermediate")
+            outputs[nid] = produced_path
             media_outputs[nid] = out_info
             if out_info.get("duration"):
-                job["duration"] = out_info["duration"]
+                with _lock:
+                    current = _jobs.get(job_id)
+                    if current is not None:
+                        current["duration"] = out_info["duration"]
             with _lock:
                 state.update({
                     "status": "done", "progress": 1,
-                    "output": "/api/file/%s/%s" % (job_id, quote(Path(produced).name)),
+                    "output": "/api/file/%s/%s" % (job_id, quote(Path(produced_path).name)),
                     "result": results.get(nid), "log": log[-3000:], "error": None,
                 })
         with _lock:
+            current = _jobs.get(job_id)
+            if current is None:
+                return
+            was_cancelled = bool(current.get("cancelled"))
             if failed:
-                job["status"] = "error"
-                for state in job["nodes"].values():
+                current["status"] = "error"
+            else:
+                current["status"] = "cancelled" if was_cancelled else "done"
+            if current["status"] == "cancelled":
+                current["outputs"] = []
+                for state in current["nodes"].values():
+                    if state.get("status") in ("running", "pending"):
+                        state["status"] = "cancelled"
+            elif failed:
+                for state in current["nodes"].values():
                     if state.get("status") == "pending":
                         state["status"] = "skipped"
-            else:
-                job["status"] = "cancelled" if job.get("cancelled") else "done"
     except Exception as exc:
+        was_cancelled = cancelled()
         with _lock:
-            job["status"] = "cancelled" if job.get("cancelled") else "error"
-            job["error"] = None if job.get("cancelled") else str(exc)
-            for state in job["nodes"].values():
-                if state.get("status") == "running":
-                    state.update({"status": "cancelled" if job.get("cancelled") else "error",
-                                  "error": None if job.get("cancelled") else str(exc)})
-                elif state.get("status") == "pending" and not job.get("cancelled"):
-                    state["status"] = "skipped"
+            current = _jobs.get(job_id)
+            if current is not None:
+                current["status"] = "cancelled" if was_cancelled else "error"
+                current["error"] = None if was_cancelled else str(exc)
+                if was_cancelled:
+                    current["outputs"] = []
+                for state in current["nodes"].values():
+                    if state.get("status") == "running":
+                        state.update({"status": current["status"],
+                                      "error": None if was_cancelled else str(exc)})
+                    elif state.get("status") == "pending" and not was_cancelled:
+                        state["status"] = "skipped"
     finally:
+        shutil.rmtree(staging, ignore_errors=True)
         with _lock:
-            job["progress"] = 1
-            job["finishedAt"] = time.time()
+            current = _jobs.get(job_id)
+            if current is not None:
+                current["progress"] = 1
+                current["finishedAt"] = time.time()
+                keep = current.get("status") == "done"
+            else:
+                keep = False
+        if not keep:
+            shutil.rmtree(jobdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
 class Handler(BaseHTTPRequestHandler):
-    server_version = "OMMVideo/1.0"
+    server_version = "OMMVideo/1.1"
     root = ROOT
+    app_id = "video"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         pass  # hub 里保持安静
 
     def _trusted(self) -> bool:
-        if not is_loopback_host(self.headers.get("Host", "")):
+        host = self.headers.get("Host", "")
+        if not is_loopback_host(host):
             return False
         origin = self.headers.get("Origin", "")
-        if origin and not is_loopback_origin(origin):
+        if origin and not trusted_origin(origin, host):
             return False
         site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
         return site in ("", "none", "same-origin", "same-site")
 
+    def _cors_origin(self) -> str:
+        origin = self.headers.get("Origin", "")
+        return origin if origin and trusted_origin(origin, self.headers.get("Host", "")) else ""
+
     def _reject(self) -> bool:
         if self._trusted():
             return False
-        self._json({"ok": False, "error": "仅允许本机回环地址访问"}, 403)
+        if self.command in ("POST", "PUT", "PATCH"):
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+                if 0 < size <= MAX_BODY:
+                    self.rfile.read(size)
+                elif size > MAX_BODY:
+                    self.close_connection = True
+            except (OSError, ValueError):
+                self.close_connection = True
+        self._json({"ok": False, "error": "仅允许同源页面或静书房 Hub 访问"}, 403)
         return True
 
-    def _send(self, code: int, body: bytes, ctype: str, extra: Optional[Dict[str, str]] = None) -> None:
+    def _headers(self, code: int, ctype: str, length: int,
+                 extra: Optional[Dict[str, str]] = None) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", "no-store")
-        origin = self.headers.get("Origin", "")
-        if origin and is_loopback_origin(origin) and is_loopback_host(self.headers.get("Host", "")):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        origin = self._cors_origin()
+        if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-        for k, v in (extra or {}).items():
-            self.send_header(k, v)
+        for key, value in (extra or {}).items():
+            self.send_header(key, value)
         self.end_headers()
+
+    def _send(self, code: int, body: bytes, ctype: str, extra: Optional[Dict[str, str]] = None) -> None:
+        self._headers(code, ctype, len(body), extra)
         if self.command != "HEAD":
             try:
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-    def _json(self, obj: Any, code: int = 200) -> None:
-        self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+    def _json(self, obj: Any, code: int = 200, extra: Optional[Dict[str, str]] = None) -> None:
+        self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
+                   "application/json; charset=utf-8", extra)
 
     def _body(self) -> bytes:
         try:
             size = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            size = 0
+        except ValueError as exc:
+            raise ValueError("Content-Length 无效") from exc
+        if size < 0:
+            raise ValueError("Content-Length 无效")
         if size > MAX_BODY:
             raise OverflowError("payload too large")
-        return self.rfile.read(size) if size > 0 else b""
+        return self.rfile.read(size) if size else b""
 
     def _json_body(self) -> Dict[str, Any]:
         try:
             data = json.loads(self._body().decode("utf-8"))
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("请求 JSON 无效") from exc
+        if not isinstance(data, dict):
+            raise ValueError("请求 JSON 必须是对象")
+        return data
+
+    def _bridge_body(self) -> Optional[bytes]:
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+        except ValueError as exc:
+            raise ValueError("Content-Length 无效") from exc
+        limit = getattr(omm_shared, "MAX_BODY", MAX_BODY) if omm_shared else MAX_BODY
+        if size < 0:
+            raise ValueError("Content-Length 无效")
+        if size > limit:
+            self.close_connection = True
+            self._json({"ok": False, "error": "payload too large"}, 413)
+            return None
+        return self.rfile.read(size) if size else b""
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         if self._reject():
             return
         self._send(204, b"", "text/plain", {
-            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+            "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         })
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        self.do_GET()
 
     def do_GET(self) -> None:  # noqa: N802
         if self._reject():
             return
-        u = urlparse(self.path)
-        path = unquote(u.path)
-        query = parse_qs(u.query)
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
+        query = parse_qs(parsed.query)
+
+        if path.startswith("/__omm/share/"):
+            if omm_share is None:
+                self._json({"ok": False, "error": "not found"}, 404)
+                return
+            status, ctype, body = omm_share.handle_get(path, query, self.app_id)
+            self._send(status, body, ctype)
+            return
+        if path.startswith("/__omm/fs/"):
+            if omm_shared is None:
+                self._json({"ok": False, "error": "not found"}, 404)
+                return
+            status, ctype, body = omm_shared.handle_get(
+                path, query, self.app_id,
+                capabilities=omm_shared.capabilities_for_app(self.app_id),
+            )
+            self._send(status, body, ctype)
+            return
 
         if path == "/api/status":
             try:
                 info = {"ffmpeg": ffmpeg_path(), "bundled": bundled_ffmpeg(), "version": ffmpeg_version()}
             except RuntimeError as exc:
                 info = {"ffmpeg": "", "bundled": False, "version": str(exc)}
-            self._json({"ok": True, "runtime": info, "workdir": str(WORK)})
+            self._json({"ok": True, "runtime": info, "workdir": str(work_root(self.root))})
             return
         if path == "/api/probe":
             fid = (query.get("file") or [""])[0]
             try:
-                upload = resolve_upload(fid)
+                upload = resolve_upload(fid, self.root)
             except RuntimeError as exc:
                 self._json({"ok": False, "error": str(exc)}, 404 if str(exc).startswith("找不到") else 400)
                 return
@@ -933,12 +1238,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith("/api/job/"):
             jid = path.split("/")[-1]
-            job = _jobs.get(jid)
-            if not job:
-                self._json({"ok": False, "error": "任务不存在"}, 404)
-                return
             with _lock:
-                snap = {
+                removed = _prune_jobs_locked()
+                job = _jobs.get(jid)
+                snap = copy.deepcopy({
                     "ok": True,
                     "jobId": jid,
                     "status": job["status"],
@@ -946,40 +1249,43 @@ class Handler(BaseHTTPRequestHandler):
                     "current": job.get("current"),
                     "duration": job.get("duration", 0),
                     "nodes": job["nodes"],
-                    "error": job.get("error"), "cancelled": job["status"] == "cancelled",
-                }
+                    "outputs": job.get("outputs", []),
+                    "error": job.get("error"),
+                    "cancelled": bool(job.get("cancelled")) or job["status"] == "cancelled",
+                }) if job else None
+            _remove_job_dirs(Path(self.root), removed)
+            if snap is None:
+                self._json({"ok": False, "error": "任务不存在或已回收"}, 404)
+                return
             self._json(snap)
             return
         if path.startswith("/api/file/"):
-            parts = path.split("/")
-            if len(parts) != 5 or not re.fullmatch(r"[0-9a-f]{12}", parts[3]):
-                self._json({"ok": False, "error": "bad path"}, 400)
+            parts = [part for part in path.split("/") if part]
+            if len(parts) != 4 or not _JOB_ID_RE.fullmatch(parts[2]):
+                self._json({"ok": False, "error": "路径无效"}, 400)
                 return
-            jid, name = parts[3], parts[4]
-            if name != _safe_name(name):
-                self._json({"ok": False, "error": "bad path"}, 400)
+            jid, name = parts[2], parts[3]
+            if not name or "\\" in name or name != _safe_name(name):
+                self._json({"ok": False, "error": "路径无效"}, 400)
                 return
-            candidate = JOBS / jid / "out" / name
-            if candidate.is_symlink():
-                self._json({"ok": False, "error": "forbidden"}, 403)
-                return
-            try:
-                target = candidate.resolve(strict=True)
-                target.relative_to((JOBS / jid / "out").resolve())
-            except (FileNotFoundError, ValueError):
+            base = jobs_dir(self.root) / jid / "out"
+            target = _contained_file(base, base / name)
+            if target is None:
                 self._json({"ok": False, "error": "文件不存在"}, 404)
                 return
-            if not target.is_file():
-                self._json({"ok": False, "error": "文件不存在"}, 404)
-                return
-            self._serve_file(target)
+            self._serve_file(target, download=(query.get("download") or [""])[0] == "1",
+                             download_name=name)
             return
 
-        # 静态文件
+        # 静态文件：不暴露后端源码、运行时工作区或 Lambda 状态。
         rel = path.lstrip("/") or "omm-video.html"
-        target = (self.root / rel).resolve()
+        if not _static_allowed(rel):
+            self._json({"ok": False, "error": "forbidden"}, 403)
+            return
+        root = Path(self.root).resolve()
+        target = (root / rel).resolve()
         try:
-            target.relative_to(self.root.resolve())
+            target.relative_to(root)
         except ValueError:
             self._json({"ok": False, "error": "forbidden"}, 403)
             return
@@ -990,26 +1296,73 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._serve_file(target)
 
-    def _serve_file(self, f: Path) -> None:
-        ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+    @staticmethod
+    def _byte_range(value: str, size: int) -> Tuple[int, int]:
+        if size <= 0:
+            raise ValueError("invalid range")
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", str(value or "").strip())
+        if not match or (not match.group(1) and not match.group(2)):
+            raise ValueError("invalid range")
+        first, last = match.groups()
+        if first:
+            start = int(first)
+            end = int(last) if last else size - 1
+            if start >= size or start < 0 or end < start:
+                raise ValueError("invalid range")
+            end = min(end, size - 1)
+        else:
+            suffix = int(last)
+            if suffix <= 0:
+                raise ValueError("invalid range")
+            start = max(0, size - suffix)
+            end = size - 1
+        return start, end
+
+    def _serve_file(self, path: Path, download: bool = False,
+                    download_name: Optional[str] = None) -> None:
+        ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript", "application/json"):
             ctype += "; charset=utf-8"
-        size = f.stat().st_size
-        extra = {"Accept-Ranges": "bytes"}
-        start = 0
-        rng = self.headers.get("Range")
-        if rng and rng.startswith("bytes="):
-            try:
-                start = int(rng.split("=")[1].split("-")[0])
-            except ValueError:
-                start = 0
-        if rng and start > 0 and start < size:
-            data = f.read_bytes()[start:]
-            self._send(206, data, ctype, dict(extra, **{"Content-Range": "bytes %d-%d/%d" % (start, size - 1, size)}))
+        try:
+            size = path.stat().st_size
+        except OSError:
+            self._json({"ok": False, "error": "文件不存在"}, 404)
             return
-        self._send(200, f.read_bytes(), ctype, extra)
+        start, end = 0, size - 1
+        code = 200
+        extra: Dict[str, str] = {"Accept-Ranges": "bytes"}
+        raw_range = self.headers.get("Range")
+        if raw_range:
+            try:
+                start, end = self._byte_range(raw_range, size)
+            except ValueError:
+                self._json({"ok": False, "error": "请求的字节范围无效"},
+                           416, {"Content-Range": "bytes */%d" % size, "Accept-Ranges": "bytes"})
+                return
+            code = 206
+            extra["Content-Range"] = "bytes %d-%d/%d" % (start, end, size)
+        if download:
+            name = download_name or path.name
+            extra["Content-Disposition"] = "%s; filename*=UTF-8''%s" % (
+                "attachment" if download else "inline", quote(name))
+        length = 0 if size == 0 else end - start + 1
+        self._headers(code, ctype, length, extra)
+        if self.command == "HEAD" or not length:
+            return
+        try:
+            with path.open("rb") as handle:
+                handle.seek(start)
+                remaining = length
+                while remaining:
+                    chunk = handle.read(min(256 * 1024, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
 
-    def _write_upload(self, name: str) -> Tuple[Optional[Path], int]:
+    def _write_upload(self, name: str, root: Path) -> Tuple[Optional[Path], int]:
         try:
             size = int(self.headers.get("Content-Length") or 0)
         except ValueError:
@@ -1017,12 +1370,14 @@ class Handler(BaseHTTPRequestHandler):
         if size <= 0:
             return None, 400
         if size > MAX_UPLOAD:
+            self.close_connection = True
             return None, 413
-        UPLOADS.mkdir(parents=True, exist_ok=True)
+        base = uploads_dir(root)
         fid = uuid.uuid4().hex[:12]
-        dest = UPLOADS / (fid + "_" + name)
+        dest = base / (fid + "_" + name)
+        temporary = base / (".upload-" + uuid.uuid4().hex + ".tmp")
         try:
-            with dest.open("xb") as handle:
+            with temporary.open("xb") as handle:
                 remaining = size
                 while remaining:
                     chunk = self.rfile.read(min(1024 * 1024, remaining))
@@ -1030,11 +1385,15 @@ class Handler(BaseHTTPRequestHandler):
                         raise IOError("上传内容不完整")
                     handle.write(chunk)
                     remaining -= len(chunk)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, dest)
         except FileExistsError:
+            temporary.unlink(missing_ok=True)
             return None, 409
         except Exception:
             try:
-                dest.unlink()
+                temporary.unlink()
             except OSError:
                 pass
             return None, 400
@@ -1043,58 +1402,104 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if self._reject():
             return
-        u = urlparse(self.path)
-        path = u.path
+        try:
+            self._handle_post()
+        except OverflowError:
+            self.close_connection = True
+            self._json({"ok": False, "error": "请求内容超过大小限制"}, 413)
+        except ValueError as exc:
+            self._json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self._json({"ok": False, "error": str(exc)}, 500)
+
+    def _handle_post(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith("/__omm/share/") or path.startswith("/__omm/fs/"):
+            handler = omm_share if path.startswith("/__omm/share/") else omm_shared
+            if handler is None:
+                self._json({"ok": False, "error": "not found"}, 404)
+                return
+            body = self._bridge_body()
+            if body is None:
+                return
+            query = parse_qs(parsed.query)
+            if path.startswith("/__omm/share/"):
+                status, ctype, payload = handler.handle_post(path, query, body, self.app_id)
+            else:
+                status, ctype, payload = handler.handle_post(
+                    path, query, body, self.app_id,
+                    capabilities=omm_shared.capabilities_for_app(self.app_id),
+                )
+            self._send(status, payload, ctype)
+            return
         if path != "/api/upload":
             try:
                 size = int(self.headers.get("Content-Length") or 0)
-            except ValueError:
-                size = 0
+            except ValueError as exc:
+                raise ValueError("Content-Length 无效") from exc
             if size > MAX_BODY:
-                self._json({"ok": False, "error": "payload too large"}, 413)
-                return
+                raise OverflowError("payload too large")
         if path == "/api/upload":
-            name = _safe_name((parse_qs(u.query).get("name") or ["video.mp4"])[0])
-            dest, status = self._write_upload(name)
+            name = _safe_name((parse_qs(parsed.query).get("name") or ["video.mp4"])[0])
+            dest, status = self._write_upload(name, Path(self.root))
             if dest is None:
                 self._json({"ok": False, "error": "文件为空、不完整或超过大小限制"}, status)
                 return
             self._json({"ok": True, "fileId": dest.name, "name": name, "size": dest.stat().st_size})
             return
         if path == "/api/run":
-            spec = self._json_body()
-            try:
-                spec = _validate_spec(spec)
-            except ValueError as exc:
-                self._json({"ok": False, "error": str(exc)}, 400)
-                return
+            spec = _validate_spec(self._json_body())
             jid = uuid.uuid4().hex[:12]
+            root = Path(self.root).resolve()
             job = {
                 "id": jid,
-                "spec": spec,
+                "spec": copy.deepcopy(spec),
                 "status": "running",
                 "progress": 0,
                 "current": None,
                 "duration": 0,
-                "nodes": {str(n.get("id")): {"status": "pending", "progress": 0, "log": ""}
-                          for n in (spec.get("nodes") or [])},
+                "nodes": {str(node.get("id")): {"status": "pending", "progress": 0, "log": ""}
+                          for node in (spec.get("nodes") or [])},
+                "outputs": [],
                 "error": None,
                 "cancelled": False,
                 "createdAt": time.time(),
+                "root": str(root),
             }
             with _lock:
-                _jobs[jid] = job
-            th = threading.Thread(target=execute_job, args=(jid,), daemon=True)
-            th.start()
+                removed = _prune_jobs_locked()
+                full = len(_jobs) >= MAX_JOBS
+                if not full:
+                    _jobs[jid] = job
+            _remove_job_dirs(root, removed)
+            if full:
+                self._json({"ok": False, "error": "运行中的任务过多，请稍后重试"}, 503)
+                return
+            try:
+                threading.Thread(target=execute_job, args=(jid, root), daemon=True).start()
+            except Exception as exc:
+                with _lock:
+                    _jobs.pop(jid, None)
+                shutil.rmtree(jobs_dir(root) / jid, ignore_errors=True)
+                self._json({"ok": False, "error": str(exc)}, 500)
+                return
             self._json({"ok": True, "jobId": jid})
             return
         if path.startswith("/api/cancel/"):
             jid = path.split("/")[-1]
             with _lock:
                 job = _jobs.get(jid)
-                if job:
+                if job is None:
+                    code, payload = 404, {"ok": False, "error": "任务不存在或已回收"}
+                elif job.get("status") != "running":
+                    code = 409
+                    payload = {"ok": False, "error": "任务已结束，无法取消", "status": job.get("status")}
+                else:
                     job["cancelled"] = True
-            self._json({"ok": bool(job)}, 200 if job else 404)
+                    code = 200
+                    payload = {"ok": True, "jobId": jid, "cancelled": True, "status": "running"}
+            self._json(payload, code)
             return
         self._json({"ok": False, "error": "not found"}, 404)
 
@@ -1106,6 +1511,7 @@ def main() -> None:
     ap.add_argument("--root", default=str(ROOT))
     args = ap.parse_args()
     Handler.root = Path(args.root)
+    work_root(Handler.root).mkdir(parents=True, exist_ok=True)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print("OMM-ZEN Video serving on http://127.0.0.1:%d" % args.port)
     print("ffmpeg: %s" % ffmpeg_path())

@@ -30,7 +30,39 @@
 
   ui.version = '2.0.0'
 
+  var ACTION_SELECTOR = '[data-action]:not(button):not(a):not(input):not(select):not(textarea):not([contenteditable="true"])'
+
+  /* Legacy product menus use clickable div/span markup. Enhance their keyboard
+   * semantics in one place instead of keeping per-product key handlers. Native
+   * buttons and controls are never wrapped or rebound. */
+  function syncActionState(el) {
+    if (el.classList.contains('disabled')) el.setAttribute('aria-disabled', 'true')
+    else el.removeAttribute('aria-disabled')
+  }
+
+  function enhanceActions(root) {
+    var scope = root || document
+    var list = Array.prototype.slice.call(scope.querySelectorAll(ACTION_SELECTOR))
+    if (scope.matches && scope.matches(ACTION_SELECTOR)) list.unshift(scope)
+    list.forEach(function (el) {
+      if (el.dataset.zenActionReady === '1') return
+      if (el.closest('button,a,input,select,textarea')) return
+      el.dataset.zenActionReady = '1'
+      if (!el.hasAttribute('role')) el.setAttribute('role', 'button')
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
+      syncActionState(el)
+      el.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return
+        if (event.repeat || el.getAttribute('aria-disabled') === 'true' || el.classList.contains('disabled')) return
+        event.preventDefault()
+        event.stopPropagation()
+        el.click()
+      })
+    })
+  }
+
   function enhance(root) {
+    enhanceActions(root)
     ui.select.enhance(root)
     if (ui.picker) ui.picker.enhance(root)
     if (ui.tooltip) ui.tooltip.enhance(root)
@@ -42,10 +74,16 @@
     if (typeof MutationObserver !== 'function' || !document.body) return
     new MutationObserver(function (records) {
       for (var i = 0; i < records.length; i++) {
-        var added = records[i].addedNodes
+        var record = records[i]
+        if (record.type === 'attributes') {
+          if (record.target.matches && record.target.matches(ACTION_SELECTOR)) syncActionState(record.target)
+          continue
+        }
+        var added = record.addedNodes
         for (var j = 0; j < added.length; j++) {
           var node = added[j]
           if (!node || node.nodeType !== 1) continue
+          enhanceActions(node)
           if (node.matches && node.matches('select[data-zen-select]')) {
             ui.select.enhance(node)
           } else if (node.querySelector && node.querySelector('select[data-zen-select]')) {
@@ -60,7 +98,9 @@
           }
         }
       }
-    }).observe(document.body, { childList: true, subtree: true })
+    }).observe(document.body, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['class'],
+    })
   }
 
   if (document.readyState === 'loading') {
@@ -70,6 +110,7 @@
   }
 
   ui.enhance = enhance
+  ui.enhanceActions = enhanceActions
   ui.start = start
 
   ui.closeAll = function () {

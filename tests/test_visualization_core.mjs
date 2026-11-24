@@ -3,6 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
+import { DataViz } from '../public/lib/data-viz.js'
 
 const core = readFileSync(new URL('../third_party/zenviz-core/core/zenviz.js', import.meta.url), 'utf8')
 const parseSource = readFileSync(new URL('../third_party/zenviz-core/core/zenviz-parse.js', import.meta.url), 'utf8')
@@ -194,6 +195,10 @@ test('ApexCharts 把缺失值保留为 null，不转 0', () => {
       series: [{ name: 'S', data: [1, null, '', 3] }],
     }),
     palette: () => ['#155EEF'],
+    chartInk: () => '#151515',
+    chartPaper: () => '#ffffff',
+    chartInkAlpha: (alpha) => `rgba(21,21,21,${alpha})`,
+    chartPaperAlpha: (alpha) => `rgba(255,255,255,${alpha})`,
     numeric: (value) => value === null || value === '' ? null : Number(value),
     getChartFontFamily: () => 'serif',
     legendSelectionByType: {},
@@ -298,6 +303,10 @@ test('SVG overlay 保留标题/副标题/图例并遵循当前 chartProps', () =
       getChartDataRule: () => ({ legend: 'series' }),
       currentLegendNames: () => ['<A & B>', 'S2'],
       palette: () => ['#155EEF', '#009688'],
+      chartInk: () => '#151515',
+      chartPaper: () => '#ffffff',
+      chartInkAlpha: (alpha) => `rgba(21,21,21,${alpha})`,
+      chartPaperAlpha: (alpha) => `rgba(255,255,255,${alpha})`,
       legendSelectionByType: { line: { '<A & B>': false } },
       getChartFontFamily: () => 'serif',
       svgEl: fakeSvgEl,
@@ -447,4 +456,56 @@ test('送复盘发布失败时提示且不伪造成功', async () => {
   assert.equal(errors[0].context, '送复盘失败')
   assert.match(errors[0].error.message, /broker unavailable/)
   assert.ok(!statuses.some((message) => message.startsWith('已送复盘')))
+})
+
+test('工作区持久化包含规范化后的数据表', () => {
+  const stored = {}
+  const state = {
+    engine: 'echarts', type: 'line', category: '论文',
+    data: { headers: ['类别', '值'], rows: [[1, 2], ['三月']] },
+  }
+  const { saveWorkspaceState } = loadFunctions(core, ['sanitizePersistedData', 'saveWorkspaceState'], {
+    state,
+    WORKSPACE_PERSIST_KEY: 'zenviz.workspace.v2', STORAGE_VERSION: 4,
+    GLOBAL_PERSIST_KEYS: ['engine', 'type', 'category'],
+    localStorage: { setItem: (key, value) => { stored[key] = value } },
+    reportError: (message, error) => { throw error || new Error(message) },
+  })
+  saveWorkspaceState()
+  const saved = JSON.parse(stored['zenviz.workspace.v2'])
+  assert.deepEqual(saved.data, { headers: ['类别', '值'], rows: [['1', '2'], ['三月', '']] })
+  assert.match(extractFunction(core, 'restorePersistedState'), /sanitizePersistedData\(workspace\.data\)/)
+})
+
+test('可视化桥接 CSV 由 DataViz.toCSV 生成，不信任传入 csv', () => {
+  const { payloadCSV } = loadFunctions(tail, ['payloadCSV'], { window: { DataViz } })
+  const csv = payloadCSV({
+    csv: 'javascript:alert(1)',
+    headers: ['名称', '备注'],
+    rows: [['A,1', '第一行\n第二行']],
+  })
+  assert.ok(csv.includes('"A,1"'))
+  assert.ok(csv.includes('"第一行\n第二行"'))
+  assert.ok(!csv.includes('javascript:'))
+})
+
+test('可视化导出使用设计尺寸而非屏幕预览尺寸', () => {
+  const canvasExport = extractFunction(core, 'getExportCanvas')
+  assert.match(canvasExport, /Number\(state\.width\)/)
+  assert.match(canvasExport, /Number\(state\.height\)/)
+  assert.match(canvasExport, /exportScaleFactor\(designW, designH\)/)
+  assert.doesNotMatch(canvasExport, /exportScaleFactor\(frame\.offsetWidth, frame\.offsetHeight\)/)
+  assert.match(extractFunction(core, 'svgToCanvas'), /Number\(state\.width\)/)
+  assert.match(extractFunction(core, 'getRenderedSVGString'), /Number\(state\.width\)/)
+})
+
+test('图表数据 palette 与 ramp 集中共享，界面色读取 ZEN 令牌', () => {
+  assert.match(core, /const ZENVIZ_PALETTES = Object\.freeze/)
+  assert.match(core, /const ZENVIZ_RAMPS = Object\.freeze/)
+  assert.match(extractFunction(core, 'palettePreview'), /ZENVIZ_PALETTES\[id\]/)
+  assert.match(extractFunction(core, 'chartInk'), /--zen-ink/)
+  assert.match(extractFunction(core, 'chartPaperColor'), /--zen-paper/)
+  assert.doesNotMatch(core, /'#151515'|'#ffffff'|'rgba\(21,21,21/)
+  const css = readFileSync(new URL('../third_party/zenviz-core/core/zenviz.css', import.meta.url), 'utf8')
+  assert.doesNotMatch(css, /\.palette-preview \.p-(?:mono|culture|science|editorial)-/)
 })

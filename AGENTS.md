@@ -59,5 +59,7 @@ Run from the repo root. Requires Node `^20.19.0 || >=22.12.0` and Python 3.10+.
 - Put `public/` on `sys.path` and import `agent_workspace.omm_data`; never add `public/agent_workspace` itself, because its `types.py` shadows the standard library.
 - On Windows, do not bulk-rewrite Chinese source with PowerShell `Set-Content -Encoding UTF8`; it can add a BOM or corrupt text. Use the editor or UTF-8 without BOM.
 - Vite copies all of `public/` before stripping `.venv`, `desktop`, `build`, `mdforge`, `data_back`, etc. from root `dist/`; builds are heavy.
+- `offline.copy_zen_styles(dest, app_id)` stages shared styles plus only that product's CSS. Do not restore a wholesale `zen/products` copy: unrelated product assets (for example Lambda's APL font) would become false bundle requirements.
 - `public/tests/test_table_api.py::test_cancel` and `::test_origin_and_host_guards` intermittently raise `ConnectionAbortedError` (WinError 10053) in the full suite but pass alone. Do not treat one occurrence as a regression.
 - There is no CI test workflow; only `.github/workflows/macos-build.yml` exists. Run regression locally before committing.
+- On Windows the `.venv/Scripts/python.exe` launcher can spawn a base-Python child. Stopping only the launcher leaves Hub/product servers alive; stop the matching process tree before restarting runtime tests.

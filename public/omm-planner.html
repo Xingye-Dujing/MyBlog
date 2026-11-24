@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="planner">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
@@ -86,16 +86,15 @@
       </div>
       <div class="menu-group" id="zp-sync-group">
         <span class="menu-label" data-i18n="menu.sync">同步</span>
-        <div
+        <button
           class="menu-btn"
           id="zp-sync-btn"
-          role="button"
-          tabindex="0"
+          type="button"
           data-i18n-title="sync.openTitle"
           title="Supabase 云同步"
         >
           <span class="zen-sync-dot"></span><span id="zp-sync-label">未配置</span>
-        </div>
+        </button>
       </div>
       <div
         class="pin-btn pinned"
@@ -454,10 +453,6 @@
     <!-- ===== Touch hint (tablet / touch devices) ===== -->
     <div id="touch-hint" aria-hidden="true"></div>
 
-    <!-- ===== Confirm ===== -->
-      </div>
-    </div>
-
     <!-- ===== Export Overlay ===== -->
     <div id="export-overlay">
       <div class="spinner"></div>
@@ -651,6 +646,7 @@
             'sync.cancelled': '已取消，未与云端交换数据',
             'sync.autoLoginFailed': '自动登录失败，请手动输入密码',
             'sync.autoLoginReady': '已自动登录，当前为手动同步',
+            'sync.workspaceConfirmRequired': '云工作区已切换，请手动解锁并确认后再同步',
             'sync.lockedCleared': '已锁定数据，并清除了本机保存的密码',
             'sync.autoSynced': '已自动同步到云端：{0}',
             'sync.cloudOverwritten': '已用云端数据覆盖本地：{0}',
@@ -993,6 +989,7 @@
             'sync.cancelled': 'Cancelled. Nothing was exchanged with the cloud',
             'sync.autoLoginFailed': 'Automatic sign-in failed. Enter the password manually',
             'sync.autoLoginReady': 'Signed in automatically. Sync stays manual',
+            'sync.workspaceConfirmRequired': 'The cloud workspace changed. Unlock and confirm it manually before syncing',
             'sync.lockedCleared': 'Data locked and the saved password removed from this browser',
             'sync.autoSynced': 'Auto synced to cloud: {0}',
             'sync.cloudOverwritten': 'Local data overwritten by cloud: {0}',
@@ -2039,9 +2036,11 @@
         const Store = {
           planners: [],
           activeId: null,
-          eventsBy: {},
-          recursBy: {},
+          eventsBy: Object.create(null),
+          recursBy: Object.create(null),
           persist: null,
+          _locked: false,
+          isLocked() { return this._locked },
           get events() {
             if (
               !this.activeId ||
@@ -2089,13 +2088,13 @@
                   ) {
                     this.activeId = this.planners[0].id
                   }
-                  this.eventsBy = {}
-                  this.recursBy = {}
+                  this.eventsBy = Object.create(null)
+                  this.recursBy = Object.create(null)
                   const eb = d.eventsBy || {},
                     rb = d.recursBy || {}
                   Object.keys(eb).forEach(function (k) {
                     const src = eb[k],
-                      dst = {}
+                      dst = Object.create(null)
                     if (src && typeof src === 'object' && !Array.isArray(src)) {
                       Object.keys(src).forEach(function (ds) {
                         dst[ds] = Array.isArray(src[ds])
@@ -2120,10 +2119,10 @@
               const pid = uid()
               this.planners = [{ id: pid, name: t('planner.default') }]
               this.activeId = pid
-              this.eventsBy = {}
-              this.recursBy = {}
+              this.eventsBy = Object.create(null)
+              this.recursBy = Object.create(null)
               if (ev && typeof ev === 'object' && !Array.isArray(ev)) {
-                const dst = {}
+                const dst = Object.create(null)
                 Object.keys(ev).forEach(function (ds) {
                   if (Array.isArray(ev[ds])) dst[ds] = ev[ds].filter(Boolean).map(normEvent)
                 })
@@ -2133,6 +2132,7 @@
             } catch (_) {}
           },
           saveDoc() {
+            if (this._locked) return false
             try {
               localStorage.setItem(
                 CONFIG.LS_DATA,
@@ -2151,7 +2151,71 @@
             }
           },
           flushSaveDoc() {
-            return this.saveDoc()
+            return this._locked ? false : this.saveDoc()
+          },
+          lock() {
+            this.flushSaveDoc()
+            this._locked = true
+            this.planners = []
+            this.activeId = null
+            this.eventsBy = Object.create(null)
+            this.recursBy = Object.create(null)
+            CountStore.records = []
+            S.selDate = ''
+            S.lastSelDs = null
+            S.multiSel = []
+            S.focusMode = false
+            S.editing = null
+            S.edAnchor = null
+            S.edDateVal = ''
+            S.edTimeVal = ''
+            S.edRepeat = 'none'
+            S.edDates = []
+            S.edSubs = []
+            S.edEndVal = ''
+            S.edHidden = false
+            S.dragPayload = null
+            S.swapping = false
+            window.ZenUI.modal.close()
+            window.ZenUI.popover.close()
+            Picker.close()
+            var editor = document.getElementById('editor')
+            if (editor) {
+              editor.classList.remove('open')
+              var edTitle = document.getElementById('ed-title')
+              var edNote = document.getElementById('ed-note')
+              if (edTitle) edTitle.value = ''
+              if (edNote) edNote.value = ''
+            }
+            try { sessionStorage.setItem('zp-cloud-locked', '1') } catch (_) {}
+            const main = document.getElementById('main')
+            const menu = document.getElementById('top-menu')
+            if (main) main.inert = true
+            if (menu) {
+              menu.inert = false
+              menu.querySelectorAll('[data-action], #pin-btn').forEach((el) => { el.inert = el.id !== 'zp-sync-btn' })
+            }
+            document.body.classList.add('cloud-locked')
+            ;['calendar', 'sheet-tabs', 'ch-right'].forEach((id) => {
+              const el = document.getElementById(id)
+              if (el) el.textContent = ''
+            })
+          },
+          unlock() {
+            this._locked = false
+            try { sessionStorage.removeItem('zp-cloud-locked') } catch (_) {}
+            const main = document.getElementById('main')
+            const menu = document.getElementById('top-menu')
+            if (main) main.inert = false
+            if (menu) {
+              menu.inert = false
+              menu.querySelectorAll('[data-action], #pin-btn').forEach((el) => { el.inert = false })
+            }
+            document.body.classList.remove('cloud-locked')
+            Settings.load()
+            this.load()
+            CountStore.load()
+            Render.all()
           },
           day(ds) {
             return this.events[ds] || []
@@ -2344,8 +2408,13 @@
           },
         }
         Store.persist = ZenUtil.debounce(function () {
-          Store.saveDoc()
+          if (!Store.isLocked()) Store.saveDoc()
         }, CONFIG.AUTO_SAVE_DELAY)
+        window.ZPlanStore = {
+          lock: function () { Store.lock() },
+          unlock: function () { Store.unlock() },
+          isLocked: function () { return Store.isLocked() },
+        }
 
         const Rules = {
           byId(id) {
@@ -2633,6 +2702,14 @@
         // ================================================================
         // 8. RENDERER
         // ================================================================
+        function ensureKeyboardControls(root) {
+          ;(root || document).querySelectorAll('[data-action], [data-picker], .sr-item').forEach(function (el) {
+            if (/^(BUTTON|INPUT|TEXTAREA|SELECT|A)$/.test(el.tagName) || el.disabled) return
+            if (!el.hasAttribute('role')) el.setAttribute('role', 'button')
+            if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
+          })
+        }
+
         const Render = {
           all() {
             Picker.close()
@@ -2659,6 +2736,7 @@
             syncViewButtons()
             Render.sheets()
             Render.tagPill()
+            ensureKeyboardControls(document)
             requestAnimationFrame(function () {
               /* 指定了跳转目标（“今天”/跳转到某天）优先滚到那一天所在的位置 */
               if (S.scrollTarget) {
@@ -2921,7 +2999,7 @@
               '" data-date="' +
               ds +
               '" data-id="' +
-              ev.id +
+              esc(ev.id) +
               '" style="--c:' +
               ev.color +
               '"' +
@@ -3222,10 +3300,10 @@
                 '<div class="cd-card ' +
                 cls +
                 '" data-id="' +
-                r.id +
+                esc(r.id) +
                 '" data-action="countEdit">' +
                 '<span class="cd-x" data-action="countDelete" data-id="' +
-                r.id +
+                esc(r.id) +
                 '" title="' +
                 esc(t('btn.delete')) +
                 '">×</span>' +
@@ -3342,7 +3420,7 @@
                 '<div class="sheet-tab' +
                 (p.id === Store.activeId ? ' active' : '') +
                 '" data-action="plannerSwitch" data-pid="' +
-                p.id +
+                esc(p.id) +
                 '" title="' +
                 esc(p.name) +
                 '">' +
@@ -3352,7 +3430,7 @@
                 '<span class="sheet-x' +
                 (many ? ' has-planners' : '') +
                 '" data-action="plannerDelete" data-pid="' +
-                p.id +
+                esc(p.id) +
                 '">×</span></div>'
             })
             DOM.sheetTabs.innerHTML = html
@@ -4219,7 +4297,7 @@
         // ================================================================
         const TagsMgr = {
           collect() {
-            const tags = {}
+            const tags = Object.create(null)
             Object.keys(Store.events).forEach(function (ds) {
               Store.events[ds].forEach(function (e) {
                 if (e.tag) {
@@ -4375,7 +4453,7 @@
                 '<div class="sr-item" data-date="' +
                 r.ds +
                 '" data-id="' +
-                r.ev.id +
+                esc(r.ev.id) +
                 '">' +
                 '<span class="sr-date">' +
                 r.ds.slice(5) +
@@ -4450,106 +4528,29 @@
             )
           },
           showHelp() {
-            function section(titleKey) {
-              return (
-                '<div class="hk-section"><div class="hk-section-title">' + t(titleKey) + '</div>'
-              )
-            }
-            function row(label, desc) {
-              return (
-                '<div class="hk-row"><span>' +
-                esc(t(label)) +
-                '</span><span class="hk-key">' +
-                esc(t(desc)) +
-                '</span></div>'
-              )
-            }
-            function rowRaw(label, desc) {
-              return (
-                '<div class="hk-row"><span>' +
-                esc(label) +
-                '</span><span class="hk-key">' +
-                esc(desc) +
-                '</span></div>'
-              )
-            }
-            let html = '<div class="hk-grid">'
-
-            /* 快捷键表：段落之间用 ~~ 分隔，段落内“标题§说明|键位|说明|键位”。
-               分组 = 生效范围；顺序与全局 keydown 处理器的判断顺序一致。 */
+            const shortcuts = window.ZenUI.shortcuts
             const raw = t('hk.rows').split('{M}').join(HK_MOD)
-            raw.split('~~').forEach((sec) => {
-              const cut = sec.indexOf('§')
-              html +=
-                '<div class="hk-section"><div class="hk-section-title">' +
-                esc(cut < 0 ? sec : sec.slice(0, cut)) +
-                '</div>'
-              const pairs = (cut < 0 ? '' : sec.slice(cut + 1)).split('|')
-              for (let i = 0; i + 1 < pairs.length; i += 2) {
-                html += rowRaw(pairs[i], pairs[i + 1])
-              }
-              html += '</div>'
-            })
-            html +=
-              '<div class="hk-section"><div class="hk-note">' +
-              esc(t('hk.note').split('{M}').join(HK_MOD)) +
-              '</div></div>'
-
-            /* 触屏 / 平板：把鼠标手势换成触摸手势，否则使用说明等于无效 */
+            const sections = shortcuts.parseRows(raw)
+            sections.push(shortcuts.note(esc(t('hk.note').split('{M}').join(HK_MOD))))
+            const textSection = (title, keys) => shortcuts.section(
+              t(title),
+              keys.map((key) => shortcuts.row(t(key), '')),
+            )
             if (TouchUI.hasTouch) {
-              html +=
-                '<div class="hk-section"><div class="hk-section-title">' +
-                esc(t('help.touch')) +
-                '</div>'
-              html += '<div class="hk-row"><span>' + esc(t('touch.hintCell')) + '</span></div>'
-              html += '<div class="hk-row"><span>' + esc(t('touch.hintLong')) + '</span></div>'
-              html += '<div class="hk-row"><span>' + esc(t('touch.hintDrag')) + '</span></div>'
-              html += '<div class="hk-row"><span>' + esc(t('focus.btnTitle')) + '</span></div>'
-              html += '<div class="hk-row"><span>' + esc(t('touch.hintMenu')) + '</span></div>'
-              html += '</div>'
+              sections.push(textSection('help.touch', [
+                'touch.hintCell', 'touch.hintLong', 'touch.hintDrag', 'focus.btnTitle', 'touch.hintMenu',
+              ]))
             }
-
-            html += section('help.drag')
-            html += '<div class="hk-row"><span>' + esc(t('help.drag.move')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.drag.reorder')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.drag.note')) + '</span></div>'
-            html += '</div>'
-
-            html += section('help.views')
-            html += '<div class="hk-row"><span>' + esc(t('help.views.month')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.views.week')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.views.list')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.views.count')) + '</span></div>'
-            html += '</div>'
-
-            html += section('help.items')
-            html += '<div class="hk-row"><span>' + esc(t('help.items.new')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.items.edit')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.items.done')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.items.color')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.items.repeat')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.items.subtask')) + '</span></div>'
-            html += '</div>'
-
-            html += section('help.multi')
-            html += '<div class="hk-row"><span>' + esc(t('help.multi.select')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.multi.range')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.multi.focus')) + '</span></div>'
-            html += '</div>'
-
-            html += section('help.sheet')
-            html += '<div class="hk-row"><span>' + esc(t('help.sheet.add')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.sheet.switch')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.sheet.rename')) + '</span></div>'
-            html += '</div>'
-
-            html += section('help.settings')
-            html += '<div class="hk-row"><span>' + esc(t('help.settings.bg')) + '</span></div>'
-            html += '<div class="hk-row"><span>' + esc(t('help.settings.zoom')) + '</span></div>'
-            html += '</div>'
-
-            html += '</div>'
-            UIMgr.showModal(t('help.title'), html)
+            sections.push(textSection('help.drag', ['help.drag.move', 'help.drag.reorder', 'help.drag.note']))
+            sections.push(textSection('help.views', ['help.views.month', 'help.views.week', 'help.views.list', 'help.views.count']))
+            sections.push(textSection('help.items', [
+              'help.items.new', 'help.items.edit', 'help.items.done', 'help.items.color',
+              'help.items.repeat', 'help.items.subtask',
+            ]))
+            sections.push(textSection('help.multi', ['help.multi.select', 'help.multi.range', 'help.multi.focus']))
+            sections.push(textSection('help.sheet', ['help.sheet.add', 'help.sheet.switch', 'help.sheet.rename']))
+            sections.push(textSection('help.settings', ['help.settings.bg', 'help.settings.zoom']))
+            shortcuts.help({ title: t('help.title'), body: shortcuts.grid(sections) })
           },
         }
 
@@ -4659,91 +4660,114 @@
             ZenUtil.readText(file).then(function (text) {
               try {
                 const data = JSON.parse(text)
+                const validId = (value) => {
+                  const id = typeof value === 'string' || typeof value === 'number' ? String(value).trim() : ''
+                  return id && id.length <= 200 && !/[\u0000-\u001f]/.test(id) &&
+                    ['__proto__', 'prototype', 'constructor'].indexOf(id) < 0 ? id : ''
+                }
+                const validateSubtasks = (list) => {
+                  if (list == null) return
+                  if (!Array.isArray(list)) throw new Error('bad subtasks')
+                  const seen = new Set()
+                  list.forEach((item) => {
+                    const id = validId(item && item.id)
+                    if (!id || seen.has(id)) throw new Error('bad subtask id')
+                    seen.add(id)
+                  })
+                }
+                const planners = Store.planners.slice()
+                const eventsBy = Object.create(null)
+                Object.keys(Store.eventsBy).forEach((pid) => {
+                  eventsBy[pid] = Object.create(null)
+                  Object.keys(Store.eventsBy[pid] || {}).forEach((ds) => {
+                    eventsBy[pid][ds] = (Store.eventsBy[pid][ds] || []).slice()
+                  })
+                })
+                const recursBy = Object.create(null)
+                Object.keys(Store.recursBy).forEach((pid) => { recursBy[pid] = (Store.recursBy[pid] || []).slice() })
+                const counts = CountStore.records.slice()
+                const plannerIds = new Set(planners.map((p) => p.id))
+                const countIds = new Set(counts.map((c) => c.id))
+                const pidMap = Object.create(null)
                 let added = 0
                 if (data && data.version === 2 && Array.isArray(data.planners)) {
                   data.planners.forEach(function (srcP) {
-                    if (!srcP || !srcP.id) return
-                    let pid = String(srcP.id)
-                    if (
-                      Store.planners.some(function (x) {
-                        return x.id === pid
-                      })
-                    )
-                      pid = uid()
-                    Store.planners.push({ id: pid, name: String(srcP.name || pid) })
-                    const seObj = (data.eventsBy || {})[srcP.id]
-                    if (seObj && typeof seObj === 'object' && !Array.isArray(seObj)) {
-                      const dst = Store.eventsBy[pid] || (Store.eventsBy[pid] = {})
+                    const sourceId = validId(srcP && srcP.id)
+                    if (!sourceId || pidMap[sourceId]) throw new Error('bad planner id')
+                    let pid = sourceId
+                    if (plannerIds.has(pid)) pid = uid()
+                    plannerIds.add(pid)
+                    pidMap[sourceId] = pid
+                    planners.push({ id: pid, name: String((srcP && srcP.name) || pid) })
+                    eventsBy[pid] = Object.create(null)
+                    recursBy[pid] = []
+                    const seObj = data.eventsBy && Object.prototype.hasOwnProperty.call(data.eventsBy, sourceId)
+                      ? data.eventsBy[sourceId] : null
+                    if (seObj != null) {
+                      if (typeof seObj !== 'object' || Array.isArray(seObj)) throw new Error('bad events map')
                       Object.keys(seObj).forEach(function (ds) {
-                        if (!Array.isArray(seObj[ds])) return
-                        const arr = dst[ds] || (dst[ds] = [])
-                        seObj[ds].forEach(function (raw) {
-                          if (!raw || !raw.id || !raw.title) return
-                          if (
-                            arr.some(function (x) {
-                              return x.id === String(raw.id)
-                            })
-                          )
-                            return
-                          arr.push(normEvent(raw))
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) throw new Error('bad date')
+                        if (!Array.isArray(seObj[ds])) throw new Error('bad events')
+                        const seen = new Set()
+                        eventsBy[pid][ds] = seObj[ds].map(function (raw) {
+                          const id = validId(raw && raw.id)
+                          if (!id || seen.has(id) || typeof raw.title !== 'string' || !raw.title) throw new Error('bad event')
+                          validateSubtasks(raw.subtasks)
+                          seen.add(id)
                           added++
+                          return normEvent(raw)
                         })
                       })
                     }
-                    const rl = (data.recursBy || {})[srcP.id]
-                    if (Array.isArray(rl)) {
-                      const dstR = Store.recursBy[pid] || (Store.recursBy[pid] = [])
-                      rl.forEach(function (raw) {
-                        if (!raw || !raw.title) return
-                        const r = normRule(raw)
-                        if (
-                          dstR.some(function (x) {
-                            return x.id === r.id
-                          })
-                        )
-                          return
-                        dstR.push(r)
+                    const rl = data.recursBy && Object.prototype.hasOwnProperty.call(data.recursBy, sourceId)
+                      ? data.recursBy[sourceId] : null
+                    if (rl != null) {
+                      if (!Array.isArray(rl)) throw new Error('bad rules')
+                      const seen = new Set()
+                      recursBy[pid] = rl.map(function (raw) {
+                        const id = validId(raw && raw.id)
+                        if (!id || seen.has(id) || typeof raw.title !== 'string' || !raw.title) throw new Error('bad rule')
+                        validateSubtasks(raw.subtasks)
+                        seen.add(id)
                         added++
+                        return normRule(raw)
                       })
                     }
                   })
-                  if (Array.isArray(data.counts)) {
+                  if (data.counts != null) {
+                    if (!Array.isArray(data.counts)) throw new Error('bad counts')
                     data.counts.forEach(function (raw) {
-                      if (!raw || !raw.title) return
-                      const c = normCount(raw)
-                      if (
-                        CountStore.records.some(function (x) {
-                          return x.id === c.id
-                        })
-                      )
-                        return
-                      CountStore.records.push(c)
+                      const id = validId(raw && raw.id)
+                      if (!id || countIds.has(id) || typeof raw.title !== 'string' || !raw.title) throw new Error('bad count')
+                      countIds.add(id)
+                      counts.push(normCount(raw))
                       added++
                     })
-                    CountStore.persist()
                   }
                 } else {
-                  const incoming = data.events || data
-                  if (typeof incoming !== 'object' || Array.isArray(incoming) || !incoming) {
-                    throw new Error('bad')
-                  }
-                  const existingIds = {}
+                  const incoming = data && data.events != null ? data.events : data
+                  if (typeof incoming !== 'object' || Array.isArray(incoming) || !incoming) throw new Error('bad')
+                  const existingIds = new Set()
                   Object.keys(Store.events).forEach(function (ds) {
-                    Store.events[ds].forEach(function (e) {
-                      existingIds[e.id] = true
-                    })
+                    Store.events[ds].forEach(function (e) { existingIds.add(e.id) })
                   })
                   Object.keys(incoming).forEach(function (ds) {
-                    if (!Array.isArray(incoming[ds])) return
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return
-                    incoming[ds].forEach(function (e) {
-                      if (!e || !e.id || existingIds[e.id] || !e.title) return
-                      Store.add(ds, normEvent(e))
-                      existingIds[e.id] = true
+                    if (!Array.isArray(incoming[ds]) || !/^\d{4}-\d{2}-\d{2}$/.test(ds)) throw new Error('bad events')
+                    const arr = eventsBy[Store.activeId][ds] || (eventsBy[Store.activeId][ds] = [])
+                    incoming[ds].forEach(function (raw) {
+                      const id = validId(raw && raw.id)
+                      if (!id || existingIds.has(id) || typeof raw.title !== 'string' || !raw.title) throw new Error('bad event')
+                      validateSubtasks(raw.subtasks)
+                      existingIds.add(id)
+                      arr.push(normEvent(raw))
                       added++
                     })
                   })
                 }
+                Store.planners = planners
+                Store.eventsBy = eventsBy
+                Store.recursBy = recursBy
+                CountStore.records = counts
                 Store.persist()
                 if (added > 0) {
                   Render.all()
@@ -5563,13 +5587,35 @@
          * 16. GLOBAL EVENT BINDINGS
          * ============================================================== */
         function flushSaveDoc() {
-          return Store.flushSaveDoc()
+          return Store.isLocked() ? false : Store.flushSaveDoc()
         }
 
         function bindGlobalEvents() {
           window.addEventListener('pagehide', flushSaveDoc)
           window.addEventListener('beforeunload', flushSaveDoc)
           document.addEventListener('click', function (e) {
+            if (Store.isLocked() && !(e.target.closest('.zenui-modal') || e.target.closest('#zp-sync-btn'))) {
+              e.preventDefault()
+              e.stopImmediatePropagation()
+            }
+          }, true)
+          document.addEventListener('keydown', function (e) {
+            if (Store.isLocked() && !(e.target.closest && e.target.closest('.zenui-modal'))) e.stopImmediatePropagation()
+          }, true)
+          document.addEventListener('keydown', function (e) {
+            if (Store.isLocked() || (e.key !== 'Enter' && e.key !== ' ')) return
+            if (e.target.closest('button, input, textarea, select, a, [contenteditable="true"]')) return
+            const control = e.target.closest('[role="button"][data-action], [role="button"][data-picker], .sr-item[role="button"]')
+            if (!control) return
+            e.preventDefault()
+            control.click()
+          })
+          document.addEventListener('click', function (e) {
+            if (Store.isLocked() && !(e.target.closest('.zenui-modal') || e.target.closest('#zp-sync-btn'))) {
+              e.preventDefault()
+              e.stopImmediatePropagation()
+              return
+            }
             const sr = e.target.closest('.sr-item')
             if (sr) {
               UIMgr.closeDropdowns()
@@ -6390,9 +6436,14 @@
         // 17. BOOT
         // ================================================================
         function boot() {
+          let locked = false
+          try { locked = sessionStorage.getItem('zp-cloud-locked') === '1' } catch (_) {}
+          Store._locked = locked
           Settings.load()
-          Store.load()
-          CountStore.load()
+          if (!locked) {
+            Store.load()
+            CountStore.load()
+          }
           document.documentElement.lang = S.lang === 'zh' ? 'zh-CN' : 'en'
           /* 触屏标记：常驻显示 hover 才出现的控件，并启用长按手势 */
           TouchUI.applyBody()
@@ -6405,7 +6456,8 @@
               })
           } catch (_) {}
           bindGlobalEvents()
-          Settings.apply()
+          if (locked) Store.lock()
+          else Settings.apply()
           document.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && DOM.splash.style.display !== 'none') {
               const fn = ACTIONS.enter
@@ -6473,17 +6525,14 @@
         }
         injectIcons()
 
-        var mSheetShell = ZenUI.layer.wireOverlay({
-          el: document.getElementById('m-sheet'),
-          mask: document.getElementById('m-mask'),
-        })
+        var mSheetShell = null
 
         function openSheet() {
-          if (!mSheetShell.isOpen()) mSheetShell.open()
+          if (mSheetShell && !mSheetShell.isOpen()) mSheetShell.open()
         }
 
         function closeSheet() {
-          mSheetShell.close()
+          if (mSheetShell) mSheetShell.close()
         }
 
         document.addEventListener('click', function (e) {
@@ -6497,8 +6546,6 @@
             return
           }
           if (e.target.closest('[data-action="mFocus"]')) {
-            // 主脚本的 ACTIONS.mFocus 已按屏宽分流（手机=多选日期，桌面=单日聚焦）。
-            // 这里不要额外派发 f 键，否则会覆盖手机端刚打开的多选面板。
             closeSheet()
             return
           }
@@ -6507,7 +6554,6 @@
             var target = document.querySelector(proxy.dataset.proxy)
             if (target) target.click()
             if (proxy.closest('#m-sheet')) setTimeout(closeSheet, 160)
-            return
           }
         })
 
@@ -6523,96 +6569,63 @@
             '<button type="button" class="mt-item" data-mview="list" data-proxy="#btn-list"><span class="ic" data-ico="list"></span><span>列表</span></button>' +
             '<button type="button" class="mt-item" data-mview="count" data-proxy="#btn-count"><span class="ic" data-ico="count"></span><span>天数</span></button>' +
             '<button type="button" class="mt-item" data-action="mMore"><span class="ic" data-ico="dots"></span><span>更多</span></button>',
-          sheet:
-            '<div id="m-mask" data-action="mClose"></div>' +
-            '<div id="m-sheet"><div class="ms-head"><span>MORE · 全部功能</span><span class="ed-close" data-action="mClose">×</span></div><div class="ms-grid">' +
-            [
-              'search:搜索',
-              'tag:标签',
-              'focusx:聚焦',
-              'stats:统计',
-              'export:导出',
-              'import:导入',
-              'print:打印',
-              'plus:新计划本',
-              'gear:设置',
-              'sync:同步',
-              'trash:清空数据',
-            ]
-              .map(function (it) {
-                var ico = it.split(':')[0],
-                  lab = it.split(':')[1]
-                var act = ico === 'focusx' ? 'mFocus' : ico === 'trash' ? 'clearAll' : ''
-                var proxy = {
-                  sync: '#zp-sync-btn',
-                  search: '#top-menu [data-action=&quot;showSearch&quot;]',
-                  tag: '#top-menu [data-action=&quot;showTags&quot;]',
-                  stats: '#top-menu [data-action=&quot;showStats&quot;]',
-                  export: '#top-menu [data-action=&quot;showExport&quot;]',
-                  import: '#top-menu [data-action=&quot;importFile&quot;]',
-                  print: '#top-menu [data-action=&quot;printView&quot;]',
-                  plus: '.sheet-add',
-                  gear: '#top-menu [data-action=&quot;showSettings&quot;]',
-                }[ico]
-                return (
-                  '<button type="button" class="ms-item' +
-                  (ico === 'trash' ? ' danger' : '') +
-                  '"' +
-                  (act ? ' data-action="' + act + '"' : ' data-proxy="' + proxy + '"') +
-                  '>' +
-                  '<span class="ic" data-ico="' +
-                  (ico === 'focusx' ? 'focus' : ico) +
-                  '"></span><span>' +
-                  lab +
-                  '</span></button>'
-                )
-              })
-              .join('') +
-            '</div></div>',
+          sheetItems: function () {
+            return [
+              'search:搜索', 'tag:标签', 'focusx:聚焦', 'stats:统计', 'export:导出',
+              'import:导入', 'print:打印', 'plus:新计划本', 'gear:设置', 'sync:同步', 'trash:清空数据',
+            ].map(function (it) {
+              var ico = it.split(':')[0], lab = it.split(':')[1]
+              var act = ico === 'focusx' ? 'mFocus' : ico === 'trash' ? 'clearAll' : ''
+              var proxy = {
+                sync: '#zp-sync-btn', search: '#top-menu [data-action=&quot;showSearch&quot;]',
+                tag: '#top-menu [data-action=&quot;showTags&quot;]', stats: '#top-menu [data-action=&quot;showStats&quot;]',
+                export: '#top-menu [data-action=&quot;showExport&quot;]', import: '#top-menu [data-action=&quot;importFile&quot;]',
+                print: '#top-menu [data-action=&quot;printView&quot;]', plus: '.sheet-add',
+                gear: '#top-menu [data-action=&quot;showSettings&quot;]',
+              }[ico]
+              return '<button type="button" class="ms-item' + (ico === 'trash' ? ' danger' : '') + '"' +
+                (act ? ' data-action="' + act + '"' : ' data-proxy="' + proxy + '"') +
+                '><span class="ic" data-ico="' + (ico === 'focusx' ? 'focus' : ico) + '"></span><span>' +
+                lab + '</span></button>'
+            }).join('')
+          },
         }
 
         function ensureChrome() {
-          if (window.innerWidth > 720) return
-          var needs = []
-
-          if (!document.getElementById('m-nav') && !document.getElementById('m-goto-slot'))
-            needs.push(['div', 'm-nav', CHROME.nav])
-          if (!document.getElementById('m-tabs')) needs.push(['nav', 'm-tabs', CHROME.tabs])
-          if (!document.getElementById('m-mask'))
-            needs.push(['div', 'm-mask', CHROME.sheet.split('<div id="m-sheet">')[0]])
-          if (!document.getElementById('m-sheet'))
-            needs.push([
-              'div',
-              'm-sheet',
-              '<div class="ms-head"><span>MORE · 全部功能</span><span class="ed-close" data-action="mClose">×</span></div><div class="ms-grid">' +
-                (CHROME.sheet.split('ms-grid">')[1] || ''),
-            ])
-          needs.forEach(function (n) {
-            var el = document.createElement(n[0])
-            el.id = n[1]
-            el.innerHTML = n[2]
-            document.body.appendChild(el)
-          })
-          if (needs.length) {
-            injectIcons()
-            var g2 = document.getElementById('goto-date')
-            var s2 = document.getElementById('m-goto-slot')
-            if (g2 && s2 && window.innerWidth <= 720 && g2.parentElement !== s2) s2.appendChild(g2)
-          }
+          if (document.getElementById('m-tabs')) return
+          var nav = document.createElement('div')
+          nav.id = 'm-nav'
+          nav.innerHTML = CHROME.nav
+          var tabs = document.createElement('nav')
+          tabs.id = 'm-tabs'
+          tabs.innerHTML = CHROME.tabs
+          var mask = document.createElement('div')
+          mask.id = 'm-mask'
+          mask.dataset.action = 'mClose'
+          var sheet = document.createElement('div')
+          sheet.id = 'm-sheet'
+          sheet.innerHTML = '<div class="ms-head"><span>MORE · 全部功能</span><button type="button" class="ed-close" data-action="mClose" aria-label="关闭">×</button></div><div class="ms-grid">' + CHROME.sheetItems() + '</div>'
+          document.body.appendChild(nav)
+          document.body.appendChild(tabs)
+          document.body.appendChild(mask)
+          document.body.appendChild(sheet)
+          injectIcons(sheet)
         }
-        ensureChrome()
-        window.addEventListener('resize', function () {
-          ensureChrome()
-        })
 
         var gotoEl = document.getElementById('goto-date')
         var slot = document.getElementById('m-goto-slot')
-        if (gotoEl && slot && gotoEl.parentElement) {
-          var home = gotoEl.parentElement
+        var home = gotoEl && gotoEl.parentElement
+        ensureChrome()
+        slot = document.getElementById('m-goto-slot')
+        mSheetShell = ZenUI.layer.wireOverlay({
+          el: document.getElementById('m-sheet'),
+          mask: document.getElementById('m-mask'),
+        })
+        if (gotoEl && slot && home) {
           var mq = window.matchMedia('(max-width:720px)')
           var place = function () {
             if (mq.matches) slot.appendChild(gotoEl)
-            else if (home && gotoEl.parentElement !== home) home.appendChild(gotoEl)
+            else if (gotoEl.parentElement !== home) home.appendChild(gotoEl)
           }
           if (mq.addEventListener) mq.addEventListener('change', place)
           else mq.addListener(place)
@@ -6688,7 +6701,6 @@
           statusId: 'zen-cloud-status'
         })
         var cfg = zenCloud.cfg
-        var meta = zenCloud.meta
         var patchCfg = zenCloud.patchCfg
         var prefs = zenCloud.prefs
         var savePrefs = zenCloud.savePrefs
@@ -6796,7 +6808,7 @@
         }
         async function pullQuiet(r) {
           var d = await dec(r.payload, unlockPassword)
-          writeLocal(d)
+          writeLocal(d, Number(r.client_updated_at || 0))
           state.lastCloudTs = Number(r.client_updated_at || 0)
           reloadOnce()
         }
@@ -6820,7 +6832,7 @@
           setMsg('sync.syncing')
           try {
             var r = await remote(),
-              localTs = Number(meta().updatedAt || 0)
+              localTs = Number(zenCloud.workspaceMeta(session.user.id).updatedAt || 0)
             if (!r) {
               await push()
               setMsg('sync.cloudEmptyPush')
@@ -6872,9 +6884,7 @@
         }
         function toast(msg) { return window.ZenUI.toast(msg) }
         function mark(ts) {
-          try {
-            localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
-          } catch (_) {}
+          return zenCloud.mark(ts)
         }
         function localData() {
           var r = localStorage.getItem(DATA_KEY)
@@ -6896,70 +6906,6 @@
             }
           }
           return d
-        }
-        function emptyData(d) {
-          return !d || !Array.isArray(d.planners) || !d.planners.length
-        }
-        function mergeCounts(a, b) {
-          var out = [],
-            seen = Object.create(null)
-          ;(Array.isArray(b) ? b : []).concat(Array.isArray(a) ? a : []).forEach(function (raw) {
-            if (!raw || !raw.id || seen[raw.id]) return
-            seen[raw.id] = true
-            out.push(raw)
-          })
-          return out
-        }
-        function mergeData(a, b) {
-          if (!a) return b
-          if (!b) return a
-          var o = ZenUtil.clone(b)
-          o.planners = o.planners || []
-          ;(a.planners || []).forEach(function (p) {
-            if (
-              !o.planners.some(function (x) {
-                return x.id === p.id
-              })
-            )
-              o.planners.push(p)
-          })
-          o.eventsBy = o.eventsBy || {}
-          Object.keys(a.eventsBy || {}).forEach(function (pid) {
-            var dst = o.eventsBy[pid] || (o.eventsBy[pid] = {})
-            Object.keys(a.eventsBy[pid] || {}).forEach(function (ds) {
-              var arr = dst[ds] || (dst[ds] = [])
-              ;(a.eventsBy[pid][ds] || []).forEach(function (e) {
-                if (
-                  !arr.some(function (x) {
-                    return x.id === e.id
-                  })
-                )
-                  arr.push(e)
-              })
-            })
-          })
-          o.recursBy = o.recursBy || {}
-          Object.keys(a.recursBy || {}).forEach(function (pid) {
-            var arr = o.recursBy[pid] || (o.recursBy[pid] = [])
-            ;(a.recursBy[pid] || []).forEach(function (r) {
-              if (
-                !arr.some(function (x) {
-                  return x.id === r.id
-                })
-              )
-                arr.push(r)
-            })
-          })
-          o.activeId =
-            a.activeId &&
-            o.planners.some(function (p) {
-              return p.id === a.activeId
-            })
-              ? a.activeId
-              : o.activeId
-          if (Array.isArray(a.counts) || Array.isArray(b.counts))
-            o.counts = mergeCounts(a.counts, b.counts)
-          return o
         }
         var libPromise = null
         function ensureLib() {
@@ -7009,39 +6955,19 @@
         async function dec(payload, pw) {
           return ZenCrypto.unseal(payload, pw, { msgUnsupported: function () { return tr('sync.unsupportedFormat') } })
         }
-        function writeLocal(d) {
+        function writeLocal(d, ts) {
           try {
             var copy = ZenUtil.clone(d || {})
             var settings = copy.settings
             delete copy.settings
-            var localCounts = [],
-              hasLocalCounts = false
-            try {
-              var previousRaw = localStorage.getItem(DATA_KEY)
-              var previous = previousRaw ? JSON.parse(previousRaw) : null
-              if (previous && Object.prototype.hasOwnProperty.call(previous, 'counts')) {
-                if (!Array.isArray(previous.counts)) throw new Error('bad counts')
-                localCounts = previous.counts
-                hasLocalCounts = true
-              } else {
-                var countRaw = localStorage.getItem('zp-count-v1')
-                var countDoc = countRaw ? JSON.parse(countRaw) : null
-                if (countDoc && Array.isArray(countDoc.records)) {
-                  localCounts = countDoc.records
-                  hasLocalCounts = true
-                }
-              }
-            } catch (_) {}
             if (Object.prototype.hasOwnProperty.call(copy, 'counts') && !Array.isArray(copy.counts))
               throw new Error('bad counts')
-            if (hasLocalCounts || Object.prototype.hasOwnProperty.call(copy, 'counts'))
-              copy.counts = mergeCounts(localCounts, copy.counts)
+            if (!Object.prototype.hasOwnProperty.call(copy, 'counts')) copy.counts = []
             localStorage.setItem(DATA_KEY, JSON.stringify(copy))
             if (settings && typeof settings === 'object')
               localStorage.setItem('zp-settings-v1', JSON.stringify(settings))
-            if (Object.prototype.hasOwnProperty.call(copy, 'counts'))
-              localStorage.setItem('zp-count-v1', JSON.stringify({ records: copy.counts }))
-            mark(now())
+            localStorage.setItem('zp-count-v1', JSON.stringify({ records: copy.counts }))
+            mark(ts || now())
           } catch (e) {
             throw new Error(
               e && e.message === tr('sync.localWriteFailed')
@@ -7081,7 +7007,7 @@
         }
         async function pull(r) {
           var d = await dec(r.payload, unlockPassword)
-          writeLocal(d)
+          writeLocal(d, Number(r.client_updated_at || 0))
           state.lastCloudTs = Number(r.client_updated_at || 0)
         }
         function refresh() {
@@ -7128,6 +7054,14 @@
               session = si.data.session || null
               if (!session) throw new Error(tr('sync.loginRequired'))
             }
+            var workspaceOk = await zenCloud.confirmWorkspace(session.user.id)
+            if (!workspaceOk) {
+              unlockPassword = ''
+              if (window.ZPlanStore && window.ZPlanStore.lock) window.ZPlanStore.lock()
+              refresh()
+              setMsg('sync.cancelled')
+              return
+            }
             if (mode === 'pull' || mode === 'push') {
               var agreed = await ensureWarnAck()
               if (!agreed) {
@@ -7138,6 +7072,7 @@
             var remember = E('zp-remember-pw') ? E('zp-remember-pw').checked : false
             savePrefs({ remember: remember, password: remember ? pw : '' })
             unlockPassword = pw
+            if (window.ZPlanStore && window.ZPlanStore.unlock) window.ZPlanStore.unlock()
             if (E('zp-password')) E('zp-password').value = ''
             refresh()
             statusKey('sync.loggedInUnlocked')
@@ -7226,6 +7161,7 @@
           unlockPassword = ''
           autoSyncOn = false
           stopWatcher()
+          if (window.ZPlanStore && window.ZPlanStore.lock) window.ZPlanStore.lock()
           if (E('zp-password')) E('zp-password').value = ''
 
           var cleared = prefs().remember
@@ -7311,15 +7247,7 @@
         function autosizeSql() { return ZenUtil.autosize('zen-sql-box') }
         function setup() {
           var b = E('zp-sync-btn')
-          if (b) {
-            b.onclick = openModal
-            b.onkeydown = function (e) {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                openModal()
-              }
-            }
-          }
+          if (b) b.onclick = openModal
         }
         function mountCloud(body, foot) {
           refresh()
@@ -7434,6 +7362,7 @@
             state.lastCloudTs = 0
             autoSyncOn = false
             stopWatcher()
+            if (window.ZPlanStore && window.ZPlanStore.lock) window.ZPlanStore.lock()
             var sp = E('zp-sql-panel')
             if (sp) sp.classList.add('zen-cloud-hidden')
             refresh()
@@ -7470,7 +7399,12 @@
               session = si.data.session || null
             }
             if (!session) throw new Error(tr('sync.loginRequired'))
+            if (zenCloud.workspaceNeedsConfirmation(session.user.id)) {
+              setMsg('sync.workspaceConfirmRequired')
+              return false
+            }
             unlockPassword = p.password
+            if (window.ZPlanStore && window.ZPlanStore.unlock) window.ZPlanStore.unlock()
             refresh()
             labelKey('sync.loggedInUnlocked', true)
             if (p.autoSync) {
@@ -7502,6 +7436,8 @@
             await connect()
             var logged = await autoLogin()
             if (!logged && session) {
+              if (window.ZPlanStore && window.ZPlanStore.lock) window.ZPlanStore.lock()
+              refresh()
               statusKey('sync.loggedInLocked')
               labelKey('sync.loggedInLocked', true)
             }

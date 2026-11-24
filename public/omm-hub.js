@@ -48,6 +48,7 @@
   var pluginLoadError = '';
   var PLUGIN_DIR = '';
   var pluginDirEditing = false;
+  var pluginSpecSeq = 0;
   var APPEARANCE_KEY = 'omm.hub.appearance.v1';
   var PIN_KEY = 'omm.hub.pins.v1';
   var RECENT_KEY = 'omm.hub.recent.v1';
@@ -81,6 +82,10 @@
   }
   var DEFAULT_KEYMAP = {};
   COMMANDS.forEach(function (cmd) { DEFAULT_KEYMAP[cmd.id] = cmd.def; });
+
+  function hasModifier(combo) {
+    return /(^|\+)(Ctrl|Alt|Shift)(\+|$)/.test(String(combo || ''));
+  }
 
   function snapIntervalLabel(minutes) {
     minutes = Number(minutes) || 0;
@@ -130,7 +135,7 @@
     var src = raw && typeof raw === 'object' ? raw : {};
     COMMANDS.forEach(function (cmd) {
       var value = typeof src[cmd.id] === 'string' ? src[cmd.id].trim() : '';
-      out[cmd.id] = value || cmd.def;
+      out[cmd.id] = value && hasModifier(value) ? value : cmd.def;
     });
     return out;
   }
@@ -142,7 +147,7 @@
     }).slice(0, 20).map(function (m) {
       return {
         name: m.name.trim().slice(0, 40),
-        key: typeof m.key === 'string' ? m.key.trim() : '',
+        key: typeof m.key === 'string' && hasModifier(m.key.trim()) ? m.key.trim() : '',
         actions: m.actions.filter(function (a) { return typeof a === 'string'; }).slice(0, 12),
       };
     });
@@ -200,6 +205,8 @@
   var cmdkSharesAt = 0;
   var cmdkSpace = null;
   var cmdkFiltered = [];
+  var CMDK_GROUPS = ['即时命令', '应用', '已打开', '动作', '命令宏', '知识卡片',
+    '笔记', '搜索历史', '最近文件', '共享项目'];
   var gsearchOpen = false;
   var gsearchTimer = 0;
   var gsearchSeq = 0;
@@ -222,6 +229,11 @@
   var graphCards = [];
   var graphSeq = 0;
   var graphPos = [];
+  var cardRequests = Object.create(null);
+  var productCards = [];
+  var productCardErrors = [];
+  var productCardsPromise = null;
+  var workspaceHiddenLeases = Object.create(null);
   var flowOpen = false;
   var todayOpen = false;
   var flowEvents = [];
@@ -272,6 +284,7 @@
   }
 
   var STORAGE_KEY = 'omm.hub.workspace.v1';
+  var DETACHED_APP_ID = new URLSearchParams(window.location.search).get('detach') || '';
   var SPLIT = 4;
   var HEAD = 32;
   var MIN_W = 240;
@@ -328,18 +341,6 @@
     return '';
   }
 
-  var LOOPBACK_HOSTS = ['127.0.0.1', 'localhost', '[::1]', '::1'];
-
-  function isLoopbackOrigin(origin) {
-    try {
-      var u = new URL(String(origin || ''));
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-      return LOOPBACK_HOSTS.indexOf(u.hostname) >= 0;
-    } catch (e) {
-      return false;
-    }
-  }
-
   /* 产品 iframe 由各插件在独立的 loopback 端口上提供服务，与工作台并不同源。
      目标 origin 必须从该 iframe 自己的 URL 推导，不能写死 location.origin。 */
   function frameTargetOrigin(frame) {
@@ -347,7 +348,7 @@
       var raw = frame && (frame.dataset.url || frame.src);
       if (raw && raw !== 'about:blank') {
         var origin = new URL(raw, window.location.href).origin;
-        if (isLoopbackOrigin(origin)) return origin;
+        if (ZenUtil.isLocalOrigin(origin)) return origin;
       }
     } catch (e) {
       /* ignore */
@@ -475,41 +476,36 @@
   }
 
   function applyDetachAndScreenLayout() {
-    try {
-      var params = new URLSearchParams(window.location.search);
-      var detach = params.get('detach');
-      if (detach && APP_BY_ID[detach]) {
-        state.open = [detach];
+    if (DETACHED_APP_ID) {
+      if (APP_BY_ID[DETACHED_APP_ID]) {
+        state.open = [DETACHED_APP_ID];
         state.tree = { type: 'leaf', id: 'p1' };
-        state.panes = { p1: detach };
+        state.panes = { p1: DETACHED_APP_ID };
         state.focused = 'p1';
-        state.maximized = null;
-        return;
+      } else {
+        state = defaultState();
       }
-      if (hubAppearance.multiMonitor === false) return;
-      var raw = localStorage.getItem(SCREEN_KEY_PREFIX + screenKey());
-      if (!raw) return;
-      var data = JSON.parse(raw);
-      if (!data || !data.tree || !data.panes) return;
-      state.open = Array.isArray(data.open)
-        ? data.open.filter(function (id) { return !!APP_BY_ID[id]; }) : [];
-      state.tree = data.tree;
-      state.panes = data.panes;
-      state.focused = data.focused && data.panes[data.focused] ? data.focused : 'p1';
-      state.maximized = data.maximized || null;
-      if (typeof data.dock === 'boolean') state.dock = data.dock;
-    } catch (e) { /* 忽略损坏的布局 */ }
+      state.maximized = null;
+      return;
+    }
+    if (hubAppearance.restore === false || hubAppearance.multiMonitor === false) return;
+    var data = ZenUtil.getJSON(SCREEN_KEY_PREFIX + screenKey(), null);
+    if (!data || !data.tree || !data.panes) return;
+    state.open = Array.isArray(data.open)
+      ? data.open.filter(function (id) { return !!APP_BY_ID[id]; }) : [];
+    state.tree = data.tree;
+    state.panes = data.panes;
+    state.focused = data.focused && data.panes[data.focused] ? data.focused : 'p1';
+    state.maximized = data.maximized || null;
+    if (typeof data.dock === 'boolean') state.dock = data.dock;
   }
 
   function saveScreenLayout() {
-    if (hubAppearance.multiMonitor === false) return;
-    try {
-      var payload = {
-        open: state.open, tree: state.tree, panes: state.panes,
-        focused: state.focused, maximized: state.maximized, dock: state.dock,
-      };
-      localStorage.setItem(SCREEN_KEY_PREFIX + screenKey(), JSON.stringify(payload));
-    } catch (e) { /* ignore */ }
+    if (DETACHED_APP_ID || hubAppearance.multiMonitor === false) return;
+    ZenUtil.setJSON(SCREEN_KEY_PREFIX + screenKey(), {
+      open: state.open, tree: state.tree, panes: state.panes,
+      focused: state.focused, maximized: state.maximized, dock: state.dock,
+    });
   }
 
   function detachApp(appId) {
@@ -528,17 +524,12 @@
   }
 
   function loadState() {
-    if (hubAppearance.restore === false) {
+    if (DETACHED_APP_ID || hubAppearance.restore === false) {
       state = defaultState();
-      state.dock = storedDockVisible();
+      state.dock = DETACHED_APP_ID ? true : storedDockVisible();
       return;
     }
-    var raw = null;
-    try {
-      raw = localStorage.getItem(STORAGE_KEY);
-    } catch (e) {
-      raw = null;
-    }
+    var raw = ZenUtil.lsGet(STORAGE_KEY, null);
     if (!raw) {
       state = defaultState();
       return;
@@ -593,18 +584,12 @@
   }
 
   function storedDockVisible() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return true;
-      var data = JSON.parse(raw);
-      return !data || data.dock !== false;
-    } catch (e) {
-      return true;
-    }
+    var data = ZenUtil.getJSON(STORAGE_KEY, null);
+    return !data || data.dock !== false;
   }
 
   function save() {
-    if (saveTimer) return;
+    if (DETACHED_APP_ID || saveTimer) return;
     saveTimer = window.setTimeout(function () {
       saveTimer = 0;
       saveNow();
@@ -612,20 +597,14 @@
   }
 
   function saveNow() {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          open: state.open,
-          tree: state.tree,
-          panes: state.panes,
-          focused: state.focused,
-          dock: state.dock,
-        })
-      );
-    } catch (e) {
-      /* ignore quota / private mode */
-    }
+    if (DETACHED_APP_ID) return;
+    ZenUtil.setJSON(STORAGE_KEY, {
+      open: state.open,
+      tree: state.tree,
+      panes: state.panes,
+      focused: state.focused,
+      dock: state.dock,
+    });
   }
 
   /* ------------------------------------------------------------------- init */
@@ -693,7 +672,6 @@
     initWorkspaceMenu();
 
     ensureSplitKeys(state.tree);
-    state.dock = storedDockVisible();
     applyDockState();
     bindEvents();
     renderAll();
@@ -711,10 +689,12 @@
       new ResizeObserver(scheduleLayout).observe(els.workspace);
     }
     window.addEventListener('resize', scheduleLayout);
-    window.addEventListener('beforeunload', saveNow);
-    window.addEventListener('pagehide', saveNow);
-    window.addEventListener('beforeunload', saveScreenLayout);
-    window.addEventListener('pagehide', saveScreenLayout);
+    if (!DETACHED_APP_ID) {
+      window.addEventListener('beforeunload', saveNow);
+      window.addEventListener('pagehide', saveNow);
+      window.addEventListener('beforeunload', saveScreenLayout);
+      window.addEventListener('pagehide', saveScreenLayout);
+    }
     lockShellScroll();
   }
 
@@ -795,7 +775,7 @@
       els.tabs.innerHTML = '';
       return;
     }
-    var activeApp = paneApp(state.focused);
+    var rovingApp = activeApp || state.open[0];
     els.tabs.innerHTML = state.open
       .map(function (appId) {
         var app = appOf(appId);
@@ -810,7 +790,11 @@
         return (
           '<button class="' +
           cls +
-          '" type="button" role="tab" draggable="true" data-app="' +
+          '" type="button" role="tab" aria-selected="' +
+          (active ? 'true' : 'false') +
+          '" tabindex="' +
+          (appId === rovingApp ? '0' : '-1') +
+          '" draggable="true" data-app="' +
           esc(appId) +
           '">' +
           '<span class="tab-glyph' + appIconClass(app) + '">' +
@@ -822,10 +806,10 @@
           (shareBadges[appId]
             ? '<span class="tab-dot" title="有共享消息"></span>'
             : '') +
-          '<span class="tab-close" data-close="' +
+          '</button>' +
+          '<button class="tab-close" type="button" data-close="' +
           esc(appId) +
-          '" role="button" title="关闭">×</span>' +
-          '</button>'
+          '" title="关闭" aria-label="关闭 ' + esc(app.name) + '">×</button>'
         );
       })
       .join('');
@@ -1189,7 +1173,7 @@
     if (!text) return false;
     var snapshot = {
       open: state.open.slice(),
-      tree: JSON.parse(JSON.stringify(state.tree)),
+      tree: ZenUtil.clone(state.tree),
       panes: Object.assign({}, state.panes),
       focused: state.focused,
       maximized: state.maximized,
@@ -1314,7 +1298,14 @@
     else launcherPinned.unshift(appId);
     launcherPinned = launcherPinned.slice(0, 8);
     saveLauncherPrefs();
-    renderLauncher(true);
+    var restoreFocus = document.activeElement && document.activeElement.hasAttribute('data-pin');
+    renderLauncher(false);
+    if (restoreFocus) {
+      var pins = els.launcher.querySelectorAll('[data-pin]');
+      for (var i = 0; i < pins.length; i++) {
+        if (pins[i].dataset.pin === appId) { pins[i].focus(); break; }
+      }
+    }
     toast(index >= 0 ? '已取消固定' : '已固定到应用面板');
   }
 
@@ -1340,11 +1331,12 @@
       '<div class="launcher-app' +
       (pinned ? ' pinned' : '') +
       (index === launcherIndex ? ' active' : '') +
-      '" role="button" tabindex="0" data-app="' +
-      esc(app.id) +
       '" data-launcher-idx="' +
       index +
       '">' +
+      '<button class="launcher-open" type="button" data-app="' +
+      esc(app.id) +
+      '" aria-label="打开 ' + esc(app.name) + '">' +
       '<span class="glyph' +
       appIconClass(app) +
       '">' +
@@ -1357,11 +1349,12 @@
       esc(app.description || '') +
       '</span></span>' +
       (key ? '<span class="key">' + key + '</span>' : '') +
+      '</button>' +
       '<button class="launcher-pin' +
       (pinned ? ' on' : '') +
       '" type="button" data-pin="' +
       esc(app.id) +
-      '" title="' +
+      '" aria-pressed="' + (pinned ? 'true' : 'false') + '" title="' +
       (pinned ? '取消固定' : '固定') +
       '">★</button></div>'
     );
@@ -1429,7 +1422,7 @@
   }
 
   function moveLauncher(delta) {
-    var items = els.launcher.querySelectorAll('.launcher-app[data-app]');
+    var items = els.launcher.querySelectorAll('.launcher-app');
     if (!items.length) return;
     launcherIndex = (launcherIndex + delta + items.length) % items.length;
     for (var i = 0; i < items.length; i++) {
@@ -1442,6 +1435,10 @@
       } catch (e) {
         /* ignore */
       }
+      if (document.activeElement && document.activeElement.classList.contains('launcher-open')) {
+        var button = active.querySelector('.launcher-open');
+        if (button) button.focus();
+      }
     }
   }
 
@@ -1452,12 +1449,6 @@
   }
 
   /* ------------------------------------------------------------ plugin panel */
-
-  function formatBytes(bytes) {
-    if (!bytes) return '';
-    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
-    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-  }
 
   function loadHubAppearance() {
     try {
@@ -1600,9 +1591,10 @@
   function applyHubAppearance() {
     if (!document.documentElement) return;
     var a11y = hubAppearance.a11y || normalizeA11y(null);
-    document.documentElement.style.setProperty('--ui-scale', String(a11y.fontScale || 1));
-    document.body.classList.toggle('hc', !!a11y.highContrast);
-    document.body.classList.toggle('reduce-motion', !!a11y.reduceMotion);
+    var root = document.documentElement;
+    root.style.setProperty('--zen-fscale', String(a11y.fontScale || 1));
+    root.dataset.zenHighContrast = String(!!a11y.highContrast);
+    root.dataset.zenReduceMotion = String(!!a11y.reduceMotion);
     if (a11y.ariaLabels !== false) {
       Array.prototype.forEach.call(document.querySelectorAll('button[title]:not([aria-label])'), function (btn) {
         btn.setAttribute('aria-label', btn.getAttribute('title'));
@@ -1619,7 +1611,6 @@
     document.documentElement.dataset.theme = 'light';
     var snapSelect = document.getElementById('hub-snap');
     if (snapSelect) snapSelect.value = String(hubAppearance.snap);
-    document.body.classList.toggle('no-motion', !!a11y.reduceMotion);
     els.app.classList.toggle('topbar-hidden', !hubAppearance.topbar);
     var restore = document.getElementById('hub-restore');
     if (restore) restore.setAttribute('aria-checked', String(hubAppearance.restore));
@@ -1775,7 +1766,11 @@
       comboCapturing = false;
       if (event.key === 'Escape') { node.textContent = previous; return; }
       var combo = comboFromEvent(event);
-      if (!combo) { node.textContent = previous; return; }
+      if (!combo || !hasModifier(combo)) {
+        node.textContent = previous;
+        if (combo) toast('快捷键至少包含 Ctrl / Alt / Shift 中的一个', 'error');
+        return;
+      }
       node.textContent = combo;
       done(combo);
     }
@@ -1904,6 +1899,15 @@
   function closeHubSettings() {
     els.hubSettings.hidden = true;
     comboCapturing = false;
+  }
+
+  function resetVisualDefaults() {
+    hubAppearance.topbar = true;
+    hubAppearance.a11y = normalizeA11y(null);
+    saveHubAppearance();
+    applyHubAppearance();
+    scheduleLayout();
+    toast('外观与无障碍已恢复默认');
   }
 
   function bindHubSettings() {
@@ -2165,15 +2169,7 @@
       });
     }
     var settingsReset = document.getElementById('hub-settings-reset');
-    if (settingsReset) settingsReset.addEventListener('click', function () {
-      // 统一走归一化函数补全全部字段；手写对象曾遗漏 focus/cloud/a11y 等，
-      // 导致重置后静心模式、云备份、无障碍开关在刷新前一直抛 TypeError。
-      hubAppearance = normalizeAppearance(null);
-      saveHubAppearance();
-      applyHubAppearance();
-      scheduleLayout();
-      toast('外观与偏好已恢复默认');
-    });
+    if (settingsReset) settingsReset.addEventListener('click', resetVisualDefaults);
   }
 
   function usageRows() {
@@ -2209,14 +2205,6 @@
       .join('');
   }
 
-  function fmtBytes(bytes) {
-    var size = Number(bytes) || 0;
-    if (size < 1024) return size + ' B';
-    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
-    if (size < 1024 * 1024 * 1024) return (size / 1024 / 1024).toFixed(1) + ' MB';
-    return (size / 1024 / 1024 / 1024).toFixed(2) + ' GB';
-  }
-
   function loadStorage(force) {
     var box = document.getElementById('hub-storage');
     if (!box) return;
@@ -2227,11 +2215,11 @@
       .then(function (data) {
         if (!data || !data.ok) throw new Error((data && data.error) || '统计失败');
         box.innerHTML = [
-          ['保存文件', fmtBytes(data.save.bytes) + ' · ' + data.save.files + ' 个'],
-          ['其中快照', fmtBytes(data.snapshots.bytes) + ' · ' + data.snapshots.files + ' 个'],
-          ['共享空间', fmtBytes(data.share.bytes) + ' · ' + data.share.files + ' 个'],
-          ['插件', fmtBytes(data.plugins.bytes) + ' · ' + data.plugins.files + ' 个'],
-          ['合计', fmtBytes(data.total.bytes)],
+          ['保存文件', ZenUtil.formatBytes(data.save.bytes) + ' · ' + data.save.files + ' 个'],
+          ['其中快照', ZenUtil.formatBytes(data.snapshots.bytes) + ' · ' + data.snapshots.files + ' 个'],
+          ['共享空间', ZenUtil.formatBytes(data.share.bytes) + ' · ' + data.share.files + ' 个'],
+          ['插件', ZenUtil.formatBytes(data.plugins.bytes) + ' · ' + data.plugins.files + ' 个'],
+          ['合计', ZenUtil.formatBytes(data.total.bytes)],
         ].map(function (pair) {
           return '<span>' + pair[0] + '</span><b>' + pair[1] + '</b>';
         }).join('');
@@ -2255,15 +2243,6 @@
       });
   }
 
-  function backupStamp() {
-    var date = new Date();
-    function pad(value) { return (value < 10 ? '0' : '') + value; }
-    return (
-      date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate()) + '-' +
-      pad(date.getHours()) + pad(date.getMinutes())
-    );
-  }
-
   function downloadBackup() {
     fetch('/api/backup', { cache: 'no-store' })
       .then(function (response) { return response.json(); })
@@ -2279,17 +2258,11 @@
           workspaces: workspaces,
           launcher: { pinned: launcherPinned, recent: launcherRecent },
         });
-        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        var url = URL.createObjectURL(blob);
-        var anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'omm-zen-backup-' + backupStamp() + '.json';
-        document.body.appendChild(anchor);
-        anchor.click();
-        setTimeout(function () {
-          URL.revokeObjectURL(url);
-          anchor.remove();
-        }, 4000);
+        ZenUtil.download(
+          'omm-zen-backup-' + ZenUtil.fileStamp() + '.json',
+          JSON.stringify(payload, null, 2),
+          'application/json'
+        );
         toast('已生成备份：设置 + 共享规则 + 工作区');
       })
       .catch(function (error) {
@@ -2408,15 +2381,10 @@
         }
         var bytes = new Uint8Array(binary.length);
         for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        var blob = new Blob([bytes], { type: 'application/zip' });
-        var url = URL.createObjectURL(blob);
-        var anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'jing-shufang-full-' + backupStamp() + '.zip';
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        ZenUtil.download(
+          'jing-shufang-full-' + ZenUtil.fileStamp() + '.zip',
+          new Blob([bytes], { type: 'application/zip' })
+        );
         var s = result.stats || {};
         toast('全量备份已生成：' + (s.files || 0) + ' 项（含快照 ' +
           (s.snapshots || 0) + '、共享 ' + (s.share || 0) + '）');
@@ -2999,7 +2967,7 @@
           esc(item.description || '') +
           '</span></span></div>' +
           '<div class="pp-actions"><span class="pp-version">' +
-          formatBytes(item.size) +
+          (item.size ? ZenUtil.formatBytes(item.size) : '') +
           '</span><button class="pp-btn ' +
           (installed ? '' : 'primary') +
           '" type="button" data-pp-action="install" data-id="' +
@@ -3062,6 +3030,7 @@
   }
 
   function renderPluginSpec() {
+    var seq = ++pluginSpecSeq;
     els.ppBody.innerHTML = '<div class="pp-empty">正在载入插件规范…</div>';
     fetch('plugin-spec.md', { cache: 'no-store' })
       .then(function (response) {
@@ -3069,7 +3038,7 @@
         return response.text();
       })
       .then(function (text) {
-        if (pluginPanelTab !== 'spec') return;
+        if (seq !== pluginSpecSeq || pluginPanelTab !== 'spec' || els.pluginPanel.hidden) return;
         els.ppBody.innerHTML =
           '<p class="pp-note">把页面打包成 zip，即可在“导入插件”中安装；完整字段说明如下。</p>' +
           '<pre class="pp-spec">' +
@@ -3077,6 +3046,7 @@
           '</pre>';
       })
       .catch(function () {
+        if (seq !== pluginSpecSeq || pluginPanelTab !== 'spec' || els.pluginPanel.hidden) return;
         els.ppBody.innerHTML =
           '<div class="pp-empty">无法读取 plugin-spec.md，请查看程序目录中的同名文件。</div>';
       });
@@ -3604,7 +3574,8 @@
     );
     frame.src = 'about:blank';
     frame.addEventListener('load', function () {
-      if (!frame.dataset.url) return;
+      if (!frame.dataset.url || !frame.dataset.expectedSrc || frame.src !== frame.dataset.expectedSrc) return;
+      frame.dataset.ready = '1';
       appStatus[appId] = 'ready';
       try {
         // 首次载入发送固定的 OMM-ZEN 外观，产品归档面板据此继承同一套令牌。
@@ -3667,6 +3638,13 @@
 
   function mountApp(appId) {
     if (!appId) return;
+    var existing = frames.get(appId);
+    if (existing && existing.dataset.workspaceHidden === '1') {
+      delete existing.dataset.workspaceHidden;
+      existing.removeAttribute('aria-hidden');
+      existing.hidden = false;
+      delete workspaceHiddenLeases[appId];
+    }
     if (appStatus[appId] === 'ready' || appStatus[appId] === 'loading') return;
     appStatus[appId] = 'loading';
     appMountedAt[appId] = Date.now();
@@ -3694,10 +3672,11 @@
            real viewport width; otherwise it boots in the ≤720px mobile layout. */
         sizeFrameBeforeLoad(frame, appId);
         frame.dataset.url = url;
+        frame.dataset.expectedSrc = url + join + 'omm_embed=1&omm_hub_origin=' +
+          encodeURIComponent(window.location.origin);
         // 把工作台的真实 origin 交给产品，便于它把回执 postMessage 发给明确的
         // 目标 origin（跨 origin 下无法从 window.parent.location 读取）。
-        frame.src = url + join + 'omm_embed=1&omm_hub_origin=' +
-          encodeURIComponent(window.location.origin);
+        frame.src = frame.dataset.expectedSrc;
       },
       function (error) {
         if (loadTimers[appId]) {
@@ -4269,13 +4248,6 @@
     window.ZenUI.menu.open(items, null, { x: x, y: y });
   }
 
-  function formatTimeShort(value) {
-    if (!value) return '';
-    var date = new Date(value);
-    if (isNaN(date.getTime())) return String(value);
-    return date.toLocaleString();
-  }
-
   function pushNotify(title, body, options) {
     var opts = options || {};
     notifications.unshift({
@@ -4415,13 +4387,20 @@
     })
   }
 
+  function cmdkOrderItems(items, groups) {
+    var ordered = [];
+    (groups || []).forEach(function (group) {
+      (items || []).forEach(function (item) {
+        if (item.group === group) ordered.push(item);
+      });
+    });
+    return ordered;
+  }
+
   function cmdkCopy(text, message) {
-    try {
-      if (navigator.clipboard) navigator.clipboard.writeText(text);
-    } catch (e) {
-      /* clipboard is optional */
-    }
-    toast(message)
+    ZenUtil.copy(text, function () { toast(message); }, function () {
+      toast('复制失败，请检查剪贴板权限', 'error');
+    });
   }
 
   /* 即时命令：本地计算 / 日期 / 进制换算，不触发网络。 */
@@ -4582,22 +4561,7 @@
     });
     // 知识卡片 / 笔记 / 搜索历史：直接读取各产品既有的 localStorage，不另建存储，
     // 动作也复用既有的 openKnowledgeGraph / showKgDetail / activateApp。
-    function cmdkRead(key, fallback) {
-      try {
-        var raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-      } catch (e) {
-        return fallback;
-      }
-    }
-    var cmdkCards = [];
-    ['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach(function (key) {
-      (cmdkRead(key, []) || []).forEach(function (c) {
-        if (c && c.content && !cmdkCards.some(function (x) { return x.id === c.id; })) {
-          cmdkCards.push(c);
-        }
-      });
-    });
+    var cmdkCards = dedupeLiveCards(readLiveCards().concat(productCards));
     cmdkCards.slice(-12).reverse().forEach(function (c) {
       items.push({
         group: '知识卡片',
@@ -4608,7 +4572,7 @@
         run: function () { openKnowledgeGraph(); showKgDetail(c); },
       });
     });
-    var cmdkDocs = cmdkRead('zc-docs', null);
+    var cmdkDocs = ZenUtil.getJSON('zc-docs', null);
     if (cmdkDocs && cmdkDocs.meta) {
       Object.keys(cmdkDocs.meta).slice(0, 12).forEach(function (id) {
         var doc = cmdkDocs.meta[id] || {};
@@ -4623,7 +4587,7 @@
         });
       });
     }
-    var cmdkSearch = cmdkRead('omm-search-v1', null);
+    var cmdkSearch = ZenUtil.getJSON('omm-search-v1', null);
     ((cmdkSearch && cmdkSearch.history) || []).slice(-10).reverse().forEach(function (h) {
       if (!h || !h.query) return;
       items.push({
@@ -4660,15 +4624,18 @@
   function renderCmdk() {
     if (!els.cmdkList) return;
     var query = (els.cmdkInput.value || '').trim().toLowerCase();
-    // 候选集 = 已注册项 + 即时命令；匹配与加权交给纯函数，分组渲染保持不变。
-    cmdkFiltered = cmdkRank(cmdkItems.concat(cmdkInstantItems(query)), query, usageStats);
+    // 即时项由触发语法直接产生，不再被自身查询二次过滤；分组顺序同时
+    // 决定 DOM 顺序与 ↑↓ / Enter 使用的 cmdkFiltered 索引。
+    var instant = cmdkInstantItems(query);
+    var ranked = cmdkRank(cmdkItems, query, usageStats);
+    cmdkFiltered = cmdkOrderItems(instant.concat(ranked), CMDK_GROUPS);
     if (cmdkIndex >= cmdkFiltered.length) cmdkIndex = Math.max(0, cmdkFiltered.length - 1);
     if (cmdkIndex < 0) cmdkIndex = 0;
     if (!cmdkFiltered.length) {
       els.cmdkList.innerHTML = '<div class="cmdk-empty">没有匹配的命令或应用。</div>';
       return;
     }
-    var groups = ['即时命令', '应用', '已打开', '动作', '知识卡片', '笔记', '搜索历史', '最近文件', '共享项目'];
+    var groups = CMDK_GROUPS;
     var html = '';
     groups.forEach(function (group) {
       var groupItems = [];
@@ -4729,6 +4696,7 @@
     cmdkIndex = 0;
     buildCmdkItems();
     renderCmdk();
+    loadProductCards();
     loadCmdkShares();
     loadRecentFiles().then(function () {
       if (!cmdkOpen) return;
@@ -4779,17 +4747,6 @@
   }
 
   /* ---------- 知识图谱：收集各产品的 zen-card 并画出引用 / 标签关系 ---------- */
-  function kgLocalCards() {
-    var out = [];
-    ['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach(function (key) {
-      try {
-        var raw = JSON.parse(localStorage.getItem(key) || '[]');
-        if (Array.isArray(raw)) out = out.concat(raw);
-      } catch (e) { /* ignore */ }
-    });
-    return out;
-  }
-
   function kgNormalize(card) {
     if (!card || typeof card !== 'object' || !card.content) return null;
     return {
@@ -4807,14 +4764,15 @@
   function collectGraphCards() {
     var seq = ++graphSeq;
     graphCards = [];
-    kgLocalCards().forEach(function (c) {
+    readLiveCards().concat(productCards).forEach(function (c) {
       var n = kgNormalize(c);
       if (n) graphCards.push(n);
     });
     graphCards = dedupeGraphCards(graphCards);
     renderKnowledgeGraph();
-    /* Ask every embedded product for its own cards; replies are merged below. */
-    frames.forEach(function (frame) {
+    /* ZenCard / ZenClip 由隐藏采集统一读取；其它已挂载产品直接请求。 */
+    frames.forEach(function (frame, appId) {
+      if (appId === 'zencard' || appId === 'zenclip') return;
       var origin = frameTargetOrigin(frame);
       if (!origin) return;
       try {
@@ -4823,6 +4781,7 @@
         );
       } catch (e) { /* ignore */ }
     });
+    loadProductCards();
     window.setTimeout(function () {
       if (seq === graphSeq && graphOpen) renderKnowledgeGraph();
     }, 600);
@@ -4842,8 +4801,7 @@
    * On isolated desktop ports this yields null and the card-based snapshot below
    * (pushed by the product pane on zen-card-request) fills the field instead. */
   function annotateLiveSnapshot() {
-    var pr = null;
-    try { pr = JSON.parse(localStorage.getItem('zencode.project.v1') || 'null'); } catch (e) { return null; }
+    var pr = ZenUtil.getJSON('zencode.project.v1', null);
     if (!pr || typeof pr !== 'object' || !Array.isArray(pr.codes)) return null;
     var codes = Object.create(null);
     pr.codes.forEach(function (c) { if (c && c.id) codes[c.id] = c; });
@@ -4898,28 +4856,84 @@
     };
   }
 
-  function collectLiveLocalData(scope) {
-    function parsed(key) {
-      try { return JSON.parse(localStorage.getItem(key) || 'null'); }
-      catch (e) { return null; }
+  function liveCardDTO(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    var content = raw.content !== undefined ? raw.content : raw.text !== undefined ? raw.text : raw.en;
+    if (!String(content == null ? '' : content).trim()) return null;
+    var out = {
+      content: String(content),
+      kind: String(raw.kind || 'note'),
+      source: String(raw.source || 'manual'),
+    };
+    ['id', 'ref', 'translation', 'note', 'color', 'image'].forEach(function (key) {
+      if (raw[key] !== undefined && raw[key] !== null) out[key] = String(raw[key]);
+    });
+    if (Array.isArray(raw.tags)) out.tags = raw.tags.map(String);
+    if (Array.isArray(raw.links)) {
+      out.links = raw.links.filter(function (link) {
+        return link && typeof link === 'object' && String(link.id || '').trim();
+      }).map(function (link) {
+        return { id: String(link.id), rel: String(link.rel || 'related') };
+      });
     }
+    ['createdAt', 'updatedAt'].forEach(function (key) {
+      var value = raw[key];
+      if (typeof value === 'string' || (typeof value === 'number' && isFinite(value))) {
+        out[key] = value;
+      }
+    });
+    if (typeof raw.format === 'string') out.format = raw.format;
+    if (typeof raw.v === 'number') out.v = raw.v;
+    return out;
+  }
+
+  function dedupeLiveCards(list) {
+    var seen = Object.create(null);
+    var out = [];
+    (list || []).forEach(function (card) {
+      if (!card) return;
+      var key = card.id || JSON.stringify([
+        card.content, card.ref || '', card.createdAt == null ? '' : card.createdAt,
+        card.updatedAt == null ? '' : card.updatedAt,
+      ]);
+      if (seen[key] !== undefined) {
+        out[seen[key]] = Object.assign({}, out[seen[key]], card);
+        return;
+      }
+      seen[key] = out.length;
+      out.push(card);
+    });
+    return out;
+  }
+
+  function readLiveCards() {
+    var cards = [];
+    ['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1'].forEach(function (key) {
+      var list = ZenUtil.getJSON(key, []);
+      if (!Array.isArray(list)) return;
+      list.forEach(function (raw) {
+        var card = liveCardDTO(raw);
+        if (card) cards.push(card);
+      });
+    });
+    return dedupeLiveCards(cards);
+  }
+
+  function collectLiveLocalData(scope) {
     function arr(key) {
-      var raw = parsed(key);
+      var raw = ZenUtil.getJSON(key, []);
       return Array.isArray(raw) ? raw : [];
     }
     // 各产品的本地存储并不都是数组：Search 存 {history:[]}，Writer 存
     // {order:[],meta:{}}，Planner 存 {eventsBy:{}}。同时兼容历史数组形状。
     function records(key, field) {
-      var raw = parsed(key);
+      var raw = ZenUtil.getJSON(key, null);
       if (Array.isArray(raw)) return raw;
       if (raw && typeof raw === 'object' && Array.isArray(raw[field])) return raw[field];
       return [];
     }
     function text(v, n) { return String(v == null ? '' : v).slice(0, n); }
-    var cards = arr('zen.cards.v1').concat(arr('zen.inbox.v1')).slice(0, 200).map(function (c) {
-      return { content: text(c && c.content, 1500), kind: text(c && c.kind, 40),
-        tags: Array.isArray(c && c.tags) ? c.tags.slice(0, 8).map(String) : [], source: text(c && c.source, 40) };
-    });
+    var cards = readLiveCards();
     if (scope === 'cards') return { cards: cards };
     // Timeline + Planner are shared by AI and ZenReview. Same-origin (web build)
     // reads them directly; isolated desktop ports use the card replies below.
@@ -4940,7 +4954,7 @@
       timeline: timeline,
       planner: (function () {
         var out = [];
-        var raw = parsed('zp-data-v2');
+        var raw = ZenUtil.getJSON('zp-data-v2', null);
         var data = Array.isArray(raw) ? raw[0] : raw;
         if (!data || typeof data !== 'object') return out;
         var days = data.days;
@@ -4968,7 +4982,7 @@
       // 正文在 IndexedDB（同步快照读不到），这里能可靠拿到的是文档标题。
       // 同时兼容历史数组形状 [{title,content}]。
       notes: (function () {
-        var idx = parsed('zc-docs');
+        var idx = ZenUtil.getJSON('zc-docs', null);
         var items = [];
         if (Array.isArray(idx)) {
           items = idx;
@@ -4990,9 +5004,7 @@
       rules: arr('zen.flow.rules.v1').slice(0, 100).map(function (r) {
         return { name: text(r && r.name, 200), enabled: r && r.enabled !== false };
       }),
-      clips: arr('zen.clip.v1').slice(0, 100).map(function (c) {
-        return { content: text(c && c.content, 1200), source: text(c && c.source, 40) };
-      }),
+      clips: arr('zen.clip.v1').map(liveCardDTO).filter(Boolean),
       timeline: timeline,
       planner: reviewData.planner,
       annotate: annotateLiveSnapshot(),
@@ -5031,19 +5043,86 @@
     w.done = true;
     if (w.timer) window.clearTimeout(w.timer);
     delete liveDataWaiters[token];
-    // de-duplicate cards collected from all panes by content prefix.
-    var seen = Object.create(null);
-    w.snapshot.cards = (w.snapshot.cards || []).filter(function (c) {
-      var key = String(c.content || '').slice(0, 100);
-      if (!key || seen[key]) return false;
-      seen[key] = 1;
-      return true;
-    }).slice(0, 200);
+    // 相同 id（或无 id 时的完整语义键）才去重，不能按内容前缀丢弃不同卡片。
+    w.snapshot.cards = dedupeLiveCards(w.snapshot.cards || []).slice(0, 200);
     try {
       w.frame.contentWindow.postMessage(
         { type: 'omm:live-data-reply', token: token, data: w.snapshot }, w.origin
       );
     } catch (e) { /* ignore */ }
+  }
+
+  function settleCardRequest(token, result) {
+    var request = cardRequests[token];
+    if (!request) return;
+    window.clearTimeout(request.timer);
+    delete cardRequests[token];
+    request.resolve(result);
+  }
+
+  function requestCardFrame(appId, frame) {
+    return new Promise(function (resolve) {
+      var token = 'hc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      cardRequests[token] = {
+        app: appId,
+        resolve: resolve,
+        timer: window.setTimeout(function () {
+          settleCardRequest(token, {
+            app: appId, cards: [], ok: false, error: '产品没有返回卡片',
+          });
+        }, 3000),
+      };
+      try {
+        frame.contentWindow.postMessage({ type: 'omm:zen-card-request', token: token }, frameTargetOrigin(frame));
+      } catch (e) {
+        settleCardRequest(token, { app: appId, cards: [], ok: false, error: '卡片请求发送失败' });
+      }
+    });
+  }
+
+  function refreshOpenCardSurfaces() {
+    if (cmdkOpen) {
+      buildCmdkItems();
+      renderCmdk();
+    }
+    if (todayOpen) renderTodayFromData();
+    if (graphOpen) {
+      graphCards = dedupeGraphCards(graphCards.concat(
+        productCards.map(kgNormalize).filter(Boolean)
+      ));
+      renderKnowledgeGraph();
+      if (productCardErrors.length && els.kgStatus) {
+        els.kgStatus.textContent += ' · 部分产品读取失败';
+      }
+    }
+  }
+
+  function loadProductCards() {
+    if (productCardsPromise) return productCardsPromise;
+    var ids = ['zencard', 'zenclip'].filter(function (id) { return !!APP_BY_ID[id]; });
+    var created = [];
+    productCardsPromise = Promise.all(ids.map(function (appId) {
+      return ensureWorkspaceFrame(appId, created)
+        .then(function (frame) { return requestCardFrame(appId, frame); })
+        .catch(function (error) {
+          return { app: appId, cards: [], ok: false, error: error && error.message ? error.message : String(error) };
+        });
+    })).then(function (results) {
+      var cards = [];
+      var errors = [];
+      results.forEach(function (result) {
+        if (result && result.ok) cards = cards.concat(result.cards || []);
+        else errors.push((result && result.app || '') + ': ' + ((result && result.error) || '读取失败'));
+      });
+      productCards = dedupeLiveCards(cards);
+      productCardErrors = errors;
+      refreshOpenCardSurfaces();
+      return { cards: productCards.slice(), errors: errors.slice(), complete: errors.length === 0 };
+    }).finally(function () {
+      cleanupWorkspaceFrames(created);
+      productCardsPromise = null;
+    });
+    return productCardsPromise;
   }
 
   /* -------------------------------------------------------- ZenBackup protocol */
@@ -5080,24 +5159,46 @@
     });
   }
 
+  function retainWorkspaceFrame(appId, created) {
+    var frame = frames.get(appId);
+    if (!frame || frame.dataset.workspaceHidden !== '1' || created.indexOf(appId) >= 0) return;
+    created.push(appId);
+    workspaceHiddenLeases[appId] = (workspaceHiddenLeases[appId] || 0) + 1;
+  }
+
   function ensureWorkspaceFrame(appId, created) {
-    if (frames.get(appId)) return waitForWorkspaceFrame(appId);
+    if (frames.get(appId)) {
+      retainWorkspaceFrame(appId, created);
+      return waitForWorkspaceFrame(appId);
+    }
     return ensureApp(appId).then(function (url) {
+      if (frames.get(appId)) {
+        retainWorkspaceFrame(appId, created);
+        return waitForWorkspaceFrame(appId);
+      }
       var frame = createFrame(appId);
       frame.dataset.url = url;
       frame.dataset.workspaceHidden = '1';
       frame.setAttribute('aria-hidden', 'true');
       frame.hidden = true;
       created.push(appId);
+      workspaceHiddenLeases[appId] = (workspaceHiddenLeases[appId] || 0) + 1;
       var join = url.indexOf('?') >= 0 ? '&' : '?';
-      frame.src = url + join + 'omm_embed=1&omm_hub_origin=' +
+      frame.dataset.expectedSrc = url + join + 'omm_embed=1&omm_hub_origin=' +
         encodeURIComponent(window.location.origin);
+      frame.src = frame.dataset.expectedSrc;
       return waitForWorkspaceFrame(appId);
     });
   }
 
   function cleanupWorkspaceFrames(created) {
     created.forEach(function (appId) {
+      var leases = workspaceHiddenLeases[appId] || 0;
+      if (leases > 1) {
+        workspaceHiddenLeases[appId] = leases - 1;
+        return;
+      }
+      delete workspaceHiddenLeases[appId];
       if (findPaneByApp(appId)) return;
       var frame = frames.get(appId);
       if (frame && frame.dataset.workspaceHidden === '1') {
@@ -5447,8 +5548,8 @@
     }
     if (els.kgList) {
       els.kgList.innerHTML = list.map(function (c, i) {
-        return '<div class="kg-item" data-i="' + i + '" title="' + kgEscape(c.content) + '">' +
-          '<span class="kg-kind">' + kgEscape(c.kind) + '</span>' + kgEscape(c.content.slice(0, 40)) + '</div>';
+        return '<div class="kg-item" data-i="' + i + '" title="' + esc(c.content) + '">' +
+          '<span class="kg-kind">' + esc(c.kind) + '</span>' + esc(c.content.slice(0, 40)) + '</div>';
       }).join('');
     }
     if (!els.kgCanvas._kgBound) {
@@ -5478,12 +5579,6 @@
     var c = p.card;
     els.kgDetail.textContent = c.kind + ' · ' + c.source + '\n' + c.content +
       (c.ref ? '\n出处：' + c.ref : '') + (c.tags.length ? '\n#' + c.tags.join(' #') : '');
-  }
-
-  function kgEscape(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   /* ---------- 数据流：把插件清单里的共享通道可视化 ---------- */
@@ -5536,10 +5631,10 @@
       ? channels.map(function (ch) {
           var chips = ch.apps.map(function (a) {
             // role / id 来自插件 manifest，必须转义后才能进 class 与 title 属性。
-            return '<span class="flow-chip ' + kgEscape(a.role) + '" title="' + kgEscape(a.id) + '">' +
-              kgEscape(a.name) + ' · ' + kgEscape(roleLabel[a.role] || a.role) + '</span>';
+            return '<span class="flow-chip ' + esc(a.role) + '" title="' + esc(a.id) + '">' +
+              esc(a.name) + ' · ' + esc(roleLabel[a.role] || a.role) + '</span>';
           }).join('');
-          return '<div class="flow-channel"><div class="fc-name">' + kgEscape(ch.id) +
+          return '<div class="flow-channel"><div class="fc-name">' + esc(ch.id) +
             '</div><div class="fc-apps">' + chips + '</div></div>';
         }).join('')
       : '<div class="kg-detail">当前插件清单没有声明共享通道。</div>';
@@ -5551,7 +5646,7 @@
       els.flowEventList.innerHTML = flowEvents.length
         ? flowEvents.slice(0, 12).map(function (ev) {
             return '<div class="flow-event"><span class="fe-time">' +
-              new Date(ev.at).toLocaleTimeString() + '</span>' + kgEscape(ev.text) + '</div>';
+              new Date(ev.at).toLocaleTimeString() + '</span>' + esc(ev.text) + '</div>';
           }).join('')
         : '<div class="kg-detail">暂无流转记录</div>';
     }
@@ -5586,12 +5681,21 @@
     }
   }
 
-  function todayRead(key, fallback) {
-    try {
-      var raw = localStorage.getItem(key)
-      return raw ? JSON.parse(raw) : fallback
-    } catch (e) {
-      return fallback
+  function todaySummaryFromData() {
+    return buildTodaySummary({
+      cards: dedupeLiveCards(readLiveCards().concat(productCards)),
+      srs: ZenUtil.getJSON('zen.srs.v1', []),
+      docs: ZenUtil.getJSON('zc-docs', null),
+      search: ZenUtil.getJSON('omm-search-v1', null),
+      rules: ZenUtil.getJSON('zen.flow.rules.v1', []),
+      now: Date.now(),
+    });
+  }
+
+  function renderTodayFromData() {
+    renderToday(todaySummaryFromData());
+    if (productCardErrors.length && els.todayStatus) {
+      els.todayStatus.textContent += ' · 部分卡片读取失败';
     }
   }
 
@@ -5645,14 +5749,8 @@
     if (els.hubSettings) els.hubSettings.hidden = true;
     todayOpen = true;
     els.todayPanel.hidden = false;
-    renderToday(buildTodaySummary({
-      cards: todayRead('zen.cards.v1', []),
-      srs: todayRead('zen.srs.v1', []),
-      docs: todayRead('zc-docs', null),
-      search: todayRead('omm-search-v1', null),
-      rules: todayRead('zen.flow.rules.v1', []),
-      now: Date.now(),
-    }));
+    renderTodayFromData();
+    loadProductCards();
   }
 
   function closeToday() {
@@ -5660,18 +5758,12 @@
     if (els.todayPanel) els.todayPanel.hidden = true;
   }
 
-  function gsearchEscape(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
   function gsearchHighlight(text, needle) {
-    var out = gsearchEscape(text);
-    var token = gsearchEscape(needle).trim();
+    var out = esc(text);
+    var token = esc(needle).trim();
     if (!token) return out;
     try {
-      var re = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      var re = new RegExp(ZenUtil.escRe(token), 'gi');
       return out.replace(re, function (m) { return '<mark>' + m + '</mark>'; });
     } catch (e) { return out; }
   }
@@ -5687,7 +5779,7 @@
       renderGlobalSearch(null, '输入关键词，检索全部产品中已保存的文档内容。');
       return;
     }
-    renderGlobalSearch(null, '正在检索“' + gsearchEscape(q) + '”…', true);
+    renderGlobalSearch(null, '正在检索“' + esc(q) + '”…', true);
     gsearchTimer = window.setTimeout(function () {
       fetch('/__omm/fs/search?q=' + encodeURIComponent(q) + '&all=1&limit=60', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
@@ -5719,7 +5811,7 @@
     }
     if (!gsearchResults.length) {
       els.gsearchList.innerHTML = '<div class="cmdk-empty">' +
-        (needle ? '没有找到与“' + gsearchEscape(needle) + '”相关的内容' : '输入关键词开始检索') +
+        (needle ? '没有找到与“' + esc(needle) + '”相关的内容' : '输入关键词开始检索') +
         '</div>';
       return;
     }
@@ -5732,10 +5824,10 @@
       var snippet = gsearchHighlight(m.snippet || m.title || '', needle || '');
       html += '<button class="cmdk-item gsearch-item' + (i === gsearchIndex ? ' active' : '') +
         '" type="button" data-gs="' + i + '">' +
-        '<span class="glyph">' + gsearchEscape(glyph) + '</span>' +
+        '<span class="glyph">' + esc(glyph) + '</span>' +
         '<span class="g-body">' +
-        '<span class="g-title"><span class="g-name">' + gsearchEscape(m.title || m.name || '未命名') +
-        '</span><span class="g-app">' + gsearchEscape(appName) + '</span></span>' +
+        '<span class="g-title"><span class="g-name">' + esc(m.title || m.name || '未命名') +
+        '</span><span class="g-app">' + esc(appName) + '</span></span>' +
         '<span class="g-snippet">' + snippet + '</span>' +
         '</span>' +
         '<span class="g-count">' + (m.count || 1) + ' 处</span>' +
@@ -6036,7 +6128,7 @@
       if (day !== lastDay) { html += '<div class="tl-day">' + esc(day) + '</div>'; lastDay = day; }
       var label = { file: '文档', snapshot: '快照', share: '共享', notify: '通知' }[e.type] || '';
       html += '<button class="tl-item" type="button" data-tl-item="' + index + '">' +
-        '<span class="tl-glyph">' + gsearchEscape(e.glyph) + '</span>' +
+        '<span class="tl-glyph">' + esc(e.glyph) + '</span>' +
         '<span class="tl-main"><span class="tl-title">' + esc(e.title) + '</span>' +
         '<span class="tl-sub">' + esc(e.sub) + ' · ' + esc(notifyTime(e.time)) + '</span></span>' +
         '<span class="tl-kind">' + label + '</span></button>';
@@ -6056,10 +6148,7 @@
         detail: { path: d.path, name: d.name, mime: d.mime, app: d.app }
       }));
     } else if (e.type === 'snapshot') {
-      closeTimeline();
-      window.dispatchEvent(new CustomEvent('omm:restore-snapshot', {
-        detail: { path: d.path, app: d.app, name: d.name, label: d.label }
-      }));
+      requestSnapshotRestore({ path: d.path, app: d.app, name: d.name, label: d.label });
     } else if (e.type === 'share') {
       var space = cmdkSpace || {};
       var channel = (space.channels || []).filter(function (c) { return c.id === d.channel; })[0];
@@ -6135,8 +6224,11 @@
 
   function copyAppLink(appId) {
     appUrlFor(appId)
-      .then(function (url) { return navigator.clipboard.writeText(url); })
-      .then(function () { toast('应用链接已复制'); })
+      .then(function (url) {
+        ZenUtil.copy(url, function () { toast('应用链接已复制'); }, function () {
+          toast('复制失败，请检查剪贴板权限', 'error');
+        });
+      })
       .catch(function (error) {
         toast('复制失败：' + (error && error.message ? error.message : error), 'error');
       });
@@ -6167,34 +6259,45 @@
       });
   }
 
+  function requestSnapshotRestore(detail) {
+    if (!detail || !detail.path || !APP_BY_ID[detail.app]) {
+      toast('找不到这条快照所属的应用', 'error');
+      return Promise.resolve(false);
+    }
+    var app = APP_BY_ID[detail.app];
+    return ommConfirm(
+      '恢复“' + app.name + '”的快照“' + (detail.label || detail.name || '未命名') + '”？\n' +
+      '当前未保存的应用状态会被覆盖。恢复前请确认已保存需要保留的内容。',
+      { title: '恢复快照', ok: '恢复', danger: true }
+    ).then(function (ok) {
+      if (!ok) return false;
+      closeTimeline();
+      toast('正在恢复快照并重启应用…');
+      window.dispatchEvent(new CustomEvent('omm:restore-snapshot', { detail: detail }));
+      return true;
+    });
+  }
+
   function restoreSnapshotFor(appId) {
     var snap = lastSnapshotByApp[appId];
     if (!snap) {
       toast('这个应用还没有快照', 'error');
       return;
     }
-    toast('正在恢复快照并重启应用…');
-    window.dispatchEvent(
-      new CustomEvent('omm:restore-snapshot', {
-        detail: {
-          app: appId,
-          path: snap.path,
-          name: snap.name,
-          label: snap.label,
-        },
-      })
-    );
+    requestSnapshotRestore({
+      app: appId,
+      path: snap.path,
+      name: snap.name,
+      label: snap.label,
+    });
   }
 
   function copyAppError(appId) {
     var app = appOf(appId);
     var text = (app ? app.name : appId) + '\n' + (appErrors[appId] || '未知错误') + '\n' + location.href;
-    var done = function () { toast('错误信息已复制'); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done).catch(function () { toast('复制失败', 'error'); });
-    } else {
-      toast(text, 'error');
-    }
+    ZenUtil.copy(text, function () { toast('错误信息已复制'); }, function () {
+      toast('复制失败，请检查剪贴板权限', 'error');
+    });
   }
 
   function loadRecentFiles(force) {
@@ -6229,7 +6332,7 @@
               app_name: entry.app_name || entry.app || '',
               path: entry.path || '',
               mime: entry.mime || '',
-              time: formatTimeShort(entry.time || entry.updated || ''),
+              time: ZenUtil.fmtDateTime(entry.time || entry.updated || ''),
             };
           });
         recentFilesAt = Date.now();
@@ -6427,17 +6530,58 @@
       var close = event.target.closest('[data-close]');
       if (close) {
         event.stopPropagation();
+        var index = state.open.indexOf(close.dataset.close);
         closeTab(close.dataset.close);
+        var tabs = els.tabs.querySelectorAll('.tab[data-app]');
+        var next = tabs[Math.min(Math.max(0, index), Math.max(0, tabs.length - 1))];
+        if (next) next.focus();
+        else els.tabAdd.focus();
         return;
       }
       var tab = event.target.closest('.tab[data-app]');
-      if (tab) activateApp(tab.dataset.app);
+      if (tab) {
+        var appId = tab.dataset.app;
+        activateApp(appId);
+        if (event.detail === 0) {
+          var tabs = els.tabs.querySelectorAll('.tab[data-app]');
+          for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].dataset.app === appId) { tabs[i].focus(); break; }
+          }
+        }
+      }
     });
     els.tabs.addEventListener('contextmenu', function (event) {
       var tab = event.target.closest('.tab[data-app]');
       if (!tab) return;
       event.preventDefault();
       showTabMenu(event.clientX, event.clientY, tab.dataset.app);
+    });
+    els.tabs.addEventListener('keydown', function (event) {
+      var tab = event.target.closest('.tab[data-app]') ||
+        (event.target.hasAttribute('data-close') ? event.target.previousElementSibling : null);
+      if (!tab || !tab.classList.contains('tab')) return;
+      var appId = tab.dataset.app;
+      if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+        event.preventDefault();
+        var rect = tab.getBoundingClientRect();
+        showTabMenu(rect.left + 12, rect.bottom, appId);
+        return;
+      }
+      var index = state.open.indexOf(appId);
+      if (index < 0) return;
+      var nextIndex = index;
+      if (event.key === 'ArrowRight') nextIndex = (index + 1) % state.open.length;
+      else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + state.open.length) % state.open.length;
+      else if (event.key === 'Home') nextIndex = 0;
+      else if (event.key === 'End') nextIndex = state.open.length - 1;
+      else return;
+      event.preventDefault();
+      var nextApp = state.open[nextIndex];
+      activateApp(nextApp);
+      var tabs = els.tabs.querySelectorAll('.tab[data-app]');
+      for (var i = 0; i < tabs.length; i++) {
+        if (tabs[i].dataset.app === nextApp) { tabs[i].focus(); break; }
+      }
     });
     els.tabs.addEventListener('auxclick', function (event) {
       if (event.button !== 1) return;
@@ -6556,7 +6700,7 @@
         togglePin(pin.dataset.pin);
         return;
       }
-      var item = event.target.closest('.launcher-app[data-app], .launcher-chip[data-app]');
+      var item = event.target.closest('.launcher-open[data-app], .launcher-chip[data-app]');
       if (!item) return;
       activateApp(item.dataset.app);
       toggleLauncher(false);
@@ -6579,13 +6723,15 @@
       renderLauncher(true);
     });
     els.launcher.addEventListener('keydown', function (event) {
+      if (event.target.closest('[data-pin]')) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         moveLauncher(event.key === 'ArrowDown' ? 1 : -1);
         return;
       }
       if (event.key === 'Enter') {
-        var active = els.launcher.querySelector('.launcher-app.active');
+        var activeItem = els.launcher.querySelector('.launcher-app.active');
+        var active = activeItem && activeItem.querySelector('.launcher-open');
         if (!active) return;
         event.preventDefault();
         activateApp(active.dataset.app);
@@ -6789,6 +6935,7 @@
       else if (action.dataset.act === 'pane-split-v') splitPane(paneId, 'v', 'right', null);
       else if (action.dataset.act === 'pane-split-h') splitPane(paneId, 'h', 'bottom', null);
       else if (action.dataset.act === 'pane-close') closePane(paneId);
+      else if (action.dataset.act === 'restore-snap') restoreSnapshotFor(action.dataset.app);
       else if (action.dataset.act === 'wake') activateApp(action.dataset.app);
       else if (action.dataset.act === 'open-plugin') {
         openPluginPanel('installed');
@@ -6980,7 +7127,7 @@
       if (!sourceFrame) return;
       // 窗口身份 + origin 双重校验：iframe 来自各插件独立的 loopback 端口，
       // 期望 origin 必须从该 frame 自己的 URL 推导。
-      if (event.origin !== frameTargetOrigin(sourceFrame) || !isLoopbackOrigin(event.origin)) return;
+      if (event.origin !== frameTargetOrigin(sourceFrame) || !ZenUtil.isLocalOrigin(event.origin)) return;
       var sourceApp = sourceFrame.dataset.app;
 
       if (data.type === 'omm:ready') {
@@ -7013,6 +7160,22 @@
         return;
       }
       if (data.type === 'omm:zen-card-reply') {
+        var cardRequest = cardRequests[data.token];
+        if (cardRequest) {
+          if (cardRequest.app !== sourceApp) return;
+          if (!Array.isArray(data.cards)) {
+            settleCardRequest(data.token, {
+              app: sourceApp, cards: [], ok: false, error: '产品返回的卡片格式无效',
+            });
+            return;
+          }
+          settleCardRequest(data.token, {
+            app: sourceApp,
+            cards: data.cards.map(liveCardDTO).filter(Boolean),
+            ok: true,
+          });
+          return;
+        }
         // A live-data request reuses the card protocol: feed any active waiter.
         var waiter = liveDataWaiters[data.token];
         if (waiter && Array.isArray(data.cards)) {
@@ -7026,10 +7189,8 @@
               });
               return;
             }
-            var n = kgNormalize(c);
-            if (n) waiter.snapshot.cards.push({
-              content: n.content, kind: n.kind, tags: n.tags, source: n.source
-            });
+            var dto = liveCardDTO(c);
+            if (dto) waiter.snapshot.cards.push(dto);
           });
           if (waiter.replied >= waiter.expected) finishLiveData(data.token);
         }
@@ -7181,8 +7342,17 @@
     });
   }
 
+  function isEditableTarget(target) {
+    if (!target || target.nodeType !== 1) return false;
+    var tag = target.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' ||
+      target.isContentEditable === true;
+  }
+
   function onKeyDown(event) {
     if (comboCapturing) return;
+    if (window.ZenUI && window.ZenUI.layer && window.ZenUI.layer.hasOpen()) return;
+    if (isEditableTarget(event.target)) return;
     var mod = event.ctrlKey || event.metaKey;
     if (!mod) {
       if (gsearchOpen) {

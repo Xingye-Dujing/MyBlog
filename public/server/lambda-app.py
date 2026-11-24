@@ -70,20 +70,40 @@ import time
 import unicodedata
 import uuid
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
-from flask import (Flask, Response, g, has_request_context, jsonify, request,
+from flask import (Flask, Response, abort, g, has_request_context, jsonify, request,
                    send_from_directory, stream_with_context)
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+
+_desktop_source = Path(__file__).resolve().parent.parent / "desktop"
+if _desktop_source.is_dir() and str(_desktop_source) not in sys.path:
+    sys.path.insert(0, str(_desktop_source))
+try:
+    import omm_share
+    import omm_shared
+except ImportError:  # staged/minimal web-only installs fail closed
+    omm_share = None
+    omm_shared = None
 
 _HERE = Path(__file__).resolve().parent
 APP_DIR = (Path(getattr(sys, "_MEIPASS", _HERE)) / "web"
            if getattr(sys, "frozen", False)
            else (_HERE.parent if (_HERE.parent / "index.html").is_file() else _HERE))
+STATE_DIR = APP_DIR
+_state_override = os.environ.get("LAMBDA_DATA_DIR", "").strip()
+if _state_override:
+    STATE_DIR = Path(_state_override).expanduser()
+elif getattr(sys, "frozen", False):
+    _data_home = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME")
+    STATE_DIR = (Path(_data_home) if _data_home else Path.home() / ".local" / "share") / "OMM-ZEN" / "lambda"
 RS = "\x1e"                     # 与前端的记录分隔符保持一致 / keep in sync with the frontend
 # 环境变量可能是 0 或负数；统一夹到可用范围，避免 queue/sleep 收到非法值
 # Env values may be zero or negative; clamp them so queue/sleep never see bad values.
 EVAL_TIMEOUT = max(0.1, float(os.environ.get("LAMBDA_EVAL_TIMEOUT", "10")))
+# Streaming uses EVAL_TIMEOUT as an idle timeout. A total wall-clock cap is
+# opt-in so heartbeats can keep a genuinely long reduction alive by default.
+EVAL_TOTAL_TIMEOUT = max(0.0, float(os.environ.get("LAMBDA_EVAL_TOTAL_TIMEOUT", "0")))
 # 流式输出队列上限：慢消费者不能让读线程无界堆积对象
 # Bound the streaming queue so a slow consumer cannot grow memory without limit.
 STREAM_QUEUE_MAX = max(64, int(os.environ.get("LAMBDA_STREAM_QUEUE_MAX", "10000")))
@@ -95,20 +115,20 @@ MAX_SHARES = max(0, int(os.environ.get("LAMBDA_MAX_SHARES", "500")))
 MAX_SHARE_BYTES = 64 * 1024
 # 分享短链的持久化文件；设为 off 可恢复纯内存模式
 # Persistence file for short share links; set to off for memory-only mode.
-SHARE_DB = os.environ.get("LAMBDA_SHARE_DB", str(APP_DIR / "shares.json"))
+SHARE_DB = os.environ.get("LAMBDA_SHARE_DB", str(STATE_DIR / "shares.json"))
 # 会话快照：把回放历史落到磁盘，过期或进程重启后可恢复
 # Session snapshots: persist replay history so a session survives expiry/restarts.
 SNAPSHOT_TTL = max(0.0, float(os.environ.get("LAMBDA_SNAPSHOT_TTL", str(SESSION_IDLE))))
 MAX_SNAPSHOTS = max(0, int(os.environ.get("LAMBDA_MAX_SNAPSHOTS", str(MAX_SESSIONS))))
 MAX_SNAPSHOT_LINES = max(1, int(os.environ.get("LAMBDA_MAX_SNAPSHOT_LINES", "2000")))
-SNAPSHOT_DB = os.environ.get("LAMBDA_SNAPSHOT_DB", str(APP_DIR / "sessions.json"))
+SNAPSHOT_DB = os.environ.get("LAMBDA_SNAPSHOT_DB", str(STATE_DIR / "sessions.json"))
 # 静态分享页：把一段对话渲染成自包含 HTML
 # Static share pages: render a transcript as a self-contained HTML document.
-PAGE_DB = os.environ.get("LAMBDA_PAGE_DB", str(APP_DIR / "sharepages.json"))
+PAGE_DB = os.environ.get("LAMBDA_PAGE_DB", str(STATE_DIR / "sharepages.json"))
 MAX_PAGES = max(0, int(os.environ.get("LAMBDA_MAX_PAGES", "100")))
 MAX_PAGE_LINES = 300
 # 策展示例与轻量 token / curated gallery and lightweight tokens
-TOKEN_DB = os.environ.get("LAMBDA_TOKEN_DB", str(APP_DIR / "tokens.json"))
+TOKEN_DB = os.environ.get("LAMBDA_TOKEN_DB", str(STATE_DIR / "tokens.json"))
 GALLERY = [
     {"id": "church", "zh": "邱奇算术", "en": "Church arithmetic",
      "code": "PLUS TWO THREE"},
@@ -841,6 +861,7 @@ class Interpreter:
             self._stream_overflow = False
             completed = False
             started = time.monotonic()
+            last_output = started
             try:
                 _write_all(self.proc.stdin, (line + "\n").encode("utf-8"))
             except (BrokenPipeError, OSError) as exc:
@@ -849,22 +870,24 @@ class Interpreter:
                 raise RuntimeError(f"interpreter pipe closed: {exc}") from exc
             try:
                 while True:
-                    # 即使输出持续不断也要检查总超时，不能只在 queue.Empty 分支检查
-                    # Enforce the wall-clock deadline on every iteration, not only
-                    # when no output arrives; a chatty command must not run forever.
-                    if time.monotonic() - started > timeout:
+                    now = time.monotonic()
+                    if EVAL_TOTAL_TIMEOUT and now - started > EVAL_TOTAL_TIMEOUT:
                         self.kill()
                         raise TimeoutError("evaluation timeout")
+                    # EVAL_TIMEOUT bounds silence, not total runtime. Continuous
+                    # output keeps a long reduction alive; an explicit total cap
+                    # can still be configured for untrusted/public deployments.
+                    idle_left = timeout - (now - last_output)
+                    if idle_left <= 0:
+                        self.kill()
+                        raise TimeoutError("evaluation timeout")
+                    wait = min(5.0, idle_left)
+                    if EVAL_TOTAL_TIMEOUT:
+                        wait = min(wait, EVAL_TOTAL_TIMEOUT - (now - started))
                     try:
-                        # 心跳间隔不超过剩余超时，避免长命令超过 EVAL_TIMEOUT 才被中止
-                        # Never wait past the deadline; a heartbeat must not overshoot.
-                        remaining = timeout - (time.monotonic() - started)
-                        item = self._stream_q.get(timeout=max(0.05, min(5.0, remaining)))
+                        item = self._stream_q.get(timeout=max(0.01, wait))
                     except queue.Empty:
                         elapsed = time.monotonic() - started
-                        if elapsed > timeout:
-                            self.kill()
-                            raise TimeoutError("evaluation timeout") from None
                         yield {"kind": "heartbeat", "elapsedMs": int(elapsed * 1000)}
                         continue
                     if item is None:
@@ -873,6 +896,7 @@ class Interpreter:
                         completed = True
                         break
                     yield item
+                    last_output = time.monotonic()
             finally:
                 self._streaming = False
                 # 客户端中途断开时命令仍在运行，输出无法再对齐；直接回收会话
@@ -1262,13 +1286,15 @@ def _sql_rename(sid: str, name: str, owner: str | None, used: float) -> bool:
         return False
 
 
-def _sql_delete(sid: str, owner: str | None = None, force: bool = False) -> None:
+def _sql_delete(sid: str, owner: str | None = None, force: bool = False) -> bool:
     clause, args = ("1=1", ()) if force else _owner_sql(owner)
     try:
         with _sql_conn() as conn:
             conn.execute(f"DELETE FROM snapshots WHERE id=? AND {clause}", (sid, *args))
+        return True
     except sqlite3.Error as exc:
         log.warning("snapshot sqlite delete failed / SQLite 快照删除失败: %s", exc)
+        return False
 
 
 def _load_snapshots() -> None:
@@ -1321,6 +1347,10 @@ def _load_snapshots() -> None:
             _snapshots[sid] = entry
 
 
+class SnapshotPersistenceError(RuntimeError):
+    """The command ran, but its replay snapshot could not be persisted."""
+
+
 def _save_snapshots_locked() -> bool:
     path = _snapshot_db_path()
     if path is None:
@@ -1359,22 +1389,32 @@ def _snapshot_put(sid: str, entry: dict) -> bool:
     if _use_sqlite():
         return _sql_put(sid, entry)
     with _snapshots_lock:
+        previous = _snapshots.get(sid)
         _snapshots[sid] = entry
-        return _save_snapshots_locked()
+        if _save_snapshots_locked():
+            return True
+        if previous is None:
+            _snapshots.pop(sid, None)
+        else:
+            _snapshots[sid] = previous
+        return False
 
 
-def _snapshot_remove(sid: str, owner: str | None = None, force: bool = False) -> None:
+def _snapshot_remove(sid: str, owner: str | None = None, force: bool = False) -> bool:
     """force 用于 TTL / 数量回收：清理必须能删掉任何人的快照
     force is for TTL/cap pruning: maintenance must be able to remove any entry.
     """
     if _use_sqlite():
-        _sql_delete(sid, owner, force)
-        return
+        return _sql_delete(sid, owner, force)
     with _snapshots_lock:
         entry = _snapshots.get(sid)
-        if entry is not None and (force or _owner_allowed(entry, owner)):
-            _snapshots.pop(sid, None)
-            _save_snapshots_locked()
+        if entry is None or not (force or _owner_allowed(entry, owner)):
+            return False
+        _snapshots.pop(sid, None)
+        if _save_snapshots_locked():
+            return True
+        _snapshots[sid] = entry
+        return False
 
 
 def _snapshot_rename(sid: str, name: str, owner: str | None) -> bool:
@@ -1453,7 +1493,8 @@ def _snapshot_record(sid: str, lines, lang: str, set_lang: bool = True,
         entry["used"] = now
         if set_lang and lang in ALLOWED_LANGS:
             entry["lang"] = lang
-        _snapshot_put(sid, entry)
+        if not _snapshot_put(sid, entry):
+            raise SnapshotPersistenceError("snapshot persistence failed")
         return _snapshot_metadata(entry)
 
 
@@ -1574,18 +1615,22 @@ def _render_page(title: str, lines: list[dict], trace: list[dict] | None = None)
         "<!doctype html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
         "<title>" + esc(title) + "</title><style>"
-        ":root{--bg:#fbfaf7;--fg:#1d1d1b;--dim:#666;--bd:#ddd;--ac:#2f6f4f}"
+        ":root{color-scheme:light;--bg:#fff;--fg:#1a1a1a;--dim:rgba(26,26,26,.62);"
+        "--bd:rgba(26,26,26,.15);--ac:#000;--code:ui-monospace,Consolas,monospace}"
+        "@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#1a1a1a;"
+        "--fg:#e8e8e8;--dim:rgba(232,232,232,.66);--bd:rgba(232,232,232,.15);--ac:#fff}}"
         "*{box-sizing:border-box}body{margin:0;padding:28px 18px;background:var(--bg);"
-        "color:var(--fg);font-family:ui-monospace,Consolas,monospace;line-height:1.65}"
+        "color:var(--fg);font-family:'Literata','SimSun','宋体',serif;line-height:1.65}"
         "main{max-width:860px;margin:auto}h1{font-weight:400;font-size:20px;margin:0 0 6px}"
         ".sub{color:var(--dim);font-size:12px;margin-bottom:20px}"
         ".row{border-bottom:1px dashed var(--bd);padding:10px 0;display:flex;gap:10px}"
         ".mark{color:var(--ac)}.body{white-space:pre-wrap;word-break:break-word;min-width:0}"
         ".en{color:var(--dim);margin-top:4px}.zh+.en{margin-top:4px}"
-        "pre{white-space:pre-wrap;word-break:break-word;color:var(--ac);font-size:12px}"
+        "pre{white-space:pre-wrap;word-break:break-word;color:var(--ac);font:12px/1.65 var(--code)}"
         "body[data-lang=zh] .en,body[data-lang=en] .zh{display:none}"
-        "button{background:transparent;border:1px solid var(--bd);border-radius:5px;"
+        "button{background:transparent;border:1px solid var(--bd);border-radius:0;"
         "color:var(--fg);padding:4px 10px;cursor:pointer;font:inherit}"
+        "button:focus-visible{outline:1px solid var(--ac);outline-offset:2px}"
         ".trace-player{margin-top:28px;border-top:1px solid var(--bd);padding-top:14px}"
         ".trace-player h2{font-size:14px;font-weight:400}"
         ".trace-player .controls{display:flex;gap:6px;align-items:center;margin-bottom:10px}"
@@ -1972,6 +2017,59 @@ def icon():
     return send_from_directory(str(APP_DIR), "icon.svg", mimetype="image/svg+xml")
 
 
+# The product is served by Flask in the Hub, so its shared CSS/JS must be served
+# here too. Keep an explicit asset allowlist: enabling Flask's catch-all static
+# folder would also expose the interpreter, session databases and this backend.
+_STATIC_ASSET_DIRS = frozenset({"zen", "lib", "vendor"})
+_STATIC_ASSET_FILES = frozenset({
+    "omm-embed.js", "omm-desktop.js", "omm-share.js", "icon.ico", "icon.svg",
+})
+
+
+@app.route("/<path:filename>")
+def product_asset(filename):
+    normalized = filename.replace("\\", "/")
+    parts = normalized.split("/", 1)
+    if len(parts) == 2 and parts[0] in _STATIC_ASSET_DIRS and parts[1]:
+        return send_from_directory(str(APP_DIR / parts[0]), parts[1])
+    if normalized in _STATIC_ASSET_FILES:
+        return send_from_directory(str(APP_DIR), normalized)
+    abort(404)
+
+
+def _desktop_response(result):
+    status, content_type, body = result
+    return Response(body, status=status, mimetype=content_type)
+
+
+@app.route("/__omm/fs/<path:endpoint>", methods=["GET", "POST"])
+def desktop_fs(endpoint):
+    if omm_shared is None:
+        abort(404)
+    path = "/__omm/fs/" + endpoint
+    query = parse_qs(request.query_string.decode("utf-8", errors="replace"))
+    if request.method == "GET":
+        return _desktop_response(omm_shared.handle_get(
+            path, query, "lambda", omm_shared.capabilities_for_app("lambda"),
+        ))
+    return _desktop_response(omm_shared.handle_post(
+        path, query, request.get_data(), "lambda", omm_shared.capabilities_for_app("lambda"),
+    ))
+
+
+@app.route("/__omm/share/<path:endpoint>", methods=["GET", "POST"])
+def desktop_share(endpoint):
+    if omm_share is None:
+        abort(404)
+    path = "/__omm/share/" + endpoint
+    query = parse_qs(request.query_string.decode("utf-8", errors="replace"))
+    if request.method == "GET":
+        return _desktop_response(omm_share.handle_get(path, query, "lambda"))
+    return _desktop_response(omm_share.handle_post(
+        path, query, request.get_data(), "lambda",
+    ))
+
+
 @app.route("/api/prelude")
 def prelude():
     return jsonify(PRELUDE)
@@ -2216,7 +2314,8 @@ def api_session_restore(sid):
         if not _snapshot_put(new_sid, new_entry):
             _drop_session(new_sid)
             return api_error("快照写入失败 / snapshot write failed", 500, "internal")
-        _snapshot_remove(sid, owner)
+        if not _snapshot_remove(sid, owner):
+            log.warning("restored snapshot cleanup failed / 恢复后旧快照清理失败: %s", sid)
     log.info("session restored from snapshot %s -> %s / 会话已从快照恢复", sid, new_sid)
     restored_metadata = _snapshot_metadata(new_entry)
     return jsonify({
@@ -2266,7 +2365,9 @@ def api_snapshot_name(sid):
     # A single owner-conditional UPDATE also closes the cross-worker RMW race.
     clean = name.strip()
     if not _snapshot_rename(sid, clean, owner):
-        return api_error("快照不存在 / snapshot not found", 404, "not_found")
+        if not _owner_allowed(_snapshot_get(sid), owner):
+            return api_error("快照不存在 / snapshot not found", 404, "not_found")
+        return api_error("快照保存失败 / snapshot save failed", 500, "internal")
     return jsonify({"ok": True, "id": sid, "name": clean})
 
 
@@ -2280,7 +2381,8 @@ def api_snapshot_delete(sid):
         entry = _snapshot_get(sid)
         if not _owner_allowed(entry, owner):
             return api_error("快照不存在 / snapshot not found", 404, "not_found")
-        _snapshot_remove(sid, owner)
+        if not _snapshot_remove(sid, owner):
+            return api_error("快照删除失败 / snapshot delete failed", 500, "internal")
     return jsonify({"ok": True, "id": sid})
 
 
@@ -2418,6 +2520,7 @@ def api_eval():
         outputs: list[dict] = []
         done = 0
         snapshot = None
+        snapshot_error = None
         try:
             for ln in lines:
                 outputs.extend(interp.send(ln))
@@ -2428,7 +2531,12 @@ def api_eval():
             # Record the successfully executed prefix even if a later line times
             # out, so a restored session still contains earlier definitions.
             if done:
-                snapshot = _snapshot_record(sid, lines[:done], lang, set_lang=("lang" in data))
+                try:
+                    snapshot = _snapshot_record(sid, lines[:done], lang, set_lang=("lang" in data))
+                except SnapshotPersistenceError as exc:
+                    snapshot_error = exc
+        if snapshot_error is not None:
+            raise snapshot_error
         _token_used(data.get("token"))
         with _sessions_lock:
             if sid in _sessions:
@@ -2436,6 +2544,10 @@ def api_eval():
         return jsonify({"ok": True, "session": sid, "outputs": outputs, "results": outputs,
                         "snapshot": snapshot,
                         "truncated": bool(snapshot and snapshot["truncated"])})
+    except SnapshotPersistenceError as exc:
+        log.error("eval snapshot write failed sid=%s / 求值快照写入失败: %s", sid_in, exc)
+        return api_error("命令已执行，但会话快照保存失败 / command ran but snapshot persistence failed",
+                         500, "snapshot_write_failed")
     except TimeoutError:
         log.warning("eval timeout sid=%s / 求值超时", sid_in)
         return api_error(_timeout_msg(lang), 408, "timeout", timeout=True)
@@ -2533,7 +2645,12 @@ def api_race():
     except RuntimeError as exc:
         log.warning("race session dead sid=%s: %s / 策略竞速会话已退出", sid_in, exc)
         return api_error(str(exc), 410, "session_expired", restart=True)
-    snapshot = _snapshot_record(sid, [expr], lang, set_lang=("lang" in data))
+    try:
+        snapshot = _snapshot_record(sid, [expr], lang, set_lang=("lang" in data))
+    except SnapshotPersistenceError as exc:
+        log.error("race snapshot write failed sid=%s / 竞速快照写入失败: %s", sid_in, exc)
+        return api_error("竞速已完成，但会话快照保存失败 / race ran but snapshot persistence failed",
+                         500, "snapshot_write_failed")
     with _sessions_lock:
         if sid in _sessions:
             _sessions[sid]["used"] = time.time()
@@ -2608,6 +2725,11 @@ def api_eval_stream():
             yield sse({"kind": "done", "ok": True, "session": sid,
                        "snapshot": snapshot,
                        "truncated": bool(snapshot and snapshot["truncated"])})
+        except SnapshotPersistenceError as exc:
+            log.error("stream snapshot write failed sid=%s / 流式快照写入失败: %s", sid, exc)
+            yield sse({"kind": "error", "ok": False, "session": sid,
+                       "error": "命令已执行，但会话快照保存失败 / command ran but snapshot persistence failed",
+                       "code": "snapshot_write_failed"})
         except TimeoutError:
             log.warning("stream eval timeout sid=%s / 流式求值超时", sid)
             yield sse({"kind": "timeout", "ok": False, "timeout": True,

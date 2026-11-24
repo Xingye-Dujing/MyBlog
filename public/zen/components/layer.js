@@ -16,6 +16,7 @@
 
   var SHADOW_CSS = [
     ':host{position:fixed;inset:0;z-index:var(--zen-z-overlay,2147483600);pointer-events:none;',
+    '  --zenui-scale:var(--zen-fscale,1);',
     '  --zenui-radius:var(--zen-radius,0px);--zenui-accent:var(--accent,#000000);',
     '  --zenui-accent-soft:var(--accent-soft,rgba(0,0,0,.06));',
     '  --zenui-ink:var(--ink,#1a1a1a);--zenui-paper:var(--paper,#fff);',
@@ -43,21 +44,21 @@
     '  border-bottom:1px solid var(--zenui-line-soft);background:var(--zenui-soft)}',
     '.zenui-head::before{content:"";width:3px;height:14px;flex:0 0 auto;',
     '  background:var(--zenui-accent);border-radius:var(--zenui-radius)}',
-    '.zenui-head b{font-size:13px;letter-spacing:.05em;font-weight:600}',
+    '.zenui-head b{font-size:calc(13px * var(--zenui-scale));letter-spacing:.05em;font-weight:600}',
     '.zenui-x{margin-left:auto;width:24px;height:24px;font-size:16px;color:var(--zenui-dim);',
     '  border-radius:var(--zenui-radius)}',
     '.zenui-x:hover{background:var(--zenui-accent-soft);color:var(--zenui-ink)}',
-    '.zenui-body{padding:15px 14px;font-size:11.5px;line-height:1.8;white-space:pre-wrap;',
+    '.zenui-body{padding:15px 14px;font-size:calc(11.5px * var(--zenui-scale));line-height:1.8;white-space:pre-wrap;',
     '  word-break:break-word;overflow:auto;min-height:0}',
     '.zenui-input{width:calc(100% - 28px);margin:0 14px 13px;padding:7px 9px;',
     '  border:1px solid var(--zenui-line-soft);background:var(--zenui-paper);color:var(--zenui-ink);',
-    '  font:inherit;font-size:11.5px;border-radius:var(--zenui-radius)}',
+    '  font:inherit;font-size:calc(11.5px * var(--zenui-scale));border-radius:var(--zenui-radius)}',
     '.zenui-input:focus{outline:none;border-color:var(--zenui-accent)}',
     '.zenui-input[hidden]{display:none}',
     '.zenui-foot{display:flex;justify-content:flex-end;gap:7px;padding:11px 14px;',
     '  border-top:1px solid var(--zenui-line-faint)}',
     '.zenui-btn{border:1px solid var(--zenui-line-soft);background:var(--zenui-paper);',
-    '  color:var(--zenui-ink);font:inherit;font-size:11px;padding:5px 14px;',
+    '  color:var(--zenui-ink);font:inherit;font-size:calc(11px * var(--zenui-scale));padding:5px 14px;',
     '  border-radius:var(--zenui-radius)}',
     '.zenui-btn:hover{background:var(--zenui-soft);border-color:var(--zenui-line)}',
     '.zenui-btn.primary{background:var(--zenui-accent-soft);border-color:var(--zenui-accent);font-weight:600}',
@@ -69,18 +70,18 @@
     '  border-radius:var(--zenui-radius);box-shadow:0 16px 40px var(--zenui-shadow);pointer-events:auto}',
     '.zenui-menu[hidden],.zenui-popmenu[hidden]{display:none}',
     '.zenui-option{display:flex;align-items:center;width:100%;padding:6px 9px;text-align:left;',
-    '  font:inherit;font-size:11px;color:var(--zenui-ink);border-radius:var(--zenui-radius)}',
+    '  font:inherit;font-size:calc(11px * var(--zenui-scale));color:var(--zenui-ink);border-radius:var(--zenui-radius)}',
     '.zenui-option:hover,.zenui-option.active{background:var(--zenui-accent-soft)}',
     '.zenui-option[aria-selected="true"]::after{content:"✓";margin-left:auto;',
     '  color:var(--zenui-accent);font-weight:700}',
     '.zenui-option[data-danger="true"]{color:var(--zenui-danger)}',
     '.zenui-option[disabled]{opacity:.4;cursor:default}',
     '.zenui-sep{height:1px;margin:3px 4px;background:var(--zenui-line-soft)}',
-    '.zenui-hint{margin-left:auto;padding-left:14px;font-size:10px;color:var(--zenui-dim)}',
+    '.zenui-hint{margin-left:auto;padding-left:14px;font-size:calc(10px * var(--zenui-scale));color:var(--zenui-dim)}',
     '/* Toast stack */',
     '.zenui-toasts{position:fixed;right:16px;bottom:16px;z-index:4;display:flex;',
     '  flex-direction:column;gap:6px;align-items:flex-end;pointer-events:none;max-width:min(360px,90vw)}',
-    '.zenui-toast{pointer-events:auto;padding:8px 12px;font-size:11px;line-height:1.6;',
+    '.zenui-toast{pointer-events:auto;padding:8px 12px;font-size:calc(11px * var(--zenui-scale));line-height:1.6;',
     '  background:var(--zenui-paper);color:var(--zenui-ink);border:1px solid var(--zenui-line);',
     '  border-left:3px solid var(--zenui-accent);border-radius:var(--zenui-radius);',
     '  box-shadow:0 8px 28px var(--zenui-shadow);animation:zenuiToastIn .16s ease}',
@@ -89,14 +90,14 @@
     '.zenui-toast[data-tone="warning"]{border-left-color:var(--zen-orange,var(--zenui-accent))}',
     '@keyframes zenuiToastIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}',
     '/* Tooltip */',
-    '.zenui-tip{position:fixed;z-index:5;pointer-events:none;padding:4px 7px;font-size:10px;',
+    '.zenui-tip{position:fixed;z-index:5;pointer-events:none;padding:4px 7px;font-size:calc(10px * var(--zenui-scale));',
     '  background:var(--zenui-ink);color:var(--zenui-paper);border-radius:var(--zenui-radius);',
     '  box-shadow:0 4px 14px var(--zenui-shadow)}',
     '.zenui-tip[hidden]{display:none}',
     '/* Tabs / segmented control */',
     '.zenui-tabs{display:inline-flex;border:1px solid var(--zenui-line-soft);border-radius:var(--zenui-radius);',
     '  overflow:hidden;pointer-events:auto}',
-    '.zenui-tab{padding:4px 12px;font-size:11px;color:var(--zenui-dim);border-right:1px solid var(--zenui-line-soft)}',
+    '.zenui-tab{padding:4px 12px;font-size:calc(11px * var(--zenui-scale));color:var(--zenui-dim);border-right:1px solid var(--zenui-line-soft)}',
     '.zenui-tab:last-child{border-right:0}',
     '.zenui-tab[aria-selected="true"]{background:var(--zenui-accent-soft);color:var(--zenui-ink);font-weight:600}',
     '/* Date / time picker, owned by components/picker.js. */',
@@ -108,15 +109,15 @@
     '.picker-pop.open{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}',
     '.picker-pop.pop-time{min-width:var(--zenui-picker-time-width,280px)}',
     '.pk-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px}',
-    '.pk-head .pk-title{flex:1;text-align:center;font-size:12px;letter-spacing:1px}',
+    '.pk-head .pk-title{flex:1;text-align:center;font-size:calc(12px * var(--zenui-scale));letter-spacing:1px}',
     '.pk-nav{width:22px;height:22px;border:1px solid var(--zenui-line-soft);display:flex;',
     '  align-items:center;justify-content:center;cursor:pointer;color:var(--zenui-dim);font-size:12px;',
     '  border-radius:var(--zenui-radius);user-select:none}',
     '.pk-nav:hover{background:var(--zenui-soft);color:var(--zenui-ink);border-color:var(--zenui-line)}',
     '.pk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}',
-    '.pk-wd{font-size:9px;color:var(--zenui-dim);text-align:center;padding:2px 0 4px}',
+    '.pk-wd{font-size:calc(9px * var(--zenui-scale));color:var(--zenui-dim);text-align:center;padding:2px 0 4px}',
     '.pk-day{height:var(--zenui-picker-day,26px);display:flex;align-items:center;justify-content:center;',
-    '  font-size:11px;cursor:pointer;border:1px solid transparent;color:var(--zenui-dim);',
+    '  font-size:calc(11px * var(--zenui-scale));cursor:pointer;border:1px solid transparent;color:var(--zenui-dim);',
     '  border-radius:var(--zenui-radius)}',
     '.pk-day:hover{border-color:var(--zenui-line);color:var(--zenui-ink)}',
     '.pk-day.other{opacity:.3}',
@@ -129,16 +130,17 @@
     '.pk-multi-foot .pk-clear.pk-done{border-style:solid;color:var(--zenui-ink)}',
     '.pk-cols{display:flex;gap:10px;width:100%}',
     '.pk-colwrap{flex:1;min-width:0;display:flex;flex-direction:column}',
-    '.pk-lab{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--zenui-dim);',
+    '.pk-lab{font-size:calc(9px * var(--zenui-scale));letter-spacing:2px;text-transform:uppercase;color:var(--zenui-dim);',
     '  text-align:center;padding-bottom:6px}',
     '.pk-col{max-height:var(--zenui-picker-col,252px);overflow-y:auto;flex:1;',
     '  border:1px solid var(--zenui-line-soft);border-radius:var(--zenui-radius)}',
-    '.pk-opt{padding:8px 0;text-align:center;font-size:12px;cursor:pointer;color:var(--zenui-dim)}',
+    '.pk-opt{display:block;width:100%;padding:8px 0;text-align:center;font:inherit;font-size:calc(12px * var(--zenui-scale));cursor:pointer;color:var(--zenui-dim)}',
     '.pk-opt:hover,.pk-opt.active{background:var(--zenui-accent-soft);color:var(--zenui-ink);font-weight:500}',
-    '.pk-clear{margin-top:8px;text-align:center;font-size:10px;letter-spacing:1px;',
+    '.pk-clear{margin-top:8px;text-align:center;font-size:calc(10px * var(--zenui-scale));letter-spacing:1px;',
     '  color:var(--zenui-dim);cursor:pointer;border:1px dashed var(--zenui-line-soft);',
     '  padding:4px;border-radius:var(--zenui-radius)}',
     '.pk-clear:hover{color:var(--zenui-ink);border-color:var(--zenui-line)}',
+    ':host([data-zen-reduce-motion="true"]) *{animation:none!important;transition:none!important;scroll-behavior:auto!important}',
   ].join('')
 
   var DIALOG_HTML = [
@@ -162,6 +164,17 @@
 
   var instance = null
 
+  function syncHostState(host) {
+    var root = document.documentElement
+    var reduced = root && root.getAttribute('data-zen-reduce-motion') === 'true'
+    if (!reduced && global.matchMedia) {
+      try { reduced = global.matchMedia('(prefers-reduced-motion: reduce)').matches } catch (e) { /* ignore */ }
+    }
+    host.setAttribute('data-zen-reduce-motion', reduced ? 'true' : 'false')
+    host.setAttribute('data-zen-high-contrast',
+      root && root.getAttribute('data-zen-high-contrast') === 'true' ? 'true' : 'false')
+  }
+
   function get() {
     if (instance) return instance
     var host = document.createElement('div')
@@ -170,6 +183,20 @@
     var shadow = host.attachShadow({ mode: 'open' })
     shadow.innerHTML = '<style>' + SHADOW_CSS + '</style>' + DIALOG_HTML
     ;(document.documentElement || document.body).appendChild(host)
+    syncHostState(host)
+    if (typeof MutationObserver === 'function' && document.documentElement) {
+      new MutationObserver(function () { syncHostState(host) }).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-zen-reduce-motion', 'data-zen-high-contrast', 'style'],
+      })
+    }
+    if (global.matchMedia) {
+      try {
+        global.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', function () {
+          syncHostState(host)
+        })
+      } catch (e) { /* older browsers */ }
+    }
 
     var state = {
       host: host,
@@ -193,7 +220,6 @@
       if (i >= 0) state.stack.splice(i, 1)
     }
     state.top = top
-    state.blur = blurAll
 
     document.addEventListener('pointerdown', function (event) {
       var entry = top()
@@ -216,9 +242,30 @@
     return state
   }
 
-  function blurAll() {
-    try { if (instance && instance.shadow.activeElement) instance.shadow.activeElement.blur() } catch (e) { /* ignore */ }
-    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur() } catch (e) { /* ignore */ }
+  function focusables(container) {
+    if (!container) return []
+    var selector = 'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),' +
+      'a[href],summary,[contenteditable]:not([contenteditable="false"]),[tabindex]:not([tabindex="-1"])'
+    return Array.prototype.slice.call(container.querySelectorAll(selector)).filter(function (el) {
+      return !el.hidden && !el.closest('[hidden]') && el.getClientRects().length > 0
+    })
+  }
+
+  function trapTab(event, container) {
+    var list = focusables(container)
+    if (!list.length) return
+    var active = container.activeElement || document.activeElement
+    var first = list[0], last = list[list.length - 1]
+    if (event.shiftKey && (active === first || list.indexOf(active) < 0)) {
+      event.preventDefault(); last.focus()
+    } else if (!event.shiftKey && (active === last || list.indexOf(active) < 0)) {
+      event.preventDefault(); first.focus()
+    }
+  }
+
+  function restoreFocus(el) {
+    if (!el || typeof el.focus !== 'function') return
+    try { el.focus({ preventScroll: true }) } catch (e) { try { el.focus() } catch (ignored) { /* ignore */ } }
   }
 
   /* Wire a product-owned overlay (drawer / bottom sheet) into the shared stack.
@@ -234,36 +281,44 @@
     var mask = o.mask
     var cls = o.openClass || 'open'
     var entry = null
-    function set(on) {
+    var opener = null
+    function set(on, restore) {
+      if (on === !!entry) return
       if (el) el.classList.toggle(cls, on)
       if (mask) mask.classList.toggle(cls, on)
       if (on) {
+        opener = document.activeElement
         entry = {
-          escape: setFalse,
+          escape: function () { set(false, true) },
           outside: function (event) {
-            if (mask && event.target === mask) setFalse()
+            if (mask && event.target === mask) set(false, false)
           },
         }
         get().push(entry)
         if (o.onOpen) o.onOpen()
+        var first = focusables(el)[0]
+        if (first) restoreFocus(first)
       } else {
         if (entry) get().pop(entry)
         entry = null
+        if (restore !== false) restoreFocus(opener)
+        opener = null
         if (o.onClose) o.onClose()
       }
     }
-    function setFalse() { set(false) }
     return {
-      open: function () { set(true) },
-      close: setFalse,
+      open: function () { set(true, true) },
+      close: function () { set(false, true) },
       isOpen: function () { return !!entry },
-      unbind: function () { if (entry) get().pop(entry); entry = null },
+      unbind: function () { set(false, false) },
     }
   }
 
   global.ZenUI.layer = {
     get: get,
-    blurAll: blurAll,
+    focusables: focusables,
+    trapTab: trapTab,
+    restoreFocus: restoreFocus,
     wireOverlay: wireOverlay,
     // True only once the layer exists and has a live surface; no initialization side effect.
     hasOpen: function () { return !!(instance && instance.stack.length) },

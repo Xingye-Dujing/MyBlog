@@ -59,8 +59,19 @@ const hubWindow = {
 }
 const hubFns = loadFunctions(
   hub,
-  ['versionKey', 'isNewerVersion', 'isLoopbackOrigin', 'frameTargetOrigin'],
-  { ...hubWindow, LOOPBACK_HOSTS: ['127.0.0.1', 'localhost', '[::1]', '::1'] },
+  ['versionKey', 'isNewerVersion', 'frameTargetOrigin'],
+  {
+    ...hubWindow,
+    ZenUtil: {
+      isLocalOrigin(origin) {
+        try {
+          const url = new URL(String(origin || ''))
+          return (url.protocol === 'http:' || url.protocol === 'https:') &&
+            ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(url.hostname)
+        } catch { return false }
+      },
+    },
+  },
 )
 
 check('1.2.0 > 1.2 (matches Python tuple comparison)', () => {
@@ -93,12 +104,10 @@ check('frameTargetOrigin rejects non-loopback product URL', () => {
   assert.equal(hubFns.frameTargetOrigin({ dataset: { url: 'https://evil.example/x' } }),
     'http://127.0.0.1:8300')
 })
-check('isLoopbackOrigin accepts loopback http(s) only', () => {
-  assert.equal(hubFns.isLoopbackOrigin('http://127.0.0.1:8300'), true)
-  assert.equal(hubFns.isLoopbackOrigin('http://localhost:8341'), true)
-  assert.equal(hubFns.isLoopbackOrigin('https://evil.example'), false)
-  assert.equal(hubFns.isLoopbackOrigin('null'), false)
-  assert.equal(hubFns.isLoopbackOrigin('file:///C:/x'), false)
+check('loopback origin validation delegates to ZenUtil.isLocalOrigin', () => {
+  const frame = hub.slice(hub.indexOf('function frameTargetOrigin('), hub.indexOf('function ommConfirm('))
+  assert.match(frame, /ZenUtil\.isLocalOrigin\(origin\)/)
+  assert.doesNotMatch(hub, /function\s+isLoopbackOrigin\s*\(/)
 })
 
 /* ------------------------------------------------------------ static guards */
@@ -117,7 +126,8 @@ for (const file of bridgeFiles) {
       `${file} still contains postMessage(..., '*')`)
   })
   check(`${file}: inbound messages validate origin`, () => {
-    assert.match(text, /event\.origin/)
+    assert.ok(/\b(?:event|e|ev)\.origin\b/.test(text) || /isTrustedParentMessage\(event\)/.test(text),
+      `${file} 缺少入站消息 origin / 父窗口信任校验`)
   })
 }
 const htmlBridges = ['public/omm-writer.html', 'public/omm-ai.html']
@@ -128,33 +138,41 @@ for (const file of htmlBridges) {
       `${file} still contains postMessage(..., '*')`)
   })
 }
-/* The AI page used to accept omm:theme / omm:shortcut from any origin at all.
- * Its listener now mirrors the embed bridge: parent source + trusted origin. */
+/* The AI page delegates inbound parent trust to the shared ZenUtil guard and
+ * sends its live-data request only to the explicit embedded Hub origin. */
 const aiHtml = src('public/omm-ai.html')
-check('omm-ai.html: inbound messages validate origin', () => {
-  assert.match(aiHtml, /event\.origin/)
-  assert.match(aiHtml, /event\.source !== window\.parent/)
-  assert.match(aiHtml, /isTrustedParentOrigin\(event\.origin\)/)
+check('omm-ai.html: inbound messages validate parent source and origin', () => {
+  assert.match(aiHtml, /ZenUtil\.isTrustedParentMessage\(event\)/)
+  assert.match(aiHtml, /postMessage\(\{ type: 'omm:live-data-request'[\s\S]{0,200}?messageHubOrigin\)/)
+  assert.doesNotMatch(aiHtml, /isTrustedParentOrigin\(|data\.type === 'omm:theme'|payload\.accent/)
 })
-for (const [label, hubOrigin, origin, expected] of [
-  ['trusted hub origin when embedded', 'http://127.0.0.1:8300', 'http://127.0.0.1:8300', true],
-  ['other origin when embedded', 'http://127.0.0.1:8300', 'https://evil.example', false],
-  ['loopback when standalone', '', 'http://localhost:8341', true],
-  ['external host when standalone', '', 'https://evil.example', false],
-  ['null origin when standalone', '', 'null', false],
-  ['file origin when standalone', '', 'file:///C:/x', false],
-]) {
-  check(`omm-ai.html: isTrustedParentOrigin - ${label}`, () => {
-    const fn = loadFunctions(aiHtml, ['isTrustedParentOrigin'], { messageHubOrigin: hubOrigin })
-    assert.equal(fn.isTrustedParentOrigin(origin), expected)
-  })
+const utilSource = src('public/zen/foundation/util.js')
+function trustChecker(search, origin) {
+  const parent = {}
+  const sandbox = { URL, URLSearchParams, parent, location: { search, origin } }
+  sandbox.window = sandbox
+  vm.runInNewContext(utilSource, sandbox)
+  return (eventOrigin, source = parent) => sandbox.ZenUtil.isTrustedParentMessage({ origin: eventOrigin, source })
 }
+const embeddedTrust = trustChecker('?omm_embed=1&omm_hub_origin=http%3A%2F%2F127.0.0.1%3A8300', 'http://127.0.0.1:8341')
+check('shared trust accepts only the exact embedded Hub parent', () => {
+  assert.equal(embeddedTrust('http://127.0.0.1:8300'), true)
+  assert.equal(embeddedTrust('http://localhost:8300'), false)
+  assert.equal(embeddedTrust('https://evil.example'), false)
+  assert.equal(embeddedTrust('http://127.0.0.1:8300', {}), false)
+})
+const standaloneTrust = trustChecker('', 'http://127.0.0.1:8341')
+check('shared trust rejects other loopback origins when standalone', () => {
+  assert.equal(standaloneTrust('http://127.0.0.1:8341'), true)
+  assert.equal(standaloneTrust('http://localhost:8341'), false)
+  assert.equal(standaloneTrust('null'), false)
+})
 check('hub forwards its own origin into embedded product URLs', () => {
   assert.match(hub, /omm_hub_origin=' \+/)
 })
-check('product bridges read the forwarded hub origin', () => {
+check('product bridges resolve the forwarded hub origin through ZenUtil', () => {
   for (const file of bridgeFiles.slice(1)) {
-    assert.match(src(file), /omm_hub_origin/)
+    assert.match(src(file), /ZenUtil\.parentTargetOrigin\(\)/)
   }
 })
 

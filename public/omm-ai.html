@@ -7,6 +7,7 @@
 <script src="omm-embed.js"></script>
 <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
 <script src="zen/components/toast.js"></script>
 <script src="zen/components/dialog.js"></script>
 <script src="zen/components/select.js"></script>
@@ -20,7 +21,7 @@
   <link rel="stylesheet" href="zen/zen.css">
   <link rel="stylesheet" href="zen/products/ai.css">
 </head>
-<body>
+<body data-omm-app="ai">
 <header class="top">
   <div class="brand"><span class="mark">智</span><span class="title">AI 工作区</span><span class="sub">静书房 · OMM-ZEN</span></div>
   <nav class="tabs" id="tabs" data-zen-tabs="views" data-zen-tab-item="button[data-tab]" data-zen-tab-active="active">
@@ -138,43 +139,17 @@
     $('metaSkill').textContent = '技能：' + ((skill && skill.name) || S.skill);
     $('metaProvider').textContent = '服务：' + S.provider + (S.model ? ' / ' + S.model : '');
   }
-  function setTheme(payload) {
-    var root = document.documentElement;
-    if (payload.theme) root.dataset.theme = payload.theme;
-    ['accent', 'accentSoft', 'accentWash', 'accentLine', 'accentContrast'].forEach(function (key) {
-      var css = { accent: '--accent', accentSoft: '--accent-soft', accentWash: '--accent-wash',
-        accentLine: '--accent-line', accentContrast: '--accent-contrast' }[key];
-      if (payload[key]) root.style.setProperty(css, payload[key]);
-    });
-  }
-  /* 主题与快捷指令只接受来自宿主 Hub 的消息。Hub 会把自己的 origin 放进 iframe URL
-     （与 omm-embed.js 同一约定）；任何第三方窗口都不应能借 postMessage 改写本页样式
-     或触发动作。这里不复用 omm-embed.js 的内部函数——它包在 IIFE 里，本页无法访问。 */
+  /* 主题与缩放由 omm-embed.js 统一应用到固定 ZEN 令牌；本页只处理业务消息。 */
   var messageHubOrigin = '';
   try {
-    var rawHub = new URLSearchParams(window.location.search).get('omm_hub_origin');
-    if (rawHub) {
-      var parsedHub = new URL(rawHub);
-      if ((parsedHub.protocol === 'http:' || parsedHub.protocol === 'https:') &&
-          ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsedHub.hostname) >= 0) {
-        messageHubOrigin = parsedHub.origin;
-      }
+    if (window.parent !== window && new URLSearchParams(window.location.search).get('omm_embed') === '1') {
+      messageHubOrigin = ZenUtil.parentTargetOrigin();
     }
   } catch (e) { /* 忽略非法 URL */ }
-  function isTrustedParentOrigin(origin) {
-    if (messageHubOrigin) return origin === messageHubOrigin;
-    try {
-      var u = new URL(String(origin || ''));
-      return (u.protocol === 'http:' || u.protocol === 'https:') &&
-        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0;
-    } catch (e) { return false; }
-  }
 
   window.addEventListener('message', function (event) {
-    if (event.source !== window.parent) return;
-    if (!isTrustedParentOrigin(event.origin)) return;
+    if (!ZenUtil.isTrustedParentMessage(event)) return;
     var data = event.data;
-    if (data && data.type === 'omm:theme') setTheme(data);
     if (data && data.type === 'omm:shortcut') {
       if (data.action === 'new-chat') newChat();
     }
@@ -431,10 +406,11 @@
         await finalizeArtifact(id, button, '已保存', '已保存：' + result.filename);
       } else if (result.action === 'publish_cards') {
         if (ops.querySelector('[data-card-send]')) return;
-        var select = document.createElement('select'); select.className = 'btn sm'; select.dataset.cardTarget = '';
+        var select = document.createElement('select'); select.className = 'btn sm'; select.dataset.cardTarget = ''; select.dataset.zenSelect = '';
         ['zencard', 'writer', 'corpus', 'english'].forEach(function (target) {
           var option = document.createElement('option'); option.value = target; option.textContent = target; select.appendChild(option);
         });
+        window.ZenUI.select.enhance(select);
         var send = document.createElement('button'); send.type = 'button'; send.className = 'btn primary sm';
         send.dataset.cardSend = ''; send.textContent = '发送卡片';
         send.addEventListener('click', async function () {

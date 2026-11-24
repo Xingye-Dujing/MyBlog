@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STYLE_DIRS = [ROOT / "zen" / d for d in ("foundation", "components", "features", "products")]
+STYLE_DIRS = [ROOT / "zen" / d for d in ("foundation", "components", "features", "canvas", "products")]
 PAGES = sorted(ROOT.glob("omm-*.html"))
 ERRORS: list[str] = []
 FIXED_RADIUS = re.compile(r"border-radius\s*:\s*(?:[1-9]\d*(?:\.\d+)?px|99px|999px)", re.I)
@@ -95,7 +95,7 @@ for source in radius_sources:
         check_radius_line(source, line_no, line)
 
 offline = (ROOT / "desktop" / "offline.py").read_text(encoding="utf-8", errors="ignore")
-if "def copy_zen_styles" not in offline or offline.count("copy_zen_styles(dest)") < 3:
+if "def copy_zen_styles" not in offline or offline.count("copy_zen_styles(") < 4:
     fail("desktop/offline.py: visual asset staging is incomplete")
 if "def copy_shared_lib" not in offline or offline.count("copy_shared_lib(dest)") < 3:
     fail("desktop/offline.py: shared lib staging is incomplete")

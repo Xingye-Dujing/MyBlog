@@ -22,15 +22,15 @@ function extractFunction(text, name) {
   throw new Error('括号不平衡: ' + name)
 }
 
-const NAMES = ['cmdkPad', 'cmdkFormatNumber', 'cmdkFuzzyScore', 'cmdkRank', 'cmdkInstantItems']
+const NAMES = ['cmdkPad', 'cmdkFormatNumber', 'cmdkFuzzyScore', 'cmdkRank', 'cmdkOrderItems', 'cmdkInstantItems']
 const api = vm.runInNewContext(
   `(function () { ${NAMES.map((n) => extractFunction(hub, n)).join('\n')}
-     return { cmdkPad, cmdkFormatNumber, cmdkFuzzyScore, cmdkRank, cmdkInstantItems }
+     return { cmdkPad, cmdkFormatNumber, cmdkFuzzyScore, cmdkRank, cmdkOrderItems, cmdkInstantItems }
    })()`,
   { Number, Math, Date, isFinite, parseInt, Function, String }
 )
 // vm 返回的数组属于另一个 realm，用 Array.from 归一化后再做结构比较。
-const { cmdkFuzzyScore, cmdkRank, cmdkInstantItems, cmdkPad } = api
+const { cmdkFuzzyScore, cmdkRank, cmdkOrderItems, cmdkInstantItems, cmdkPad } = api
 const asArray = (value) => Array.from(value)
 
 test('模糊评分：完全匹配最强，子序列命中可用，不匹配为 -1', () => {
@@ -90,10 +90,22 @@ test('即时命令：日期与进制换算', () => {
   assert.equal(asArray(cmdkInstantItems('')).length, 0)
 })
 
+test('即时命令不参与自身查询过滤，分组顺序与键盘索引一致', () => {
+  const instant = cmdkInstantItems('@date')
+  const candidates = instant.concat([
+    { group: '动作', label: '动作' },
+    { group: '应用', label: '应用' },
+  ])
+  const ordered = cmdkOrderItems(candidates, ['即时命令', '应用', '动作'])
+  assert.deepEqual(Array.from(ordered, (item) => item.label), [instant[0].label, '应用', '动作'])
+})
+
 test('面板本体仍复用 renderCmdk，仅在过滤阶段接入新函数', () => {
   const render = hub.slice(hub.indexOf('function renderCmdk()'), hub.indexOf('function runCmdk('))
-  assert.ok(render.includes('cmdkRank(cmdkItems.concat(cmdkInstantItems(query)), query, usageStats)'))
-  assert.ok(render.includes("'即时命令'"))
+  assert.ok(render.includes('cmdkRank(cmdkItems, query, usageStats)'))
+  assert.ok(render.includes('cmdkOrderItems(instant.concat(ranked), CMDK_GROUPS)'))
+  assert.ok(render.includes('data-cmdk="\' + entry.index + \'"'))
+  assert.ok(!render.includes('cmdkRank(cmdkItems.concat(cmdkInstantItems(query))'))
   assert.ok(!render.includes('cmdk-items-v2'), '不应重建面板元素')
   const build = hub.slice(hub.indexOf('function buildCmdkItems()'), hub.indexOf('function loadCmdkShares()'))
   for (const appId of ['app.id', 'appId', "'writer'", "'search'"]) {

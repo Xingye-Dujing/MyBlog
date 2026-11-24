@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="search">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
+    <script src="lib/zen-csv.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
@@ -75,14 +76,14 @@
 
     <div class="dropdown" id="dd-history">
       <div class="dd-title">搜索历史 <span id="history-count" class="k">0</span></div>
-      <label class="dd-field"><input class="dd-input" id="history-filter" placeholder="筛选历史…" /></label>
+      <label class="dd-field"><input class="dd-input" id="history-filter" aria-label="筛选搜索历史" placeholder="筛选历史…" /></label>
       <div id="history-list"></div>
       <div class="dd-actions"><button class="mini-btn" id="history-clear">清空历史</button></div>
     </div>
 
     <div class="dropdown" id="dd-kb" style="width:360px">
       <div class="dd-title">搜索知识库 <span id="kb-count" class="k">0</span></div>
-      <label class="dd-field"><input class="dd-input" id="kb-filter" placeholder="全文检索：问题 / 摘要 / 来源 / 标签…" /></label>
+      <label class="dd-field"><input class="dd-input" id="kb-filter" aria-label="全文检索知识库" placeholder="全文检索：问题 / 摘要 / 来源 / 标签…" /></label>
       <label class="dd-check"><input type="checkbox" id="kb-pinned" /> 仅看置顶</label>
       <div class="dd-title" id="kb-stats" style="font-size:9px"></div>
       <div id="kb-list" style="max-height:300px;overflow:auto"></div>
@@ -201,12 +202,40 @@
           '不要编造来源，不要输出与问题无关的内容。使用 Markdown 格式（标题、列表、加粗、表格）整理答案。'
 
         function clone(x) { return ZenUtil.clone(x) }
+        function sourceUrl(value) {
+          if (typeof value !== 'string' || !value.trim()) return ''
+          try {
+            const parsed = new URL(value.trim())
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : ''
+          } catch (e) { return '' }
+        }
+        function validSources(list) {
+          var out = []
+          ;(Array.isArray(list) ? list : []).forEach(function (s) {
+            var url = sourceUrl(s && s.url)
+            if (url) out.push(Object.assign({}, s, { url: url }))
+          })
+          return out
+        }
+        function historyId(entry) {
+          if (entry && entry.id) return String(entry.id)
+          return 'h-' + ZenUtil.hashStr(String(entry && entry.query || '') + '\n' + String(entry && entry.ts || ''))
+        }
+        function normalizeHistoryEntry(entry) {
+          var item = entry && typeof entry === 'object' ? clone(entry) : {}
+          item.sources = validSources(item.sources)
+          item.id = historyId(item)
+          return item
+        }
+        function historyById(id) {
+          return S.history.find(function (h) { return historyId(h) === id }) || null
+        }
         function load() {
           var o = ZenUtil.getJSON(LS, null)
           if (!o) return clone(DEFAULT)
           return {
             settings: Object.assign({}, DEFAULT.settings, o.settings || {}),
-            history: Array.isArray(o.history) ? o.history : []
+            history: (Array.isArray(o.history) ? o.history : []).map(normalizeHistoryEntry)
           }
         }
         var S = load()
@@ -397,13 +426,14 @@
         /* ---------------- search ---------------- */
         function mergeSources(list) {
           ;(list || []).forEach(function (s) {
-            if (!s || !s.url) return
-            for (var i = 0; i < current.sources.length; i++) if (current.sources[i].url === s.url) return
+            var url = sourceUrl(s && s.url)
+            if (!url) return
+            for (var i = 0; i < current.sources.length; i++) if (current.sources[i].url === url) return
             current.sources.push({
-              url: s.url,
-              title: s.title || s.url,
+              url: url,
+              title: s.title || url,
               snippet: s.snippet || '',
-              site: s.site_name || hostOf(s.url),
+              site: s.site_name || hostOf(url),
               icon: s.site_icon || '',
               date: s.page_age || s.published_at || ''
             })
@@ -415,14 +445,16 @@
           })
         }
         function sourceIndexOf(url) {
-          for (var i = 0; i < current.sources.length; i++) if (current.sources[i].url === url) return i + 1
+          var normalized = sourceUrl(url)
+          if (!normalized) return -1
+          for (var i = 0; i < current.sources.length; i++) if (current.sources[i].url === normalized) return i + 1
           return -1
         }
         function buildCitedText(text, annotations) {
           var marks = []
           ;(annotations || []).forEach(function (a) {
             var u = a && (a.url_citation || a)
-            if (!u || typeof u.end_index !== 'number') return
+            if (!u || typeof u.end_index !== 'number' || !sourceUrl(u.url)) return
             var n = sourceIndexOf(u.url)
             if (n < 0) {
               mergeSources([{ url: u.url, title: u.title || u.url }])
@@ -679,7 +711,7 @@
         }
         function visibleSources() {
           if (!current) return []
-          var list = current.sources.slice()
+          var list = validSources(current.sources)
           if (S.settings.filter === 'cited') {
             var cited = {}
             ;(current.annotations || []).forEach(function (a) { var u = a && (a.url_citation || a); if (u && u.url) cited[u.url] = 1 })
@@ -783,8 +815,9 @@
 
         /* ---------------- history ---------------- */
         function pushHistory(entry) {
-          S.history = S.history.filter(function (h) { return h.query !== entry.query })
-          S.history.unshift(clone(entry))
+          var item = normalizeHistoryEntry(entry)
+          S.history = S.history.filter(function (h) { return h.query !== item.query })
+          S.history.unshift(item)
           if (S.history.length > 50) S.history.length = 50
           save()
           renderHistory()
@@ -794,7 +827,7 @@
         function renderHistory() {
           var box = $('history-list')
           $('history-count').textContent = S.history.length
-          var shown = S.history.map(function (h, i) { return { h: h, i: i } }).filter(function (x) {
+          var shown = S.history.map(function (h) { return { h: h, id: historyId(h) } }).filter(function (x) {
             return !historyFilter || String(x.h.query || '').toLowerCase().indexOf(historyFilter.toLowerCase()) >= 0
           })
           if (!shown.length) {
@@ -803,10 +836,10 @@
             return
           }
           box.innerHTML = shown.map(function (x) {
-            return '<div class="history-item" data-h="' + x.i + '">' +
+            return '<div class="history-item" data-h="' + esc(x.id) + '">' +
               '<div class="h-q">' + esc(x.h.query) + '</div>' +
               '<div class="h-m">' + esc(new Date(x.h.ts).toLocaleString()) + ' · ' + (x.h.sources || []).length + ' 条结果' +
-              '<button class="h-del" data-del="' + x.i + '" title="删除">×</button></div>' +
+              '<button class="h-del" data-del="' + esc(x.id) + '" title="删除">×</button></div>' +
               '</div>'
           }).join('')
         }
@@ -830,14 +863,14 @@
           }
           var shown = entries.slice(0, 60)
           box.innerHTML = shown.map(function (h) {
-            var idx = S.history.indexOf(h)
+            var id = historyId(h)
             var tags = (h.tags || []).map(function (t) { return '<span class="kb-tag">#' + esc(t) + '</span>' }).join(' ')
-            return '<div class="kb-item" data-kb="' + idx + '">' +
+            return '<div class="kb-item" data-kb="' + esc(id) + '">' +
               '<div class="kb-q">' + esc(h.query) + '</div>' +
               '<div class="kb-m"><span>' + esc(new Date(h.ts).toLocaleDateString()) + '</span>' + tags +
-              '<button class="kb-pin' + (h.pinned ? ' on' : '') + '" data-pin="' + idx + '" title="置顶">★</button>' +
-              '<button class="kb-tocard" data-tocard="' + idx + '" title="存为卡片">卡</button>' +
-              '<button class="kb-send" data-send="' + idx + '" title="发送到产品">↗</button></div></div>'
+              '<button class="kb-pin' + (h.pinned ? ' on' : '') + '" data-pin="' + esc(id) + '" title="置顶">★</button>' +
+              '<button class="kb-tocard" data-tocard="' + esc(id) + '" title="存为卡片">卡</button>' +
+              '<button class="kb-send" data-send="' + esc(id) + '" title="发送到产品">↗</button></div></div>'
           }).join('')
         }
         function kbSend(entry, target) {
@@ -866,7 +899,7 @@
           return JSON.stringify({
             engine: 'OMM-ZEN Search', provider: 'DeepSeek',
             query: current.query, answer: current.answer,
-            sources: current.sources, queries: current.queries,
+            sources: validSources(current.sources), queries: current.queries,
             context: current.context || [], isFollowUp: !!current.isFollowUp,
             usage: current.usage, elapsed_ms: current.elapsed,
             created_at: new Date(current.ts).toISOString()
@@ -883,8 +916,8 @@
             current.context.forEach(function (m) { if (m.role === 'user') lines.push('- ' + m.content) })
             lines.push('')
           }
-          lines.push('## 结果来源（' + current.sources.length + '）', '')
-          current.sources.forEach(function (s, i) {
+          lines.push('## 结果来源（' + validSources(current.sources).length + '）', '')
+          validSources(current.sources).forEach(function (s, i) {
             lines.push((i + 1) + '. **' + (s.title || s.url) + '**')
             lines.push('   - 网址：' + s.url)
             if (s.site) lines.push('   - 站点：' + s.site)
@@ -895,13 +928,13 @@
           if (current.queries.length) lines.push('## 相关搜索', '', current.queries.map(function (q) { return '- ' + q }).join('\n'), '')
           return lines.join('\n')
         }
-        function csvCell(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"' }
         function asCSV() {
-          var rows = [['序号', '标题', '网址', '站点', '发布时间', '摘要'].map(csvCell).join(',')]
-          current.sources.forEach(function (s, i) {
-            rows.push([i + 1, s.title, s.url, s.site, ZenUtil.fmtDate(s.date), s.snippet].map(csvCell).join(','))
+          if (!window.ZenCSV || typeof window.ZenCSV.stringify !== 'function') throw new Error('CSV 组件尚未加载')
+          var rows = [['序号', '标题', '网址', '站点', '发布时间', '摘要']]
+          validSources(current.sources).forEach(function (s, i) {
+            rows.push([i + 1, s.title, s.url, s.site, ZenUtil.fmtDate(s.date), s.snippet])
           })
-          return '\ufeff' + rows.join('\r\n')
+          return window.ZenCSV.stringify(rows, ',', { formulaSafe: true })
         }
         function asHTML() {
           return '<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8">' +
@@ -922,7 +955,7 @@
             '<h1>' + esc(current.query) + '</h1>' +
             '<div class="m">OMM-ZEN Search · DeepSeek 联网搜索 · ' + esc(new Date(current.ts).toLocaleString()) + '</div>' +
             '<h2>智能摘要</h2><div class="a">' + mdToHtml(buildCitedText(current.answer, current.annotations)) + '</div>' +
-            '<h2>结果来源（' + current.sources.length + '）</h2>' + current.sources.map(function (s, i) {
+            '<h2>结果来源（' + validSources(current.sources).length + '）</h2>' + validSources(current.sources).map(function (s, i) {
               return '<div class="s"><b>' + (i + 1) + '. <a href="' + esc(s.url) + '">' + esc(s.title || s.url) + '</a></b>' +
                 '<p>' + esc(s.site || '') + (s.date ? ' · ' + esc(ZenUtil.fmtDate(s.date)) : '') + '</p>' +
                 '<p>' + esc(s.snippet || '') + '</p><u>' + esc(s.url) + '</u></div>'
@@ -934,7 +967,10 @@
           var name = safeName()
           if (fmt === 'json') download(name + '.json', asJSON(), 'application/json')
           else if (fmt === 'md') download(name + '.md', asMarkdown(), 'text/markdown;charset=utf-8')
-          else if (fmt === 'csv') download(name + '.csv', asCSV(), 'text/csv;charset=utf-8')
+          else if (fmt === 'csv') {
+            try { download(name + '.csv', asCSV(), 'text/csv;charset=utf-8', true) }
+            catch (e) { toast(e.message || 'CSV 导出失败'); return }
+          }
           else if (fmt === 'html') download(name + '.html', asHTML(), 'text/html;charset=utf-8')
           closeDropdowns()
           toast('已导出 ' + fmt.toUpperCase())
@@ -982,12 +1018,13 @@
           var del = e.target.closest('[data-del]')
           if (del) {
             e.stopPropagation()
-            S.history.splice(parseInt(del.getAttribute('data-del'), 10), 1)
-            save(); renderHistory(); renderSuggestions(); toast('已删除该记录'); return
+            var delId = del.getAttribute('data-del')
+            S.history = S.history.filter(function (h) { return historyId(h) !== delId })
+            save(); renderHistory(); renderSuggestions(); renderKB(); toast('已删除该记录'); return
           }
           var it = e.target.closest('.history-item')
           if (!it) return
-          var h = S.history[parseInt(it.getAttribute('data-h'), 10)]
+          var h = historyById(it.getAttribute('data-h'))
           if (!h) return
           cancelSearchForNavigation()
           current = clone(h)
@@ -1091,21 +1128,21 @@
           var pin = e.target.closest('[data-pin]')
           if (pin) {
             e.stopPropagation()
-            var hp = S.history[parseInt(pin.getAttribute('data-pin'), 10)]
+            var hp = historyById(pin.getAttribute('data-pin'))
             if (hp) { hp.pinned = !hp.pinned; save(); renderKB(); toast(hp.pinned ? '已置顶' : '已取消置顶') }
             return
           }
           var tocard = e.target.closest('[data-tocard]')
           if (tocard) {
             e.stopPropagation()
-            var hc = S.history[parseInt(tocard.getAttribute('data-tocard'), 10)]
+            var hc = historyById(tocard.getAttribute('data-tocard'))
             if (hc) kbToCard(hc)
             return
           }
           var send = e.target.closest('[data-send]')
           if (send) {
             e.stopPropagation()
-            var he = S.history[parseInt(send.getAttribute('data-send'), 10)]
+            var he = historyById(send.getAttribute('data-send'))
             if (he) {
               window.ZenUI.dialog.prompt('发送到哪个产品？', 'writer').then(function (target) {
                 if (target) kbSend(he, target)
@@ -1115,7 +1152,7 @@
           }
           var item = e.target.closest('[data-kb]')
           if (!item) return
-          var h = S.history[parseInt(item.getAttribute('data-kb'), 10)]
+          var h = historyById(item.getAttribute('data-kb'))
           if (!h) return
           cancelSearchForNavigation()
           current = clone(h)
@@ -1135,7 +1172,7 @@
           if (!f || !window.SearchLibrary) return
           ZenUtil.readText(f).then(function (text) {
             try {
-              var incoming = window.SearchLibrary.unpack(String(text))
+              var incoming = window.SearchLibrary.unpack(String(text)).map(normalizeHistoryEntry)
               incoming.forEach(function (entry) {
                 S.history = S.history.filter(function (h) { return h.query !== entry.query })
                 S.history.push(entry)

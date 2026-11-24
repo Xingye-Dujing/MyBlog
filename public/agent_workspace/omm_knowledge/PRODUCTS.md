@@ -399,7 +399,7 @@
   - 上传与任务：video-runtime/work/uploads、video-runtime/work/jobs（相对插件目录）。
 - 格式：
   - AI 工作区工作流 JSON：{format:"omm-video-workflow", version:1, nodes:[{id,type,data}], connections:[{from,to,fromPort,toPort}]}（详见 json-specs/video.md）。
-  - 导出与打开：导出 video-workflow.json；omm-video.js 同时接受工作台自身的画布 JSON，应用后与 AI 生成的文件等价。
+  - 导出与打开：导出 video-workflow.json；lib/zen-video.js 同时接受工作台自身的画布 JSON，应用后与 AI 生成的文件等价。
 - 最佳实践：
   - 画布先加节点再连线；分析节点（媒体信息/场景/静音/黑场/缩略图）不改内容，可并联在输入之后。
   - 运行前确认视频输入节点已导入文件；画布为空或无文件时运行会被拦截。

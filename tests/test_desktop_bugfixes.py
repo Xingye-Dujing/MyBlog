@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parent.parent
 for path in (str(ROOT / "public" / "desktop"), str(ROOT / "public")):
@@ -64,6 +65,23 @@ class ShareIdentityTests(unittest.TestCase):
     def test_plugin_servers_pass_their_own_id(self):
         src = (ROOT / "public" / "desktop" / "hub_server.py").read_text(encoding="utf-8-sig")
         self.assertIn("default_app=plugin_id", src)
+
+
+class ResponseAbortTests(unittest.TestCase):
+    def test_disconnected_update_probe_does_not_raise(self):
+        handler = ShellHandler.__new__(ShellHandler)
+        handler.command = "GET"
+        handler.send_response = Mock()
+        handler.send_header = Mock()
+        handler.end_headers = Mock()
+        handler.wfile = Mock()
+        handler.wfile.write.side_effect = ConnectionAbortedError
+        handler.reply_json(200, {"available": False})
+        handler.reply_raw(200, "text/plain", b"ok")
+
+        handler.end_headers = Mock(side_effect=ConnectionResetError)
+        handler.reply_json(200, {"available": False})
+        handler.reply_raw(200, "text/plain", b"ok")
 
 
 class RollbackPathTests(unittest.TestCase):

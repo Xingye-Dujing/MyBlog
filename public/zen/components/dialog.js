@@ -39,24 +39,10 @@
         if (event.key === 'Enter') { event.preventDefault(); finish(true) }
       })
       l.veil.addEventListener('keydown', function (event) {
-        if (event.key === 'Tab') trapTab(event, l)
+        if (event.key === 'Tab') layer.trapTab(event, l.shadow)
       })
     }
     return l
-  }
-
-  function trapTab(event, l) {
-    var focusables = l.veil.querySelectorAll('button:not([disabled]),input:not([disabled])')
-    if (!focusables.length) return
-    var list = Array.prototype.slice.call(focusables).filter(function (el) { return !el.hidden })
-    if (!list.length) return
-    var first = list[0]
-    var last = list[list.length - 1]
-    if (event.shiftKey && l.shadow.activeElement === first) {
-      event.preventDefault(); last.focus()
-    } else if (!event.shiftKey && l.shadow.activeElement === last) {
-      event.preventDefault(); first.focus()
-    }
   }
 
   function normalize(opts) {
@@ -77,7 +63,7 @@
     if (pending) finish(false)
     if (l.closeMenu) l.closeMenu()
     return new Promise(function (resolve) {
-      pending = { resolve: resolve, kind: o.kind }
+      pending = { resolve: resolve, kind: o.kind, opener: document.activeElement }
       l.headTitle.textContent = o.title
       l.bodyEl.textContent = String(message == null ? '' : message)
       l.cancelBtn.textContent = o.cancel
@@ -118,7 +104,7 @@
     l.veil.classList.remove('on')
     l.veil.hidden = true
     if (l.pendingEntry) { l.pop(l.pendingEntry); l.pendingEntry = null }
-    layer.blurAll()
+    layer.restoreFocus(job.opener)
     job.resolve(value)
   }
 
@@ -190,8 +176,13 @@
     s.m.host.setAttribute('hidden', '')
     if (s.entry) layer.get().pop(s.entry)
     if (s.m.host.parentNode) s.m.host.parentNode.removeChild(s.m.host)
-    if (modalStack.length) applyIds(modalStack[modalStack.length - 1].m, modalStack[modalStack.length - 1].ids)
-    layer.blurAll()
+    if (modalStack.length) {
+      var top = modalStack[modalStack.length - 1]
+      applyIds(top.m, top.ids)
+      layer.restoreFocus(top.m.x)
+    } else {
+      layer.restoreFocus(s.opener)
+    }
     if (s.opts.onClose) s.opts.onClose()
   }
 
@@ -208,11 +199,15 @@
     m.foot.innerHTML = o.foot || ''
     m.foot.hidden = !o.foot
     m.card.style.width = o.width || ''
-    var s = { opts: o, m: m, ids: ids, entry: null }
+    m.card.style.maxWidth = 'calc(100vw - 36px)'
+    var s = { opts: o, m: m, ids: ids, entry: null, opener: document.activeElement }
     m.host.removeAttribute('hidden')
     m.host.classList.add('on')
     s.entry = {
       escape: function () { ui.modal.close() },
+      key: function (event) {
+        if (event.key === 'Tab') layer.trapTab(event, m.host)
+      },
       outside: function (event) {
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(m.host) >= 0) return
@@ -227,7 +222,9 @@
     })
     if (o.onMount) o.onMount(m.body, m.foot)
     window.requestAnimationFrame(function () {
-      try { m.x.focus({ preventScroll: true }) } catch (e) { /* ignore */ }
+      if (!m.host.contains(document.activeElement)) {
+        try { m.x.focus({ preventScroll: true }) } catch (e) { /* ignore */ }
+      }
     })
     return {
       el: m.host, body: m.body, foot: m.foot,

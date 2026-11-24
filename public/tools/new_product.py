@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 HTML = '''<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="{pid}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -23,7 +23,9 @@ HTML = '''<!doctype html>
     <script src="omm-embed.js"></script>
     <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
     <link rel="stylesheet" href="zen/zen.css">
+    <script src="zen/foundation/util.js"></script>
     <script src="zen/components/layer.js"></script>
+    <script src="zen/components/popover.js"></script>
     <script src="zen/components/toast.js"></script>
     <script src="zen/components/dialog.js"></script>
     <script src="zen/components/select.js"></script>
@@ -51,12 +53,7 @@ HTML = '''<!doctype html>
       ;(function () {{
         'use strict'
         var $ = function (id) {{ return document.getElementById(id) }}
-        function toast(text) {{
-          var node = document.createElement('div')
-          node.className = 'hint'
-          node.textContent = text
-          $('content').appendChild(node)
-        }}
+        function toast(text) {{ return window.ZenUI.toast(text) }}
         $('content').textContent = '在这里实现 {name} 的业务逻辑。'
         window.Zen{cls} = {{ toast: toast }}
       }})()

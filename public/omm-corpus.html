@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="corpus">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
@@ -2070,6 +2070,9 @@
           manualAiIds = new Set()
 
         function toast(msg) { return window.ZenUI.toast(msg) }
+        function confirmAction(msg, okText) {
+          return window.ZenUI.dialog.confirm(msg, { ok: okText || '继续', danger: true })
+        }
         function catById(id) {
           return S.categories.find((x) => x.id === id)
         }
@@ -2401,9 +2404,11 @@
           if (!duplicate) openEditor(editId)
           else openEditor()
         }
-        function deleteEditor() {
+        async function deleteEditor() {
           if (!editId) return
-          S.entries = S.entries.filter((x) => x.id !== editId)
+          const id = editId
+          if (!(await confirmAction('确定删除这条语料吗？删除后无法撤销。', '删除'))) return
+          S.entries = S.entries.filter((x) => x.id !== id)
           save()
           closeEditor()
           renderHome()
@@ -2459,7 +2464,7 @@
             .join('')
           $$('[data-cat-del]').forEach(
             (b) =>
-              (b.onclick = () => {
+              (b.onclick = async () => {
                 if (S.categories.length <= 1) {
                   toast('至少保留一个分类')
                   return
@@ -2469,6 +2474,7 @@
                   toast('该分类还有语料，请先移动或删除语料')
                   return
                 }
+                if (!(await confirmAction('确定删除这个空分类吗？', '删除'))) return
                 S.categories = S.categories.filter((x) => x.id !== c)
                 save()
                 populateCats()
@@ -2946,6 +2952,7 @@ openModal('KEYBOARD', window.ZenUI.shortcuts.grid(rows))
           return conv ? conv.messages : []
         }
         function newConversation() {
+          stopAIRequest()
           const conv = {
             id: uid(),
             title: '未命名对话',
@@ -2961,10 +2968,13 @@ openModal('KEYBOARD', window.ZenUI.shortcuts.grid(rows))
         function switchConversation(convId) {
           const conv = S.conversations.find((c) => c.id === convId)
           if (!conv) return
+          stopAIRequest()
           S.activeConvId = convId
           save()
         }
-        function deleteConversation(convId) {
+        async function deleteConversation(convId) {
+          stopAIRequest()
+          if (!(await confirmAction('确定删除这段对话吗？删除后无法撤销。', '删除'))) return
           S.conversations = S.conversations.filter((c) => c.id !== convId)
           if (S.activeConvId === convId) {
             S.activeConvId = S.conversations[0]?.id || ''
@@ -2973,9 +2983,10 @@ openModal('KEYBOARD', window.ZenUI.shortcuts.grid(rows))
           renderConvList()
           renderChat()
         }
-        function deleteMessage(msgId) {
+        async function deleteMessage(msgId) {
           const conv = getActiveConv()
           if (!conv) return
+          if (!(await confirmAction('确定删除这条消息吗？', '删除'))) return
           conv.messages = conv.messages.filter((m) => m.id !== msgId)
           conv.updatedAt = now()
           save()
@@ -3051,8 +3062,10 @@ openModal('KEYBOARD', window.ZenUI.shortcuts.grid(rows))
             }
           })
         }
-        function addChat(role, content, opts = {}) {
-          const conv = getActiveConv()
+        function addChat(role, content, opts = {}, convId) {
+          const conv = convId
+            ? S.conversations.find((c) => c.id === convId)
+            : getActiveConv()
           if (!conv) return
           conv.messages.push({
             id: uid(),
@@ -3141,13 +3154,15 @@ openModal('KEYBOARD', window.ZenUI.shortcuts.grid(rows))
         function renderAIStreamShell() {
           const box = $('#ai-chat')
           const row = document.createElement('div')
-          row.className = 'ai-bubble-row'
+          row.className = 'ai-bubble-row ai-streaming'
           row.innerHTML =
-            '<div class="ai-bubble" id="ai-live-bubble"><div class="ai-bubble-meta">AI · STREAMING</div><details class="ai-thinking" id="ai-thinking"><summary>回答思路 · 可展开查看</summary><div class="ai-thinking-text ai-thinking-md" id="ai-thinking-text"></div></details><div class="ai-bubble-content" id="ai-stream-body"></div><div class="ai-stop-wrap" style="margin-top:8px"><button class="mini-btn ai-stop" id="ai-stop" type="button">停止</button></div></div>'
+            '<div class="ai-bubble" id="ai-live-bubble"><div class="ai-bubble-meta">AI · STREAMING</div><details class="ai-thinking" id="ai-thinking"><summary>回答思路 · 可展开查看</summary><div class="ai-thinking-text ai-thinking-md" id="ai-thinking-text"></div></details><div class="ai-bubble-content" id="ai-stream-body"></div><div class="ai-stop-wrap"><button class="mini-btn ai-stop" id="ai-stop" type="button">停止</button></div></div>'
           box.appendChild(row)
           box.scrollTop = box.scrollHeight
           $('#ai-stop').onclick = () => {
             if (window.__corpusAbort) window.__corpusAbort.abort()
+            $('#ai-stop').disabled = true
+            $('#ai-stop').textContent = '停止中…'
           }
           return {
             body: $('#ai-stream-body'),
@@ -3394,6 +3409,12 @@ ${extra}`
         let aiContextTouched = false
         let aiContextDraft = ''
 
+        function stopAIRequest() {
+          aiSessionId += 1
+          if (window.__corpusAbort) window.__corpusAbort.abort()
+          window.__corpusAbort = null
+        }
+
         function cloneRequestMessages(messages) {
           return messages.map((m) => ({ role: m.role, content: String(m.content || '') }))
         }
@@ -3474,7 +3495,8 @@ ${extra}`
           const thinkingEnabled = isThinkingEnabled()
           const sendReasoning = thinkingEnabled && isOpenRouter
           const sendReasoningOff = !thinkingEnabled && isOpenRouter
-          window.__corpusAbort = new AbortController()
+          const controller = override.signal ? null : new AbortController()
+          const signal = override.signal || controller.signal
           const headers = {
             'Content-Type': 'application/json',
             Authorization: 'Bearer ' + apiKey,
@@ -3488,7 +3510,7 @@ ${extra}`
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body),
-                signal: window.__corpusAbort.signal,
+                signal: signal,
               })
             } catch (e) {
               if (e?.name === 'AbortError') throw e
@@ -3572,27 +3594,28 @@ ${extra}`
           // 末尾未以空行结束的 SSE 块也要用真实回调处理，否则最后一段正文会丢失。
           if (buffer.trim() && !done) parseSSEBlock(buffer, handleEvent)
           emit()
-          window.__corpusAbort = null
           S.stats.aiHits = (S.stats.aiHits || 0) + 1
           save()
           return splitAIStreamText(full, state.reasoning)
         }
         async function aiAsk(mode) {
-          const sessionId = aiSessionId
           window.__corpusAiMode = mode
           const q = clean($('#ai-query').value)
           if (!q) {
             toast('先输入需求')
             return
           }
-          if (window.__corpusAbort) {
-            toast('当前已有 AI 生成任务')
-            return
-          }
           if (!getActiveConv()) {
             newConversation()
             renderConvList()
           }
+          const convId = getActiveConv().id
+          stopAIRequest()
+          const sessionId = aiSessionId
+          const controller = new AbortController()
+          window.__corpusAbort = controller
+          const active = () => sessionId === aiSessionId &&
+            getActiveConv()?.id === convId && window.__corpusAbort === controller
 
           // 在发送前冻结最终 messages。预览与 fetch 后续都只读取这一份，保证严格一致。
           const requestMessages = cloneRequestMessages(buildAIRequestMessages(q, mode))
@@ -3601,20 +3624,18 @@ ${extra}`
           previewPromptMode = mode
           setPromptPreviewMode(mode, false)
 
-          addChat('user', q)
+          addChat('user', q, {}, convId)
           renderChat()
           $('#ai-query').value = ''
-          // 输入框已清空后，预览只读取发送前冻结的 messages，绝不重新构建。
           updateAIPromptPreview()
           $('#ai-status').textContent = '正在连接 AI……'
           const ui = renderAIStreamShell()
           ui.thinkingWrap.open = false
           ui.thinking.textContent = '等待模型响应……'
-          let finalText = '',
-            summary = ''
+          let finalText = '', summary = ''
           try {
             await callAIStream(requestMessages, mode, (ev) => {
-              if (sessionId !== aiSessionId) return
+              if (!active()) return
               if (isThinkingEnabled() && ev.summary) {
                 summary = limitThinkingSummary(ev.summary)
                 ui.thinking.innerHTML = renderMarkdown(summary)
@@ -3634,8 +3655,8 @@ ${extra}`
               const chatEl = $('#ai-chat')
               const atBottom = chatEl.scrollTop + chatEl.clientHeight >= chatEl.scrollHeight - 50
               if (atBottom) chatEl.scrollTop = chatEl.scrollHeight
-            })
-            if (sessionId !== aiSessionId) return
+            }, { signal: controller.signal })
+            if (!active()) return
             summary = isThinkingEnabled() ? limitThinkingSummary(summary) : ''
             if (isThinkingEnabled()) {
               ui.thinking.innerHTML = summary
@@ -3649,20 +3670,19 @@ ${extra}`
             addChat('assistant', finalText || '模型没有返回正文内容。', {
               summary: isThinkingEnabled() ? limitThinkingSummary(summary) : '',
               model: S.settings.apiModel,
-            })
+            }, convId)
             if (ui.row.isConnected) ui.row.remove()
             renderChat()
-            $('#ai-status').textContent =
-              mode === 'compose'
-                ? `完成 · 英文正文约 ${countEnglishWords(finalText)} 词 · 已流式输出`
-                : '完成 · 已流式输出 · 当前对话上下文已保留'
+            $('#ai-status').textContent = mode === 'compose'
+              ? `完成 · 英文正文约 ${countEnglishWords(finalText)} 词 · 已流式输出`
+              : '完成 · 已流式输出 · 当前对话上下文已保留'
             renderHome()
             updateHead()
           } catch (e) {
-            if (sessionId !== aiSessionId) return
+            if (!active()) return
             if (e?.name === 'AbortError') {
               const stopped = stripThinkingSummary(finalText || ui.body?.textContent || '')
-              if (stopped) addChat('assistant', stopped, { summary, model: S.settings.apiModel })
+              if (stopped) addChat('assistant', stopped, { summary, model: S.settings.apiModel }, convId)
               $('#ai-status').textContent = '已停止生成'
               if (ui.row.isConnected) ui.row.remove()
               renderChat()
@@ -3676,7 +3696,9 @@ ${extra}`
               }
               ui.thinkingWrap.open = false
             }
-            window.__corpusAbort = null
+          } finally {
+            if (window.__corpusAbort === controller) window.__corpusAbort = null
+            ui.row.classList.remove('ai-streaming')
           }
         }
         const EN_STOPWORDS = new Set([
@@ -4015,11 +4037,12 @@ ${extra}`
             },
           )
         }
-        function importDataText() {
+        async function importDataText() {
           try {
             const d = JSON.parse($('#data-box').value)
             if (!Array.isArray(d.entries) || !Array.isArray(d.categories))
               throw new Error('格式不正确')
+            if (!(await confirmAction('恢复 JSON 将覆盖当前全部分类、语料、设置与对话，确定继续吗？', '覆盖恢复'))) return
             S = Object.assign(clone(DEFAULT), d, {
               settings: Object.assign(clone(DEFAULT).settings, d.settings || {}),
               stats: Object.assign({}, d.stats || {}),
@@ -4042,40 +4065,10 @@ ${extra}`
 
         // ---------- OMM Bridge · 与 Annotate / English 互通 ----------
         const OMM = window.OMMBridge || null
-        /* Corpus 没有通用确认弹窗，这里自建一个，风格与其它模态一致 */
-        let cfCb = null
-        function cfFinish(v) {
-          const f = cfCb
-          cfCb = null
-          closeModal()
-          if (f) f(v)
+        function bridgeConfirm(msg, okText, fin) {
+          confirmAction(msg, okText).then(function (ok) { if (fin) fin(ok) })
         }
-        function xConfirm(msg, okText, fin) {
-          cfCb = fin
-          openModal(
-            'CONFIRM',
-            `<div class="info-line" id="omm-cf-msg"></div>
-            <div class="drawer-actions" style="margin-top: 16px">
-              <button class="ed-btn" id="omm-cf-cancel">取消</button>
-              <button class="ed-btn primary" id="omm-cf-ok">继续</button>
-            </div>`,
-            function (body) {
-              body.querySelector('#omm-cf-msg').textContent = msg
-              body.querySelector('#omm-cf-ok').textContent = okText || '继续'
-              body.querySelector('#omm-cf-ok').onclick = () => cfFinish(true)
-              body.querySelector('#omm-cf-cancel').onclick = () => cfFinish(false)
-            },
-            function () {
-              // 通过共享关闭按钮 / Esc 关掉确认框时，同样要兑现等待中的 Promise
-              if (cfCb) {
-                const f = cfCb
-                cfCb = null
-                f(false)
-              }
-            },
-          )
-        }
-        if (OMM) OMM.setConfirmer(xConfirm)
+        if (OMM) OMM.setConfirmer(bridgeConfirm)
         /* 按名称取（或新建）一个分类 */
         function ensureCat(name, desc) {
           const nm = clean(name) || '笔记导入'

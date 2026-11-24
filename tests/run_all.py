@@ -96,6 +96,8 @@ def main() -> int:
         "test_zen_crypto.mjs",
         "test_design_system.mjs",
         "test_zen_shared_ui.mjs",
+        "test_bridge_trust.mjs",
+        "test_lambda_stream.mjs",
     ]
     failures += run("ZenCard / SRS / Flow / Review / Backup / products (Node)",
                     ["node", "--test"] + ["tests/" + t for t in zen_tests])

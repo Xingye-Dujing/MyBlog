@@ -61,5 +61,5 @@ test('共享与卡片事件会写入流转记录', () => {
 test('renderDataFlow 渲染通道与角色标签', () => {
   assert.ok(hub.includes("roleLabel = { both: '双向', publish: '发布', consume: '消费' }"))
   assert.ok(hub.includes('flow-chip '))
-  assert.ok(hub.includes('kgEscape(ch.id)'))
+  assert.ok(hub.includes('esc(ch.id)'))
 })

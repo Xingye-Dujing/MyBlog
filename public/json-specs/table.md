@@ -35,6 +35,7 @@
 
 **连线对象**：`from`/`to` 必需；`fromPort` 默认 `"right"`，`toPort` 默认 `"left"`；
 连接节点用 `toPort: "top"` 接第二张表。除 `file` / `note` 外，每个节点至少有一个上游。
+`file` / `note` 不能有上游；`join` 必须各接一个 `left` 与 `top` 端口；其它节点必须且只能接一个 `left` 端口。
 
 ---
 

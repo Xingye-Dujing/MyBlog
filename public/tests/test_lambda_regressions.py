@@ -80,6 +80,80 @@ def _headers(**extra):
     return headers
 
 
+def test_snapshot_write_failure_is_reported_and_rolled_back(backend, monkeypatch):
+    module, client = backend
+    monkeypatch.setattr(module, "get_session", lambda *a, **kw: ("persist-fail", RecordingInterpreter()))
+    monkeypatch.setattr(module, "_save_snapshots_locked", lambda: False)
+    response = client.post("/api/eval", json={"session": "persist-fail", "line": "ONE"}, headers=_headers())
+    assert response.status_code == 500
+    assert response.get_json()["code"] == "snapshot_write_failed"
+    assert "persist-fail" not in module._snapshots
+
+
+def test_snapshot_delete_failure_keeps_existing_snapshot(backend, monkeypatch):
+    module, client = backend
+    entry = module._normalize_snapshot_entry({"code": ["ONE"], "lang": "both", "owner": None})
+    module._snapshots["delete-fail"] = entry
+    monkeypatch.setattr(module, "_save_snapshots_locked", lambda: False)
+    response = client.delete("/api/snapshot/delete-fail", json={}, headers=_headers())
+    assert response.status_code == 500
+    assert "delete-fail" in module._snapshots
+
+
+def test_stream_continuous_output_uses_idle_timeout(lambda_module, monkeypatch):
+    import queue
+
+    class FakeInterpreter:
+        alive = True
+
+        def __init__(self):
+            self._stream_q = queue.Queue()
+            self.proc = type("Process", (), {"stdin": None})()
+
+        def fill(self):
+            for item in ({"kind": "result"}, {"kind": "result"}, {"kind": "result"}, None):
+                self._stream_q.put(item)
+
+        def _begin_command(self, timeout):
+            pass
+
+        def _end_command(self):
+            pass
+
+        def kill(self):
+            raise AssertionError("continuous output must not hit the idle timeout")
+
+    ticks = iter([0.0, 0.04, 0.04, 0.08, 0.08, 0.12, 0.12, 0.16])
+    monkeypatch.setattr(lambda_module.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(lambda_module, "EVAL_TOTAL_TIMEOUT", 0)
+    fake = FakeInterpreter()
+    monkeypatch.setattr(lambda_module, "_write_all", lambda *a, **kw: fake.fill())
+    outputs = list(lambda_module.Interpreter.send_stream(fake, "ONE", timeout=0.05))
+    assert len(outputs) == 3
+    assert all(item["kind"] == "result" for item in outputs)
+
+
+def test_lambda_exposes_desktop_and_share_bridges(backend, monkeypatch, tmp_path):
+    module, client = backend
+    monkeypatch.setenv("OMM_DESKTOP", "1")
+    monkeypatch.setenv("OMM_SHARED_DIR", str(tmp_path / "shared"))
+    status = client.get("/__omm/fs/status?app=lambda", headers=_headers())
+    assert status.status_code == 200
+    assert status.get_json()["desktop"] is True
+    assert status.get_json()["app"] == "lambda"
+    space = client.get("/__omm/share/space?app=lambda", headers=_headers())
+    assert space.status_code == 200
+    assert space.get_json()["app"] == "lambda"
+
+
+def test_static_share_page_uses_neutral_zen_palette_and_square_controls(lambda_module):
+    page = lambda_module._render_page("分享", [{"kind": "result", "zh": "结果", "en": "result"}])
+    assert "--ac:#000" in page
+    assert "border-radius:0" in page
+    assert "#2f6f4f" not in page
+    assert "border-radius:5px" not in page
+
+
 def test_source_tree_resolves_bundled_interpreter(lambda_module, monkeypatch):
     monkeypatch.delenv("LAMBDA_INTERP_BIN", raising=False)
     monkeypatch.delenv("LAMBDA_INTERP_DIR", raising=False)
@@ -478,5 +552,81 @@ const source = html.slice(start, end);
   assert.equal(sent.to, 'ai');
   assert.equal(sent.format, 'omm.lambda.session');
 })().catch(error => { console.error(error); process.exit(1); });
+"""
+    )
+
+
+def test_lambda_ui_keeps_static_styles_out_and_combobox_aria_on_textarea():
+    _run_node(
+        r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const html = fs.readFileSync('public/index.html', 'utf8');
+const css = fs.readFileSync('public/zen/products/lambda.css', 'utf8');
+assert.doesNotMatch(html, /\sstyle=/i, 'Lambda markup must not carry static style attributes');
+const cmd = html.match(/<textarea\b[^>]*id="cmd"[^>]*>/)[0];
+const ac = html.match(/<div\b[^>]*id="ac"[^>]*>/)[0];
+assert.match(cmd, /role="combobox"/);
+assert.match(cmd, /aria-controls="ac"/);
+assert.doesNotMatch(ac, /aria-activedescendant/);
+const closeAc = html.slice(html.indexOf('function closeAc('), html.indexOf('function openAc('));
+assert.doesNotMatch(closeAc, /ac\.removeAttribute\(["']aria-activedescendant/);
+assert.match(html, /cmd\.setAttribute\(["']aria-activedescendant/);
+const renderTrace = html.slice(html.indexOf('function renderTrace('), html.indexOf('function astNodeHtml('));
+assert.doesNotMatch(renderTrace, /style=/);
+const renderPanel = html.slice(html.indexOf('function renderPanel('), html.indexOf('async function api('));
+assert.match(renderPanel, /range\.style\.setProperty\(["']--p/);
+"""
+    )
+
+
+def test_lambda_ui_focus_visibility_and_phone_tabs_keep_content_width():
+    _run_node(
+        r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const css = fs.readFileSync('public/zen/products/lambda.css', 'utf8');
+assert.match(css, /\.line:focus-within \.act\{opacity:1;\}/);
+assert.match(css, /\.env-del:focus-visible\{opacity:1;\}/);
+assert.match(css, /\.chip:focus-visible/);
+assert.match(css, /\.env-name:focus-visible/);
+assert.match(css, /\.tabs\{[^}]*overflow-x:auto;/);
+for (const selector of ['.subtitle-en', '.lam-mt-1', '.lam-mt-2', '.lam-mt-3', '.lam-mb-2', '.lam-normal', '.type-value', '.chip-hint']) {
+  assert.ok(css.includes(selector), 'missing Lambda utility class ' + selector);
+}
+const phone = css.slice(css.indexOf('@media (max-width:600px)'), css.indexOf('@media (hover:none)'));
+assert.match(phone, /\.tab\{flex:0 0 auto;min-width:max-content;/);
+assert.doesNotMatch(phone, /\.tab\{flex:1 1 0/);
+assert.match(phone, /\.tab\{[^}]*white-space:nowrap;/);
+"""
+    )
+
+
+def test_lambda_exported_animation_has_no_green_or_nonzero_radius():
+    _run_node(
+        r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const html = fs.readFileSync('public/index.html', 'utf8');
+const animation = html.slice(html.indexOf('function traceAnimation('), html.indexOf('function proofDiamond('));
+assert.doesNotMatch(animation, /green|#339933|#0f0|#00ff00/i);
+assert.doesNotMatch(animation, /border-radius\s*:\s*(?:[1-9]\d*(?:\.\d+)?px|99px|999px)/i);
+assert.doesNotMatch(animation, /\sstyle=/i);
+"""
+    )
+
+
+def test_lambda_ui_preserves_semantic_chips_save_failure_and_inspector_reset():
+    _run_node(
+        r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const html = fs.readFileSync('public/index.html', 'utf8');
+assert.match(html, /elem\("button", "chip"/);
+assert.match(html, /class="env-name" type="button"/);
+const saveBlob = html.slice(html.indexOf('async function saveBlob('), html.indexOf('var ERR_HELP'));
+assert.match(saveBlob, /保存失败|Save failed/);
+const clearAll = html.slice(html.indexOf('function clearAll('), html.indexOf('document.addEventListener\("click"'));
+assert.match(clearAll, /resetInspector\(\)/);
 """
     )

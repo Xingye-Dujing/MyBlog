@@ -13,6 +13,7 @@
 <script src="omm-desktop.js"></script>
 <script src="omm-share.js"></script>
 <script src="zen/components/layer.js"></script>
+<script src="zen/components/popover.js"></script>
 <script src="zen/components/toast.js"></script>
 <script src="zen/components/dialog.js"></script>
 <script src="zen/components/select.js"></script>
@@ -26,7 +27,7 @@
 <div class="app">
   <header>
     <div>
-      <h1><span class="lam">λ</span> 演算计算器 <span style="color:var(--faint)">/ Lambda Calculus</span></h1>
+      <h1><span class="lam">λ</span> 演算计算器 <span class="subtitle-en">/ Lambda Calculus</span></h1>
       <p class="sub" id="subline">Haskell 解释器 · 归约轨迹 · 语法树 · 类型推断</p>
     </div>
     <div class="controls">
@@ -75,6 +76,8 @@
               <div class="ed-stack">
                 <div class="hl" id="hl" aria-hidden="true"></div>
                 <textarea id="cmd" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false"
+                  role="combobox" aria-autocomplete="list" aria-controls="ac" aria-expanded="false"
+                  aria-label="输入表达式，回车执行 / type an expression, Enter to run"
                   placeholder="输入表达式，回车执行 / type an expression, Enter to run"></textarea>
               </div>
             </div>
@@ -1018,13 +1021,19 @@
   }
 
   async function saveBlob(name, text, type){
-    if (window.OMMDesktop && typeof window.OMMDesktop.saveText === "function") {
+    if (window.OMMDesktop && window.OMMDesktop.enabled && typeof window.OMMDesktop.saveText === "function") {
       try {
-        await window.OMMDesktop.saveText(name, text, type);
+        var saved = await window.OMMDesktop.saveText(name, text, type);
+        if (saved === false) throw new Error("desktop save failed");
         return true;
-      } catch(e) { return false; }
+      } catch(e) {
+        toast(dual("保存失败，请检查保存目录或改用浏览器下载。", "Save failed; check the save folder or use the browser download."));
+        return false;
+      }
     }
-    return ZenUtil.download(name, text, type);
+    var downloaded = ZenUtil.download(name, text, type);
+    if (!downloaded) toast(dual("浏览器下载失败。", "Browser download failed."));
+    return downloaded;
   }
 
   // 常见错误码的中英文说明；点击结果行的 meta 徽标即可查看
@@ -1055,7 +1064,6 @@
     if (!m || !code) return;
     m.setAttribute("role", "button");
     m.setAttribute("tabindex", "0");
-    m.style.cursor = "pointer";
     m.title = t("errCode") + ": " + code + " — " + dual("点击查看原因", "click for details");
     function show(){
       var h = ERR_HELP[code];
@@ -1423,8 +1431,7 @@
     html += '<button type="button" data-play="1" class="play" aria-label="play">' +
             (state.playing ? "⏸" : "▶") + '</button>';
     html += '<button type="button" data-nav="prev" aria-label="prev">◀</button>';
-    var pct = steps.length > 1 ? (i / (steps.length - 1) * 100) : 0;
-    html += '<input type="range" id="tr-range" min="0" max="' + (steps.length - 1) + '" value="' + i + '" style="--p:' + pct + '%">';
+    html += '<input type="range" id="tr-range" min="0" max="' + (steps.length - 1) + '" value="' + i + '">';
     html += '<button type="button" data-nav="next" aria-label="next">▶</button>';
     html += '<span class="count">' + (i + 1) + " / " + steps.length + '</span>';
     html += '<label class="speed">' + esc(t("playMs")) +
@@ -1548,10 +1555,10 @@
       html += '<pre class="ast-pre">' + obj.ast.map(esc).join("\n") + '</pre>';
     }
     if (obj.astTree && obj.ast){
-      html += '<h3 style="margin-top:14px">' + esc(dual("文本树", "text tree")) +
+      html += '<h3 class="lam-mt-3">' + esc(dual("文本树", "text tree")) +
               '</h3><pre class="ast-pre">' + obj.ast.map(esc).join("\n") + '</pre>';
     }
-    if (obj.db) html += '<h3 style="margin-top:12px">de Bruijn</h3><pre class="ast-pre">' + esc(obj.db) + '</pre>';
+    if (obj.db) html += '<h3 class="lam-mt-2">de Bruijn</h3><pre class="ast-pre">' + esc(obj.db) + '</pre>';
     return html;
   }
 
@@ -1560,19 +1567,19 @@
     var ty = obj ? pickPair(obj.typeZh, obj.typeEn, obj.type) : "";
     if (!ty) return '<p class="empty">' + esc(t("noType")) + '</p>';
     var prop = obj ? pickPair(obj.propositionZh, obj.propositionEn, obj.proposition) : "";
-    var html = '<h3>' + esc(t("type")) + '</h3><pre style="color:var(--accent);font-size:14px">' + esc(ty) + '</pre>';
+    var html = '<h3>' + esc(t("type")) + '</h3><pre class="type-value">' + esc(ty) + '</pre>';
     if (prop){
-      html += '<h3 style="margin-top:14px">' + esc(t("propTitle")) + '</h3>' +
+      html += '<h3 class="lam-mt-3">' + esc(t("propTitle")) + '</h3>' +
               '<pre class="prop-box">' + esc(prop) + '</pre>';
     }
     if (obj && obj.erased){
-      html += '<h3 style="margin-top:14px">' + esc(dual("擦除后的 λ 项", "Erased λ term")) +
+      html += '<h3 class="lam-mt-3">' + esc(dual("擦除后的 λ 项", "Erased λ term")) +
               '</h3><pre class="prop-box">' + esc(obj.erased) + '</pre>' +
-              (obj.fTerm ? '<p class="empty" style="font-style:normal">' + esc(obj.fTerm) + '</p>' : '');
+              (obj.fTerm ? '<p class="empty lam-normal">' + esc(obj.fTerm) + '</p>' : '');
     }
     var deriv = obj ? (obj.derivation || []) : [];
     if (deriv.length){
-      html += '<details style="margin-top:12px"><summary>' + esc(t("derivation")) +
+      html += '<details class="lam-mt-2"><summary>' + esc(t("derivation")) +
               ' (' + deriv.length + ')</summary><ol class="deriv-list">';
       deriv.forEach(function(d){
         html += '<li><span class="pf-rule">' + esc(d.kind || "") + '</span> ' +
@@ -1583,7 +1590,7 @@
       });
       html += '</ol></details>';
     }
-    html += '<p class="empty" style="margin-top:10px;font-style:normal">' + esc(t("typeHint")) + '</p>';
+    html += '<p class="empty lam-normal lam-mt-2">' + esc(t("typeHint")) + '</p>';
     return html;
   }
 
@@ -1595,11 +1602,11 @@
                '</span></div>';
     if (!state.envRows.length) return head + '<p class="empty">' + esc(t("envEmpty")) + '</p>';
     var html = head;
-    html += '<p class="empty" style="margin-bottom:8px;font-style:normal">' + esc(t("envHint")) + '</p>';
+    html += '<p class="empty lam-normal lam-mb-2">' + esc(t("envHint")) + '</p>';
     state.envRows.forEach(function(r){
       html += '<div class="env-row">';
       var ty = pickPair(r.typeZh, r.typeEn, r.type);
-      html += '<div class="env-head"><span class="env-name" data-insert="' + esc(r.name) + '">' + esc(r.name) + '</span>';
+      html += '<div class="env-head"><button class="env-name" type="button" data-insert="' + esc(r.name) + '">' + esc(r.name) + '</button>';
       if (ty) html += '<span class="env-ty">' + esc(ty) + '</span>';
       html += '<button class="env-del" type="button" data-del="' + esc(r.name) + '">' + esc(t("del")) + '</button></div>';
       html += '<div class="env-val">' + esc(r.value) + '</div>';
@@ -1633,7 +1640,7 @@
       html += '<div class="guide-step"><h4>' + bilingual(r.h[0], r.h[1]) + '</h4>' +
               '<p>' + bilingual(r.b[0], r.b[1]) + '</p></div>';
     });
-    html += '<h3 style="margin-top:14px">' + esc(t("practiceTitle")) + '</h3><ol class="practice">';
+    html += '<h3 class="lam-mt-3">' + esc(t("practiceTitle")) + '</h3><ol class="practice">';
     PRACTICE.forEach(function(p){
       var q = I18N[p.q] || {zh:p.q, en:p.q};
       var a = I18N[p.a] || {zh:p.a, en:p.a};
@@ -1654,7 +1661,7 @@
 
   function renderTools(){
     var html = '<h3>' + esc(dual("工具", "Tools")) + '</h3>';
-    html += '<p class="empty" style="font-style:normal;margin-bottom:10px">' +
+    html += '<p class="empty lam-normal lam-mb-2">' +
             esc(dual("这些命令也可以直接在终端输入。", "These commands also work in the terminal.")) +
             '</p><div class="tools">';
     function btn(tool, zh, en){
@@ -1686,12 +1693,12 @@
     html += '<button class="mini" type="button" data-tool="time">' + esc(t("toolTime")) + '</button>' +
             '<button class="mini" type="button" data-tool="bench">' + esc(t("toolBench")) + '</button>' +
             '<button class="mini" type="button" data-tool="helpcmd">' + esc(t("toolHelpCmd")) + '</button>';
-    html += '<div class="sess-acts" style="margin-top:10px">' +
+    html += '<div class="sess-acts lam-mt-2">' +
       '<button class="mini" type="button" data-a11y-contrast>' + esc(t("contrast")) + ': ' +
         (state.a11y.contrast ? "on" : "off") + '</button>' +
       '<button class="mini" type="button" data-a11y-font>A− / A+</button></div>';
     html += '</div>';
-    html += '<p class="empty" style="font-style:normal;margin-top:12px">' +
+    html += '<p class="empty lam-normal lam-mt-2">' +
             esc(dual(":eq / :conv 会依次询问两个表达式；:nf / :whnf / :int 询问一个表达式。",
                      ":eq / :conv ask for two expressions; :nf / :whnf / :int ask for one.")) +
             '</p>';
@@ -1842,7 +1849,7 @@
     cmds.forEach(function(c){
       html += '<dt>' + esc(c[0]) + '</dt><dd>' + esc(c[1]) + '</dd>';
     });
-    html += '</dl><h3 style="margin-top:14px">' + esc(t("type")) + '</h3><p class="empty" style="font-style:normal">' + esc(t("helpBody")) + '</p>';
+    html += '</dl><h3 class="lam-mt-3">' + esc(t("type")) + '</h3><p class="empty lam-normal">' + esc(t("helpBody")) + '</p>';
     return html;
   }
 
@@ -1892,7 +1899,7 @@
       "在工具标签运行 :growth，这里会画出项规模随步数变化的曲线。",
       "Run :growth from Tools to plot term size against reduction steps.")) + '</p>';
     var html = '<h3>' + esc(t("growth")) + '</h3>' +
-      '<p class="empty" style="font-style:normal">' +
+      '<p class="empty lam-normal">' +
       esc(dual("应用序与正规序对照，纵轴为节点数。",
                "Applicative vs normal order; the vertical axis is node count.")) + '</p>';
     var series = [["applicative", "--del"], ["normal", "--accent"]];
@@ -1929,13 +1936,13 @@
   function renderNotebook(){
     var cells = state.notebookCells.length ? state.notebookCells : [{code: ""}];
     var html = '<h3>' + esc(t("notebook")) + '</h3>' +
-      '<p class="empty" style="font-style:normal">' + esc(dual(
+      '<p class="empty lam-normal">' + esc(dual(
         "每个单元独立运行，可重排或删除；内容随界面状态保存。",
         "Each cell runs independently; reorder or delete cells. Saved with the UI state.")) + '</p>';
     cells.forEach(function(c, i){
       html += '<div class="ex-card"><textarea id="nb-' + i + '" rows="2" spellcheck="false" ' +
         'aria-label="cell ' + (i + 1) + '">' + esc(c.code) + '</textarea>' +
-        '<div class="sess-acts" style="margin-top:6px">' +
+        '<div class="sess-acts lam-mt-1">' +
         '<button type="button" data-nb-run="' + i + '">' + esc(t("runB")) + '</button>' +
         '<button type="button" data-nb-up="' + i + '">↑</button>' +
         '<button type="button" data-nb-down="' + i + '">↓</button>' +
@@ -1957,7 +1964,7 @@
   function renderCompare(){
     var c = state.compare;
     return '<h3>' + esc(t("compare")) + '</h3>' +
-      '<p class="empty" style="font-style:normal">' + esc(dual(
+      '<p class="empty lam-normal">' + esc(dual(
         "两侧各用独立会话归约，再用 :conv / :prove 判断两个正规形是否同义。",
         "Each side reduces in its own session; compare the normal forms with :conv / :prove.")) + '</p>' +
       '<div class="ex-card"><div class="ex-title">A · ' + esc(t("runB")) + '</div>' +
@@ -2024,10 +2031,10 @@
   function renderSessions(){
     var rows = state.sessionRows || [];
     var html = '<h3>' + esc(t("sessions")) + '</h3>' +
-      '<p class="empty" style="font-style:normal">' + esc(dual(
+      '<p class="empty lam-normal">' + esc(dual(
         "已保存的会话可恢复、重命名或删除；恢复会创建新的会话并回放历史。",
         "Saved sessions can be restored, renamed or deleted; restore replays the history into a new session.")) + '</p>' +
-      '<div style="margin-bottom:10px"><button class="mini" type="button" data-sess-refresh">' +
+      '<div class="lam-mb-2"><button class="mini" type="button" data-sess-refresh">' +
       esc(t("refreshB")) + '</button></div>';
     if (!rows.length) return html + '<p class="empty">' + esc(t("noSessions")) + '</p>';
     rows.forEach(function(row){
@@ -2058,7 +2065,7 @@
     var done = state.exerciseDone || {};
     var n = Object.keys(done).filter(function(k){ return done[k]; }).length;
     var html = '<h3>' + esc(t("exercises")) + '</h3>' +
-      '<p class="empty" style="font-style:normal">' + esc(dual(
+      '<p class="empty lam-normal">' + esc(dual(
         "用 :conv 检查你的答案是否 β 等价；进度保存在本地。",
         "Your answer is checked with :conv for beta-equivalence; progress is saved locally.")) +
         ' (' + n + '/' + EXERCISES.length + ')</p>';
@@ -2117,7 +2124,7 @@
         '</p>';
     }
     var html = '<h3>' + esc(dual("策略竞速", "Strategy race")) + '</h3>';
-    html += '<p class="empty" style="font-style:normal;margin-bottom:10px">' + esc(dual(
+    html += '<p class="empty lam-normal lam-mb-2">' + esc(dual(
       "同一表达式在四种策略下的归约；步数受步数上限约束，完整轨迹可在“轨迹”标签查看。",
       "One expression under four strategies; step counts respect the step limit. Open Trace for the full steps.")) + '</p>';
     html += '<div class="race-grid">';
@@ -2181,6 +2188,8 @@
 
     var range = panel.querySelector("#tr-range");
     if (range){
+      var traceCount = (state.selected && state.selected.trace) ? state.selected.trace.length : 1;
+      range.style.setProperty("--p", (traceCount > 1 ? state.tracePos / (traceCount - 1) * 100 : 0) + "%");
       range.addEventListener("input", function(){
         stopPlay();
         state.tracePos = parseInt(range.value, 10) || 0;
@@ -2541,8 +2550,8 @@
     el.style.color = ok ? "var(--ok)" : "var(--err)";
   }
 
-  // 流式求值可用时优先使用，长归约期间显示心跳而不再被 10 秒超时杀掉
-  // Prefer streaming when available; heartbeats keep long reductions alive.
+  // 流式求值可用时优先使用；持续输出会刷新空闲超时，长归约不再被固定总时限杀掉
+  // Prefer streaming; continuous output refreshes the idle timeout for long reductions.
   function canStream(){
     return typeof TextDecoder !== "undefined" && typeof ReadableStream !== "undefined";
   }
@@ -2599,7 +2608,7 @@
     // The backend already received (and may be running) the line; a later transport
     // failure must not re-send it through /api/eval.
     if (streamState) streamState.started = true;
-    var buf = "", outputs = [], session = null, failure = null;
+    var buf = "", outputs = [], session = null, failure = null, completed = false;
     var consume = function(){
       var idx;
       while ((idx = buf.indexOf("\n\n")) >= 0){
@@ -2608,7 +2617,10 @@
         var obj = null;
         try { obj = JSON.parse(frame.slice(6)); } catch(e){ continue; }
         if (!obj) continue;
-        if (obj.kind === "start" || obj.kind === "done"){
+        if (obj.kind === "start"){
+          if (obj.session) session = obj.session;
+        } else if (obj.kind === "done"){
+          completed = obj.ok !== false;
           if (obj.session) session = obj.session;
         } else if (obj.kind === "heartbeat"){
           showRunning(obj.elapsedMs);
@@ -2632,6 +2644,11 @@
     if (failure){
       var status = failure.timeout ? 408 : (failure.restart ? 410 : 500);
       return {status: status, data: failure};
+    }
+    if (!completed){
+      return {status: 500, data: {ok: false, restart: true, code: "incomplete_stream",
+        error: dual("执行连接意外结束，结果未知；正在重建会话。",
+                    "The execution stream ended unexpectedly; result unknown and session rebuilding.")}};
     }
     return {status: 200, data: {ok: true, session: session, outputs: outputs}};
   }
@@ -3018,7 +3035,8 @@
 
   function closeAc(){
     ac.classList.remove("open");
-    if (ac.removeAttribute) ac.removeAttribute("aria-activedescendant");
+    if (cmd.setAttribute) cmd.setAttribute("aria-expanded", "false");
+    if (cmd.removeAttribute) cmd.removeAttribute("aria-activedescendant");
     state.acItems = []; state.acIndex = -1;
   }
 
@@ -3034,7 +3052,10 @@
              '" data-i="' + i + '" aria-selected="' + (i === 0 ? 'true' : 'false') + '">' +
              '<span>' + esc(x) + '</span><span class="hint">' + esc(cmdHint(x)) + '</span></div>';
     }).join("");
-    if (ac.setAttribute) ac.setAttribute("aria-activedescendant", "ac-opt-0");
+    if (cmd.setAttribute) {
+      cmd.setAttribute("aria-expanded", "true");
+      cmd.setAttribute("aria-activedescendant", "ac-opt-0");
+    }
     Array.prototype.forEach.call(ac.querySelectorAll(".item"), function(el){
       el.addEventListener("mousedown", function(ev){ ev.preventDefault(); acceptAc(parseInt(el.dataset.i, 10)); });
     });
@@ -3322,7 +3343,7 @@
       el.classList.toggle("active", i === state.acIndex);
       if (el.setAttribute) el.setAttribute("aria-selected", i === state.acIndex ? "true" : "false");
     });
-    if (ac.setAttribute) ac.setAttribute("aria-activedescendant", "ac-opt-" + state.acIndex);
+    if (cmd.setAttribute) cmd.setAttribute("aria-activedescendant", "ac-opt-" + state.acIndex);
   }
 
   // 滚动与光标移动时同步高亮层、行号与括号匹配 / keep layers aligned on scroll and caret moves
@@ -3374,6 +3395,22 @@
     }
   }
 
+  function resetInspector(){
+    state.selected = null;
+    state.tracePos = 0;
+    state.envRows = [];
+    state.manualTerm = "";
+    state.redexes = [];
+    state.lastType = null;
+    state.raceResults = null;
+    state.growth = null;
+    state.compare.leftTerm = "";
+    state.compare.rightTerm = "";
+    state.expiredSession = null;
+    closeAc();
+    renderPanel();
+  }
+
   function clearAll(){
     state.gen = (state.gen || 0) + 1;
     // 清空也要终止所有进行中的请求与轨迹播放，否则它们随后仍会重建会话
@@ -3388,13 +3425,18 @@
     activeController = null;
     setCancelActive(false);
     stopPlay();
+    var oldSession = state.session;
+    [oldSession, state.compare.leftSession, state.compare.rightSession].forEach(function(sid){
+      if (sid) api("api/session/" + encodeURIComponent(sid) + "/cancel", {}, "POST");
+    });
+    state.compare.leftSession = null;
+    state.compare.rightSession = null;
     out.innerHTML = "";
     state.codeLines = [];
     state.localHistoryRejected = false;
-    state.selected = null;
-    state.envRows = [];
     state.session = null;
     setManual(false);
+    resetInspector();
     newSession().then(async function(){
       await evalLine(":strategy " + $("strategy").value, true);
       await evalLine(":steps " + state.limit, true);
@@ -3769,8 +3811,11 @@
     var items = (EXAMPLE_CATS[state.exCat] || EXAMPLE_CATS[0]).items;
     box.innerHTML = "";
     items.forEach(function(ex){
-      var b = elem("span", "chip");
-      b.innerHTML = esc(ex[0]) + ' <span style="color:var(--faint)">· ' + esc(ex[1]) + '</span>';
+      var b = elem("button", "chip");
+      b.type = "button";
+      b.appendChild(document.createTextNode(ex[0] + " "));
+      var hint = elem("span", "chip-hint", "· " + ex[1]);
+      b.appendChild(hint);
       b.addEventListener("click", function(){
         cmd.value = ex[0];
         cmd.focus();
@@ -3787,7 +3832,8 @@
       var box = $("chips");
       box.innerHTML = "";
       (names || []).forEach(function(n){
-        var c = elem("span", "chip", esc(n));
+        var c = elem("button", "chip", n);
+        c.type = "button";
         c.addEventListener("click", function(){ insertText(n); });
         box.appendChild(c);
       });

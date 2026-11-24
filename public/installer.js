@@ -10,17 +10,11 @@
   };
 
   var APPEARANCE_KEY = 'omm.installer.appearance.v1';
-  var appearance = { radius: 0, motion: true, compact: false };
-
+  var appearance = { motion: true, compact: false };
+  var doneModal = null;
   var els = {};
 
-  var esc = ZenUtil.esc
-
-  function bytes(value) {
-    if (!value) return '0 MB';
-    if (value < 1024 * 1024) return Math.round(value / 1024) + ' KB';
-    return (value / 1024 / 1024).toFixed(1) + ' MB';
-  }
+  var esc = ZenUtil.esc;
 
   function api(url, options) {
     return fetch(url, options || {}).then(function (response) {
@@ -49,7 +43,6 @@
     els.progressPercent = document.getElementById('progress-percent');
     els.progressBar = document.getElementById('progress-bar');
     els.progressLog = document.getElementById('progress-log');
-    els.done = document.getElementById('done');
     els.shortcut = document.getElementById('shortcut');
     els.railCount = document.getElementById('rail-count');
     els.railSize = document.getElementById('rail-size');
@@ -58,24 +51,29 @@
     applyAppearance();
     bindSettings();
 
+    els.grid.addEventListener('change', function (event) {
+      var input = event.target.closest('.plugin input[type="checkbox"]');
+      if (!input) return;
+      var item = input.closest('.plugin[data-id]');
+      if (!item) return;
+      if (input.checked) state.selected.add(item.dataset.id);
+      else state.selected.delete(item.dataset.id);
+      syncPluginSelection();
+    });
     document.getElementById('select-all').addEventListener('click', function () {
       if (!state.catalog) return;
       state.catalog.plugins.forEach(function (item) {
         state.selected.add(item.id);
       });
-      renderPlugins();
+      syncPluginSelection();
     });
     document.getElementById('select-none').addEventListener('click', function () {
       state.selected.clear();
-      renderPlugins();
+      syncPluginSelection();
     });
     document.getElementById('browse').addEventListener('click', browse);
     els.install.addEventListener('click', startInstall);
     els.retry.addEventListener('click', loadCatalog);
-    document.getElementById('launch').addEventListener('click', launch);
-    document.getElementById('close-done').addEventListener('click', function () {
-      els.done.hidden = true;
-    });
 
     loadConfig()
       .then(loadCatalog)
@@ -171,7 +169,7 @@
             esc(item.description || '') +
             '</span></span>' +
             '<span class="size">' +
-            bytes(item.size) +
+            ZenUtil.formatBytes(item.size) +
             '</span>' +
             '<span class="checkmark">' +
             (checked ? '✓' : '') +
@@ -179,19 +177,19 @@
           );
         })
         .join('');
-      Array.prototype.forEach.call(
-        els.grid.querySelectorAll('.plugin'),
-        function (el) {
-          el.addEventListener('click', function (event) {
-            event.preventDefault();
-            var id = el.dataset.id;
-            if (state.selected.has(id)) state.selected.delete(id);
-            else state.selected.add(id);
-            renderPlugins();
-          });
-        }
-      );
     }
+    updateSummary();
+  }
+
+  function syncPluginSelection() {
+    Array.prototype.forEach.call(els.grid.querySelectorAll('.plugin[data-id]'), function (item) {
+      var checked = state.selected.has(item.dataset.id);
+      item.classList.toggle('checked', checked);
+      var input = item.querySelector('input[type="checkbox"]');
+      if (input) input.checked = checked;
+      var mark = item.querySelector('.checkmark');
+      if (mark) mark.textContent = checked ? '✓' : '';
+    });
     updateSummary();
   }
 
@@ -204,44 +202,28 @@
       return sum + (Number(item.size) || 0);
     }, 0);
     els.summaryCount.textContent = String(chosen.length);
-    els.summarySize.textContent = bytes(size);
+    els.summarySize.textContent = ZenUtil.formatBytes(size);
     els.railCount.textContent = String(chosen.length);
-    els.railSize.textContent = bytes(size);
+    els.railSize.textContent = ZenUtil.formatBytes(size);
     els.install.disabled = state.installing || !state.catalog;
     els.install.textContent = state.installing ? '安装中…' : '开始安装';
   }
 
   function loadAppearance() {
-    try {
-      var raw = localStorage.getItem(APPEARANCE_KEY);
-      if (raw) {
-        var data = JSON.parse(raw);
-        if (data && typeof data === 'object') {
-          appearance.radius = [0, 4, 8, 12, 16].indexOf(Number(data.radius)) >= 0 ? Number(data.radius) : 0;
-          appearance.motion = data.motion !== false;
-          appearance.compact = !!data.compact;
-        }
-      }
-    } catch (e) {
-      /* ignore */
-    }
+    var data = ZenUtil.getJSON(APPEARANCE_KEY, {}) || {};
+    appearance.motion = data.motion !== false;
+    appearance.compact = !!data.compact;
+    // 旧版本可能在同一对象里存过 radius；立即用规范对象覆盖，删除旧持久化。
+    if (Object.prototype.hasOwnProperty.call(data, 'radius')) saveAppearance();
   }
 
   function saveAppearance() {
-    try {
-      localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
-    } catch (e) {
-      /* ignore */
-    }
+    ZenUtil.setJSON(APPEARANCE_KEY, appearance);
   }
 
   function applyAppearance() {
-    document.documentElement.style.setProperty('--radius', appearance.radius + 'px');
     document.body.classList.toggle('no-motion', !appearance.motion);
     document.body.classList.toggle('compact', appearance.compact);
-    Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
-      btn.classList.toggle('active', Number(btn.dataset.radius) === appearance.radius);
-    });
     var motion = document.getElementById('motion');
     var compact = document.getElementById('compact');
     if (motion) motion.setAttribute('aria-checked', String(appearance.motion));
@@ -251,16 +233,6 @@
   var SETTINGS_HTML =
     '<div class="settings-body">' +
       '<div class="settings-sub">只影响安装器界面，不影响已安装产品</div>' +
-      '<section class="setting">' +
-        '<div class="setting-label">圆角</div>' +
-        '<div class="segmented" id="radius-options">' +
-          '<button type="button" data-radius="0">0</button>' +
-          '<button type="button" data-radius="4">4</button>' +
-          '<button type="button" data-radius="8">8</button>' +
-          '<button type="button" data-radius="12">12</button>' +
-          '<button type="button" data-radius="16">16</button>' +
-        '</div>' +
-      '</section>' +
       '<section class="setting">' +
         '<div class="setting-label">界面动效</div>' +
         '<button class="switch" data-zen-switch id="motion" type="button" role="switch" aria-checked="true">' +
@@ -273,10 +245,10 @@
           '<span class="switch-track"></span><span>缩小间距，在一屏内看到更多产品</span>' +
         '</button>' +
       '</section>' +
-    '</div>'
+    '</div>';
   var SETTINGS_FOOT =
     '<button class="ghost" id="settings-reset" type="button">恢复默认</button>' +
-    '<button class="primary" id="settings-done" type="button">完成</button>'
+    '<button class="primary" id="settings-done" type="button">完成</button>';
 
   function bindSettings() {
     function open() {
@@ -286,15 +258,8 @@
         html: SETTINGS_HTML,
         foot: SETTINGS_FOOT,
         width: 'min(460px, calc(100vw - 28px))',
-        onMount: function (body, foot) {
+        onMount: function () {
           applyAppearance();
-          Array.prototype.forEach.call(document.querySelectorAll('[data-radius]'), function (btn) {
-            btn.addEventListener('click', function () {
-              appearance.radius = Number(btn.dataset.radius);
-              saveAppearance();
-              applyAppearance();
-            });
-          });
           document.getElementById('motion').addEventListener('click', function () {
             appearance.motion = !appearance.motion;
             saveAppearance();
@@ -306,7 +271,7 @@
             applyAppearance();
           });
           document.getElementById('settings-reset').addEventListener('click', function () {
-            appearance = { radius: 0, motion: true, compact: false };
+            appearance = { motion: true, compact: false };
             saveAppearance();
             applyAppearance();
           });
@@ -379,7 +344,7 @@
           els.summaryState.textContent = '安装完成';
           els.install.textContent = '重新安装';
           els.install.disabled = false;
-          els.done.hidden = false;
+          showDone();
           return;
         }
         if (progress.error) {
@@ -402,14 +367,41 @@
       });
   }
 
+  function showDone() {
+    if (doneModal) return;
+    var template = document.getElementById('done-tpl');
+    doneModal = window.ZenUI.modal.open({
+      title: '安装完成',
+      html: template ? template.innerHTML : '',
+      width: 'min(440px, calc(100vw - 28px))',
+      onMount: function () {
+        document.getElementById('launch').addEventListener('click', launch);
+        document.getElementById('close-done').addEventListener('click', function () {
+          if (doneModal) doneModal.close();
+        });
+      },
+      onClose: function () { doneModal = null; },
+    });
+  }
+
   function launch() {
+    var button = document.getElementById('launch');
+    var error = document.getElementById('launch-error');
+    button.disabled = true;
+    button.textContent = '正在启动…';
+    error.hidden = true;
     api('/api/launch', { method: 'POST', body: '{}' })
       .then(function () {
-        els.done.hidden = true;
         els.summaryState.textContent = '已启动';
+        if (doneModal) doneModal.close();
       })
-      .catch(function (error) {
-        els.progressMessage.textContent = error.message;
+      .catch(function (failure) {
+        button.disabled = false;
+        button.textContent = '启动 静书房';
+        error.textContent = '启动失败：' + failure.message;
+        error.hidden = false;
+        els.summaryState.textContent = '启动失败';
+        button.focus();
       });
   }
 

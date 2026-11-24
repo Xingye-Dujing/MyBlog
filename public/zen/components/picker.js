@@ -24,7 +24,10 @@
   var POP_ID = 'zenui-picker-pop'
   var config = {
     labels: function () {
-      return { done: '确定', clear: '清除', hour: '时', minute: '分' }
+      return {
+        done: '确定', clear: '清除', hour: '时', minute: '分',
+        prevMonth: '上个月', nextMonth: '下个月',
+      }
     },
     weekdays: function () { return ['一', '二', '三', '四', '五', '六', '日'] },
     weekStart: function () { return 1 },
@@ -70,6 +73,7 @@
       event.stopPropagation()
       onPick(target)
     })
+    pop.addEventListener('keydown', onKeyDown)
     return pop
   }
 
@@ -129,21 +133,12 @@
       outside: function (event) {
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(el) >= 0 || (anchor && path.indexOf(anchor) >= 0)) return
-        close()
+        close(false)
       },
-      escape: close,
-      key: function (event) {
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          var opts = el.querySelectorAll('.pk-opt,.pk-day:not(.dis)')
-          if (!opts.length) return
-          event.preventDefault(); event.stopImmediatePropagation()
-          var i = Array.prototype.indexOf.call(opts, l.shadow.activeElement)
-          var next = (i + (event.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length
-          try { opts[next].focus() } catch (e) { /* ignore */ }
-        }
-      },
+      escape: function () { close(true) },
     }
     l.push(ctx.entry)
+    focusCurrent()
     return api
   }
 
@@ -157,16 +152,52 @@
         config.scroll(col.querySelector('.pk-opt.active'), 'center')
       })
     }
+    if (el.classList.contains('open')) focusCurrent()
+  }
+
+  function focusCurrent() {
+    var el = ensurePop()
+    var choices = el.querySelectorAll('.pk-day:not(.dis),.pk-opt')
+    Array.prototype.forEach.call(choices, function (choice) { choice.tabIndex = -1 })
+    var current = el.querySelector('.pk-day.sel:not(.dis),.pk-day.today:not(.dis),.pk-opt.active') || choices[0]
+    if (!current) return
+    current.tabIndex = 0
+    try { current.focus() } catch (e) { /* ignore */ }
+  }
+
+  function onKeyDown(event) {
+    if (!ctx) return
+    if (event.key === 'Tab') {
+      layer.trapTab(event, ensurePop().getRootNode())
+      return
+    }
+    var target = event.target
+    if (!target || !target.matches || !target.matches('.pk-day,.pk-opt')) return
+    var delta = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key]
+    if (!delta && event.key !== 'Home' && event.key !== 'End') return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    var choices = Array.prototype.slice.call(
+      target.matches('.pk-day') ? ensurePop().querySelectorAll('.pk-day:not(.dis)') : ensurePop().querySelectorAll('.pk-opt')
+    )
+    if (!choices.length) return
+    var index = choices.indexOf(target)
+    var next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1
+      : (index + delta + choices.length) % choices.length
+    target.tabIndex = -1
+    choices[next].tabIndex = 0
+    choices[next].focus()
   }
 
   function onPick(target) {
     if (!ctx) return
+    var callback = ctx.cb
     var v = target.dataset.pick
     if (ctx.kind === 'multidate') {
       if (v === '@ok') {
         var value = ctx.dates.slice().sort()
         close()
-        ctx.cb(value.join(','))
+        callback(value.join(','))
         return
       }
       if (v === '@clear') { ctx.dates = []; render(); return }
@@ -180,7 +211,7 @@
         return
       }
     }
-    if (v === '@clear') { close(); ctx.cb('', true); return }
+    if (v === '@clear') { close(); callback('', true); return }
     if (v === '@nav') {
       var dir = parseInt(target.dataset.dir, 10)
       ctx.m += dir
@@ -191,14 +222,14 @@
     }
     if ((ctx.kind === 'date' || ctx.kind === 'enddate') && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
       close()
-      ctx.cb(v, false)
+      callback(v, false)
       return
     }
     if (ctx.kind === 'time') {
       if (target.dataset.part === 'h') { ctx.hh = v; render(); return }
       ctx.mm = v
       close()
-      ctx.cb(ctx.hh + ':' + v, false)
+      callback(ctx.hh + ':' + v, false)
     }
   }
 
@@ -207,9 +238,9 @@
     var weekStart = Number(config.weekStart()) || 0
     var names = config.weekdays() || []
     var html = '<div class="pk-head">' +
-      '<div class="pk-nav" data-pick="@nav" data-dir="-1">‹</div>' +
+      '<button class="pk-nav" type="button" data-pick="@nav" data-dir="-1" aria-label="' + esc(l.prevMonth) + '">‹</button>' +
       '<span class="pk-title">' + ctx.y + ' / ' + pad(ctx.m) + '</span>' +
-      '<div class="pk-nav" data-pick="@nav" data-dir="1">›</div></div>'
+      '<button class="pk-nav" type="button" data-pick="@nav" data-dir="1" aria-label="' + esc(l.nextMonth) + '">›</button></div>'
     html += '<div class="pk-grid">'
     for (var w = 0; w < 7; w++) html += '<div class="pk-wd">' + esc(names[w] || '') + '</div>'
     var first = new Date(ctx.y, ctx.m - 1, 1)
@@ -223,17 +254,21 @@
       if (d.getMonth() + 1 !== ctx.m) cls.push('other')
       if (ctx.minDS && ds < ctx.minDS) cls.push('dis')
       if (ds === today) cls.push('today')
-      if (ctx.kind === 'multidate' ? ctx.dates.indexOf(ds) >= 0 : ds === ctx.value) cls.push('sel')
-      html += '<div class="' + cls.join(' ') + '" data-pick="' + ds + '">' + d.getDate() + '</div>'
+      var selected = ctx.kind === 'multidate' ? ctx.dates.indexOf(ds) >= 0 : ds === ctx.value
+      if (selected) cls.push('sel')
+      var disabled = ctx.minDS && ds < ctx.minDS
+      html += '<button class="' + cls.join(' ') + '" type="button" data-pick="' + ds + '"' +
+        (disabled ? ' disabled' : '') + ' aria-pressed="' + (selected ? 'true' : 'false') +
+        '" aria-label="' + ds + '">' + d.getDate() + '</button>'
     }
     html += '</div>'
     if (ctx.kind === 'multidate') {
       html += '<div class="pk-multi-foot">' +
-        '<span class="pk-clear" data-pick="@clear">' + esc(l.clear) + '</span>' +
-        '<span class="pk-clear pk-done" data-pick="@ok">' + esc(l.done) + ' (' + ctx.dates.length + ')</span></div>'
+        '<button class="pk-clear" type="button" data-pick="@clear">' + esc(l.clear) + '</button>' +
+        '<button class="pk-clear pk-done" type="button" data-pick="@ok">' + esc(l.done) + ' (' + ctx.dates.length + ')</button></div>'
     }
     if (ctx.kind === 'enddate') {
-      html += '<div class="pk-multi-foot"><span class="pk-clear" data-pick="@clear">' + esc(l.clear) + '</span></div>'
+      html += '<div class="pk-multi-foot"><button class="pk-clear" type="button" data-pick="@clear">' + esc(l.clear) + '</button></div>'
     }
     return html
   }
@@ -244,29 +279,35 @@
     var minutes = ''
     for (var h = 0; h < 24; h++) {
       var hv = pad(h)
-      hours += '<div class="pk-opt' + (hv === ctx.hh ? ' active' : '') +
-        '" data-pick="' + hv + '" data-part="h">' + hv + '</div>'
+      hours += '<button class="pk-opt' + (hv === ctx.hh ? ' active' : '') +
+        '" type="button" data-pick="' + hv + '" data-part="h" aria-pressed="' +
+        (hv === ctx.hh ? 'true' : 'false') + '">' + hv + '</button>'
     }
     for (var m = 0; m < 60; m++) {
       var mv = pad(m)
-      minutes += '<div class="pk-opt' + (mv === ctx.mm ? ' active' : '') +
-        '" data-pick="' + mv + '" data-part="m">' + mv + '</div>'
+      minutes += '<button class="pk-opt' + (mv === ctx.mm ? ' active' : '') +
+        '" type="button" data-pick="' + mv + '" data-part="m" aria-pressed="' +
+        (mv === ctx.mm ? 'true' : 'false') + '">' + mv + '</button>'
     }
     return '<div class="pk-cols">' +
       '<div class="pk-colwrap"><div class="pk-lab">' + esc(l.hour) + '</div><div class="pk-col">' + hours + '</div></div>' +
       '<div class="pk-colwrap"><div class="pk-lab">' + esc(l.minute) + '</div><div class="pk-col">' + minutes + '</div></div>' +
-      '</div><div class="pk-clear" data-pick="@clear">' + esc(l.clear) + '</div>'
+      '</div><button class="pk-clear" type="button" data-pick="@clear">' + esc(l.clear) + '</button>'
   }
 
-  function close() {
+  function close(restoreFocus) {
     var l = layer.get()
     var el = ensurePop()
+    var anchor = ctx && ctx.anchor
     if (ctx && el.classList.contains('open')) {
       if (config.hide) config.hide(el)
       else el.classList.remove('open')
     }
     if (ctx && ctx.entry) l.pop(ctx.entry)
     ctx = null
+    if (restoreFocus !== false && anchor && anchor.focus) {
+      try { anchor.focus() } catch (e) { /* ignore */ }
+    }
   }
 
   /* ---------------------------------------------------------------- enhance */
@@ -280,15 +321,18 @@
       el.dataset.zenPickerReady = '1'
       var kind = el.matches('input[type="time"]') || el.hasAttribute('data-zen-time') ? 'time' : 'date'
       if (el.matches('input')) el.readOnly = true
-      el.addEventListener('click', function (event) {
+      function launch(event) {
         event.preventDefault()
         event.stopPropagation()
-        open(kind, el, el.value || '', function (value, cleared) {
+        open(kind, el, el.value || '', function (value) {
           el.value = value || ''
           try { el.dispatchEvent(new Event('input', { bubbles: true })) } catch (e) { /* ignore */ }
           try { el.dispatchEvent(new Event('change', { bubbles: true })) } catch (e) { /* ignore */ }
-          if (cleared) el.dispatchEvent(new Event('change', { bubbles: true }))
         })
+      }
+      el.addEventListener('click', launch)
+      el.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') launch(event)
       })
     })
   }

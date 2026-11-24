@@ -307,6 +307,21 @@ const validSnapshot = () => ({
   indexedDB: [{ name: 'db', version: 1, stores: [{ name: 's', keyPath: 'id', records: [{ key: '1', value: { id: '1' } }] }] }],
 })
 
+test('恢复 IndexedDB 时删除快照未包含的数据库', async () => {
+  const events = []
+  const { restoreDatabases } = loadFunctions(desktop, ['restoreDatabases'], {
+    deleteDatabase: async (name) => { events.push('delete:' + name) },
+    restoreDatabase: async (info) => { events.push('restore:' + info.name) },
+  })
+  await restoreDatabases([{ name: 'keep' }], ['keep', 'obsolete'])
+  assert.deepEqual(events, ['delete:obsolete', 'restore:keep'])
+})
+
+test('自动快照指纹覆盖完整序列化状态', () => {
+  assert.ok(desktop.includes('ZenUtil.fingerprint(JSON.stringify(snapshot))'))
+  assert.doesNotMatch(desktop, /text\.slice\(0,\s*2048\)/)
+})
+
 test('applyState 先验证快照，非法内容在任何写入前失败', async () => {
   let backups = 0
   const env = applyContext({ captureRollbackState: async () => { backups++; return {} } })
@@ -365,6 +380,13 @@ function liveContext(store) {
   ])
   const context = {
     localStorage: { getItem: (key) => key in store ? store[key] : null },
+    ZenUtil: {
+      getJSON(key, fallback) {
+        const raw = key in store ? store[key] : null
+        if (raw == null) return fallback
+        try { return JSON.parse(raw) } catch { return fallback }
+      },
+    },
     flowEvents: [{ kind: 'snapshot', text: 'saved', at: 1767225600000 }],
     frames,
     frameTargetOrigin: () => 'http://127.0.0.1:8321',
@@ -374,7 +396,8 @@ function liveContext(store) {
     JSON, Date, Object, Array, String, Number,
   }
   const fn = loadFunctions(hub,
-    ['annotateLiveSnapshot', 'collectLiveLocalData', 'respondLiveData', 'finishLiveData'], context)
+    ['liveCardDTO', 'dedupeLiveCards', 'readLiveCards', 'annotateLiveSnapshot',
+      'collectLiveLocalData', 'respondLiveData', 'finishLiveData'], context)
   return { ...fn, posts, waiters: context.liveDataWaiters }
 }
 
@@ -612,6 +635,7 @@ test('ZenBackup 隐藏 iframe 完成后清理，不删除用户已打开的窗�
   const { cleanupWorkspaceFrames } = loadFunctions(hub, ['cleanupWorkspaceFrames'], {
     findPaneByApp: () => null,
     frames,
+    workspaceHiddenLeases: Object.create(null),
     destroyFrame: (id) => destroyed.push(id),
     appStatus: {},
   })
@@ -633,4 +657,256 @@ test('Hub AI 设置不缓存或读取密钥，留空提交时省略 apiKey', () 
   const block = hub.slice(hub.indexOf('function saveAIConfig('), hub.indexOf('function openHubSettings('))
   assert.ok(block.includes("if (clearKey || nextKey) ai.apiKey = clearKey ? '' : nextKey"))
   assert.ok(block.includes('data && data.hasStoredKey'))
+})
+
+/* ---------------------- Hub layout / accessibility regressions ---------- */
+
+test('detach 窗口只显示目标产品且不写主布局或多屏布局', () => {
+  const writes = []
+  const state = { open: ['writer', 'data'], tree: {}, panes: {}, focused: 'p1', dock: false, maximized: null }
+  const fn = loadFunctions(hub,
+    ['defaultState', 'applyDetachAndScreenLayout', 'saveNow', 'saveScreenLayout'], {
+      DETACHED_APP_ID: 'writer',
+      APP_BY_ID: { writer: { id: 'writer' } },
+      hubAppearance: { restore: true, multiMonitor: true },
+      state,
+      STORAGE_KEY: 'main-layout',
+      SCREEN_KEY_PREFIX: 'screen-layout.',
+      screenKey: () => 'display-1',
+      ZenUtil: {
+        getJSON: () => { throw new Error('detach must not read layouts') },
+        setJSON: (key, value) => writes.push({ key, value }),
+      },
+    })
+  fn.applyDetachAndScreenLayout()
+  assert.deepEqual(Array.from(state.open), ['writer'])
+  assert.equal(state.panes.p1, 'writer')
+  fn.saveNow()
+  fn.saveScreenLayout()
+  assert.deepEqual(writes, [])
+})
+
+test('restore=false 不读取显示器布局', () => {
+  const state = { open: [], tree: { type: 'leaf', id: 'p1' }, panes: { p1: null }, focused: 'p1', dock: true }
+  const fn = loadFunctions(hub, ['applyDetachAndScreenLayout'], {
+    DETACHED_APP_ID: '',
+    APP_BY_ID: {},
+    hubAppearance: { restore: false, multiMonitor: true },
+    state,
+    ZenUtil: { getJSON: () => { throw new Error('must not restore screen layout') } },
+  })
+  fn.applyDetachAndScreenLayout()
+  assert.deepEqual(Array.from(state.open), [])
+})
+
+test('恢复快照按钮与时间线都经过同一确认入口', async () => {
+  const events = []
+  let confirmed = false
+  const fn = loadFunctions(hub, ['requestSnapshotRestore', 'restoreSnapshotFor'], {
+    APP_BY_ID: { writer: { id: 'writer', name: 'Writer' } },
+    lastSnapshotByApp: { writer: { path: '/tmp/snap.json', name: 'snap.json', label: '手动快照' } },
+    ommConfirm: () => Promise.resolve(confirmed),
+    closeTimeline: () => {},
+    toast: () => {},
+    CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail } },
+    window: { dispatchEvent: (event) => events.push(event) },
+  })
+  fn.restoreSnapshotFor('writer')
+  await Promise.resolve()
+  assert.equal(events.length, 0)
+  confirmed = true
+  fn.restoreSnapshotFor('writer')
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(events.length, 1)
+  assert.equal(events[0].type, 'omm:restore-snapshot')
+  assert.equal(events[0].detail.path, '/tmp/snap.json')
+  const paneHandler = hub.slice(hub.indexOf('/* panes */'), hub.indexOf('/* splitters */'))
+  assert.ok(paneHandler.includes("action.dataset.act === 'restore-snap'"))
+  const timeline = hub.slice(hub.indexOf('function openTimelineItem('), hub.indexOf('function showTabMenu('))
+  assert.ok(timeline.includes('requestSnapshotRestore('))
+})
+
+test('恢复外观默认只重置视觉与无障碍，不碰快捷键、宏和云凭据', () => {
+  const keymap = { 'open-0': 'Alt+0' }
+  const macros = [{ name: '写作', key: 'Ctrl+Alt+W', actions: ['open-1'] }]
+  const cloud = { enabled: true, url: 'https://dav.example', user: 'u', password: 'secret' }
+  const hubAppearance = {
+    topbar: false,
+    a11y: { fontScale: 1.5, highContrast: true, reduceMotion: true, ariaLabels: false },
+    keymap, macros, cloud,
+    focus: { pomodoro: 45 }, restore: false, snap: 30,
+  }
+  const saved = []
+  loadFunctions(hub, ['normalizeA11y', 'resetVisualDefaults'], {
+    hubAppearance,
+    saveHubAppearance: () => saved.push(hubAppearance),
+    applyHubAppearance: () => {},
+    scheduleLayout: () => {},
+    toast: () => {},
+  }).resetVisualDefaults()
+  assert.equal(hubAppearance.topbar, true)
+  assert.deepEqual(JSON.parse(JSON.stringify(hubAppearance.a11y)),
+    { fontScale: 1, highContrast: false, reduceMotion: false, ariaLabels: true })
+  assert.equal(hubAppearance.keymap, keymap)
+  assert.equal(hubAppearance.macros, macros)
+  assert.equal(hubAppearance.cloud, cloud)
+  assert.equal(hubAppearance.focus.pomodoro, 45)
+  assert.equal(saved.length, 1)
+})
+
+test('Hub 全局快捷键避开共享浮层与可编辑控件，自定义组合必须带修饰键', () => {
+  let open = true
+  let prevented = 0
+  const event = { ctrlKey: true, key: 'k', target: { nodeType: 1, tagName: 'BODY' }, preventDefault: () => prevented++ }
+  const fn = loadFunctions(hub, ['hasModifier', 'isEditableTarget', 'onKeyDown'], {
+    comboCapturing: false,
+    window: { ZenUI: { layer: { hasOpen: () => open } } },
+  })
+  fn.onKeyDown(event)
+  assert.equal(prevented, 0)
+  open = false
+  fn.onKeyDown({ ...event, target: { nodeType: 1, tagName: 'INPUT' } })
+  assert.equal(prevented, 0)
+  assert.equal(fn.hasModifier('Ctrl+K'), true)
+  assert.equal(fn.hasModifier('Shift+F10'), true)
+  assert.equal(fn.hasModifier('K'), false)
+  assert.ok(hub.includes('if (!combo || !hasModifier(combo))'))
+  const keymap = loadFunctions(hub, ['hasModifier', 'normalizeKeymap'], {
+    COMMANDS: [{ id: 'command-palette', def: 'Ctrl+K' }],
+  })
+  assert.equal(keymap.normalizeKeymap({ 'command-palette': 'K' })['command-palette'], 'Ctrl+K')
+})
+
+test('安装器键盘选择不重建网格，完成页与启动失败反馈走共享模态', async () => {
+  const installer = read('public/installer.js')
+  const page = read('public/installer.html')
+  const render = installer.slice(installer.indexOf('function renderPlugins()'), installer.indexOf('function syncPluginSelection()'))
+  assert.ok(!/\.addEventListener|renderPlugins\(\);/.test(render), '选择产品不应整表重建')
+  assert.ok(installer.includes("els.grid.addEventListener('change'"))
+  assert.ok(installer.includes('syncPluginSelection();'))
+  assert.ok(page.includes('id="done-tpl"'))
+  assert.ok(!page.includes('id="done"'))
+  assert.ok(installer.includes('doneModal = window.ZenUI.modal.open('))
+  assert.ok(installer.includes("error.hidden = false"))
+  assert.ok(installer.includes("error.textContent = '启动失败：'"))
+  const button = { disabled: false, textContent: '', focus: () => {} }
+  const error = { hidden: true, textContent: '' }
+  const fn = loadFunctions(installer, ['launch'], {
+    document: { getElementById: (id) => id === 'launch' ? button : error },
+    api: () => Promise.reject(new Error('denied')),
+    els: { summaryState: { textContent: '' } },
+    doneModal: null,
+  })
+  fn.launch()
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(button.disabled, false)
+  assert.equal(error.hidden, false)
+  assert.match(error.textContent, /启动失败：denied/)
+})
+
+test('安装器删除圆角设置与旧 radius 持久化，固定 ZEN 直角', () => {
+  const installer = read('public/installer.js')
+  const page = read('public/installer.html')
+  const css = read('public/zen/products/installer.css')
+  assert.ok(!/data-radius|radius-options|appearance\.radius|setProperty\(['"]--radius/.test(installer + page))
+  assert.ok(installer.includes("hasOwnProperty.call(data, 'radius')"))
+  assert.ok(installer.includes('ZenUtil.setJSON(APPEARANCE_KEY, appearance)'))
+  const radii = Array.from(css.matchAll(/border-radius\s*:\s*([^;]+)/g), (match) => match[1].trim())
+  assert.ok(radii.every((value) => value.includes('var(--zen-radius)') || value === '50%'))
+})
+
+test('Hub CSS 清理死选择器并修正设置页脚、共享 select 与无障碍 targeting', () => {
+  const css = read('public/zen/products/hub.css')
+  assert.ok(!css.includes('never contains hard-coded colour values'))
+  assert.ok(!/\.plugin-panel\b|\.pp-card\s*\{/.test(css))
+  assert.ok(!css.includes('.oui-select'))
+  assert.ok(css.includes('.setting-inline .zenui-select-trigger'))
+  assert.ok(/\.settings-foot\s*\{/.test(css))
+  assert.ok(css.includes("html[data-zen-high-contrast='true']"))
+  assert.ok(css.includes("html[data-zen-reduce-motion='true']"))
+  assert.ok(css.includes('.tab { font-size: calc(12px * var(--zen-fscale))'))
+  assert.ok(css.includes('#dock { font-size: calc(10px * var(--zen-fscale))'))
+  assert.ok(!/--ui-scale|\.tab \.tab-name|\.dock-label|body\.(?:hc|reduce-motion|no-motion)/.test(css))
+  const apply = hub.slice(hub.indexOf('function applyHubAppearance()'), hub.indexOf('function cloudConfigFromForm()'))
+  assert.ok(apply.includes("root.dataset.zenHighContrast = String(!!a11y.highContrast)"))
+  assert.ok(apply.includes("root.dataset.zenReduceMotion = String(!!a11y.reduceMotion)"))
+  assert.ok(apply.includes("'--zen-fscale'"))
+})
+
+test('launcher pin 键盘不打开应用，tabs 使用真实关闭按钮与 roving focus', () => {
+  const launcherKey = hub.slice(hub.indexOf("els.launcher.addEventListener('keydown'"), hub.indexOf('/* layout menu */'))
+  assert.ok(launcherKey.indexOf("if (event.target.closest('[data-pin]')) return") < launcherKey.indexOf("if (event.key === 'Enter')"))
+  const launcherItem = hub.slice(hub.indexOf('function launcherApp('), hub.indexOf('function renderLauncher('))
+  assert.ok(launcherItem.includes('<button class="launcher-open"'))
+  assert.ok(!launcherItem.includes('role="button" tabindex="0" data-app='))
+  const tabs = hub.slice(hub.indexOf('function renderTabs()'), hub.indexOf('function updateTabsOverflow()'))
+  assert.ok(tabs.includes('aria-selected="'))
+  assert.ok(tabs.includes("(appId === rovingApp ? '0' : '-1')"))
+  assert.ok(tabs.includes("'</button>' +\n          '<button class=\"tab-close\""))
+  assert.ok(!tabs.includes('<span class="tab-close"'))
+  assert.ok(hub.includes("event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')"))
+})
+
+test('插件规范请求失败不会覆盖已切换标签', async () => {
+  let rejectRequest
+  const body = { innerHTML: '' }
+  const context = {
+    fetch: () => new Promise((resolve, reject) => { rejectRequest = reject }),
+    pluginPanelTab: 'spec',
+    pluginSpecSeq: 0,
+    els: { ppBody: body, pluginPanel: { hidden: false } },
+    esc: (value) => String(value),
+  }
+  vm.createContext(context)
+  vm.runInContext(`(${extractFunction(hub, 'renderPluginSpec')})()`, context)
+  body.innerHTML = 'installed-tab'
+  context.pluginPanelTab = 'installed'
+  rejectRequest(new Error('offline'))
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(body.innerHTML, 'installed-tab')
+})
+
+test('Hub 隐藏采集 ZenCard / ZenClip，完成后按租约清理且不伪造失败数据', async () => {
+  const requested = []
+  const cleaned = []
+  const fn = loadFunctions(hub,
+    ['dedupeLiveCards', 'loadProductCards'], {
+      APP_BY_ID: { zencard: {}, zenclip: {} },
+      productCardsPromise: null,
+      productCards: [],
+      productCardErrors: [],
+      ensureWorkspaceFrame: async (id, list) => { requested.push(id); list.push(id); return { id } },
+      requestCardFrame: async (id) => id === 'zencard'
+        ? { app: id, ok: true, cards: [{ id: 'c1', content: 'card' }] }
+        : { app: id, ok: false, cards: [], error: 'offline' },
+      cleanupWorkspaceFrames: (ids) => cleaned.push(...ids),
+      refreshOpenCardSurfaces: () => {},
+      Promise, Object, Array, String,
+    })
+  const result = await fn.loadProductCards()
+  assert.deepEqual(Array.from(requested), ['zencard', 'zenclip'])
+  assert.deepEqual(Array.from(cleaned), ['zencard', 'zenclip'])
+  assert.deepEqual(Array.from(result.cards, (card) => card.id), ['c1'])
+  assert.equal(result.complete, false)
+  assert.match(result.errors.join(' '), /zenclip: offline/)
+})
+
+test('隐藏 iframe 多租约时最后一次清理才销毁', () => {
+  const destroyed = []
+  const frames = new Map([['writer', { dataset: { workspaceHidden: '1' } }]])
+  const leases = { writer: 2 }
+  const { cleanupWorkspaceFrames } = loadFunctions(hub, ['cleanupWorkspaceFrames'], {
+    findPaneByApp: () => null,
+    frames,
+    workspaceHiddenLeases: leases,
+    destroyFrame: (id) => destroyed.push(id),
+    appStatus: {},
+  })
+  cleanupWorkspaceFrames(['writer'])
+  assert.deepEqual(destroyed, [])
+  cleanupWorkspaceFrames(['writer'])
+  assert.deepEqual(destroyed, ['writer'])
 })

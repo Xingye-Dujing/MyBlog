@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="data">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
@@ -116,16 +116,15 @@
       </div>
       <div class="menu-group" id="zp-sync-group">
         <span class="menu-label" data-i18n="menu.sync">同步</span>
-        <div
+        <button
           class="menu-btn"
           id="zp-sync-btn"
-          role="button"
-          tabindex="0"
+          type="button"
           data-i18n-title="sync.openTitle"
           title="Supabase 云同步"
         >
           <span class="zen-sync-dot"></span><span id="zp-sync-label">未配置</span>
-        </div>
+        </button>
       </div>
       <div
         class="pin-btn pinned"
@@ -656,7 +655,7 @@
     <input
       type="file"
       id="file-input"
-      accept=".csv,.tsv,.txt,.json,.jsonl,.ndjson,.md,.sql,.xlsx,.xml,.db,.sqlite"
+      accept=".csv,.tsv,.txt,.json,.jsonl,.ndjson,.md,.sql,.xlsx,.db,.sqlite"
       style="display: none"
     />
 
@@ -877,6 +876,7 @@
             'sync.cancelled': '已取消，未与云端交换数据',
             'sync.autoLoginFailed': '自动登录失败，请手动输入密码',
             'sync.autoLoginReady': '已自动登录，当前为手动同步',
+            'sync.workspaceConfirmRequired': '云工作区已切换，请手动解锁并确认后再同步',
             'sync.lockedCleared': '已锁定数据，并清除了本机保存的密码',
             'sync.autoSynced': '已自动同步到云端：{0}',
             'sync.cloudOverwritten': '已用云端数据覆盖本地：{0}',
@@ -1098,6 +1098,7 @@
             'msg.alignReset': '已恢复默认对齐',
             'msg.fitDone': '已按内容调整尺寸',
             'msg.saved': '已保存到本地',
+            'msg.saveFailed': '保存失败：本机存储不可写，本次改动未写入',
             'msg.addedRow': '已插入行',
             'msg.addedCol': '已插入列',
             'msg.deletedRow': '已删除行',
@@ -1271,6 +1272,7 @@
             'sync.cancelled': 'Cancelled. No data was exchanged with the cloud',
             'sync.autoLoginFailed': 'Auto sign-in failed. Enter your password manually',
             'sync.autoLoginReady': 'Signed in automatically. Manual sync is active',
+            'sync.workspaceConfirmRequired': 'The cloud workspace changed. Unlock and confirm it manually before syncing',
             'sync.lockedCleared': 'Data locked and the locally saved password was cleared',
             'sync.autoSynced': 'Auto synced to cloud: {0}',
             'sync.cloudOverwritten': 'Local data overwritten by cloud: {0}',
@@ -1499,6 +1501,7 @@
             'msg.alignReset': 'Alignment reset',
             'msg.fitDone': 'Cells resized to fit content',
             'msg.saved': 'Saved locally',
+            'msg.saveFailed': 'Save failed: local storage is not writable; this change was not persisted',
             'msg.addedRow': 'Row inserted',
             'msg.addedCol': 'Column inserted',
             'msg.deletedRow': 'Row deleted',
@@ -1717,9 +1720,7 @@
           },
           bump: function () {
             var n = String((+this.rev() || 0) + 1)
-            try {
-              localStorage.setItem(CONFIG.LS_REV, n)
-            } catch (e) {}
+            localStorage.setItem(CONFIG.LS_REV, n)
             return n
           },
           /* 文档（表格数据）：从 localStorage 读；键不存在时是空文档。
@@ -1748,15 +1749,16 @@
               raw = ''
             try {
               raw = JSON.stringify(v)
-            } catch (e) {
-              raw = ''
-            }
-            try {
+              if (typeof raw !== 'string') throw new Error('文档无法序列化')
               localStorage.setItem(CONFIG.LS_DOC, raw)
-            } catch (e) {}
+              this.bump()
+            } catch (e) {
+              this._doc = null
+              this._docRaw = null
+              throw e
+            }
             this._doc = v
             this._docRaw = raw
-            this.bump()
           },
           /* 外观 + 工作台状态 */
           settings: function () {
@@ -1778,15 +1780,16 @@
             var raw = ''
             try {
               raw = JSON.stringify(o)
-            } catch (e) {
-              raw = ''
-            }
-            try {
+              if (typeof raw !== 'string') throw new Error('设置无法序列化')
               localStorage.setItem(CONFIG.LS_SET, raw)
-            } catch (e) {}
+              this.bump()
+            } catch (e) {
+              this._set = null
+              this._setRaw = null
+              throw e
+            }
             this._set = o
             this._setRaw = raw
-            this.bump()
           },
           /* 缓存是否已被本进程之外的改动弄脏（invalidate 后 _raw 为 null 也视为脏） */
           docStale: function () {
@@ -1858,7 +1861,7 @@
           save: function () {
             try {
               /* 存储被外部清空后不再回写，否则用户“删了又回来” */
-              if (externalResetDetected()) return
+              if (externalResetDetected()) return false
               /* 写入 localStorage（唯一数据源）并递增版本号 */
               Storage.writeSettings({
                 lang: S.lang,
@@ -1910,7 +1913,11 @@
                 repHist: (S.repHist || []).slice(0, 20),
                 lastResult: lastResultForSave(),
               })
-            } catch (e) {}
+              return true
+            } catch (e) {
+              notify(T('msg.saveFailed'))
+              return false
+            }
           },
           /* 把一份已解析的设置对象灌进 S（load 与 hydrate 共用） */
           applyFrom: function (o) {
@@ -2111,12 +2118,15 @@
            tables / activeId 用 getter/setter 直接映射到 Storage 的文档缓存，
            因此每一次读取都经过版本校验：存储被清空或外部改动时，读到的就是存储里的真实内容。 */
         var Store = {
+          _lockedView: null,
+          isLocked: function () { return !!this._lockedView },
           active: function () {
             var tables = this.tables
             if (!tables.length) {
-              tables.push(newTable('sheet1'))
-              /* 补建的表必须写回 localStorage，否则它只活在缓存里，刷新就没了 */
-              this.persist()
+              if (this.isLocked()) return null
+              var fresh = newTable('sheet1')
+              Storage.writeDoc([fresh], fresh.id)
+              return Storage.doc().tables[0]
             }
             var f = null,
               act = this.activeId
@@ -2128,6 +2138,7 @@
             return f
           },
           load: function () {
+            if (this.isLocked()) return
             var d = Storage.doc()
             if (d.tables && d.tables.length) {
               this.tables = d.tables.map(normTable)
@@ -2135,38 +2146,99 @@
               return
             }
             var st = sampleTable()
-            this.tables = [st]
-            this.activeId = st.id
-            this.persist()
+            Storage.writeDoc([st], st.id)
             /* 记录“本机内容仍只是自动生成的示例表”，云同步据此判断本机是否为空白设备 */
             try {
               localStorage.setItem(CONFIG.LS_SEED, '1')
             } catch (e) {}
           },
           persist: function () {
+            if (this.isLocked()) throw new Error('数据已锁定')
             /* 存储被外部清空后不再回写 */
-            if (externalResetDetected()) return
+            if (externalResetDetected()) return false
             Storage.writeDoc(this.tables, this.activeId)
+            return true
+          },
+          lock: function () {
+            this._lockedView = { tables: [], activeId: null }
+            Storage.invalidate()
+            S.sel = { r: 0, c: 0 }
+            S.sel2 = null
+            S.editing = null
+            S.undo = []
+            S.redo = []
+            S.find = null
+            S.lastResult = null
+            S.filter = { on: false, mode: 'and', cs: false, conds: [], rows: null }
+            S.sortSnap = null
+            S.sortMark = null
+            S.sqlHist = []
+            S.findHist = []
+            S.repHist = []
+            if (DOM.sqlInput) DOM.sqlInput.value = ''
+            try { sessionStorage.setItem('zd-cloud-locked', '1') } catch (_) {}
+            var main = document.getElementById('main')
+            var menu = document.getElementById('top-menu')
+            if (main) main.inert = true
+            if (menu) {
+              menu.inert = false
+              menu.querySelectorAll('[data-action], #pin-btn').forEach(function (el) {
+                el.inert = el.id !== 'zp-sync-btn'
+              })
+            }
+            document.body.classList.add('cloud-locked')
+            ;['grid-head', 'grid-rows', 'sheet-tabs', 'schema-list', 'res-wrap', 'sql-hist'].forEach(function (id) {
+              var el = document.getElementById(id)
+              if (el) el.textContent = ''
+            })
+          },
+          unlock: function () {
+            this._lockedView = null
+            Storage.invalidate()
+            try { sessionStorage.removeItem('zd-cloud-locked') } catch (_) {}
+            var main = document.getElementById('main')
+            var menu = document.getElementById('top-menu')
+            if (main) main.inert = false
+            if (menu) {
+              menu.inert = false
+              menu.querySelectorAll('[data-action], #pin-btn').forEach(function (el) { el.inert = false })
+            }
+            document.body.classList.remove('cloud-locked')
+            this.load()
+            Settings.load()
+            restoreWorkbench()
+            renderFilterConds()
+            Settings.apply()
+            renderAll()
+            renderHist()
           },
         }
         Object.defineProperty(Store, 'tables', {
           enumerable: true,
           get: function () {
-            return Storage.doc().tables
+            return this.isLocked() ? this._lockedView.tables : Storage.doc().tables
           },
           set: function (v) {
-            Storage.doc().tables = v
+            if (this.isLocked()) this._lockedView.tables = v
+            else Storage.doc().tables = v
           },
         })
         Object.defineProperty(Store, 'activeId', {
           enumerable: true,
           get: function () {
-            return Storage.doc().activeId
+            return this.isLocked() ? this._lockedView.activeId : Storage.doc().activeId
           },
           set: function (v) {
-            Storage.doc().activeId = v
+            if (this.isLocked()) this._lockedView.activeId = v
+            else Storage.doc().activeId = v
           },
         })
+
+        window.ZDDataStore = {
+          lock: function () { Store.lock() },
+          unlock: function () { Store.unlock() },
+          isLocked: function () { return Store.isLocked() },
+        }
 
         function normAlign(a) {
           var out = {}
@@ -2650,19 +2722,51 @@
           return tb2
         }
 
+        function markdownCell(value) {
+          return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\\/g, '\\\\')
+            .replace(/\|/g, '\\|')
+            .replace(/\r\n|\r|\n/g, '<br>')
+            .replace(/^ +/, function (spaces) { return spaces.replace(/ /g, '&#32;') })
+            .replace(/ +$/, function (spaces) { return spaces.replace(/ /g, '&#32;') })
+        }
+        function parseMarkdownRow(line) {
+          var s = String(line).trim().replace(/^\|/, '').replace(/\|$/, '')
+          var cells = [], cur = '', escaped = false
+          for (var i = 0; i < s.length; i++) {
+            var ch = s[i]
+            if (escaped) {
+              cur += ch
+              escaped = false
+            } else if (ch === '\\') {
+              escaped = true
+            } else if (ch === '|') {
+              cells.push(cur.trim())
+              cur = ''
+            } else cur += ch
+          }
+          if (escaped) cur += '\\'
+          cells.push(cur.replace(/^ /, '').replace(/ $/, ''))
+          return cells.map(function (cell) {
+            return cell.replace(/<br\s*\/?>/gi, '\n')
+              .replace(/&#32;/g, ' ')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&amp;/g, '&')
+          })
+        }
         function fromMarkdown(text) {
           var lines = String(text).split(/\r?\n/)
           var rows = []
           lines.forEach(function (ln) {
             var s = ln.trim()
             if (!s || s.indexOf('|') < 0) return
-            if (/^\|?[\s:|-]+\|[\s:|-]*$/.test(s) && /-/.test(s)) return
-            s = s.replace(/^\|/, '').replace(/\|$/, '')
-            rows.push(
-              s.split('|').map(function (x) {
-                return x.trim()
-              }),
-            )
+            var cells = parseMarkdownRow(s)
+            if (cells.length && cells.every(function (cell) { return /^:?-{3,}:?$/.test(cell) })) return
+            rows.push(cells)
           })
           if (!rows.length) throw new Error('no table')
           var maxc = 0
@@ -3014,7 +3118,7 @@
             '| ' +
               t.cols
                 .map(function (c) {
-                  return String(c.name)
+                  return markdownCell(c.name)
                 })
                 .join(' | ') +
               ' |',
@@ -3033,7 +3137,7 @@
               '| ' +
                 r
                   .map(function (v) {
-                    return isNil(v) ? '' : String(v).replace(/\|/g, '\\|')
+                    return markdownCell(isNil(v) ? '' : v)
                   })
                   .join(' | ') +
                 ' |',
@@ -3042,9 +3146,13 @@
           return a.join('\n')
         }
 
+        function sqlIdent(value) {
+          return '`' + String(value == null ? '' : value).replace(/`/g, '``') + '`'
+        }
+
         function sqlLit(v) {
           if (isNil(v)) return 'NULL'
-          if (typeof v === 'number') return String(v)
+          if (typeof v === 'number') return isFinite(v) ? String(v) : "'" + String(v) + "'"
           if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
           return "'" + String(v).split("'").join("''") + "'"
         }
@@ -3063,14 +3171,14 @@
                       : c.type === 'bool'
                         ? 'BOOLEAN'
                         : 'TEXT'
-                return '  `' + c.name + '` ' + ty
+                return '  ' + sqlIdent(c.name) + ' ' + ty
               })
               .join(',\n')
-            out.push('CREATE TABLE `' + t.name + '` (\n' + defs + '\n);')
+            out.push('CREATE TABLE ' + sqlIdent(t.name) + ' (\n' + defs + '\n);')
             if (t.rows.length) {
               var names = t.cols
                 .map(function (c) {
-                  return '`' + c.name + '`'
+                  return sqlIdent(c.name)
                 })
                 .join(', ')
               var chunk = []
@@ -3078,9 +3186,9 @@
                 chunk.push('  (' + r.map(sqlLit).join(', ') + ')')
                 if (chunk.length === 200 || i === t.rows.length - 1) {
                   out.push(
-                    'INSERT INTO `' +
-                      t.name +
-                      '` (' +
+                    'INSERT INTO ' +
+                      sqlIdent(t.name) +
+                      ' (' +
                       names +
                       ') VALUES\n' +
                       chunk.join(',\n') +
@@ -4763,6 +4871,14 @@
           renderStatus()
         }
 
+        function ensureKeyboardControls(root) {
+          ;(root || document).querySelectorAll('[data-action], [data-picker], [data-fsel], [data-ctype], [data-cdel], [data-hist]').forEach(function (el) {
+            if (/^(BUTTON|INPUT|TEXTAREA|SELECT|A)$/.test(el.tagName) || el.disabled) return
+            if (!el.hasAttribute('role')) el.setAttribute('role', 'button')
+            if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
+          })
+        }
+
         function renderAll() {
           /* 换表 / 换视图 / 数据变更后重新显示选区，避免一直停在无高亮状态 */
           activateSelection()
@@ -4776,12 +4892,13 @@
           if (S.view === 'grid') renderGrid()
           else if (S.view === 'schema') renderSchema()
           renderStatus()
+          ensureKeyboardControls(document)
         }
 
         /* 回到页面 / 另一个标签页改过存储时，丢弃缓存并整体重读一遍，
            保证界面显示的永远是 localStorage 里的真实内容 */
         function syncFromStorage() {
-          if (externalResetDetected()) return
+          if (Store.isLocked() || externalResetDetected()) return
           if (!Storage.docStale() && !Storage.setStale()) return
           Storage.invalidate()
           if (Storage.hasDoc()) {
@@ -4797,6 +4914,7 @@
           renderHist()
         }
         window.addEventListener('storage', function () {
+          if (Store.isLocked()) return
           Storage.invalidate()
           syncFromStorage()
         })
@@ -4807,15 +4925,16 @@
           }
           /* 切到后台：立刻把当前内容写进 localStorage。
              内存里不留“待写”的副本，页面被系统回收也不会丢改动。 */
-          if (externalResetDetected()) return
+          if (externalResetDetected() || Store.isLocked()) return
           Store.persist()
           Settings.save()
         })
         window.addEventListener('focus', function () {
-          syncFromStorage()
+          if (!Store.isLocked()) syncFromStorage()
         })
 
         function afterChange() {
+          if (Store.isLocked()) return
           /* 存储已被外部清空 -> 停止保存并刷新回初始状态 */
           if (externalResetDetected()) return
           if (S.filter.on) recomputeFilter(true)
@@ -4826,7 +4945,12 @@
           } catch (e) {}
           /* 行数据若有增删/重排，写盘前先把逐行行高、单元格对齐重映射到新的行列序 */
           reconcileTable(Store.active())
-          Store.persist()
+          try {
+            Store.persist()
+          } catch (e) {
+            notify(T('msg.saveFailed'))
+            return
+          }
           renderAll()
         }
 
@@ -4834,6 +4958,7 @@
            8. CELL EDIT
            ============================================================ */
         function setCell(r, c, v) {
+          if (Store.isLocked()) return
           var t = Store.active()
           if (!t.rows[r]) return
           if (v === '' || v === null) {
@@ -4847,6 +4972,7 @@
         }
 
         function openEditor(ri, ci, initial) {
+          if (Store.isLocked()) return
           var t = Store.active()
           if (!t.rows[ri]) return
           S.editing = { r: ri, c: ci }
@@ -5741,6 +5867,7 @@
         }
 
         function runSQL(sql) {
+          if (Store.isLocked()) throw new Error('数据已锁定')
           var t0 = nowMs()
           var text = String(sql).trim().replace(/;\s*$/, '')
           if (!text) throw new Error(T('msg.needSql'))
@@ -5994,19 +6121,23 @@
               if (ci < 0) throw new Error('未知列: ' + s2.col)
               return { col: ci, val: s2.val }
             })
-            pushUndo()
+            var nextRows = ut.rows.map(function (r) { return r.slice() })
             var cnt = 0
-            ut.rows.forEach(function (r) {
+            nextRows.forEach(function (r) {
               if (uw && !evCond(uw, r, ut)) return
               // SQL evaluates every right-hand side against the original row.
-              // Writing into r as we go makes SET a=b, b=a produce (2,2).
+              // The whole result is computed on a clone before any row commits.
               var original = r.slice()
               targets.forEach(function (t) {
                 r[t.col] = evOp(t.val, original, ut)
               })
               cnt++
             })
-            inferTypes(ut)
+            var trial = { cols: ut.cols.map(function (c) { return { name: c.name, type: c.type } }), rows: nextRows }
+            inferTypes(trial)
+            pushUndo()
+            ut.rows = nextRows
+            ut.cols = trial.cols
             return { cols: [], rows: [], msg: 'UPDATE · ' + cnt + ' 行已更新', changed: true }
           }
 
@@ -6063,17 +6194,31 @@
               p.op(')')
               tuples.push(vals)
             } while (p.isOp(',') && (p.nx(), true))
-            pushUndo()
-            tuples.forEach(function (vals) {
+            var seenCols = Object.create(null)
+            if (icols) icols.forEach(function (name) {
+              var key = name.toLowerCase()
+              if (seenCols[key]) throw new Error('重复列: ' + name)
+              seenCols[key] = true
+              if (colIndex(it, name) < 0) throw new Error('未知列: ' + name)
+            })
+            var newRows = tuples.map(function (vals) {
+              var width = icols ? icols.length : it.cols.length
+              if (vals.length !== width) throw new Error('INSERT 值与列数量不一致: ' + iname)
               var arr = new Array(it.cols.length).fill(null)
               vals.forEach(function (o, i) {
                 var ci = icols ? colIndex(it, icols[i]) : i
-                if (ci < 0) throw new Error('未知列: ' + (icols ? icols[i] : i))
                 arr[ci] = evOp(o, [], it)
               })
-              it.rows.push(arr)
+              return arr
             })
-            inferTypes(it)
+            var insertTrial = {
+              cols: it.cols.map(function (c) { return { name: c.name, type: c.type } }),
+              rows: it.rows.concat(newRows),
+            }
+            inferTypes(insertTrial)
+            pushUndo()
+            it.rows = insertTrial.rows
+            it.cols = insertTrial.cols
             return {
               cols: [],
               rows: [],
@@ -7037,7 +7182,6 @@
           }
           if (ext === 'md') return [fromMarkdown(text)]
           if (ext === 'sql') return fromSQLText(text)
-          if (ext === 'xml') return [fromDelim(text, '\t', false)]
           var s = head.trim()
           if (s[0] === '[' || s[0] === '{') {
             try {
@@ -7856,6 +8000,7 @@
             f.re.lastIndex = 0
             var nv = old.replace(f.re, f.rep || '')
             setCell(h.r, h.c, nv)
+            afterChange()
             computeFind()
             renderGrid()
             renderStatus()
@@ -7878,6 +8023,7 @@
               if (nv !== old) n++
               setCell(h.r, h.c, nv)
             })
+            afterChange()
             computeFind()
             renderGrid()
             renderStatus()
@@ -8855,6 +9001,21 @@
           DOM.fselPop = document.getElementById('fsel-pop')
           DOM.filterList = document.getElementById('filter-list')
 
+          document.addEventListener('click', function (e) {
+            if (Store.isLocked() && !(e.target.closest && e.target.closest('.zenui-modal'))) {
+              e.preventDefault()
+              e.stopImmediatePropagation()
+            }
+          }, true)
+          document.addEventListener('keydown', function (e) {
+            if (Store.isLocked() || (e.key !== 'Enter' && e.key !== ' ')) return
+            if (e.target.closest('button, input, textarea, select, a, [contenteditable="true"]')) return
+            var control = e.target.closest('[role="button"][data-action], [role="button"][data-picker], [role="button"][data-ctype], [role="button"][data-cdel], [role="button"][data-hist]')
+            if (!control) return
+            e.preventDefault()
+            control.click()
+          })
+
           /* 确认弹层改用共享 ZenUI.dialog，取消 / 遮罩由共享层结算 */
 
           /* 弹窗点外部关闭由共享外壳处理 */
@@ -9607,7 +9768,7 @@
              焦点在云同步弹窗内时交给弹窗自身的键位与浏览器处理，不进入网格快捷键。 */
           function gk(handler) {
             return function (e) {
-              if (inCloudModal(e.target)) return
+              if (Store.isLocked() || inCloudModal(e.target)) return
               handler(e)
             }
           }
@@ -9637,7 +9798,14 @@
             'mod+f': { run: gk(function () { if (S.view === 'grid') ACTIONS.showFind() }), allowInput: true },
             'mod+g': { run: gk(function () { if (S.view === 'grid') ACTIONS.showGoto() }), allowInput: true },
             /* Ctrl+S：挡掉浏览器的“保存网页”，立刻把当前内容写进本地存储 */
-            'mod+s': { run: gk(function () { Store.persist(); Settings.save(); notify(T('msg.saved')) }), allowInput: true },
+            'mod+s': { run: gk(function () {
+              try {
+                var saved = Store.persist()
+                if (saved !== false && Settings.save() !== false) notify(T('msg.saved'))
+              } catch (e) {
+                notify(T('msg.saveFailed'))
+              }
+            }), allowInput: true },
             /* Ctrl+Delete / Ctrl+Backspace：删除选中的整行 / 整列 */
             'mod+delete': { run: gk(function () { if (S.view === 'grid') delSelectedLine() }), allowInput: true },
             'mod+backspace': { run: gk(function () { if (S.view === 'grid') delSelectedLine() }), allowInput: true },
@@ -9937,6 +10105,13 @@
         function init() {
           bind()
           injectIcons()
+          try {
+            if (sessionStorage.getItem('zd-cloud-locked') === '1') {
+              Store.lock()
+              initStorageGuard()
+              return
+            }
+          } catch (_) {}
           Settings.load()
           Store.load()
           restoreWorkbench()
@@ -10006,7 +10181,6 @@
           statusId: 'zen-cloud-status'
         })
         var cfg = zenCloud.cfg
-        var meta = zenCloud.meta
         var patchCfg = zenCloud.patchCfg
         var prefs = zenCloud.prefs
         var savePrefs = zenCloud.savePrefs
@@ -10137,7 +10311,7 @@
         }
         async function pullQuiet(r) {
           var d = await dec(r.payload, unlockPassword)
-          writeLocal(d)
+          writeLocal(d, Number(r.client_updated_at || 0))
           state.lastCloudTs = Number(r.client_updated_at || 0)
           reloadOnce()
         }
@@ -10163,7 +10337,7 @@
           setMsg('sync.syncing')
           try {
             var r = await remote(),
-              m = meta(),
+              m = zenCloud.workspaceMeta(session.user.id),
               dH = docHash(),
               sH = setHash(),
               hasHistory = !!(m.syncedDocHash || m.syncedHash),
@@ -10237,18 +10411,10 @@
         }
         function toast(msg) { return window.ZenUI.toast(msg) }
         function mark(ts) {
-          try {
-            /* 分别记录内容指纹与设置指纹：判断“本地是否有未上传的表格内容”时
-               只看内容，避免切个视图、改个主题就被当成内容改动去覆盖云端 */
-            localStorage.setItem(
-              META_KEY,
-              JSON.stringify({
-                updatedAt: ts || now(),
-                syncedDocHash: docHash(),
-                syncedSetHash: setHash(),
-              }),
-            )
-          } catch (_) {}
+          return zenCloud.mark(ts, {
+            syncedDocHash: docHash(),
+            syncedSetHash: setHash(),
+          })
         }
         function localData() {
           var r = localStorage.getItem(DATA_KEY)
@@ -10261,25 +10427,6 @@
             d.settings = {}
           }
           return d
-        }
-        function emptyData(d) {
-          return !d || !Array.isArray(d.tables) || !d.tables.length
-        }
-        function mergeData(a, b) {
-          if (!a) return b
-          if (!b) return a
-          var o = ZenUtil.clone(b)
-          o.tables = o.tables || []
-          ;(a.tables || []).forEach(function (t) {
-            if (
-              !o.tables.some(function (x) {
-                return x.id === t.id
-              })
-            )
-              o.tables.push(t)
-          })
-          if (!o.activeId && a.activeId) o.activeId = a.activeId
-          return o
         }
         var libPromise = null
         function ensureLib() {
@@ -10369,7 +10516,7 @@
             return false
           }
         }
-        function writeLocal(d) {
+        function writeLocal(d, ts) {
           try {
             var copy = ZenUtil.clone(d || {})
             var settings = copy.settings
@@ -10377,7 +10524,7 @@
             localStorage.setItem(DATA_KEY, JSON.stringify(copy))
             if (settings && typeof settings === 'object')
               localStorage.setItem(SET_KEY, JSON.stringify(settings))
-            mark(now())
+            mark(ts || now())
             /* 通知页面脚本：存储已被写入，内存缓存立即作废（否则会继续读旧内容） */
             if (window.ZDStorage && typeof window.ZDStorage.invalidate === 'function')
               window.ZDStorage.invalidate()
@@ -10418,7 +10565,7 @@
         }
         async function pull(r) {
           var d = await dec(r.payload, unlockPassword)
-          writeLocal(d)
+          writeLocal(d, Number(r.client_updated_at || 0))
           state.lastCloudTs = Number(r.client_updated_at || 0)
         }
         function refresh() {
@@ -10465,6 +10612,14 @@
               session = si.data.session || null
               if (!session) throw new Error(tr('sync.loginRequired'))
             }
+            var workspaceOk = await zenCloud.confirmWorkspace(session.user.id)
+            if (!workspaceOk) {
+              unlockPassword = ''
+              if (window.ZDDataStore && window.ZDDataStore.lock) window.ZDDataStore.lock()
+              refresh()
+              setMsg('sync.cancelled')
+              return
+            }
             if (mode === 'pull' || mode === 'push') {
               var agreed = await ensureWarnAck()
               if (!agreed) {
@@ -10475,6 +10630,7 @@
             var remember = E('zp-remember-pw') ? E('zp-remember-pw').checked : false
             savePrefs({ remember: remember, password: remember ? pw : '' })
             unlockPassword = pw
+            if (window.ZDDataStore && window.ZDDataStore.unlock) window.ZDDataStore.unlock()
             if (E('zp-password')) E('zp-password').value = ''
             refresh()
             statusKey('sync.loggedInUnlocked')
@@ -10563,6 +10719,7 @@
           unlockPassword = ''
           autoSyncOn = false
           stopWatcher()
+          if (window.ZDDataStore && window.ZDDataStore.lock) window.ZDDataStore.lock()
           if (E('zp-password')) E('zp-password').value = ''
 
           var cleared = prefs().remember
@@ -10652,15 +10809,7 @@
         function autosizeSql() { return ZenUtil.autosize('zen-sql-box') }
         function setup() {
           var b = E('zp-sync-btn')
-          if (b) {
-            b.onclick = openModal
-            b.onkeydown = function (e) {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                openModal()
-              }
-            }
-          }
+          if (b) b.onclick = openModal
         }
         function mountCloud(body, foot) {
           refresh()
@@ -10779,6 +10928,7 @@
             state.lastCloudTs = 0
             autoSyncOn = false
             stopWatcher()
+            if (window.ZDDataStore && window.ZDDataStore.lock) window.ZDDataStore.lock()
             var sp = E('zp-sql-panel')
             if (sp) sp.classList.add('zen-cloud-hidden')
             refresh()
@@ -10815,7 +10965,12 @@
               session = si.data.session || null
             }
             if (!session) throw new Error(tr('sync.loginRequired'))
+            if (zenCloud.workspaceNeedsConfirmation(session.user.id)) {
+              setMsg('sync.workspaceConfirmRequired')
+              return false
+            }
             unlockPassword = p.password
+            if (window.ZDDataStore && window.ZDDataStore.unlock) window.ZDDataStore.unlock()
             refresh()
             labelKey('sync.loggedInUnlocked', true)
             if (p.autoSync) {
@@ -10850,6 +11005,8 @@
             await connect()
             var logged = await autoLogin()
             if (!logged && session) {
+              if (window.ZDDataStore && window.ZDDataStore.lock) window.ZDDataStore.lock()
+              refresh()
               statusKey('sync.loggedInLocked')
               labelKey('sync.loggedInLocked', true)
             }

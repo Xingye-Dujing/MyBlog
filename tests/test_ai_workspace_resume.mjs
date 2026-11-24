@@ -53,7 +53,7 @@ function baseSandbox(overrides = {}) {
   const stored = {}
   return {
     S, chat, controls,
-    window: { OMMDesktop: {}, OMMShare: {}, ZenUI: {} },
+    window: { OMMDesktop: {}, OMMShare: {}, ZenUI: { select: { enhance() {} } } },
     document: { createElement: element, getElementById: (id) => controls[id] || element() },
     $: (id) => controls[id] || element(),
     ZenUtil: {
@@ -72,14 +72,14 @@ function baseSandbox(overrides = {}) {
   }
 }
 
-test('旧 Hub 的 radius payload 不能改写 AI 页面圆角令牌', () => {
-  const calls = []
-  const { setTheme } = functions(['setTheme'], {
-    document: { documentElement: { dataset: {}, style: { setProperty: (...args) => calls.push(args) } } }
-  })
-  setTheme({ theme: 'dark', radius: 28, accent: '#fff' })
-  assert.equal(calls.some(([name]) => name === '--radius' || name === '--zen-radius'), false)
-  assert.doesNotMatch(ai, /payload\.radius/)
+test('AI 主题委托统一桥接，只接受 theme/scale 且忽略 accent', () => {
+  assert.match(ai, /ZenUtil\.isTrustedParentMessage\(event\)/)
+  assert.doesNotMatch(ai, /function setTheme\(|isTrustedParentOrigin\(|payload\.accent|data\.type === 'omm:theme'/)
+  const embed = readFileSync(new URL('../public/omm-embed.js', import.meta.url), 'utf8')
+  assert.match(embed, /data\.theme === 'dark'/)
+  assert.match(embed, /'--zen-radius': '0px'/)
+  assert.match(embed, /'--zen-fscale': data\.scale == null \? null : String\(data\.scale\)/)
+  assert.match(ai, /<body data-omm-app="ai">/)
 })
 
 test('question answer 重新携带 provider/model/baseUrl 与本次内存 key', async () => {
@@ -299,13 +299,22 @@ test('卡片发送失败时保留重试，不显示已发送', async () => {
   const button = element()
   const ops = element()
   await applyArtifact('art_cards', button, ops, { id: 1, conv: 'conv_cards' })
+  const select = ops.children[0]
   const send = ops.children[1]
+  assert.equal(select.dataset.zenSelect, '')
+  assert.equal(select.dataset.cardTarget, '')
   await send.listeners.click()
   assert.equal(send.disabled, false)
   assert.equal(send.textContent, '重试发送')
   assert.equal(button.textContent, '待发送')
   assert.equal(toasts.some((text) => String(text).includes('已发送到')), false)
   assert.equal(toasts.some((text) => String(text).includes('发送失败')), true)
+})
+
+test('AI 窄屏标签横向滚动且不隐藏后三个功能', () => {
+  const css = readFileSync(new URL('../public/zen/products/ai.css', import.meta.url), 'utf8')
+  assert.match(css, /\.top \.tabs\{[^}]*overflow-x:auto/)
+  assert.doesNotMatch(css, /\.top \.tabs button:nth-child\(n\+5\)\{display:none\}/)
 })
 
 test('live-data 只向带可信 Hub origin 的父窗口请求，不扩大独立页权限', async () => {
@@ -326,6 +335,6 @@ test('live-data 只向带可信 Hub origin 的父窗口请求，不扩大独立�
   assert.equal(posted[0][1], 'http://127.0.0.1:8300')
   sb.S.liveResolve({ cards: [{ content: '可信数据' }] })
   assert.deepEqual(await pending, { cards: [{ content: '可信数据' }] })
-  assert.match(ai, /event\.source !== window\.parent/)
-  assert.match(ai, /isTrustedParentOrigin\(event\.origin\)/)
+  assert.match(ai, /ZenUtil\.isTrustedParentMessage\(event\)/)
+  assert.doesNotMatch(ai, /isTrustedParentOrigin\(/)
 })

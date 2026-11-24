@@ -24,6 +24,8 @@
  *   openClass       class toggled on the popover itself (default 'open')
  *   closeOnWheel    close when the user scrolls outside
  *   closeOnScroll   close on any scroll event (capture)
+ *   focus           move focus to the first control when opened
+ *   trapFocus       keep Tab / Shift+Tab inside dialog-like popovers
  *   onOpen/onClose  hooks(el) for product-owned side effects
  * Depends: zen/components/layer.js (load after it)
  */
@@ -75,7 +77,7 @@
     if (top != null) el.style.top = css(top)
   }
 
-  function close(el) {
+  function close(el, restoreFocus) {
     if (!active) return
     if (el && active.el !== el) return
     var job = active
@@ -87,6 +89,7 @@
     if (job.onWheel) global.removeEventListener('wheel', job.onWheel, true)
     if (job.onScroll) global.removeEventListener('scroll', job.onScroll, true)
     l.closePopover = null
+    if (restoreFocus !== false) layer.restoreFocus(job.anchor)
     if (job.opts.onClose) job.opts.onClose(job.el)
   }
 
@@ -106,9 +109,15 @@
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(el) >= 0) return
         if (anchor && path.indexOf(anchor) >= 0) return
-        close(el)
+        for (var i = 0; i < path.length; i++) {
+          if (path[i] && (path[i].id === 'zen-ui-layer' || (path[i].dataset && path[i].dataset.zenUiLayer))) return
+        }
+        close(el, false)
       },
-      escape: function () { close(el) },
+      escape: function () { close(el, true) },
+      key: function (event) {
+        if (opts.trapFocus === true && event.key === 'Tab') layer.trapTab(event, el)
+      },
     }
     active.entry = entry
     l.push(entry)
@@ -118,7 +127,7 @@
         if (!active || active.el !== el) return
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(el) >= 0) return
-        close(el)
+        close(el, false)
       }
       if (opts.closeOnWheel) global.addEventListener('wheel', active.onWheel, true)
       if (opts.closeOnScroll) {
@@ -127,7 +136,11 @@
       } else active.onWheel = null
     }
     if (opts.onOpen) opts.onOpen(el)
-    return function () { close(el) }
+    else if (opts.focus === true) {
+      var first = layer.focusables(el)[0]
+      if (first) layer.restoreFocus(first)
+    }
+    return function () { close(el, true) }
   }
 
   ui.popover = { open: open, close: close, closeAll: close, place: place }

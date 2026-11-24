@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="latex">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
@@ -1163,7 +1163,7 @@
           })().catch((e) => setStatus('导出失败：' + (e && e.message ? e.message : e), 'err'))
         }
         function pdfUrl() {
-          return state.apiBase + '/pdf?key=' + encodeURIComponent(state.lastKey)
+          return normalizeServiceBase(state.apiBase) + '/pdf?key=' + encodeURIComponent(state.lastKey)
         }
         function splitProblems() {
           const hard = []
@@ -1701,9 +1701,17 @@
           if (keepCursor) src.selectionStart = src.selectionEnd = Math.min(pos, text.length)
           updatePos()
         }
-        function loadTemplate(id, silent) {
+        async function confirmDiscardChanges(message) {
+          if (!state.tex || state.tex === state.lastCompiledTex) return true
+          return window.ZenUI.dialog.confirm(
+            message || '当前源码尚未编译，替换后会丢失这些修改。是否继续？',
+            { danger: true },
+          )
+        }
+        async function loadTemplate(id, silent, force) {
           const t = templateById(id)
-          if (!t) return
+          if (!t) return false
+          if (!force && !state.booting && !await confirmDiscardChanges('载入模板“' + t.name + '”会覆盖当前源码，是否继续？')) return false
           if (!state.booting) saveCurrentDocument()
           state.tplId = id
           state.currentDocId = 'template:' + id
@@ -1719,6 +1727,7 @@
           if (!state.booting) scheduleCompile({ load: true, immediate: true })
           if (!silent) closeDropdowns()
           saveCurrentDocument()
+          return true
         }
         function markClean() {
           // 保留历史兼容入口；“未编译”状态由 setTex/onEdit 在需要时维护。
@@ -1744,6 +1753,24 @@
             return false
           }
         }
+        function normalizeServiceBase(value) {
+          const raw = normBase(value)
+          if (!raw) return ''
+          const u = new URL(raw)
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('服务地址只允许 HTTP / HTTPS')
+          if (u.origin !== location.origin && !isLoopbackUrl(u.href)) {
+            throw new Error('服务地址只允许同源或本机 loopback')
+          }
+          if (u.search || u.hash) throw new Error('服务地址不能包含查询参数或片段')
+          return u.href.replace(/\/+$/, '')
+        }
+        function assertServiceUrl(url) {
+          const u = new URL(url, location.href)
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('本地编译服务只允许 HTTP / HTTPS')
+          if (u.origin !== location.origin && !isLoopbackUrl(u.href)) {
+            throw new Error('本地编译服务只允许同源或本机 loopback 地址')
+          }
+        }
 
         async function loopbackPermissionState() {
           if (!navigator.permissions || !navigator.permissions.query) return 'unknown'
@@ -1758,9 +1785,10 @@
         // 带超时的 fetch：地址填错时（尤其是本机开着代理）不会一直挂着。
         // 同时保留调用方自己的 AbortSignal，这样“中止编译”可以真正打断浏览器端等待。
         async function fetchWithTimeout(url, opts, ms) {
+          assertServiceUrl(url)
           const ctl = new AbortController()
           const timer = setTimeout(() => ctl.abort(), ms || 12000)
-          const init = Object.assign({}, opts || {}, { signal: ctl.signal })
+          const init = Object.assign({ redirect: 'error' }, opts || {}, { signal: ctl.signal })
           const externalSignal = opts && opts.signal
           const abortFromExternal = () => ctl.abort()
 
@@ -1795,7 +1823,18 @@
           }
 
           const run = (async () => {
-            const pref = override !== undefined ? normBase(override) : servicePref()
+            let pref = ''
+            try {
+              pref = override !== undefined ? normalizeServiceBase(override) : normalizeServiceBase(servicePref())
+            } catch (e) {
+              const msg = e && e.message ? e.message : '服务地址无效'
+              state.apiBase = ''
+              state.service = null
+              updateChip()
+              setStatus(msg, 'err')
+              if (loud) toast(msg)
+              return false
+            }
 
             // 云端页面优先直连本机服务；本地页面优先同源。
             const localDefault = 'http://127.0.0.1:8123'
@@ -1841,7 +1880,7 @@
               }
             }
 
-            state.apiBase = servicePref()
+            state.apiBase = pref
             state.service = null
             updateChip()
 
@@ -1913,16 +1952,20 @@
         }
         async function saveServiceInput(clear) {
           const msg = $id('svc-msg')
-          const v = clear ? '' : normBase($id('svc-input') ? $id('svc-input').value : '')
-          if (!clear && v && !/^https?:\/\//i.test(v)) {
-            msg.textContent = '地址需要以 http:// 或 https:// 开头'
-            msg.style.color = 'var(--err)'
+          let v = ''
+          try {
+            v = clear ? '' : normalizeServiceBase($id('svc-input') ? $id('svc-input').value : '')
+          } catch (e) {
+            if (msg) {
+              msg.textContent = e.message || '地址无效'
+              msg.style.color = 'var(--zen-err)'
+            }
             return
           }
           if (clear) LS.set('api', '')
           if (msg) {
             msg.textContent = '正在测试 ' + (v || '同源地址') + ' …'
-            msg.style.color = 'var(--dim)'
+            msg.style.color = 'var(--zen-ink-dim)'
           }
           // 只有连上了才把地址写进配置，填错不会留下坏设置
           const ok = await detectService(false, v)
@@ -1930,7 +1973,7 @@
             msg.textContent = ok
               ? '连通成功，已切换到 ' + (state.apiBase || '同源地址') + '。'
               : '连接失败。请确认地址正确，且本机已运行 server/latex-serve.py。'
-            msg.style.color = ok ? 'var(--ok)' : 'var(--err)'
+            msg.style.color = ok ? 'var(--zen-green)' : 'var(--zen-err)'
           }
           if (ok) {
             toast('已连接本地服务')
@@ -1943,7 +1986,7 @@
           const value = input ? input.value.trim() : ''
           if (msg) {
             msg.textContent = '正在保存 MiKTeX 路径 …'
-            msg.style.color = 'var(--dim)'
+            msg.style.color = 'var(--zen-ink-dim)'
           }
           try {
             const res = await fetch((state.apiBase || '') + '/api/config', {
@@ -1962,14 +2005,14 @@
               msg.textContent = data.miktex_bin
                 ? '已保存：' + data.miktex_bin + (data.miktex ? '（MiKTeX ' + data.miktex + '）' : '')
                 : '已清除自定义路径，改为自动探测；当前未找到 MiKTeX。'
-              msg.style.color = data.miktex_bin ? 'var(--ok)' : 'var(--err)'
+              msg.style.color = data.miktex_bin ? 'var(--zen-green)' : 'var(--zen-err)'
             }
             toast(data.miktex_bin ? 'MiKTeX 路径已保存' : '未检测到 MiKTeX', !data.miktex_bin)
             if (data.miktex_bin) compile(true)
           } catch (e) {
             if (msg) {
               msg.textContent = '保存失败：' + (e && e.message ? e.message : String(e || ''))
-              msg.style.color = 'var(--err)'
+              msg.style.color = 'var(--zen-err)'
             }
           }
         }
@@ -2066,6 +2109,8 @@
           const task = activeCompile
           task.cancelRequested = true
           if (restart) task.restartRequested = true
+          cancelPdfRenders()
+          renderToken += 1
           setStatus(reason || '正在中止当前编译…', 'busy')
           showCompileProgress(reason || '正在中止当前编译…')
 
@@ -2191,11 +2236,23 @@
           clearTimeout(autoTimer)
           autoTimer = null
 
+          // 互斥锁与任务必须在首个 await 之前落定；服务检测也是编译的一部分。
+          const task = {
+            id: ++compileSeq,
+            controller: new AbortController(),
+            cancelRequested: false,
+            restartRequested: false,
+          }
+          activeCompile = task
+          setBusy(true)
+
           // 新编译一旦开始，就以“这次编译”为当前唯一结果。
           // 注意：必须发生在服务检测之前，这样即使服务未启动、源码为空、HTTP 400、
           // 网络异常等情况，也绝不能继续显示上一份成功 PDF。
           const source = $id('src').value
           const compileVersion = state.editVersion
+          const engine = state.engine
+          const passes = state.passes
           state.lastKey = ''
           state.pages = 0
           state.ms = 0
@@ -2214,40 +2271,24 @@
             pdfDoc = null
             pdfDocKey = ''
           }
-
-          if (!state.service) {
-            showCompileProgress('正在连接本地编译服务…')
-            setStatus('正在连接本地编译服务…', 'busy')
-            const serviceOk = await detectService(false)
-            if (!serviceOk) {
-              const msg = '未检测到本地编译服务，请启动 server/latex-serve.py 后重试。'
-              state.errors = [{ file: '服务', line: 0, msg, level: 'error' }]
-              state.log = msg
-              setStatus('编译请求失败 · ' + msg, 'err')
-              const serviceErrorPanel = $id('pdf-status')
-              if (serviceErrorPanel) serviceErrorPanel.classList.remove('compile-progress')
-              showErrors(msg)
-              $id('editor-msg').textContent = msg
-              return
-            }
+          if (pdfLoadTask) {
+            try { pdfLoadTask.task.destroy() } catch (e) {}
+            pdfLoadTask = null
           }
 
-          const engine = state.engine
-          const passes = state.passes
-          const task = {
-            id: ++compileSeq,
-            controller: new AbortController(),
-            cancelRequested: false,
-            restartRequested: false,
-          }
-          activeCompile = task
-          setBusy(true)
-          // 记录本次真正送给编译服务的源码。
-          // 注意：编译期间若用户继续编辑，compileVersion 会变化，本次结果必须视为过期，
-          // 不能覆盖最新编辑后的 PDF。
-          state.lastCompiledTex = source
           const t0 = performance.now()
           try {
+            if (!state.service) {
+              showCompileProgress('正在连接本地编译服务…')
+              setStatus('正在连接本地编译服务…', 'busy')
+              const serviceOk = await detectService(false)
+              if (task.cancelRequested || task.controller.signal.aborted) return
+              if (!serviceOk) throw new Error('未检测到本地编译服务，请启动 server/latex-serve.py 后重试。')
+            }
+            if (task.cancelRequested || task.controller.signal.aborted) return
+            // 记录本次真正送给编译服务的源码；服务未连接时不算已编译。
+            state.lastCompiledTex = source
+
             let r = await fetchWithTimeout(
               state.apiBase + '/api/compile',
               {
@@ -2280,6 +2321,7 @@
             // 等服务端明确变为空闲后只重试一次，不创建额外排队任务。
             if (r.status === 409 && j.busy) {
               const idle = await waitServerIdle(20000)
+              if (task.cancelRequested || task.controller.signal.aborted) return
               if (!idle) throw new Error('本地编译服务仍处于忙碌状态，请稍后再试')
               r = await fetchWithTimeout(
                 state.apiBase + '/api/compile',
@@ -2312,6 +2354,7 @@
             if (!r.ok && !j.ok) {
               throw new Error(j.error || 'HTTP ' + r.status)
             }
+            if (j.ok && !j.key) throw new Error('编译服务未返回 PDF key')
 
             const stale = compileVersion !== state.editVersion
             state.log = j.log || ''
@@ -2721,7 +2764,9 @@
 
         async function ensurePdfDoc() {
           if (!window.pdfjsLib) throw new Error('PDF 组件未加载')
-          if (pdfDoc && pdfDoc.numPages && pdfDocKey === state.lastKey) return pdfDoc
+          const key = state.lastKey
+          if (!key) throw new Error('当前没有可打开的 PDF')
+          if (pdfDoc && pdfDoc.numPages && pdfDocKey === key) return pdfDoc
           if (pdfDoc) {
             try {
               pdfDoc.destroy()
@@ -2729,23 +2774,38 @@
             pdfDoc = null
             pdfDocKey = ''
           }
-          if (pdfLoadTask) return pdfLoadTask.promise
-          pdfLoadTask = pdfjsLib.getDocument({
-            url: pdfUrl(),
-            disableAutoFetch: false,
-            // 中日韩 CID 字体需要 cmaps；未内嵌的标准字体需要 standard_fonts。
-            // 原先这两个都没给，离线/内网下会退化成乱码。
-            cMapUrl: 'vendor/pdfjs/3.11.174/cmaps/',
-            cMapPacked: true,
-            standardFontDataUrl: 'vendor/pdfjs/3.11.174/standard_fonts/',
-          })
-          try {
-            pdfDoc = await pdfLoadTask.promise
-            pdfDocKey = state.lastKey
-            return pdfDoc
-          } finally {
+          if (pdfLoadTask) {
+            if (pdfLoadTask.key === key) return pdfLoadTask.promise
+            try {
+              pdfLoadTask.task.destroy()
+            } catch (e) {}
             pdfLoadTask = null
           }
+          const entry = {
+            key: key,
+            task: pdfjsLib.getDocument({
+              url: pdfUrl(),
+              disableAutoFetch: false,
+              // 中日韩 CID 字体需要 cmaps；未内嵌的标准字体需要 standard_fonts。
+              // 原先这两个都没给，离线/内网下会退化成乱码。
+              cMapUrl: 'vendor/pdfjs/3.11.174/cmaps/',
+              cMapPacked: true,
+              standardFontDataUrl: 'vendor/pdfjs/3.11.174/standard_fonts/',
+            }),
+          }
+          pdfLoadTask = entry
+          entry.promise = entry.task.promise.then((doc) => {
+            if (pdfLoadTask !== entry || key !== state.lastKey) {
+              try { doc.destroy() } catch (e) {}
+              throw new Error('PDF 已更新，请重试')
+            }
+            pdfDoc = doc
+            pdfDocKey = key
+            return doc
+          }).finally(() => {
+            if (pdfLoadTask === entry) pdfLoadTask = null
+          })
+          return entry.promise
         }
 
         async function renderPdf() {
@@ -3092,7 +3152,7 @@
                 '</div>',
             )
           })
-          document.addEventListener('click', (e) => {
+          document.addEventListener('click', async (e) => {
             if (!e.target.closest('.zenui-modal')) return
             if (e.target.closest('#modal-ok')) {
               closeModal()
@@ -3141,6 +3201,16 @@
               }
               if (action === 'reset') {
                 const id = ta.dataset.templateId || ''
+                const template = templateById(id)
+                if (!template || !template.builtin || !hasTemplateOverride(id)) {
+                  if (msg) {
+                    msg.textContent = '没有可恢复的内置修改'
+                    msg.className = 'template-editor-msg err'
+                  }
+                  return
+                }
+                if (!await window.ZenUI.dialog.confirm('恢复内置原版会覆盖该模板的本机修改，是否继续？', { danger: true })) return
+                if (state.tplId === id && !await confirmDiscardChanges('恢复内置原版会覆盖当前编辑器内容，是否继续？')) return
                 const ok = resetTemplateOverride(id)
                 if (ok) {
                   closeModal()
@@ -3179,7 +3249,7 @@
                 closeModal()
                 buildDropdowns()
                 if (mode === 'new') {
-                  loadTemplate(savedId, true)
+                  loadTemplate(savedId, true, true)
                   toast('模板已创建并载入')
                 } else {
                   toast('模板已保存 · 当前文档未修改')
@@ -3212,9 +3282,11 @@
             passive: true,
           })
           // 导入
-          $id('file-input').addEventListener('change', (e) => {
+          $id('file-input').addEventListener('change', async (e) => {
             const f = e.target.files && e.target.files[0]
+            e.target.value = ''
             if (!f) return
+            if (!await confirmDiscardChanges('导入“' + f.name + '”会覆盖当前源码，是否继续？')) return
             ZenUtil.readText(f, 'utf-8').then((text) => {
               saveCurrentDocument()
               state.tplId = ''
@@ -3228,7 +3300,6 @@
               // 导入属于高优先级新任务：旧编译若仍在运行，会先被中止，再立即编译新文件。
               scheduleCompile({ load: true, immediate: true })
             })
-            e.target.value = ''
           })
 
           // 离开页面或切后台前先落盘，避免刷新/关闭标签页导致编辑内容丢失。

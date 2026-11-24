@@ -63,8 +63,16 @@ test('Hub 处理产品回传的卡片', () => {
 
 function liveData(store, flowEvents) {
   const localStorage = { getItem: (k) => (k in store ? store[k] : null) }
-  const { collectLiveLocalData } = load(hub, ['annotateLiveSnapshot', 'collectLiveLocalData'],
-    { localStorage, JSON, Date, flowEvents: flowEvents || [] })
+  const ZenUtil = {
+    getJSON(key, fallback) {
+      const raw = localStorage.getItem(key)
+      if (raw == null) return fallback
+      try { return JSON.parse(raw) } catch { return fallback }
+    },
+  }
+  const { collectLiveLocalData } = load(hub,
+    ['liveCardDTO', 'dedupeLiveCards', 'readLiveCards', 'annotateLiveSnapshot', 'collectLiveLocalData'],
+    { localStorage, ZenUtil, JSON, Date, flowEvents: flowEvents || [] })
   return collectLiveLocalData()
 }
 
@@ -77,7 +85,7 @@ test('Hub 聚合各产品的同源 localStorage 键', () => {
     'zen.flow.rules.v1': JSON.stringify([{ name: '归档规则', enabled: true }]),
     'zen.clip.v1': JSON.stringify([{ content: '剪藏内容' }]),
   })
-  assert.equal(snap.cards.length, 2)
+  assert.equal(snap.cards.length, 3)
   assert.equal(snap.cards[0].content, 'SM-2 算法')
   assert.equal(snap.cards[0].tags.join(','), '学习')
   assert.equal(snap.notes[0].title, '我的笔记')
@@ -220,15 +228,55 @@ test('dedupeGraphCards 按 id 去重并保持顺序', () => {
   assert.equal(dedupeGraphCards(null).length, 0)
 })
 
-test('kgEscape 转义 HTML', () => {
-  const { kgEscape } = load(hub, ['kgEscape'])
-  assert.equal(kgEscape('<a & "b">'), '&lt;a &amp; &quot;b&quot;&gt;')
+test('Hub 转义统一委托 ZenUtil.esc，不再保留图谱私有 helper', () => {
+  assert.ok(!/function\s+(?:kgEscape|gsearchEscape)\s*\(/.test(hub))
+  assert.ok(hub.includes('var esc = ZenUtil.esc'))
+  assert.match(hub, /title="' \+ esc\(c\.content\)/)
+})
+
+test('live-data 卡片 DTO 保留完整安全字段与原始时间', () => {
+  const { liveCardDTO, dedupeLiveCards } = load(hub, ['liveCardDTO', 'dedupeLiveCards'])
+  const raw = {
+    id: 'full-1', kind: 'word', source: 'english', content: 'complete', translation: '完整',
+    note: '批注', ref: 'https://example.test', color: '#123456', image: 'data:image/png;base64,x',
+    tags: ['a'], links: [{ id: 'target', rel: 'related', extra: 'drop' }],
+    createdAt: 1767225600000, updatedAt: '2026-01-02 03:04:05', unsafe: 'drop',
+  }
+  const dto = liveCardDTO(raw)
+  assert.equal(dto.createdAt, 1767225600000)
+  assert.equal(dto.updatedAt, '2026-01-02 03:04:05')
+  for (const key of ['translation', 'note', 'ref', 'color', 'image']) assert.equal(dto[key], raw[key])
+  assert.deepEqual(Array.from(dto.links, (link) => ({ id: link.id, rel: link.rel })), [{ id: 'target', rel: 'related' }])
+  assert.equal(Object.hasOwn(dto, 'unsafe'), false)
+  const samePrefix = liveCardDTO({ id: 'full-2', content: 'complete but different', createdAt: 1 })
+  const merged = dedupeLiveCards([
+    { id: 'full-1', content: 'complete' },
+    dto,
+    samePrefix,
+  ])
+  assert.equal(merged.length, 2)
+  assert.equal(merged[0].translation, '完整')
+  assert.equal(merged[0].createdAt, 1767225600000)
+})
+
+test('ZenCard / ZenClip 注册无 UI 卡片响应，Hub 可隐藏采集', () => {
+  for (const id of ['zencard', 'zenclip']) {
+    const page = read(`public/omm-${id}.html`)
+    assert.ok(page.includes(`data-omm-app="${id}"`))
+    assert.ok(page.includes('data-zen-link-ui="false"'))
+    assert.ok(page.includes('src="lib/zen-link.js"'))
+  }
+  assert.ok(hub.includes("var ids = ['zencard', 'zenclip']"))
+  assert.ok(hub.includes('frame.dataset.workspaceHidden'))
+  assert.ok(hub.includes('frame.dataset.expectedSrc'))
+  assert.ok(hub.includes("frame.dataset.ready = '1'"))
+  assert.ok(hub.includes('cleanupWorkspaceFrames(created)'))
 })
 
 test('产品端响应收集请求，并以明确 origin 回传', () => {
-  assert.ok(link.includes("d.type === 'omm:zen-card-request'"))
+  assert.match(link, /data\?\.type === 'omm:zen-card-request'/)
   assert.ok(link.includes("type: 'omm:zen-card-reply'"))
-  assert.ok(link.includes('e.origin'))
+  assert.match(link, /(?:event|e)\.origin/)
   assert.doesNotMatch(link, /postMessage\([^,]+,\s*'\*'/)
 })
 

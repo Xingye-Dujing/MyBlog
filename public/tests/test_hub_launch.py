@@ -2,6 +2,7 @@
 """真实工作台集成：静书房把 AI 工作区作为内置插件启动并打开页面。"""
 from __future__ import annotations
 
+import json
 import os
 import sys
 import urllib.request
@@ -55,6 +56,45 @@ def test_stage_copies_es_module_siblings(tmp_path):
         offline.copy_shared_lib(dest)
         for asset in assets:
             assert (dest / asset).is_file(), (html, asset)
+
+
+@pytest.mark.parametrize("runtime", ["ai", "mdforge", "latex", "video"])
+def test_hub_product_bridges_keep_product_identity(runtime, tmp_path, monkeypatch):
+    """OMM_APP_ID=hub 是 Hub 进程身份，不能覆盖各产品的桌面桥身份。"""
+    import hub_server
+
+    monkeypatch.setenv("OMM_DESKTOP", "1")
+    monkeypatch.setenv("OMM_APP_ID", "hub")
+    monkeypatch.setenv("OMM_SHARED_DIR", str(tmp_path / "shared"))
+    monkeypatch.setenv("OMM_DATA_DIR", str(tmp_path / "data"))
+    hub = hub_server.HubServer(ROOT, 8398, plugin_root=tmp_path / "plugins")
+    server = None
+    try:
+        server = getattr(hub, "_start_" + runtime)(0, ROOT)
+        base = "http://127.0.0.1:%d" % server.server_port
+        headers = {"Origin": base, "Sec-Fetch-Site": "same-origin"}
+        for path in ("/__omm/fs/status", "/__omm/fs/config", "/__omm/share/space"):
+            request = urllib.request.Request(base + path, headers=headers)
+            with urllib.request.urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                assert response.status == 200, (runtime, path, payload)
+            assert payload["app"] == runtime, (runtime, path, payload)
+            assert payload["ok"] is True, (runtime, path, payload)
+        post_headers = dict(headers, **{"Content-Type": "application/json"})
+        request = urllib.request.Request(
+            base + "/__omm/fs/config",
+            data=json.dumps({"mode": "overwrite"}).encode("utf-8"),
+            headers=post_headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            assert response.status == 200, (runtime, "POST /__omm/fs/config", payload)
+        assert payload["app"] == runtime and payload["ok"] is True, (runtime, payload)
+    finally:
+        if server is not None:
+            hub_server._stop_server(server)
+        hub.stop_all()
 
 
 def test_hub_starts_ai_plugin(tmp_path, monkeypatch):

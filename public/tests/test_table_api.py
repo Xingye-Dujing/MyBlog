@@ -237,7 +237,92 @@ def test_origin_and_host_guards(server):
     assert status == 403
     status, body = client.post("/api/run", b"{}", "application/json",
                                {"Origin": "http://127.0.0.1:9999"})
-    assert status != 403  # loopback origin 允许（会因空 spec 失败，但不应被安全拒绝）
+    assert status == 403
+    status, body = client.post("/api/run", b"{}", "application/json",
+                               {"Origin": client.base})
+    assert status == 400  # 同源允许，随后因空 spec 被业务校验拒绝
+    status, body = client.post("/api/run", b"{}", "application/json",
+                               {"Origin": "http://127.0.0.1:8300", "Sec-Fetch-Site": "same-site"})
+    assert status == 400
+
+
+def test_static_never_exposes_state_or_backend(server, tmp_path):
+    client, _ = server
+    (tmp_path / "sessions.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "server").mkdir()
+    (tmp_path / "server" / "private.py").write_text("secret", encoding="utf-8")
+    (tmp_path / "table-serve.py").write_text("secret", encoding="utf-8")
+    for path in ("/sessions.json", "/server/private.py", "/table-serve.py", "/table-runtime/work/uploads/x"):
+        status, _body, _headers = client.get(path)
+        assert status == 403, path
+
+
+def test_download_rejects_bad_job_id_backslash_and_symlink(server, tmp_path):
+    client, _ = server
+    jid = "a" * 12
+    out = serve.jobs_dir(tmp_path) / jid / "out"
+    out.mkdir(parents=True)
+    (out / "result.xlsx").write_bytes(b"book")
+    status, body, _headers = client.get("/api/file/%s/result.xlsx" % jid)
+    assert status == 200 and body == b"book"
+    for path in ("/api/file/not-a-job/result.xlsx", "/api/file/%s/..%%5Cresult.xlsx" % jid,
+                 "/api/file/%s/result%%5Cname.xlsx" % jid):
+        status, _body, _headers = client.get(path)
+        assert status in (400, 403, 404), path
+    outside = tmp_path / "outside.xlsx"
+    outside.write_bytes(b"outside")
+    link = out / "link.xlsx"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        return
+    status, _body, _headers = client.get("/api/file/%s/link.xlsx" % jid)
+    assert status == 404
+
+
+def test_cancel_missing_and_terminal_are_real_failures(server):
+    client, _ = server
+    status, payload = client.post_json("/api/cancel/" + "a" * 12, {})
+    assert status == 404 and not payload["ok"]
+    serve._jobs["b" * 12] = {"status": "done", "cancelled": False}
+    status, payload = client.post_json("/api/cancel/" + "b" * 12, {})
+    assert status == 409 and not payload["ok"]
+
+
+def test_invalid_json_is_a_json_400(server):
+    client, _ = server
+    status, body = client.post("/api/run", b"{", "application/json")
+    assert status == 400 and not json.loads(body)["ok"]
+
+
+def test_job_snapshot_is_detached_and_ttl_reclaims_output(server, tmp_path, monkeypatch):
+    client, _ = server
+    jid = "c" * 12
+    serve._jobs.clear()
+    serve._jobs[jid] = {
+        "id": jid, "status": "done", "progress": 1, "current": None,
+        "nodes": {"n": {"status": "done", "result": {"rows": [1]}}},
+        "outputs": [], "conflicts": [], "warnings": [], "error": None,
+        "dryRun": False, "cancelled": False, "result": None,
+        "createdAt": time.time() - 10, "finishedAt": time.time() - 10,
+    }
+    out = serve.jobs_dir(tmp_path) / jid / "out"
+    out.mkdir(parents=True)
+    status, payload = client.json("/api/job/" + jid)
+    assert status == 200
+    payload["nodes"]["n"]["result"]["rows"].append(2)
+    assert serve._jobs[jid]["nodes"]["n"]["result"]["rows"] == [1]
+    monkeypatch.setattr(serve, "JOB_TTL", 1)
+    status, payload = client.json("/api/job/" + jid)
+    assert status == 404 and not payload["ok"]
+    assert not (serve.jobs_dir(tmp_path) / jid).exists()
+    serve._jobs.clear()
+    serve._jobs["d" * 12] = {"status": "running", "createdAt": time.time()}
+    serve._jobs["e" * 12] = {"status": "done", "createdAt": time.time() - 5,
+                              "finishedAt": time.time() - 5}
+    monkeypatch.setattr(serve, "MAX_JOBS", 2)
+    assert serve._prune_jobs_locked() == ["e" * 12]
+    assert set(serve._jobs) == {"d" * 12}
 
 
 def test_static_path_traversal(server):

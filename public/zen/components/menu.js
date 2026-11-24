@@ -33,7 +33,7 @@
     if (target && target.scrollIntoView) target.scrollIntoView({ block: 'nearest' })
   }
 
-  function close() {
+  function close(restoreFocus) {
     if (!active) return
     var l = layer.get()
     var job = active
@@ -41,7 +41,7 @@
     l.popmenu.hidden = true
     if (job.entry) l.pop(job.entry)
     l.closePopMenu = null
-    layer.blurAll()
+    if (restoreFocus !== false) layer.restoreFocus(job.anchor)
     if (job.opts.onClose) job.opts.onClose()
   }
 
@@ -109,17 +109,19 @@
       el.addEventListener('pointerover', function () { paint(i) })
     })
     paint(0)
+    layer.restoreFocus(actions()[0])
     var entry = {
       outside: function (event) {
         var path = event.composedPath ? event.composedPath() : [event.target]
         if (path.indexOf(l.popmenu) >= 0) return
         if (anchor && path.indexOf(anchor) >= 0) return
-        close()
+        close(false)
       },
-      escape: close,
+      escape: function () { close(true) },
       key: function (event) {
         var list = actions()
         if (!list.length) return
+        if (event.key === 'Tab') { close(true); return }
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault(); event.stopImmediatePropagation()
           paint(active.index + (event.key === 'ArrowDown' ? 1 : -1) + list.length)

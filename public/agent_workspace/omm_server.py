@@ -41,10 +41,6 @@ try:  # pragma: no cover
 except Exception:  # pragma: no cover
     _omm_share = None
 
-def _app_id() -> str:
-    return str(os.environ.get('OMM_APP_ID') or 'ai')
-
-
 def _public_root(app: Flask) -> Path:
     return Path(app.config['PUBLIC_ROOT']).resolve()
 
@@ -57,8 +53,10 @@ def _safe_asset(root: Path, filename: str) -> Path | None:
     return target
 
 
-def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None = None) -> Flask:
+def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None = None,
+               app_id: str = 'ai') -> Flask:
     """构造一个独立的 AI 工作区 Flask app。"""
+    caller_app = str(app_id or 'ai')
     app = Flask(__name__, static_folder=None)
     app.config['PUBLIC_ROOT'] = Path(plugin_dir).resolve() if plugin_dir else Path(__file__).resolve().parent.parent
     app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
@@ -149,7 +147,7 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
             abort(404)
         parsed = urlsplit(request.full_path)
         status, content_type, body = _omm_shared.handle_get(
-            '/__omm/fs/' + sub, parse_qs(parsed.query), _app_id())
+            '/__omm/fs/' + sub, parse_qs(parsed.query), caller_app)
         return Response(body, status=status, content_type=content_type)
 
     @app.post('/__omm/fs/<path:sub>')
@@ -158,7 +156,7 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
             abort(404)
         parsed = urlsplit(request.full_path)
         status, content_type, body = _omm_shared.handle_post(
-            '/__omm/fs/' + sub, parse_qs(parsed.query), request.get_data(cache=False), _app_id())
+            '/__omm/fs/' + sub, parse_qs(parsed.query), request.get_data(cache=False), caller_app)
         return Response(body, status=status, content_type=content_type)
 
     @app.get('/__omm/share/<path:sub>')
@@ -167,7 +165,7 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
             abort(404)
         parsed = urlsplit(request.full_path)
         status, content_type, body = _omm_share.handle_get(
-            '/__omm/share/' + sub, parse_qs(parsed.query), _app_id())
+            '/__omm/share/' + sub, parse_qs(parsed.query), caller_app)
         return Response(body, status=status, content_type=content_type)
 
     @app.post('/__omm/share/<path:sub>')
@@ -176,7 +174,7 @@ def create_app(plugin_dir: str | Path | None = None, data_dir: str | Path | None
             abort(404)
         parsed = urlsplit(request.full_path)
         status, content_type, body = _omm_share.handle_post(
-            '/__omm/share/' + sub, parse_qs(parsed.query), request.get_data(cache=False), _app_id())
+            '/__omm/share/' + sub, parse_qs(parsed.query), request.get_data(cache=False), caller_app)
         return Response(body, status=status, content_type=content_type)
 
     # ── 本插件自己的轻量接口（给前端渲染产品/技能/规范） ──────────────────────

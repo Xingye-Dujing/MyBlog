@@ -31,6 +31,17 @@ test('omm-visualization.html matches the shared core generator', (t) => {
       normalize(committed),
       'regenerate the file with build.py instead of editing it by hand',
     )
+    const generated = normalize(committed)
+    assert.ok(!generated.includes('id="preview-modal"'), 'generated page still contains the migrated preview shell')
+    assert.ok(!generated.includes("$('#preview-modal').classList.contains('open')"), 'Escape still queries the removed preview shell')
+    assert.ok(!generated.includes('zenchange'), 'private select event remains')
+    assert.ok(!generated.includes('class="zen-select'), 'private select markup remains')
+    assert.ok(generated.includes('data-zen-select'), 'shared select markup missing')
+    assert.ok(generated.includes('data-select-slot'), 'multi-value roles lost their shared-select slots')
+    assert.ok(!generated.includes('data-multiple='), 'native multiple select is not supported by the shared trigger')
+    assert.ok(generated.includes('ZenUI.select.enhance'), 'shared select enhancement missing')
+    assert.ok(generated.includes('lib/data-viz.js'), 'DataViz module missing')
+    assert.ok(generated.includes('payloadCSV(payload)'), 'bridge CSV does not use DataViz')
   } finally {
     rmSync(out, { recursive: true, force: true })
   }

@@ -12,6 +12,30 @@ const products = [
   'zencard', 'zenflow', 'zenclip', 'zenreview', 'zenbackup',
 ]
 
+test('规范间距、投影、遮罩与浮层层级令牌均有浅深真源', () => {
+  const tokens = read('public/zen/foundation/tokens.css')
+  for (const [name, value] of Object.entries({
+    '--zen-space-1': '4px', '--zen-space-2': '8px', '--zen-space-3': '12px',
+    '--zen-space-4': '16px', '--zen-space-5': '24px', '--zen-z-overlay': '2147483600',
+  })) {
+    assert.match(tokens, new RegExp(`${name}:\\s*${value};`), `缺少 ${name}`)
+  }
+  for (const name of ['--zen-shadow-soft', '--zen-shadow-deep', '--zen-overlay', '--zen-veil']) {
+    assert.ok((tokens.match(new RegExp(`${name}:`, 'g')) || []).length >= 2, `${name} 缺少浅深两套`)
+  }
+  for (const [legacy, canonical] of Object.entries({
+    '--shadow-soft': '--zen-shadow-soft', '--shadow-deep': '--zen-shadow-deep',
+    '--overlay': '--zen-overlay', '--veil': '--zen-veil',
+  })) {
+    assert.match(tokens, new RegExp(`${legacy}:\\s*var\\(${canonical}\\);`), `${legacy} 未引用规范令牌`)
+  }
+  const docs = read('public/docs/design-tokens.md')
+  for (const name of ['--zen-space-1', '--zen-space-5', '--zen-z-overlay',
+    '--zen-shadow-soft', '--zen-shadow-deep', '--zen-overlay', '--zen-veil']) {
+    assert.ok(docs.includes(name), `设计令牌文档缺少 ${name}`)
+  }
+})
+
 test('设计系统文档齐备且可索引', () => {
   const docs = ['README.md', 'design-tokens.md', 'components.md',
     'shared-modules.md', 'product-guide.md', 'skills.md']
@@ -40,6 +64,13 @@ test('每个产品只通过统一入口与自身产品样式接入', () => {
   }
 })
 
+test('每个产品入口显式声明 data-omm-app 身份', () => {
+  for (const id of [...products.filter((id) => id !== 'hub'), 'lambda']) {
+    const html = read(id === 'lambda' ? 'public/index.html' : `public/omm-${id}.html`)
+    assert.ok(html.includes(`data-omm-app="${id}"`), `${id} 缺少显式产品身份`)
+  }
+})
+
 test('每个产品都有统一风格的产品图标', () => {
   const source = read('public/omm-icons.js')
   const ids = new Set(
@@ -59,6 +90,7 @@ test('每个产品都有统一风格的产品图标', () => {
 test('所有产品统一接入 OMM-ZEN UI 核心组件（可选件按需加载）', () => {
   const required = [
     'zen/components/layer.js',
+    'zen/components/popover.js',
     'zen/components/toast.js',
     'zen/components/dialog.js',
     'zen/components/select.js',
@@ -90,6 +122,18 @@ test('样式入口只加载核心层，能力包按需引用', () => {
   }
   assert.ok(exists('public/zen/canvas/canvas.css'), '缺少统一画布样式包')
   assert.ok(!imports.some((p) => p.includes('canvas/canvas.css')), '画布样式不应进入核心入口')
+})
+
+test('共享样式引用的 zen-* 令牌都有唯一定义', () => {
+  const tokens = read('public/zen/foundation/tokens.css')
+  const defined = new Set([...tokens.matchAll(/(--zen-[a-z0-9-]+)\s*:/g)].map((m) => m[1]))
+  const used = new Set()
+  for (const name of readdirSync(new URL('public/zen/', ROOT), { recursive: true })) {
+    if (!String(name).endsWith('.css')) continue
+    const css = read(`public/zen/${String(name).replaceAll('\\\\', '/')}`)
+    for (const match of css.matchAll(/var\((--zen-[a-z0-9-]+)/g)) used.add(match[1])
+  }
+  assert.deepEqual([...used].filter((token) => !defined.has(token)).sort(), [])
 })
 
 test('ZEN 界面圆角只允许共享令牌或语义圆形', () => {
@@ -126,6 +170,8 @@ test('Lambda 与 MdForge 不写死第二套产品色板', () => {
   const mdforge = read('public/zen/products/mdforge.css')
   assert.doesNotMatch(mdforge, /--(?:bg|paper|text|border|hover|active|accent)[\w-]*\s*:\s*(?:#|rgba?\()/i,
     'MdForge 不得写死第二套 ZEN 色彩令牌')
+  const latex = read('public/zen/products/latex.css')
+  assert.doesNotMatch(latex, /#[0-9a-f]{3,8}\b|rgba?\(/i, 'LaTeX 产品样式不得写死色值')
 })
 
 test('候选区不再使用浏览器原生 select 弹窗', () => {

@@ -457,7 +457,7 @@ PRODUCTS: Dict[str, Dict[str, Any]] = {
         ],
         'formats': [
             'AI 工作区工作流 JSON：{format:"omm-video-workflow", version:1, nodes:[{id,type,data}], connections:[{from,to,fromPort,toPort}]}（详见 json-specs/video.md）。',
-            '导出与打开：导出 video-workflow.json；omm-video.js 同时接受工作台自身的画布 JSON，应用后与 AI 生成的文件等价。',
+            '导出与打开：导出 video-workflow.json；lib/zen-video.js 同时接受工作台自身的画布 JSON，应用后与 AI 生成的文件等价。',
         ],
         'ai': '产品自身不含生成式 AI。通过 AI 工作区编排工作流：omm_product_info("video") 查节点与约束，omm_spec_search("视频工作台") 读 json-specs/video.md；生成的工作流 JSON 可用 ZenVideoAI.snapshot()/snapshotMarkdown() 取当前画布，或经 OMMShare 发给用户落库。',
         'best_practices': [

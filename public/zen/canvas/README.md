@@ -125,6 +125,6 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 ## 7. 变更纪律
 
 - 改画布交互 → 只改 `zen/canvas/engine.js`；改画布样式 → 改
-  `zen/features/canvas-framework.css`。
+  `zen/canvas/canvas.css`。
 - 改自动布局算法 → 只改 `zen/canvas/layout.js`。
 - 产品特有逻辑（节点字段、执行引擎、面板）→ 放在产品自己的 JS 里，不要写进框架。

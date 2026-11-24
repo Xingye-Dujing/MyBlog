@@ -722,6 +722,7 @@ def _host_allowed(header_value):
 
 class Handler(SimpleHTTPRequestHandler):
     server_version = "ZentexServe/1.0"
+    app_id = "latex"
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -802,14 +803,14 @@ class Handler(SimpleHTTPRequestHandler):
             if omm_share is None:
                 return self.send_bytes(b"not found", "text/plain", 404)
             status, ctype, body = omm_share.handle_get(
-                p, parse_qs(u.query), os.environ.get("OMM_APP_ID") or "latex"
+                p, parse_qs(u.query), self.app_id
             )
             return self.send_bytes(body, ctype, status)
         if p.startswith("/__omm/fs/"):
             if omm_shared is None:
                 return self.send_bytes(b"not found", "text/plain", 404)
             status, ctype, body = omm_shared.handle_get(
-                p, parse_qs(u.query), os.environ.get("OMM_APP_ID") or "latex"
+                p, parse_qs(u.query), self.app_id
             )
             return self.send_bytes(body, ctype, status)
         if p == "/api/env":
@@ -874,7 +875,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_bytes(b"payload too large", "text/plain", 413)
             body = self.rfile.read(n) if n > 0 else b""
             status, ctype, payload = omm_share.handle_post(
-                u.path, parse_qs(u.query), body, os.environ.get("OMM_APP_ID") or "latex"
+                u.path, parse_qs(u.query), body, self.app_id
             )
             return self.send_bytes(payload, ctype, status)
         if u.path.startswith("/__omm/fs/"):
@@ -888,7 +889,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_bytes(b"payload too large", "text/plain", 413)
             body = self.rfile.read(n) if n > 0 else b""
             status, ctype, payload = omm_shared.handle_post(
-                u.path, parse_qs(u.query), body, os.environ.get("OMM_APP_ID") or "latex"
+                u.path, parse_qs(u.query), body, self.app_id
             )
             return self.send_bytes(payload, ctype, status)
         if u.path == "/api/config":

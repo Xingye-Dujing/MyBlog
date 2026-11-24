@@ -5,7 +5,8 @@
  * exposes window.ZenHTML and has no product-specific branches.
  *
  * API: ZenHTML.sanitize(html, opts)
- * opts: { allowIframe, tags, attrs, iframeHosts }
+ * opts: { allowIframe, tags, attrs, iframeHosts, allowExternalLinks,
+ *         localImagesOnly, styleProps }
  */
 ;(function (global) {
   'use strict'
@@ -50,7 +51,11 @@
 
   /* Only typography/layout-safe inline properties. Reject CSS escapes before
    * parsing so escaped separators cannot reassemble forbidden declarations. */
-  function safeStyle(value) {
+  function safeStyle(value, props) {
+    var allowed = props || SAFE_STYLE_PROPS
+    var has = typeof allowed.has === 'function'
+      ? function (name) { return allowed.has(name) }
+      : function (name) { return allowed.indexOf(name) >= 0 }
     var text = String(value || '')
       .replace(/url\s*\([^)]*\)/gi, '')
       .replace(/expression\s*\([^)]*\)/gi, '')
@@ -64,7 +69,7 @@
       if (colon < 0) return ''
       var prop = part.slice(0, colon).trim().toLowerCase()
       var val = part.slice(colon + 1).trim()
-      if (SAFE_STYLE_PROPS.indexOf(prop) < 0 || !val || /[{}<>]/.test(val)) return ''
+      if (!has(prop) || !val || /[{}<>]/.test(val)) return ''
       return prop + ':' + val
     }).filter(Boolean).join(';')
   }
@@ -73,8 +78,11 @@
     var o = opts || {}
     return {
       allowIframe: !!o.allowIframe,
+      allowExternalLinks: o.allowExternalLinks !== false,
+      localImagesOnly: !!o.localImagesOnly,
       tags: o.tags ? toSet(o.tags) : toSet(ALLOWED_TAGS),
       attrs: o.attrs ? toSet(o.attrs) : toSet(SAFE_ATTRS),
+      styleProps: o.styleProps ? toSet(o.styleProps) : toSet(SAFE_STYLE_PROPS),
       drop: toSet(DROP_ENTIRELY),
       iframeHosts: o.iframeHosts || IFRAME_HOSTS,
     }
@@ -108,12 +116,21 @@
         child.removeAttribute(attr.name)
         return
       }
-      if ((name === 'href' || name === 'src' || name === 'xlink:href') && !safeUrl(value)) {
+      if (opts.localImagesOnly && tag === 'IMG' && name === 'src') {
+        if (!/^(blob:|data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,)/i.test(String(value || '').trim())) {
+          child.removeAttribute(attr.name)
+          return
+        }
+      } else if ((name === 'href' || name === 'src' || name === 'xlink:href') && !safeUrl(value)) {
+        child.removeAttribute(attr.name)
+        return
+      }
+      if (!opts.allowExternalLinks && (name === 'href' || name === 'xlink:href')) {
         child.removeAttribute(attr.name)
         return
       }
       if (name === 'style') {
-        var cleaned = safeStyle(value)
+        var cleaned = safeStyle(value, opts.styleProps)
         if (cleaned) child.setAttribute('style', cleaned)
         else child.removeAttribute('style')
       }
@@ -158,6 +175,7 @@
     options: options,
     safeUrl: safeUrl,
     safeStyle: safeStyle,
+    safeStyleProps: SAFE_STYLE_PROPS,
     allowedTags: ALLOWED_TAGS,
     safeAttrs: SAFE_ATTRS,
     richTextAttrs: RICH_TEXT_ATTRS,

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="english">
   <head>
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
@@ -65,15 +65,14 @@
       </div>
       <div class="menu-group" id="ze-sync-group">
         <span class="menu-label">同步</span>
-        <div
+        <button
           class="menu-btn ze-sync-menu-btn"
           id="ze-sync-btn"
-          role="button"
-          tabindex="0"
+          type="button"
           title="Supabase 云同步"
         >
           <span class="zen-sync-dot"></span><span id="ze-sync-label">未配置</span>
-        </div>
+        </button>
       </div>
       <div class="pin-btn pinned" id="pin-btn" data-action="togglePin" title="固定菜单栏">
         <svg
@@ -520,7 +519,7 @@
 
     <!-- Hidden inputs -->
     <input type="file" id="fi-backup" accept=".json" style="display: none" />
-    <input type="file" id="fi-vocab" accept=".json,.txt,.csv" style="display: none" />
+    <input type="file" id="fi-vocab" accept=".json,.txt,.csv,.tsv" style="display: none" />
     <input type="file" id="fi-ls-audio" accept="audio/*" style="display: none" />
     <input type="file" id="fi-ls-subs" accept=".srt,.lrc,.txt" style="display: none" />
     <input type="file" id="fi-doodles" accept=".json" style="display: none" />
@@ -533,8 +532,10 @@
     />
 
     <!-- ===== OMM Bridge Core · 三端数据互通 (annotate / english / corpus) ===== -->
+    <script src="lib/zen-csv.js"></script>
     <script src="lib/omm-bridge.js" data-self="omm-english" id="omm-bridge-core"></script>
-    <script>
+    <script type="module">
+      import { ZenSRS } from './lib/zen-srs.js'
       ;(function () {
         'use strict'
         // ============================================================
@@ -5126,7 +5127,6 @@
         // ============================================================
         const LS_KEY = 'zenglish_v1'
         const DAY = 86400000
-        const IV = [0, 1, 2, 4, 7, 15]
 
         function defaults() {
           return {
@@ -5149,36 +5149,166 @@
               tySound: true,
               tySoundVol: 60,
             },
-            notes: {},
-            drawings: {},
-            books: {},
+            notes: Object.create(null),
+            drawings: Object.create(null),
+            books: Object.create(null),
             activeBook: 'cet6',
             view: 'home',
             words: { q: '', filter: 'all' },
-            prog: {},
-            days: {},
+            prog: Object.create(null),
+            days: Object.create(null),
             listen: [],
           }
         }
 
-        let S = load()
+        let cloudLocked = false
+        try { cloudLocked = sessionStorage.getItem('ze-cloud-locked') === '1' } catch (_) {}
+        let S = cloudLocked ? emptyState() : load()
+
+        function isRecord(value) {
+          return !!value && typeof value === 'object' && !Array.isArray(value)
+        }
+        function safeDict(value) {
+          const out = Object.create(null)
+          if (isRecord(value)) Object.keys(value).forEach((key) => { out[key] = value[key] })
+          return out
+        }
+        function safeId(value) {
+          if (typeof value !== 'string' && typeof value !== 'number') return ''
+          const id = String(value).trim()
+          if (!id || id.length > 200 || /[\u0000-\u001f]/.test(id)) return ''
+          return ['__proto__', 'prototype', 'constructor'].includes(id) ? '' : id
+        }
+        function normalizeSrs(word, raw) {
+          const id = String(word)
+          if (!isRecord(raw)) return ZenSRS.createState(id)
+          const canonical = ['reps', 'ease', 'interval', 'due'].some((key) => raw[key] !== undefined)
+          if (canonical) {
+            return {
+              id,
+              reps: Math.max(0, Math.floor(Number(raw.reps) || 0)),
+              ease: Math.max(1.3, Number(raw.ease) || 2.5),
+              interval: Math.max(0, Math.floor(Number(raw.interval) || 0)),
+              due: Number(raw.due) || Date.now(),
+              lapses: Math.max(0, Math.floor(Number(raw.lapses) || 0)),
+              last: raw.last == null ? null : Number(raw.last) || null,
+            }
+          }
+          const box = Math.max(0, Math.min(5, Math.floor(Number(raw.b) || 0)))
+          let interval = 0
+          for (let i = 0; i < box; i++) interval = ZenSRS.grade({ id, reps: i, ease: 2.5, interval, due: 0, lapses: 0, last: null }, 'good', 0).interval
+          return {
+            id,
+            reps: box,
+            ease: 2.5,
+            interval,
+            due: Number(raw.due) || Date.now(),
+            lapses: Math.max(0, Math.floor(Number(raw.bad) || 0)),
+            last: null,
+          }
+        }
+        function normalizeState(input, strict) {
+          if (!isRecord(input)) throw new Error('备份格式不正确')
+          const out = Object.assign(Object.create(null), defaults())
+          Object.keys(input).forEach((key) => { out[key] = input[key] })
+          out.set = Object.assign(Object.create(null), defaults().set, isRecord(input.set) ? input.set : {})
+          delete out.set.radius
+          out.notes = safeDict(input.notes)
+          out.drawings = safeDict(input.drawings)
+          out.prog = Object.create(null)
+          const rawProg = safeDict(input.prog)
+          Object.keys(rawProg).forEach((word) => {
+            if (!isRecord(rawProg[word])) {
+              if (strict) throw new Error('单词进度格式不正确')
+              return
+            }
+            out.prog[word] = normalizeSrs(word, rawProg[word])
+          })
+          out.days = Object.create(null)
+          const rawDays = safeDict(input.days)
+          Object.keys(rawDays).forEach((day) => {
+            const counts = Object.create(null)
+            const source = safeDict(rawDays[day])
+            Object.keys(source).forEach((key) => {
+              const value = Number(source[key])
+              counts[key] = Number.isFinite(value) && value >= 0 ? value : 0
+            })
+            out.days[day] = counts
+          })
+          out.books = Object.create(null)
+          const rawBooks = safeDict(input.books)
+          Object.keys(rawBooks).forEach((key) => {
+            const book = rawBooks[key]
+            if (!isRecord(book)) {
+              if (strict) throw new Error('词书格式不正确')
+              return
+            }
+            const id = book.id == null ? safeId(key) : safeId(book.id)
+            if (!id || Object.prototype.hasOwnProperty.call(out.books, id)) {
+              if (strict) throw new Error('词书 ID 缺失或重复')
+              return
+            }
+            const words = Array.isArray(book.w)
+              ? book.w.filter(Array.isArray).map((entry) => [
+                  String(entry[0] == null ? '' : entry[0]),
+                  String(entry[1] == null ? '' : entry[1]),
+                  String(entry[2] == null ? '' : entry[2]),
+                  String(entry[3] == null ? '' : entry[3]),
+                  String(entry[4] == null ? '' : entry[4]),
+                ])
+              : []
+            out.books[id] = Object.assign(Object.create(null), book, { id, w: words })
+          })
+          out.listen = []
+          const listenIds = new Set()
+          ;(Array.isArray(input.listen) ? input.listen : []).forEach((raw) => {
+            if (!isRecord(raw)) {
+              if (strict) throw new Error('听力资源格式不正确')
+              return
+            }
+            let id = safeId(raw.id)
+            if (!id || listenIds.has(id)) {
+              if (strict) throw new Error('听力资源 ID 缺失或重复')
+              id = ZenUtil.uid()
+            }
+            listenIds.add(id)
+            const item = Object.assign(Object.create(null), raw, { id })
+            item.title = String(raw.title || '听力资源')
+            item.lines = Array.isArray(raw.lines) ? raw.lines.filter(isRecord).map((line) => Object.assign(Object.create(null), line, { text: String(line.text || '') })) : []
+            item.zh = Array.isArray(raw.zh) ? raw.zh.map((line) => String(line || '')) : []
+            item.qs = Array.isArray(raw.qs) ? raw.qs.filter(isRecord).map((q) => Object.assign(Object.create(null), q, {
+              q: String(q.q || ''), o: Array.isArray(q.o) ? q.o.map((value) => String(value)) : [], a: Number(q.a) || 0,
+            })) : []
+            out.listen.push(item)
+          })
+          out.words = Object.assign(Object.create(null), { q: '', filter: 'all' }, isRecord(input.words) ? input.words : {})
+          if (typeof out.words.q !== 'string') out.words.q = ''
+          if (!['all', 'new', 'learning', 'mastered', 'star'].includes(out.words.filter)) out.words.filter = 'all'
+          return seed(out)
+        }
 
         function load() {
           try {
             const raw = localStorage.getItem(LS_KEY)
-            if (!raw) return seed(defaults())
-            const obj = JSON.parse(raw)
-            const d = defaults()
-            const s = Object.assign(d, obj)
-            s.set = Object.assign(d.set, obj.set || {})
-            delete s.set.radius
-            return seed(s)
+            return raw ? normalizeState(JSON.parse(raw), false) : seed(defaults())
           } catch (e) {
             return seed(defaults())
           }
         }
+        function emptyState() {
+          const state = seed(defaults())
+          state.books.cet6.w = []
+          state.books.fav.w = []
+          return state
+        }
 
         function seed(s) {
+          s.notes = safeDict(s.notes)
+          s.drawings = safeDict(s.drawings)
+          s.books = safeDict(s.books)
+          s.prog = safeDict(s.prog)
+          s.days = safeDict(s.days)
+          Object.keys(s.days).forEach((key) => { s.days[key] = safeDict(s.days[key]) })
           if (!s.books.cet6) {
             s.books.cet6 = { id: 'cet6', name: '六级核心高频词', builtin: true, w: WORDS }
           } else if (!Array.isArray(s.books.cet6.w)) {
@@ -5189,14 +5319,11 @@
           } else if (!Array.isArray(s.books.fav.w)) {
             s.books.fav.w = []
           }
-          if (!s.drawings || typeof s.drawings !== 'object') s.drawings = {}
           if (!s.activeBook || !s.books[s.activeBook]) s.activeBook = 'cet6'
-          if (!['home', 'words', 'flash', 'quiz', 'listen', 'typing'].includes(s.view))
-            s.view = 'home'
-          if (!s.words || typeof s.words !== 'object') s.words = { q: '', filter: 'all' }
+          if (!['home', 'words', 'flash', 'quiz', 'listen', 'typing'].includes(s.view)) s.view = 'home'
+          if (!isRecord(s.words)) s.words = { q: '', filter: 'all' }
           if (typeof s.words.q !== 'string') s.words.q = ''
-          if (!['all', 'new', 'learning', 'mastered', 'star'].includes(s.words.filter))
-            s.words.filter = 'all'
+          if (!['all', 'new', 'learning', 'mastered', 'star'].includes(s.words.filter)) s.words.filter = 'all'
           return s
         }
 
@@ -5209,30 +5336,82 @@
           })
           return clone
         }
+        function flushSave() {
+          if (cloudLocked) return false
+          clearTimeout(_saveT)
+          _saveT = null
+          try {
+            localStorage.setItem(LS_KEY, JSON.stringify(serializeS()))
+            return true
+          } catch (e) {
+            notify('保存失败：存储空间不足')
+            return false
+          }
+        }
+        function setEditingLocked(locked) {
+          cloudLocked = !!locked
+          try {
+            if (cloudLocked) sessionStorage.setItem('ze-cloud-locked', '1')
+            else sessionStorage.removeItem('ze-cloud-locked')
+          } catch (_) {}
+          const main = document.getElementById('main')
+          const menu = document.getElementById('top-menu')
+          if (main) main.inert = cloudLocked
+          if (menu) {
+            menu.inert = false
+            menu.querySelectorAll('[data-action], #pin-btn').forEach((el) => { el.inert = cloudLocked && el.id !== 'ze-sync-btn' })
+          }
+          document.body.classList.toggle('cloud-locked', cloudLocked)
+        }
         window.ZEnglishStore = {
-          snapshot() {
-            return serializeS()
-          },
+          snapshot() { return serializeS() },
+          normalize(data, strict) { return normalizeState(data, strict !== false) },
           replace(data) {
-            const obj = ZenUtil.clone(data)
-            S = Object.assign(defaults(), obj)
-            S.set = Object.assign(defaults().set, obj.set || {})
-            delete S.set.radius
-            S = seed(S)
+            S = normalizeState(data, true)
             DICT = null
             if (typeof WV !== 'undefined' && S.activeBook) WV.book = S.activeBook
             return serializeS()
           },
+          lock() {
+            flushSave()
+            TT.stop()
+            window.ZenUI.modal.close()
+            S = emptyState()
+            DICT = null
+            WV.list = []
+            if (Listen.cur) Listen.cur = null
+            Dict.d = null
+            Typing.words = []
+            Typing.typed = []
+            Typing._target = ''
+            Typing.active = false
+            Typing.done = false
+            Flash.q = []
+            Flash.started = false
+            Flash.done = false
+            Quiz.qs = []
+            Quiz.wrongList = []
+            Quiz.sp = null
+            setEditingLocked(true)
+            ;['v-home', 'v-words', 'v-flash', 'v-quiz', 'v-listen', 'v-typing'].forEach((id) => {
+              const el = document.getElementById(id)
+              if (el) el.textContent = ''
+            })
+          },
+          unlock() {
+            setEditingLocked(false)
+            S = load()
+            DICT = null
+            if (typeof WV !== 'undefined' && S.activeBook) WV.book = S.activeBook
+            applyAll()
+            switchView(S.view || 'home')
+          },
+          isLocked() { return cloudLocked },
         }
         function save() {
+          if (cloudLocked) return
           clearTimeout(_saveT)
-          _saveT = setTimeout(() => {
-            try {
-              localStorage.setItem(LS_KEY, JSON.stringify(serializeS()))
-            } catch (e) {
-              notify('保存失败：存储空间不足')
-            }
-          }, 350)
+          _saveT = setTimeout(flushSave, 350)
         }
 
         // ============================================================
@@ -5433,19 +5612,16 @@
           })
         }
 
-        /* 复用共享弹窗外壳：原私有 #modal 外壳已删除，foot 按钮的 data-action 仍由全局 ACT 分发。
-           共享卡片会在每次打开时复用，guide-light 标记需要在 onMount 后按需补回。 */
+        /* 复用共享弹窗外壳，foot 按钮的 data-action 仍由全局 ACT 分发。 */
         function modalOpen(title, html, foot) {
           const handle = window.ZenUI.modal.open({
             title: title,
             html: html,
             foot: foot || '',
             ids: { close: 'modal-close', foot: 'modal-foot' },
-            width: '580px',
+            width: 'min(580px, calc(100vw - 24px))',
             onMount: function (body) {
               modalIsOpen = true
-              const card = body.parentElement
-              if (card) card.classList.remove('guide-light')
             },
             onClose: function () {
               modalIsOpen = false
@@ -6924,38 +7100,39 @@
         }
         function ensureProg(word) {
           const k = nkey(word)
-          if (!S.prog[k])
-            S.prog[k] = { b: 0, due: Date.now(), seen: 0, ok: 0, bad: 0, fuzzy: 0, star: false }
+          const previous = S.prog[k]
+          const state = normalizeSrs(k, previous)
+          S.prog[k] = Object.assign(state, {
+            seen: Math.max(0, Math.floor(Number(previous && previous.seen) || 0)),
+            ok: Math.max(0, Math.floor(Number(previous && previous.ok) || 0)),
+            bad: Math.max(0, Math.floor(Number(previous && previous.bad) || 0)),
+            fuzzy: Math.max(0, Math.floor(Number(previous && previous.fuzzy) || 0)),
+            star: !!(previous && previous.star),
+          })
           return S.prog[k]
         }
         function gradeWord(word, g) {
           const p = ensureProg(word)
+          const grade = g === 0 ? 'again' : g === 1 ? 'hard' : 'good'
+          const next = ZenSRS.grade(p, grade, Date.now())
           p.seen++
-          if (g === 0) {
-            p.b = 0
-            p.bad++
-            p.due = Date.now() + 600000
-          } else if (g === 1) {
-            p.fuzzy = (p.fuzzy || 0) + 1
-            p.due = Date.now() + (p.b === 0 ? 0.25 : IV[p.b] * 0.7) * DAY
-          } else {
-            p.b = Math.min(5, p.b + 1)
-            p.ok++
-            p.due = Date.now() + IV[p.b] * DAY
-          }
+          if (g === 0) p.bad++
+          else if (g === 1) p.fuzzy++
+          else p.ok++
+          S.prog[nkey(word)] = Object.assign(p, next)
           save()
         }
         function isDue(word) {
           const p = progOf(word)
-          return p && p.b < 5 && p.due <= Date.now()
+          return !!p && p.due <= Date.now()
         }
         function isNew(word) {
           return !progOf(word)
         }
         function mastery(word) {
           const p = progOf(word)
-          if (!p || p.seen === 0) return 'new'
-          return p.b >= 5 ? 'mastered' : 'learning'
+          if (!p || !p.seen) return 'new'
+          return p.reps >= 2 ? 'mastered' : 'learning'
         }
         function dueList(words) {
           return words.filter((w) => isDue(w[0]))
@@ -6970,7 +7147,7 @@
           return todayStat('r').r || 0
         }
         function dueTodayCount() {
-          return dueList(activeWords()).length
+          return ZenSRS.stats(activeWords().map((word) => progOf(word[0])).filter(Boolean)).due
         }
         function newLeftToday() {
           return Math.max(
@@ -6993,16 +7170,15 @@
           return n
         }
         function bookStats(words) {
-          let nw = 0,
-            ln = 0,
-            ms = 0
+          let nw = 0
+          const states = []
           words.forEach((w) => {
-            const m = mastery(w[0])
-            if (m === 'new') nw++
-            else if (m === 'learning') ln++
-            else ms++
+            const p = progOf(w[0])
+            if (!p || !p.seen) nw++
+            else states.push(p)
           })
-          return { nw, ln, ms, total: words.length }
+          const stats = ZenSRS.stats(states)
+          return { nw, ln: stats.learning, ms: stats.learned, total: words.length }
         }
 
         // ============================================================
@@ -7028,6 +7204,14 @@
         function refreshView() {
           renderView(curView)
         }
+        function ensureKeyboardControls(root) {
+          ;(root || document).querySelectorAll('[data-action], [data-picker]').forEach((el) => {
+            if (/^(BUTTON|INPUT|TEXTAREA|SELECT|A)$/.test(el.tagName) || el.disabled) return
+            if (!el.hasAttribute('role')) el.setAttribute('role', 'button')
+            if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
+          })
+        }
+
         function renderView(v) {
           if (v === 'home') renderHome()
           else if (v === 'words') renderWords()
@@ -7037,6 +7221,7 @@
           else if (v === 'typing') Typing.render()
           updateHead()
           updateStatus()
+          ensureKeyboardControls(document)
         }
         function updateHead() {
           const b = bookOf(S.activeBook)
@@ -7475,7 +7660,7 @@
                   '<div class="dd-item' +
                   (x.id === WV.book ? ' selected' : '') +
                   '" data-action="pickBook" data-id="' +
-                  x.id +
+                  esc(x.id) +
                   '"><span>' +
                   esc(x.name) +
                   '</span><span class="hint">' +
@@ -7502,7 +7687,7 @@
           const m = mastery(entry[0])
           const mLabel = { new: '未学', learning: '学习中', mastered: '已掌握' }[m]
           const dueTxt = p ? new Date(p.due).toLocaleDateString() : '—'
-          const boxTxt = p ? (p.b >= 5 ? '第5盒（已掌握）' : '第' + (p.b + 1) + '盒') : '—'
+          const boxTxt = p ? (p.reps >= 2 ? '已掌握 · 间隔 ' + p.interval + ' 天' : '复习间隔 ' + p.interval + ' 天') : '—'
           const fav = inFav(entry[0])
           const note = ensureNotes(entry[0])
           const canDel = !S.books[bookId].builtin || S.books[bookId].id === 'fav'
@@ -7633,19 +7818,30 @@
               if (out.length) return out
             }
           } catch (e) {}
+          const firstLine = text.split(/\r?\n/, 1)[0] || ''
+          const delimiter = firstLine.indexOf('\t') >= 0 ? '\t' : firstLine.indexOf(',') >= 0 ? ',' : null
+          let records = []
+          if (delimiter) {
+            try {
+              records = ZenCSV.parse(text, delimiter).filter((row) => row.some((cell) => String(cell).trim()))
+            } catch (_) {}
+          }
+          if (!records.length) {
+            text.split(/\r?\n/).forEach((line) => {
+              line = line.trim()
+              if (!line) return
+              let parts
+              if (/ {2,}/.test(line)) parts = line.split(/ {2,}/)
+              else {
+                const m = line.match(/^([a-zA-Z][a-zA-Z\-']*)\s+(.+)$/)
+                parts = m ? [m[1], '', m[2]] : [line]
+              }
+              records.push(parts)
+            })
+          }
           const out = []
-          text.split(/\r?\n/).forEach((line) => {
-            line = line.trim()
-            if (!line) return
-            let parts
-            if (line.indexOf('\t') >= 0) parts = line.split('\t')
-            else if (/ {2,}/.test(line)) parts = line.split(/ {2,}/)
-            else if (/^["']?[a-zA-Z][a-zA-Z\-' ]*["']?,/.test(line)) parts = line.split(',')
-            else {
-              const m = line.match(/^([a-zA-Z][a-zA-Z\-']*)\s+(.+)$/)
-              parts = m ? [m[1], '', m[2]] : [line]
-            }
-            parts = parts.map((s) => s.trim().replace(/^["']+|["']+$/g, ''))
+          records.forEach((parts) => {
+            parts = parts.map((s) => String(s).trim())
             if (parts[0]) out.push([parts[0], parts[1] || '', parts[2] || '', parts[3] || ''])
           })
           return out
@@ -7659,7 +7855,7 @@
               '" placeholder="例如：六级真题生词 / 雅思核心" /></div>' +
               '<div class="ed-field"><span class="ed-label">粘贴数据 或 选择文件</span>' +
               '<textarea class="ed-area" id="im-text" style="min-height:150px" placeholder="支持三种格式：&#10;1. JSON：[{&quot;w&quot;:&quot;word&quot;,&quot;ph&quot;:&quot;音标&quot;,&quot;m&quot;:&quot;释义&quot;,&quot;ex&quot;:&quot;例句&quot;}]&#10;2. 制表符分隔：word → 音标 → 释义 → 例句&#10;3. 每行一条：word 释义"></textarea></div>' +
-              '<button class="mini-btn" data-action="importPickFile">选择本地文件 (.json / .txt / .csv)</button>' +
+              '<button class="mini-btn" data-action="importPickFile">选择本地文件 (.json / .txt / .csv / .tsv)</button>' +
               '<div class="fmt-hint">导入后自动去重。内置词库不可覆盖；重复导入同一文件会生成新词书。</div>',
             '<button class="ed-btn" data-action="modalClose">取消</button>' +
               '<button class="ed-btn primary" data-action="importDo">导 入</button>',
@@ -7676,11 +7872,11 @@
             return
           }
           const id = 'u' + Date.now()
-          const seen = {}
+          const seen = new Set()
           const dedup = entries.filter((e) => {
             const k = nkey(e[0])
-            if (seen[k]) return false
-            seen[k] = true
+            if (seen.has(k)) return false
+            seen.add(k)
             return true
           })
           S.books[id] = { id, name, builtin: false, w: dedup }
@@ -7926,7 +8122,7 @@
             .map(
               (b) =>
                 '<div class="bm-row" data-id="' +
-                b.id +
+                esc(b.id) +
                 '">' +
                 '<span class="bm-name" data-action="bmRename">' +
                 esc(b.name) +
@@ -8131,7 +8327,7 @@
                         esc(it.title) +
                         '</div>' +
                         '<div class="ls-info">' +
-                        it.type +
+                        esc(it.type) +
                         ' · ' +
                         it.lines.length +
                         ' 句' +
@@ -8848,7 +9044,7 @@
           if (asTxt)
             download(
               b.name + '.txt',
-              b.w.map((e) => [e[0], e[1], e[2], e[3]].join('\t')).join('\r\n'),
+              ZenCSV.stringify(b.w.map((e) => [e[0], e[1], e[2], e[3]]), '\t', { formulaSafe: true }),
             )
           else download(b.name + '.json', JSON.stringify(b.w, null, 1), 'application/json')
           notify('"' + b.name + '" 已导出')
@@ -8858,12 +9054,9 @@
             try {
               const obj = JSON.parse(text)
               if (!obj.books || !obj.prog) throw 0
+              const normalized = window.ZEnglishStore.normalize(obj, true)
               confirmBox('导入该备份将覆盖当前全部数据，继续？', () => {
-                S = Object.assign(defaults(), obj)
-                S.set = Object.assign(defaults().set, obj.set || {})
-                delete S.set.radius
-                S = seed(S)
-                DICT = null
+                window.ZEnglishStore.replace(normalized)
                 save()
                 applyAll()
                 switchView('home')
@@ -8974,7 +9167,7 @@
                   (isActive ? ' active' : '') +
                   (disabled ? ' disabled' : '') +
                   '" data-action="tyScope" data-s="' +
-                  val +
+                  esc(val) +
                   '">' +
                   '<span>' +
                   label +
@@ -9943,7 +10136,7 @@
                 (isActive ? ' active' : '') +
                 (disabled ? ' disabled' : '') +
                 '" data-action="qScope" data-s="' +
-                val +
+                esc(val) +
                 '">' +
                 '<span>' +
                 label +
@@ -10506,7 +10699,7 @@
             if (this.wrongList.length) {
               this.wrongList.forEach((e) => {
                 const p = ensureProg(e[0])
-                p.due = Date.now()
+                S.prog[nkey(e[0])] = Object.assign(p, ZenSRS.grade(p, 'again', Date.now()))
               })
               save()
             }
@@ -10582,7 +10775,7 @@
         // GUIDE
         // ============================================================
         function showGuideModal() {
-          const guideHandle = modalOpen(
+          modalOpen(
             '使用指南',
             '<div class="dd-label">① 背单词（记忆盒算法）</div>' +
               '<div class="fmt-hint">“背单词”页选择混合学习：到期复习词与新词自动交错。看卡片正面回想 → 空格翻面 → 按认识程度打分：<b>认识</b>进入下一记忆盒（间隔 1/2/4/7/15 天），<b>模糊</b>明天再见，<b>不认识</b>10 分钟后重来。连续打卡、每日目标都记录在总览。</div>' +
@@ -10595,8 +10788,6 @@
               '<div class="dd-label">⑤ 数据安全</div>' +
               '<div class="fmt-hint">全部数据存于本机浏览器。请定期“备份”导出 JSON；换设备用“恢复备份”导入。</div>',
           )
-          const card = guideHandle && guideHandle.el.querySelector('.zenui-modal-card')
-          if (card) card.classList.add('guide-light')
         }
 
         // ============================================================
@@ -10694,75 +10885,49 @@
             showGuideModal()
           },
           showHelp() {
-            const M = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
-              ? '⌘'
-              : 'Ctrl'
-            const row = (desc, key) =>
-              '<div class="hk-row"><span>' +
-              desc +
-              '</span><span class="hk-key">' +
-              key +
-              '</span></div>'
-            const sect = (title, rows) =>
-              '<div class="hk-section"><div class="hk-section-title">' +
-              title +
-              '</div>' +
-              rows.map((r) => row(r[1], r[0])).join('') +
-              '</div>'
-            modalOpen(
-              '快捷键说明',
-              '<div class="hk-grid">' +
-                sect('全局', [
-                  ['Esc', '依次关闭：涂鸦查看 / 涂鸦编辑 / 确认框 / 弹窗 / 抽屉 / 浮层'],
-                  ['?', '打开 / 重新载入本说明'],
-                ]) +
-                sect('背卡复习中（记忆卡页）', [
-                  ['空格', '翻到正面 / 背面'],
-                  ['1', '不认识'],
-                  ['2', '模糊'],
-                  ['3', '认识'],
-                  ['←', '不认识'],
-                  ['→', '认识'],
-                  ['S', '朗读当前单词或句子'],
-                  ['D', '开关左右两侧的涂鸦草稿面板'],
-                ]) +
-                sect('听力页 · 播放中', [
-                  ['空格', '播放 / 暂停'],
-                  ['←', '上一句'],
-                  ['→', '下一句'],
-                ]) +
-                sect('听力页 · 听写模式', [
-                  [M + ' Enter', '提交这句听写'],
-                  ['S', '重放当前这句'],
-                ]) +
-                sect('测验页 · 四选一', [
-                  ['A / B / C / D', '选择第 1 / 2 / 3 / 4 个选项'],
-                  ['1 / 2 / 3 / 4', '同上（数字键）'],
-                ]) +
-                sect('测验页 · 拼写挑战', [
-                  ['Enter', '检查拼写；已判定时则重试或进入下一题'],
-                  ['Backspace', '撤销判定并删掉一个已输入的字母'],
-                ]) +
-                sect('打字练习中', [
-                  ['任意字符', '录入'],
-                  ['空格', '输入空格（单词模式下为跳过）'],
-                  ['Backspace', '删掉最后输入的字符'],
-                  ['Tab', '显示下一个正确字符（提示）'],
-                ]) +
-                sect('焦点在输入框上时', [
-                  ['Enter', '确认词书改名'],
-                  ['Enter', '确认涂鸦颜色色值（需 6 位十六进制）'],
-                  ['Enter 或 Space', '打开顶栏的云同步弹窗'],
-                  ['Enter', '在弹窗内登录'],
-                  ['Esc', '关闭弹窗 / 抽屉，并让当前输入框失焦'],
-                ]) +
-                '<div class="hk-section"><div class="hk-note">' +
+            const section = (title, rows) => window.ZenUI.shortcuts.section(
+              title,
+              rows.map(([key, desc]) => window.ZenUI.shortcuts.row(desc, key)),
+            )
+            const body = window.ZenUI.shortcuts.grid([
+              section('全局', [
+                ['Esc', '依次关闭：涂鸦查看 / 涂鸦编辑 / 确认框 / 弹窗 / 抽屉 / 浮层'],
+                ['?', '打开 / 重新载入本说明'],
+              ]),
+              section('背卡复习中（记忆卡页）', [
+                ['空格', '翻到正面 / 背面'], ['1', '不认识'], ['2', '模糊'], ['3', '认识'],
+                ['←', '不认识'], ['→', '认识'], ['S', '朗读当前单词或句子'],
+                ['D', '开关左右两侧的涂鸦草稿面板'],
+              ]),
+              section('听力页 · 播放中', [
+                ['空格', '播放 / 暂停'], ['←', '上一句'], ['→', '下一句'],
+              ]),
+              section('听力页 · 听写模式', [
+                [window.ZenUI.shortcuts.format('mod+enter'), '提交这句听写'], ['S', '重放当前这句'],
+              ]),
+              section('测验页 · 四选一', [
+                ['A / B / C / D', '选择第 1 / 2 / 3 / 4 个选项'], ['1 / 2 / 3 / 4', '同上（数字键）'],
+              ]),
+              section('测验页 · 拼写挑战', [
+                ['Enter', '检查拼写；已判定时则重试或进入下一题'],
+                ['Backspace', '撤销判定并删掉一个已输入的字母'],
+              ]),
+              section('打字练习中', [
+                ['任意字符', '录入'], ['空格', '输入空格（单词模式下为跳过）'],
+                ['Backspace', '删掉最后输入的字符'], ['Tab', '显示下一个正确字符（提示）'],
+              ]),
+              section('焦点在输入框上时', [
+                ['Enter', '确认词书改名'], ['Enter', '确认涂鸦颜色色值（需 6 位十六进制）'],
+                ['Enter 或 Space', '打开顶栏的云同步弹窗'], ['Enter', '在弹窗内登录'],
+                ['Esc', '关闭弹窗 / 抽屉，并让当前输入框失焦'],
+              ]),
+              window.ZenUI.shortcuts.note(
                 '除 <b>Esc</b> 之外，其余键位在焦点位于任何输入框时都不响应；也不响应 <b>Ctrl</b> / <b>⌘</b> / <b>Alt</b> 组合。' +
                 '各页的键位只在对应页面（或对应模式）里生效，同一个键在不同页面含义不同。<br />' +
-                '打字练习进行中，<b>?</b> 会被当作练习字符录入，此时打不开本说明——先按 <b>Esc</b> 或等本轮结束。' +
-                '</div></div>' +
-                '</div>',
-            )
+                '打字练习进行中，<b>?</b> 会被当作练习字符录入，此时打不开本说明——先按 <b>Esc</b> 或等本轮结束。',
+              ),
+            ])
+            window.ZenUI.shortcuts.help({ title: '快捷键说明', body })
           },
 
           settingsToggleTheme() {
@@ -11006,13 +11171,12 @@
             buzz(8)
             if (m === 'new') {
               const p = ensureProg(e[0])
-              p.b = Math.max(p.b, 1)
-              p.seen = Math.max(p.seen, 1)
+              p.seen = 1
+              S.prog[nkey(e[0])] = Object.assign(p, ZenSRS.grade(p, 'good', Date.now()))
               notify('"' + e[0] + '" 标记为学习中')
             } else if (m === 'learning') {
               const p = ensureProg(e[0])
-              p.b = 5
-              p.due = Date.now() + IV[5] * DAY
+              S.prog[nkey(e[0])] = Object.assign(p, ZenSRS.grade(p, 'good', Date.now()))
               notify('"' + e[0] + '" 标记为已掌握')
             } else {
               delete S.prog[nkey(e[0])]
@@ -11582,6 +11746,11 @@
         // EVENT DELEGATION
         // ============================================================
         document.addEventListener('click', (e) => {
+          if (cloudLocked && !(e.target.closest('.zenui-modal') || e.target.closest('#ze-sync-btn'))) {
+            e.preventDefault()
+            e.stopImmediatePropagation()
+            return
+          }
           const tw = e.target.closest('.tw')
           if (tw) {
             twClick(tw)
@@ -11601,6 +11770,20 @@
           if (t.closest('#more-sheet') && a !== 'openMore') ACT.closeMore()
         })
 
+        document.addEventListener('keydown', (e) => {
+          if (cloudLocked && !(e.target.closest && e.target.closest('.zenui-modal'))) {
+            e.stopImmediatePropagation()
+          }
+        }, true)
+        document.addEventListener('keydown', (e) => {
+          if (cloudLocked || (e.key !== 'Enter' && e.key !== ' ')) return
+          if (e.target.closest('button, input, textarea, select, a, [contenteditable="true"]')) return
+          const control = e.target.closest('[role="button"][data-action], [role="button"][data-picker]')
+          if (!control) return
+          e.preventDefault()
+          control.click()
+        })
+
         function flashGradeBtn(g) {
           const cls = ['again', 'hard', 'good'][g]
           const btn = document.querySelector('.gb.' + cls)
@@ -11614,6 +11797,7 @@
         // 局部业务键：Escape 关弹窗 / 输入框 blur；答题、打字、帮助面板。
         // 全局键的修饰键匹配、可编辑目标守卫与 preventDefault 已交给 ZenUI.shortcuts。
         function onBusinessKey(e) {
+          if (cloudLocked) return
           if (e.key === 'Escape') {
             // Sketch viewer / editor, dropdowns, the word popover and the date
             // picker all close through the shared ZenUI.layer stack while their
@@ -11769,6 +11953,8 @@
         // INIT
         // ============================================================
         function init() {
+          setEditingLocked(cloudLocked)
+          ensureKeyboardControls(document)
           rebuildCache()
           applyAll()
 
@@ -11891,6 +12077,7 @@
 
           window.addEventListener('beforeunload', () => {
             TT.stop()
+            if (cloudLocked) return
             if (window._zeSkipFlush) {
               try {
                 localStorage.removeItem(LS_KEY)
@@ -11956,7 +12143,6 @@
           statusId: 'zen-cloud-status'
         })
         var cfg = zenCloud.cfg
-        var meta = zenCloud.meta
         var patchCfg = zenCloud.patchCfg
         var prefs = zenCloud.prefs
         var savePrefs = zenCloud.savePrefs
@@ -12081,7 +12267,7 @@
           setStatus('同步中')
           try {
             var r = await remote(),
-              localTs = Number(meta().updatedAt || 0)
+              localTs = Number(zenCloud.workspaceMeta(session.user.id).updatedAt || 0)
             if (!r) {
               await push()
               setStatus('云端还没有数据，已上传本地数据')
@@ -12121,56 +12307,23 @@
         }
         function toast(msg) { return window.ZenUI.toast(msg) }
         function mark(ts) {
-          try {
-            localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
-          } catch (_) {}
+          return zenCloud.mark(ts)
         }
         function localData() {
           var r = localStorage.getItem(DATA_KEY)
           if (!r) throw new Error('没有可同步的本地数据')
           return JSON.parse(r)
         }
-        function isPlainObject(o) {
-          return !!o && typeof o === 'object' && !Array.isArray(o)
-        }
-
         function normalizeData(d) {
-          if (!isPlainObject(d)) throw new Error('云端数据无效')
-          var out = ZenUtil.clone(d)
-          out.v = Number(out.v || 1)
-          out.set = isPlainObject(out.set) ? out.set : {}
-          out.notes = isPlainObject(out.notes) ? out.notes : {}
-          out.drawings = isPlainObject(out.drawings) ? out.drawings : {}
-          out.books = isPlainObject(out.books) ? out.books : {}
-          out.prog = isPlainObject(out.prog) ? out.prog : {}
-          out.days = isPlainObject(out.days) ? out.days : {}
-          out.listen = Array.isArray(out.listen) ? out.listen : []
-          if (!out.books.cet6)
-            out.books.cet6 = { id: 'cet6', name: '六级核心高频词', builtin: true, w: null }
-          if (!out.books.fav)
-            out.books.fav = { id: 'fav', name: '我的生词本', builtin: true, w: [] }
-          if (!out.activeBook || !out.books[out.activeBook]) out.activeBook = 'cet6'
-          if (['home', 'words', 'flash', 'quiz', 'listen', 'typing'].indexOf(out.view) < 0)
-            out.view = 'home'
-          if (!out.words || typeof out.words !== 'object') out.words = { q: '', filter: 'all' }
-          if (typeof out.words.q !== 'string') out.words.q = ''
-          if (['all', 'new', 'learning', 'mastered', 'star'].indexOf(out.words.filter) < 0)
-            out.words.filter = 'all'
-          return out
+          return window.ZEnglishStore.normalize(d, true)
         }
         function validateData(d) {
-          return (
-            isPlainObject(d) &&
-            isPlainObject(d.books) &&
-            isPlainObject(d.prog) &&
-            isPlainObject(d.days) &&
-            Array.isArray(d.listen) &&
-            isPlainObject(d.notes) &&
-            isPlainObject(d.drawings) &&
-            isPlainObject(d.set) &&
-            !!d.books.cet6 &&
-            !!d.books.fav
-          )
+          try {
+            normalizeData(d)
+            return true
+          } catch (_) {
+            return false
+          }
         }
         var libPromise = null
         function ensureLib() {
@@ -12280,7 +12433,7 @@
           }
         }
         async function pull(r) {
-          var localTs = Number(meta().updatedAt || 0),
+          var localTs = Number(zenCloud.workspaceMeta(session.user.id).updatedAt || 0),
             cloudTs = Number(r.client_updated_at || 0),
             data = await dec(r.payload, unlockPassword)
           if (!validateData(data)) throw new Error('云端数据无效')
@@ -12363,6 +12516,14 @@
               session = si.data.session || null
               if (!session) throw new Error('请先登录')
             }
+            var workspaceOk = await zenCloud.confirmWorkspace(session.user.id)
+            if (!workspaceOk) {
+              unlockPassword = ''
+              if (window.ZEnglishStore && window.ZEnglishStore.lock) window.ZEnglishStore.lock()
+              refresh()
+              setStatus('已取消，未与云端交换数据')
+              return
+            }
             if (mode === 'pull' || mode === 'push') {
               var agreed = await ensureWarnAck()
               if (!agreed) {
@@ -12373,6 +12534,7 @@
             var remember = E('ze-remember-pw') ? E('ze-remember-pw').checked : false
             savePrefs({ remember: remember, password: remember ? pw : '' })
             unlockPassword = pw
+            if (window.ZEnglishStore && window.ZEnglishStore.unlock) window.ZEnglishStore.unlock()
             if (E('ze-password')) E('ze-password').value = ''
             refresh()
             setStatus('已登录，数据已解锁')
@@ -12417,6 +12579,7 @@
           unlockPassword = ''
           autoSyncOn = false
           stopWatcher()
+          if (window.ZEnglishStore && window.ZEnglishStore.lock) window.ZEnglishStore.lock()
           if (E('ze-password')) E('ze-password').value = ''
 
           var cleared = prefs().remember
@@ -12465,15 +12628,7 @@
         }
         function setup() {
           var b = E('ze-sync-btn')
-          if (b) {
-            b.onclick = openModal
-            b.onkeydown = function (e) {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                openModal()
-              }
-            }
-          }
+          if (b) b.onclick = openModal
         }
         function mountCloud(body, foot) {
           refresh()
@@ -12593,6 +12748,7 @@
             lastCloudTs = 0
             autoSyncOn = false
             stopWatcher()
+            if (window.ZEnglishStore && window.ZEnglishStore.lock) window.ZEnglishStore.lock()
             var sp = E('ze-sql-panel')
             if (sp) sp.classList.add('zen-cloud-hidden')
             refresh()
@@ -12622,7 +12778,12 @@
               session = si.data.session || null
             }
             if (!session) throw new Error('自动登录失败')
+            if (zenCloud.workspaceNeedsConfirmation(session.user.id)) {
+              setStatus('云工作区已切换，请手动解锁并确认后再同步')
+              return false
+            }
             unlockPassword = p.password
+            if (window.ZEnglishStore && window.ZEnglishStore.unlock) window.ZEnglishStore.unlock()
             refresh()
             setLabel('已登录，数据已解锁', true)
             if (p.autoSync) {
@@ -12654,6 +12815,8 @@
             await connect()
             var logged = await autoLogin()
             if (!logged && session) {
+              if (window.ZEnglishStore && window.ZEnglishStore.lock) window.ZEnglishStore.lock()
+              refresh()
               setStatus('已登录，数据已锁定')
               setLabel('已登录，数据已锁定', true)
             }

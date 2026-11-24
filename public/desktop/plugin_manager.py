@@ -521,12 +521,19 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _is_local_reference(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return parsed.scheme in ("", "file") or (
+        len(value) >= 3 and value[0].isalpha() and value[1] == ":" and value[2] in "/\\"
+    )
+
+
 def _read_url(url: str, timeout: float = 30.0) -> bytes:
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme in ("", "file"):
+    if _is_local_reference(url):
         path = (
             Path(url)
-            if not parsed.scheme
+            if parsed.scheme != "file"
             else Path(urllib.request.url2pathname(parsed.path))
         )
         return path.read_bytes()
@@ -574,7 +581,7 @@ def fetch_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
     last = None
     for candidate in mirror_urls(url):
         try:
-            if urllib.parse.urlparse(candidate).scheme in ("", "file"):
+            if _is_local_reference(candidate):
                 data = _read_url(candidate, timeout=timeout)
             else:
                 data = _retry_network(
@@ -680,8 +687,7 @@ def download_bytes(
     timeout: float = 60.0,
 ) -> bytes:
     def once(candidate: str) -> bytes:
-        parsed = urllib.parse.urlparse(candidate)
-        if parsed.scheme in ("", "file"):
+        if _is_local_reference(candidate):
             data = _read_url(candidate, timeout=timeout)
             if progress:
                 progress(len(data), len(data))
@@ -712,7 +718,7 @@ def download_bytes(
     last = None
     for candidate in candidates:
         try:
-            if urllib.parse.urlparse(candidate).scheme in ("", "file"):
+            if _is_local_reference(candidate):
                 data = once(candidate)
             else:
                 data = _retry_network(lambda candidate=candidate: once(candidate), attempts=2)

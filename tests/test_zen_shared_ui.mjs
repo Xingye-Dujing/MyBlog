@@ -614,6 +614,9 @@ test('ZenCloud 的偏好、错误分类与面板标记在共享层可验证', ()
         open: () => ({ el: null }),
         close: () => {},
       },
+      dialog: {
+        confirm: () => Promise.resolve(true),
+      },
     },
     setTimeout,
     Promise,
@@ -646,4 +649,103 @@ test('ZenCloud 的偏好、错误分类与面板标记在共享层可验证', ()
   assert.ok(html.includes('id="zen-cloud-status"'))
   assert.ok(html.includes('select 1'))
   assert.ok(ZenCloud.warnHTML({ prefix: 'zw' }).includes('id="zw-warn-ok"'))
+})
+
+test('ZenCloud.remote 解包 Supabase 结果并向上传递 error', async () => {
+  const store = new Map([['cfg', JSON.stringify({ url: 'https://demo.supabase.co/' })]])
+  let result = { data: { payload: 'cipher', client_updated_at: 7 }, error: null }
+  let query = null
+  const client = {
+    from(table) {
+      assert.equal(table, 'demo_sync')
+      query = {
+        select(fields) { assert.equal(fields, 'payload,client_updated_at'); return this },
+        eq(column, value) { assert.equal(column, 'user_id'); assert.equal(value, 'user-1'); return this },
+        maybeSingle() { return Promise.resolve(result) },
+      }
+      return query
+    },
+  }
+  const ctx = {
+    ZenUtil: {
+      esc: (s) => String(s), getJSON: (k, fb) => store.has(k) ? JSON.parse(store.get(k)) : fb,
+      isTableMissing: () => false,
+    },
+    localStorage: {
+      getItem: (k) => store.has(k) ? store.get(k) : null,
+      setItem: (k, v) => store.set(k, v),
+      removeItem: (k) => store.delete(k),
+    },
+    document: { getElementById: () => null },
+    ZenUI: { modal: { open() {}, close() {} }, dialog: { confirm: () => Promise.resolve(true) } },
+    Promise,
+  }
+  ctx.window = ctx
+  vm.createContext(ctx)
+  vm.runInContext(read('public/lib/zen-cloud.js'), ctx)
+  const api = ctx.ZenCloud.create({
+    cfgKey: 'cfg', metaKey: 'meta', table: 'demo_sync',
+    client: () => client, session: () => ({ user: { id: 'user-1' } }),
+  })
+  assert.deepEqual(JSON.parse(JSON.stringify(await api.remote())), { payload: 'cipher', client_updated_at: 7 })
+  const error = { message: 'cloud failed' }
+  result = { data: null, error }
+  await assert.rejects(api.remote(), (e) => e === error)
+})
+
+test('ZenCloud 工作区按 project+user 隔离，切换需明确确认且重置基线', async () => {
+  const store = new Map([['cfg', JSON.stringify({ url: 'https://one.supabase.co/' })]])
+  const answers = []
+  const ctx = {
+    ZenUtil: {
+      esc: (s) => String(s), getJSON: (k, fb) => store.has(k) ? JSON.parse(store.get(k)) : fb,
+      isTableMissing: () => false,
+    },
+    localStorage: {
+      getItem: (k) => store.has(k) ? store.get(k) : null,
+      setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k),
+    },
+    document: { getElementById: () => null },
+    ZenUI: {
+      modal: { open() {}, close() {} },
+      dialog: { confirm: (_body, opts) => { answers.push(opts); return Promise.resolve(answers.length > 1) } },
+    },
+    Promise,
+  }
+  ctx.window = ctx
+  vm.createContext(ctx)
+  vm.runInContext(read('public/lib/zen-cloud.js'), ctx)
+  let user = 'u1'
+  const api = ctx.ZenCloud.create({
+    cfgKey: 'cfg', metaKey: 'meta', table: 'demo_sync', client: () => null, session: () => ({ user: { id: user } }),
+  })
+  api.mark(10, { syncedDocHash: 'old' })
+  assert.equal(api.workspaceMeta('u1').updatedAt, 10)
+  assert.equal(api.workspaceMeta('u2').updatedAt, undefined)
+  assert.equal(api.workspaceNeedsConfirmation('u1'), false)
+  user = 'u2'
+  assert.equal(api.workspaceNeedsConfirmation('u2'), true)
+  assert.equal(await api.confirmWorkspace('u2'), false)
+  assert.equal(api.workspaceMeta('u2').updatedAt, undefined)
+  assert.equal(await api.confirmWorkspace('u2'), true)
+  assert.equal(api.workspaceMeta('u2').updatedAt, 0)
+  assert.equal(api.workspaceMeta('u2').syncedDocHash, '')
+  assert.equal(answers.length, 2)
+  assert.equal(answers[0].danger, true)
+})
+
+test('ZenCSV 是 CSV/TSV 的唯一无损编解码器', () => {
+  const ctx = { window: null }
+  ctx.window = ctx
+  vm.createContext(ctx)
+  vm.runInContext(read('public/lib/zen-csv.js'), ctx)
+  const rows = [['word', 'meaning'], ['a,b', 'say "hi"'], ['line\nbreak', ' padded '], ['', '制表符\t值']]
+  for (const delimiter of [',', '\t']) {
+    const encoded = ctx.ZenCSV.stringify(rows, delimiter)
+    assert.deepEqual(JSON.parse(JSON.stringify(ctx.ZenCSV.parse(encoded, delimiter))), rows)
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.ZenCSV.parse('\uFEFFa,b\r\n"x,y","z""q"\r\n', ','))), [['a', 'b'], ['x,y', 'z"q']])
+  assert.equal(ctx.ZenCSV.stringify([['=1+1']], ','), '=1+1\r\n')
+  assert.equal(ctx.ZenCSV.stringify([['=1+1']], ',', { formulaSafe: true }), "'=1+1\r\n")
+  assert.throws(() => ctx.ZenCSV.parse('a;b', ';'), /逗号或制表符/)
 })

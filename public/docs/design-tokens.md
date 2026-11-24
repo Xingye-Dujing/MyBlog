@@ -44,18 +44,51 @@ legacy 别名仅供存量代码使用，新代码不要引用。
 `--zen-control-accent` / `--zen-control-track` 为滑杆与开关控件色；
 `--zen-highlight-yellow` 为消息高亮色；`--zen-canvas-port` / `--zen-canvas-conn` /
 `--zen-canvas-node` / `--zen-canvas-title` 为画布节点色；`--zen-swatch-amber/olive/rust/blue`
-为安装器色板。产品不再就地写死这些色值。
+为安装器色板；`--zen-swatch-teal` / `--zen-swatch-graphite` 为产品色阶与功能色块。
+产品不再就地写死这些色值。
+
+## 投影与遮罩
+
+| 令牌 | 用途 | 浅色 | 深色 |
+|---|---|---|---|
+| `--zen-shadow-soft` | 控件、浮层的轻投影 | `rgba(26,26,26,.18)` | `rgba(0,0,0,.4)` |
+| `--zen-shadow-deep` | 模态、抽屉的深投影 | `rgba(26,26,26,.24)` | `rgba(0,0,0,.5)` |
+| `--zen-overlay` | 抽屉/弹层的背景遮罩 | `rgba(26,26,26,.22)` | `rgba(0,0,0,.45)` |
+| `--zen-veil` | 浅色遮罩/玻璃层 | `rgba(255,255,255,.72)` | `rgba(0,0,0,.62)` |
+
+legacy `--shadow-soft`、`--shadow-deep`、`--overlay`、`--veil` 只引用上述规范令牌，
+不保留独立色值。
 
 ## 间距与圆角
 
-`--zen-space-1..5` = 4 / 8 / 12 / 16 / 24px；`--zen-radius: 0`（全品牌统一直角）；
+| 令牌 | 值 |
+|---|---|
+| `--zen-space-1` | `4px` |
+| `--zen-space-2` | `8px` |
+| `--zen-space-3` | `12px` |
+| `--zen-space-4` | `16px` |
+| `--zen-space-5` | `24px` |
+
+`--zen-radius: 0`（全品牌统一直角）；
 `--zen-fscale: 1`（字号缩放由工作台无障碍设置注入）。状态圆点、画布端口与颜色取样点
 可用 `50%` 表达语义圆形，除此之外的界面容器、控件和浮层不得写死或派生非零圆角。
 
 ## 层级
 
-`--zen-z-base` 1 · canvas 10 · menu 1000 · toolbar 2000 · context 2500 ·
-confirm 9999 · cloud 12000 · panel 2147482100。新组件不得自造 z-index。
+| 令牌 | 值 |
+|---|---|
+| `--zen-z-base` | `1` |
+| `--zen-z-canvas` / `--zen-z-canvas-ui` | `10` / `40` |
+| `--zen-z-cursor` / `--zen-z-sticky` | `100` / `300` |
+| `--zen-z-dropdown` / `--zen-z-menu` | `1000` / `1000` |
+| `--zen-z-toolbar` / `--zen-z-context` | `2000` / `2500` |
+| `--zen-z-panel` / `--zen-z-popover` | `3000` / `4000` |
+| `--zen-z-modal` / `--zen-z-preview` | `5000` / `6000` |
+| `--zen-z-toast` / `--zen-z-confirm` | `8000` / `9999` |
+| `--zen-z-cloud` | `12000` |
+| `--zen-z-overlay` | `2147483600`（共享 ZenUI 浮层宿主） |
+
+新组件不得自造 z-index。
 
 ## 层顺序
 

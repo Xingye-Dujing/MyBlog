@@ -240,7 +240,7 @@ class HubServer:
         # 每个 mdforge 插件实例创建独立的 Flask app，把静态根目录绑定在各自的
         # config 里。mdforge.server 的路由通过 _public_root() 读取当前 app 的配置，
         # 不再依赖进程级 PUBLIC_ROOT 全局变量（多插件并存时会互相串目录）。
-        app = mdforge_server.create_app(plugin_dir.resolve())
+        app = mdforge_server.create_app(plugin_dir.resolve(), app_id="mdforge")
         server = make_server("127.0.0.1", port, app, threaded=True)
         _serve(server)
         return server
@@ -253,7 +253,7 @@ class HubServer:
         import agent_workspace.omm_server as ai_server  # noqa: WPS433
         from werkzeug.serving import make_server
 
-        app = ai_server.create_app(plugin_dir.resolve())
+        app = ai_server.create_app(plugin_dir.resolve(), app_id="ai")
         server = make_server("127.0.0.1", port, app, threaded=True)
         _serve(server)
         return server
@@ -324,6 +324,9 @@ class HubServer:
         from werkzeug.serving import make_server
 
         os.environ["OMM_PLUGIN_ROOT"] = str(plugin_dir)
+        os.environ.setdefault("LAMBDA_DATA_DIR", str(app_data_base() / "OMM-ZEN" / "lambda"))
+        if str(plugin_dir) not in sys.path:
+            sys.path.insert(0, str(plugin_dir))
         script = self.root / "server" / "lambda-app.py"
         if not script.is_file():
             script = self.root / "lambda-app.py"

@@ -12,6 +12,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -151,6 +152,22 @@ class ChainTest(BrowserCase, unittest.TestCase):
                 self.assert_accessible_dom()
                 self.assert_zen_radius()
 
+    def test_writer_batch_color_buttons_have_accessible_names(self):
+        self.open("omm-writer.html")
+        buttons = self.page.locator(".ctx-batch-sw")
+        self.assertEqual(buttons.count(), 9)
+        for index in range(9):
+            label = buttons.nth(index).get_attribute("aria-label")
+            self.assertTrue(label and re.search(r"[\u4e00-\u9fff]", label),
+                "Writer 批量色块 %d 缺少中文可访问名称" % index)
+        self.assertEqual(self.page.locator(".ctx-batch-sw[style]").count(), 0)
+        backgrounds = self.page.locator(".ctx-batch-sw:not(.none)").evaluate_all(
+            "(els) => els.map((el) => getComputedStyle(el).backgroundColor)")
+        self.assertTrue(all(value and value != "rgba(0, 0, 0, 0)" for value in backgrounds))
+        dot_sizes = self.page.locator(".db-w i").evaluate_all(
+            "(els) => els.map((el) => [parseFloat(getComputedStyle(el).width), parseFloat(getComputedStyle(el).height)])")
+        self.assertTrue(dot_sizes and all(width > 0 and height > 0 for width, height in dot_sizes))
+
     def test_writer_import_sanitizes_rich_html(self):
         self.open("omm-writer.html")
         payload = {"nodes": [{
@@ -169,7 +186,7 @@ class ChainTest(BrowserCase, unittest.TestCase):
         self.assertFalse(self.page.locator("#node-1 .node-content img").get_attribute("onerror"))
         self.assertEqual(self.page.locator("#node-1 .node-content b").inner_text(), "safe")
 
-    def test_corpus_import_escapes_record_ids(self):
+    def test_corpus_import_replaces_unsafe_record_ids(self):
         self.open("omm-corpus.html")
         bad_id = 'x"><img src=x onerror="window.__ommXss=3">'
         payload = {
@@ -183,7 +200,10 @@ class ChainTest(BrowserCase, unittest.TestCase):
         self.page.click("#data-import")
         self.page.wait_for_timeout(300)
         self.assertIsNone(self.page.evaluate("window.__ommXss || null"))
-        self.assertEqual(self.page.locator(".corpus-row").first.get_attribute("data-id"), bad_id)
+        imported_id = self.page.locator(".corpus-row").first.get_attribute("data-id")
+        self.assertRegex(imported_id, r"^[A-Za-z0-9_-]+$")
+        self.assertNotEqual(imported_id, bad_id)
+        self.assertEqual(self.page.locator(".corpus-row").first.locator("img").count(), 0)
 
     def test_zencard_import_escapes_card_ids(self):
         self.open("omm-zencard.html")

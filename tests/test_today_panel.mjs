@@ -84,13 +84,14 @@ test('面板按钮与容器存在，入口复用现有动作', () => {
   assert.ok(js.includes('data-today-app='))
 })
 
-test('今日面板只读各产品既有 localStorage，不新增存储', () => {
-  const open = js.slice(js.indexOf('function openToday()'), js.indexOf('function closeToday()'))
-  for (const key of ['zen.cards.v1', 'zen.srs.v1', 'zc-docs', 'omm-search-v1', 'zen.flow.rules.v1']) {
-    assert.ok(open.includes("'" + key + "'"), key)
+test('今日面板只读产品存储并合并隐藏卡片采集', () => {
+  const summary = js.slice(js.indexOf('function todaySummaryFromData()'), js.indexOf('function renderToday('))
+  for (const key of ['zen.cards.v1', 'zen.inbox.v1', 'zen.clip.v1', 'zen.srs.v1', 'zc-docs', 'omm-search-v1', 'zen.flow.rules.v1']) {
+    assert.ok(js.includes("'" + key + "'"), key)
   }
-  assert.ok(open.includes('todayRead('), '应通过只读封装读取')
-  assert.ok(!open.includes('setItem'), '不应写入任何存储')
-  const read = js.slice(js.indexOf('function todayRead('), js.indexOf('function renderToday('))
-  assert.ok(read.includes('localStorage.getItem('))
+  assert.ok(summary.includes('readLiveCards().concat(productCards)'))
+  assert.ok(!summary.includes('setItem'), '不应写入任何存储')
+  const open = js.slice(js.indexOf('function openToday()'), js.indexOf('function closeToday()'))
+  assert.ok(open.includes('renderTodayFromData()'))
+  assert.ok(open.includes('loadProductCards()'))
 })

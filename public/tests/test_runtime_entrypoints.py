@@ -65,3 +65,29 @@ def test_lambda_version_falls_back_to_source_spec(lambda_module, tmp_path):
         assert lambda_module._read_version() == "1.2.3"
     finally:
         lambda_module.APP_DIR = original
+
+
+def test_lambda_serves_shared_product_assets_without_exposing_backend(lambda_module):
+    client = lambda_module.app.test_client()
+    for path in (
+        "/zen/zen.css",
+        "/zen/foundation/tokens.css",
+        "/zen/components/index.js",
+        "/lib/zen-card.js",
+        "/omm-embed.js",
+        "/omm-desktop.js",
+        "/omm-share.js",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.data, path
+    for path in (
+        "/lambda-app.py",
+        "/extension.exe",
+        "/sessions.json",
+        "/shares.json",
+        "/plugin.json",
+        "/zen/../server/lambda-app.py",
+        "/zen/%2e%2e/server/lambda-app.py",
+    ):
+        assert client.get(path).status_code == 404, path

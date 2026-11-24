@@ -21,9 +21,7 @@
  * snapshot instead of reading the iframe from outside.
  */
 
-/* OMM-ZEN UI kit moved to zen/components/ (core + components + entry).
- * Product pages load zen/ui before this bridge; window.OMMUI is the
- * compatibility facade exposed by zen/components/index.js. */
+/* Shared OMM-ZEN UI is loaded from zen/components/ before this bridge. */
 
 ;(function () {
   'use strict'
@@ -48,41 +46,16 @@
   var ENV = (function () {
     var appId = detectAppId()
     var embedded = false
-    var hubOrigin = ''
     try {
-      var params = new URLSearchParams(location.search)
-      embedded = params.get('omm_embed') === '1'
-      var rawHub = params.get('omm_hub_origin')
-      if (rawHub) {
-        var parsed = new URL(rawHub)
-        if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-            ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(parsed.hostname) >= 0) {
-          hubOrigin = parsed.origin
-        }
-      }
+      embedded = new URLSearchParams(location.search).get('omm_embed') === '1'
     } catch (e) {
       embedded = /[?&]omm_embed=1(?:&|$)/.test(location.search)
     }
-    return { appId: appId, embedded: embedded, hubOrigin: hubOrigin }
+    return { appId: appId, embedded: embedded }
   })()
 
-  function isLoopbackOrigin(origin) {
-    try {
-      var u = new URL(String(origin || ''))
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
-      return ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
-    } catch (e) {
-      return false
-    }
-  }
-
-  function isTrustedParentOrigin(origin) {
-    if (ENV.hubOrigin) return origin === ENV.hubOrigin
-    return isLoopbackOrigin(origin)
-  }
-
   function parentTargetOrigin() {
-    return ENV.hubOrigin || location.origin
+    return ZenUtil.parentTargetOrigin()
   }
 
   var originalCreateObjectURL = URL.createObjectURL
@@ -100,8 +73,6 @@
 
   var model = {
     enabled: false,
-    ready: false,
-    shadow: null,
     shell: 'app', // 'app' | 'hub'
     open: false,
     pane: 'save',
@@ -132,7 +103,8 @@
     seq: 0,
   }
 
-  var focusTimer = 0
+  var closeArchivePopover = null
+  var focusTimer = null
   var restoreTokens = {}
   var snapshotTokens = {}
 
@@ -186,20 +158,11 @@
   }
 
   function byId(id) {
-    return model.shadow ? model.shadow.getElementById(id) : null
+    return model.root ? model.root.querySelector('[id="' + id + '"]') : null
   }
 
   function toast(text, kind) {
-    if (!model.shadow) return
-    var box = byId('omm-toast')
-    if (!box) return
-    box.textContent = text
-    box.dataset.kind = kind || 'info'
-    box.classList.add('show')
-    clearTimeout(box._timer)
-    box._timer = setTimeout(function () {
-      box.classList.remove('show')
-    }, kind === 'error' ? 6000 : 3800)
+    window.ZenUI.toast(text, kind === 'error' ? 'error' : 'info')
   }
 
   /* ------------------------------------------------------------------- api */
@@ -598,7 +561,12 @@
     })
   }
 
-  async function restoreDatabases(infos) {
+  async function restoreDatabases(infos, currentNames) {
+    var targetNames = Object.create(null)
+    infos.forEach(function (info) { if (info && info.name) targetNames[info.name] = true })
+    for (var n = 0; n < (currentNames || []).length; n++) {
+      if (!targetNames[currentNames[n]]) await deleteDatabase(currentNames[n])
+    }
     for (var i = 0; i < infos.length; i++) await restoreDatabase(infos[i])
   }
 
@@ -630,14 +598,22 @@
           createSchema(up, info)
         })
       }
+      var desired = Object.create(null)
+      ;(info.stores || []).forEach(function (storeInfo) { desired[storeInfo.name] = true })
       var missing = (info.stores || []).filter(function (storeInfo) {
         return !db.objectStoreNames.contains(storeInfo.name)
       })
-      if (missing.length) {
+      var extra = Array.prototype.slice.call(db.objectStoreNames || []).filter(function (name) {
+        return !desired[name]
+      })
+      if (missing.length || extra.length) {
         var nextVersion = (db.version || 1) + 1
         db.close()
         db = await openDatabase(info.name, nextVersion, function (up) {
           createSchema(up, info)
+          extra.forEach(function (storeName) {
+            if (up.objectStoreNames.contains(storeName)) up.deleteObjectStore(storeName)
+          })
         })
       }
       for (var i = 0; i < (info.stores || []).length; i++) {
@@ -689,7 +665,7 @@
       // IndexedDB is restored first. localStorage/sessionStorage commit only after
       // every database transaction succeeds, so a failed DB never leaves a visibly
       // half-restored product.
-      await restoreDatabases(target.indexedDB)
+      await restoreDatabases(target.indexedDB, (backup.indexedDB || []).map(function (info) { return info.name }))
       replaceStorage(target)
     } catch (e) {
       try {
@@ -748,16 +724,6 @@
     }
   }
 
-  function fingerprint(text) {
-    var sample = text.slice(0, 2048) + text.slice(-2048)
-    var hash = 2166136261
-    for (var i = 0; i < sample.length; i++) {
-      hash ^= sample.charCodeAt(i)
-      hash = Math.imul(hash, 16777619)
-    }
-    return text.length + ':' + (hash >>> 0)
-  }
-
   var lastFingerprint = ''
   var lastSnapshotAt = 0
 
@@ -787,7 +753,7 @@
       if (opts.snapshot !== false && model.config.autoSnapshot && !isHubShell) {
         try {
           var snapshot = await captureState(payload.label)
-          var fp = fingerprint(JSON.stringify(snapshot))
+          var fp = ZenUtil.fingerprint(JSON.stringify(snapshot))
           if (fp !== lastFingerprint || Date.now() - lastSnapshotAt > 60000) {
             payload.state = snapshot
             lastFingerprint = fp
@@ -974,262 +940,9 @@
       })
   }
 
-  /* ------------------------------------------------------------------- css */
-
-  var PANEL_CSS = [
-    ':host{all:initial;--omm-radius:var(--radius,0px)}',
-    '*{box-sizing:border-box}',
-    '.omm-btn{position:fixed;left:16px;bottom:84px;z-index:2147482100;pointer-events:auto;',
-    '  display:flex;align-items:center;gap:4px;border:1px solid var(--omm-ink, #1a1a1a);background:var(--omm-paper, #ffffff);',
-    '  color:var(--omm-ink, #1a1a1a);font:600 11px/1 "Literata","SimSun","宋体","NSimSun","Songti SC","STSong",serif;letter-spacing:.04em;',
-    '  padding:5px 7px;cursor:pointer;box-shadow:0 3px 10px rgba(38,35,31,.10);border-radius:var(--omm-radius,0px)}',
-    '.omm-btn:hover{background:var(--omm-soft, #f5f5f5);border-color:var(--omm-ink, #1a1a1a);color:var(--omm-ink, #1a1a1a)}',
-    '.omm-panel{position:fixed;left:16px;bottom:132px;z-index:2147482101;pointer-events:auto;',
-    '  width:min(600px,calc(100vw - 32px));max-height:min(74vh,720px);display:none;flex-direction:column;',
-    '  background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a);border:1px solid var(--omm-ink, #1a1a1a);border-radius:var(--omm-radius,0px);',
-    '  box-shadow:0 22px 60px rgba(26,26,26,.18);font:12px/1.55 "Literata","SimSun","宋体","NSimSun","Songti SC","STSong",serif}',
-    '.omm-panel.open{display:flex}',
-    ':host([data-shell="hub"]) .omm-btn{display:none}',
-    ':host([data-embedded="1"]) .omm-btn{display:none}',
-    ':host([data-shell="hub"]) .omm-panel{left:auto;right:16px;bottom:auto;top:calc(var(--topbar,46px) + 8px);',
-    '  width:min(540px,calc(100vw - 32px));max-height:min(78vh,760px)}',
-    '.omm-head{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-bottom:1px solid var(--omm-line-soft, #d9d9d9)}',
-    '.omm-head b{font-size:14px;letter-spacing:.04em}',
-    '.omm-x{border:0;background:transparent;font-size:17px;cursor:pointer;color:var(--omm-ink, #1a1a1a);padding:0 4px;border-radius:var(--omm-radius,0px)}',
-    '.omm-x:hover{background:var(--omm-soft, #f5f5f5)}',
-    '.omm-tabs{display:flex;gap:2px;padding:7px 11px 0;border-bottom:1px solid var(--omm-line-soft, #d9d9d9)}',
-    '.omm-tabs button{border:0;background:transparent;font:inherit;padding:5px 9px;cursor:pointer;color:var(--omm-dim, #666666);',
-    '  border-bottom:2px solid transparent;border-radius:var(--omm-radius,0px) var(--omm-radius,0px) 0 0}',
-    '.omm-tabs button[aria-selected="true"]{color:var(--omm-ink, #1a1a1a);border-color:var(--omm-ink, #1a1a1a);font-weight:700}',
-    '.omm-tabs button:focus-visible{outline:1px solid var(--omm-ink, #1a1a1a);outline-offset:-1px}',
-    '.omm-body{padding:11px 13px 13px;overflow:auto;flex:1 1 auto;min-height:160px}',
-    '.omm-pane{display:none}.omm-pane.active{display:block}',
-    '.omm-label{display:block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--omm-dim, #666666);margin:9px 0 4px}',
-    '.omm-input{width:100%;padding:7px 8px;border:1px solid #b8b8b8;background:var(--omm-paper, #ffffff);font:inherit;color:var(--omm-ink, #1a1a1a);border-radius:var(--omm-radius,0px)}',
-    '.omm-input:focus{outline:1px solid var(--omm-ink, #1a1a1a);border-color:var(--omm-ink, #1a1a1a)}',
-    '.omm-input:disabled{background:#f7f4ee;color:#9c9486}',
-    '.omm-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:7px 0}',
-    '.omm-row label{display:flex;align-items:center;gap:6px;cursor:pointer}',
-    '.omm-row label[data-disabled="1"]{cursor:default;color:#9c9486}',
-    '.omm-row input[type="checkbox"],.omm-row input[type="radio"]{',
-    '  -webkit-appearance:none;appearance:none;width:13px;height:13px;margin:0;flex:0 0 auto;',
-    '  border:1px solid var(--omm-ink, #1a1a1a);background:var(--omm-paper, #ffffff);position:relative;display:inline-block;',
-    '  vertical-align:-2px;cursor:pointer;accent-color:var(--omm-ink, #1a1a1a);border-radius:var(--omm-radius,0px)}',
-    '.omm-row input[type="radio"]{border-radius:50%}',
-    '.omm-row input[type="checkbox"]:checked,.omm-row input[type="radio"]:checked{background:var(--omm-soft, #f5f5f5)}',
-    '.omm-row input[type="checkbox"]:checked::after{content:"";position:absolute;left:3px;top:0;',
-    '  width:4px;height:8px;border:solid var(--omm-ink, #1a1a1a);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}',
-    '.omm-row input[type="radio"]:checked::after{content:"";position:absolute;left:3px;top:3px;',
-    '  width:5px;height:5px;border-radius:50%;background:var(--omm-ink, #1a1a1a)}',
-    '.omm-row input[type="checkbox"]:focus-visible,.omm-row input[type="radio"]:focus-visible{outline:1px solid var(--omm-ink, #1a1a1a);outline-offset:2px}',
-    '.omm-row input:disabled{opacity:.4;cursor:default}',
-    '.omm-primary,.omm-secondary{border:1px solid var(--omm-ink, #1a1a1a);font:inherit;font-size:11.5px;padding:5px 11px;cursor:pointer;',
-    '  background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a);border-radius:var(--omm-radius,0px)}',
-    '.omm-primary{background:var(--omm-soft, #f5f5f5)}.omm-primary:hover,.omm-secondary:hover{background:#e8dfd1}',
-    '.omm-primary:disabled,.omm-secondary:disabled{opacity:.45;cursor:default}',
-    '.omm-primary:focus-visible,.omm-secondary:focus-visible{outline:1px solid var(--omm-ink, #1a1a1a);outline-offset:2px}',
-    '.omm-note{color:var(--omm-dim, #666666);font-size:11.5px;margin-top:6px;word-break:break-all}',
-    '.omm-section{margin-top:12px;border-top:1px solid #ece7de;padding-top:2px}',
-    '.omm-lead{color:var(--omm-dim, #666666);font-size:11px;line-height:1.55;margin:0 0 6px;padding:5px 8px;background:var(--omm-soft, #f5f5f5);border-left:2px solid var(--omm-line-soft, #d9d9d9)}',
-    '.omm-scope{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:11px;color:var(--omm-dim, #666666);margin:0 0 3px}',
-    '.omm-scope b{color:var(--omm-ink, #1a1a1a);font-weight:600}',
-    '.omm-help{margin:7px 0;padding:6px 8px;border-left:2px solid var(--omm-line-soft, #d9d9d9);background:var(--omm-soft, #f5f5f5);color:var(--omm-dim, #666666);font-size:11px;line-height:1.55}',
-    '.omm-help b{color:var(--omm-ink, #1a1a1a);font-weight:600}',
-    '.omm-search{position:relative;margin:8px 0 5px}',
-    '.omm-search .omm-input{padding-right:28px}',
-    '.omm-search button{position:absolute;right:5px;top:50%;transform:translateY(-50%);border:0;background:transparent;',
-    '  color:var(--omm-dim, #666666);font:14px/1 inherit;cursor:pointer;padding:2px;display:none}',
-    '.omm-search.has-value button{display:block}',
-    '.omm-search button:hover{color:var(--omm-ink, #1a1a1a)}',
-    '.omm-chips{display:flex;gap:4px;margin:0 0 2px;flex-wrap:wrap}',
-    '.omm-chips button{border:1px solid var(--omm-line-soft, #c8c8c8);background:var(--omm-paper, #ffffff);color:var(--omm-dim, #666666);font:inherit;font-size:10.5px;',
-    '  padding:2px 9px;cursor:pointer;border-radius:var(--omm-radius,0px)}',
-    '.omm-chips button:hover{border-color:var(--omm-ink, #1a1a1a);color:var(--omm-ink, #1a1a1a)}',
-    '.omm-chips button[aria-pressed="true"]{background:var(--omm-ink, #1a1a1a);border-color:var(--omm-ink, #1a1a1a);color:var(--omm-paper, #ffffff)}',
-    '.omm-list{border:1px solid var(--omm-line-soft, #d9d9d9);margin-top:6px;border-radius:var(--omm-radius,0px)}',
-    '.omm-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 9px;border-bottom:1px solid #ece7de}',
-    '.omm-item:last-child{border-bottom:0}',
-    '.omm-item:hover{background:#fbf8f2}',
-    '.omm-item-main{min-width:0;flex:1}',
-    '.omm-item-head{display:flex;align-items:center;gap:4px;min-width:0}',
-    '.omm-item-head b{display:block;min-width:0;max-width:100%;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.omm-meta{color:var(--omm-dim, #666666);font-size:11px;word-break:break-all;margin-top:1px}',
-    '.omm-actions{display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:210px}',
-    '.omm-actions button{border:1px solid #bcbcbc;background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a);font:inherit;font-size:11px;padding:3px 7px;',
-    '  cursor:pointer;white-space:nowrap;border-radius:var(--omm-radius,0px)}',
-    '.omm-actions button:hover{background:var(--omm-soft, #f5f5f5);color:var(--omm-ink, #1a1a1a);border-color:var(--omm-ink, #1a1a1a)}',
-    '.omm-actions button:disabled{opacity:.38;cursor:default;background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a)}',
-    '.omm-actions button.danger:hover{background:rgba(0,0,0,.06);border-color:#8f2f27;color:#8f2f27}',
-    '.omm-actions button:focus-visible{outline:1px solid var(--omm-ink, #1a1a1a);outline-offset:1px}',
-    '.omm-empty{padding:22px 10px;text-align:center;color:var(--omm-dim, #666666);font-size:12px;line-height:1.7;white-space:pre-line}',
-    '.omm-badge{display:inline-block;border:1px solid var(--omm-line-soft, #c8c8c8);padding:0 5px;margin-right:5px;font-size:10px;',
-    '  color:var(--omm-dim, #666666);border-radius:var(--omm-radius,0px)}',
-    '.omm-kind{display:inline-block;border:1px solid var(--omm-ink, #1a1a1a);padding:0 5px;margin-right:5px;font-size:10px;',
-    '  letter-spacing:.02em;color:var(--omm-ink, #1a1a1a);border-radius:var(--omm-radius,0px)}',
-    '.omm-kind[data-kind="snapshot"]{background:var(--omm-soft, #f5f5f5)}',
-    '.omm-kind[data-kind="file"]{background:var(--omm-paper, #ffffff)}',
-    '.omm-info{flex:0 0 auto;width:15px;height:15px;border:1px solid #bcbcbc;background:var(--omm-paper, #ffffff);color:var(--omm-dim, #666666);',
-    '  font:600 10px/1 "Literata","Songti SC",serif;cursor:pointer;padding:0;border-radius:50%}',
-    '.omm-info:hover{border-color:var(--omm-ink, #1a1a1a);color:var(--omm-ink, #1a1a1a)}',
-    '.omm-detail{margin-top:6px;padding:6px 7px;background:var(--omm-soft, #f5f5f5);border:1px dashed var(--omm-line-soft, #d9d9d9);',
-    '  font-size:10.5px;line-height:1.55;color:var(--omm-dim, #666666)}',
-    '.omm-detail div{display:flex;gap:6px;margin:1px 0}',
-    '.omm-detail span:first-child{flex:0 0 58px;color:var(--omm-dim, #666666)}',
-    '.omm-detail span:last-child{flex:1;word-break:break-all}',
-    '.omm-rename{display:flex;gap:4px;margin:3px 0 4px}',
-    '.omm-rename input{flex:1;min-width:0;padding:3px 6px;border:1px solid var(--omm-ink, #1a1a1a);background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a);',
-    '  font:inherit;font-size:11.5px;border-radius:var(--omm-radius,0px)}',
-    '.omm-rename button{border:1px solid var(--omm-ink, #1a1a1a);background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a);font:inherit;font-size:11px;padding:2px 7px;',
-    '  cursor:pointer;border-radius:var(--omm-radius,0px)}',
-    '.omm-rename button:hover{background:var(--omm-soft, #f5f5f5)}',
-    '.omm-foot{margin-top:6px;color:var(--omm-dim, #666666);font-size:10.5px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}',
-    '.omm-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);z-index:2147482200;pointer-events:none;',
-    '  max-width:min(680px,calc(100vw - 40px));padding:8px 13px;background:var(--omm-paper, #ffffff);color:var(--omm-ink, #1a1a1a);border:1px solid var(--omm-ink, #1a1a1a);',
-    '  border-radius:var(--omm-radius,0px);',
-    '  font:12px/1.5 "Literata","SimSun","宋体","NSimSun","Songti SC","STSong",serif;white-space:pre-wrap;opacity:0;transition:.18s}',
-    '.omm-toast.show{opacity:1;transform:translate(-50%,0)}',
-    '.omm-toast[data-kind="error"]{background:#fdf0ee;border-color:#8f2f27;color:#8f2f27}',
-    /* Batch selection: a checkbox per archive row plus a contextual action bar. */
-    '.omm-item input[data-archive-pick]{flex:0 0 auto;width:13px;height:13px;margin:1px 6px 0 0;',
-    '  accent-color:var(--omm-ink,#1a1a1a);cursor:pointer;vertical-align:-2px}',
-    '.omm-batch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;margin:6px 0 0;',
-    '  border:1px solid var(--omm-ink,#1a1a1a);background:var(--omm-soft,#f5f5f5);font-size:10.5px}',
-    '.omm-batch[hidden]{display:none}',
-    '.omm-batch .omm-batch-count{margin-right:auto;color:var(--omm-dim,#666666)}',
-    '.omm-batch button{border:1px solid var(--omm-line-soft,#d9d9d9);background:var(--omm-paper,#ffffff);',
-    '  padding:2px 8px;font:inherit;font-size:10.5px;cursor:pointer;color:var(--omm-ink,#1a1a1a);',
-    '  border-radius:var(--omm-radius,0px)}',
-    '.omm-batch button:hover{border-color:var(--omm-ink,#1a1a1a)}',
-    '.omm-batch button.danger{color:#8f2f27}',
-    '.omm-batch button:disabled{opacity:.45;cursor:default}',
-    '.omm-pick-all{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--omm-dim,#666666)}',
-    '.omm-pick-all input{width:13px;height:13px;margin:0;accent-color:var(--omm-ink,#1a1a1a);cursor:pointer}',
-    /* ---------------------------------------------------------------- *
-     * Appearance overrides. Accent, radius and focus are all derived from
-     * the shell variables above, so no surface keeps a hard-coded hue.
-     * This also styles the share panel (.osh-*) injected into this shadow
-     * root by omm-share.js.
-     * ---------------------------------------------------------------- */
-    '.omm-panel{border-color:var(--omm-accent-line);overflow:hidden;',
-    '  box-shadow:0 22px 60px var(--omm-shadow),inset 0 3px 0 var(--omm-accent)}',
-    '.omm-btn{border-color:var(--omm-accent);',
-    '  box-shadow:0 3px 10px var(--omm-shadow),inset 0 -2px 0 var(--omm-accent)}',
-    '.omm-btn:hover{background:var(--omm-accent-soft)}',
-    '.omm-head{border-bottom:1px solid var(--omm-accent-line);background:var(--omm-accent-wash)}',
-    '.omm-head b::before{content:"";display:inline-block;width:3px;height:13px;margin-right:7px;',
-    '  vertical-align:-2px;background:var(--omm-accent);border-radius:var(--omm-radius)}',
-    '.omm-tabs{border-bottom:1px solid var(--omm-accent-line)}',
-    '.omm-tabs button:hover{background:var(--omm-accent-wash)}',
-    '.omm-tabs button[aria-selected="true"]{border-color:var(--omm-accent);',
-    '  background:var(--omm-accent-soft);color:var(--omm-ink)}',
-    '.omm-label{color:var(--omm-accent)}',
-    '.omm-input{border-color:var(--omm-accent-line)}',
-    '.omm-input:focus{outline:1px solid var(--omm-accent-line);border-color:var(--omm-accent)}',
-    '.omm-input:disabled{background:var(--omm-soft);color:var(--omm-dim)}',
-    '.omm-row label[data-disabled="1"]{color:var(--omm-dim)}',
-    '.omm-row input[type="checkbox"]:checked,.omm-row input[type="radio"]:checked{',
-    '  background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
-    '.omm-row input[type="checkbox"]:checked::after{border-color:var(--omm-accent)}',
-    '.omm-row input[type="radio"]:checked::after{background:var(--omm-accent)}',
-    '.omm-primary{background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
-    '.omm-secondary{border-color:var(--omm-accent-line)}',
-    '.omm-primary:hover,.omm-secondary:hover{background:var(--omm-accent-soft)}',
-    '.omm-lead,.omm-help{border-left:2px solid var(--omm-accent);background:var(--omm-accent-wash)}',
-    '.omm-section{border-top:1px solid var(--omm-accent-line)}',
-    '.omm-chips button{border-color:var(--omm-accent-line)}',
-    '.omm-chips button[aria-pressed="true"]{background:var(--omm-accent);',
-    '  border-color:var(--omm-accent);color:var(--omm-accent-contrast)}',
-    '.omm-list{border-color:var(--omm-accent-line)}',
-    '.omm-item{border-bottom:1px solid var(--omm-line-soft)}',
-    '.omm-item:hover{background:var(--omm-accent-wash)}',
-    '.omm-actions button{border-color:var(--omm-accent-line)}',
-    '.omm-actions button:hover{background:var(--omm-accent-wash);border-color:var(--omm-accent)}',
-    '.omm-actions button.danger:hover{background:var(--omm-danger-soft);',
-    '  border-color:var(--omm-danger);color:var(--omm-danger)}',
-    '.omm-badge,.omm-kind{border-color:var(--omm-accent-line)}',
-    '.omm-kind[data-kind="snapshot"]{background:var(--omm-accent-soft)}',
-    '.omm-info{border-color:var(--omm-accent-line)}',
-    '.omm-info:hover{border-color:var(--omm-accent);color:var(--omm-accent)}',
-    '.omm-detail{border:1px dashed var(--omm-accent-line);background:var(--omm-accent-wash)}',
-    '.omm-rename input{border-color:var(--omm-accent)}',
-    '.omm-toast{border-color:var(--omm-accent);border-left:3px solid var(--omm-accent);',
-    '  box-shadow:0 10px 34px var(--omm-shadow)}',
-    '.omm-toast[data-kind="error"]{background:var(--omm-danger-soft);',
-    '  border-color:var(--omm-danger);color:var(--omm-danger)}',
-    '.omm-search button{color:var(--omm-accent)}',
-    '.osh-lead{border-left:2px solid var(--omm-accent);background:var(--omm-accent-wash)}',
-    '.osh-chip{border-color:var(--omm-accent-line)}',
-    '.osh-chip[aria-pressed="true"]{background:var(--omm-accent);',
-    '  border-color:var(--omm-accent);color:var(--omm-accent-contrast)}',
-    '.osh-chip:hover{border-color:var(--omm-accent)}',
-    '.osh-list,.osh-rule,.osh-preview,.osh-batch{border-color:var(--omm-accent-line)}',
-    '.osh-batch{background:var(--omm-accent-wash)}',
-    '.osh-batch button,.osh-member input[type="checkbox"]{border-color:var(--omm-accent-line)}',
-    '.osh-batch button:hover{border-color:var(--omm-accent)}',
-    '.osh-batch button.danger,.osh-item button.danger{color:var(--omm-danger)}',
-    '.osh-item:hover{background:var(--omm-accent-wash)}',
-    '.osh-member input[type="checkbox"]:checked{background:var(--omm-accent-soft);border-color:var(--omm-accent)}',
-    '.omm-item input[data-archive-pick],.omm-pick-all input{accent-color:var(--omm-accent)}',
-    '.omm-batch{border-color:var(--omm-accent-line);background:var(--omm-accent-wash)}',
-    '.omm-batch button{border-color:var(--omm-accent-line)}',
-    '.omm-batch button:hover{border-color:var(--omm-accent)}',
-    '.omm-batch button.danger{color:var(--omm-danger)}',
-    /* Every bordered element inside the archive panel follows --radius. */
-    '.omm-panel,.omm-head,.omm-x,.omm-tabs,.omm-tabs button,.omm-body,.omm-pane,.omm-label,',
-    '.omm-input,.omm-row,.omm-primary,.omm-secondary,.omm-note,.omm-section,.omm-lead,',
-    '.omm-scope,.omm-help,.omm-search,.omm-chips,.omm-chips button,.omm-list,.omm-item,',
-    '.omm-item-main,.omm-item-head,.omm-meta,.omm-actions,.omm-actions button,.omm-empty,',
-    '.omm-badge,.omm-kind,.omm-detail,.omm-rename,.omm-rename input,.omm-rename button,',
-    '.omm-foot,.omm-toast,.omm-content-hits,.omm-content-head,.omm-content-snippet,',
-    '.omm-compare,.omm-compare-out,.omm-btn,.osh-lead,.osh-bar,.osh-summary,.osh-chips,',
-    '.osh-chip,.osh-list,.osh-empty,.osh-foot,.osh-rules,.osh-rule,.osh-rule-head,',
-    '.osh-member,.osh-note,.osh-target,.osh-item,.osh-preview,.osh-batch,.osh-batch button,',
-    '.omm-batch,.omm-batch button',
-    '{border-radius:var(--omm-radius)}',
-    '.omm-tabs button{border-radius:var(--omm-radius) var(--omm-radius) 0 0}',
-    'button:focus:not(:focus-visible),input:focus:not(:focus-visible){outline:none}',
-    'button:focus-visible{outline:1px solid var(--omm-accent);outline-offset:1px}',
-    'input[type="search"]::-webkit-search-cancel-button,',
-    'input[type="search"]::-webkit-search-decoration{-webkit-appearance:none;appearance:none}'
-  ].join('')
+  /* Archive and share visuals live in zen/components/archive.css. */
 
   /* ------------------------------------------------------------------ html */
-
-  var PANEL_VARS =
-    /* Accent, radius and shadows are inherited from the shell document, so the
-       archive panel (and the share panel inside it) always follows the current
-       OMM-ZEN theme. Fallbacks keep standalone product pages readable. */
-    ':host{--omm-radius:var(--radius,0px);' +
-    '--omm-accent:var(--accent,#000000);' +
-    '--omm-accent-soft:var(--accent-soft,rgba(0,0,0,.06));' +
-    '--omm-accent-wash:var(--accent-wash,rgba(0,0,0,.03));' +
-    '--omm-accent-line:var(--accent-line,rgba(0,0,0,.5));' +
-    '--omm-accent-contrast:var(--accent-contrast,#ffffff);' +
-    '--omm-danger:var(--danger,#8f2f27);' +
-    '--omm-danger-soft:var(--danger-soft,rgba(0,0,0,.06));' +
-    '--omm-shadow:var(--shadow-deep,rgba(26,26,26,.18));' +
-    /* Base colours are inherited too, so light/dark switching works in the
-       hub without waiting for a postMessage. Fallbacks serve product pages
-       that have no shell stylesheet. */
-    '--omm-ink:var(--ink,#1a1a1a);' +
-    '--omm-paper:var(--paper,#ffffff);' +
-    '--omm-soft:var(--soft,#f5f5f5);' +
-    '--omm-dim:var(--dim,#666666);' +
-    '--omm-line-soft:var(--line-soft,#d9d9d9)}' +
-    ':host(.omm-dark){--omm-ink:#e8e8e8;--omm-paper:#232323;--omm-soft:#2a2a2a;--omm-dim:#a8a8a8;' +
-    '--omm-line-soft:#444444;--omm-shadow:rgba(0,0,0,.5)}' +
-    ':host(.omm-dark) .omm-panel{box-shadow:0 22px 60px var(--omm-shadow)}' +
-    ':host(.omm-dark) .omm-toast{box-shadow:0 10px 34px var(--omm-shadow)}' +
-    '.omm-content-hits{border:1px solid var(--omm-accent-line);border-radius:var(--omm-radius);margin-bottom:6px;background:var(--omm-paper)}' +
-    '.omm-content-head{padding:6px 8px;border-bottom:1px solid var(--omm-accent-line);font-size:11px}' +
-    '.omm-content-head b{font-weight:700}' +
-    '.omm-content-snippet{margin-top:3px;font-size:10.5px;line-height:1.5;color:var(--omm-dim);word-break:break-all}' +
-    '.omm-hit{border:0;border-bottom:1px solid var(--omm-line-soft);border-radius:0}' +
-    '.omm-hit:last-child{border-bottom:0}' +
-    '.omm-compare{border:1px solid var(--omm-accent-line);background:var(--omm-accent-soft);color:var(--omm-ink);font:inherit;font-size:10.5px;padding:2px 6px;cursor:pointer;border-radius:var(--omm-radius)}' +
-    '.omm-compare:hover{border-color:var(--omm-accent)}' +
-    '.omm-compare:disabled{opacity:.55;cursor:default}' +
-    '.omm-compare-out{margin-left:6px;color:var(--omm-dim);font-size:10px;word-break:break-all}';
 
   var PANEL_HTML = [
     '<button class="omm-btn" id="omm-open" type="button" title="保存路径、历史快照与跨产品共享">▣ 存档</button>',
@@ -1285,7 +998,6 @@
     '    </div>',
     '  </div>',
     '</section>',
-    '<div class="omm-toast" id="omm-toast" role="status"></div>',
   ].join('')
 
   /* ------------------------------------------------------------ mount + UI */
@@ -1295,12 +1007,11 @@
     model.shell = isHubDocument() ? 'hub' : 'app'
     var host = document.createElement('div')
     host.id = 'omm-desktop-host'
-    host.style.cssText = 'position:fixed;inset:0;z-index:2147482000;pointer-events:none'
+    host.className = 'omm-desktop-host'
     if (model.shell === 'hub') host.setAttribute('data-shell', 'hub')
     if (ENV.embedded) host.setAttribute('data-embedded', '1')
-    var shadow = host.attachShadow({ mode: 'open' })
-    shadow.innerHTML = '<style>' + PANEL_VARS + PANEL_CSS + '</style>' + PANEL_HTML
-    model.shadow = shadow
+    host.innerHTML = PANEL_HTML
+    model.root = host
     model.host = host
     document.documentElement.appendChild(host)
     bindUi()
@@ -1309,7 +1020,7 @@
   function bindUi() {
     byId('omm-open').addEventListener('click', openPanel)
     byId('omm-close').addEventListener('click', closePanel)
-    model.shadow.querySelectorAll('.omm-tabs button').forEach(function (button) {
+    model.root.querySelectorAll('.omm-tabs button').forEach(function (button) {
       button.addEventListener('click', function () { setPane(button.dataset.pane) })
     })
 
@@ -1332,7 +1043,7 @@
     })
     byId('omm-refresh-archive').addEventListener('click', function () { loadArchive() })
     /* Batch selection: one delegated change handler for all row checkboxes. */
-    model.shadow.addEventListener('change', function (event) {
+    model.root.addEventListener('change', function (event) {
       var input = event.target
       if (!input || !input.matches || !input.matches('input[data-archive-pick]')) return
       if (input.checked) model.selected[input.dataset.archivePick] = true
@@ -1372,35 +1083,15 @@
       applyQuery()
       search.focus()
     })
-    model.shadow.querySelectorAll('.omm-chips button').forEach(function (button) {
+    model.root.querySelectorAll('.omm-chips button').forEach(function (button) {
       button.addEventListener('click', function () {
         model.filters.kind = button.dataset.kind || 'all'
-        model.shadow.querySelectorAll('.omm-chips button').forEach(function (other) {
+        model.root.querySelectorAll('.omm-chips button').forEach(function (other) {
           other.setAttribute('aria-pressed', other === button ? 'true' : 'false')
         })
         renderArchive()
       })
     })
-
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') closePanel()
-    })
-    /* The floating panel closes on any outside click — in the hub too.  The
-       toggle button and the OMM-ZEN UI layer are excluded so a click on them
-       does not close the panel right before their own handler opens/uses it. */
-    document.addEventListener('pointerdown', function (event) {
-      var panel = byId('omm-panel')
-      if (!panel || !panel.classList.contains('open')) return
-      var path = event.composedPath ? event.composedPath() : [event.target]
-      if (path.indexOf(panel) >= 0) return
-      if (path.indexOf(byId('omm-open')) >= 0) return
-      for (var i = 0; i < path.length; i++) {
-        var node = path[i]
-        if (!node || !node.closest) continue
-        if (node.id === 'omm-ui-host' || node.closest('[data-omm-archive-toggle], [data-omm-ui-layer]')) return
-      }
-      closePanel()
-    }, true)
 
     if (isHub()) {
       window.addEventListener('omm:archive', function (event) {
@@ -1438,13 +1129,11 @@
         /* ignore */
       }
       window.addEventListener('message', function (event) {
-        if (event.source !== window.parent) return
-        if (!isTrustedParentOrigin(event.origin)) return
+        if (!ZenUtil.isTrustedParentMessage(event)) return
         var data = event.data
         if (!data || !data.type) return
         if (data.type === 'omm:create-snapshot') onSnapshotRequest(data)
         else if (data.type === 'omm:restore-snapshot') onRestoreRequest(data)
-        else if (data.type === 'omm:theme') { setPanelTheme(data.theme); applyShellAppearance(data) }
         else if (data.type === 'omm:state-info') onStateInfoRequest(data)
       })
     }
@@ -1474,8 +1163,7 @@
 
   window.addEventListener('message', function (event) {
     // 只接受来自父窗口（静书房）的状态回执，避免同源的其他 iframe 伪造。
-    if (event.source !== window.parent) return
-    if (!isTrustedParentOrigin(event.origin)) return
+    if (!ZenUtil.isTrustedParentMessage(event)) return
     var data = event.data
     if (!data || !data.type) return
     if (data.type === 'omm:state-info-done' && data.token && pendingStateInfo[data.token]) {
@@ -1500,28 +1188,6 @@
       '本地存储 ' + (info.localStorage || 0) + ' 项 · 会话 ' + (info.sessionStorage || 0) +
       ' 项 · IndexedDB ' + (info.indexedDB || 0) + ' 库 ' + (info.records || 0) + ' 条'
     )
-  }
-
-  function setPanelTheme(theme) {
-    model.theme = theme === 'dark' ? 'dark' : 'light'
-    if (model.host) model.host.classList.toggle('omm-dark', model.theme === 'dark')
-  }
-
-  /* Embedded products have no shell stylesheet, so mirror the hub's palette
-     onto the shadow host. Custom properties then cascade into the panel. */
-  function applyShellAppearance(data) {
-    if (!model.host || !data) return
-    var map = {
-      '--accent': data.accent,
-      '--accent-soft': data.accentSoft,
-      '--accent-wash': data.accentWash,
-      '--accent-line': data.accentLine,
-      '--accent-contrast': data.accentContrast,
-      '--radius': (Number(data.radius) || 0) + 'px'
-    }
-    Object.keys(map).forEach(function (key) {
-      if (map[key] != null) model.host.style.setProperty(key, String(map[key]))
-    })
   }
 
   /* Live counters used by the archive panel's snapshot compare feature. */
@@ -1610,10 +1276,10 @@
 
   function setPane(name) {
     model.pane = name
-    model.shadow.querySelectorAll('.omm-tabs button').forEach(function (button) {
+    model.root.querySelectorAll('.omm-tabs button').forEach(function (button) {
       button.setAttribute('aria-selected', button.dataset.pane === name ? 'true' : 'false')
     })
-    model.shadow.querySelectorAll('.omm-pane').forEach(function (pane) {
+    model.root.querySelectorAll('.omm-pane').forEach(function (pane) {
       pane.classList.toggle('active', pane.dataset.pane === name)
     })
     if (name === 'archive') {
@@ -1639,26 +1305,43 @@
   function openPanel() {
     var panel = byId('omm-panel')
     if (!panel) return
+    if (closeArchivePopover) closeArchivePopover()
     model.open = true
-    panel.classList.add('open')
     if (isHub()) {
       if (window.__ommFocusedApp) setFocusedApp(window.__ommFocusedApp, true)
       bridgeDispatch('omm:focus-request')
     }
     setPane('save')
     loadArchive()
+    var anchor = isHub()
+      ? document.querySelector('[data-omm-archive-toggle]')
+      : byId('omm-open')
+    var placement = isHub()
+      ? { side: 'left', valign: 'top', padTop: 54, gap: 8 }
+      : { align: 'left', flip: true, gap: 8 }
+    placement.activeClass = 'active'
+    placement.focus = true
+    placement.trapFocus = true
+    placement.onClose = function () {
+      model.open = false
+      closeArchivePopover = null
+    }
+    closeArchivePopover = window.ZenUI.popover.open(panel, anchor, placement)
   }
 
   function closePanel() {
-    var panel = byId('omm-panel')
     model.open = false
-    if (panel) panel.classList.remove('open')
+    if (closeArchivePopover) {
+      var close = closeArchivePopover
+      closeArchivePopover = null
+      close()
+    }
   }
 
   /* ------------------------------------------------------------- rendering */
 
   function renderScope() {
-    if (!model.shadow) return
+    if (!model.root) return
     var app = effectiveApp()
     var name = effectiveAppName()
     var all = scopeShowsAll()
@@ -1698,7 +1381,7 @@
   }
 
   function renderConfig() {
-    if (!model.shadow) return
+    if (!model.root) return
     var locked = isHub() && !effectiveApp()
     var path = byId('omm-path')
     var note = byId('omm-path-note')
@@ -1719,7 +1402,7 @@
           ? '当前路径：' + model.config.path
           : ''
     }
-    model.shadow.querySelectorAll('input[name="omm-mode"]').forEach(function (input) {
+    model.root.querySelectorAll('input[name="omm-mode"]').forEach(function (input) {
       input.disabled = locked
       input.checked = input.value === model.config.mode
     })
@@ -1747,7 +1430,6 @@
   function applyConfig(data) {
     if (!data) return
     model.enabled = true
-    model.ready = true
     model.config.raw = data.config || model.config.raw
     model.config.path = data.save_path || ''
     model.config.mode = data.mode || model.config.mode
@@ -1799,7 +1481,7 @@
   }
 
   function loadArchive() {
-    if (!model.enabled || !model.shadow) return
+    if (!model.enabled || !model.root) return
     var app = effectiveApp()
     var all = scopeShowsAll()
     var seq = ++model.seq
@@ -2441,7 +2123,7 @@
     var scope = byId('omm-all').checked ? 'all' : 'app'
 
     function commit() {
-      var modeInput = model.shadow.querySelector('input[name="omm-mode"]:checked')
+      var modeInput = model.root.querySelector('input[name="omm-mode"]:checked')
       var payload = {
         app: app,
         path: newPath,
@@ -2708,9 +2390,9 @@
   }
 
   function isEditing() {
-    if (!model.shadow) return false
-    var active = model.shadow.activeElement
-    return !!(active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))
+    if (!model.root) return false
+    var active = document.activeElement
+    return !!(active && model.root.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))
   }
 
   /* ------------------------------------------------------------------ boot */

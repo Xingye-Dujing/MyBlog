@@ -355,7 +355,8 @@ def _reject_untrusted_figures(source: str, filename: str) -> None:
         raise error
 
 
-def create_app(public_root: Optional[Path] = None) -> Flask:
+def create_app(public_root: Optional[Path] = None, app_id: str = "mdforge") -> Flask:
+    caller_app = str(app_id or "mdforge")
     app = Flask(__name__, static_folder=None)
     app.config["PUBLIC_ROOT"] = Path(public_root).resolve() if public_root else PUBLIC_ROOT
     app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
@@ -390,7 +391,7 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
         status, content_type, body = omm_shared.handle_get(
             "/__omm/fs/" + sub,
             parse_qs(parsed.query),
-            os.environ.get("OMM_APP_ID") or "mdforge",
+            caller_app,
         )
         return Response(body, status=status, content_type=content_type)
 
@@ -402,7 +403,7 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
         status, content_type, body = omm_share.handle_get(
             "/__omm/share/" + sub,
             parse_qs(parsed.query),
-            os.environ.get("OMM_APP_ID") or "mdforge",
+            caller_app,
         )
         return Response(body, status=status, content_type=content_type)
 
@@ -415,7 +416,7 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
             "/__omm/share/" + sub,
             parse_qs(parsed.query),
             request.get_data(cache=False),
-            os.environ.get("OMM_APP_ID") or "mdforge",
+            caller_app,
         )
         return Response(body, status=status, content_type=content_type)
 
@@ -428,7 +429,7 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
             "/__omm/fs/" + sub,
             parse_qs(parsed.query),
             request.get_data(cache=False),
-            os.environ.get("OMM_APP_ID") or "mdforge",
+            caller_app,
         )
         return Response(body, status=status, content_type=content_type)
 

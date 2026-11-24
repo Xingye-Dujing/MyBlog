@@ -149,3 +149,24 @@ test('Writer 富文本配置不允许 id 与 data 属性逃逸', () => {
   assert.equal(ZenHTML.richTextAttrs.includes('class'), true)
   assert.equal(ZenHTML.richTextAttrs.includes('style'), true)
 })
+
+test('文档预览策略清除外链、远程图片并保留本机图片与版式属性', () => {
+  const link = el('a', HTML, [['href', 'https://evil.example'], ['onclick', 'evil()']])
+  const remote = el('img', HTML, [['src', 'https://evil.example/pixel.png']])
+  const local = el('img', HTML, [['src', 'blob:local-image'], ['onerror', 'evil()']])
+  const box = el('section', HTML, [['style', 'position:absolute;top:12px;width:600px;background:url(https://evil.example)']])
+  const root = el('div', HTML, [], [link, remote, local, box])
+  ZenHTML.sanitizeNode(root, ZenHTML.options({
+    tags: ZenHTML.allowedTags.concat(['SECTION']),
+    attrs: ZenHTML.richTextAttrs,
+    allowExternalLinks: false,
+    localImagesOnly: true,
+    styleProps: ZenHTML.safeStyleProps.concat(['position', 'top']),
+  }))
+  assert.equal(link.getAttribute('href'), null)
+  assert.equal(link.getAttribute('onclick'), null)
+  assert.equal(remote.getAttribute('src'), null)
+  assert.equal(local.getAttribute('src'), 'blob:local-image')
+  assert.equal(local.getAttribute('onerror'), null)
+  assert.equal(box.getAttribute('style'), 'position:absolute;top:12px;width:600px')
+})

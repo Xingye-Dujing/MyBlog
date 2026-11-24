@@ -432,7 +432,9 @@ function requestHub(action, manifest, options) {
     if (action === 'restore') message.manifest = manifest
     const setTimer = typeof win.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout
     const clearTimer = typeof win.clearTimeout === 'function' ? win.clearTimeout.bind(win) : clearTimeout
-    timer = setTimer(function () { fail(new Error('Hub 备份请求超时')) }, Number(opts.timeout) || 15000)
+    // Hub owns an 180s job budget; wait slightly longer so its real progress or
+    // failure reply arrives before the caller removes the listener.
+    timer = setTimer(function () { fail(new Error('Hub 备份请求超时')) }, Number(opts.timeout) || 190000)
     try {
       win.parent.postMessage(message, targetOrigin)
     } catch (error) { fail(error) }

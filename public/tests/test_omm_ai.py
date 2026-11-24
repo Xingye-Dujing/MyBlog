@@ -319,8 +319,13 @@ def test_frontend_style_and_bridge_contract():
     assert not re.search(r'<script[^>]+src=["\']https?://', html)
     assert not re.search(r'<link[^>]+href=["\']https?://', html)
     for token in ['/api/ai/chat', '/api/ai/artifacts/', 'X-Provider-Key', 'OMMShare.openApp',
-                  'OMMDesktop.saveText', 'omm:theme', 'Ctrl+Enter', 'omm.zen.']:
+                  'OMMDesktop.saveText', 'Ctrl+Enter', 'omm.zen.']:
         assert token in html, token
+    assert 'ZenUtil.isTrustedParentMessage(event)' in html
+    assert 'isTrustedParentOrigin' not in html
+    embed = (ROOT / 'omm-embed.js').read_text(encoding='utf-8')
+    for token in ('omm:theme', "'--zen-radius': '0px'", "'--zen-fscale': data.scale"):
+        assert token in embed, token
 
 
 def test_framework_blueprint_surface():

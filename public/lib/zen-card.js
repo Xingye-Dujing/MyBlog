@@ -235,10 +235,20 @@ function parsePack(text) {
   return { name: str(obj.name), cards: cards }
 }
 
-/* Stable content-based fingerprint, used to de-duplicate across products. */
+/* Stable semantic fingerprint. Notes, tags, links and provenance are part of a
+ * card's meaning: two cards with the same quotation but different annotations
+ * must not collapse into one. Timestamps and generated ids are intentionally
+ * excluded so equivalent copies from different products still de-duplicate. */
 function fingerprint(card) {
   const c = create(card)
-  const key = [c.kind, c.content.trim(), c.translation.trim()].join('\u0001')
+  const key = JSON.stringify([
+    c.kind, c.source, c.content.trim(), c.translation.trim(), c.note.trim(),
+    c.tags.slice().sort(), c.ref.trim(), c.color.trim(),
+    arr(c.links).slice().sort(function (a, b) {
+      return (a.rel + '\u0001' + a.id).localeCompare(b.rel + '\u0001' + b.id)
+    }),
+    c.image || '',
+  ])
   let h = 2166136261
   for (let i = 0; i < key.length; i++) {
     h ^= key.charCodeAt(i)
@@ -250,18 +260,23 @@ function fingerprint(card) {
 function merge(cards, opts) {
   const o = opts || {}
   const byId = Object.create(null)
+  const order = []
+  arr(cards).map(create).forEach(function (card) {
+    if (!byId[card.id]) order.push(card.id)
+    // Incoming state is authoritative for an existing id (upsert), which lets
+    // rule engines and other products update a card instead of silently
+    // retaining the first stale copy.
+    byId[card.id] = card
+  })
   const byFp = Object.create(null)
   const out = []
-  arr(cards)
-    .map(create)
-    .forEach(function (c) {
-      const fp = fingerprint(c)
-      const idKey = c.id
-      if (byId[idKey] || (o.byFingerprint !== false && byFp[fp])) return
-      byId[idKey] = 1
-      byFp[fp] = 1
-      out.push(c)
-    })
+  order.forEach(function (id) {
+    const card = byId[id]
+    const fp = fingerprint(card)
+    if (o.byFingerprint !== false && byFp[fp]) return
+    byFp[fp] = 1
+    out.push(card)
+  })
   if (o.sort !== false) {
     out.sort(function (a, b) {
       return str(a.createdAt).localeCompare(str(b.createdAt))

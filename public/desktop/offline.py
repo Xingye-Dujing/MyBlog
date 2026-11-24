@@ -107,22 +107,31 @@ def _copy_common(dest: Path) -> None:
         shutil.copy2(src, dest / src.name)
 
 
-def copy_zen_styles(dest: Path) -> None:
-    """Stage the shared visual assets: entry / foundation / features / products.
+def copy_zen_styles(dest: Path, app_id: str) -> None:
+    """Stage the shared visual assets and only the current product's layer.
 
     _copy_referenced_assets skips paths with a slash, so these trees must be
-    copied explicitly. Every product links zen/zen.css; editing them updates
-    all products at the next build.
+    copied explicitly. Every product links zen/zen.css; product-only CSS stays
+    in its own bundle so another product's assets are never required.
     """
     target = dest / "zen"
     target.mkdir(parents=True, exist_ok=True)
     entry = ROOT / "zen" / "zen.css"
     if entry.is_file():
         shutil.copy2(entry, target / entry.name)
-    for tree in ("foundation", "features", "products"):
+    for tree in ("foundation", "features"):
         src = ROOT / "zen" / tree
         if src.is_dir():
             shutil.copytree(src, target / tree, dirs_exist_ok=True)
+    product = ROOT / "zen" / "products" / (app_id + ".css")
+    products = target / "products"
+    if product.is_file():
+        products.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(product, products / product.name)
+    if products.is_dir():
+        for stale in products.glob("*.css"):
+            if stale.name != product.name:
+                stale.unlink(missing_ok=True)
 
 
 def copy_shared_lib(dest: Path) -> None:
@@ -188,21 +197,35 @@ def copy_table_runtime(dest: Path) -> None:
 
 
 def copy_lambda_runtime(dest: Path) -> None:
-    """Lambda 演算计算器：打包后端 lambda-app.py 与内置 extension 二进制、运行状态文件。"""
+    """Lambda 演算计算器：打包后端、桌面/共享桥模块与内置资源，不打包用户状态。"""
     backend = ROOT / "server" / "lambda-app.py"
     if backend.is_file():
         shutil.copy2(backend, dest / "lambda-app.py")
+    for name in ("omm_fs.py", "omm_shared.py", "omm_share.py", "plugin_specs.py", "plugin_manager.py"):
+        source = ROOT / "desktop" / name
+        if source.is_file():
+            shutil.copy2(source, dest / name)
     for name in ("extension.exe", "extension"):
         src = ROOT / name
         if src.is_file():
             shutil.copy2(src, dest / name)
             break
-    for name in ("fonts", "icon.svg", "sessions.json", "shares.json", "tokens.json", "benchmarks.json"):
+    for name in ("fonts", "icon.svg", "benchmarks.json"):
         src = ROOT / name
         if src.is_dir():
             shutil.copytree(src, dest / src.name, dirs_exist_ok=True)
         elif src.is_file():
             shutil.copy2(src, dest / src.name)
+    # Staging is incremental; remove state left by an older bundle as well.
+    for name in ("sessions.json", "shares.json", "tokens.json", "sharepages", "sharepages.json"):
+        stale = dest / name
+        if stale.is_dir():
+            _rmtree_safe(stale)
+        else:
+            try:
+                stale.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def copy_vendor(dest: Path, app_id: str) -> None:
@@ -234,7 +257,7 @@ def stage(app_id: str, html_name: str, dest: Path, common_assets=()) -> Path:
     for asset in common_assets:
         shutil.copy2(ROOT / asset, dest / Path(asset).name)
     _copy_referenced_assets(html_name, dest)
-    copy_zen_styles(dest)
+    copy_zen_styles(dest, app_id)
     copy_zen_ui(dest)
     copy_shared_lib(dest)
     copy_canvas_framework(dest)
@@ -257,7 +280,7 @@ def stage_plugin(app_id: str, dest: Path) -> Path:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets(item["entry"], dest)
-    copy_zen_styles(dest)
+    copy_zen_styles(dest, app_id)
     copy_zen_ui(dest)
     copy_shared_lib(dest)
     copy_canvas_framework(dest)
@@ -287,7 +310,7 @@ def _stage_shell(dest: Path, common_assets=()) -> None:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
     _copy_referenced_assets("omm-hub.html", dest)
-    copy_zen_styles(dest)
+    copy_zen_styles(dest, "hub")
     copy_zen_ui(dest)
     copy_shared_lib(dest)
     _copy_common(dest)
@@ -338,7 +361,7 @@ def stage_installer(dest: Path, common_assets=()) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     for asset in INSTALLER_ASSETS:
         shutil.copy2(ROOT / asset, dest / asset)
-    copy_zen_styles(dest)
+    copy_zen_styles(dest, "installer")
     copy_zen_ui(dest)
     copy_shared_lib(dest)
     shutil.copy2(ROOT / "plugin-spec.md", dest / "plugin-spec.md")

@@ -12,7 +12,6 @@
   var API = ''
   var canvas = null
   var jobId = null
-  var pollTimer = null
   var selectedId = null
   var bookMeta = null
   var lastResult = null
@@ -21,6 +20,10 @@
   var activeTab = 'params'
   var rangeTarget = null
   var dragging = null
+  var workflowRevision = 0
+  var activeRevision = -1
+  var uploadGeneration = 0
+  var starting = false
 
   function $(id) { return document.getElementById(id) }
   function esc(s) {
@@ -510,8 +513,8 @@
       })
       html += '</select>'
     } else if (fd.type === 'checkbox') {
-      html += '<label class="switch-row"><input type="checkbox" data-key="' + esc(fd.key) + '"' +
-        (value ? ' checked' : '') + ' /> 启用</label>'
+      html += '<button type="button" class="switch" role="switch" data-zen-switch data-key="' + esc(fd.key) + '" aria-checked="' + (value ? 'true' : 'false') + '">' +
+        '<span class="switch-track" aria-hidden="true"></span><span>启用</span></button>'
     } else if (fd.type === 'file') {
       html += '<div class="field-row"><button class="menu-btn" data-file-key="' + esc(fd.key) + '">' +
         (rec.data.filename ? '更换：' + esc(shortText(rec.data.filename, 16)) : '选择 Excel 文件…') + '</button></div>' +
@@ -526,8 +529,9 @@
       var all = bookMeta ? bookMeta.sheets.map(function (s) { return s.name }) : []
       html += '<div class="field-row">' + (all.length ? all.map(function (s) {
         var on = Array.isArray(value) && value.indexOf(s) >= 0
-        return '<label class="switch-row"><input type="checkbox" data-multi="' + esc(fd.key) +
-          '" value="' + esc(s) + '"' + (on ? ' checked' : '') + ' /> ' + esc(s) + '</label>'
+        return '<button type="button" class="switch" role="switch" data-zen-switch data-multi="' + esc(fd.key) +
+          '" value="' + esc(s) + '" aria-checked="' + (on ? 'true' : 'false') + '">' +
+          '<span class="switch-track" aria-hidden="true"></span><span>' + esc(s) + '</span></button>'
       }).join('') : '<span class="hintline">请先导入 Excel</span>') + '</div>'
     } else if (fd.type === 'factor') {
       var fv = value || {}
@@ -607,19 +611,21 @@
       var handler = function () {
         var key = input.dataset.key
         var val
-        if (input.type === 'checkbox') val = input.checked
+        if (input.hasAttribute('data-zen-switch')) val = window.ZenUI.switch.isOn(input)
+        else if (input.type === 'checkbox') val = input.checked
         else if (input.type === 'number') val = Number(input.value)
         else val = input.value
         var p = {}; p[key] = val; patch(p)
         if (key === 'sheetMode' || key === 'rangeMode' || key === 'op' ||
             key === 'kind' || key === 'mode' || key === 'target') renderInspector()
       }
-      input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'change', handler)
+      input.addEventListener(input.hasAttribute('data-zen-switch') ? 'click' : 'change', handler)
     })
     body.querySelectorAll('[data-multi]').forEach(function (input) {
-      input.addEventListener('change', function () {
+      input.addEventListener('click', function () {
         var key = input.dataset.multi
-        var values = Array.prototype.slice.call(body.querySelectorAll('[data-multi="' + key + '"]:checked'))
+        var values = Array.prototype.slice.call(body.querySelectorAll('[data-multi="' + key + '"]'))
+          .filter(function (el) { return window.ZenUI.switch.isOn(el) })
           .map(function (el) { return el.value })
         var p = {}; p[key] = values; patch(p)
       })
@@ -723,8 +729,10 @@
     })
     body.querySelectorAll('[data-expr-check]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        apiPost('/api/expr/check', { expression: rec.data.expression || '' }).then(function (res) {
-          toast(res.ok ? '表达式合法' : ('表达式错误：' + (res.error || '')))
+        apiPost('/api/expr/check', { expression: rec.data.expression || '' }).then(function () {
+          toast('表达式合法')
+        }).catch(function (e) {
+          toast('表达式错误：' + ZenJob.message(e, '校验失败'))
         })
       })
     })
@@ -936,7 +944,7 @@
     if (obj.app !== 'table' && obj.format !== 'omm-table-workflow') invalid('不是表格工作流')
     if (obj.app && obj.app !== 'table') invalid('应用标识不匹配')
     if (obj.format && obj.format !== 'omm-table-workflow') invalid('格式标识不匹配')
-    if (obj.version != null && Number(obj.version) !== 1) invalid('版本不受支持')
+    if (obj.version != null && (typeof obj.version !== 'number' || obj.version !== 1)) invalid('版本不受支持')
     if (!Array.isArray(obj.nodes) || !Array.isArray(obj.connections)) invalid('缺少 nodes/connections 数组')
     if (obj.nodes.length > 500 || obj.connections.length > 1000) invalid('工作流规模过大')
     var ids = Object.create(null)
@@ -985,6 +993,22 @@
       next[current].forEach(function (id) { if (--indegree[id] === 0) queue.push(id) })
     }
     if (visited !== nodes.length) invalid('工作流存在循环连线')
+    var fileCount = nodes.filter(function (n) { return n.type === 'file' }).length
+    if (fileCount !== 1) invalid('工作流必须有且只有一个 Excel 文件节点')
+    nodes.forEach(function (node) {
+      var incoming = connections.filter(function (connection) { return connection.to === node.id })
+      if (node.type === 'file' || node.type === 'note') {
+        if (incoming.length) invalid(node.type + ' 节点不能有上游输入')
+        return
+      }
+      if (node.type === 'join') {
+        var left = incoming.filter(function (connection) { return connection.toPort === 'left' }).length
+        var top = incoming.filter(function (connection) { return connection.toPort === 'top' }).length
+        if (incoming.length !== 2 || left !== 1 || top !== 1) invalid('连接节点必须各接一个左端口和一个上方端口')
+        return
+      }
+      if (incoming.length !== 1 || incoming[0].toPort !== 'left') invalid('节点必须且只能有一个左端口输入：' + node.id)
+    })
     var view = obj.view && typeof obj.view === 'object' ? obj.view : {}
     var scale = finite(view.scale, 1)
     if (scale <= 0) invalid('视图缩放必须大于 0')
@@ -1089,33 +1113,35 @@
   // ----------------------------------------------------------------------
   // 后端交互
   // ----------------------------------------------------------------------
-  function apiGet(path) {
-    return fetch(API + path).then(function (r) { return r.json() })
-  }
+  function apiGet(path) { return ZenJob.get(API, path) }
   function apiPost(path, body, raw) { return ZenJob.post(API, path, body, raw) }
 
   function uploadFile(file, nodeId) {
+    var generation = ++uploadGeneration
     toast('正在上传 ' + file.name + ' …')
     apiPost('/api/upload?name=' + encodeURIComponent(file.name), file, true).then(function (res) {
-      if (!res.ok) { toast('上传失败：' + (res.error || '未知错误')); return }
+      if (generation !== uploadGeneration) return
       var id = nodeId
+      if (id && !canvas.getNode(id)) return
       if (!id) {
         var existing = canvas.getNodes().find(function (n) { return n.type === 'file' })
         id = existing ? existing.id : canvas.addNode('file', {}, { x: 140, y: 160 }).id
       }
       canvas.updateNode(id, { data: { fileId: res.fileId, filename: res.name, sheet: '' } })
-      loadBookMeta(res.fileId)
+      loadBookMeta(res.fileId, generation)
       toast('已导入 ' + res.name)
-    }).catch(function (e) { toast('上传失败：' + e.message) })
+    }).catch(function (e) {
+      if (generation === uploadGeneration) toast('上传失败：' + ZenJob.message(e, '未知错误'))
+    })
   }
 
-  function loadBookMeta(fileId) {
+  function loadBookMeta(fileId, generation) {
     apiGet('/api/book?file=' + encodeURIComponent(fileId)).then(function (res) {
-      if (!res.ok) { toast('读取工作簿失败：' + (res.error || '')); return }
-      bookMeta = res
-      // 自动选择第一张工作表
+      if (generation !== uploadGeneration) return
       var rec = canvas.getNodes().filter(function (n) { return n.type === 'file' })[0]
-      if (rec && bookMeta.sheets.length) {
+      if (!rec || rec.data.fileId !== fileId) return
+      bookMeta = res
+      if (bookMeta.sheets.length) {
         var valid = bookMeta.sheets.some(function (s) { return s.name === rec.data.sheet })
         if (!valid || (rec.data.sheetMode === 'selected' && !(rec.data.selected || []).length)) {
           canvas.updateNode(rec.id, { data: { sheet: bookMeta.sheets[0].name, selected: [bookMeta.sheets[0].name] } })
@@ -1123,55 +1149,117 @@
       }
       renderInspector()
       $('stat-runtime').textContent = 'openpyxl · ' + bookMeta.sheets.length + ' 个工作表'
-    }).catch(function () {})
+    }).catch(function (e) {
+      if (generation === uploadGeneration) toast('读取工作簿失败：' + ZenJob.message(e, '未知错误'))
+    })
+  }
+
+  function setRunning(running, dryRun) {
+    $('btn-run').disabled = running
+    $('btn-dry').disabled = running
+    $('btn-stop').disabled = !running
+    $('result-state').textContent = running ? (dryRun ? '试运行中' : '运行中') : '待命'
+    if (!running) $('stat-progress').textContent = '进度：—'
+  }
+
+  function clearNodeStates() {
+    canvas.getNodes().forEach(function (rec) {
+      var el = canvas.getNodeElement(rec.id)
+      if (!el) return
+      delete el.dataset.state
+      var badge = el.querySelector('[data-role="status"]')
+      if (badge) { badge.textContent = ''; badge.className = 'zc-status' }
+      var bar = el.querySelector('[data-role="progress"]')
+      if (bar) {
+        bar.classList.remove('active')
+        if (bar.firstElementChild) bar.firstElementChild.style.width = '0%'
+      }
+      var result = el.querySelector('[data-role="result"]')
+      if (result) result.textContent = ''
+    })
+  }
+
+  function clearWorkflowState() {
+    workflowRevision += 1
+    lastResult = null
+    clearNodeStates()
+    $('result-body').innerHTML = '<div class="empty">工作流已变化，旧结果已清除。</div>'
+    $('result-state').textContent = jobId ? '旧任务运行中' : '待命'
+    if (!jobId) {
+      $('stat-job').textContent = '任务：无'
+      $('stat-progress').textContent = '进度：—'
+    }
   }
 
   function run(dryRun, previewNode) {
-    if (jobId) { toast('任务正在运行'); return }
+    if (jobId || starting) { toast('任务正在运行'); return }
     var spec = buildSpec()
     if (!spec.nodes.length) { toast('画布是空的，请先添加节点'); return }
     if (!spec.nodes.some(function (n) { return n.type === 'file' && n.data.fileId })) {
       toast('请先给 Excel 文件节点导入文件'); return
     }
+    var revision = workflowRevision
+    starting = true
+    $('btn-run').disabled = true
+    $('btn-dry').disabled = true
+    lastResult = null
     apiPost('/api/run', { spec: spec, dryRun: !!dryRun, previewNode: previewNode || '' }).then(function (res) {
-      if (!res.ok) { toast('启动失败：' + (res.error || '')); return }
+      starting = false
       jobId = res.jobId
-      lastResult = null
-      $('btn-run').disabled = true
-      $('btn-dry').disabled = true
-      $('btn-stop').disabled = false
-      $('result-state').textContent = dryRun ? '试运行中' : '运行中'
+      activeRevision = revision
+      setRunning(true, dryRun)
       $('stat-job').textContent = '任务：' + jobId + (dryRun ? '（试运行）' : '')
-      poll()
-    }).catch(function (e) { toast('无法连接后端：' + e.message) })
+      ZenJob.poll(API, jobId, {
+        onState: function (s) {
+          if (jobId !== res.jobId || activeRevision !== workflowRevision) return
+          Object.keys(s.nodes || {}).forEach(function (id) { applyNodeState(id, s.nodes[id]) })
+          $('stat-progress').textContent = '进度：' + Math.round((s.progress || 0) * 100) + '%'
+          $('result-state').textContent = '运行中'
+          $('stat-job').textContent = '任务：' + jobId
+        },
+        onError: function () {
+          if (jobId === res.jobId && activeRevision === workflowRevision) {
+            $('result-state').textContent = '连接中断，正在重试'
+          }
+        },
+        onFinish: function (s, error) {
+          if (jobId !== res.jobId) return
+          var stale = activeRevision !== workflowRevision
+          jobId = null
+          setRunning(false, dryRun)
+          $('stat-job').textContent = '任务：无'
+          if (error) {
+            $('result-state').textContent = '任务已回收'
+            toast(ZenJob.message(error, '任务查询失败'))
+            return
+          }
+          if (stale) {
+            $('result-state').textContent = '工作流已变化'
+            toast('工作流已变化，旧任务结果已忽略')
+            return
+          }
+          lastResult = s
+          renderResults(s)
+          $('result-state').textContent = s.status === 'done' ? '完成' : s.status === 'cancelled' ? '已停止' : '失败'
+          toast(s.status === 'done' ? (s.dryRun ? '试运行完成' : '工作流执行完成') :
+            s.status === 'cancelled' ? '工作流已停止' : '工作流失败')
+          if (activeTab === 'data') renderInspector()
+        },
+      })
+    }).catch(function (e) {
+      starting = false
+      $('btn-run').disabled = false
+      $('btn-dry').disabled = false
+      toast('启动失败：' + ZenJob.message(e, '无法连接后端'))
+    })
   }
 
   function previewNode(id) { run(true, id) }
 
-  function stop() { return ZenJob.cancel(API, jobId, toast) }
-
-  function poll() {
-    clearTimeout(pollTimer)
-    if (!jobId) return
-    apiGet('/api/job/' + jobId).then(function (s) {
-      if (!s.ok) return
-      Object.keys(s.nodes || {}).forEach(function (id) { applyNodeState(id, s.nodes[id]) })
-      $('stat-progress').textContent = '进度：' + Math.round((s.progress || 0) * 100) + '%'
-      $('result-state').textContent = s.status === 'done' ? '完成' : s.status === 'error' ? '失败' : s.status === 'cancelled' ? '已停止' : '运行中'
-      $('stat-job').textContent = '任务：' + jobId
-      if (s.status === 'running') {
-        pollTimer = setTimeout(poll, 600)
-      } else {
-        lastResult = s
-        renderResults(s)
-        jobId = null
-        $('btn-run').disabled = false
-        $('btn-dry').disabled = false
-        $('btn-stop').disabled = true
-        toast(s.status === 'done' ? (s.dryRun ? '试运行完成' : '工作流执行完成') : s.status === 'cancelled' ? '工作流已停止' : '工作流失败')
-        if (activeTab === 'data') renderInspector()
-      }
-    }).catch(function () { pollTimer = setTimeout(poll, 1500) })
+  function stop() {
+    return ZenJob.cancel(API, jobId, toast).catch(function (e) {
+      toast('停止失败：' + ZenJob.message(e, '无法连接后端'))
+    })
   }
 
   function applyNodeState(id, st) {
@@ -1192,7 +1280,7 @@
     var result = el.querySelector('[data-role="result"]')
     if (!result) return
     if (st.status === 'error') {
-      result.innerHTML = '<span style="color:#c0392b">' + esc((st.error && st.error.message) || '执行失败') + '</span>'
+      result.innerHTML = '<span class="is-error">' + esc((st.error && st.error.message) || '执行失败') + '</span>'
     } else if (st.status === 'done') {
       var r = st.result || {}
       if (r.rowCount != null) {
@@ -1209,7 +1297,7 @@
     var host = $('result-body')
     var html = ''
     if (s.error) {
-      html += '<div class="result-line" style="color:#c0392b">' + esc(s.error.message || s.error) + '</div>'
+      html += '<div class="result-line is-error">' + esc(s.error.message || s.error) + '</div>'
       if (s.error.hint) html += '<div class="hintline">' + esc(s.error.hint) + '</div>'
     }
     if (s.dryRun) html += '<div class="hintline">试运行：未写出任何文件</div>'
@@ -1399,7 +1487,6 @@
       window.ZenUI.dialog.confirm('清空画布？此操作可撤销（Ctrl+Z）。').then(function (ok) {
         if (!ok) return
         canvas.clear()
-        renderResults({ nodes: {}, outputs: [] })
       })
     })
     $('btn-upload').addEventListener('click', function () { pendingFileNode = null; fileInput.value = ''; fileInput.click() })
@@ -1442,7 +1529,6 @@
     $('btn-help').addEventListener('click', showHelp)
 
     apiGet('/api/status').then(function (s) {
-      if (!s.ok) return
       $('runtime-badge').textContent = 'openpyxl ' + (s.openpyxl || '') + ' ✓'
       $('stat-runtime').textContent = 'openpyxl ' + (s.openpyxl || '') + ' · 后端就绪'
     }).catch(function () {
@@ -1452,6 +1538,7 @@
 
     canvas.bus.on('change', function () {
       $('stat-nodes').textContent = '节点 ' + canvas.state.nodes.length + ' · 连线 ' + canvas.state.connections.length
+      clearWorkflowState()
     })
     $('stat-nodes').textContent = '节点 ' + canvas.state.nodes.length + ' · 连线 ' + canvas.state.connections.length
   }

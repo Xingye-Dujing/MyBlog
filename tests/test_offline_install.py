@@ -1,6 +1,7 @@
 """Offline asset staging and transactional framework installation tests."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -17,6 +18,7 @@ for path in (str(DESKTOP), str(ROOT / "public")):
         sys.path.insert(0, path)
 
 import installer_server  # noqa: E402
+import plugin_manager  # noqa: E402
 from plugin_manager import PluginError  # noqa: E402
 
 
@@ -24,6 +26,17 @@ def _framework_zip(path: Path, files: dict[str, bytes]) -> None:
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, data in files.items():
             zf.writestr(name, data)
+
+
+class LocalCatalogTests(unittest.TestCase):
+    def test_windows_drive_path_is_read_as_a_local_catalog(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "catalog.json"
+            payload = {"plugins": [], "frameworks": {}}
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertEqual(plugin_manager.fetch_catalog(str(path)), payload)
+            self.assertEqual(plugin_manager.fetch_json(str(path)), payload)
+            self.assertEqual(plugin_manager.download_bytes(str(path)), path.read_bytes())
 
 
 class FrameworkInstallTests(unittest.TestCase):

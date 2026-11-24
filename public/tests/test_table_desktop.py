@@ -56,3 +56,60 @@ def test_stage_plugin_contains_backend_and_page():
         manifest = json.loads((dest / "plugin.json").read_text(encoding="utf-8"))
         assert manifest["runtime"] == "table"
         assert manifest["port"] == 8331
+
+
+def test_stage_plugin_only_stages_its_own_product_styles(tmp_path):
+    table = offline.stage_plugin("table", tmp_path / "table")
+    lambda_app = offline.stage_plugin("lambda", tmp_path / "lambda")
+    assert (table / "zen/products/table.css").is_file()
+    assert not (table / "zen/products/lambda.css").exists()
+    assert (lambda_app / "zen/products/lambda.css").is_file()
+    assert not (lambda_app / "zen/products/table.css").exists()
+    assert (lambda_app / "fonts/APL385.ttf").is_file()
+
+
+def test_lambda_runtime_stages_desktop_bridge_modules_without_state(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    dest = tmp_path / "lambda"
+    dest.mkdir()
+    (source / "server").mkdir(parents=True)
+    (source / "desktop").mkdir()
+    (source / "server" / "lambda-app.py").write_text("backend", encoding="utf-8")
+    modules = ("omm_fs.py", "omm_shared.py", "omm_share.py", "plugin_specs.py", "plugin_manager.py")
+    for name in modules:
+        (source / "desktop" / name).write_text("# " + name, encoding="utf-8")
+    for name in ("sessions.json", "shares.json", "tokens.json", "sharepages.json"):
+        (source / name).write_text("private", encoding="utf-8")
+    (source / "sharepages").mkdir()
+    (source / "sharepages" / "private.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(offline, "ROOT", source)
+    offline.copy_lambda_runtime(dest)
+    for name in modules:
+        assert (dest / name).read_text(encoding="utf-8") == "# " + name
+    for name in ("sessions.json", "shares.json", "tokens.json", "sharepages", "sharepages.json"):
+        assert not (dest / name).exists(), name
+
+
+def test_lambda_runtime_does_not_stage_user_state(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    dest = tmp_path / "lambda"
+    (source / "server").mkdir(parents=True)
+    (source / "server" / "lambda-app.py").write_text("backend", encoding="utf-8")
+    (source / "fonts").mkdir()
+    (source / "fonts" / "font.ttf").write_bytes(b"font")
+    for name in ("benchmarks.json", "sessions.json", "shares.json", "tokens.json", "sharepages.json"):
+        (source / name).write_text("{}", encoding="utf-8")
+    (source / "sharepages").mkdir()
+    (source / "sharepages" / "private.json").write_text("{}", encoding="utf-8")
+    dest.mkdir()
+    for name in ("sessions.json", "shares.json", "tokens.json", "sharepages.json"):
+        (dest / name).write_text("stale", encoding="utf-8")
+    (dest / "sharepages").mkdir()
+    (dest / "sharepages" / "stale.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(offline, "ROOT", source)
+    offline.copy_lambda_runtime(dest)
+    assert (dest / "lambda-app.py").is_file()
+    assert (dest / "benchmarks.json").is_file()
+    assert (dest / "fonts" / "font.ttf").is_file()
+    for name in ("sessions.json", "shares.json", "tokens.json", "sharepages", "sharepages.json"):
+        assert not (dest / name).exists(), name

@@ -62,7 +62,7 @@ test('工作流契约与后端一致', () => {
   assert.ok(js.includes("format: 'omm-table-workflow'"))
   assert.ok(js.includes('version: 1'))
   assert.ok(js.includes('/api/run'))
-  assert.ok(js.includes('/api/job/'))
+  assert.ok(js.includes('ZenJob.poll('), '轮询应委托共享状态机')
   assert.ok(js.includes('/api/upload'))
   assert.ok(js.includes("'file'") && js.includes("'write'") && js.includes("'save'"))
 })

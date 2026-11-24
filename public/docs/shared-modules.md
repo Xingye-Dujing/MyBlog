@@ -24,19 +24,21 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
 | 文件 | 作用 |
 |---|---|
 | `lib/zen-card.js` | ZenCard 创建 / 校验 / 打包，跨产品通用格式 |
-| `lib/zen-link.js` | 卡片按钮与知识库入口 |
+| `lib/zen-link.js` | 卡片按钮与知识库入口；浮层复用 `ZenUI.popover`，发送目标由 `OMMShare.targets()` 按当前频道权限解析；只读采集页可用 `data-zen-link-ui="false"` 隐藏按钮 |
 | `lib/zen-backup.js` / `lib/zen-pack.js` | 工作区快照与工作区包：原始字符串保真、字段级脱敏、明确白名单与失败回滚 |
 | `lib/zen-srs.js` / `lib/zen-review.js` | 间隔复习状态与复盘报告 |
 | `lib/zen-flow.js` | 规则校验与执行 |
 | `lib/zen-chart.js` | CSV 解析与自包含 SVG 图表 |
-| `lib/zen-table.js` / `zen-paper.js` | 表格与论文辅助 |
+| `lib/zen-table.js` / `lib/zen-video.js` | 表格与视频工作流产品层 |
 | `lib/zen-crypto.js` | Base64 编解码、PBKDF2 派生（云同步产品共用） |
-| `lib/zen-cloud.js` | `ZenCloud`：云面板/警告/页脚标记生成器与通用引擎（偏好、确认、错误分类、远端读取）；六个云同步产品共用，产品只保留数据快照与冲突策略 |
+| `lib/zen-cloud.js` | `ZenCloud`：云面板/警告/页脚标记生成器与通用引擎（偏好、工作区隔离与确认、错误分类、远端读取）；六个云同步产品共用，产品只保留数据快照与冲突策略 |
+| `lib/zen-csv.js` | `ZenCSV.parse()` / `ZenCSV.stringify()`：CSV 与 TSV 的唯一编解码器，保留引号、分隔符、换行和字段首尾空格；导出可用 `{formulaSafe:true}` 阻断电子表格公式注入 |
 | `lib/zen-html.js` | `ZenHTML.sanitize()`：博客 Markdown 与产品富文本共用的 HTML 白名单清洗 |
-| `lib/zen-job.js` | 画布产品的作业协议：JSON 提交、取消、视口中心插点（table / video 共用） |
+| `lib/zen-job.js` | 画布产品的作业协议：统一 HTTP/JSON 错误、取消、单实例轮询终态、视口中心插点（table / video 共用） |
 | `lib/data-viz.js` / `viz-bridge.js` / `lib/search-library.js` | 出图、跨页送图、检索 |
 | `zen/components/switch.js` | 共享 ARIA 开关（`data-zen-switch`），替代各产品的开关外观与点击实现 |
 | `zen/components/shortcuts.js` | 除快捷键注册外还提供 `ZenUI.shortcuts.help()` 与 `.hk-*` 面板生成器 |
+| `zen/components/archive.css` | 存档与跨产品共享面板的唯一视觉实现，由 `zen/zen.css` 加载；桥接不注入 shadow 样式或私有 Toast |
 | `zen/foundation/util.js` | `ZenUtil.el()` / `ZenUtil.fmtDateTime()` / `ZenUtil.parentTargetOrigin()` / `ZenUtil.isTrustedParentMessage()` 等通用无状态助手（单一实现；跨窗口消息只信任精确 Hub 父窗口或同源父窗口） |
 | `zen/foundation/base.css` | `zen-spin` 等关键帧的唯一真源；产品只引用动画名 |
 | `zen/features/launcher.css` | hub 与 installer 共用的启动器样式 |
@@ -53,3 +55,5 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
 2. 在 `tests/product_guard.py` 的 `SHARED_MODULES` 登记，纳入版本指纹。
 3. 在 `tests/` 增加专项测试，覆盖核心行为与复用断言。
 4. 更新本文与 `docs/product-guide.md`。
+
+`zen-csv.js` 使用经典脚本全局对象，不依赖打包器；导入导出均通过 `ZenCSV`，产品不得再维护私有分隔符解析器。
