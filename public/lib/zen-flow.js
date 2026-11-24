@@ -127,7 +127,12 @@ function deserialize(text) {
   if (!obj || obj.format !== 'zen-flow' || !Array.isArray(obj.rules)) {
     throw new Error('非法 zen-flow 规则文件')
   }
-  return obj.rules.map(createRule)
+  const rules = obj.rules.map(createRule)
+  rules.forEach(function (rule, index) {
+    const result = validateRule(rule)
+    if (!result.ok) throw new Error('非法 zen-flow 规则：rules[' + index + '] ' + result.errors.join('；'))
+  })
+  return rules
 }
 
 /* 开箱即用的规则模板：让新用户不必先学 when/actions 语法就能接到工作流。

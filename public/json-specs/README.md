@@ -24,7 +24,7 @@
 | 项目 | 源文件 | 应用名 | 导入入口 | AI 该生成的东西 | 扩展名 | 顶层硬性要求（不满足就导入失败） |
 |---|---|---|---|---|---|---|
 | [ZenPack](zenpack.md) | `lib/zen-pack.js` + `lib/zen-backup.js` | 工作区搬家 | 导出 / 导入工作区包 | `.json` | `format:"zen-backup"` 与 `v:1`，`products[].id` 为 localStorage 键名 |
-| [ZenCard](zencard.md) | `lib/zen-card.js` | 通用卡片 | 导入卡片包 | 卡片包对象 | `.json` | `format:"zen-card-pack"` 且 `v:1` 且 `cards[]` |
+| [ZenCard](zencard.md) | `lib/zen-card.js` | 通用卡片 | 导入卡片包 | 卡片包对象 | `.json` | `format:"zen-card-pack"` 且 `v:1` 且 `cards[]`，每张卡片通过 `zen-card` 校验 |
 | [Writer](writer.md) | `omm-writer.html` | ZenWriter | 导入文件 | 画布对象 | `.zc` | 顶层有 `nodes` 数组 |
 | [Annotate](annotate.md) | `omm-annotate.html` | ZenMark | 导入（项目备份）/ 导入互通包 | 项目备份对象 | `.json` | `project.codes` 是数组（整库替换） |
 | [Corpus](corpus.md) | `omm-corpus.html` | ZenCorpus | 导入 / 从 JSON 恢复 | 全量备份对象 | `.json` | **同时**有 `entries[]` 与 `categories[]` |

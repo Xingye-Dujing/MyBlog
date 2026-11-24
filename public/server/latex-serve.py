@@ -37,6 +37,10 @@ except Exception:  # pragma: no cover
     omm_share = None  # type: ignore
 
 ROOT = os.environ.get("OMM_PLUGIN_ROOT") or os.path.dirname(os.path.abspath(__file__))
+if not os.environ.get("OMM_PLUGIN_ROOT"):
+    _SOURCE_ROOT = os.path.dirname(os.path.abspath(__file__))
+    if os.path.isfile(os.path.join(os.path.dirname(_SOURCE_ROOT), "omm-latex.html")):
+        ROOT = os.path.dirname(_SOURCE_ROOT)
 # 编译在系统临时目录里进行，不污染项目目录
 BUILD_DIR = os.path.join(tempfile.gettempdir(), "zentex-build")
 

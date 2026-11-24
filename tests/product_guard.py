@@ -98,7 +98,7 @@ SHARED_MODULES = [
     "public/lib/data-viz.js", "public/lib/search-library.js", "public/viz-bridge.js",
     "public/omm-embed.js", "public/omm-share.js", "public/omm-desktop.js",
     "public/lib/zen-crypto.js", "public/lib/omm-bridge.js", "public/lib/zen-job.js",
-    "public/lib/zen-cloud.js",
+    "public/lib/zen-cloud.js", "public/lib/zen-html.js",
     "public/zen/components/layer.js", "public/zen/components/toast.js",
     "public/zen/components/dialog.js", "public/zen/components/select.js",
     "public/zen/components/menu.js", "public/zen/components/popover.js",
@@ -225,7 +225,7 @@ def local_target(owner: str, url: str) -> str | None:
         return None
     if raw.startswith("/"):
         return _normalize(raw.split("/"))
-    return _normalize([_owner_dir(owner), *raw.split("/")])
+    return _normalize([*_owner_dir(owner).split("/"), *raw.split("/")])
 
 
 def _lines(text: str) -> list[tuple[int, str]]:

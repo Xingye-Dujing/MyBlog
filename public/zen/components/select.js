@@ -145,6 +145,12 @@
       trigger.className = 'zenui-select-trigger'
       trigger.setAttribute('aria-haspopup', 'listbox')
       trigger.setAttribute('aria-expanded', 'false')
+      ;['aria-label', 'aria-labelledby', 'title'].forEach(function (name) {
+        var value = select.getAttribute(name)
+        if (value == null) trigger.removeAttribute(name)
+        else trigger.setAttribute(name, value)
+      })
+      trigger.disabled = !!select.disabled
       var label = document.createElement('span')
       trigger.appendChild(label)
       wrap.appendChild(trigger)
@@ -152,11 +158,23 @@
       wrap.appendChild(select)
       select.setAttribute('aria-hidden', 'true')
       select.tabIndex = -1
-      function sync() { label.textContent = currentLabel(select) }
+      function sync() {
+        label.textContent = currentLabel(select)
+        trigger.disabled = !!select.disabled
+        trigger.setAttribute('aria-disabled', String(!!select.disabled))
+        ;['aria-label', 'aria-labelledby', 'title'].forEach(function (name) {
+          var value = select.getAttribute(name)
+          if (value == null) trigger.removeAttribute(name)
+          else trigger.setAttribute(name, value)
+        })
+      }
       sync()
       select.addEventListener('change', sync)
       if (typeof MutationObserver === 'function') {
-        new MutationObserver(sync).observe(select, { childList: true, subtree: true, characterData: true })
+        new MutationObserver(sync).observe(select, {
+          childList: true, subtree: true, characterData: true, attributes: true,
+          attributeFilter: ['disabled', 'aria-label', 'aria-labelledby', 'title'],
+        })
       }
       trigger.addEventListener('click', function (event) {
         event.preventDefault(); event.stopPropagation()

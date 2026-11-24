@@ -179,7 +179,12 @@ function parsePack(text) {
   if (!obj || obj.format !== 'zen-card-pack' || !Array.isArray(obj.cards)) {
     throw new Error('非法 zen-card-pack')
   }
-  return { name: str(obj.name), cards: obj.cards.map(create) }
+  const cards = obj.cards.map(create)
+  cards.forEach(function (card, index) {
+    const result = validate(card)
+    if (!result.ok) throw new Error('非法 zen-card-pack：cards[' + index + '] ' + result.errors.join('；'))
+  })
+  return { name: str(obj.name), cards: cards }
 }
 
 /* Stable content-based fingerprint, used to de-duplicate across products. */

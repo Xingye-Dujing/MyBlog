@@ -1387,7 +1387,8 @@ _DATA = json.loads(r'''{
       "hard": [
         "format=zen-card-pack",
         "v 数字 1",
-        "cards 是数组"
+        "cards 是数组",
+        "cards[] 每张通过 zen-card 校验"
       ],
       "template": {
         "format": "zen-card-pack",
@@ -1443,7 +1444,8 @@ _DATA = json.loads(r'''{
       ],
       "hard": [
         "format=zen-card-pack",
-        "cards 是数组"
+        "cards 是数组",
+        "cards[] 每张通过 zen-card 校验"
       ],
       "template": {
         "format": "zen-card-pack",
@@ -1484,7 +1486,8 @@ _DATA = json.loads(r'''{
       ],
       "hard": [
         "actions.type 在允许枚举内",
-        "顶层规则数组"
+        "顶层规则数组",
+        "rules[] 每项通过 validateRule"
       ],
       "template": [
         {

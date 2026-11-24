@@ -11,6 +11,11 @@ import socket
 import sys
 import threading
 import webbrowser
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from mdforge.compiler import environment_info
 from mdforge.server import app

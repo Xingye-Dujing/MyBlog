@@ -100,8 +100,8 @@
 ## 2. 卡片包（批量）
 
 让 AI 一次产出多张卡片时用外层 `zen-card-pack`：顶层 `format:"zen-card-pack"`、`v:1`、
-可选的 `name`、以及 `cards` 数组（每张是第 1 节的合法卡片）。`parsePack()` 会把每张
-卡片过一遍 `create()` 归一化。
+可选的 `name`、以及 `cards` 数组（每张是第 1 节的合法卡片）。`parsePack()` 会先把每张
+卡片过一遍 `create()` 归一化，再逐张执行 `validate()`；任一张非法都会拒绝整个包。
 
 ---
 

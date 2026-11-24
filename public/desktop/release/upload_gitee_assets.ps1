@@ -1,5 +1,5 @@
 param(
-  [string]$Tag = 'v1.0.39',
+  [string]$Tag = 'v1.0.40',
   [string]$AssetDir = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'dist'),
   [string[]]$Names
 )

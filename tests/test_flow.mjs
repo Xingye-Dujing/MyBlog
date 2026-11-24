@@ -89,6 +89,11 @@ test('serialize / deserialize 往返', () => {
   assert.throws(() => ZenFlow.deserialize('{"format":"bad"}'))
 })
 
+test('deserialize 拒绝包内非法规则', () => {
+  const pack = { format: 'zen-flow', v: 1, rules: [{ name: 'x', actions: [] }] }
+  assert.throws(() => ZenFlow.deserialize(JSON.stringify(pack)), /rules\[0\]/)
+})
+
 test('validateRule 遇到缺失/非数组 actions 时返回校验失败而不是抛异常', () => {
   for (const actions of [undefined, null, {}]) {
     const res = ZenFlow.validateRule({ name: 'x', actions })

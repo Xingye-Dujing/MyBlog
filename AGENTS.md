@@ -1,99 +1,63 @@
 # AGENTS.md
 
-## Non-negotiable: zero residue, no compatibility shims
-
-This is a hard rule for every change in this repo. Follow it after every migration and before
-every commit:
-
-- **Leave no residue, no abandoned code.** When logic/styles move to a shared asset, delete the
-  old product-owned implementation entirely: private shells, listeners, helper functions, dead
-  event bindings, unused ids/templates, backup files, stale docs. Do not leave commented-out code.
-- **No compatibility concerns.** Do not keep old API aliases, legacy wrappers, or deprecated
-  names "just in case". Update all call sites to the one canonical API and remove the alias.
-- **Delete anything currently unused.** Files, functions, CSS rules, tokens, and docs that no
-  longer have any reference must be removed, not kept for a future that may never come. Verify
-  by grepping all source (HTML/JS/CSS/PY/MD) before deleting.
-- **No redundancy, no duplication.** There must be exactly one implementation of each visual or
-  interaction concern. If two modules do the same job, unify them and delete the copy. Shared
-  code goes in `zen/` or `lib/`; products only configure it.
-- This applies to generated/derived files too: never hand-edit a generated artifact to paper over
-  drift — edit the source and regenerate.
-
-## Read this first (OMM-ZEN product work)
-
-- `public/docs/` is the design-system contract: `README.md` (hard rules), `design-tokens.md`,
-  `components.md`, `shared-modules.md`, `product-guide.md`, `skills.md`. Read `README.md` and
-  `product-guide.md` before adding or changing any product.
-- New product: `python public/tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --channels <频道>`
-  (from repo root). It generates the entry page, `zen/products/<id>.css` and a test skeleton,
-  refuses to overwrite, and prints the `BUILTIN_PLUGINS` entry to paste. It does not edit the registry.
-- Styles: one entry `zen/zen.css`; shared layers `tokens.css`, `base.css`, `primitives.css`,
-  `features/*.css`; product-only rules in `zen/products/<id>.css` wrapped in `@layer zen.product { … }`.
-  No inline `<style>`, no new hardcoded colours, no per-product z-index. Radius is fixed 0 and the
-  accent is neutral — the hub/installer theme-colour, radius and light/dark settings were deliberately
-  removed; do not reintroduce them.
-- Shared JS lives in `public/lib/` (`zen-*.js`, `data-viz.js`, `search-library.js`) and exposes one
-  global per module (`ZenCrypto`, `ZenCard`, …). Bridge scripts (`omm-embed.js`, `omm-desktop.js`,
-  `omm-share.js`) and `viz-bridge.js` stay at the root: the zenviz-core submodule template references
-  `viz-bridge.js` by bare name. `lib/zen-crypto.js` holds the Base64/PBKDF2 helpers used by the six
-  cloud-sync products; do not re-inline them. A new shared module must be listed in
-  `tests/product_guard.py` `SHARED_MODULES` and staged by `offline.py copy_shared_lib`, which ties
-  it to the suite version.
-
 ## Repo shape
 
-- `production` is the deployed build variant of a personal blog repo that also carries a much larger static product suite. The root `README.md` covers only the blog and lists the differences from `main`.
-- Root `src/` + root `index.html`: Vue 3 + Vite blog SPA. Content is fetched from `public/data/chats.json` and `public/data/comments.json` with `no-cache` (no LocalStorage for content).
-- `public/`: OMM-ZEN product suite. Standalone HTML pages with ES modules from `public/lib/`; there is no frontend build step for these pages. Shared JS is in `lib/`, Python product backends in `server/`; the Python desktop launcher is `public/desktop/`, AI workspace backend `public/agent_workspace/`, JSON format specs `public/json-specs/`.
-- `public/server/*` backends are staged to the plugin root under their original filenames by `offline.py`; source-tree code finds assets one directory up, staged code finds them beside itself. Keep both paths working when moving a backend.
-- `public/index.html` is currently the Lambda product/plugin page, not the blog. The blog entry is the root `index.html`. `npm run build` emits the blog as `dist/index.html`; test Lambda through the plugin/desktop path.
-- `third_party/zenviz-core/` is a git submodule shared with another product (`profiles/omm` is the OMM profile). Init it with `git submodule update --init` before chart work.
-- `public/dist/` is desktop release output (gitignored); root `dist/` is the web build.
-- Web deploy is Vercel (`vercel.json` rewrites all paths to `/`). Desktop release flow is in `public/desktop/RELEASE.md`.
+- `production` is the deployed branch. Root `README.md` documents only the Vue blog, not the product suite.
+- Root `src/` + root `index.html` are the Vue 3/Vite blog. Chat/comment content is fetched from `public/data/*.json` with `cache: 'no-cache'`; localStorage is only for UI preferences.
+- `public/` is the standalone OMM-ZEN product suite. Its HTML/JS/CSS have no frontend build step. Python backends live in `public/server/`, desktop packaging in `public/desktop/`, AI backend in `public/agent_workspace/`.
+- `public/index.html` is the Lambda product page, not the blog. Test Lambda through the plugin/desktop path.
+- Root `dist/` is the Vite blog build. `public/dist/` and `public/build/` are gitignored desktop/plugin outputs.
+- Vercel rewrites every path to `/` (`vercel.json`).
+
+## OMM-ZEN contract
+
+- Before product work, read `public/docs/README.md` and `public/docs/product-guide.md`; use `design-tokens.md`, `components.md`, and `shared-modules.md` as references.
+- **Zero residue, zero compatibility, zero redundancy.** After moving logic/styles, delete the old implementation, aliases, wrappers, dead bindings, unused ids/templates, and stale docs. Grep all source before deleting. Never leave commented-out code.
+- Styles enter only through `zen/zen.css`. Shared layers are `foundation/`, `components/`, `features/`; product-only CSS goes in `zen/products/<id>.css` inside `@layer zen.product`. No inline `<style>`, new hardcoded colours, or per-product z-index. Radius stays `0`; accent stays neutral.
+- Reuse `ZenUI` components; do not add native dialogs or private overlay shells. Shared JS lives in `public/lib/` or `public/zen/`; products configure it rather than copy it.
+- Untrusted HTML must pass through `lib/zen-html.js` (`ZenHTML.sanitize`); do not add product-private sanitisers. Escape every imported id used in an HTML attribute.
+- Bridge load order is `omm-embed.js` → `omm-desktop.js` → `omm-share.js`. Keep these and `viz-bridge.js` at the `public/` root; the zenviz-core template references `viz-bridge.js` by bare name.
+- Cross-product data goes through `OMMShare` / `OMMDesktop` / ZenCard. Never wildcard `postMessage`; validate both `event.origin` and `event.source`, and reply to an explicit origin.
+- New product: `python public/tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --channels <频道>`. It generates files and prints the registry entry but does not register the product.
+- `public/desktop/plugin_specs.py` `BUILTIN_PLUGINS` is the product registry. Conventional entries are `public/omm-<id>.html`. Also wire `DESKTOP_EXE_NAMES`, runtime/offline staging, tests, and JSON/AI specs when applicable. Imported plugins are forced to `static`.
+- AI product knowledge comes from `PRODUCTS` in `public/agent_workspace/omm_data.py`; skills derive from it. Do not hand-edit generated skill lists.
+- `public/server/*` code must work both in the source tree (assets one directory up) and staged plugins (assets beside the backend).
 
 ## Commands
 
-Run from the repo root unless noted.
+Run from the repo root. Requires Node `^20.19.0 || >=22.12.0` and Python 3.10+.
 
-- `npm install`, `npm run dev`, `npm run build`, `npm run preview`.
-- `npm run lint` and `npm run format` touch `src/` only. `public/` is deliberately outside ESLint/Prettier.
-- Full regression: `python tests/run_all.py` (Python unittest, product guard, AI workspace pytest, Node suites, Playwright E2E, lint, build). Venv-dependent steps are skipped if `public/.venv` is missing.
-- `tests/run_all.py` has a hardcoded `zen_tests` list of Node files — a new `tests/test_*.mjs` is **silently skipped** unless added there. `python tests/product_guard.py --check` does not catch this.
-- Required after any `public/` edit: `python tests/product_guard.py --check`. Without `--check` it first auto-fixes quote violations. Use `--list` or `--only LINK,IMPORT,REGISTRY` for focused runs.
-- Focused tests:
-  - `node --test tests/test_zencard.mjs`
-  - `node --test tests/test_design_system.mjs tests/test_zen_crypto.mjs`
+- Blog: `npm install`, `npm run dev`, `npm run build`, `npm run preview`.
+- `npm run lint` and `npm run format` only touch `src/`; `public/` is excluded. There is no `npm test`.
+- Required after any `public/` edit: `python tests/product_guard.py --check`. Without `--check`, the guard first repairs quote violations. Focused: `python tests/product_guard.py --only LINK,IMPORT,REGISTRY`.
+- Style audit: `python public/desktop/check_styles.py`.
+- Full regression: `python tests/run_all.py` (Python, guard, pytest, Node, Playwright, lint, build). pytest/E2E are skipped when `public/.venv` is absent.
+- A new `tests/test_*.mjs` is silently omitted from the full suite unless added to the hardcoded `zen_tests` list in `tests/run_all.py`.
+- Focused checks:
+  - `node --test tests/test_design_system.mjs tests/test_zen_shared_ui.mjs`
   - `python -m unittest discover -s tests -p 'test_build_consistency.py' -v`
-  - `public/.venv/Scripts/python.exe -m pytest public/tests -q`
-  - `public/.venv/Scripts/python.exe -m unittest discover -s tests/e2e -v`
+  - `public/.venv/Scripts/python.exe -m pytest public/tests/test_table_api.py::test_origin_and_host_guards -q`
+  - `public/.venv/Scripts/python.exe -m unittest discover -s tests/e2e -v -k test_hub_cmdk_finds_product_owned_data`
 - First-time E2E setup: `public/.venv/Scripts/python.exe -m playwright install chromium-headless-shell`.
-- There is no `npm test` script.
+- Playwright must use the shared UI: click `.zenui-select-trigger` then `.zenui-option` for `data-zen-select`, and `.zenui-ok` for `ZenUI.dialog.confirm`. Native selects are hidden and confirms are not browser dialogs.
 
-## Generated files: edit the source, then regenerate
+## Generated files and versions
 
-- `public/json-specs/format-registry.json` -> `public/agent_workspace/omm_formats_generated.py`, `public/json-specs/formats.generated.md`, `public/agent_workspace/omm_knowledge/formats.generated.md` via `python public/tools/gen_formats.py`. The `GEN_FORMATS` guard fails on drift.
-- `third_party/zenviz-core/` -> `public/omm-visualization.html` via `python third_party/zenviz-core/build.py --product omm --root .`. Keep product-specific code in `profiles/omm`; `tests/test_zenviz_core_sync.mjs` compares byte-for-byte.
-- `public/json-specs/*.md` -> `public/agent_workspace/omm_knowledge/*.md` must be byte-identical (`README.md` mirrors as `json-specs-README.md`). Every spec must also be linked from `public/json-specs/README.md` (`SPEC` / `SPEC_SYNC`).
-- `public/dist/` and `public/build/` are generated and gitignored; never treat them as source.
-
-## Product and version rules
-
-- `public/desktop/plugin_specs.py` `BUILTIN_PLUGINS` is the single product registry. The launcher, guard, catalog, and offline staging derive from it. A new product also needs `DESKTOP_EXE_NAMES`, a runtime branch when non-static, `offline.py` staging, tests, and (when it has an import format) a JSON spec plus its AI knowledge mirror.
-- `REGISTRY` maps product id `x` to the conventional page `public/omm-x.html`; a different entry filename fails the check unless the guard is updated.
-- AI product knowledge lives in `public/agent_workspace/omm_data.py`; skills derive from `PRODUCTS`, so update that rather than hand-editing derived skill lists. Adding an extra (non-product) skill in `omm_skills.py` also breaks hard-coded skill counts in `public/tests/test_omm_ai.py` and `public/tests/test_ui_browser.py`, and the AI page's skill grid. `omm.zen.dev` is the developer skill that teaches the design system to the AI.
-- `tests/version_baseline.json` is release state. Do not run `--record-baseline` outside a release. Bump the product's `version` in `plugin_specs` when its page changes, or the suite `VERSION` when a module in `SHARED_MODULES` changes. `python tests/product_guard.py --suggest-bump` lists candidates.
-- When bumping suite `VERSION`, also update the default release tags in `.github/workflows/macos-build.yml` and `public/desktop/release/*`; `tests/test_build_consistency.py` enforces this.
-- `public/dist/catalog.json` is gitignored. On a fresh clone, `VERSION` and `REGISTRY` cannot pass until a local release build exists; do not "fix" that by rewriting the version baseline.
-- Imported/user plugins are forced to `static` and cannot run local backend code; only official built-in products may use a non-static runtime.
+- Never hand-edit generated artifacts. Edit the source, regenerate, then run the sync guard.
+- `public/json-specs/format-registry.json` generates `omm_formats_generated.py` and both `formats.generated.md` copies: `python public/tools/gen_formats.py`.
+- `public/json-specs/*.md` must be byte-identical to `public/agent_workspace/omm_knowledge/*.md`; every spec must be indexed in `public/json-specs/README.md`.
+- Chart page source is `third_party/zenviz-core/profiles/omm`; regenerate with `python third_party/zenviz-core/build.py --product omm --root .`. Run `git submodule update --init` before chart work.
+- A new shared module must be added to `SHARED_MODULES` in `tests/product_guard.py`; `offline.py copy_shared_lib` stages `public/lib/` wholesale.
+- Bump the product `version` when its page changes, or suite `VERSION` when a `SHARED_MODULES` file changes. Also update default tags in `.github/workflows/macos-build.yml` and `public/desktop/release/*`.
+- After a version bump, run `python public/desktop/build_plugins.py` before `product_guard.py --check`; `public/dist/catalog.json` is gitignored and stale on a fresh clone.
+- `tests/version_baseline.json` is release state. Do not run `--record-baseline` outside a release. Follow `public/desktop/RELEASE.md` for the immutable-tag release flow.
 
 ## Gotchas
 
-- Never use CJK corner brackets U+300C / U+300D / U+300E / U+300F / U+FE41-U+FE44 / U+301D-U+301F anywhere in source, docs, or data. Use Chinese curly quotes. `python tests/no_jp_quotes.py` repairs in place.
-- `public/agent_workspace/` is a vendored upstream framework; only `omm_*.py` adapters and `omm_knowledge/` are ours. Do not reformat upstream files (the quote gate excludes them to keep them byte-identical).
-- Import rule: put `public/` on `sys.path` and import as `agent_workspace.omm_data`; never put `public/agent_workspace` itself on `sys.path` because its `types.py` shadows the standard library.
-- Product pages are parsed by Node tests for syntax, DOM id references, bridge wiring, and `postMessage` origin checks. Keep them parseable; never use wildcard `postMessage` or skip `event.origin` / `event.source` validation.
-- Vite copies all of `public/` first, then removes `DEV_ONLY_DIRS` (`.venv`, `desktop`, `build`, `mdforge`, `data_back`, ...) from `dist/`; builds are heavy and `public/dist` is not deployed.
-- On Windows, avoid bulk-rewriting Chinese source with PowerShell `Set-Content -Encoding UTF8`; it can add a BOM or mangle text. Use the editor or UTF-8 without BOM.
-- `public/tests/test_table_api.py::test_cancel` and `::test_origin_and_host_guards` intermittently raise `ConnectionAbortedError` (WinError 10053) under the full suite; both pass when run alone. Do not treat one occurrence as a regression.
-- Version bumps need a release refresh before the guard goes green: `python public/desktop/build_plugins.py` regenerates `public/dist/catalog.json`, then `python tests/product_guard.py --record-baseline` refreshes `tests/version_baseline.json`. Until both run, `--check` reports VERSION drift.
-- There is no CI test workflow; only `.github/workflows/macos-build.yml` exists. Run the regression suite locally before committing.
+- Never use CJK corner brackets U+300C/U+300D/U+300E/U+300F/U+FE41-U+FE44/U+301D-U+301F. Use Chinese curly quotes; `python tests/no_jp_quotes.py` repairs violations.
+- `public/agent_workspace/` is vendored upstream; only `omm_*.py` adapters and `omm_knowledge/` are ours. Do not reformat upstream files.
+- Put `public/` on `sys.path` and import `agent_workspace.omm_data`; never add `public/agent_workspace` itself, because its `types.py` shadows the standard library.
+- On Windows, do not bulk-rewrite Chinese source with PowerShell `Set-Content -Encoding UTF8`; it can add a BOM or corrupt text. Use the editor or UTF-8 without BOM.
+- Vite copies all of `public/` before stripping `.venv`, `desktop`, `build`, `mdforge`, `data_back`, etc. from root `dist/`; builds are heavy.
+- `public/tests/test_table_api.py::test_cancel` and `::test_origin_and_host_guards` intermittently raise `ConnectionAbortedError` (WinError 10053) in the full suite but pass alone. Do not treat one occurrence as a regression.
+- There is no CI test workflow; only `.github/workflows/macos-build.yml` exists. Run regression locally before committing.

@@ -1,5 +1,5 @@
 param(
-  [string]$Tag = 'v1.0.39',
+  [string]$Tag = 'v1.0.40',
   [string]$Keep = 'catalog.json'
 )
 # Free space in the Gitee repository.

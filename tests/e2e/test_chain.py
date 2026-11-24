@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PUBLIC = ROOT / "public"
 
 PAGES = sorted(
-    p.name for p in PUBLIC.glob("omm-*.html")
+    [p.name for p in PUBLIC.glob("omm-*.html")] + ["index.html"]
 )
 
 
@@ -57,7 +57,13 @@ class BrowserCase:
         self.context = self.browser.new_context(accept_downloads=True)
         self.page = self.context.new_page()
         self._errors = []
+        self._console_errors = []
+        self._bad_responses = []
         self.page.on("pageerror", lambda e: self._errors.append(str(e)))
+        self.page.on("console", lambda m: self._console_errors.append(m.text)
+                     if m.type == "error" and "Failed to load resource" not in m.text else None)
+        self.page.on("response", lambda r: self._bad_responses.append("%s %s" % (r.status, r.url))
+                     if r.status >= 400 and "/api/" not in r.url and "/__omm/" not in r.url else None)
         self.page.on("dialog", lambda d: d.accept())
 
     def tearDown(self):
@@ -70,6 +76,8 @@ class BrowserCase:
 
     def assert_no_script_errors(self):
         self.assertEqual(self._errors, [], "页面存在未捕获脚本异常: %s" % self._errors[:3])
+        self.assertEqual(self._console_errors, [], "页面存在控制台错误: %s" % self._console_errors[:3])
+        self.assertEqual(self._bad_responses, [], "页面存在意外资源错误: %s" % self._bad_responses[:3])
 
     def select_zen_option(self, selector, value, label):
         """Use the shared select's visible trigger and shadow-DOM option list."""
@@ -87,9 +95,100 @@ class ChainTest(BrowserCase, unittest.TestCase):
         for name in PAGES:
             with self.subTest(page=name):
                 self._errors.clear()
+                self._console_errors.clear()
+                self._bad_responses.clear()
                 self.open(name)
                 self.assertTrue(self.page.title(), "%s 没有 title" % name)
                 self.assert_no_script_errors()
+
+    def test_writer_import_sanitizes_rich_html(self):
+        self.open("omm-writer.html")
+        payload = {"nodes": [{
+            "id": "node-1", "type": "text", "x": 0, "y": 0,
+            "title": '<img src=x onerror="window.__ommXss=1">',
+            "content": '<img src=x onerror="window.__ommXss=2>"><b>safe</b>',
+        }], "connections": []}
+        self.page.set_input_files("#file-input", {
+            "name": "evil.zc", "mimeType": "application/json",
+            "buffer": json.dumps(payload).encode(),
+        })
+        self.page.wait_for_selector("#node-1")
+        self.page.wait_for_timeout(300)
+        self.assertIsNone(self.page.evaluate("window.__ommXss || null"))
+        self.assertIn("<img", self.page.locator("#node-1 .title-text").inner_text().lower())
+        self.assertFalse(self.page.locator("#node-1 .node-content img").get_attribute("onerror"))
+        self.assertEqual(self.page.locator("#node-1 .node-content b").inner_text(), "safe")
+
+    def test_corpus_import_escapes_record_ids(self):
+        self.open("omm-corpus.html")
+        bad_id = 'x"><img src=x onerror="window.__ommXss=3">'
+        payload = {
+            "entries": [{"id": bad_id, "en": "safe", "zh": "", "type": "sentence", "categoryId": "c1", "tags": []}],
+            "categories": [{"id": "c1", "name": "cat"}],
+        }
+        self.page.click("#menu-trigger")
+        self.page.wait_for_timeout(350)
+        self.page.click("#import-btn")
+        self.page.locator("#data-box").fill(json.dumps(payload))
+        self.page.click("#data-import")
+        self.page.wait_for_timeout(300)
+        self.assertIsNone(self.page.evaluate("window.__ommXss || null"))
+        self.assertEqual(self.page.locator(".corpus-row").first.get_attribute("data-id"), bad_id)
+
+    def test_zencard_import_escapes_card_ids(self):
+        self.open("omm-zencard.html")
+        bad_id = 'x"><img src=x onerror="window.__ommXss=4">'
+        pack = {"format": "zen-card-pack", "v": 1, "cards": [{
+            "format": "zen-card", "v": 1, "id": bad_id,
+            "kind": "note", "source": "manual", "content": "safe", "tags": [],
+        }]}
+        self.page.click('[data-view="io"]')
+        self.page.locator("#import-text").fill(json.dumps(pack))
+        self.page.click("#import-btn")
+        self.page.click('[data-view="library"]')
+        self.page.wait_for_timeout(300)
+        self.assertIsNone(self.page.evaluate("window.__ommXss || null"))
+        self.assertEqual(self.page.locator("#card-list .item").first.get_attribute("data-id"), bad_id)
+
+    def test_zenclip_escapes_stored_card_ids(self):
+        bad_id = 'x"><img src=x onerror="window.__ommXss=5">'
+        cards = [{"format": "zen-card", "v": 1, "id": bad_id,
+                  "kind": "note", "source": "manual", "content": "safe", "tags": []}]
+        self.context.add_init_script(
+            "localStorage.setItem('zen.clip.v1', %s)" % json.dumps(json.dumps(cards)))
+        self.open("omm-zenclip.html")
+        self.page.wait_for_timeout(300)
+        self.assertIsNone(self.page.evaluate("window.__ommXss || null"))
+        self.assertEqual(self.page.locator("#clip-list .item").first.get_attribute("data-id"), bad_id)
+
+    def test_zenflow_import_escapes_rule_ids(self):
+        self.open("omm-zenflow.html")
+        bad_id = 'x"><img src=x onerror="window.__ommXss=6">'
+        pack = {"format": "zen-flow", "v": 1, "rules": [{
+            "id": bad_id, "name": "safe", "enabled": True, "priority": 0,
+            "when": {}, "actions": [{"type": "notify", "message": "hello"}],
+        }]}
+        self.page.set_input_files("#import-file", {
+            "name": "evil.json", "mimeType": "application/json",
+            "buffer": json.dumps(pack).encode(),
+        })
+        self.page.wait_for_timeout(300)
+        self.assertIsNone(self.page.evaluate("window.__ommXss || null"))
+        self.assertEqual(self.page.locator("#rule-list .item").first.get_attribute("data-id"), bad_id)
+
+    def test_shared_select_keeps_accessible_names(self):
+        self.open("omm-ai.html")
+        trigger = self.page.locator("#skillSelect").locator("xpath=..").locator(".zenui-select-trigger")
+        self.assertEqual(trigger.get_attribute("title"), "专家技能")
+        self.open("index.html")
+        trigger = self.page.locator("#lang").locator("xpath=..").locator(".zenui-select-trigger")
+        self.assertEqual(trigger.get_attribute("aria-label"), "language")
+
+    def test_latex_boot_binds_controls_after_modal_migration(self):
+        self.open("omm-latex.html")
+        self.page.click("#btn-log")
+        self.page.wait_for_selector(".zenui-modal:not([hidden])")
+        self.assert_no_script_errors()
 
     def test_zencard_creates_and_persists_card(self):
         self.open("omm-zencard.html")

@@ -27,6 +27,7 @@
 | `lib/zen-table.js` / `zen-paper.js` | 表格与论文辅助 |
 | `lib/zen-crypto.js` | Base64 编解码、PBKDF2 派生（云同步产品共用） |
 | `lib/zen-cloud.js` | `ZenCloud`：云面板/警告/页脚标记生成器与通用引擎（偏好、确认、错误分类、远端读取）；六个云同步产品共用，产品只保留数据快照与冲突策略 |
+| `lib/zen-html.js` | `ZenHTML.sanitize()`：博客 Markdown 与产品富文本共用的 HTML 白名单清洗 |
 | `lib/zen-job.js` | 画布产品的作业协议：JSON 提交、取消、视口中心插点（table / video 共用） |
 | `lib/data-viz.js` / `viz-bridge.js` / `lib/search-library.js` | 出图、跨页送图、检索 |
 | `zen/components/switch.js` | 共享 ARIA 开关（`data-zen-switch`），替代各产品的开关外观与点击实现 |
@@ -43,7 +44,7 @@
 
 ## 新增共享模块的规则
 
-1. 纯逻辑放 `public/zen-*.js`，暴露单一全局对象，不依赖具体产品。
+1. 纯逻辑放 `public/lib/zen-*.js`，暴露单一全局对象或 ES module 导出，不依赖具体产品。
 2. 在 `tests/product_guard.py` 的 `SHARED_MODULES` 登记，纳入版本指纹。
 3. 在 `tests/` 增加专项测试，覆盖核心行为与复用断言。
 4. 更新本文与 `docs/product-guide.md`。

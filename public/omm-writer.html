@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <script src="omm-embed.js"></script>
     <script src="zen/foundation/util.js"></script>
+    <script src="lib/zen-html.js"></script>
     <script src="zen/components/layer.js"></script>
     <script src="zen/components/context-menu.js"></script>
     <script src="zen/components/popover.js"></script>
@@ -4911,8 +4912,9 @@
 
           _createNodeInner(x, y, type, data) {
             let id
-            if (data && data.id) {
-              id = data.id
+            const rawId = data && data.id ? String(data.id) : ''
+            if (/^[A-Za-z0-9_-]{1,80}$/.test(rawId) && !document.getElementById(rawId)) {
+              id = rawId
               const num = parseInt(id.split('-')[1])
               if (!isNaN(num) && num > AppState.nodeCounter) {
                 AppState.nodeCounter = num
@@ -4966,7 +4968,7 @@
             let headerInner = `
                         <span class="node-title">
                             ${type === 'group' ? '<span class="collapse-indicator" data-action="toggleGroup">▼</span>' : ''}
-                            <span class="title-text">${title}</span>
+                            <span class="title-text">${escapeHtml(title)}</span>
                         </span>
                         <div class="node-actions">`
             if (type === 'todo') {
@@ -5605,8 +5607,20 @@
                   ? String(data.fontSize).replace('px', '') + 'px'
                   : AppState.contentFontSize + 'px'
               content.style.lineHeight = data && data.lh ? data.lh : AppState.contentLineHeight
-              content.innerHTML = data && data.content ? data.content : ''
+              content.innerHTML = window.ZenHTML.sanitize(
+                data && data.content ? data.content : '',
+                { attrs: window.ZenHTML.richTextAttrs },
+              )
               content.addEventListener('input', debouncedAutoSave)
+              content.addEventListener('paste', function (event) {
+                var clipboard = event.clipboardData
+                if (!clipboard) return
+                var html = clipboard.getData('text/html')
+                if (!html) return
+                event.preventDefault()
+                var clean = window.ZenHTML.sanitize(html, { attrs: window.ZenHTML.richTextAttrs })
+                document.execCommand('insertHTML', false, clean)
+              })
               content.addEventListener('mouseup', () =>
                 setTimeout(ToolbarManager.handleSelection, 10),
               )
@@ -11525,7 +11539,9 @@
             borderColor: node.dataset.borderColor || '',
           }
           if (type === 'text' || type === 'todo' || type === 'group') {
-            obj.content = contentEl ? contentEl.innerHTML : ''
+            obj.content = contentEl
+              ? window.ZenHTML.sanitize(contentEl.innerHTML, { attrs: window.ZenHTML.richTextAttrs })
+              : ''
             obj.lh = contentEl ? contentEl.style.lineHeight : ''
           } else if (type === 'image') {
             // 关键：不能从 <img>.src 取。
@@ -15148,9 +15164,6 @@
             migration.reason = (e && e.message) || 'error'
           }
           if (migration.migrated) {
-            console.log(
-              '[ZenWriter] migrated ' + migration.docs + ' canvas(es) from ' + migration.from,
-            )
             notify(t('notify.storageMigrated', migration.docs))
           } else if (migration.reason && migration.reason !== 'empty') {
             console.warn('[ZenWriter] migration skipped:', migration.reason)
@@ -15262,12 +15275,6 @@
             UIManager.applyNodeBg()
             UIManager.renderDocList()
           }, 200)
-
-          console.log('ZenWriter initialized (multi-document).')
-          console.log('Active canvas:', DocManager.activeName())
-          console.log('Canvas count:', DocManager.list().length)
-          console.log('Connections:', AppState.connections.length)
-          console.log('Nodes:', getNodes().length)
         }
 
         // ================================================================

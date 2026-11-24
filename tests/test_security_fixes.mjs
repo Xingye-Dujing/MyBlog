@@ -1,28 +1,21 @@
-/* 安全补漏回归测试（node:test）
- * 运行：node --test tests/test_security_fixes.mjs
- */
+/* Markdown 安全集成回归：博客必须复用共享清洗器，不能重新长出私有副本。 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
 
 const ROOT = new URL('../', import.meta.url)
-const source = readFileSync(new URL('src/composables/useMarkdown.js', ROOT), 'utf8')
-const start = source.indexOf('const SAFE_STYLE_PROPS')
-const end = source.indexOf('function sanitizeElement(')
-assert.notEqual(start, -1)
-assert.notEqual(end, -1)
-const code = source.slice(start, end) + '\nreturn { safeStyle }'
-const { safeStyle } = vm.runInNewContext(`(function () { ${code} })()`, { Set, String, Array })
+const read = (path) => readFileSync(new URL(path, ROOT), 'utf8')
 
-test('内联样式白名单挡住覆盖整页的定位属性', () => {
-  const cleaned = safeStyle(
-    'position:fixed;inset:0;z-index:2147483647;background:#fff;pointer-events:auto;color:red'
-  )
-  assert.equal(cleaned, 'color:red')
+test('Markdown 渲染委托共享 ZenHTML 清洗器', () => {
+  const source = read('src/composables/useMarkdown.js')
+  assert.match(source, /window\.ZenHTML\.sanitize\(/)
+  assert.doesNotMatch(source, /function\s+(?:sanitizeHtml|safeStyle|sanitizeElement)\s*\(/)
 })
 
-test('常规排版样式仍然保留', () => {
-  assert.equal(safeStyle('height:1.2em;color:#333'), 'height:1.2em;color:#333')
-  assert.equal(safeStyle('background:url(javascript:alert(1));color:red'), 'color:red')
+test('博客入口在应用模块之前加载共享清洗器', () => {
+  const html = read('index.html')
+  const sanitizer = html.indexOf('lib/zen-html.js')
+  const app = html.indexOf('/src/main.js')
+  assert.ok(sanitizer >= 0)
+  assert.ok(app > sanitizer)
 })

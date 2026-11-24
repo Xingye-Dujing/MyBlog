@@ -193,9 +193,6 @@ def _rate_ok(cost: int = 1) -> bool:
             return False
         _rate_buckets[ip] = (tokens - float(cost), now)
     return True
-# 版本号来自仓库根目录的 VERSION 文件
-# Version is read from the VERSION file at the repository root.
-VERSION_FILE = APP_DIR.parent / "VERSION"
 
 # `:load` 默认只允许解释器目录内的文件，防止 Web 用户读取服务器任意路径；
 # 设为 `*` 可关闭限制（仅建议在本地使用）
@@ -1772,12 +1769,26 @@ def prelude():
 
 
 def _read_version() -> str:
-    # 版本取自仓库根目录的 VERSION 文件，缺失时返回 unknown
-    # Version comes from the repo-root VERSION file; fall back to "unknown".
+    # Staged plugins carry plugin.json; source runs read the canonical suite
+    # version from desktop/plugin_specs.py. No duplicate VERSION file is needed.
+    env_version = os.environ.get("LAMBDA_VERSION", "").strip()
+    if env_version:
+        return env_version
     try:
-        return VERSION_FILE.read_text(encoding="utf-8").strip() or "unknown"
+        manifest = json.loads((APP_DIR / "plugin.json").read_text(encoding="utf-8"))
+        version = str(manifest.get("version") or "").strip()
+        if version:
+            return version
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        source = (APP_DIR / "desktop" / "plugin_specs.py").read_text(encoding="utf-8")
+        match = re.search(r"^VERSION\s*=\s*['\"]([^'\"]+)['\"]", source, re.M)
+        if match:
+            return match.group(1)
     except OSError:
-        return "unknown"
+        pass
+    return "unknown"
 
 
 @app.route("/api/health")

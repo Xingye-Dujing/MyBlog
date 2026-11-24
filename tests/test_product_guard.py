@@ -486,6 +486,20 @@ class ResourceCheckTests(unittest.TestCase):
         js = {"public/a.js": "a.href = url\nimg.src = blob"}
         self.assertEqual(g.check_resources(js, lambda t: False), [])
 
+    def test_nested_css_relative_paths_resolve_against_stylesheet(self):
+        self.assertEqual(
+            g.local_target('public/zen/products/x.css', '../assets/a.png'),
+            'zen/assets/a.png',
+        )
+        self.assertEqual(
+            g.local_target('public/zen/products/x.css', '../../fonts/a.ttf'),
+            'fonts/a.ttf',
+        )
+        files = {'public/zen/products/x.css': 'a{src:url(../fonts/missing.ttf)}'}
+        issues = g.check_resources(files, lambda t: t == 'fonts/a.ttf')
+        self.assertEqual(len(issues), 1)
+        self.assertIn('missing.ttf', issues[0].message)
+
     def test_product_pages_are_covered_by_link_check_instead(self):
         files = {"public/omm-x.html": '<link href="missing.css">'}
         self.assertEqual(g.check_resources(files, lambda t: False), [])

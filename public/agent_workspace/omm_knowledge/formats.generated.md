@@ -1114,7 +1114,7 @@
 - 实现源码：`public/lib/zen-card.js`
 - 深度校验器：`v_zencard`
 - Golden fixture：`zencard-pack.json`
-- 硬门槛：format=zen-card-pack；v 数字 1；cards 是数组
+- 硬门槛：format=zen-card-pack；v 数字 1；cards 是数组；cards[] 每张通过 zen-card 校验
 
 | 字段 | 类型 | 必需 |
 |---|---|---|
@@ -1157,7 +1157,7 @@
 - 契约：format=`zen-card-pack`，version=`1`
 - 实现源码：`public/lib/zen-card.js`
 - 深度校验器：`v_zenclip`
-- 硬门槛：format=zen-card-pack；cards 是数组
+- 硬门槛：format=zen-card-pack；cards 是数组；cards[] 每张通过 zen-card 校验
 
 | 字段 | 类型 | 必需 |
 |---|---|---|
@@ -1201,7 +1201,7 @@
 - 实现源码：`public/lib/zen-flow.js`
 - 深度校验器：`v_zenflow`
 - Golden fixture：`zenflow-rules.json`
-- 硬门槛：actions.type 在允许枚举内；顶层规则数组
+- 硬门槛：actions.type 在允许枚举内；顶层规则数组；rules[] 每项通过 validateRule
 
 | 字段 | 类型 | 必需 |
 |---|---|---|

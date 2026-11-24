@@ -81,6 +81,11 @@ test('pack 往返保留多张卡片', () => {
   assert.deepEqual(pack.cards[0], cards[0])
 })
 
+test('parsePack 拒绝包内非法卡片', () => {
+  const pack = { format: 'zen-card-pack', v: 1, cards: [{ content: '' }] }
+  assert.throws(() => ZenCard.parsePack(JSON.stringify(pack)), /cards\[0\]/)
+})
+
 test('fingerprint 对同内容稳定、对不同内容不同', () => {
   const a = ZenCard.create({ content: 'same', translation: '同' }, FIXED)
   const b = ZenCard.create({ content: 'same', translation: '同' }, { ...FIXED, rand: 0.9 })

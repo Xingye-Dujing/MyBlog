@@ -1,7 +1,5 @@
-/* Markdown 输出清洗回归测试（node:test）
- * useMarkdown.js 依赖浏览器的 DOMParser；这里用最小 DOM 桩在 VM 中执行同一段
- * 清洗逻辑，验证白名单不会被 MathML 命名空间绕过。
- * 运行：node --test tests/test_markdown_sanitizer.mjs
+/* Shared HTML whitelist regression tests (node:test)
+ * Run: node --test tests/test_markdown_sanitizer.mjs
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -9,18 +7,16 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
 const ROOT = new URL('../', import.meta.url)
-const source = readFileSync(new URL('src/composables/useMarkdown.js', ROOT), 'utf8')
-
-const start = source.indexOf('const ALLOWED_TAGS')
-const end = source.indexOf('function sanitizeHtml(')
-assert.notEqual(start, -1, 'ALLOWED_TAGS 未找到')
-assert.notEqual(end, -1, 'sanitizeHtml 未找到')
-const code = source.slice(start, end) + '\nreturn { sanitizeNode, safeUrl, safeStyle }'
-const { sanitizeNode, safeUrl, safeStyle } = vm.runInNewContext(
-  `(function () { ${code} })()`,
-  { Set, Array, String, Math, Object, Number, URL,
-    window: { location: { href: 'https://example.com/blog/' } } },
-)
+const source = readFileSync(new URL('public/lib/zen-html.js', ROOT), 'utf8')
+const ctx = {
+  Set, Array, String, Math, Object, Number, URL,
+  window: { location: { href: 'https://example.com/blog/' } },
+}
+ctx.window.window = ctx.window
+vm.createContext(ctx)
+vm.runInContext(source, ctx)
+const ZenHTML = ctx.window.ZenHTML
+const opts = ZenHTML.options({ allowIframe: false })
 
 const HTML = 'http://www.w3.org/1999/xhtml'
 const MATH = 'http://www.w3.org/1998/Math/MathML'
@@ -55,10 +51,8 @@ function el(tag, ns, attrs = [], children = []) {
     replaceWith(...nodes) {
       if (this.parentNode) {
         const i = this.parentNode.childNodes.indexOf(this)
-        if (i >= 0) {
-          this.parentNode.childNodes.splice(i, 1, ...nodes)
-          nodes.forEach((n) => { n.parentNode = this.parentNode })
-        }
+        if (i >= 0) this.parentNode.childNodes.splice(i, 1, ...nodes)
+        nodes.forEach((n) => { n.parentNode = this.parentNode })
         this.parentNode = null
       }
     },
@@ -69,11 +63,11 @@ function el(tag, ns, attrs = [], children = []) {
 
 function clean(children, allowIframe = false) {
   const root = el('div', HTML, [], children)
-  sanitizeNode(root, allowIframe)
+  ZenHTML.sanitizeNode(root, ZenHTML.options({ allowIframe }))
   return root
 }
 
-test('MathML 命名空间不能绕过事件属性与危险 URL 清洗', () => {
+test('MathML 命名空间不能绕过事件属性、危险 URL 与 style 清洗', () => {
   const math = el('math', MATH, [
     ['onmouseover', 'alert(1)'],
     ['xlink:href', 'javascript:alert(2)'],
@@ -84,8 +78,8 @@ test('MathML 命名空间不能绕过事件属性与危险 URL 清洗', () => {
   assert.equal(root.childNodes.length, 1)
   assert.equal(math.getAttribute('onmouseover'), null)
   assert.equal(math.getAttribute('xlink:href'), null)
-  assert.equal(math.getAttribute('encoding'), 'application/x-tex')
   assert.ok(!/url\(/i.test(math.getAttribute('style') || ''))
+  assert.equal(math.getAttribute('encoding'), 'application/x-tex')
 })
 
 test('MathML 中嵌套的可疑链接与子节点同样被清洗', () => {
@@ -119,7 +113,7 @@ test('普通 HTML 的危险协议、事件属性与脚本仍被处理', () => {
   assert.equal(script.parentNode, null)
 })
 
-test('未知标签拆包后，被提升的子节点仍须重新清洗（XSS）', () => {
+test('未知标签拆包后，被提升的子节点仍须重新清洗', () => {
   const img = el('img', HTML, [
     ['src', 'x'],
     ['onerror', 'alert(document.cookie)'],
@@ -128,7 +122,6 @@ test('未知标签拆包后，被提升的子节点仍须重新清洗（XSS）',
   const nested = el('foo', HTML, [], [link])
   const unknown = el('center', HTML, [], [img, nested])
   const root = clean([unknown])
-  // 未知容器被拆开，文字/子节点保留，但危险属性不能随之穿过白名单。
   assert.equal(root.childNodes.length, 2)
   assert.equal(img.parentNode, root)
   assert.equal(img.getAttribute('onerror'), null)
@@ -137,16 +130,22 @@ test('未知标签拆包后，被提升的子节点仍须重新清洗（XSS）',
 })
 
 test('safeUrl 允许站点内与白名单协议，拒绝 javascript/data 脚本', () => {
-  assert.equal(safeUrl('https://example.com/a'), true)
-  assert.equal(safeUrl('/img/a.png'), true)
-  assert.equal(safeUrl('#section'), true)
-  assert.equal(safeUrl('javascript:alert(1)'), false)
-  assert.equal(safeUrl('data:text/html;base64,PHNjcmlwdD4='), false)
+  assert.equal(ZenHTML.safeUrl('https://example.com/a'), true)
+  assert.equal(ZenHTML.safeUrl('/img/a.png'), true)
+  assert.equal(ZenHTML.safeUrl('#section'), true)
+  assert.equal(ZenHTML.safeUrl('javascript:alert(1)'), false)
+  assert.equal(ZenHTML.safeUrl('data:text/html;base64,PHNjcmlwdD4='), false)
 })
 
-test('style 白名单不被 CSS 转义绕过（\\3b / \\3a 重组分号与冒号）', () => {
+test('style 白名单不被 CSS 转义绕过', () => {
   const payload = 'width:1px\\3b position\\3a fixed\\3b top\\3a 0\\3b z-index\\3a 9999'
-  assert.equal(safeStyle(payload), '')
-  assert.ok(!/position|z-index/i.test(safeStyle(payload)))
-  assert.equal(safeStyle('color:red;font-weight:bold'), 'color:red;font-weight:bold')
+  assert.equal(ZenHTML.safeStyle(payload), '')
+  assert.ok(!/position|z-index/i.test(ZenHTML.safeStyle(payload)))
+  assert.equal(ZenHTML.safeStyle('color:red;font-weight:bold'), 'color:red;font-weight:bold')
+})
+
+test('Writer 富文本配置不允许 id 与 data 属性逃逸', () => {
+  assert.equal(ZenHTML.richTextAttrs.includes('id'), false)
+  assert.equal(ZenHTML.richTextAttrs.includes('class'), true)
+  assert.equal(ZenHTML.richTextAttrs.includes('style'), true)
 })
