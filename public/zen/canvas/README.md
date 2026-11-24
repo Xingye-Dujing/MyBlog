@@ -13,7 +13,7 @@
 ```
 zen/canvas/
 ├── canvas.css       # 统一画布样式包（可选加载）
-├── engine.js       # 画布核心：节点 / 连线 / 视口 / 选择 / 折叠 / 历史 / 序列化 / 事件
+├── engine.js       # 画布核心：节点 / 连线 / 视口 / 选择 / 折叠 / 历史 / 序列化 / 事件 / 数据载入校验
 ├── layout.js       # 6 策略自动布局引擎（唯一实现，纯函数）
 └── README.md        # 本文件
 ```
@@ -59,8 +59,14 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
    - `onContextMenu(e, ctx) -> items[]` —— 右键菜单由产品提供
    - `layout` —— 可替换布局引擎
 4. **序列化与撤销**：`toJSON()` 是唯一数据契约；`undo/redo` 基于快照；
-   `fromJSON()` 过滤孤儿连线，和 writer 的 `_saneConnections` 同策略。
-5. **样式以 writer 为准**：默认色板就是 writer 的 `--bg/--text/--border`、
+   `fromJSON()` 在清空画布前完整校验，非法数据抛错且不会破坏当前状态。
+5. **数据载入只有一个实现**：`ZenCanvas.normalizeSpec(data, config)` 是画布 JSON
+   与工作流 JSON 的唯一校验/归一化入口，`fromJSON()` 内部也调用它。坐标统一用
+   `parseFloat` 归一化，因此 `toJSON()` 输出的 CSS 像素字符串（`"80px"`）可以原样回载。
+   产品不得自带第二套校验器：通用检查（根节点、版本、规模、id、类型、端口、重复、
+   环路）都在共享层；产品只通过 `config` 提供 `format` / `types` / `validate`
+   业务规则回调（`table` / `video` 均按此接入）。
+6. **样式以 writer 为准**：默认色板就是 writer 的 `--bg/--text/--border`、
    `--accent-green`（选中/连线），`--radius` 默认 0，1px 线框、hover 才显头部、
    圆点端口全部继承。对其他产品线只做变量回退（`--line/--panel/--dim`），
    但任何产品不得覆盖成与 writer 不同的圆角或强调色。
@@ -110,6 +116,7 @@ zenflow 已经验证过；框架只调用，不复制。布局算法改动同样
 | `autoLayout(strategy)` | `smart / layered / force / spine / radial / timeline` |
 | `copySelection / paste / duplicate / deleteSelection / undo / redo` | 编辑 |
 | `toJSON / fromJSON / exportFile` | 持久化 |
+| `ZenCanvas.normalizeSpec(data, config)` | 画布/工作流数据的唯一校验与坐标归一化入口；产品用它载入 localStorage 与导入文件，`config` 可给 `format / types / acyclic / validate` |
 | `on(event, fn)` / `off` | 事件：`change/selection/connect/disconnect/nodeCommand/viewport/portDragStart/portDragEnd` |
 | `use(plugin)` / `registerNodeType(type, def)` / `destroy()` | 扩展与生命周期 |
 

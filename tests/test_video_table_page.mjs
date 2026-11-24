@@ -6,6 +6,11 @@ import vm from 'node:vm'
 
 const ROOT = new URL('../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, ROOT), 'utf8')
+
+// 产品不再自带画布校验器：测试桩直接使用共享引擎导出的 normalizeSpec。
+const engineContext = { module: { exports: {} }, console }
+vm.runInNewContext(read('public/zen/canvas/engine.js'), engineContext, { filename: 'engine.js' })
+const { normalizeSpec } = engineContext.module.exports
 const flush = async () => { await Promise.resolve(); await Promise.resolve() }
 const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve() }
 function deferred() {
@@ -40,7 +45,7 @@ function factorInputs(html) {
   return inputs
 }
 
-function harness(product) {
+function harness(product, seedStorage = {}) {
   const id = product
   const elements = new Map()
   const requests = []
@@ -173,7 +178,10 @@ function harness(product) {
     fitView() {}, _changed() {}, select() {}, duplicate() {}, removeNode() {}, paste() {},
     selectAll() {}, autoLayout() {}, screenToWorld() { return { x: 0, y: 0 } },
   }
-  window.ZenCanvas = { create(options) { Object.assign(canvasOptions, options); return canvas } }
+  window.ZenCanvas = {
+    create(options) { Object.assign(canvasOptions, options); return canvas },
+    normalizeSpec(obj, config) { return normalizeSpec(obj, config) },
+  }
 
   const document = {
     readyState: 'loading', body: element('body'),
@@ -200,7 +208,7 @@ function harness(product) {
   function fetch(path, options = {}) {
     return fetchOverride ? fetchOverride(path, options) : defaultFetch(path, options)
   }
-  const storage = new Map()
+  const storage = new Map(Object.entries(seedStorage))
   const localStorage = {
     getItem(key) { return storage.get(key) || null },
     setItem(key, value) { storage.set(key, value) },
@@ -304,6 +312,21 @@ for (const id of ['video', 'table']) {
     h.elements.get('btn-open').click()
     assert.equal(h.fromJSONCalls.length, 0)
     assert.ok(h.toasts.some((message) => message.includes('版本不受支持')))
+  })
+
+  test(`${id} 本地画布可直接回载且不再提示无效工作流`, () => {
+    const saved = {
+      version: 1, app: id,
+      nodes: [{
+        id: 'n1', type: id === 'video' ? 'input' : 'file',
+        x: '80px', y: '140px', w: '250px', h: '120px', data: {},
+      }],
+      connections: [], view: { scale: 1, panX: 0, panY: 0 }, meta: {},
+    }
+    const h = harness(id, { [`zen.${id}.canvas.v1`]: JSON.stringify(saved) })
+    assert.equal(h.fromJSONCalls.length, 1)
+    assert.equal(h.fromJSONCalls[0].nodes[0].x, 80)
+    assert.ok(!h.toasts.some((message) => message.includes('已忽略无效的本地工作流')))
   })
 
   test(`${id} 卡片消息同时校验 parent source 与 origin`, () => {

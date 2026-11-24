@@ -8,7 +8,8 @@
  *      改为依赖注入：nodeTypes / render / serialize / events / storage；
  *   3. 实例级状态，同一页面可挂多张画布，互不污染。
  *
- * 对外只暴露 ZenCanvas.create(options) -> instance；详见 zen/canvas/README.md。
+ * 对外暴露 ZenCanvas.create(options) -> instance 与
+ * ZenCanvas.normalizeSpec(data, config)（画布数据唯一校验/归一化入口）；详见 zen/canvas/README.md。
  */
 (function (global, factory) {
   'use strict'
@@ -1675,67 +1676,114 @@
     }
   }
 
-  ZenCanvasInstance.prototype._validateCanvasData = function (data) {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      throw new Error('invalid canvas data')
+  /* 画布数据的唯一校验/归一化入口：内部快照（fromJSON）与外部工作流
+     （normalizeSpec）共用同一份实现。`toJSON()` 把坐标写成 CSS 像素字符串，
+     所以坐标必须用 parseFloat 归一化，不能用 Number。 */
+  function normalizeSpec(obj, config) {
+    var cfg = config || {}
+    var scope = cfg.scope
+    function invalid(message) { throw new Error('工作流无效：' + message) }
+    function finite(value, fallback, label) {
+      if (value == null || value === '') return fallback
+      var number = parseFloat(value)
+      if (!isFinite(number)) invalid(label + '不是有限数值')
+      return number
     }
-    if (data.app !== this.scope) {
-      throw new Error('canvas app mismatch: expected "' + this.scope + '"')
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) invalid('根节点必须是对象')
+    if (scope && obj.app !== scope && !(cfg.format && obj.format === cfg.format)) {
+      invalid('不是' + scope + '画布数据或工作流')
     }
-    if (!Array.isArray(data.nodes)) throw new Error('canvas nodes must be an array')
-    if (data.connections != null && !Array.isArray(data.connections)) {
-      throw new Error('canvas connections must be an array')
-    }
+    if (scope && obj.app && obj.app !== scope) invalid('应用标识不匹配')
+    if (cfg.format && obj.format && obj.format !== cfg.format) invalid('格式标识不匹配')
+    if (obj.version != null && obj.version !== 1) invalid('版本不受支持')
+    if (!Array.isArray(obj.nodes) || !Array.isArray(obj.connections)) invalid('缺少 nodes/connections 数组')
+    var maxNodes = cfg.maxNodes || 500
+    var maxConnections = cfg.maxConnections || 1000
+    if (obj.nodes.length > maxNodes || obj.connections.length > maxConnections) invalid('工作流规模过大')
 
-    var self = this
-    var nodeIds = new Set()
-    var connectionIds = new Set()
-    var connectionKeys = new Set()
-    var nodes = data.nodes.map(function (n, index) {
-      if (!n || typeof n !== 'object' || Array.isArray(n)) {
-        throw new Error('invalid canvas node at index ' + index)
+    var types = cfg.types || {}
+    var ids = Object.create(null)
+    var nodes = obj.nodes.map(function (n, index) {
+      if (!n || typeof n !== 'object' || Array.isArray(n)) invalid('nodes[' + index + '] 必须是对象')
+      var id = String(n.id == null ? '' : n.id)
+      if (!id || id.length > 120 || /[\x00-\x1f]/.test(id)) invalid('节点 id 为空或过长')
+      if (ids[id]) invalid('节点 id 重复：' + id)
+      if (typeof n.type !== 'string' || !Object.prototype.hasOwnProperty.call(types, n.type)) {
+        invalid('未知节点类型：' + n.type)
       }
-      if (typeof n.type !== 'string' || !Object.prototype.hasOwnProperty.call(self.types, n.type)) {
-        throw new Error('unknown node type at index ' + index + ': ' + n.type)
+      var def = types[n.type]
+      if (n.data != null && (typeof n.data !== 'object' || Array.isArray(n.data))) invalid('节点 data 必须是对象：' + id)
+      ids[id] = def
+      return {
+        id: id, type: n.type,
+        x: finite(n.x, 100, '横坐标'), y: finite(n.y, 100, '纵坐标'),
+        w: finite(n.w, def.w || 240, '节点宽度'), h: finite(n.h, def.h || 110, '节点高度'),
+        title: n.title == null ? (def.label || n.type) : String(n.title),
+        locked: !!n.locked, minimized: !!n.minimized,
+        data: assign({}, n.data || {}),
       }
-      if ((typeof n.id !== 'string' && typeof n.id !== 'number') ||
-          (typeof n.id === 'number' && !isFinite(n.id)) || String(n.id).trim() === '') {
-        throw new Error('canvas node id is required at index ' + index)
-      }
-      var id = String(n.id)
-      if (nodeIds.has(id)) throw new Error('duplicate canvas node id: ' + id)
-      nodeIds.add(id)
-      return { source: n, id: id }
     })
 
-    var connections = (data.connections || []).map(function (c, index) {
-      if (!c || typeof c !== 'object' || Array.isArray(c)) {
-        throw new Error('invalid canvas connection at index ' + index)
-      }
-      var from = c.from == null ? '' : String(c.from)
-      var to = c.to == null ? '' : String(c.to)
-      if (!nodeIds.has(from)) throw new Error('unknown connection source at index ' + index + ': ' + from)
-      if (!nodeIds.has(to)) throw new Error('unknown connection target at index ' + index + ': ' + to)
-      if (from === to) throw new Error('canvas connection cannot reference the same node: ' + from)
+    var seen = Object.create(null)
+    var connectionIds = Object.create(null)
+    var connections = obj.connections.map(function (c, index) {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) invalid('connections[' + index + '] 必须是对象')
+      var from = String(c.from == null ? '' : c.from)
+      var to = String(c.to == null ? '' : c.to)
+      if (!ids[from] || !ids[to]) invalid('连线指向不存在的节点')
+      if (from === to) invalid('节点不能连接自身')
       var fromPort = c.fromPort || 'right'
       var toPort = c.toPort || 'left'
+      if (ids[from].ports && ids[from].ports.indexOf(fromPort) < 0) invalid('连线端口不合法')
+      if (ids[to].ports && ids[to].ports.indexOf(toPort) < 0) invalid('连线端口不合法')
       var key = from + '\u0000' + to + '\u0000' + fromPort + '\u0000' + toPort
-      if (connectionKeys.has(key)) throw new Error('duplicate canvas connection at index ' + index)
-      connectionKeys.add(key)
-
-      var id = null
+      if (seen[key]) invalid('重复连线')
+      seen[key] = true
+      var connId = null
       if (c.id != null) {
         if ((typeof c.id !== 'string' && typeof c.id !== 'number') ||
             (typeof c.id === 'number' && !isFinite(c.id)) || String(c.id).trim() === '') {
-          throw new Error('canvas connection id is invalid at index ' + index)
+          invalid('连线 id 不合法')
         }
-        id = String(c.id)
-        if (connectionIds.has(id)) throw new Error('duplicate canvas connection id: ' + id)
-        connectionIds.add(id)
+        connId = String(c.id)
+        if (connectionIds[connId]) invalid('重复连线 id：' + connId)
+        connectionIds[connId] = true
       }
-      return { source: c, id: id, from: from, to: to, fromPort: fromPort, toPort: toPort }
+      return {
+        id: connId, from: from, to: to, fromPort: fromPort, toPort: toPort,
+        route: c.route === 'elbow' ? 'elbow' : undefined,
+        routeHint: c.route === 'elbow' ? c.routeHint : undefined,
+      }
     })
-    return { nodes: nodes, connections: connections }
+
+    if (cfg.acyclic) {
+      var indegree = Object.create(null)
+      var next = Object.create(null)
+      nodes.forEach(function (n) { indegree[n.id] = 0; next[n.id] = [] })
+      connections.forEach(function (c) { indegree[c.to]++; next[c.from].push(c.to) })
+      var queue = nodes.filter(function (n) { return indegree[n.id] === 0 }).map(function (n) { return n.id })
+      var visited = 0
+      while (queue.length) {
+        var current = queue.shift()
+        visited++
+        next[current].forEach(function (id) { if (--indegree[id] === 0) queue.push(id) })
+      }
+      if (visited !== nodes.length) invalid('工作流存在循环连线')
+    }
+    if (typeof cfg.validate === 'function') cfg.validate(nodes, connections)
+
+    var view = obj.view && typeof obj.view === 'object' ? obj.view : {}
+    var scale = finite(view.scale, 1, '视图缩放')
+    if (scale <= 0) invalid('视图缩放必须大于 0')
+    return {
+      version: 1, app: scope || '', nodes: nodes, connections: connections,
+      view: { scale: scale, panX: finite(view.panX, 0, '视口横坐标'), panY: finite(view.panY, 0, '视口纵坐标') },
+      meta: {},
+    }
+  }
+
+  ZenCanvasInstance.prototype._validateCanvasData = function (data) {
+    return normalizeSpec(data, { scope: this.scope, types: this.types })
   }
 
   ZenCanvasInstance.prototype.fromJSON = function (data, opts) {
@@ -1743,24 +1791,22 @@
     var self = this
     this._silent(function () {
       self.clear()
-      plan.nodes.forEach(function (item) {
-        var n = item.source
-        var payload = assign({}, n.data || {})
-        if (n.title != null) payload.title = n.title
-        if (n.w != null) payload.w = num(n.w, 240)
-        if (n.h != null) payload.h = num(n.h, 110)
-        payload.locked = !!n.locked
-        payload.minimized = !!n.minimized
-        payload.id = item.id
-        self.addNode(n.type, payload, { x: num(n.x, 100), y: num(n.y, 100) }, { change: false })
+      plan.nodes.forEach(function (n) {
+        var payload = assign({}, n.data)
+        payload.title = n.title
+        payload.w = n.w
+        payload.h = n.h
+        payload.locked = n.locked
+        payload.minimized = n.minimized
+        payload.id = n.id
+        self.addNode(n.type, payload, { x: n.x, y: n.y }, { change: false })
       })
-      plan.connections.forEach(function (item) {
-        var c = item.source
+      plan.connections.forEach(function (c) {
         var extra = { route: c.route, routeHint: c.routeHint }
-        if (item.id != null) extra.id = item.id
-        self.addConnection(item.from, item.to, item.fromPort, item.toPort, extra)
+        if (c.id != null) extra.id = c.id
+        self.addConnection(c.from, c.to, c.fromPort, c.toPort, extra)
       })
-      self.setView(data.view || { scale: 1, panX: 0, panY: 0 })
+      self.setView(plan.view)
     })
     if (!opts || opts.history !== false) this._changed()
     else this._snapshot = JSON.stringify(this.toJSON())
@@ -2181,6 +2227,7 @@
   return {
     version: VERSION,
     create: create,
+    normalizeSpec: normalizeSpec,
     geometry: {
       getItemPort: getItemPort,
       getPortPosition: getPortPosition,

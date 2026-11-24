@@ -46,8 +46,18 @@ Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏
 ## 画布框架
 
 `zen/canvas/layout.js` 是 6 策略自动布局的唯一实现；
-`zen/canvas/engine.js` 提供节点、连线、视口、选择、历史与序列化。
+`zen/canvas/engine.js` 提供节点、连线、视口、选择、历史、序列化与数据载入校验。
 画布样式是可选包 `zen/canvas/canvas.css`，只由画布产品单独引用；核心 `zen.css` 不加载它。
+
+写入要求（画布产品共用，禁止各自实现）：
+
+- `ZenCanvas.normalizeSpec(data, config)` 与 `fromJSON()` 共用同一份校验/归一化实现；
+  坐标用 `parseFloat` 处理，`toJSON()` 输出的 `"80px"` 可以原样回载。产品不得再写
+  私有的 `toCanvasJSON` / `finite` 之类的第二套校验器。
+- 通用检查（根节点、版本、规模、id、类型、端口、重复、环路）在共享层；产品只通过
+  `config` 提供 `format`、`types` 与 `validate` 业务规则回调。
+- writer 的 SVG 层直接带共享类 `zc-svg-layer`，连线样式只来自 `zen/canvas/canvas.css`；
+  共享层不写 `#svg-layer` 等产品私有选择器，writer 专有规则留在 `zen/products/writer.css`。
 
 ## 新增共享模块的规则
 

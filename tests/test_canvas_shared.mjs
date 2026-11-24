@@ -10,6 +10,7 @@ const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf
 const engineSource = read('public/zen/canvas/engine.js')
 const canvasCss = read('public/zen/canvas/canvas.css')
 const writerCss = read('public/zen/products/writer.css')
+const writerHtml = read('public/omm-writer.html')
 const selectSource = read('public/zen/components/select.js')
 
 class FakeElement {
@@ -291,6 +292,41 @@ test('imported connection ids advance the generated id sequence', () => {
   canvas.fromJSON(data, { history: false })
   const next = canvas.addConnection('b', 'a', 'right', 'left')
   assert.equal(next.id, 'conn-42')
+})
+
+test('CSS pixel coordinates from toJSON round-trip through the shared loader', () => {
+  const { canvas: ZenCanvas } = canvasContext()
+  const { canvas } = makeCanvas(ZenCanvas)
+  canvas.addNode('note', { text: 'A' }, { x: 80, y: 140 })
+  canvas.addNode('note', { text: 'B' }, { x: 420, y: 140 })
+  canvas.addConnection('note-1', 'note-2')
+  const saved = JSON.parse(JSON.stringify(canvas.toJSON()))
+  assert.equal(saved.nodes[0].x, '80px')
+
+  const restored = ZenCanvas.normalizeSpec(saved, { scope: 'demo', types: canvas.types })
+  assert.equal(restored.nodes[0].x, 80)
+  canvas.fromJSON(restored, { history: false })
+  assert.deepEqual(JSON.parse(JSON.stringify(canvas.toJSON().nodes.map((n) => n.id))), ['note-1', 'note-2'])
+  assert.equal(canvas.getConnections().length, 1)
+
+  const spec = {
+    format: 'demo-workflow',
+    nodes: saved.nodes.map((n) => ({ id: n.id, type: n.type, data: n.data })),
+    connections: saved.connections,
+  }
+  const imported = ZenCanvas.normalizeSpec(spec, {
+    scope: 'demo', format: 'demo-workflow', types: canvas.types,
+  })
+  assert.equal(imported.nodes[0].x, 100)
+  canvas.fromJSON(imported, { history: false })
+  assert.equal(canvas.getConnections().length, 1)
+})
+
+test('Writer connection layer reuses the shared canvas SVG styles', () => {
+  assert.match(writerHtml, /<svg id="svg-layer" class="zc-svg-layer"><\/svg>/)
+  assert.doesNotMatch(canvasCss, /#svg-layer/)
+  assert.match(canvasCss, /\.zc-svg-layer \.conn-line \{[\s\S]*?stroke: var\(--conn-color\)/)
+  assert.match(writerCss, /body\.focus-mode #svg-layer \.conn-line/)
 })
 
 test('removeNode and clear publish empty selection so inspectors drop dead bindings', () => {

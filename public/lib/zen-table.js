@@ -932,87 +932,32 @@
     }
   }
 
-  function toCanvasJSON(obj) {
-    function invalid(message) { throw new Error('工作流无效：' + message) }
-    function finite(value, fallback) {
-      if (value == null) return fallback
-      var number = Number(value)
-      if (!isFinite(number)) invalid('坐标或尺寸不是有限数值')
-      return number
-    }
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) invalid('根节点必须是对象')
-    if (obj.app !== 'table' && obj.format !== 'omm-table-workflow') invalid('不是表格工作流')
-    if (obj.app && obj.app !== 'table') invalid('应用标识不匹配')
-    if (obj.format && obj.format !== 'omm-table-workflow') invalid('格式标识不匹配')
-    if (obj.version != null && (typeof obj.version !== 'number' || obj.version !== 1)) invalid('版本不受支持')
-    if (!Array.isArray(obj.nodes) || !Array.isArray(obj.connections)) invalid('缺少 nodes/connections 数组')
-    if (obj.nodes.length > 500 || obj.connections.length > 1000) invalid('工作流规模过大')
-    var ids = Object.create(null)
-    var nodes = obj.nodes.map(function (n, index) {
-      if (!n || typeof n !== 'object' || Array.isArray(n)) invalid('nodes[' + index + '] 必须是对象')
-      var id = String(n.id == null ? '' : n.id)
-      if (!id || id.length > 120 || /[\x00-\x1f]/.test(id)) invalid('节点 id 为空或过长')
-      if (ids[id]) invalid('节点 id 重复：' + id)
-      var def = DEFS[n.type]
-      if (!def) invalid('未知节点类型：' + n.type)
-      if (n.data != null && (typeof n.data !== 'object' || Array.isArray(n.data))) invalid('节点 data 必须是对象：' + id)
-      ids[id] = def
-      return {
-        id: id, type: n.type,
-        x: finite(n.x, 100), y: finite(n.y, 100),
-        w: finite(n.w, def.w), h: finite(n.h, def.h),
-        title: n.title == null ? def.label : String(n.title),
-        locked: !!n.locked, minimized: !!n.minimized,
-        data: Object.assign({}, n.data || {}),
+  // 产品业务规则；结构与坐标校验由 zen/canvas/engine.js 的 normalizeSpec 统一负责。
+  var SPEC = {
+    scope: 'table',
+    format: 'omm-table-workflow',
+    types: DEFS,
+    acyclic: true,
+    validate: function (nodes, connections) {
+      function invalid(message) { throw new Error('工作流无效：' + message) }
+      if (nodes.filter(function (n) { return n.type === 'file' }).length !== 1) {
+        invalid('工作流必须有且只有一个 Excel 文件节点')
       }
-    })
-    var seen = Object.create(null)
-    var connections = obj.connections.map(function (c, index) {
-      if (!c || typeof c !== 'object' || Array.isArray(c)) invalid('connections[' + index + '] 必须是对象')
-      var from = String(c.from == null ? '' : c.from)
-      var to = String(c.to == null ? '' : c.to)
-      if (!ids[from] || !ids[to]) invalid('连线指向不存在的节点')
-      if (from === to) invalid('节点不能连接自身')
-      var fromPort = c.fromPort || 'right'
-      var toPort = c.toPort || 'left'
-      if (ids[from].ports.indexOf(fromPort) < 0 || ids[to].ports.indexOf(toPort) < 0) invalid('连线端口不合法')
-      var key = from + '\u0000' + to + '\u0000' + fromPort + '\u0000' + toPort
-      if (seen[key]) invalid('重复连线')
-      seen[key] = true
-      return { id: c.id, from: from, to: to, fromPort: fromPort, toPort: toPort }
-    })
-    var indegree = Object.create(null)
-    var next = Object.create(null)
-    nodes.forEach(function (n) { indegree[n.id] = 0; next[n.id] = [] })
-    connections.forEach(function (c) { indegree[c.to]++; next[c.from].push(c.to) })
-    var queue = nodes.filter(function (n) { return indegree[n.id] === 0 }).map(function (n) { return n.id })
-    var visited = 0
-    while (queue.length) {
-      var current = queue.shift()
-      visited++
-      next[current].forEach(function (id) { if (--indegree[id] === 0) queue.push(id) })
-    }
-    if (visited !== nodes.length) invalid('工作流存在循环连线')
-    var fileCount = nodes.filter(function (n) { return n.type === 'file' }).length
-    if (fileCount !== 1) invalid('工作流必须有且只有一个 Excel 文件节点')
-    nodes.forEach(function (node) {
-      var incoming = connections.filter(function (connection) { return connection.to === node.id })
-      if (node.type === 'file' || node.type === 'note') {
-        if (incoming.length) invalid(node.type + ' 节点不能有上游输入')
-        return
-      }
-      if (node.type === 'join') {
-        var left = incoming.filter(function (connection) { return connection.toPort === 'left' }).length
-        var top = incoming.filter(function (connection) { return connection.toPort === 'top' }).length
-        if (incoming.length !== 2 || left !== 1 || top !== 1) invalid('连接节点必须各接一个左端口和一个上方端口')
-        return
-      }
-      if (incoming.length !== 1 || incoming[0].toPort !== 'left') invalid('节点必须且只能有一个左端口输入：' + node.id)
-    })
-    var view = obj.view && typeof obj.view === 'object' ? obj.view : {}
-    var scale = finite(view.scale, 1)
-    if (scale <= 0) invalid('视图缩放必须大于 0')
-    return { version: 1, app: 'table', nodes: nodes, connections: connections, view: { scale: scale, panX: finite(view.panX, 0), panY: finite(view.panY, 0) }, meta: {} }
+      nodes.forEach(function (node) {
+        var incoming = connections.filter(function (connection) { return connection.to === node.id })
+        if (node.type === 'file' || node.type === 'note') {
+          if (incoming.length) invalid(node.type + ' 节点不能有上游输入')
+          return
+        }
+        if (node.type === 'join') {
+          var left = incoming.filter(function (connection) { return connection.toPort === 'left' }).length
+          var top = incoming.filter(function (connection) { return connection.toPort === 'top' }).length
+          if (incoming.length !== 2 || left !== 1 || top !== 1) invalid('连接节点必须各接一个左端口和一个上方端口')
+          return
+        }
+        if (incoming.length !== 1 || incoming[0].toPort !== 'left') invalid('节点必须且只能有一个左端口输入：' + node.id)
+      })
+    },
   }
 
   function saveWorkflowFile() {
@@ -1471,7 +1416,7 @@
     var saved = null
     try { saved = JSON.parse(localStorage.getItem('zen.table.canvas.v1') || 'null') } catch (_) {}
     try {
-      if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(toCanvasJSON(saved), { history: false })
+      if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(ZenCanvas.normalizeSpec(saved, SPEC), { history: false })
       else applyTemplate('加班补贴：时间分档 + 插入行')
     } catch (err) {
       applyTemplate('加班补贴：时间分档 + 插入行')
@@ -1513,7 +1458,7 @@
           try {
             var obj = JSON.parse(reader.result)
             var spec = obj.format === 'omm-table-workflow' ? obj : obj.workflow || obj
-            canvas.fromJSON(toCanvasJSON(spec), { history: false })
+            canvas.fromJSON(ZenCanvas.normalizeSpec(spec, SPEC), { history: false })
             toast('工作流已载入')
           } catch (err) { toast('文件解析失败：' + err.message) }
         }
