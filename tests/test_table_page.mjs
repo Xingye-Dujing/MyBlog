@@ -72,7 +72,7 @@ test('AI 桥与父窗口来源校验接线正确', () => {
   assert.ok(js.includes('window.ZenTableAI = {'))
   assert.ok(js.includes('snapshotMarkdown'))
   assert.ok(js.includes("ev.data.type !== 'omm:zen-card-request'"))
-  assert.ok(js.includes('ZenUtil.isLocalOrigin(ev.origin)'), '来源校验应委托共享助手')
+  assert.ok(js.includes('ZenUtil.isTrustedParentMessage(ev)'), '来源校验应委托统一父窗口助手')
   assert.ok(js.includes('window.parent.postMessage('))
   assert.ok(!/postMessage\([^,]+,\s*['"]\*['"]\)/.test(js), '禁止 wildcard postMessage')
   assert.ok(js.includes('OMMShare.send'))

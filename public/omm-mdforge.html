@@ -480,14 +480,6 @@
         </div>
       </div>
       <div class="dd-item-row">
-        <span>统一圆角</span>
-        <div class="settings-control">
-          <span class="settings-value" id="sv-radius">0</span>
-          <button class="settings-btn" data-setting="radius-down" aria-label="减小圆角">−</button>
-          <button class="settings-btn" data-setting="radius-up" aria-label="增大圆角">+</button>
-        </div>
-      </div>
-      <div class="dd-item-row">
         <span>界面字号</span>
         <div class="settings-control">
           <span class="settings-value" id="sv-fontsize">13px</span>
@@ -513,7 +505,7 @@
           id="set-miktex-bin"
           spellcheck="false"
           placeholder="D:\\MiKTeX\\miktex\\bin\\x64"
-          style="width:100%;box-sizing:border-box;padding:5px 7px;font:inherit;font-size:11px;color:inherit;background:transparent;border:1px solid var(--line);border-radius:4px;outline:none"
+          style="width:100%;box-sizing:border-box;padding:5px 7px;font:inherit;font-size:11px;color:inherit;background:transparent;border:1px solid var(--line);border-radius:var(--zen-radius);outline:none"
         />
         <button class="dd-item" id="set-miktex-save" style="margin-top:6px;padding-left:0">
           <span>保存 MiKTeX 路径</span><span class="hint" id="miktex-hint">自动</span>
@@ -734,7 +726,6 @@ template: academic
         const DEFAULT_SETTINGS = {
           theme: 'paper',
           bg: 'bg-void',
-          radius: 0,
           fscale: 1,
           statusbar: true,
           lineNumbers: true,
@@ -850,7 +841,13 @@ template: academic
 
         function loadSettings() {
           const parsed = ZenUtil.getJSON(SETTINGS_KEY, null)
-          return { ...DEFAULT_SETTINGS, ...(parsed && typeof parsed === 'object' ? parsed : {}) }
+          const settings = { ...DEFAULT_SETTINGS }
+          if (parsed && typeof parsed === 'object') {
+            Object.keys(DEFAULT_SETTINGS).forEach((key) => {
+              if (parsed[key] !== undefined) settings[key] = parsed[key]
+            })
+          }
+          return settings
         }
 
         function saveSettings() {
@@ -865,14 +862,10 @@ template: academic
           const s = state.settings
           const root = document.documentElement
           root.style.setProperty(
-            '--radius',
-            `${Math.max(0, Math.min(14, Number(s.radius) || 0))}px`,
-          )
-          root.style.setProperty(
             '--fscale',
             String(Math.max(0.85, Math.min(1.2, Number(s.fscale) || 1))),
           )
-          ZenUtil.themeApply(s.theme === 'night', 'theme-night')
+          ZenUtil.themeApply(s.theme === 'night', 'theme-dark')
           ;['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].forEach((name) => {
             document.body.classList.toggle(name, s.bg === name)
           })
@@ -883,7 +876,6 @@ template: academic
           dom.gutter.style.display = s.lineNumbers ? '' : 'none'
           dom.editor.style.paddingLeft = s.lineNumbers ? '2px' : '18px'
           $('#sv-theme').textContent = s.theme === 'night' ? '夜' : '白'
-          $('#sv-radius').textContent = String(Math.round(Number(s.radius) || 0))
           $('#sv-fontsize').textContent = `${Math.round(13 * Number(s.fscale || 1))}px`
           $('#sv-statusbar').textContent = s.statusbar ? '开' : '关'
           $('#sv-linenumbers').textContent = s.lineNumbers ? '开' : '关'
@@ -2930,10 +2922,6 @@ template: academic
           $$('[data-setting]').forEach((btn) => {
             btn.addEventListener('click', () => {
               const kind = btn.dataset.setting
-              if (kind === 'radius-up')
-                state.settings.radius = Math.min(14, (Number(state.settings.radius) || 0) + 1)
-              if (kind === 'radius-down')
-                state.settings.radius = Math.max(0, (Number(state.settings.radius) || 0) - 1)
               if (kind === 'font-up')
                 state.settings.fscale = Math.min(
                   1.2,

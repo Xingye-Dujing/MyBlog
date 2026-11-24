@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-omm-app="lambda">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -8,9 +8,11 @@
 <title>Lambda 演算计算器 · Lambda Calculus</title>
 <link rel="stylesheet" href="zen/zen.css" />
 <link rel="stylesheet" href="zen/products/lambda.css" />
-<script src="omm-embed.js"></script>
 <script src="zen/foundation/util.js"></script>
-    <script src="zen/components/layer.js"></script>
+<script src="omm-embed.js"></script>
+<script src="omm-desktop.js"></script>
+<script src="omm-share.js"></script>
+<script src="zen/components/layer.js"></script>
 <script src="zen/components/toast.js"></script>
 <script src="zen/components/dialog.js"></script>
 <script src="zen/components/select.js"></script>
@@ -358,6 +360,33 @@
   // --------------------------------------------------------------------
   // AI 桥接（window.ZenLambdaAI，OMM-ZEN 产品桥）
   // --------------------------------------------------------------------
+  var MAX_LOCAL_CODE_LINES = 2000;
+  var SNAPSHOT_SETTING_RESERVE = 8;
+  function localHistoryLimit(){ return Math.max(0, state.snapshotMaxLines - SNAPSHOT_SETTING_RESERVE); }
+
+  // 快照恢复只接受完整且不短于本地历史的数据；截断元数据优先于数组长度判断。
+  // Restore only complete snapshots that are not shorter than local history.
+  function snapshotHistory(data, localLines) {
+    localLines = Array.isArray(localLines) ? localLines : [];
+    if (!data || !Array.isArray(data.code)) return {ok: false, reason: "invalid"};
+    var code = data.code.slice();
+    var meta = data.snapshot && typeof data.snapshot === "object" ? data.snapshot : {};
+    var maxLines = typeof meta.maxLines === "number" ? meta.maxLines :
+      (typeof data.maxLines === "number" ? data.maxLines : MAX_LOCAL_CODE_LINES);
+    var totalLines = typeof meta.totalLines === "number" ? meta.totalLines :
+      (typeof data.totalLines === "number" ? data.totalLines : code.length);
+    if (data.truncated === true || meta.truncated === true || totalLines > code.length) {
+      return {ok: false, reason: "truncated", maxLines: maxLines};
+    }
+    if (code.length > maxLines || localLines.length > maxLines) {
+      return {ok: false, reason: "capacity", maxLines: maxLines};
+    }
+    if (code.length < localLines.length) {
+      return {ok: false, reason: "shorter", maxLines: maxLines};
+    }
+    return {ok: true, code: code, maxLines: maxLines};
+  }
+
   function zenSnapshot() {
     var rows = (state && state.sessionRows) || []
     return {
@@ -379,12 +408,11 @@
   }
   window.ZenLambdaAI = { snapshot: zenSnapshot, snapshotMarkdown: zenSnapshotMarkdown, version: 1 }
 
-  // omm:zen-card-request — 响应工作台广播（仅接受 loopback parent origin）
+  // omm:zen-card-request — 只响应精确父 Hub；sibling 与非 Hub loopback 均拒绝。
   ;(function () {
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
-      if (window.parent === window) return
-      if (!ZenUtil.isLocalOrigin(ev.origin)) return
+      if (!ZenUtil.isTrustedParentMessage(ev)) return
       var api = window.ZenLambdaAI
       if (!api || !api.snapshotMarkdown) return
       var md = api.snapshotMarkdown()
@@ -402,30 +430,26 @@
     })
   })()
 
-  function lambdaDownload(name, text) {
-    return ZenUtil.download(name, text, "application/json")
-  }
-
   function sendToAI() {
     var api = window.ZenLambdaAI
-    if (!api || !api.snapshot) { toast('AI 桥接未就绪'); return }
+    if (!api || !api.snapshot) { toast('AI 桥接未就绪'); return Promise.resolve(false) }
+    if (!window.OMMShare || typeof window.OMMShare.send !== 'function') {
+      toast('共享空间不可用，请在静书房工作台中打开 Lambda')
+      return Promise.resolve(false)
+    }
     var snap = api.snapshot()
     var title = 'Lambda 演算计算器 · ' + snap.sessionCount + ' 个会话'
-    if (window.OMMShare && window.OMMShare.send) {
-      window.OMMShare.send({
-        to: 'ai', channel: 'documents', format: 'omm.lambda.session',
-        title: title, payload: { version: 1, title: title, canvas: snap },
-      }).then(function () {
-        toast('会话已发给 AI 工作区')
-        if (window.OMMShare.openApp) window.OMMShare.openApp('ai')
-      }, function () {
-        lambdaDownload('lambda-sessions.json', JSON.stringify(snap, null, 2))
-        toast('共享空间不可用，已导出 lambda-sessions.json')
-      })
-    } else {
-      lambdaDownload('lambda-sessions.json', JSON.stringify(snap, null, 2))
-      toast('已导出会话快照，可粘贴到 AI 工作区')
-    }
+    return window.OMMShare.send({
+      to: 'ai', channel: 'documents', format: 'omm.lambda.session',
+      title: title, payload: { version: 1, title: title, canvas: snap },
+    }).then(function () {
+      toast('会话已发给 AI 工作区')
+      if (window.OMMShare.openApp) window.OMMShare.openApp('ai')
+      return true
+    }, function (err) {
+      toast('发送失败：' + ((err && err.message) || err))
+      return false
+    })
   }
 
   var btn = document.getElementById('btn-ai')
@@ -454,6 +478,8 @@
     growth: null,        // :growth 曲线数据 / growth series
     a11y: {contrast: false, font: 100}, // 可读性设置 / readability settings
     sessionRows: [],    // 会话快照列表 / snapshot rows
+    snapshotMaxLines: MAX_LOCAL_CODE_LINES, // 服务端返回的实际快照容量 / server snapshot cap
+    localHistoryRejected: false, // 超容量本地历史保留在存储中且不被空状态覆盖 / preserve oversized local data
     raceResults: null,   // 策略竞速的四份结果 / four results of a strategy race
     expiredSession: null,// 失效会话 id，用于快照恢复 / dead session id for snapshot restore
     eta: false,
@@ -696,6 +722,7 @@
   /* --------------------------------------------------------------- storage / 存储 */
   var LS = "lambda.ui.v2";
   function saveLocal(){
+    if (state.localHistoryRejected) return;
     try {
       localStorage.setItem(LS, JSON.stringify({
         lang: state.lang, theme: state.theme, strategy: $("strategy").value,
@@ -990,7 +1017,13 @@
       '<text x="282" y="45" class="diamond-step">' + rs + '</text></svg>';
   }
 
-  function saveBlob(name, text, type){
+  async function saveBlob(name, text, type){
+    if (window.OMMDesktop && typeof window.OMMDesktop.saveText === "function") {
+      try {
+        await window.OMMDesktop.saveText(name, text, type);
+        return true;
+      } catch(e) { return false; }
+    }
     return ZenUtil.download(name, text, type);
   }
 
@@ -1983,6 +2016,7 @@
     var r = await api("api/snapshots", {}, "GET");
     if (r.data && r.data.ok){
       state.sessionRows = r.data.snapshots || [];
+      if (typeof r.data.maxLines === "number") state.snapshotMaxLines = r.data.maxLines;
       renderPanel();
     }
   }
@@ -1998,9 +2032,11 @@
     if (!rows.length) return html + '<p class="empty">' + esc(t("noSessions")) + '</p>';
     rows.forEach(function(row){
       var name = row.name || row.id.slice(0, 8);
+      var snapshotNote = row.truncated ? ' · ' + esc(dual("历史不完整，禁止覆盖恢复", "truncated history; restore disabled")) : '';
       html += '<div class="sess-card"><div class="sess-head"><span>' + esc(name) + '</span></div>' +
         '<div class="sess-meta">' + esc(String(row.lines)) + ' ' + esc(t("steps")) +
-        ' · ' + esc(row.lang) + ' · ' + esc(new Date(row.used * 1000).toLocaleString()) + '</div>' +
+        ' · ' + esc(row.lang) + ' · ' + esc(new Date(row.used * 1000).toLocaleString()) +
+        snapshotNote + '</div>' +
         '<div class="sess-acts">' +
         '<button type="button" data-sess-restore="' + esc(row.id) + '">' + esc(t("restoreB")) + '</button>' +
         '<button type="button" data-sess-rename="' + esc(row.id) + '">' + esc(t("renameB")) + '</button>' +
@@ -2299,8 +2335,17 @@
     Array.prototype.forEach.call(panel.querySelectorAll("[data-sess-restore]"), function(el){
       el.addEventListener("click", async function(){
         var r = await api("api/session/" + encodeURIComponent(el.dataset.sessRestore) + "/restore",
-                          {lang: state.lang});
+                          {lang: state.lang, localLines: state.codeLines.length});
         if (r.status === 200 && r.data && r.data.ok){
+          var restored = snapshotHistory(r.data, state.codeLines);
+          if (!restored.ok){
+            var reason = restored.reason === "shorter" ?
+              dual("服务端快照比本地历史短，已拒绝覆盖。", "Server snapshot is shorter than local history; overwrite refused.") :
+              dual("服务端快照历史不完整或超过容量，已拒绝覆盖。", "Server snapshot is truncated or over capacity; overwrite refused.");
+            addLine("fail", reason);
+            return;
+          }
+          if (typeof restored.maxLines === "number") state.snapshotMaxLines = restored.maxLines;
           // 取消旧会话并中止进行中的请求，避免旧解释器泄漏
           // Cancel the old session and abort in-flight requests so no interpreter leaks.
           var oldSid = state.session;
@@ -2327,7 +2372,7 @@
           state.tracePos = 0;
           setManual(false);
           state.session = r.data.session;
-          state.codeLines = Array.isArray(r.data.code) ? r.data.code.slice() : [];
+          state.codeLines = restored.code;
           setConn(true);
           // 后端按快照保存的语言恢复，这里用界面当前语言重新声明
           // The backend restores with the snapshot's saved language; re-assert the UI language.
@@ -2462,8 +2507,15 @@
     if (pendingSession) return pendingSession;
     var p = (async function(){
       var r = await api("api/session", {lang: state.lang});
-      if (r.data && r.data.session){ state.session = r.data.session; setConn(true); }
-      else {
+      if (r.data && r.data.session){
+        state.session = r.data.session;
+        if (typeof r.data.snapshotMaxLines === "number") state.snapshotMaxLines = r.data.snapshotMaxLines;
+        if (state.codeLines.length > localHistoryLimit()){
+          toast(dual("本地历史超过服务端可回放容量，请导出后清空或调整上限。",
+                     "Local history exceeds the server replay capacity; export and clear it or raise the limit."));
+        }
+        setConn(true);
+      } else {
         state.session = null; setConn(false);
         // 会话创建失败时给出提示，不能只让界面显示“未连接”
         // Report a failed session; the connection badge alone is not enough.
@@ -2689,19 +2741,34 @@
     state.expiredSession = null;
     if (old){
       var rr = await api("api/session/" + encodeURIComponent(old) + "/restore",
-                         {lang: state.lang});
+                         {lang: state.lang, localLines: state.codeLines.length});
       if (rr.status === 200 && rr.data && rr.data.ok){
-        state.session = rr.data.session;
-        state.codeLines = Array.isArray(rr.data.code) ? rr.data.code.slice() : [];
-        saveLocal();
-        setConn(true);
-        state.replaying = true;
-        try { await evalLine(":lang " + state.lang, true); }
-        finally { state.replaying = false; }
-        return;
+        var restored = snapshotHistory(rr.data, state.codeLines);
+        if (restored.ok){
+          if (typeof restored.maxLines === "number") state.snapshotMaxLines = restored.maxLines;
+          state.session = rr.data.session;
+          state.codeLines = restored.code;
+          saveLocal();
+          setConn(true);
+          state.replaying = true;
+          try { await evalLine(":lang " + state.lang, true); }
+          finally { state.replaying = false; }
+          return;
+        }
+        toast(dual("服务端快照较短或不完整，已保留本地历史并重新回放。",
+                   "Server snapshot was shorter or incomplete; local history was kept and replayed."));
+      } else if (rr.status === 409 || rr.status === 413) {
+        toast(dual("服务端快照不可用于覆盖，已保留本地历史并重新回放。",
+                   "Server snapshot cannot overwrite local history; local history was kept and replayed."));
       }
     }
     await newSession();
+    if (state.codeLines.length > localHistoryLimit()){
+      state.localHistoryRejected = true;
+      addLine("warn", dual("本地历史超过服务端可回放容量，已保留历史并拒绝回放。",
+                           "Local history exceeds the server replay capacity; history kept and replay refused."));
+      return;
+    }
     state.replaying = true;
     try {
       await evalLine(":lang " + state.lang, true);
@@ -2808,6 +2875,11 @@
     if (/^:edit\b/.test(trimmed)){
       addLine("info", dual("网页端不能启动服务器上的编辑器；请使用命令行 :edit。",
                            "The web app cannot launch a server-side editor; use :edit in the CLI."));
+      return [];
+    }
+    if (opts.record !== false && state.codeLines.length >= localHistoryLimit()){
+      toast(dual("会话历史已达到可回放容量 " + localHistoryLimit() + " 行，请导出后清空或调整服务端上限。",
+                 "Session history reached the " + localHistoryLimit() + "-line replay cap; export and clear it or raise the server limit."));
       return [];
     }
 
@@ -3274,6 +3346,12 @@
     stopPlay();
     try {
       if (!opts.reuse || !state.session) await newSession();
+      if (state.codeLines.length > localHistoryLimit()){
+        state.localHistoryRejected = true;
+        addLine("fail", dual("本地历史超过服务端可回放容量 " + localHistoryLimit() + " 行，已拒绝回放；原本地历史已保留。",
+                             "Local history exceeds the " + localHistoryLimit() + "-line server replay cap; replay refused and local data preserved."));
+        return;
+      }
       addLine("info", t("welcome"), null, null, I18N.welcome.zh, I18N.welcome.en);
       // 设置必须先发送到解释器，回放才会按分享的策略/步数执行
       // Apply settings before replay so shared strategy and limit take effect.
@@ -3312,6 +3390,7 @@
     stopPlay();
     out.innerHTML = "";
     state.codeLines = [];
+    state.localHistoryRejected = false;
     state.selected = null;
     state.envRows = [];
     state.session = null;
@@ -3536,15 +3615,18 @@
     if (s.charAt(0) === ":") return !!SAFE_SHARE_CMDS[s.split(/\s+/)[0].toLowerCase()];
     return true;
   }
-  function safeShareCode(code){
+  function safeCode(code, maxLines){
     if (!Array.isArray(code)) return [];
-    return code.filter(isSafeShareCommand).slice(0, 200);
+    var safe = code.filter(isSafeShareCommand);
+    return safe.length > maxLines ? null : safe;
   }
-
   function applySharePayload(payload){
     if (!payload) return;
     if (Array.isArray(payload.code)) {
-      state.codeLines = safeShareCode(payload.code);
+      var sharedCode = safeCode(payload.code, 200);
+      if (sharedCode === null){
+        toast(dual("分享历史超过 200 行上限，已拒绝载入。", "Share history exceeds the 200-line cap; import refused."));
+      } else state.codeLines = sharedCode;
     }
     if (typeof payload.strategy === "string" && STRATEGY_LABELS[payload.strategy]) {
       $("strategy").value = payload.strategy;
@@ -3602,7 +3684,7 @@
   });
 
   $("export").addEventListener("click", function(){
-    ZenUtil.download("lambda-session-" + fileStamp() + ".lam", state.codeLines.join("\n") + "\n", "text/plain;charset=utf-8");
+    saveBlob("lambda-session-" + fileStamp() + ".lam", state.codeLines.join("\n") + "\n", "text/plain;charset=utf-8");
   });
 
   $("import").addEventListener("click", function(){ $("file").click(); });
@@ -3611,6 +3693,11 @@
     if (!f) return;
     ZenUtil.readText(f, "utf-8").then(async function(text){
       var lines = String(text || "").split(/\r?\n/).filter(function(l){ return l.trim(); });
+      if (lines.length > localHistoryLimit() || state.codeLines.length + lines.length > localHistoryLimit()){
+        toast(dual("导入历史超过可回放容量 " + localHistoryLimit() + " 行，已拒绝导入。",
+                   "Import exceeds the " + localHistoryLimit() + "-line replay capacity; import refused."));
+        return;
+      }
       for (var i = 0; i < lines.length; i++) await exec(lines[i]);
       toast(t("importOk") + " · " + lines.length);
       refreshEnv();
@@ -3798,9 +3885,14 @@
         $("strategy").value = saved.strategy;
       }
       if (Array.isArray(saved.code)) {
-        // 本地存储与分享链接同样要经过命令白名单，避免刷新后回放 :load/:edit/:q
-        // Local storage must pass the same command whitelist as share links.
-        state.codeLines = safeShareCode(saved.code);
+        // 本地存储与分享链接同样要经过命令白名单；超容量时保留原存储并拒绝空状态覆盖。
+        // Local storage uses the share whitelist; oversized data is preserved, not overwritten.
+        var localCode = safeCode(saved.code, MAX_LOCAL_CODE_LINES);
+        if (localCode === null){
+          state.localHistoryRejected = true;
+          toast(dual("本地历史超过 " + MAX_LOCAL_CODE_LINES + " 行容量上限，已拒绝载入；请导出备份或清空。",
+                     "Local history exceeds the " + MAX_LOCAL_CODE_LINES + "-line cap; load refused. Export a backup or clear it."));
+        } else state.codeLines = localCode;
       }
       // 命令历史随界面状态一起持久化，刷新后仍可用上下方向键找回
       // Persist command history with the UI state so Up/Down survives a reload.
@@ -3841,9 +3933,12 @@
         var b64 = hash.slice(5).replace(/-/g,"+").replace(/_/g,"/");
         while (b64.length % 4) b64 += "=";
         var text = decodeURIComponent(escape(atob(b64)));
-        state.codeLines = text.split("\n").filter(function(l){
+        var sharedCode = safeCode(text.split("\n").filter(function(l){
           return l.trim() && isSafeShareCommand(l);
-        }).slice(0, 200);
+        }), 200);
+        if (sharedCode === null){
+          toast(dual("分享历史超过 200 行上限，已拒绝载入。", "Share history exceeds the 200-line cap; import refused."));
+        } else state.codeLines = sharedCode;
       } catch(e){}
     }
 

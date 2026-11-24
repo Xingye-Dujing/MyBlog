@@ -61,6 +61,7 @@ PLUGIN_ASSETS = [
     "omm-share.js",
     "icon.ico",
     "icon-writer.ico",
+    "icon.svg",
 ]
 
 
@@ -107,16 +108,21 @@ def _copy_common(dest: Path) -> None:
 
 
 def copy_zen_styles(dest: Path) -> None:
-    """Stage the shared visual assets: foundation / features / products.
+    """Stage the shared visual assets: entry / foundation / features / products.
 
     _copy_referenced_assets skips paths with a slash, so these trees must be
     copied explicitly. Every product links zen/zen.css; editing them updates
     all products at the next build.
     """
+    target = dest / "zen"
+    target.mkdir(parents=True, exist_ok=True)
+    entry = ROOT / "zen" / "zen.css"
+    if entry.is_file():
+        shutil.copy2(entry, target / entry.name)
     for tree in ("foundation", "features", "products"):
         src = ROOT / "zen" / tree
         if src.is_dir():
-            shutil.copytree(src, dest / "zen" / tree, dirs_exist_ok=True)
+            shutil.copytree(src, target / tree, dirs_exist_ok=True)
 
 
 def copy_shared_lib(dest: Path) -> None:
@@ -333,6 +339,7 @@ def stage_installer(dest: Path, common_assets=()) -> Path:
     for asset in INSTALLER_ASSETS:
         shutil.copy2(ROOT / asset, dest / asset)
     copy_zen_styles(dest)
+    copy_zen_ui(dest)
     copy_shared_lib(dest)
     shutil.copy2(ROOT / "plugin-spec.md", dest / "plugin-spec.md")
     _copy_common(dest)

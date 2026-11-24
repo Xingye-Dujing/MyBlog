@@ -230,6 +230,7 @@
         var current = null
         var searching = false
         var abort = null
+        var searchGeneration = 0
         var startTime = 0
         var lastRender = 0
         var findText = ''
@@ -449,25 +450,38 @@
           $('status-dot').classList.toggle('busy', !!busy)
         }
 
+        function cancelSearchForNavigation() {
+          if (abort) abort.abort()
+          searchGeneration++
+          searching = false
+          abort = null
+          $('searchbar').classList.remove('searching')
+        }
+
         async function runSearch(query, opts) {
           opts = opts || {}
           var q = String(query || '').trim()
           if (!q) { toast('请输入搜索内容'); return }
-          if (searching) { toast('正在搜索中，请先停止当前搜索'); return }
           var key = String(S.settings.apiKey || '').trim()
           if (!key) { toast('请先在设置中配置 DeepSeek API Key'); toggleDropdown('dd-settings'); return }
 
+          cancelSearchForNavigation()
+          var generation = searchGeneration
           var context = Array.isArray(opts.context) ? clone(opts.context) : []
           var reasoning = ''
           searching = true
           startTime = Date.now()
           lastRender = 0
-          current = {
+          var task = {
             query: q, answer: '', sources: [], queries: [], annotations: [], usage: null,
             elapsed: 0, ts: Date.now(), error: '', context: context,
             isFollowUp: context.length > 0, assistantMsg: null, serverToolCalls: null
           }
+          current = task
           $('q').value = q
+          findText = ''
+          $('find-input').value = ''
+          $('follow-bar').classList.add('hidden')
           $('searchbar').classList.add('searching')
           $('statusbar').classList.remove('hidden')
           $('results').classList.remove('hidden')
@@ -493,6 +507,7 @@
           var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }
 
           function handleChunk(obj) {
+            if (generation !== searchGeneration || current !== task) return
             if (obj.error) throw new Error(obj.error.message || JSON.stringify(obj.error))
             var ch = obj.choices && obj.choices[0]
             if (!ch) return
@@ -561,59 +576,75 @@
             }
           }
 
+          var reader = null
           try {
             var res = await fetch(url, {
               method: 'POST', headers: headers, body: JSON.stringify(body), signal: controller.signal
             })
+            if (generation !== searchGeneration || current !== task) return
             if (!res.ok) {
               var tx = await res.text()
+              if (generation !== searchGeneration || current !== task) return
               if (res.status === 400 && /thinking|reasoning/i.test(tx) && body.thinking) {
                 delete body.thinking
                 res = await fetch(url, {
                   method: 'POST', headers: headers, body: JSON.stringify(body), signal: controller.signal
                 })
+                if (generation !== searchGeneration || current !== task) return
                 if (!res.ok) throw new Error(shortErr(await res.text()) || ('HTTP ' + res.status))
               } else {
                 throw new Error(shortErr(tx) || ('HTTP ' + res.status))
               }
             }
             if (!res.body || !res.body.getReader) throw new Error('当前浏览器不支持流式读取')
-            var reader = res.body.getReader()
+            reader = res.body.getReader()
             var decoder = new TextDecoder('utf-8')
             var buffer = ''
             while (true) {
               var rd = await reader.read()
+              if (generation !== searchGeneration || current !== task) break
               if (rd.done) break
               buffer += decoder.decode(rd.value, { stream: true })
               var parts = buffer.split('\n')
               buffer = parts.pop()
               consume(parts.join('\n'))
             }
+            if (generation !== searchGeneration || current !== task) return
             if (buffer.trim()) consume(buffer)
             setStatus('搜索完成', false)
           } catch (e) {
+            if (generation !== searchGeneration || current !== task) return
             if (e && e.name === 'AbortError') {
-              current.error = '已停止本次搜索。'
+              task.error = '已停止本次搜索。'
               setStatus('已停止', false)
             } else {
-              current.error = e && e.message ? e.message : String(e)
+              task.error = e && e.message ? e.message : String(e)
               setStatus('搜索失败', false)
-              toast(current.error)
+              toast(task.error)
             }
           } finally {
+            if (generation !== searchGeneration || current !== task) {
+              if (reader) {
+                try {
+                  var cancelled = reader.cancel()
+                  if (cancelled && typeof cancelled.catch === 'function') cancelled.catch(function () {})
+                } catch (_) {}
+              }
+              return
+            }
             searching = false
             abort = null
-            current.elapsed = Date.now() - startTime
-            if (current.answer || current.sources.length) {
-              var am = { role: 'assistant', content: current.answer }
+            task.elapsed = Date.now() - startTime
+            if (task.answer || task.sources.length) {
+              var am = { role: 'assistant', content: task.answer }
               if (reasoning) am.reasoning_content = reasoning
-              if (current.serverToolCalls) am.server_tool_calls = current.serverToolCalls
-              if (current.annotations && current.annotations.length) am.annotations = current.annotations
-              current.assistantMsg = am
+              if (task.serverToolCalls) am.server_tool_calls = task.serverToolCalls
+              if (task.annotations && task.annotations.length) am.annotations = task.annotations
+              task.assistantMsg = am
             }
             $('searchbar').classList.remove('searching')
             renderCurrent()
-            if (!opts.noHistory && current.query && (current.answer || current.sources.length)) pushHistory(current)
+            if (!opts.noHistory && task.query && (task.answer || task.sources.length)) pushHistory(task)
           }
         }
         function shortErr(tx) {
@@ -958,6 +989,7 @@
           if (!it) return
           var h = S.history[parseInt(it.getAttribute('data-h'), 10)]
           if (!h) return
+          cancelSearchForNavigation()
           current = clone(h)
           current.elapsed = h.elapsed || 0
           $('q').value = h.query
@@ -1031,7 +1063,9 @@
           })
         })
         $('m-new').addEventListener('click', function () {
+          cancelSearchForNavigation()
           current = null; $('q').value = ''; findText = ''; $('find-input').value = ''
+          $('follow-bar').classList.add('hidden')
           renderCurrent(); renderSuggestions(); $('q').focus()
           setStatus('就绪', false); closeDropdowns()
         })
@@ -1083,6 +1117,7 @@
           if (!item) return
           var h = S.history[parseInt(item.getAttribute('data-kb'), 10)]
           if (!h) return
+          cancelSearchForNavigation()
           current = clone(h)
           $('q').value = h.query
           $('results').classList.remove('hidden')

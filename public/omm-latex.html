@@ -129,7 +129,7 @@
             <div class="gutter" id="gutter"></div>
             <div class="editor-code-wrap" id="editor-code-wrap">
               <pre class="editor-highlight" id="editor-highlight" aria-hidden="true"></pre>
-              <textarea id="src" spellcheck="false" wrap="off"></textarea>
+              <textarea id="src" aria-label="TeX 源码" spellcheck="false" wrap="off"></textarea>
             </div>
           </div>
           <div class="editor-foot">
@@ -210,7 +210,6 @@
           lastCompiledTex: '', // 上次已编译的源码，用于避免无意义的重复编译
           compileAfter: false, // 编译进行中又发生改动 → 结束后补编一次
           editVersion: 0, // 每次用户内容变化递增，用于丢弃过期编译结果
-          radius: 0,
           bg: 'body-grid',
           split: 0.46, // 编辑器占比
           flip: false, // true = 编辑器在右
@@ -650,16 +649,6 @@
         ]
 
         /* ===================== 样式调控 ===================== */
-        function applyRadius() {
-          document.documentElement.style.setProperty('--radius', state.radius + 'px')
-        }
-        function changeRadius(delta) {
-          state.radius = clamp(state.radius + delta, 0, 12)
-          applyRadius()
-          LS.set('radius', state.radius)
-          refreshOpenDropdown('view')
-          setStatus('统一圆角 · ' + state.radius + 'px')
-        }
         function applyBg(cls) {
           const bg = cls || 'plain'
           document.body.classList.remove('body-grid', 'body-dots', 'body-cross', 'body-diagonal')
@@ -772,7 +761,6 @@
             ],
             view: [
               ['bgrow', '背景'],
-              ['radiusrow', '圆角'],
               ['sep'],
               ['label', '布局'],
               ['swap', state.flip ? '编辑器移到左侧' : '编辑器移到右侧', true, false],
@@ -809,16 +797,6 @@
                   bgDot('body-dots', '圆点') +
                   bgDot('body-cross', '十字') +
                   bgDot('body-diagonal', '斜线') +
-                  '</div></div>'
-                )
-              if (it[0] === 'radiusrow')
-                return (
-                  '<div class="dd-item-row"><span>圆角</span><div class="settings-control">' +
-                  '<span class="settings-value">' +
-                  state.radius +
-                  'px</span>' +
-                  '<button class="settings-btn" type="button" data-dd="radius:down">−</button>' +
-                  '<button class="settings-btn" type="button" data-dd="radius:up">+</button>' +
                   '</div></div>'
                 )
               if (it[0] === 'dpirow')
@@ -932,7 +910,6 @@
 
         function handleDropdown(id) {
           if (!id) return
-          if (id.indexOf('radius:') === 0) return changeRadius(id.endsWith('up') ? 1 : -1)
           if (id.indexOf('bg:') === 0) {
             const v = id.split(':')[1] || 'plain'
             applyBg(v)
@@ -2036,8 +2013,9 @@
         }
 
         async function waitServerIdle(maxMs = 20000) {
+          // 只有明确未连接时才跳过；apiBase='' 表示同源服务，仍必须查询 /api/status。
+          if (!state.service) return true
           const base = normBase(state.apiBase)
-          if (!base) return true
           const deadline = Date.now() + maxMs
           while (Date.now() < deadline) {
             try {
@@ -2057,8 +2035,9 @@
         }
 
         async function requestServerCancel() {
+          // 同源地址的空 apiBase 不是“未连接”；已连接时必须真正取消并等待 idle。
+          if (!state.service) return true
           const base = normBase(state.apiBase)
-          if (!base) return false
           try {
             const r = await fetchWithTimeout(
               base + '/api/cancel',
@@ -2940,7 +2919,7 @@
           '<p>默认 <b>XeLaTeX</b>，因为它是中文排版的首选（配合 <code>ctex</code> 宏包）。纯英文文档可换 pdfLaTeX，速度略快；LuaLaTeX 内核最新，适合复杂宏包。</p>',
           '<p>“编译两遍”用于生成目录、交叉引用与参考文献编号——LaTeX 需要跑两趟才能把页码填回去。</p>',
           '<h4>布局</h4>',
-          '<p>拖动中间的竖线可以调整两边宽度；“左右调换”把编辑器换到右侧。“视图”菜单里的“背景”与“圆角”会统一作用于整个界面，设置会保存在本地。</p>',
+          '<p>拖动中间的竖线可以调整两边宽度；“左右调换”把编辑器换到右侧。“视图”菜单里的“背景”会统一作用于整个界面，设置会保存在本地。</p>',
           '<h4>错误定位</h4>',
           '<p>编译失败时，右边会列出错误（带 <code>文件:行号</code>），点一下即可跳到源码对应行；左侧行号也会标红。</p>',
           '<h4>快捷键</h4>',
@@ -3339,8 +3318,6 @@
         }
 
         function restorePrefs() {
-          const r = Number(LS.get('radius', '0'))
-          if (Number.isFinite(r)) state.radius = clamp(r, 0, 12)
           const bg = LS.get('bg', 'plain')
           state.bg = ['plain', 'body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg)
             ? bg
@@ -3372,7 +3349,6 @@
           state.pngDpi = [96, 150, 200, 300, 600].includes(dpi) ? dpi : 300
           restoreTemplateCatalog()
           applyMenuPinned()
-          applyRadius()
           applyBg(state.bg)
           applySplit()
           applyEditorStyle()

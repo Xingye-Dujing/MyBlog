@@ -96,7 +96,7 @@
         mime: data.mime,
       });
     }
-    /* 工作台广播的主题/强调色/圆角统一落到 zen 令牌，产品页不再各自维护一套。 */
+    /* 工作台广播的主题/缩放统一落到 zen 令牌；ZEN 界面圆角固定为直角。 */
     function applyZenTheme(data) {
       if (!data) return;
       var root = document.documentElement;
@@ -104,14 +104,14 @@
       root.setAttribute('data-theme', dark ? 'dark' : 'light');
       document.body.classList.toggle('theme-dark', dark);
       var map = {
-        '--zen-radius': data.radius == null ? null : Number(data.radius) + 'px',
+        '--zen-radius': '0px',
         '--zen-fscale': data.scale == null ? null : String(data.scale)
       };
       Object.keys(map).forEach(function (key) {
         if (map[key] == null) return;
         root.style.setProperty(key, String(map[key]));
       });
-      root.style.setProperty('--radius', map['--zen-radius'] || root.style.getPropertyValue('--radius'));
+      root.style.setProperty('--radius', '0px');
     }
 
     window.addEventListener('message', function (event) {

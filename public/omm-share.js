@@ -49,13 +49,17 @@
     }
   }
 
-  var APP = (function () {
+  function detectAppId() {
+    var marked = document.querySelector('[data-omm-app]')
+    var value = marked && marked.getAttribute('data-omm-app')
+    if (value && /^[a-z0-9_-]+$/i.test(value)) return value.toLowerCase()
     var file = (location.pathname.split('/').pop() || '').toLowerCase()
     var match = file.match(/^omm-([a-z0-9_-]+)\.html$/)
     if (match) return match[1]
     if (/\/$/.test(location.pathname) && /mdforge/i.test(document.title)) return 'mdforge'
     return ''
-  })()
+  }
+  var APP = detectAppId()
 
   var state = {
     enabled: false,
@@ -237,7 +241,6 @@
     var opts = options || {}
     var body = {
       to: appId(opts.to),
-      channel: opts.channel || '',
       format: opts.format || '',
       title: opts.title || '',
       artifact_id: opts.artifactId || '',
@@ -254,7 +257,6 @@
     var title = (meta && (meta.title || meta.name)) || '英语笔记'
     send({
       to: target,
-      channel: 'notes.english',
       format: 'omm.bridge',
       title: title,
       payload: payload,
@@ -287,7 +289,6 @@
     var name = target.name || appName(target.app)
     return send({
       to: target.app,
-      channel: item.channel,
       artifactId: item.id,
       format: item.format,
       title: item.title,
@@ -347,19 +348,15 @@
     }
   }
 
-  function emit(artifact) {
-    state.handlers.slice().forEach(function (handler) {
-      try {
-        handler(artifact)
-      } catch (e) {
-        if (window.console) console.error(e)
-      }
-    })
+  async function emit(artifact) {
+    await Promise.all(state.handlers.slice().map(function (handler) {
+      return Promise.resolve().then(function () { return handler(artifact) })
+    }))
     window.dispatchEvent(new CustomEvent('omm:artifact', { detail: artifact }))
   }
 
   async function deliverMessage(message) {
-    if (!message) return false
+    if (!message || !state.handlers.length) return false
     if (message.artifact) {
       var item = message.artifact
       if (item.kind === 'file') {
@@ -374,31 +371,24 @@
           return true
         } catch (err) {
           state.toast('共享文件读取失败：' + (err && err.message ? err.message : err), 'error')
-          return true
+          return false
         }
       }
-      if (!state.handlers.length) return false
       try {
         var data = await apiGet('/item', { id: item.id })
-        var record = data.item || {}
+        if (!data || !data.item) throw new Error('共享记录不存在')
+        var record = data.item
         record.from = message.from
         record.message_id = message.id
         record.created_at = record.created_at || message.created_at
-        emit(record)
+        await emit(record)
         notifyReceived(message, record)
       } catch (e) {
-        emit({
-          id: message.id,
-          from: message.from,
-          format: message.format || item.format,
-          title: item.title,
-          payload: null,
-          created_at: message.created_at,
-        })
+        state.toast('共享记录读取或处理失败：' + (e && e.message ? e.message : e), 'error')
+        return false
       }
       return true
     }
-    if (message.format === 'omm.bridge' && !state.handlers.length) return false
     var simple = {
       id: message.id,
       from: message.from,
@@ -409,9 +399,14 @@
       created_at: message.created_at,
       channel: message.channel,
     }
-    emit(simple)
-    notifyReceived(message, simple)
-    return true
+    try {
+      await emit(simple)
+      notifyReceived(message, simple)
+      return true
+    } catch (e) {
+      state.toast('共享内容处理失败：' + (e && e.message ? e.message : e), 'error')
+      return false
+    }
   }
 
   async function pollInbox() {
@@ -863,7 +858,6 @@
       chain = chain.then(function () {
         return send({
           to: targetApp,
-          channel: item.channel,
           artifactId: item.id,
           format: item.format,
           title: item.title,
@@ -1063,7 +1057,7 @@
   }
 
   window.OMMShare = {
-    app: APP,
+    get app() { return APP },
     get enabled() { return state.enabled },
     get space() { return state.space },
     get listening() { return state.handlers.length },
@@ -1082,6 +1076,8 @@
 
   installBridgeTrap()
   document.addEventListener('DOMContentLoaded', function () {
+    APP = detectAppId() || APP
+    state.app = APP
     patchBridge()
     patchLinks()
   })

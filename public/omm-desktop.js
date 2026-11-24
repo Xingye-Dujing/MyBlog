@@ -34,13 +34,19 @@
 
   /* ------------------------------------------------------------------ env */
 
-  var ENV = (function () {
+  function detectAppId() {
+    var marked = document.querySelector('[data-omm-app]')
+    var value = marked && marked.getAttribute('data-omm-app')
+    if (value && /^[a-z0-9_-]+$/i.test(value)) return value.toLowerCase()
     var file = (location.pathname.split('/').pop() || '').toLowerCase()
     var match = file.match(/^omm-([a-z0-9_-]+)\.html$/)
-    var appId = match ? match[1] : ''
-    if (!appId && /\/$/.test(location.pathname) && /mdforge/i.test(document.title)) {
-      appId = 'mdforge'
-    }
+    if (match) return match[1]
+    if (/\/$/.test(location.pathname) && /mdforge/i.test(document.title)) return 'mdforge'
+    return ''
+  }
+
+  var ENV = (function () {
+    var appId = detectAppId()
     var embedded = false
     var hubOrigin = ''
     try {
@@ -345,7 +351,8 @@
           try {
             upgrade(req.result, event)
           } catch (e) {
-            /* the records below may still restore */
+            try { req.transaction.abort() } catch (abortError) { /* already aborted */ }
+            reject(e)
           }
         }
       }
@@ -383,53 +390,54 @@
 
   async function captureDatabase(name) {
     var db = await openDatabase(name)
-    var stores = []
-    var names = Array.prototype.slice.call(db.objectStoreNames)
-    if (!names.length) {
+    var version = db.version
+    try {
+      var stores = []
+      var names = Array.prototype.slice.call(db.objectStoreNames)
+      if (!names.length) return { name: name, version: version, stores: [] }
+      var tx = db.transaction(names, 'readonly')
+      for (var i = 0; i < names.length; i++) {
+        var storeName = names[i]
+        var store = tx.objectStore(storeName)
+        var info = {
+          name: storeName,
+          keyPath: store.keyPath,
+          autoIncrement: !!store.autoIncrement,
+          indexes: [],
+          records: [],
+        }
+        var idxNames = Array.prototype.slice.call(store.indexNames)
+        idxNames.forEach(function (idxName) {
+          var idx = store.index(idxName)
+          info.indexes.push({
+            name: idx.name,
+            keyPath: idx.keyPath,
+            unique: !!idx.unique,
+            multiEntry: !!idx.multiEntry,
+          })
+        })
+        var keys = await new Promise(function (resolve, reject) {
+          var r = store.getAllKeys()
+          r.onsuccess = function () { resolve(r.result || []) }
+          r.onerror = function () { reject(r.error) }
+        })
+        var values = await new Promise(function (resolve, reject) {
+          var r = store.getAll()
+          r.onsuccess = function () { resolve(r.result || []) }
+          r.onerror = function () { reject(r.error) }
+        })
+        for (var n = 0; n < values.length; n++) {
+          info.records.push({
+            key: await encodeValue(keys[n]),
+            value: await encodeValue(values[n]),
+          })
+        }
+        stores.push(info)
+      }
+      return { name: name, version: version, stores: stores }
+    } finally {
       db.close()
-      return { name: name, version: db.version, stores: [] }
     }
-    var tx = db.transaction(names, 'readonly')
-    for (var i = 0; i < names.length; i++) {
-      var storeName = names[i]
-      var store = tx.objectStore(storeName)
-      var info = {
-        name: storeName,
-        keyPath: store.keyPath,
-        autoIncrement: !!store.autoIncrement,
-        indexes: [],
-        records: [],
-      }
-      var idxNames = Array.prototype.slice.call(store.indexNames)
-      idxNames.forEach(function (idxName) {
-        var idx = store.index(idxName)
-        info.indexes.push({
-          name: idx.name,
-          keyPath: idx.keyPath,
-          unique: !!idx.unique,
-          multiEntry: !!idx.multiEntry,
-        })
-      })
-      var keys = await new Promise(function (resolve, reject) {
-        var r = store.getAllKeys()
-        r.onsuccess = function () { resolve(r.result || []) }
-        r.onerror = function () { reject(r.error) }
-      })
-      var values = await new Promise(function (resolve, reject) {
-        var r = store.getAll()
-        r.onsuccess = function () { resolve(r.result || []) }
-        r.onerror = function () { reject(r.error) }
-      })
-      for (var n = 0; n < values.length; n++) {
-        info.records.push({
-          key: await encodeValue(keys[n]),
-          value: await encodeValue(values[n]),
-        })
-      }
-      stores.push(info)
-    }
-    db.close()
-    return { name: name, version: db.version, stores: stores }
   }
 
   async function captureState(label) {
@@ -478,81 +486,218 @@
     return snapshot
   }
 
+  function validateSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new Error('快照内容无效')
+    }
+    function storageMap(value, label) {
+      if (value === undefined || value === null) return {}
+      if (typeof value !== 'object' || Array.isArray(value)) throw new Error(label + '格式无效')
+      return value
+    }
+    function validKeyPath(value) {
+      return value === null || value === undefined || typeof value === 'string' ||
+        (Array.isArray(value) && value.every(function (part) { return typeof part === 'string' }))
+    }
+    var localStorageSnapshot = storageMap(snapshot.localStorage, 'localStorage')
+    var sessionStorageSnapshot = storageMap(snapshot.sessionStorage, 'sessionStorage')
+    var databases = snapshot.indexedDB === undefined || snapshot.indexedDB === null
+      ? [] : snapshot.indexedDB
+    if (!Array.isArray(databases)) throw new Error('IndexedDB 快照格式无效')
+    var databaseNames = Object.create(null)
+    databases.forEach(function (dbInfo) {
+      if (!dbInfo || typeof dbInfo !== 'object' || typeof dbInfo.name !== 'string' ||
+          !dbInfo.name || databaseNames[dbInfo.name]) throw new Error('数据库快照格式无效')
+      databaseNames[dbInfo.name] = true
+      if (dbInfo.version !== undefined && (!Number.isInteger(dbInfo.version) || dbInfo.version < 1)) {
+        throw new Error('数据库版本无效: ' + dbInfo.name)
+      }
+      if (!Array.isArray(dbInfo.stores)) throw new Error('数据库存储仓格式无效: ' + dbInfo.name)
+      var storeNames = Object.create(null)
+      dbInfo.stores.forEach(function (storeInfo) {
+        if (!storeInfo || typeof storeInfo !== 'object' || typeof storeInfo.name !== 'string' ||
+            !storeInfo.name || storeNames[storeInfo.name] || !validKeyPath(storeInfo.keyPath)) {
+          throw new Error('存储仓快照格式无效: ' + dbInfo.name)
+        }
+        storeNames[storeInfo.name] = true
+        if (!Array.isArray(storeInfo.records)) throw new Error('存储仓记录格式无效: ' + storeInfo.name)
+        if (storeInfo.indexes !== undefined && !Array.isArray(storeInfo.indexes)) {
+          throw new Error('存储仓索引格式无效: ' + storeInfo.name)
+        }
+        ;(storeInfo.indexes || []).forEach(function (idx) {
+          if (!idx || typeof idx.name !== 'string' || !idx.name || !validKeyPath(idx.keyPath)) {
+            throw new Error('存储仓索引格式无效: ' + storeInfo.name)
+          }
+        })
+        storeInfo.records.forEach(function (record) {
+          if (!record || typeof record !== 'object' || !('key' in record) || !('value' in record)) {
+            throw new Error('存储仓记录格式无效: ' + storeInfo.name)
+          }
+          // Decode before touching live storage so malformed base64 / dates fail early.
+          decodeValue(record.key)
+          decodeValue(record.value)
+        })
+      })
+    })
+    return {
+      localStorage: localStorageSnapshot,
+      sessionStorage: sessionStorageSnapshot,
+      indexedDB: databases,
+    }
+  }
+
+  async function captureRollbackState(target) {
+    var backup = { localStorage: {}, sessionStorage: {}, indexedDB: [] }
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i)
+      backup.localStorage[key] = localStorage.getItem(key)
+    }
+    for (var s = 0; s < sessionStorage.length; s++) {
+      var skey = sessionStorage.key(s)
+      backup.sessionStorage[skey] = sessionStorage.getItem(skey)
+    }
+    if (!window.indexedDB) {
+      if (target.indexedDB.length) throw new Error('当前环境不支持 IndexedDB，无法安全恢复')
+      return backup
+    }
+    if (typeof indexedDB.databases !== 'function') {
+      if (target.indexedDB.length) throw new Error('无法枚举 IndexedDB，无法安全恢复')
+      return backup
+    }
+    var databases = await indexedDB.databases()
+    for (var d = 0; d < databases.length; d++) {
+      var info = databases[d]
+      if (info && info.name) backup.indexedDB.push(await captureDatabase(info.name))
+    }
+    return backup
+  }
+
+  function replaceStorage(state) {
+    var errors = []
+    try {
+      Object.keys(localStorage).forEach(function (key) { localStorage.removeItem(key) })
+      Object.keys(state.localStorage || {}).forEach(function (key) {
+        localStorage.setItem(key, String(state.localStorage[key]))
+      })
+    } catch (e) { errors.push(e) }
+    try {
+      Object.keys(sessionStorage).forEach(function (key) { sessionStorage.removeItem(key) })
+      Object.keys(state.sessionStorage || {}).forEach(function (key) {
+        sessionStorage.setItem(key, String(state.sessionStorage[key]))
+      })
+    } catch (e) { errors.push(e) }
+    if (errors.length) throw errors[0]
+  }
+
+  function deleteDatabase(name) {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.deleteDatabase(name)
+      req.onsuccess = function () { resolve() }
+      req.onerror = function () { reject(req.error || new Error('删除数据库失败: ' + name)) }
+      req.onblocked = function () { reject(new Error('删除数据库被阻塞: ' + name)) }
+    })
+  }
+
+  async function restoreDatabases(infos) {
+    for (var i = 0; i < infos.length; i++) await restoreDatabase(infos[i])
+  }
+
+  async function rollbackState(backup, targetNames) {
+    var errors = []
+    try { await restoreDatabases(backup.indexedDB) } catch (e) { errors.push(e) }
+    var backedUp = Object.create(null)
+    backup.indexedDB.forEach(function (info) { backedUp[info.name] = true })
+    for (var i = 0; i < targetNames.length; i++) {
+      if (backedUp[targetNames[i]]) continue
+      try { await deleteDatabase(targetNames[i]) } catch (e) { errors.push(e) }
+    }
+    try { replaceStorage(backup) } catch (e) { errors.push(e) }
+    if (errors.length) {
+      throw new Error('回滚失败: ' + errors.map(function (e) {
+        return e && e.message ? e.message : String(e)
+      }).join(' | '))
+    }
+  }
+
   async function restoreDatabase(info) {
     if (!info || !info.name) return
     var db = null
     try {
-      db = await openDatabase(info.name)
-    } catch (e) {
-      db = await openDatabase(info.name, info.version || 1, function (up) {
-        createSchema(up, info)
+      try {
+        db = await openDatabase(info.name)
+      } catch (e) {
+        db = await openDatabase(info.name, info.version || 1, function (up) {
+          createSchema(up, info)
+        })
+      }
+      var missing = (info.stores || []).filter(function (storeInfo) {
+        return !db.objectStoreNames.contains(storeInfo.name)
       })
-    }
-    var missing = (info.stores || []).filter(function (storeInfo) {
-      return !db.objectStoreNames.contains(storeInfo.name)
-    })
-    if (missing.length) {
-      var nextVersion = (db.version || 1) + 1
-      db.close()
-      db = await openDatabase(info.name, nextVersion, function (up) {
-        createSchema(up, info)
-      })
-    }
-    for (var i = 0; i < (info.stores || []).length; i++) {
-      var storeInfo = info.stores[i]
-      if (!db.objectStoreNames.contains(storeInfo.name)) continue
-      await new Promise(function (resolve, reject) {
-        var tx = db.transaction(storeInfo.name, 'readwrite')
-        var store = tx.objectStore(storeInfo.name)
-        var r = store.clear()
-        r.onerror = function () { reject(r.error) }
-        r.onsuccess = function () {
-          var records = storeInfo.records || []
-          for (var n = 0; n < records.length; n++) {
-            var record = records[n]
-            var value = decodeValue(record.value)
-            if (storeInfo.keyPath === null || storeInfo.keyPath === undefined) {
-              store.put(value, decodeValue(record.key))
-            } else {
-              store.put(value)
+      if (missing.length) {
+        var nextVersion = (db.version || 1) + 1
+        db.close()
+        db = await openDatabase(info.name, nextVersion, function (up) {
+          createSchema(up, info)
+        })
+      }
+      for (var i = 0; i < (info.stores || []).length; i++) {
+        var storeInfo = info.stores[i]
+        if (!db.objectStoreNames.contains(storeInfo.name)) continue
+        await new Promise(function (resolve, reject) {
+          var tx = db.transaction(storeInfo.name, 'readwrite')
+          var store = tx.objectStore(storeInfo.name)
+          if (JSON.stringify(store.keyPath === undefined ? null : store.keyPath) !==
+              JSON.stringify(storeInfo.keyPath === undefined ? null : storeInfo.keyPath)) {
+            tx.abort()
+            reject(new Error('存储仓主键不匹配: ' + storeInfo.name))
+            return
+          }
+          var r = store.clear()
+          r.onerror = function () { reject(r.error) }
+          r.onsuccess = function () {
+            try {
+              var records = storeInfo.records || []
+              for (var n = 0; n < records.length; n++) {
+                var record = records[n]
+                var value = decodeValue(record.value)
+                if (storeInfo.keyPath === null || storeInfo.keyPath === undefined) {
+                  store.put(value, decodeValue(record.key))
+                } else {
+                  store.put(value)
+                }
+              }
+            } catch (e) {
+              try { tx.abort() } catch (abortError) { /* already aborted */ }
+              reject(e)
             }
           }
-        }
-        tx.oncomplete = function () { resolve() }
-        tx.onerror = function () { reject(tx.error) }
-        tx.onabort = function () { reject(tx.error || new Error('恢复事务中止')) }
-      })
+          tx.oncomplete = function () { resolve() }
+          tx.onerror = function () { reject(tx.error) }
+          tx.onabort = function () { reject(tx.error || new Error('恢复事务中止')) }
+        })
+      }
+    } finally {
+      if (db) db.close()
     }
-    db.close()
   }
 
   async function applyState(snapshot) {
-    if (!snapshot || typeof snapshot !== 'object') throw new Error('快照内容无效')
-    var ls = snapshot.localStorage || {}
+    var target = validateSnapshot(snapshot)
+    var backup = await captureRollbackState(target)
+    var targetNames = target.indexedDB.map(function (info) { return info.name })
     try {
-      Object.keys(localStorage).forEach(function (key) {
-        localStorage.removeItem(key)
-      })
-      Object.keys(ls).forEach(function (key) {
-        localStorage.setItem(key, String(ls[key]))
-      })
+      // IndexedDB is restored first. localStorage/sessionStorage commit only after
+      // every database transaction succeeds, so a failed DB never leaves a visibly
+      // half-restored product.
+      await restoreDatabases(target.indexedDB)
+      replaceStorage(target)
     } catch (e) {
-      throw new Error('写入本地数据失败: ' + (e && e.message ? e.message : e))
-    }
-    var ss = snapshot.sessionStorage || {}
-    try {
-      Object.keys(sessionStorage).forEach(function (key) {
-        sessionStorage.removeItem(key)
-      })
-      Object.keys(ss).forEach(function (key) {
-        sessionStorage.setItem(key, String(ss[key]))
-      })
-    } catch (e) {
-      /* session storage is best effort */
-    }
-    var dbs = snapshot.indexedDB || []
-    for (var i = 0; i < dbs.length; i++) {
-      await restoreDatabase(dbs[i])
+      try {
+        await rollbackState(backup, targetNames)
+      } catch (rollbackError) {
+        throw new Error('恢复失败，且' + (rollbackError && rollbackError.message ? rollbackError.message : rollbackError))
+      }
+      throw new Error('恢复失败，已回滚到恢复前状态: ' + (e && e.message ? e.message : e))
     }
     location.reload()
   }
@@ -2571,6 +2716,7 @@
   /* ------------------------------------------------------------------ boot */
 
   function boot() {
+    ENV.appId = detectAppId() || ENV.appId
     apiGet('/status').then(function (data) {
       if (!data || !data.desktop) return
       applyConfig(data)
@@ -2591,7 +2737,7 @@
   }
 
   window.OMMDesktop = {
-    app: ENV.appId,
+    get app() { return ENV.appId },
     get enabled() { return model.enabled },
     saveBlob: saveBlob,
     saveText: saveText,

@@ -39,6 +39,11 @@ from urllib.parse import parse_qs, urlsplit
 import omm_fs
 
 try:
+    from plugin_specs import PLUGIN_BY_ID
+except Exception:  # pragma: no cover - staged/minimal installs fail closed
+    PLUGIN_BY_ID = {}
+
+try:
     from plugin_manager import app_data_base
 except Exception:  # pragma: no cover - keeps the module importable by itself
 
@@ -244,6 +249,72 @@ APP_NAMES = {
     "hub": "静书房",
 }
 
+# Desktop capabilities are granted by the server, never accepted from a page or
+# plugin manifest. Imported/unknown static plugins get only the harmless status
+# probe used to detect whether the desktop bridge exists.
+IMPORTED_FS_CAPABILITIES = frozenset({"status"})
+_PRODUCT_FS_CAPABILITIES = frozenset(
+    {
+        "status",
+        "config",
+        "save",
+        "snapshot",
+        "snapshots",
+        "snapshot/rename",
+        "snapshot/delete",
+        "archive",
+        "shared",
+        "file",
+        "ai-config:read",
+        "appearance",
+        "open",
+    }
+)
+FS_CAPABILITIES_BY_APP: Dict[str, frozenset[str]] = {
+    app: _PRODUCT_FS_CAPABILITIES for app in PLUGIN_BY_ID
+}
+FS_CAPABILITIES_BY_APP["redact"] = _PRODUCT_FS_CAPABILITIES | frozenset(
+    {"docx2pdf", "docx2pdf/config", "pdf/tool"}
+)
+FS_CAPABILITIES_BY_APP["hub"] = frozenset(
+    set(_PRODUCT_FS_CAPABILITIES)
+    | {
+        "ai-config:write",
+        "docx2pdf",
+        "docx2pdf/config",
+        "pdf/tool",
+    }
+)
+
+
+def capabilities_for_app(app: str, trusted_hub: bool = False) -> frozenset[str]:
+    """Resolve an app's desktop capabilities from the trusted built-in registry."""
+    app_id = clean_app_id(app)
+    if app_id == "hub":
+        return FS_CAPABILITIES_BY_APP["hub"] if trusted_hub else IMPORTED_FS_CAPABILITIES
+    return FS_CAPABILITIES_BY_APP.get(app_id, IMPORTED_FS_CAPABILITIES)
+
+
+_FS_ROUTE_CAPABILITIES = {
+    "/__omm/fs/status": "status",
+    "/__omm/fs/config": "config",
+    "/__omm/fs/shared": "shared",
+    "/__omm/fs/ai-config": "ai-config:read",
+    "/__omm/fs/search": "archive",
+    "/__omm/fs/archive": "archive",
+    "/__omm/fs/snapshots": "snapshots",
+    "/__omm/fs/snapshot": "snapshot",
+    "/__omm/fs/appearance": "appearance",
+    "/__omm/fs/docx2pdf": "docx2pdf",
+    "/__omm/fs/pdf/tool": "pdf/tool",
+    "/__omm/fs/file": "file",
+    "/__omm/fs/save": "save",
+    "/__omm/fs/snapshot/rename": "snapshot/rename",
+    "/__omm/fs/snapshot/delete": "snapshot/delete",
+    "/__omm/fs/docx2pdf/config": "docx2pdf/config",
+    "/__omm/fs/open": "open",
+}
+
 _KIND_BY_EXT = {
     ".csv": "table",
     ".tsv": "table",
@@ -376,6 +447,15 @@ def _normalize_ai(raw: Any) -> Dict[str, Any]:
     if not cfg["apiModel"]:
         cfg["apiModel"] = _empty_ai()["apiModel"]
     return cfg
+
+
+def _public_ai(ai: Dict[str, Any]) -> Dict[str, Any]:
+    """Desktop pages may edit AI settings but can never read the stored key."""
+    public = {key: value for key, value in ai.items() if key != "apiKey"}
+    has_key = bool(ai.get("apiKey"))
+    public["configured"] = has_key
+    public["hasStoredKey"] = has_key
+    return public
 
 
 def _empty_config() -> Dict[str, Any]:
@@ -954,7 +1034,7 @@ def write_snapshot(
     folder.mkdir(parents=True, exist_ok=True)
     payload = dict(state)
     payload.setdefault("version", 1)
-    payload.setdefault("app", app)
+    payload["app"] = app
     payload.setdefault("taken_at", now_iso())
     # The explicit label wins over whatever the page embedded in its state:
     # the file name is derived from it, and both must agree.
@@ -1280,7 +1360,7 @@ def list_shared() -> Dict[str, Any]:
     resources.sort(key=lambda item: str(item.get("updated") or ""), reverse=True)
     return {
         "ok": True,
-        "config": cfg,
+        "config": redact_config_secrets(cfg),
         "resources": resources,
         "apps": [
             {
@@ -1877,17 +1957,47 @@ def _error(status: int, message: str) -> Tuple[int, str, bytes]:
     return _json(status, {"ok": False, "error": message})
 
 
-def _client_app(default_app: str, query: Dict[str, list[str]]) -> str:
-    raw = (query.get("app") or [""])[0]
-    return clean_app_id(raw or default_app or "app")
+def _client_app(
+    default_app: str,
+    query: Dict[str, list[str]],
+    trusted_hub: bool = False,
+) -> str:
+    """Resolve caller identity, allowing only a trusted Hub to scope a product."""
+    app = clean_app_id(default_app or "app")
+    if trusted_hub and app == "hub":
+        return clean_app_id((query.get("app") or [""])[0] or app)
+    return app
+
+
+def _route_capability(path: str, method: str) -> str:
+    capability = _FS_ROUTE_CAPABILITIES.get(path, "")
+    if path == "/__omm/fs/ai-config" and method == "POST":
+        return "ai-config:write"
+    return capability
+
+
+def _resolve_capabilities(
+    default_app: str, capabilities: Optional[Iterable[str]]
+) -> frozenset[str]:
+    if capabilities is not None:
+        return frozenset(str(item) for item in capabilities)
+    return capabilities_for_app(default_app)
 
 
 def handle_get(
-    path: str, query: Dict[str, list[str]], default_app: str = "app"
+    path: str,
+    query: Dict[str, list[str]],
+    default_app: str = "app",
+    capabilities: Optional[Iterable[str]] = None,
+    trusted_hub: bool = False,
 ) -> Tuple[int, str, bytes]:
     if not desktop_enabled():
         return _error(404, "desktop API is not enabled")
-    app = _client_app(default_app, query)
+    app = _client_app(default_app, query, trusted_hub=trusted_hub)
+    granted = _resolve_capabilities(app, capabilities)
+    required = _route_capability(path, "GET")
+    if required and required not in granted:
+        return _error(403, "当前插件没有此桌面能力")
     if path == "/__omm/fs/status":
         cfg = load_config()
         return _json(
@@ -1897,6 +2007,7 @@ def handle_get(
                 "desktop": True,
                 "api": API_VERSION,
                 "app": app,
+                "capabilities": sorted(granted),
                 "save_path": str(resolve_save_dir(app, cfg)),
                 "mode": resolve_mode(app, cfg),
                 "auto_snapshot": resolve_auto_snapshot(app, cfg),
@@ -1911,7 +2022,7 @@ def handle_get(
             {
                 "ok": True,
                 "app": app,
-                "config": cfg,
+                "config": redact_config_secrets(cfg),
                 "save_path": str(resolve_save_dir(app, cfg)),
                 "mode": resolve_mode(app, cfg),
                 "auto_snapshot": resolve_auto_snapshot(app, cfg),
@@ -1923,10 +2034,9 @@ def handle_get(
     if path == "/__omm/fs/shared":
         return _json(200, list_shared())
     if path == "/__omm/fs/ai-config":
-        cfg = load_config()
-        ai = _normalize_ai(cfg.get("ai"))
-        # 只有密钥存在时才回传，避免页面上到处暴露空字段。
-        return _json(200, {"ok": True, "ai": ai, "configured": bool(ai.get("apiKey"))})
+        ai = _normalize_ai(load_config().get("ai"))
+        return _json(200, {"ok": True, "ai": _public_ai(ai), "configured": bool(ai.get("apiKey")),
+                           "hasStoredKey": bool(ai.get("apiKey"))})
     if path == "/__omm/fs/search":
         all_apps = (query.get("all") or ["1"])[0] != "0"
         raw_query = (query.get("q") or [""])[0].strip()
@@ -1996,28 +2106,48 @@ def handle_post(
     query: Dict[str, list[str]],
     body: bytes,
     default_app: str = "app",
+    capabilities: Optional[Iterable[str]] = None,
+    trusted_hub: bool = False,
 ) -> Tuple[int, str, bytes]:
     if not desktop_enabled():
         return _error(404, "desktop API is not enabled")
-    app = _client_app(default_app, query)
+    app = _client_app(default_app, query, trusted_hub=trusted_hub)
+    granted = _resolve_capabilities(app, capabilities)
+    required = _route_capability(path, "POST")
+    if required and required not in granted:
+        return _error(403, "当前插件没有此桌面能力")
     try:
         if len(body) > MAX_BODY:
             return _error(413, "请求体过大")
         payload = json.loads(body.decode("utf-8")) if body else {}
         if not isinstance(payload, dict):
             raise ValueError("请求格式无效")
-        payload_app = clean_app_id(payload.get("app") or app)
+        caller_app = clean_app_id(default_app or "app")
+        payload_app = (
+            clean_app_id(payload.get("app") or app)
+            if trusted_hub and caller_app == "hub"
+            else app
+        )
         if path == "/__omm/fs/config":
-            return _json(200, _update_config(payload_app, payload))
+            if caller_app != "hub" and str(payload.get("scope") or "app").lower() == "all":
+                return _error(403, "只有工作台可以修改全部产品的保存设置")
+            result = _update_config(payload_app, payload)
+            result["config"] = redact_config_secrets(result.get("config") or {})
+            return _json(200, result)
         if path == "/__omm/fs/ai-config":
             ai_raw = payload.get("ai") if isinstance(payload.get("ai"), dict) else payload
-            ai = _normalize_ai(ai_raw)
+            incoming = ai_raw if isinstance(ai_raw, dict) else {}
+            ai = _normalize_ai(incoming)
             with FileLock(lock_path()):
                 cfg = load_config()
+                if "apiKey" not in incoming:
+                    ai["apiKey"] = _normalize_ai(cfg.get("ai")).get("apiKey", "")
                 cfg["ai"] = ai
                 cfg["updated"] = now_iso()
                 _write_config(cfg)
-            return _json(200, {"ok": True, "ai": ai, "configured": bool(ai.get("apiKey"))})
+            public = _public_ai(ai)
+            return _json(200, {"ok": True, "ai": public, "configured": public["configured"],
+                               "hasStoredKey": public["hasStoredKey"]})
         if path == "/__omm/fs/save":
             raw = str(payload.get("data") or "")
             if not raw:

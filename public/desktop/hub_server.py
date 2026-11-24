@@ -23,6 +23,8 @@ import functools
 import importlib.util
 import json
 import os
+import re
+import secrets
 import sys
 import threading
 import time
@@ -54,6 +56,30 @@ HUB_HTML = "omm-hub.html"
 MAX_IMPORT_BYTES = 220 * 1024 * 1024
 # 全量备份包含文档、快照与共享文件，体积远大于设置备份。
 MAX_FULL_BACKUP_BYTES = 800 * 1024 * 1024
+HUB_CREDENTIAL_HEADER = "X-OMM-Hub-Capability"
+HUB_CREDENTIAL_GET = frozenset(
+    {
+        "/api/backup",
+        "/api/full-backup",
+        "/api/storage/open",
+        "/api/window",
+        "/api/detach",
+    }
+)
+HUB_CREDENTIAL_POST = frozenset(
+    {
+        "/api/restore",
+        "/api/full-restore",
+        "/api/plugins/install",
+        "/api/plugins/import",
+        "/api/settings/plugin-dir",
+        "/api/plugins/remove",
+        "/api/cloud/upload",
+        "/api/cloud/download",
+        "/api/plugins/rollback",
+        "/__omm/update/apply",
+    }
+)
 
 
 class _QuietHTTPServer(ThreadingHTTPServer):
@@ -93,11 +119,52 @@ class HubServer:
         self.servers: dict[str, dict] = {}
         self.ports_path = self.user_plugin_root / "ports.json"
         self.ports = self._load_ports()
+        self.capability_token = secrets.token_urlsafe(32)
+        self._capability_registry_path = self.user_plugin_root / "capabilities.json"
+        self._trusted_plugins = self._load_trusted_plugins()
         self._catalog = None
         self._catalog_url = ""
         self._catalog_at = 0.0
         self._storage_cache = (0.0, None)
         self._sync_share()
+
+    def _load_trusted_plugins(self) -> set[str]:
+        try:
+            raw = json.loads(self._capability_registry_path.read_text(encoding="utf-8-sig"))
+            values = raw.get("trusted") if isinstance(raw, dict) else []
+            return {
+                str(item)
+                for item in values or []
+                if isinstance(item, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,40}", item)
+            }
+        except Exception:
+            return set()
+
+    def _save_trusted_plugins(self) -> None:
+        try:
+            self._capability_registry_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._capability_registry_path.with_suffix(".tmp")
+            tmp.write_text(
+                json.dumps({"trusted": sorted(self._trusted_plugins)}, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(tmp, self._capability_registry_path)
+        except Exception:
+            pass
+
+    def _set_plugin_trust(self, plugin_id: str, trusted: bool) -> None:
+        if trusted:
+            self._trusted_plugins.add(plugin_id)
+        else:
+            self._trusted_plugins.discard(plugin_id)
+        self._save_trusted_plugins()
+
+    def _plugin_capabilities(self, plugin: dict):
+        import omm_shared
+
+        if plugin.get("source") == "bundled" or plugin.get("id") in self._trusted_plugins:
+            return omm_shared.capabilities_for_app(plugin.get("id") or "")
+        return omm_shared.IMPORTED_FS_CAPABILITIES
 
     def _sync_share(self) -> None:
         """Seed the share policy from the installed plugin manifests.
@@ -150,9 +217,14 @@ class HubServer:
             self._save_ports()
 
     # ------------------------------------------------------------ servers
-    def _start_static(self, port: int, directory: Path, default_app: str = ""):
+    def _start_static(
+        self, port: int, directory: Path, default_app: str = "", capabilities=None
+    ):
         handler = functools.partial(
-            ShellHandler, directory=str(directory), default_app=default_app
+            ShellHandler,
+            directory=str(directory),
+            default_app=default_app,
+            capabilities=capabilities,
         )
         server = _QuietHTTPServer(("127.0.0.1", port), handler)
         _serve(server)
@@ -320,7 +392,12 @@ class HubServer:
                     return self._start_table(port, plugin_dir)
                 if runtime == "lambda":
                     return self._start_lambda(port, plugin_dir)
-                return self._start_static(port, plugin_dir, default_app=plugin_id)
+                return self._start_static(
+                    port,
+                    plugin_dir,
+                    default_app=plugin_id,
+                    capabilities=self._plugin_capabilities(plugin),
+                )
 
             try:
                 server = start(wanted)
@@ -393,6 +470,8 @@ class HubServer:
             self._sync_share()
             self.ports_path = new_root / "ports.json"
             self.ports = self._load_ports()
+            self._capability_registry_path = new_root / "capabilities.json"
+            self._trusted_plugins = self._load_trusted_plugins()
             return {
                 "ok": True,
                 "unchanged": False,
@@ -488,6 +567,7 @@ class HubServer:
         with self.lock:
             self.stop(plugin_id)
             plugin = self.registry.install_zip(payload, imported=False)
+            self._set_plugin_trust(plugin["id"], True)
         # Restart on the new files right away: the user should be able to
         # click the plugin right after the update without restarting the hub.
         started = self.restart(plugin_id)
@@ -503,6 +583,7 @@ class HubServer:
     def import_zip(self, payload: bytes) -> dict:
         with self.lock:
             plugin = self.registry.install_zip(payload, imported=True)
+            self._set_plugin_trust(plugin["id"], False)
             self.stop(plugin["id"])
         started = self.restart(plugin["id"])
         self._sync_share()
@@ -517,6 +598,7 @@ class HubServer:
         with self.lock:
             self.stop(plugin_id)
             fallback = self.registry.remove(plugin_id)
+            self._set_plugin_trust(plugin_id, False)
             self._sync_share()
             return {"ok": True, "bundled_remains": fallback}
 
@@ -973,6 +1055,51 @@ class HubServer:
 class HubHandler(ShellHandler):
     hub: HubServer
 
+    def page_capability_script(self) -> str:
+        token = json.dumps(self.hub.capability_token)
+        return '<script>window.__ommHubCapabilityToken=%s;</script>' % token
+
+    def _expected_origin(self) -> str:
+        try:
+            parsed = urlsplit("//" + (self.headers.get("Host") or ""))
+            return "http://" + parsed.netloc
+        except Exception:
+            return ""
+
+    def _hub_authorized(self) -> bool:
+        supplied = self.headers.get(HUB_CREDENTIAL_HEADER) or ""
+        if not secrets.compare_digest(supplied, self.hub.capability_token):
+            return False
+        origin = (self.headers.get("Origin") or "").strip()
+        return not origin or origin == self._expected_origin()
+
+    def _requires_hub_credential(self, path: str) -> bool:
+        return (
+            path in HUB_CREDENTIAL_GET
+            or path in HUB_CREDENTIAL_POST
+            or path.startswith("/__omm/fs/")
+            or path.startswith("/__omm/share/")
+        )
+
+    def _authorize_hub_request(self, path: str) -> bool:
+        if not self._requires_hub_credential(path):
+            return True
+        if not self._hub_authorized():
+            self._reply(403, {"ok": False, "error": "缺少可信工作台能力凭证"})
+            return False
+        if self.command == "POST":
+            content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+            if path == "/api/plugins/import":
+                allowed = content_type in ("application/zip", "application/octet-stream")
+            elif path == "/__omm/update/apply":
+                allowed = content_type in ("", "application/json")
+            else:
+                allowed = content_type == "application/json"
+            if not allowed:
+                self._reply(403, {"ok": False, "error": "拒绝跨 Origin 简单请求"})
+                return False
+        return True
+
     def _reply(self, status: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -1005,6 +1132,8 @@ class HubHandler(ShellHandler):
             self._reply(403, {"ok": False, "error": "仅允许本机访问"})
             return
         parsed = urlsplit(self.path)
+        if not self._authorize_hub_request(parsed.path):
+            return
         try:
             if self.handle_update_get():
                 return
@@ -1078,6 +1207,8 @@ class HubHandler(ShellHandler):
             self._reply(403, {"ok": False, "error": "仅允许本机访问"})
             return
         parsed = urlsplit(self.path)
+        if not self._authorize_hub_request(parsed.path):
+            return
         try:
             if self.handle_desktop_post():
                 return
@@ -1146,7 +1277,9 @@ def start_hub_server(root: Path, port: int = HUB_PORT, plugin_root: Path | None 
         return port
     hub = HubServer(root, port, plugin_root=plugin_root)
     HubHandler.hub = hub
-    handler = functools.partial(HubHandler, directory=str(root))
+    handler = functools.partial(
+        HubHandler, directory=str(root), default_app="hub", trusted_hub=True
+    )
     try:
         server = _QuietHTTPServer(("127.0.0.1", port), handler)
     except OSError:

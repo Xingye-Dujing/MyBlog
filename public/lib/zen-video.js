@@ -164,7 +164,7 @@
       w: 250, h: 126,
       defaults: { factor: 1 },
       fields: [f('factor', '音量倍数', 'range', { min: 0, max: 4, step: 0.1, hint: '0 = 静音，1 = 原音量。' })],
-      summary: function (d) { return (d.factor || 1) + '× 音量' },
+      summary: function (d) { return (d.factor == null ? 1 : d.factor) + '× 音量' },
       meta: function () { return 'volume 滤镜' },
     },
     mute: {
@@ -225,7 +225,11 @@
         f('preset', '编码预设', 'select', { options: ['ultrafast', 'fast', 'medium', 'slow'] }),
       ],
       summary: function (d) { return (d.format || 'mp4').toUpperCase() + ' · CRF ' + (d.crf || 23) + ' · ' + (d.preset || 'medium') },
-      meta: function () { return 'libx264 / aac' },
+      meta: function (d) {
+        if (d.format === 'webm') return 'VP9 / Opus'
+        if (d.format === 'gif') return 'GIF 调色板链'
+        return 'H.264 / AAC'
+      },
     },
     export: {
       label: '导出文件', category: '输出', glyph: '出', ports: ['left'], kind: 'k-out',
@@ -397,31 +401,75 @@
   }
 
   // 接受两种 JSON 形态：AI 工作区的工作流 JSON（format: omm-video-workflow）
-  // 与工作台自身的画布 JSON（zen/canvas toJSON）。
+  // 与工作台自身的画布 JSON（zen/canvas toJSON）。先完整验证，再交给
+  // fromJSON；共享画布会清空现有内容，不能把校验放在清空之后。
   function toCanvasJSON(obj) {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj
-    if (obj.format !== 'omm-video-workflow' && obj.app) return obj
-    var nodes = (Array.isArray(obj.nodes) ? obj.nodes : []).map(function (n) {
+    function invalid(message) { throw new Error('工作流无效：' + message) }
+    function finite(value, fallback) {
+      if (value == null) return fallback
+      var number = Number(value)
+      if (!isFinite(number)) invalid('坐标或尺寸不是有限数值')
+      return number
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) invalid('根节点必须是对象')
+    if (obj.app !== 'video' && obj.format !== 'omm-video-workflow') invalid('不是视频工作流')
+    if (obj.app && obj.app !== 'video') invalid('应用标识不匹配')
+    if (obj.format && obj.format !== 'omm-video-workflow') invalid('格式标识不匹配')
+    if (obj.version != null && Number(obj.version) !== 1) invalid('版本不受支持')
+    if (!Array.isArray(obj.nodes) || !Array.isArray(obj.connections)) invalid('缺少 nodes/connections 数组')
+    if (obj.nodes.length > 500 || obj.connections.length > 1000) invalid('工作流规模过大')
+    var ids = Object.create(null)
+    var nodes = obj.nodes.map(function (n, index) {
+      if (!n || typeof n !== 'object' || Array.isArray(n)) invalid('nodes[' + index + '] 必须是对象')
+      var id = String(n.id == null ? '' : n.id)
+      if (!id || id.length > 120 || /[\x00-\x1f]/.test(id)) invalid('节点 id 为空或过长')
+      if (ids[id]) invalid('节点 id 重复：' + id)
       var def = DEFS[n.type]
+      if (!def) invalid('未知节点类型：' + n.type)
+      if (n.data != null && (typeof n.data !== 'object' || Array.isArray(n.data))) invalid('节点 data 必须是对象：' + id)
+      ids[id] = def
       return {
-        id: n.id,
-        type: n.type,
-        x: (n.x != null ? n.x : 100),
-        y: (n.y != null ? n.y : 100),
-        w: (n.w != null ? n.w : (def ? def.w : 240)),
-        h: (n.h != null ? n.h : (def ? def.h : 110)),
-        title: n.title || (def ? def.label : n.type),
-        locked: !!n.locked,
-        minimized: !!n.minimized,
-        data: n.data || {},
+        id: id, type: n.type,
+        x: finite(n.x, 100), y: finite(n.y, 100),
+        w: finite(n.w, def.w), h: finite(n.h, def.h),
+        title: n.title == null ? def.label : String(n.title),
+        locked: !!n.locked, minimized: !!n.minimized,
+        data: Object.assign({}, n.data || {}),
       }
     })
-    var connections = (Array.isArray(obj.connections) ? obj.connections : []).map(function (c) {
-      return { id: c.id, from: c.from, to: c.to, fromPort: c.fromPort || 'right', toPort: c.toPort || 'left' }
+    var seen = Object.create(null)
+    var connections = obj.connections.map(function (c, index) {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) invalid('connections[' + index + '] 必须是对象')
+      var from = String(c.from == null ? '' : c.from)
+      var to = String(c.to == null ? '' : c.to)
+      if (!ids[from] || !ids[to]) invalid('连线指向不存在的节点')
+      if (from === to) invalid('节点不能连接自身')
+      var fromPort = c.fromPort || 'right'
+      var toPort = c.toPort || 'left'
+      if (ids[from].ports.indexOf(fromPort) < 0 || ids[to].ports.indexOf(toPort) < 0) invalid('连线端口不合法')
+      var key = from + '\u0000' + to + '\u0000' + fromPort + '\u0000' + toPort
+      if (seen[key]) invalid('重复连线')
+      seen[key] = true
+      return { id: c.id, from: from, to: to, fromPort: fromPort, toPort: toPort }
     })
+    var indegree = Object.create(null)
+    var next = Object.create(null)
+    nodes.forEach(function (n) { indegree[n.id] = 0; next[n.id] = [] })
+    connections.forEach(function (c) { indegree[c.to]++; next[c.from].push(c.to) })
+    var queue = nodes.filter(function (n) { return indegree[n.id] === 0 }).map(function (n) { return n.id })
+    var visited = 0
+    while (queue.length) {
+      var current = queue.shift()
+      visited++
+      next[current].forEach(function (id) { if (--indegree[id] === 0) queue.push(id) })
+    }
+    if (visited !== nodes.length) invalid('工作流存在循环连线')
+    var view = obj.view && typeof obj.view === 'object' ? obj.view : {}
+    var scale = finite(view.scale, 1)
+    if (scale <= 0) invalid('视图缩放必须大于 0')
     return {
       version: 1, app: 'video', nodes: nodes, connections: connections,
-      view: { scale: 1, panX: 0, panY: 0 }, meta: {},
+      view: { scale: scale, panX: finite(view.panX, 0), panY: finite(view.panY, 0) }, meta: {},
     }
   }
 
@@ -490,13 +538,12 @@
   }
 
   // --------------------------------------------------------------------
-  // omm:zen-card-request — 工作台响应 hub 广播（仅接受 loopback parent origin）
+  // omm:zen-card-request — 仅响应共享助手确认的 parent source 与 origin
   // --------------------------------------------------------------------
   ;(function () {
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
-      if (window.parent === window) return
-      if (!ZenUtil.isLocalOrigin(ev.origin)) return
+      if (!ZenUtil.isTrustedParentMessage(ev)) return
       var api = window.ZenVideoAI
       if (!api || !api.snapshotMarkdown) return
       var md = api.snapshotMarkdown()
@@ -523,16 +570,17 @@
     var spec = api.workflowSpec()
     var title = '视频工作台 · ' + ((spec.nodes || []).length) + ' 节点'
     if (window.OMMShare && window.OMMShare.send) {
-      window.OMMShare.send({
+      return window.OMMShare.send({
         to: 'ai',
         channel: 'documents',
         format: 'omm.video.workflow',
         title: title,
-        payload: { version: 1, title: title, canvas: api.snapshot() },
-      }).then(function () {
+        payload: { version: 1, title: title, canvas: api.snapshot(), workflow: spec },
+      }).then(function (message) {
+        if (!message) throw new Error('共享服务未确认投递')
         toast('工作流已发给 AI 工作区')
         if (window.OMMShare.openApp) window.OMMShare.openApp('ai')
-      }, function () {
+      }).catch(function () {
         saveWorkflowFile()
       })
     } else {
@@ -563,7 +611,7 @@
     if (jobId) { toast('任务正在运行'); return }
     var spec = buildSpec()
     if (!spec.nodes.length) { toast('画布是空的，请先添加节点'); return }
-    if (!spec.nodes.some(function (n) { return n.op === 'input' && n.data.fileId })) {
+    if (!spec.nodes.some(function (n) { return n.type === 'input' && n.data.fileId })) {
       toast('请先给“视频输入”节点选择文件'); return
     }
     apiPost('/api/run', spec).then(function (res) {
@@ -612,7 +660,7 @@
     var badge = el.querySelector('[data-role="status"]')
     if (badge) {
       badge.textContent = st.status === 'running' ? Math.round((st.progress || 0) * 100) + '%' :
-        st.status === 'done' ? '完成' : st.status === 'error' ? '失败' : ''
+        st.status === 'done' ? '完成' : st.status === 'error' ? '失败' : st.status === 'cancelled' ? '已停止' : ''
       badge.className = 'zc-status' + (st.status ? ' is-' + st.status : '')
     }
     var bar = el.querySelector('[data-role="progress"]')
@@ -624,7 +672,7 @@
     if (!result) return
     if (st.status === 'error') {
       result.innerHTML = '<span style="color:#c0392b">' + esc(st.error || '执行失败') + '</span>'
-    } else if (st.status === 'done') {
+    } else if (st.status === 'done' || st.status === 'running') {
       var r = st.result || {}
       if (r.probe && r.probe.video) {
         result.textContent = fmtTime(r.probe.duration) + ' · ' + r.probe.video.width + '×' + r.probe.video.height + ' · ' + (r.probe.video.fps || '?') + 'fps'
@@ -652,7 +700,7 @@
     nodes.forEach(function (n) { byId[n.id] = n })
     Object.keys(s.nodes || {}).forEach(function (id) {
       var st = s.nodes[id]
-      if (st.status !== 'done') return
+      if (st.status !== 'done' && st.status !== 'error') return
       var rec = byId[id]
       var label = rec ? (DEFS[rec.type] ? DEFS[rec.type].label : rec.type) : id
       html += '<div class="section-title" style="margin-top:6px">' + esc(label) + '</div>'
@@ -823,8 +871,13 @@
     // 载入上次画布，否则给一个可直接运行的示例
     var saved = null
     try { saved = JSON.parse(localStorage.getItem('zen.video.canvas.v1') || 'null') } catch (_) {}
-    if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(toCanvasJSON(saved), { history: false })
-    else applyTemplate('基础剪辑')
+    try {
+      if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(toCanvasJSON(saved), { history: false })
+      else applyTemplate('基础剪辑')
+    } catch (err) {
+      applyTemplate('基础剪辑')
+      toast('已忽略无效的本地工作流')
+    }
 
     // 工具栏
     $('btn-run').addEventListener('click', run)

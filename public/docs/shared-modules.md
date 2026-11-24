@@ -9,10 +9,15 @@
 |---|---|
 | `omm-embed.js` | 嵌入模式识别、父窗口 origin 校验与快捷入口 |
 | `omm-desktop.js` | 桌面桥接、统一 UI 组件、存档面板、主题消息 |
-| `omm-share.js` | 跨产品共享总线、ZenCard 发送与频道 |
+| `omm-share.js` | 跨产品共享总线：按收发双方能力自动解析唯一频道；异步处理器成功后才 ACK，失败保留 inbox |
 
 三者顺序固定：`omm-embed.js` → `omm-desktop.js` → `omm-share.js`。
-禁止通配符 `postMessage`，目标 origin 必须来自父窗口或 iframe 自身 URL。
+入口页用 `data-omm-app="<产品 id>"` 声明身份，`index.html` 等非 `omm-*.html` 入口同样适用。
+禁止通配符 `postMessage`，目标 origin 必须来自父窗口或 iframe 自身 URL；消息接收统一调用
+`ZenUtil.isTrustedParentMessage(event)`，不得只信任任意 loopback origin。
+
+ZenBackup 在桌面嵌入环境通过 Hub 的 `omm:workspace-backup-request/reply` 协议逐产品采集与恢复；
+Hub 只接受 `zenbackup` 来源，恢复按 `maskedPaths` 合并当前设备敏感字段，失败产品逐项报告。
 
 ## 可复用产品逻辑
 
@@ -20,7 +25,7 @@
 |---|---|
 | `lib/zen-card.js` | ZenCard 创建 / 校验 / 打包，跨产品通用格式 |
 | `lib/zen-link.js` | 卡片按钮与知识库入口 |
-| `lib/zen-backup.js` / `lib/zen-pack.js` | 工作区快照与工作区包 |
+| `lib/zen-backup.js` / `lib/zen-pack.js` | 工作区快照与工作区包：原始字符串保真、字段级脱敏、明确白名单与失败回滚 |
 | `lib/zen-srs.js` / `lib/zen-review.js` | 间隔复习状态与复盘报告 |
 | `lib/zen-flow.js` | 规则校验与执行 |
 | `lib/zen-chart.js` | CSV 解析与自包含 SVG 图表 |
@@ -32,7 +37,7 @@
 | `lib/data-viz.js` / `viz-bridge.js` / `lib/search-library.js` | 出图、跨页送图、检索 |
 | `zen/components/switch.js` | 共享 ARIA 开关（`data-zen-switch`），替代各产品的开关外观与点击实现 |
 | `zen/components/shortcuts.js` | 除快捷键注册外还提供 `ZenUI.shortcuts.help()` 与 `.hk-*` 面板生成器 |
-| `zen/foundation/util.js` | `ZenUtil.el()` / `ZenUtil.fmtDateTime()` 等通用无状态助手（单一实现） |
+| `zen/foundation/util.js` | `ZenUtil.el()` / `ZenUtil.fmtDateTime()` / `ZenUtil.parentTargetOrigin()` / `ZenUtil.isTrustedParentMessage()` 等通用无状态助手（单一实现；跨窗口消息只信任精确 Hub 父窗口或同源父窗口） |
 | `zen/foundation/base.css` | `zen-spin` 等关键帧的唯一真源；产品只引用动画名 |
 | `zen/features/launcher.css` | hub 与 installer 共用的启动器样式 |
 

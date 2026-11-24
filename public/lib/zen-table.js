@@ -49,6 +49,38 @@
     var s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim()
     return s.length > (max || 22) ? s.slice(0, max || 22) + '…' : s
   }
+  function rowKeysText(value) {
+    if (Array.isArray(value)) return value.join(',')
+    return String(value || '').split(/[,，]/).map(function (s) { return s.trim() }).filter(Boolean).join(',')
+  }
+  function lookupResultType(data) {
+    if (data.lookupResultType) return data.lookupResultType
+    return data.lookupKind === 'exact' ? 'text' : 'number'
+  }
+  function lookupEditor(data) {
+    var kind = data.lookupKind || 'time'
+    var resultType = lookupResultType(data)
+    if (kind === 'exact') {
+      return { keys: ['value', 'result'], labels: ['匹配值', '结果'], types: { value: 'text', result: resultType } }
+    }
+    return {
+      keys: ['min', 'max', 'result'], labels: ['下限', '上限', '结果'],
+      types: { min: kind === 'numeric' ? 'number' : 'text', max: kind === 'numeric' ? 'number' : 'text', result: resultType },
+    }
+  }
+  function normalizeLookupCell(value, col, data) {
+    var editor = lookupEditor(data)
+    if (editor.types[col] === 'number') {
+      if (value === '') return ''
+      var number = Number(value)
+      return isFinite(number) ? (number === 0 ? 0 : number) : value
+    }
+    if (data.lookupKind === 'time' && (col === 'min' || col === 'max')) {
+      var match = String(value || '').replace('：', ':').match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+      if (match) return ('0' + match[1]).slice(-2) + ':' + match[2] + (match[3] ? ':' + match[3] : '')
+    }
+    return value
+  }
 
   // ----------------------------------------------------------------------
   // 预设
@@ -284,7 +316,7 @@
         f('colTotals', '生成合计行', 'checkbox'),
         f('totalLabel', '合计标签', 'text'),
       ],
-      summary: function (d) { return (d.rowKeys || []).join(',') + ' × ' + d.colKey },
+      summary: function (d) { return rowKeysText(d.rowKeys) + ' × ' + d.colKey },
       meta: function () { return '行转列 · 可带行列合计' },
     },
     write: {
@@ -499,15 +531,22 @@
       }).join('') : '<span class="hintline">请先导入 Excel</span>') + '</div>'
     } else if (fd.type === 'factor') {
       var fv = value || {}
+      var factorMode = fv.mode || 'column'
       html += '<div class="field-row"><select data-zen-select data-factor="mode">' +
         ['column:乘某一列', 'header:按表头名称', 'constant:固定数值'].map(function (o) {
           var p = o.split(':')
-          return '<option value="' + p[0] + '"' + (fv.mode === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'
+          return '<option value="' + p[0] + '"' + (factorMode === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'
         }).join('') + '</select>' +
-        '<input type="text" data-factor="column" placeholder="列名" value="' + esc(fv.column || '') + '" />' +
-        '<input type="number" data-factor="value" placeholder="数值" value="' + esc(fv.value == null ? 1 : fv.value) + '" /></div>'
+        (factorMode === 'constant' ? '' : '<input type="text" data-factor="' + factorMode + '" placeholder="' +
+          (factorMode === 'header' ? '表头名称' : '列名') + '" value="' + esc(fv[factorMode] || '') + '" />') +
+        '<input type="number" data-factor="value" placeholder="数值" value="' + esc(fv.value == null ? 1 : fv.value) + '"' +
+          (factorMode === 'constant' ? '' : ' hidden') + ' /></div>'
     } else if (fd.type === 'lookup') {
-      html += renderTableEditor(fd.key, ['min', 'max', 'result'], ['下限', '上限', '结果'], value || []) +
+      var lookup = lookupEditor(rec.data)
+      html += '<label class="field"><span>结果类型</span><select data-zen-select data-lookup-result-type>' +
+        '<option value="number"' + (lookupResultType(rec.data) === 'number' ? ' selected' : '') + '>数值</option>' +
+        '<option value="text"' + (lookupResultType(rec.data) === 'text' ? ' selected' : '') + '>文本</option></select></label>' +
+        renderTableEditor(fd.key, lookup.keys, lookup.labels, value || [], false, lookup.types) +
         '<div class="field-row"><button class="menu-btn" data-lookup-preset="' + esc(fd.key) + '">载入加班补贴标准</button></div>'
     } else if (fd.type === 'condition') {
       var cond = value || { logic: 'and', rules: [], then: 1, else: 0 }
@@ -533,6 +572,7 @@
         '<button class="menu-btn" data-expr-check="' + esc(fd.key) + '">校验</button></div>'
     } else {
       var inputType = fd.type === 'number' ? 'number' : 'text'
+      if (fd.key === 'defaultResult' && lookupResultType(rec.data) === 'text') inputType = 'text'
       html += '<input type="' + inputType + '" data-key="' + esc(fd.key) + '"' +
         (fd.min != null ? ' min="' + fd.min + '"' : '') +
         (fd.max != null ? ' max="' + fd.max + '"' : '') +
@@ -542,14 +582,15 @@
     return html + '</label>'
   }
 
-  function renderTableEditor(key, keys, labels, rows, compact) {
+  function renderTableEditor(key, keys, labels, rows, compact, types) {
     var html = '<table class="editor-table"><thead><tr>' +
       labels.map(function (l) { return '<th>' + esc(l) + '</th>' }).join('') + '<th></th></tr></thead><tbody>'
     ;(rows || []).forEach(function (row, i) {
       html += '<tr>'
       keys.forEach(function (k) {
-        html += '<td><input data-tcell="' + esc(key) + '" data-row="' + i + '" data-col="' + esc(k) +
-          '" value="' + esc(row[k] == null ? '' : row[k]) + '" /></td>'
+        var type = (types && types[k]) || 'text'
+        html += '<td><input type="' + type + '" data-tcell="' + esc(key) + '" data-row="' + i + '" data-col="' + esc(k) +
+          '"' + (type === 'number' ? ' step="any"' : '') + ' value="' + esc(row[k] == null ? '' : row[k]) + '" /></td>'
       })
       html += '<td class="row-del" data-tdel="' + esc(key) + '" data-row="' + i + '">×</td></tr>'
     })
@@ -588,6 +629,13 @@
         var fv = Object.assign({}, rec.data.factor || {})
         fv[input.dataset.factor] = input.dataset.factor === 'value' ? Number(input.value) : input.value
         patch({ factor: fv })
+        if (input.dataset.factor === 'mode') renderInspector()
+      })
+    })
+    body.querySelectorAll('[data-lookup-result-type]').forEach(function (input) {
+      input.addEventListener('change', function () {
+        patch({ lookupResultType: input.value })
+        renderInspector()
       })
     })
     body.querySelectorAll('[data-cond]').forEach(function (input) {
@@ -611,7 +659,7 @@
         } else {
           var rows = (rec.data[key] || []).slice()
           rows[i] = rows[i] || {}
-          rows[i][col] = input.value
+          rows[i][col] = normalizeLookupCell(input.value, col, rec.data)
           var p = {}; p[key] = rows; patch(p)
         }
       })
@@ -645,7 +693,8 @@
           var def = DEFS[rec.type]
           var fd = (def.fields || []).filter(function (x) { return x.key === key })[0]
           var blank = {}
-          ;((fd && fd.columns) || []).forEach(function (c) { blank[c.key] = '' })
+          if (fd && fd.type === 'lookup') lookupEditor(rec.data).keys.forEach(function (col) { blank[col] = '' })
+          else ((fd && fd.columns) || []).forEach(function (c) { blank[c.key] = '' })
           rows.push(blank)
           var p = {}; p[key] = rows; patch(p)
         }
@@ -656,6 +705,8 @@
       btn.addEventListener('click', function () {
         var key = btn.dataset.lookupPreset
         var p = {}; p[key] = FEE_LOOKUP.map(function (x) { return Object.assign({}, x) })
+        p.lookupKind = 'time'
+        p.lookupResultType = 'number'
         p.defaultResult = 3
         patch(p)
         renderInspector()
@@ -874,24 +925,70 @@
   }
 
   function toCanvasJSON(obj) {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj
-    if (obj.format !== 'omm-table-workflow' && obj.app) return obj
-    var nodes = (Array.isArray(obj.nodes) ? obj.nodes : []).map(function (n) {
+    function invalid(message) { throw new Error('工作流无效：' + message) }
+    function finite(value, fallback) {
+      if (value == null) return fallback
+      var number = Number(value)
+      if (!isFinite(number)) invalid('坐标或尺寸不是有限数值')
+      return number
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) invalid('根节点必须是对象')
+    if (obj.app !== 'table' && obj.format !== 'omm-table-workflow') invalid('不是表格工作流')
+    if (obj.app && obj.app !== 'table') invalid('应用标识不匹配')
+    if (obj.format && obj.format !== 'omm-table-workflow') invalid('格式标识不匹配')
+    if (obj.version != null && Number(obj.version) !== 1) invalid('版本不受支持')
+    if (!Array.isArray(obj.nodes) || !Array.isArray(obj.connections)) invalid('缺少 nodes/connections 数组')
+    if (obj.nodes.length > 500 || obj.connections.length > 1000) invalid('工作流规模过大')
+    var ids = Object.create(null)
+    var nodes = obj.nodes.map(function (n, index) {
+      if (!n || typeof n !== 'object' || Array.isArray(n)) invalid('nodes[' + index + '] 必须是对象')
+      var id = String(n.id == null ? '' : n.id)
+      if (!id || id.length > 120 || /[\x00-\x1f]/.test(id)) invalid('节点 id 为空或过长')
+      if (ids[id]) invalid('节点 id 重复：' + id)
       var def = DEFS[n.type]
+      if (!def) invalid('未知节点类型：' + n.type)
+      if (n.data != null && (typeof n.data !== 'object' || Array.isArray(n.data))) invalid('节点 data 必须是对象：' + id)
+      ids[id] = def
       return {
-        id: n.id, type: n.type,
-        x: n.x != null ? n.x : 100, y: n.y != null ? n.y : 100,
-        w: n.w != null ? n.w : (def ? def.w : 250),
-        h: n.h != null ? n.h : (def ? def.h : 120),
-        title: n.title || (def ? def.label : n.type),
+        id: id, type: n.type,
+        x: finite(n.x, 100), y: finite(n.y, 100),
+        w: finite(n.w, def.w), h: finite(n.h, def.h),
+        title: n.title == null ? def.label : String(n.title),
         locked: !!n.locked, minimized: !!n.minimized,
-        data: n.data || {},
+        data: Object.assign({}, n.data || {}),
       }
     })
-    var connections = (Array.isArray(obj.connections) ? obj.connections : []).map(function (c) {
-      return { id: c.id, from: c.from, to: c.to, fromPort: c.fromPort || 'right', toPort: c.toPort || 'left' }
+    var seen = Object.create(null)
+    var connections = obj.connections.map(function (c, index) {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) invalid('connections[' + index + '] 必须是对象')
+      var from = String(c.from == null ? '' : c.from)
+      var to = String(c.to == null ? '' : c.to)
+      if (!ids[from] || !ids[to]) invalid('连线指向不存在的节点')
+      if (from === to) invalid('节点不能连接自身')
+      var fromPort = c.fromPort || 'right'
+      var toPort = c.toPort || 'left'
+      if (ids[from].ports.indexOf(fromPort) < 0 || ids[to].ports.indexOf(toPort) < 0) invalid('连线端口不合法')
+      var key = from + '\u0000' + to + '\u0000' + fromPort + '\u0000' + toPort
+      if (seen[key]) invalid('重复连线')
+      seen[key] = true
+      return { id: c.id, from: from, to: to, fromPort: fromPort, toPort: toPort }
     })
-    return { version: 1, app: 'table', nodes: nodes, connections: connections, view: { scale: 1, panX: 0, panY: 0 }, meta: {} }
+    var indegree = Object.create(null)
+    var next = Object.create(null)
+    nodes.forEach(function (n) { indegree[n.id] = 0; next[n.id] = [] })
+    connections.forEach(function (c) { indegree[c.to]++; next[c.from].push(c.to) })
+    var queue = nodes.filter(function (n) { return indegree[n.id] === 0 }).map(function (n) { return n.id })
+    var visited = 0
+    while (queue.length) {
+      var current = queue.shift()
+      visited++
+      next[current].forEach(function (id) { if (--indegree[id] === 0) queue.push(id) })
+    }
+    if (visited !== nodes.length) invalid('工作流存在循环连线')
+    var view = obj.view && typeof obj.view === 'object' ? obj.view : {}
+    var scale = finite(view.scale, 1)
+    if (scale <= 0) invalid('视图缩放必须大于 0')
+    return { version: 1, app: 'table', nodes: nodes, connections: connections, view: { scale: scale, panX: finite(view.panX, 0), panY: finite(view.panY, 0) }, meta: {} }
   }
 
   function saveWorkflowFile() {
@@ -952,8 +1049,7 @@
   ;(function () {
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.type !== 'omm:zen-card-request') return
-      if (window.parent === window) return
-      if (!ZenUtil.isLocalOrigin(ev.origin)) return
+      if (!ZenUtil.isTrustedParentMessage(ev)) return
       var api = window.ZenTableAI
       if (!api || !api.snapshotMarkdown) return
       var md = api.snapshotMarkdown()
@@ -977,13 +1073,14 @@
     var spec = api.workflowSpec()
     var title = '表格自动化 · ' + ((spec.nodes || []).length) + ' 节点'
     if (window.OMMShare && window.OMMShare.send) {
-      window.OMMShare.send({
+      return window.OMMShare.send({
         to: 'ai', channel: 'documents', format: 'omm.table.workflow', title: title,
         payload: { version: 1, title: title, canvas: api.snapshot(), workflow: spec },
-      }).then(function () {
+      }).then(function (message) {
+        if (!message) throw new Error('共享服务未确认投递')
         toast('工作流已发给 AI 工作区')
         if (window.OMMShare.openApp) window.OMMShare.openApp('ai')
-      }, function () { saveWorkflowFile() })
+      }).catch(function () { saveWorkflowFile() })
     } else {
       saveWorkflowFile()
     }
@@ -1060,7 +1157,7 @@
       if (!s.ok) return
       Object.keys(s.nodes || {}).forEach(function (id) { applyNodeState(id, s.nodes[id]) })
       $('stat-progress').textContent = '进度：' + Math.round((s.progress || 0) * 100) + '%'
-      $('result-state').textContent = s.status === 'done' ? '完成' : s.status === 'error' ? '失败' : '运行中'
+      $('result-state').textContent = s.status === 'done' ? '完成' : s.status === 'error' ? '失败' : s.status === 'cancelled' ? '已停止' : '运行中'
       $('stat-job').textContent = '任务：' + jobId
       if (s.status === 'running') {
         pollTimer = setTimeout(poll, 600)
@@ -1071,7 +1168,7 @@
         $('btn-run').disabled = false
         $('btn-dry').disabled = false
         $('btn-stop').disabled = true
-        toast(s.status === 'done' ? (s.dryRun ? '试运行完成' : '工作流执行完成') : '工作流失败')
+        toast(s.status === 'done' ? (s.dryRun ? '试运行完成' : '工作流执行完成') : s.status === 'cancelled' ? '工作流已停止' : '工作流失败')
         if (activeTab === 'data') renderInspector()
       }
     }).catch(function () { pollTimer = setTimeout(poll, 1500) })
@@ -1084,7 +1181,7 @@
     var badge = el.querySelector('[data-role="status"]')
     if (badge) {
       badge.textContent = st.status === 'running' ? Math.round((st.progress || 0) * 100) + '%' :
-        st.status === 'done' ? '完成' : st.status === 'error' ? '失败' : ''
+        st.status === 'done' ? '完成' : st.status === 'error' ? '失败' : st.status === 'cancelled' ? '已停止' : ''
       badge.className = 'zc-status' + (st.status ? ' is-' + st.status : '')
     }
     var bar = el.querySelector('[data-role="progress"]')
@@ -1285,8 +1382,13 @@
 
     var saved = null
     try { saved = JSON.parse(localStorage.getItem('zen.table.canvas.v1') || 'null') } catch (_) {}
-    if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(toCanvasJSON(saved), { history: false })
-    else applyTemplate('加班补贴：时间分档 + 插入行')
+    try {
+      if (saved && saved.nodes && saved.nodes.length) canvas.fromJSON(toCanvasJSON(saved), { history: false })
+      else applyTemplate('加班补贴：时间分档 + 插入行')
+    } catch (err) {
+      applyTemplate('加班补贴：时间分档 + 插入行')
+      toast('已忽略无效的本地工作流')
+    }
 
     $('btn-dry').addEventListener('click', function () { run(true) })
     $('btn-run').addEventListener('click', function () { run(false) })

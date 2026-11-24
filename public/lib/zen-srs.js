@@ -121,9 +121,36 @@ function serialize(states) {
 
 function deserialize(text) {
   const obj = typeof text === 'string' ? JSON.parse(text) : text
-  if (!obj || obj.format !== 'zen-srs' || !Array.isArray(obj.states)) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
+      obj.format !== 'zen-srs' || obj.v !== 1 || !Array.isArray(obj.states)) {
     throw new Error('非法 zen-srs 状态文件')
   }
+  const seen = Object.create(null)
+  obj.states.forEach(function (state, index) {
+    const at = 'states[' + index + ']'
+    if (!state || typeof state !== 'object' || Array.isArray(state)) {
+      throw new Error('非法 zen-srs：' + at + ' 必须是对象')
+    }
+    if (typeof state.id !== 'string' || !state.id.trim()) {
+      throw new Error('非法 zen-srs：' + at + '.id 必须是非空字符串')
+    }
+    if (seen[state.id]) throw new Error('非法 zen-srs：' + at + '.id 重复')
+    seen[state.id] = true
+    ;['reps', 'lapses', 'interval'].forEach(function (key) {
+      if (!Number.isSafeInteger(state[key]) || state[key] < 0) {
+        throw new Error('非法 zen-srs：' + at + '.' + key + ' 必须是非负安全整数')
+      }
+    })
+    if (typeof state.ease !== 'number' || !Number.isFinite(state.ease) || state.ease < MIN_EASE) {
+      throw new Error('非法 zen-srs：' + at + '.ease 必须是大于等于 ' + MIN_EASE + ' 的有限数字')
+    }
+    if (!Number.isSafeInteger(state.due) || state.due < 0) {
+      throw new Error('非法 zen-srs：' + at + '.due 必须是非负安全时间戳')
+    }
+    if (state.last !== null && (!Number.isSafeInteger(state.last) || state.last < 0)) {
+      throw new Error('非法 zen-srs：' + at + '.last 必须是 null 或非负安全时间戳')
+    }
+  })
   return obj.states
 }
 

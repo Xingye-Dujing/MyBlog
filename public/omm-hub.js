@@ -9,6 +9,33 @@
 (function () {
   'use strict';
 
+  /* The server injects a per-process credential only into same-origin Hub HTML.
+     Adding it as a header (never a URL parameter) makes sensitive requests fail
+     CORS preflight and impossible to forge with text/plain no-cors. */
+  (function installHubCredentialFetch() {
+    var token = window.__ommHubCapabilityToken || '';
+    if (!token || !window.fetch) return;
+    var nativeFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      var raw = typeof input === 'string' ? input : input && input.url;
+      if (!raw) return nativeFetch(input, init);
+      var url;
+      try { url = new URL(raw, window.location.href); } catch (e) { return nativeFetch(input, init); }
+      var sensitive = url.origin === window.location.origin && (
+        url.pathname.indexOf('/api/') === 0 ||
+        url.pathname.indexOf('/__omm/fs/') === 0 ||
+        url.pathname.indexOf('/__omm/share/') === 0 ||
+        url.pathname === '/__omm/update/apply'
+      );
+      if (!sensitive) return nativeFetch(input, init);
+      var options = Object.assign({}, init || {});
+      var headers = new Headers(options.headers || {});
+      headers.set('X-OMM-Hub-Capability', token);
+      options.headers = headers;
+      return nativeFetch(input, options);
+    };
+  })();
+
   var APP_LIST = [];
   var APP_BY_ID = {};
   var PLUGIN_INFO = [];
@@ -187,7 +214,6 @@
   var zenAudio = null;
   var zenSource = null;
   var zenNodes = [];
-  var aiSavedKey = '';
   var aiConfigPromise = null;
   var timelineOpen = false;
   var timelineFilter = 'all';
@@ -928,8 +954,8 @@
     })();
   }
 
-  var pendingSnapshots = {};
-  var pendingRestores = {};
+  var pendingSnapshots = Object.create(null);
+  var pendingRestores = Object.create(null);
 
   window.addEventListener('omm:snapshot-request', function (event) {
     var detail = event && event.detail ? event.detail : null;
@@ -945,7 +971,7 @@
         return;
       }
       var token = 's' + Date.now() + Math.random().toString(16).slice(2, 6);
-      pendingSnapshots[token] = detail.done;
+      pendingSnapshots[token] = { done: detail.done, app: appId };
       var timer = window.setInterval(function () {
         if (!pendingSnapshots[token]) {
           window.clearInterval(timer);
@@ -968,9 +994,9 @@
       }, 900);
       window.setTimeout(function () {
         window.clearInterval(timer);
-        var done = pendingSnapshots[token];
+        var pending = pendingSnapshots[token];
         delete pendingSnapshots[token];
-        if (done) done({ ok: false, error: '应用没有响应，请稍后重试' });
+        if (pending) pending.done({ ok: false, error: '应用没有响应，请稍后重试' });
       }, 12000);
     });
   });
@@ -1018,7 +1044,7 @@
       }
       var token = 'r' + Date.now() + Math.random().toString(16).slice(2, 6);
       var tries = 0;
-      pendingRestores[token] = true;
+      pendingRestores[token] = { app: appId };
       function send() {
         tries += 1;
         if (tries > 10) {
@@ -1815,14 +1841,13 @@
     }
     aiConfigPromise = window.OMMDesktop.aiConfig().then(function (data) {
       var ai = (data && data.ai) || {};
-      aiSavedKey = ai.apiKey || '';
       var set = function (id, value) { var el = document.getElementById(id); if (el) el.value = value || ''; };
       set('hub-ai-provider', ai.provider || 'deepseek');
       set('hub-ai-base', ai.apiBase);
       set('hub-ai-model', ai.apiModel);
       set('hub-ai-system', ai.system);
       set('hub-ai-key', '');
-      if (hint) hint.textContent = data.configured
+      if (hint) hint.textContent = data.hasStoredKey
         ? '已保存密钥（为安全起见不再显示）。修改后留空即保持原密钥；需要更换请直接填写新值。'
         : '尚未填写 API Key。在这里填写一次，所有支持 AI 的产品都能读取。';
     }).catch(function () {
@@ -1834,22 +1859,23 @@
     var run = function () {
       var hint = document.getElementById('hub-ai-hint');
       var value = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+      var nextKey = value('hub-ai-key');
       var ai = {
         provider: value('hub-ai-provider') || 'deepseek',
         apiBase: value('hub-ai-base'),
         apiModel: value('hub-ai-model'),
         system: value('hub-ai-system'),
-        apiKey: clearKey ? '' : (value('hub-ai-key') || aiSavedKey),
       };
+      // 缺省 apiKey 由服务端保留原值；只有显式清空或填写新值时才提交该字段。
+      if (clearKey || nextKey) ai.apiKey = clearKey ? '' : nextKey;
       if (!window.OMMDesktop || !window.OMMDesktop.setAIConfig) {
         toast('AI 配置仅在桌面版可用', 'error');
         return;
       }
-      return window.OMMDesktop.setAIConfig(ai).then(function () {
-        aiSavedKey = ai.apiKey;
+      return window.OMMDesktop.setAIConfig(ai).then(function (data) {
         var key = document.getElementById('hub-ai-key');
         if (key) key.value = '';
-        if (hint) hint.textContent = ai.apiKey
+        if (hint) hint.textContent = data && data.hasStoredKey
           ? 'AI 配置已保存，所有产品下次启动时生效。'
           : 'AI 配置已保存（未设置密钥，在线功能需各产品自行填写）。';
         toast('AI 配置已保存');
@@ -1857,8 +1883,6 @@
         toast('保存 AI 配置失败：' + (error && error.message ? error.message : error), 'error');
       });
     };
-    // aiSavedKey 由异步请求填充；若用户抢在加载完成前保存，留空的输入框会被当成
-    // “清空密钥”。等加载结束再写，避免静默抹掉服务端已有的密钥。
     return aiConfigPromise ? aiConfigPromise.then(run) : run();
   }
 
@@ -4811,6 +4835,8 @@
    * zen-card-request to every embedded product (desktop, isolated ports). */
   var liveDataWaiters = Object.create(null);
   var liveDataSeq = 0;
+  var workspaceBackupJobs = Object.create(null);
+  var vizDeliveries = Object.create(null);
 
   /* Annotate (ZenMark) is read from same-origin localStorage in the web build.
    * On isolated desktop ports this yields null and the card-based snapshot below
@@ -4872,7 +4898,7 @@
     };
   }
 
-  function collectLiveLocalData() {
+  function collectLiveLocalData(scope) {
     function parsed(key) {
       try { return JSON.parse(localStorage.getItem(key) || 'null'); }
       catch (e) { return null; }
@@ -4890,11 +4916,54 @@
       return [];
     }
     function text(v, n) { return String(v == null ? '' : v).slice(0, n); }
+    var cards = arr('zen.cards.v1').concat(arr('zen.inbox.v1')).slice(0, 200).map(function (c) {
+      return { content: text(c && c.content, 1500), kind: text(c && c.kind, 40),
+        tags: Array.isArray(c && c.tags) ? c.tags.slice(0, 8).map(String) : [], source: text(c && c.source, 40) };
+    });
+    if (scope === 'cards') return { cards: cards };
+    // Timeline + Planner are shared by AI and ZenReview. Same-origin (web build)
+    // reads them directly; isolated desktop ports use the card replies below.
+    var timeline = (function () {
+      var items = (flowEvents || []).slice(0, 60).map(function (ev) {
+        return { app: text(ev.kind, 40), ts: ev.at ? new Date(ev.at).toISOString() : '', title: text(ev.text, 300) };
+      });
+      arr('zen.viz.review.v1').slice(-40).forEach(function (e) {
+        if (e && typeof e === 'object') {
+          items.push({ app: 'visualization', ts: text(e.ts, 40),
+            title: text(e.title, 300) + ' · ' + text(e.chartType, 40) + ' (' + (e.rows || 0) + ' 行)' });
+        }
+      });
+      return items.slice(0, 80);
+    })();
+    var reviewData = {
+      cards: cards,
+      timeline: timeline,
+      planner: (function () {
+        var out = [];
+        var raw = parsed('zp-data-v2');
+        var data = Array.isArray(raw) ? raw[0] : raw;
+        if (!data || typeof data !== 'object') return out;
+        var days = data.days;
+        if (!days && data.eventsBy && typeof data.eventsBy === 'object') {
+          var byId = data.eventsBy;
+          var pid = data.activeId && byId[data.activeId] ? data.activeId : Object.keys(byId)[0];
+          days = pid ? byId[pid] : {};
+        }
+        days = days || {};
+        Object.keys(days).slice(0, 60).forEach(function (day) {
+          var list = Array.isArray(days[day]) ? days[day] : (days[day] && days[day].events) || [];
+          list.slice(0, 40).forEach(function (e) {
+            if (!e || typeof e !== 'object') return;
+            if (e.hidden === true) return;
+            out.push({ title: text(e.title, 300), done: e.done === true || e.done === 'failed', day: text(day, 40) });
+          });
+        });
+        return out.slice(0, 100);
+      })(),
+    };
+    if (scope === 'review') return reviewData;
     return {
-      cards: arr('zen.cards.v1').concat(arr('zen.inbox.v1')).slice(0, 200).map(function (c) {
-        return { content: text(c.content, 1500), kind: text(c.kind, 40),
-          tags: Array.isArray(c.tags) ? c.tags.slice(0, 8).map(String) : [], source: text(c.source, 40) };
-      }),
+      cards: cards,
       // Writer 的 zc-docs 是 {v,activeId,order:[],meta:{id:{name,...}}} 索引，
       // 正文在 IndexedDB（同步快照读不到），这里能可靠拿到的是文档标题。
       // 同时兼容历史数组形状 [{title,content}]。
@@ -4912,69 +4981,35 @@
           });
         }
         return items.slice(0, 100).map(function (d) {
-          return { title: text(d.title, 200), content: text(d.content != null ? d.content : d.text, 1500) };
+          return { title: text(d && d.title, 200), content: text(d && (d.content != null ? d.content : d.text), 1500) };
         });
       })(),
       searches: records('omm-search-v1', 'history').slice(0, 100).map(function (s) {
-        return { query: text(s.query, 300), answer: text(s.answer, 1200) };
+        return { query: text(s && s.query, 300), answer: text(s && s.answer, 1200) };
       }),
       rules: arr('zen.flow.rules.v1').slice(0, 100).map(function (r) {
-        return { name: text(r.name, 200), enabled: r.enabled !== false };
+        return { name: text(r && r.name, 200), enabled: r && r.enabled !== false };
       }),
       clips: arr('zen.clip.v1').slice(0, 100).map(function (c) {
-        return { content: text(c.content, 1200), source: text(c.source, 40) };
+        return { content: text(c && c.content, 1200), source: text(c && c.source, 40) };
       }),
-      // Timeline + Planner are what ZenReview asks for. Same-origin (web build)
-      // reads them directly; on isolated desktop ports they degrade to empty and
-      // the product falls back to its manual paste boxes.
-      timeline: (function () {
-        var items = (flowEvents || []).slice(0, 60).map(function (ev) {
-          return { app: text(ev.kind, 40), ts: ev.at ? new Date(ev.at).toISOString() : '', title: text(ev.text, 300) };
-        });
-        // Chart-to-report: Viz products register a review entry in this key.
-        arr('zen.viz.review.v1').slice(-40).forEach(function (e) {
-          if (e && typeof e === 'object') {
-            items.push({ app: 'visualization', ts: text(e.ts, 40),
-              title: text(e.title, 300) + ' · ' + text(e.chartType, 40) + ' (' + (e.rows || 0) + ' 行)' });
-          }
-        });
-        return items.slice(0, 80);
-      })(),
-      planner: (function () {
-        var out = [];
-        var raw = parsed('zp-data-v2');
-        var data = Array.isArray(raw) ? raw[0] : raw;
-        if (!data || typeof data !== 'object') return out;
-        var days = data.days;
-        // 真实结构：eventsBy 是按 plannerId 再按 day 分层的对象；取 activeId
-        // 指向的日程本，缺失时退到首个日程本。兼容历史 {days:{}} 数组形状。
-        if (!days && data.eventsBy && typeof data.eventsBy === 'object') {
-          var byId = data.eventsBy;
-          var pid = data.activeId && byId[data.activeId] ? data.activeId : Object.keys(byId)[0];
-          days = pid ? byId[pid] : {};
-        }
-        days = days || {};
-        Object.keys(days).slice(0, 60).forEach(function (day) {
-          var list = Array.isArray(days[day]) ? days[day] : (days[day] && days[day].events) || [];
-          list.slice(0, 40).forEach(function (e) {
-            if (!e || typeof e !== 'object') return;
-            // Planner 的隐藏项（ed.hidden，“仅编辑页可见”）绝不能离开本机：
-            // 既不能进 AI 的实时快照，也不能进 ZenReview 的拉取数据。
-            if (e.hidden === true) return;
-            out.push({ title: text(e.title, 300), done: e.done === true || e.done === 'failed', day: text(day, 40) });
-          });
-        });
-        return out.slice(0, 100);
-      })(),
+      timeline: timeline,
+      planner: reviewData.planner,
       annotate: annotateLiveSnapshot(),
     };
   }
 
-  function respondLiveData(sourceFrame, origin) {
-    var token = 'live' + (++liveDataSeq);
-    var snapshot = collectLiveLocalData();
+  function respondLiveData(sourceFrame, origin, sourceApp, requestedToken) {
+    var scope = sourceApp === 'ai' ? 'full' : sourceApp === 'zenreview' ? 'review' :
+      sourceApp === 'zenflow' ? 'cards' : '';
+    if (!scope) return false;
+    if (requestedToken !== undefined &&
+        (typeof requestedToken !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(requestedToken))) return false;
+    var token = requestedToken || 'live' + (++liveDataSeq);
+    if (liveDataWaiters[token]) return false;
+    var snapshot = collectLiveLocalData(scope);
     var waiter = liveDataWaiters[token] = {
-      frame: sourceFrame, origin: origin, snapshot: snapshot,
+      frame: sourceFrame, origin: origin, snapshot: snapshot, scope: scope,
       expected: 0, replied: 0, done: false,
     };
     frames.forEach(function (frame) {
@@ -4985,11 +5020,9 @@
         waiter.expected++;
       } catch (e) { /* ignore */ }
     });
-    // Finish as soon as every addressed pane has replied (slow cold starts used to
-    // be cut off by the old fixed 700 ms window); keep the timer as a fallback for
-    // panes that never answer.
     waiter.timer = window.setTimeout(function () { finishLiveData(token); }, 2000);
     if (!waiter.expected) finishLiveData(token);
+    return true;
   }
 
   function finishLiveData(token) {
@@ -5011,6 +5044,321 @@
         { type: 'omm:live-data-reply', token: token, data: w.snapshot }, w.origin
       );
     } catch (e) { /* ignore */ }
+  }
+
+  /* -------------------------------------------------------- ZenBackup protocol */
+
+  function loadZenBackupModule() {
+    if (window.ZenBackup) return Promise.resolve(window.ZenBackup);
+    return import('./lib/zen-backup.js').then(function (module) { return module.ZenBackup; });
+  }
+
+  function workspaceBackupReply(job, payload) {
+    try {
+      job.frame.contentWindow.postMessage(
+        Object.assign({ type: 'omm:workspace-backup-reply', token: job.token }, payload),
+        job.origin
+      );
+    } catch (e) { /* ignore */ }
+  }
+
+  function finishWorkspaceBackup(token, payload) {
+    var job = workspaceBackupJobs[token];
+    if (!job || job.done) return;
+    job.done = true;
+    if (job.timer) window.clearTimeout(job.timer);
+    delete workspaceBackupJobs[token];
+    workspaceBackupReply(job, payload);
+  }
+
+  function waitForWorkspaceFrame(appId) {
+    return new Promise(function (resolve, reject) {
+      whenAppReady(appId, function (frame) {
+        if (frame) resolve(frame);
+        else reject(new Error('产品启动超时: ' + appId));
+      });
+    });
+  }
+
+  function ensureWorkspaceFrame(appId, created) {
+    if (frames.get(appId)) return waitForWorkspaceFrame(appId);
+    return ensureApp(appId).then(function (url) {
+      var frame = createFrame(appId);
+      frame.dataset.url = url;
+      frame.dataset.workspaceHidden = '1';
+      frame.setAttribute('aria-hidden', 'true');
+      frame.hidden = true;
+      created.push(appId);
+      var join = url.indexOf('?') >= 0 ? '&' : '?';
+      frame.src = url + join + 'omm_embed=1&omm_hub_origin=' +
+        encodeURIComponent(window.location.origin);
+      return waitForWorkspaceFrame(appId);
+    });
+  }
+
+  function cleanupWorkspaceFrames(created) {
+    created.forEach(function (appId) {
+      if (findPaneByApp(appId)) return;
+      var frame = frames.get(appId);
+      if (frame && frame.dataset.workspaceHidden === '1') {
+        destroyFrame(appId);
+        appStatus[appId] = 'sleeping';
+      }
+    });
+  }
+
+  function captureWorkspaceProduct(appId, label) {
+    return new Promise(function (resolve, reject) {
+      window.dispatchEvent(new CustomEvent('omm:snapshot-request', {
+        detail: {
+          app: appId,
+          label: label,
+          done: function (result) {
+            if (!result || result.ok === false || !result.path) {
+              reject(new Error(result && result.error ? result.error : '产品没有返回快照'));
+              return;
+            }
+            resolve(result.path);
+          },
+        },
+      }));
+    });
+  }
+
+  async function readWorkspaceSnapshot(appId, path) {
+    var response = await fetch('/__omm/fs/snapshot?app=' + encodeURIComponent(appId) +
+      '&path=' + encodeURIComponent(path), { cache: 'no-store' });
+    var data = await response.json();
+    if (!response.ok || !data || data.ok === false || !data.snapshot) {
+      throw new Error(data && data.error ? data.error : '读取产品快照失败');
+    }
+    return data.snapshot;
+  }
+
+  async function collectWorkspaceBackup(job) {
+    var ZenBackup = await loadZenBackupModule();
+    var created = [];
+    var results = [];
+    var products = [];
+    try {
+      await Promise.all(APP_LIST.map(async function (app) {
+        try {
+          await ensureWorkspaceFrame(app.id, created);
+          var path = await captureWorkspaceProduct(app.id, 'ZenBackup 工作区采集');
+          var state = await readWorkspaceSnapshot(app.id, path);
+          products.push({
+            id: app.id,
+            name: app.name,
+            version: app.version || '1',
+            savedAt: state.taken_at || new Date().toISOString(),
+            data: state,
+          });
+          results.push({ app: app.id, ok: true, path: path });
+        } catch (e) {
+          results.push({ app: app.id, ok: false, error: e && e.message ? e.message : String(e) });
+        }
+      }));
+      products.sort(function (a, b) { return a.id.localeCompare(b.id); });
+      results.sort(function (a, b) { return a.app.localeCompare(b.app); });
+      var manifest = ZenBackup.collect(products, { name: 'OMM-ZEN 工作区备份' });
+      var validation = ZenBackup.validate(manifest);
+      var ok = validation.ok && results.length > 0 && results.every(function (item) { return item.ok; });
+      finishWorkspaceBackup(job.token, {
+        ok: ok,
+        manifest: manifest,
+        results: results,
+        error: ok ? '' : (validation.errors[0] || '部分产品采集失败'),
+      });
+    } finally {
+      cleanupWorkspaceFrames(created);
+    }
+  }
+
+  function restoreWorkspaceProduct(appId, path) {
+    return waitForWorkspaceFrame(appId).then(function (frame) {
+      return new Promise(function (resolve, reject) {
+        var token = 'wr' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var tries = 0;
+        var settled = false;
+        var interval = 0;
+        var timeout = 0;
+        function done(result) {
+          if (settled) return;
+          settled = true;
+          window.clearInterval(interval);
+          window.clearTimeout(timeout);
+          delete pendingRestores[token];
+          if (result && result.ok === true) resolve();
+          else reject(new Error(result && result.error ? result.error : '产品未确认恢复'));
+        }
+        pendingRestores[token] = { app: appId, done: done };
+        function send() {
+          tries += 1;
+          if (tries > 10) return done({ ok: false, error: '产品恢复超时' });
+          try {
+            frame.contentWindow.postMessage(
+              { type: 'omm:restore-snapshot', token: token, app: appId, path: path },
+              frameTargetOrigin(frame)
+            );
+          } catch (e) { /* retry */ }
+        }
+        interval = window.setInterval(send, 800);
+        timeout = window.setTimeout(function () { done({ ok: false, error: '产品恢复超时' }); }, 15000);
+        send();
+      });
+    });
+  }
+
+  async function restoreWorkspaceBackup(job, manifest) {
+    var ZenBackup = await loadZenBackupModule();
+    var validation = ZenBackup.validate(manifest);
+    if (!validation.ok) {
+      finishWorkspaceBackup(job.token, { ok: false, results: [], error: validation.errors[0] });
+      return;
+    }
+    var seenProducts = Object.create(null);
+    for (var i = 0; i < (manifest.products || []).length; i++) {
+      var productId = String(manifest.products[i] && manifest.products[i].id || '');
+      if (!productId || seenProducts[productId]) {
+        finishWorkspaceBackup(job.token, { ok: false, results: [], error: '备份包含重复或空产品 id' });
+        return;
+      }
+      seenProducts[productId] = true;
+    }
+    var created = [];
+    var results = [];
+    try {
+      await Promise.all((manifest.products || []).map(async function (product) {
+        var appId = String(product && product.id || '');
+        if (ZenBackup.isSecretKey(appId)) {
+          results.push({ app: appId, ok: false, error: '纯凭据条目不允许恢复' });
+          return;
+        }
+        if (!appOf(appId)) {
+          results.push({ app: appId, ok: false, error: '未注册的产品 id' });
+          return;
+        }
+        try {
+          var currentState = null;
+          if (product.redacted === true || (Array.isArray(product.maskedPaths) && product.maskedPaths.length)) {
+            await ensureWorkspaceFrame(appId, created);
+            var currentPath = await captureWorkspaceProduct(appId, 'ZenBackup 恢复前快照');
+            currentState = await readWorkspaceSnapshot(appId, currentPath);
+          }
+          var restored = ZenBackup.restoreEntryData(product, currentState);
+          if (!restored || restored.skip) {
+            results.push({ app: appId, ok: false, error: '备份条目没有可恢复数据' });
+            return;
+          }
+          var state = restored.value;
+          if (!state || typeof state !== 'object' || Array.isArray(state) ||
+              (!state.localStorage && !state.sessionStorage && !state.indexedDB)) {
+            results.push({ app: appId, ok: false, error: '产品快照格式无效' });
+            return;
+          }
+          var response = await fetch('/__omm/fs/snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ app: appId, state: state, label: 'ZenBackup 工作区恢复' }),
+          });
+          var saved = await response.json();
+          if (!response.ok || !saved || saved.ok === false || !saved.path) {
+            throw new Error(saved && saved.error ? saved.error : '写入产品快照失败');
+          }
+          await ensureWorkspaceFrame(appId, created);
+          await restoreWorkspaceProduct(appId, saved.path);
+          results.push({ app: appId, ok: true, path: saved.path });
+        } catch (e) {
+          results.push({ app: appId, ok: false, error: e && e.message ? e.message : String(e) });
+        }
+      }));
+      results.sort(function (a, b) { return a.app.localeCompare(b.app); });
+      var ok = results.length > 0 && results.every(function (item) { return item.ok; });
+      finishWorkspaceBackup(job.token, {
+        ok: ok,
+        results: results,
+        error: ok ? '' : '部分产品恢复失败',
+      });
+    } finally {
+      cleanupWorkspaceFrames(created);
+    }
+  }
+
+  function handleWorkspaceBackupRequest(sourceFrame, origin, sourceApp, data) {
+    if (sourceApp !== 'zenbackup') return;
+    var token = typeof data.token === 'string' ? data.token : '';
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(token)) return;
+    if (workspaceBackupJobs[token]) {
+      try {
+        sourceFrame.contentWindow.postMessage(
+          { type: 'omm:workspace-backup-reply', token: token, ok: false, results: [], error: '请求正在处理' },
+          origin
+        );
+      } catch (e) { /* ignore */ }
+      return;
+    }
+    var action = data.action;
+    if (action !== 'collect' && action !== 'restore') {
+      try {
+        sourceFrame.contentWindow.postMessage(
+          { type: 'omm:workspace-backup-reply', token: token, ok: false, results: [], error: '未知备份操作' },
+          origin
+        );
+      } catch (e) { /* ignore */ }
+      return;
+    }
+    var job = workspaceBackupJobs[token] = {
+      token: token, frame: sourceFrame, origin: origin, done: false, timer: 0,
+    };
+    job.timer = window.setTimeout(function () {
+      finishWorkspaceBackup(token, { ok: false, results: [], error: '工作区备份请求超时' });
+    }, 180000);
+    var running = action === 'collect'
+      ? collectWorkspaceBackup(job)
+      : restoreWorkspaceBackup(job, data.manifest);
+    running.catch(function (e) {
+      finishWorkspaceBackup(token, { ok: false, results: [], error: e && e.message ? e.message : String(e) });
+    });
+  }
+
+  function finishVizDelivery(token, ok, error) {
+    var delivery = vizDeliveries[token];
+    if (!delivery || delivery.done) return;
+    delivery.done = true;
+    if (delivery.timer) window.clearTimeout(delivery.timer);
+    delete vizDeliveries[token];
+    try {
+      delivery.frame.contentWindow.postMessage(
+        { type: 'omm:zenviz-data-delivery', token: token, ok: !!ok, error: error || '' },
+        delivery.origin
+      );
+    } catch (e) { /* ignore */ }
+  }
+
+  function relayVizData(sourceFrame, origin, sourceApp, data) {
+    if (sourceApp !== 'data') return;
+    var token = typeof data.token === 'string' ? data.token : '';
+    var payload = data.payload;
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(token) || !payload || payload.format !== 'zenviz-data') return;
+    if (!appOf('visualization') || vizDeliveries[token]) return;
+    var delivery = vizDeliveries[token] = {
+      frame: sourceFrame, origin: origin, done: false, timer: 0,
+    };
+    activateApp('visualization');
+    whenAppReady('visualization', function (frame) {
+      if (!frame) return finishVizDelivery(token, false, '可视化产品启动超时');
+      try {
+        frame.contentWindow.postMessage(
+          { type: 'omm:zenviz-data', token: token, payload: payload },
+          frameTargetOrigin(frame)
+        );
+      } catch (e) {
+        return finishVizDelivery(token, false, '可视化产品投递失败');
+      }
+      delivery.timer = window.setTimeout(function () {
+        finishVizDelivery(token, false, '可视化产品未确认接收');
+      }, 5000);
+    });
   }
 
   function dedupeGraphCards(list) {
@@ -6640,17 +6988,23 @@
         return;
       }
       if (data.type === 'omm:snapshot-done') {
-        var done = pendingSnapshots[data.token];
+        var pending = pendingSnapshots[data.token];
+        if (!pending || pending.app !== sourceApp) return;
         delete pendingSnapshots[data.token];
-        if (done) done(data);
+        pending.done(data);
         return;
       }
       if (data.type === 'omm:restore-accepted') {
-        delete pendingRestores[data.token];
+        var accepted = pendingRestores[data.token];
+        if (!accepted || accepted.app !== sourceApp) return;
         return;
       }
       if (data.type === 'omm:restore-done') {
-        if (data.ok === false) toast('恢复失败：' + (data.error || '未知错误'), 'error');
+        var restore = pendingRestores[data.token];
+        if (!restore || restore.app !== sourceApp) return;
+        delete pendingRestores[data.token];
+        if (restore.done) restore.done(data);
+        else if (data.ok === false) toast('恢复失败：' + (data.error || '未知错误'), 'error');
         else toast('快照已恢复');
         return;
       }
@@ -6665,7 +7019,7 @@
           waiter.replied++;
           data.cards.slice(0, 200).forEach(function (c) {
             // Annotate pushes a read-only coding snapshot through the same bridge.
-            if (c && String(c.kind || '') === 'omm.annotate.snapshot') {
+            if (waiter.scope === 'full' && c && String(c.kind || '') === 'omm.annotate.snapshot') {
               waiter.snapshot.annotate = Object.assign({}, waiter.snapshot.annotate || {}, {
                 markdown: String(c.content || '').slice(0, 12000),
                 source: String(c.source || 'omm-annotate'),
@@ -6686,8 +7040,31 @@
         pushFlowEvent('card', '收到 ' + (sourceApp || '产品') + ' 的 ' + incoming.length + ' 张卡片');
         return;
       }
+      if (data.type === 'omm:workspace-backup-request') {
+        handleWorkspaceBackupRequest(sourceFrame, event.origin, sourceApp, data);
+        return;
+      }
+      if (data.type === 'omm:zenviz-data') {
+        relayVizData(sourceFrame, event.origin, sourceApp, data);
+        return;
+      }
+      if (data.type === 'omm:zenviz-data-received') {
+        var delivery = vizDeliveries[data.token];
+        if (delivery && sourceApp === 'visualization') {
+          finishVizDelivery(data.token, true, '');
+        }
+        return;
+      }
       if (data.type === 'omm:live-data-request') {
-        respondLiveData(sourceFrame, event.origin);
+        if (!respondLiveData(sourceFrame, event.origin, sourceApp, data.token)) {
+          try {
+            sourceFrame.contentWindow.postMessage(
+              { type: 'omm:live-data-reply', token: String(data.token || ''), ok: false,
+                error: '当前产品无权读取实时数据', data: null },
+              event.origin
+            );
+          } catch (e) { /* ignore */ }
+        }
         return;
       }
       if (data.type === 'omm:review-card') {

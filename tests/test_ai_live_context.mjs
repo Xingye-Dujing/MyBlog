@@ -24,7 +24,8 @@ function extractFunction(text, name) {
 
 test('send 把实时快照放进 chat 请求的 context.omm_live', () => {
   assert.ok(ai.includes('var live = await requestLiveData();'))
-  assert.ok(ai.includes('context: live ? { omm_live: live } : {}'))
+  assert.ok(ai.includes('if (live) context.omm_live = live'))
+  assert.ok(ai.includes('context.omm_shared = shared'))
 })
 
 test('requestLiveData 用带 token 的明确 origin 请求', () => {

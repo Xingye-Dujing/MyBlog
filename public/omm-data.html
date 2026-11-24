@@ -235,9 +235,16 @@
 
     <!-- ===== Find / Replace Dropdown ===== -->
     <div class="dropdown" id="dd-find">
-      <div class="dd-label" data-i18n="find.find">查找</div>
+      <div class="dd-label" id="find-label" data-i18n="find.find">查找</div>
       <div style="padding: 2px; border-bottom: 1px solid var(--border-dim); margin-bottom: 4px">
-        <input type="text" class="dd-text" id="find-input" autocomplete="off" spellcheck="false" />
+        <input
+          type="text"
+          class="dd-text"
+          id="find-input"
+          aria-labelledby="find-label"
+          autocomplete="off"
+          spellcheck="false"
+        />
       </div>
       <div class="dd-item-row">
         <span data-i18n="find.opts">选项</span>
@@ -258,12 +265,13 @@
         </div>
       </div>
       <div class="dd-divider"></div>
-      <div class="dd-label" data-i18n="find.replace">替换</div>
+      <div class="dd-label" id="replace-label" data-i18n="find.replace">替换</div>
       <div style="padding: 2px; border-bottom: 1px solid var(--border-dim); margin-bottom: 4px">
         <input
           type="text"
           class="dd-text"
           id="replace-input"
+          aria-labelledby="replace-label"
           autocomplete="off"
           spellcheck="false"
         />
@@ -463,14 +471,6 @@
           <span class="settings-value" id="sv-zoom">100%</span
           ><span class="settings-btn" data-action="zoomDown">−</span
           ><span class="settings-btn" data-action="zoomUp">+</span>
-        </div>
-      </div>
-      <div class="dd-item-row">
-        <span data-i18n="dd.settings.radius">圆角</span>
-        <div class="settings-control">
-          <span class="settings-value" id="sv-radius">0</span
-          ><span class="settings-btn" data-action="radiusDown">−</span
-          ><span class="settings-btn" data-action="radiusUp">+</span>
         </div>
       </div>
       <div class="dd-item-row">
@@ -1013,7 +1013,6 @@
             'dd.settings.theme': '主题',
             'dd.settings.bg': '背景',
             'dd.settings.zoom': '缩放',
-            'dd.settings.radius': '圆角',
             'dd.settings.fontsize': '界面字体',
             'dd.settings.cellfont': '单元格字体',
             'dd.settings.colw': '列宽',
@@ -1415,7 +1414,6 @@
             'dd.settings.theme': 'Theme',
             'dd.settings.bg': 'Background',
             'dd.settings.zoom': 'Zoom',
-            'dd.settings.radius': 'Radius',
             'dd.settings.fontsize': 'UI font',
             'dd.settings.cellfont': 'Cell font',
             'dd.settings.colw': 'Col width',
@@ -1594,7 +1592,6 @@
           theme: 'light',
           bg: 'bg-void',
           zoom: 1,
-          radius: 0,
           fontSize: 13,
           cellFont: 13,
           colW: 150,
@@ -1868,7 +1865,6 @@
                 theme: S.theme,
                 bg: S.bg,
                 zoom: S.zoom,
-                radius: S.radius,
                 fontSize: S.fontSize,
                 cellFont: S.cellFont,
                 colW: S.colW,
@@ -1923,7 +1919,6 @@
               'theme',
               'bg',
               'zoom',
-              'radius',
               'fontSize',
               'cellFont',
               'colW',
@@ -1941,7 +1936,6 @@
             S.trimEmpty = S.trimEmpty !== false
             S.cellPreview = S.cellPreview !== false
             S.zoom = clamp(+S.zoom || 1, CONFIG.MIN_ZOOM, CONFIG.MAX_ZOOM)
-            S.radius = clamp(+S.radius || 0, 0, 12)
             S.fontSize = clamp(+S.fontSize || 13, 11, 20)
             S.cellFont = clamp(+S.cellFont || 13, 11, 22)
             /* 默认尺寸同样不设上限，只挡住 0 / NaN / 负数 */
@@ -2033,7 +2027,6 @@
             ZenUtil.themeApply(S.theme === 'dark')
             document.body.classList.add(S.bg)
             document.documentElement.style.setProperty('--zoom', S.zoom)
-            document.documentElement.style.setProperty('--radius', S.radius + 'px')
             document.documentElement.style.setProperty(
               '--fscale',
               String(S.fontSize / CONFIG.BASE_FONT),
@@ -2059,7 +2052,6 @@
             }
             sv('sv-theme', T('theme.' + S.theme))
             sv('sv-zoom', Math.round(S.zoom * 100) + '%')
-            sv('sv-radius', S.radius)
             sv('sv-fontsize', S.fontSize + 'px')
             sv('sv-cellfont', S.cellFont + 'px')
             sv('sv-colw', S.colW)
@@ -2523,12 +2515,8 @@
               if (line[i] === '"') inQ = !inQ
               else if (line[i] === d && !inQ) n++
             }
-            var nc = 0
-            for (var k = 0; k < line.length; k++) {
-              if (line[k] === d) nc++
-            }
-            if (nc > bestN) {
-              bestN = nc
+            if (n > bestN) {
+              bestN = n
               best = d
             }
           })
@@ -2577,36 +2565,74 @@
 
         function fromJSON(text) {
           var d = JSON.parse(text)
-          var arr = Array.isArray(d) ? d : Array.isArray(d.rows) ? d.rows : null
+          var hasOwn = function (o, k) {
+            return Object.prototype.hasOwnProperty.call(o, k)
+          }
+          var explicitHeaders =
+            d && !Array.isArray(d) && hasOwn(d, 'headers') && hasOwn(d, 'rows')
+          var arr = Array.isArray(d)
+            ? d
+            : d && Array.isArray(d.rows)
+              ? d.rows
+              : null
           if (!arr) throw new Error('not array')
           // A single null/garbage element must not abort the whole import.
           arr = arr.filter(function (r) { return r !== null && typeof r === 'object' })
-          if (!arr.length) return newTable('import', [{ name: 'A', type: 'text' }], [[]])
+          var headers = null
+          if (explicitHeaders) {
+            if (!Array.isArray(d.headers) || !d.headers.length)
+              throw new Error('headers must be a non-empty array')
+            if (!d.headers.every(function (h) { return typeof h === 'string' }))
+              throw new Error('headers must contain strings')
+            headers = d.headers.slice()
+          }
+          if (!arr.length) {
+            var cols = (headers || ['A']).map(function (name) {
+              return { name: name, type: 'text' }
+            })
+            return normTable({ id: uid(), name: 'import', cols: cols, rows: [], colW: [] })
+          }
+          var arrayRows = Array.isArray(arr[0])
+          if (arr.some(function (r) { return Array.isArray(r) !== arrayRows }))
+            throw new Error('rows must use one consistent shape')
           var keys = []
-          if (Array.isArray(arr[0])) {
+          if (arrayRows) {
             var maxc = 0
             arr.forEach(function (r) {
-              var n = Array.isArray(r) ? r.length : 0
-              if (n > maxc) maxc = n
+              if (r.length > maxc) maxc = r.length
             })
-            for (var i = 0; i < maxc; i++) keys.push(idxToCol(i))
+            if (headers && maxc > headers.length)
+              throw new Error('row has more values than headers')
+            if (!headers) {
+              for (var i = 0; i < maxc; i++) keys.push(idxToCol(i))
+            } else keys = headers
+            var width = keys.length
             var tb = { id: uid(), name: 'import', cols: [], rows: [], colW: [] }
             keys.forEach(function (k) {
               tb.cols.push({ name: k, type: 'text' })
             })
             arr.forEach(function (r) {
+              if (r.length > width) throw new Error('row has more values than headers')
               var a = []
-              for (var i = 0; i < maxc; i++) a.push(r[i] === undefined ? null : r[i])
+              for (var c = 0; c < width; c++) a.push(r[c] === undefined ? null : r[c])
               tb.rows.push(a)
             })
             inferTypes(tb)
             return tb
           }
+          if (headers) {
+            var duplicate = Object.create(null)
+            for (var h = 0; h < headers.length; h++) {
+              if (duplicate[headers[h]]) throw new Error('duplicate header in object rows')
+              duplicate[headers[h]] = true
+            }
+          }
           arr.forEach(function (o) {
             Object.keys(o).forEach(function (k) {
-              if (keys.indexOf(k) < 0) keys.push(k)
+              if (!headers && keys.indexOf(k) < 0) keys.push(k)
             })
           })
+          if (headers) keys = headers
           var tb2 = { id: uid(), name: 'import', cols: [], rows: [], colW: [] }
           keys.forEach(function (k) {
             tb2.cols.push({ name: k, type: 'text' })
@@ -2614,6 +2640,7 @@
           arr.forEach(function (o) {
             tb2.rows.push(
               keys.map(function (k) {
+                if (!hasOwn(o, k)) return null
                 var v = o[k]
                 return v === undefined || v === '' ? null : v
               }),
@@ -2721,97 +2748,213 @@
           })
         }
 
-        function sqlVal(raw) {
-          raw = String(raw).trim()
-          if (raw === '') return null
-          var u = raw.toUpperCase()
-          if (u === 'NULL') return null
-          if (u === 'TRUE') return true
-          if (u === 'FALSE') return false
-          if (
-            (raw[0] === "'" && raw[raw.length - 1] === "'") ||
-            (raw[0] === '"' && raw[raw.length - 1] === '"')
-          )
-            return raw
-              .slice(1, -1)
-              .split(raw[0] + raw[0])
-              .join(raw[0])
-          var n = Number(raw)
-          if (/^-?\d+(\.\d+)?$/.test(raw) && !isNaN(n)) return n
-          return raw
+        function sqlColumnType(def) {
+          var ty = String((def[1] && def[1].v) || '').toUpperCase()
+          if (['INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'NUMERIC', 'NUMBER', 'DECIMAL', 'FLOAT', 'REAL', 'DOUBLE'].indexOf(ty) >= 0)
+            return 'number'
+          if (['DATE', 'DATETIME', 'TIMESTAMP', 'TIME'].indexOf(ty) >= 0) return 'date'
+          if (['BOOL', 'BOOLEAN'].indexOf(ty) >= 0) return 'bool'
+          return 'text'
+        }
+
+        function sqlCreateColumns(p) {
+          p.op('(')
+          var defs = [],
+            def = [],
+            depth = 1,
+            closed = false
+          while (p.pk()) {
+            if (depth === 1 && p.isOp(')')) {
+              p.nx()
+              defs.push(def)
+              def = []
+              closed = true
+              break
+            }
+            var tk = p.nx()
+            if (tk.t === 'op' && tk.v === '(') depth++
+            else if (tk.t === 'op' && tk.v === ')') depth--
+            if (depth === 1 && tk.t === 'op' && tk.v === ',') {
+              defs.push(def)
+              def = []
+            } else def.push(tk)
+          }
+          if (!closed || depth !== 1) throw new Error('CREATE TABLE 的列定义不完整')
+          var out = [],
+            seen = Object.create(null)
+          defs.forEach(function (d) {
+            if (!d.length) throw new Error('CREATE TABLE 含空列定义')
+            var head = String((d[0] && d[0].v) || '').toUpperCase()
+            if (d[0].t === 'kw' && ['PRIMARY', 'UNIQUE', 'KEY', 'INDEX', 'CONSTRAINT', 'FOREIGN', 'CHECK'].indexOf(head) >= 0)
+              return
+            if (d.length < 2 || (d[1].t !== 'kw' && d[1].t !== 'ident'))
+              throw new Error('列定义缺少类型: ' + (d[0] && d[0].v))
+            if (['ident', 'str', 'kw'].indexOf(d[0].t) < 0)
+              throw new Error('列名无效: ' + d[0].v)
+            var name = String(d[0].v)
+            var key = name.toLowerCase()
+            if (seen[key]) throw new Error('重复列名: ' + name)
+            seen[key] = true
+            out.push({ name: name, type: sqlColumnType(d) })
+          })
+          if (!out.length) throw new Error('CREATE TABLE 没有可用列')
+          return out
+        }
+
+        function sqlNameList(p) {
+          p.op('(')
+          var out = [],
+            seen = Object.create(null)
+          if (p.isOp(')')) throw new Error('列名列表不能为空')
+          do {
+            var name = p.name(),
+              key = name.toLowerCase()
+            if (seen[key]) throw new Error('重复列名: ' + name)
+            seen[key] = true
+            out.push(name)
+          } while (p.isOp(',') && p.nx())
+          p.op(')')
+          return out
+        }
+
+        function sqlLiteral(p) {
+          var x = p.pk()
+          if (!x) throw new Error('INSERT 缺少值')
+          if (x.t === 'op' && (x.v === '-' || x.v === '+') && p.pk(1) && p.pk(1).t === 'num') {
+            p.nx()
+            var n = p.nx()
+            return x.v === '-' ? -n.v : n.v
+          }
+          if (x.t === 'num' || x.t === 'str') {
+            p.nx()
+            return x.v
+          }
+          if (x.t === 'kw') {
+            var u = x.v.toUpperCase()
+            if (u === 'NULL' || u === 'TRUE' || u === 'FALSE') {
+              p.nx()
+              return u === 'NULL' ? null : u === 'TRUE'
+            }
+          }
+          throw new Error('INSERT 含无法解析的值: ' + x.v)
+        }
+
+        function sqlTuples(p) {
+          var out = []
+          do {
+            p.op('(')
+            var vals = []
+            if (!p.isOp(')')) {
+              do {
+                vals.push(sqlLiteral(p))
+              } while (p.isOp(',') && p.nx())
+            }
+            p.op(')')
+            if (!vals.length) throw new Error('INSERT 空值组')
+            out.push(vals)
+          } while (p.isOp(',') && p.nx())
+          return out
+        }
+
+        function sqlEnsureColumns(tb, names) {
+          names.forEach(function (name) {
+            var found = false
+            for (var i = 0; i < tb.cols.length; i++) {
+              if (tb.cols[i].name.toLowerCase() === name.toLowerCase()) {
+                found = true
+                break
+              }
+            }
+            if (found) return
+            tb.cols.push({ name: name, type: 'text' })
+            tb.rows.forEach(function (r) { r.push(null) })
+          })
         }
 
         function fromSQLText(text) {
-          var tables = []
-          var byName = {}
-          var re =
-            /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"\[]?[\w\u4e00-\u9fa5$]+[`"\]]?)\s*\(([\s\S]*?)\)\s*;?/gi
-          var m
-          while ((m = re.exec(text)) !== null) {
-            var name = stripName(m[1])
-            var defs = splitTopLevel(m[2], ',').filter(function (d) {
-              return !/^\s*(PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN)\b/i.test(d)
-            })
-            var tb = { id: uid(), name: name, cols: [], rows: [], colW: [] }
-            defs.forEach(function (d) {
-              var parts = d.split(/\s+/)
-              if (!parts.length || !parts[0]) return
-              tb.cols.push({ name: stripName(parts[0]), type: 'text' })
-            })
-            if (!tb.cols.length) tb.cols.push({ name: 'A', type: 'text' })
-            tables.push(tb)
-            byName[name.toLowerCase()] = tb
-          }
-          var ire =
-            /INSERT\s+INTO\s+([`"\[]?[\w\u4e00-\u9fa5$]+[`"\]]?)\s*(\(([^)]*)\))?\s*VALUES\s*([\s\S]*?);/gi
-          var m2
-          var flat = text.replace(/;\s*$/, '') + ';'
-          while ((m2 = ire.exec(flat)) !== null) {
-            var tn = stripName(m2[1]).toLowerCase()
-            var tb2 = byName[tn]
-            if (!tb2) {
-              tb2 = { id: uid(), name: stripName(m2[1]), cols: [], rows: [], colW: [] }
-              tables.push(tb2)
-              byName[tn] = tb2
-            }
-            var colNames = m2[3]
-              ? splitTopLevel(m2[3], ',').map(function (x) {
-                  return stripName(x)
-                })
-              : null
-            if (colNames && colNames.length > tb2.cols.length) {
-              tb2.cols = colNames.map(function (c) {
-                return { name: c, type: 'text' }
-              })
-            }
-            var tuples = splitTuples(m2[4])
-            tuples.forEach(function (tp) {
-              var vals = splitTopLevel(tp, ',').map(sqlVal)
-              if (colNames) {
-                var arr = new Array(tb2.cols.length).fill(null)
-                for (var i = 0; i < colNames.length; i++) {
-                  var ci = -1
-                  for (var k = 0; k < tb2.cols.length; k++)
-                    if (tb2.cols[k].name.toLowerCase() === colNames[i].toLowerCase()) ci = k
-                  if (ci < 0) {
-                    tb2.cols.push({ name: colNames[i], type: 'text' })
-                    ci = tb2.cols.length - 1
-                    arr.push(null)
-                  }
-                  arr[ci] = vals[i]
-                }
-                tb2.rows.push(arr)
-              } else {
-                tb2.rows.push(vals)
+          var tables = [],
+            byName = Object.create(null),
+            statements = [],
+            current = []
+          tokenize(String(text)).forEach(function (tk) {
+            if (tk.t === 'op' && tk.v === ';') {
+              if (current.length) statements.push(current)
+              current = []
+            } else current.push(tk)
+          })
+          if (current.length) statements.push(current)
+          statements.forEach(function (statement) {
+            var p = new P(statement)
+            var first = statement[0].t === 'kw' ? statement[0].v.toUpperCase() : ''
+            if (first === 'CREATE') {
+              p.nx()
+              p.kw('TABLE')
+              var ifNotExists = false
+              if (p.isKw('IF')) {
+                p.nx()
+                p.kw('NOT')
+                p.kw('EXISTS')
+                ifNotExists = true
               }
-            })
-          }
+              var tableName = p.name()
+              var cols = sqlCreateColumns(p)
+              if (p.pk()) throw new Error('CREATE TABLE 后有多余内容')
+              var key = tableName.toLowerCase()
+              if (byName[key]) {
+                if (!ifNotExists) throw new Error('表已存在: ' + tableName)
+                return
+              }
+              var tb = { id: uid(), name: tableName, cols: cols, rows: [], colW: [] }
+              tables.push(tb)
+              byName[key] = tb
+              return
+            }
+            if (first === 'INSERT') {
+              p.nx()
+              p.kw('INTO')
+              var insertName = p.name()
+              var insertKey = insertName.toLowerCase()
+              var target = byName[insertKey]
+              if (!target) {
+                target = { id: uid(), name: insertName, cols: [], rows: [], colW: [] }
+                tables.push(target)
+                byName[insertKey] = target
+              }
+              var colNames = p.isOp('(') ? sqlNameList(p) : null
+              p.kw('VALUES')
+              var tuples = sqlTuples(p)
+              if (p.pk()) throw new Error('INSERT 后有多余内容')
+              if (colNames) sqlEnsureColumns(target, colNames)
+              tuples.forEach(function (vals) {
+                var width = colNames ? colNames.length : vals.length
+                if (!target.cols.length) {
+                  for (var i = 0; i < width; i++)
+                    target.cols.push({ name: idxToCol(i), type: 'text' })
+                }
+                if (vals.length !== (colNames ? colNames.length : target.cols.length))
+                  throw new Error('INSERT 值与列数量不一致: ' + insertName)
+                var row = new Array(target.cols.length).fill(null)
+                if (colNames) {
+                  for (var c = 0; c < colNames.length; c++) {
+                    var ci = -1
+                    for (var k = 0; k < target.cols.length; k++) {
+                      if (target.cols[k].name.toLowerCase() === colNames[c].toLowerCase()) ci = k
+                    }
+                    if (ci < 0) throw new Error('未知列: ' + colNames[c])
+                    row[ci] = vals[c]
+                  }
+                } else row = vals
+                target.rows.push(row)
+              })
+              return
+            }
+            throw new Error('无法解析的 SQL 语句: ' + statement[0].v)
+          })
           if (!tables.length) throw new Error('no table found')
           tables.forEach(function (tb) {
+            if (!tb.cols.length) throw new Error('表没有列: ' + tb.name)
             var maxc = tb.cols.length
-            tb.rows.forEach(function (r) {
-              if (r.length > maxc) maxc = r.length
-            })
+            tb.rows.forEach(function (r) { if (r.length > maxc) maxc = r.length })
             while (tb.cols.length < maxc)
               tb.cols.push({ name: idxToCol(tb.cols.length), type: 'text' })
             tb.rows = tb.rows.map(function (r) {
@@ -2823,52 +2966,6 @@
             inferTypes(tb)
           })
           return tables
-        }
-
-        function splitTuples(s) {
-          var out = [],
-            depth = 0,
-            cur = '',
-            inQ = false,
-            q = ''
-          for (var i = 0; i < s.length; i++) {
-            var ch = s[i]
-            if (inQ) {
-              cur += ch
-              if (ch === q) {
-                if (s[i + 1] === q) {
-                  cur += q
-                  i++
-                  continue
-                }
-                inQ = false
-              }
-              continue
-            }
-            if (ch === "'" || ch === '"') {
-              inQ = true
-              q = ch
-              cur += ch
-              continue
-            }
-            if (ch === '(') {
-              depth++
-              if (depth === 1) {
-                cur = ''
-                continue
-              }
-            }
-            if (ch === ')') {
-              depth--
-              if (depth === 0) {
-                out.push(cur)
-                cur = ''
-                continue
-              }
-            }
-            if (depth > 0) cur += ch
-          }
-          return out
         }
 
         function toDelim(t, d) {
@@ -2900,14 +2997,16 @@
         }
 
         function toJSON(t) {
-          var out = t.rows.map(function (r) {
-            var o = {}
-            t.cols.forEach(function (c, i) {
-              o[c.name] = isNil(r[i]) ? null : r[i]
-            })
-            return o
-          })
-          return JSON.stringify(out, null, 2)
+          return JSON.stringify(
+            {
+              headers: t.cols.map(function (c) { return c.name }),
+              rows: t.rows.map(function (r) {
+                return t.cols.map(function (_, i) { return isNil(r[i]) ? null : r[i] })
+              }),
+            },
+            null,
+            2,
+          )
         }
 
         function toMarkdown(t) {
@@ -3795,16 +3894,26 @@
         function sheetXml(t) {
           var x =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
-            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>',
+            head = ''
+          for (var c = 0; c < t.cols.length; c++) {
+            head +=
+              '<c r="' +
+              idxToCol(c) +
+              '1" t="inlineStr"><is><t xml:space="preserve">' +
+              escXml(String(t.cols[c].name)) +
+              '</t></is></c>'
+          }
+          x += '<row r="1">' + head + '</row>'
           for (var r = 0; r < t.rows.length; r++) {
             var row = t.rows[r],
               s = '',
               has = false
-            for (var c = 0; c < t.cols.length; c++) {
-              var v = row[c]
+            for (var col = 0; col < t.cols.length; col++) {
+              var v = row[col]
               if (isNil(v)) continue
               has = true
-              var ref = idxToCol(c) + (r + 1)
+              var ref = idxToCol(col) + (r + 2)
               if (typeof v === 'number' && isFinite(v))
                 s += '<c r="' + ref + '"><v>' + v + '</v></c>'
               else if (typeof v === 'boolean')
@@ -3817,7 +3926,7 @@
                   escXml(String(v)) +
                   '</t></is></c>'
             }
-            x += has ? '<row r="' + (r + 1) + '">' + s + '</row>' : '<row r="' + (r + 1) + '"/>'
+            x += has ? '<row r="' + (r + 2) + '">' + s + '</row>' : '<row r="' + (r + 2) + '"/>'
           }
           x += '</sheetData></worksheet>'
           return x
@@ -5254,6 +5363,7 @@
             if (ch === '/' && s[i + 1] === '*') {
               i += 2
               while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++
+              if (i >= s.length) throw new Error('SQL 块注释未闭合')
               i += 2
               continue
             }
@@ -5273,18 +5383,28 @@
                 out += s[j]
                 j++
               }
-              if (j >= s.length) throw new Error(T('msg.badRegex'))
+              if (j >= s.length) throw new Error('SQL 字符串未闭合')
               toks.push({ t: 'str', v: out })
               i = j + 1
               continue
             }
-            if (ch === '`') {
-              var j2 = i + 1,
+            if (ch === '`' || ch === '[') {
+              var close = ch === '`' ? '`' : ']',
+                j2 = i + 1,
                 o2 = ''
-              while (j2 < s.length && s[j2] !== '`') {
+              while (j2 < s.length) {
+                if (s[j2] === close) {
+                  if (s[j2 + 1] === close) {
+                    o2 += close
+                    j2 += 2
+                    continue
+                  }
+                  break
+                }
                 o2 += s[j2]
                 j2++
               }
+              if (j2 >= s.length) throw new Error('SQL 标识符未闭合')
               toks.push({ t: 'ident', v: o2 })
               i = j2 + 1
               continue
@@ -5306,7 +5426,10 @@
                   j3 = je
                 }
               }
-              toks.push({ t: 'num', v: parseFloat(s.slice(i, j3)) })
+              var numberText = s.slice(i, j3)
+              if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(numberText))
+                throw new Error('无效数字: ' + numberText)
+              toks.push({ t: 'num', v: parseFloat(numberText) })
               i = j3
               continue
             }
@@ -5323,7 +5446,7 @@
               i += 2
               continue
             }
-            if ('=<>(),.*+-'.indexOf(ch) >= 0) {
+            if ('=<>(),.*+-;'.indexOf(ch) >= 0) {
               toks.push({ t: 'op', v: ch })
               i++
               continue
@@ -7587,22 +7710,29 @@
               return
             }
             var payload = window.DataViz.toPayload(t, { name: t.name })
-            window.VizBridge.send(payload)
-            notify('已发送到可视化图表')
-            try {
-              if (window.parent !== window) {
-                var target = location.origin
-                var raw = new URLSearchParams(location.search).get('omm_hub_origin')
-                if (raw) {
-                  var u = new URL(raw)
-                  if ((u.protocol === 'http:' || u.protocol === 'https:') &&
-                      ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) target = u.origin
-                }
-                window.parent.postMessage({ type: 'omm:share-open', app: 'visualization' }, target)
-              } else {
-                window.open('omm-visualization.html', '_blank', 'noopener')
+            Promise.resolve(window.VizBridge.send(payload)).then(function (delivered) {
+              if (!delivered) {
+                notify('发送失败：可视化产品未确认接收')
+                return
               }
-            } catch (e) {}
+              notify('已发送到可视化图表')
+              try {
+                if (window.parent !== window) {
+                  var target = location.origin
+                  var raw = new URLSearchParams(location.search).get('omm_hub_origin')
+                  if (raw) {
+                    var u = new URL(raw)
+                    if ((u.protocol === 'http:' || u.protocol === 'https:') &&
+                        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) target = u.origin
+                  }
+                  window.parent.postMessage({ type: 'omm:share-open', app: 'visualization' }, target)
+                } else {
+                  window.open('omm-visualization.html', '_blank', 'noopener')
+                }
+              } catch (e) {}
+            }).catch(function () {
+              notify('发送失败：可视化产品未确认接收')
+            })
           },
           showTextOut: function () {
             UIMgr.closeDropdowns()
@@ -8207,7 +8337,6 @@
             S.theme = 'light'
             S.bg = 'bg-void'
             S.zoom = 1
-            S.radius = 0
             S.fontSize = 13
             S.cellFont = 13
             S.colW = 150
@@ -8226,14 +8355,6 @@
             S.zoom = clamp(+(S.zoom - 0.1).toFixed(2), CONFIG.MIN_ZOOM, CONFIG.MAX_ZOOM)
             Settings.apply()
             renderGrid()
-          },
-          radiusUp: function () {
-            S.radius = clamp(S.radius + 2, 0, 12)
-            Settings.apply()
-          },
-          radiusDown: function () {
-            S.radius = clamp(S.radius - 2, 0, 12)
-            Settings.apply()
           },
           fontUp: function () {
             S.fontSize = clamp(S.fontSize + 1, 11, 20)
@@ -8677,8 +8798,6 @@
           'replaceAll',
           'zoomUp',
           'zoomDown',
-          'radiusUp',
-          'radiusDown',
           'fontUp',
           'fontDown',
           'cellFontUp',

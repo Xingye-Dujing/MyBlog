@@ -25,7 +25,7 @@
 |---|---|---|---|---|---|---|
 | [ZenPack](zenpack.md) | `lib/zen-pack.js` + `lib/zen-backup.js` | 工作区搬家 | 导出 / 导入工作区包 | `.json` | `format:"zen-backup"` 与 `v:1`，`products[].id` 为 localStorage 键名 |
 | [ZenCard](zencard.md) | `lib/zen-card.js` | 通用卡片 | 导入卡片包 | 卡片包对象 | `.json` | `format:"zen-card-pack"` 且 `v:1` 且 `cards[]`，每张卡片通过 `zen-card` 校验 |
-| [Writer](writer.md) | `omm-writer.html` | ZenWriter | 导入文件 | 画布对象 | `.zc` | 顶层有 `nodes` 数组 |
+| [Writer](writer.md) | `omm-writer.html` | ZenWriter | 导入文件 | 画布对象 / 整库 | `.zc` / `.zwlib` | 顶层有 `nodes` 数组，或 `format=zenwriter-library` 且 `docs` 为对象 |
 | [Annotate](annotate.md) | `omm-annotate.html` | ZenMark | 导入（项目备份）/ 导入互通包 | 项目备份对象 | `.json` | `project.codes` 是数组（整库替换） |
 | [Corpus](corpus.md) | `omm-corpus.html` | ZenCorpus | 导入 / 从 JSON 恢复 | 全量备份对象 | `.json` | **同时**有 `entries[]` 与 `categories[]` |
 | [Data](data.md) | `omm-data.html` | ZenData | 从文件导入 / 从文本导入 | 数据集（数组） | `.json`/`.csv`/`.tsv` | 顶层是数组，或 `{rows:[...]}` |
@@ -44,7 +44,7 @@
 ## 2. 按“能不能让 AI 生成可导入文件”分类
 
 **✅ 支持 AI 直接生成可导入的 JSON（主力场景）**
-- ZenCard 卡片包、Writer `.zc`、Annotate 项目备份、Corpus 恢复、English 四类、Planner 备份、Data 数据集、Visualization 右侧属性。
+- ZenCard 卡片包、Writer `.zc` / `.zwlib`、Annotate 项目备份、Corpus 恢复、English 四类、Planner 备份、Data 数据集、Visualization 右侧属性。
 
 **通用中间格式**：ZenCard 不是某个产品的私有文件，而是所有产品互通的桥梁——
 `lib/zen-card.js` 提供与语料、批注、英语桥接包、写作画布、数据表之间的双向纯函数转换。
@@ -67,7 +67,7 @@
 - **别生成 PDF 版面**：Annotate 的 PDF 版面存在 IndexedDB，JSON 带不走；伪造 `kind:"pdf"` 只会显示“本机未缓存”。
 - **版本号是数字**：Planner 的 `version` 必须是数字 `2`；Visualization 属性文件 `version` 必须是数字 `1`，写字符串会判定失败。
 - **English 先词库后涂鸦**：涂鸦按单词短边贴合居中，键必须匹配已存在的单词，所以导入顺序是 A 词库 → B 涂鸦。
-- **纯 JSON**：所有交付文件都是 **UTF-8 合法 JSON**，无注释、无尾逗号（Writer 的 `.zc` 同理）。
+- **纯 JSON**：所有交付文件都是 **UTF-8 合法 JSON**，无注释、无尾逗号（Writer 的 `.zc` / `.zwlib` 同理）。
 
 ---
 
@@ -79,7 +79,7 @@ json-specs/
 ├── prompts.md         ★ 各项目“一页提示词”，复制即用（自包含，无需附整份规范）
 ├── zenpack.md         ZenPack 工作区包（复用 ZenBackup 清单格式）
 ├── zencard.md         ★ ZenCard 通用卡片 / 卡片包（跨产品中间格式）
-├── writer.md          ZenWriter 画布 (.zc)          ← 画布规范正本
+├── writer.md          ZenWriter 画布 (.zc / .zwlib)  ← 画布规范正本
 ├── annotate.md        ZenMark  项目备份 / 互通包 (.json)
 ├── corpus.md          ZenCorpus 恢复 / 互通包 (.json)
 ├── data.md            ZenData  数据集 / 文本导入 (.json)

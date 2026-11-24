@@ -129,6 +129,9 @@ def execute_job(job_id: str, root: Path) -> None:
             elif name == "node_error":
                 node = job["nodes"].setdefault(payload["id"], {"status": "error"})
                 node.update({"status": "error", "error": payload.get("error", {})})
+            elif name == "node_cancelled":
+                node = job["nodes"].setdefault(payload["id"], {"status": "cancelled"})
+                node.update({"status": "cancelled", "progress": 0})
             elif name == "progress":
                 node = job["nodes"].setdefault(payload["id"], {"status": "running"})
                 node["progress"] = payload.get("progress", 0)
@@ -155,8 +158,9 @@ def execute_job(job_id: str, root: Path) -> None:
             job["outputs"] = json_safe(result.get("outputs", []))
             job["conflicts"] = json_safe(result.get("conflicts", []))
             job["warnings"] = json_safe(result.get("warnings", []))
-            job["status"] = "done" if result.get("ok") else "error"
-            if not result.get("ok"):
+            job["status"] = ("cancelled" if result.get("cancelled")
+                             else "done" if result.get("ok") else "error")
+            if not result.get("ok") and not result.get("cancelled"):
                 job["error"] = result.get("error") or (result.get("errors") or [{}])[0]
     except Exception as exc:
         with _lock:
@@ -302,7 +306,7 @@ class Handler(BaseHTTPRequestHandler):
                     "nodes": job["nodes"], "outputs": job.get("outputs", []),
                     "conflicts": job.get("conflicts", []), "warnings": job.get("warnings", []),
                     "error": job.get("error"), "dryRun": bool(job.get("dryRun")),
-                    "result": job.get("result"),
+                    "cancelled": job["status"] == "cancelled", "result": job.get("result"),
                 }
             self._json(snap)
             return

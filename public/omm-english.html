@@ -206,14 +206,6 @@
           ><span class="settings-btn" data-action="fontUp">+</span>
         </div>
       </div>
-      <div class="dd-item-row">
-        <span>圆角</span>
-        <div class="settings-control">
-          <span class="settings-value" id="sv-radius">0</span
-          ><span class="settings-btn" data-action="radiusDown">−</span
-          ><span class="settings-btn" data-action="radiusUp">+</span>
-        </div>
-      </div>
       <div class="dd-divider"></div>
       <div class="dd-label">学习</div>
       <div class="dd-item-row">
@@ -5143,7 +5135,6 @@
               theme: 'light',
               bg: 'bg-dots',
               fscale: 1,
-              radius: 0,
               pinned: false,
               statusbar: true,
               dailyNew: 20,
@@ -5180,6 +5171,7 @@
             const d = defaults()
             const s = Object.assign(d, obj)
             s.set = Object.assign(d.set, obj.set || {})
+            delete s.set.radius
             return seed(s)
           } catch (e) {
             return seed(defaults())
@@ -5211,6 +5203,7 @@
         let _saveT = null
         function serializeS() {
           const clone = ZenUtil.clone(S)
+          delete clone.set.radius
           Object.keys(clone.books).forEach((k) => {
             if (clone.books[k].builtin && k !== 'fav') clone.books[k].w = null
           })
@@ -5224,6 +5217,7 @@
             const obj = ZenUtil.clone(data)
             S = Object.assign(defaults(), obj)
             S.set = Object.assign(defaults().set, obj.set || {})
+            delete S.set.radius
             S = seed(S)
             DICT = null
             if (typeof WV !== 'undefined' && S.activeBook) WV.book = S.activeBook
@@ -5247,6 +5241,19 @@
         const $ = (s) => document.querySelector(s)
         const $$ = (s) => Array.from(document.querySelectorAll(s))
         function esc(s) { return ZenUtil.esc(s) }
+        /* 先转义原文，再只把高亮词包进可信的 <em>；导入内容不能绕过 HTML 转义。 */
+        function highlightExample(text, word) {
+          const source = String(text || '')
+          const target = String(word || '')
+          if (!target) return esc(source)
+          const re = new RegExp('\\b' + ZenUtil.escRe(target) + '\\w*', 'gi')
+          let out = '', last = 0, match
+          while ((match = re.exec(source))) {
+            out += esc(source.slice(last, match.index)) + '<em>' + esc(match[0]) + '</em>'
+            last = match.index + match[0].length
+          }
+          return out + esc(source.slice(last))
+        }
         function pad(n) { return ZenUtil.pad(n) }
         function dayKey(d) {
           d = d || new Date()
@@ -5497,7 +5504,7 @@
           b.classList.toggle('menu-pinned', !!st.pinned)
           b.classList.toggle('statusbar-hidden', !st.statusbar)
           document.documentElement.style.setProperty('--fscale', st.fscale)
-          document.documentElement.style.setProperty('--radius', st.radius + 'px')
+          document.documentElement.style.setProperty('--zen-radius', '0px')
           const pin = $('#pin-btn')
           const tm = $('#top-menu')
           pin.classList.toggle('pinned', !!st.pinned)
@@ -5507,7 +5514,6 @@
             d.classList.toggle('active', d.dataset.bg === st.bg),
           )
           $('#sv-fontsize').textContent = Math.round(st.fscale * 100) + '%'
-          $('#sv-radius').textContent = st.radius
           $('#sv-daily').textContent = st.dailyNew
           $('#sv-autospeak').textContent = st.autoSpeak ? '开' : '关'
           $('#sv-phon').textContent = st.showPhon ? '开' : '关'
@@ -7739,9 +7745,9 @@
                 out.push(
                   OMM.doc({
                     title: L.title,
-                    text: segs.map((x) => x.text).join(' '),
+                    text: segs.map((x) => x.text).join('\n'),
                     lang: 'en',
-                    zh: '',
+                    zh: segs.map((x, i) => String((L.zh && L.zh[i]) || '')).join('\n'),
                   }),
                 )
               } else {
@@ -7789,14 +7795,26 @@
           )
           notify('已导出 ' + items.length + ' 项')
         }
-        function zbSend(toApp, items) {
+        async function zbSend(toApp, items) {
           if (!OMM) return notify('互通模块未加载')
           if (!items || !items.length) return notify('没有可发送的内容')
-          OMM.ask(OMM.sendMsg(toApp, items), '发送').then((ok) => {
-            if (!ok) return notify('已取消发送')
-            OMM.deliver(toApp, items, zbMeta())
+          const ok = await OMM.ask(OMM.sendMsg(toApp, items), '发送')
+          if (!ok) return notify('已取消发送')
+          try {
+            const meta = zbMeta()
+            await window.OMMShare.send({
+              to: toApp,
+              format: 'omm.bridge',
+              title: meta.sourceAppName + ' 互通数据',
+              payload: OMM.env(items, meta),
+            })
+            if (window.OMMShare.openApp) window.OMMShare.openApp(toApp)
             notify('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
-          })
+            return true
+          } catch (e) {
+            notify('发送失败：' + (e.message || e))
+            return false
+          }
         }
         /* 把 bridge 包收进 English：单词→新词书，句子/模板→语料，文章→听力材料 */
         function zbApply(items, meta, from) {
@@ -7808,7 +7826,7 @@
             nNote = 0,
             nListen = 0
           if (words.length) {
-            const pid = 'u' + Date.now()
+            const pid = ZenUtil.uid('u')
             const seen = {}
             const dedup = words.filter((w) => {
               const k = nkey(w.w)
@@ -7844,6 +7862,12 @@
           docs.forEach((d) => {
             const t = String(d.text || '').trim()
             if (!t) return
+            /* 有译文时整段保留为一个 seg，避免按英文句号猜测中译对齐而丢译文。 */
+            if (String(d.zh || '').trim()) {
+              segs.push({ s: null, e: null, text: t })
+              zhs.push(String(d.zh))
+              return
+            }
             parseSubs(t).segs.forEach((s) => {
               segs.push({ s: null, e: null, text: s.text })
               zhs.push('')
@@ -7856,7 +7880,7 @@
           })
           if (segs.length) {
             const L = Array.isArray(S.listen) ? S.listen : (S.listen = [])
-            const lid = 'u' + Date.now() + 'L'
+            const lid = ZenUtil.uid('u') + 'L'
             const title =
               (meta && (meta.docTitle || meta.title)) ||
               (segs.length ? String(segs[0].text).slice(0, 20) : '导入材料')
@@ -8837,6 +8861,7 @@
               confirmBox('导入该备份将覆盖当前全部数据，继续？', () => {
                 S = Object.assign(defaults(), obj)
                 S.set = Object.assign(defaults().set, obj.set || {})
+                delete S.set.radius
                 S = seed(S)
                 DICT = null
                 save()
@@ -9086,7 +9111,7 @@
                   : i === this.pos
                     ? '_'
                     : ''
-              boxesHtml += '<div class="' + cls + '" id="ty-b' + i + '">' + display + '</div>'
+              boxesHtml += '<div class="' + cls + '" id="ty-b' + i + '">' + esc(display) + '</div>'
             }
             if (inWord) boxesHtml += '</span>'
 
@@ -9098,28 +9123,18 @@
 
             let hintHtml = ''
             if (isSentence) {
-              const escaped = ZenUtil.escRe(word)
-              const exampleHtml = example
-                ? example.replace(new RegExp('\\b' + escaped + '\\w*', 'gi'), '<em>$&</em>')
-                : ''
+              const exampleHtml = example ? highlightExample(example, word) : ''
               hintHtml =
                 '<div class="ty-sent-hint">' +
                 '<div class="ty-sent-meaning">' +
-                meaning +
+                esc(meaning) +
                 '</div>' +
                 (translation ? '<div class="ty-sent-ex">' + esc(translation) + '</div>' : '') +
                 (exampleHtml ? '<div class="ty-sent-ex">' + exampleHtml + '</div>' : '') +
                 '</div>'
             } else {
-              if (meaning) hintHtml += '<div class="ty-meaning">' + meaning + '</div>'
-              if (example) {
-                const escaped = ZenUtil.escRe(word)
-                const highlighted = example.replace(
-                  new RegExp('\\b' + escaped + '\\w*', 'gi'),
-                  '<em>$&</em>',
-                )
-                hintHtml += '<div class="ty-example">' + highlighted + '</div>'
-              }
+              if (meaning) hintHtml += '<div class="ty-meaning">' + esc(meaning) + '</div>'
+              if (example) hintHtml += '<div class="ty-example">' + highlightExample(example, word) + '</div>'
             }
 
             const modeLabel = isSentence ? '例句' : '单词'
@@ -9137,7 +9152,7 @@
             if (isSentence) {
               infoLine = '<div class="ty-word-display" style="margin-bottom:4px">拼写例句</div>'
             } else {
-              infoLine = '<div class="ty-word-display">' + phon + '</div>'
+              infoLine = '<div class="ty-word-display">' + esc(phon) + '</div>'
             }
 
             $('#v-typing').innerHTML =
@@ -10765,16 +10780,6 @@
             applyAll()
             save()
           },
-          radiusDown() {
-            S.set.radius = clamp(S.set.radius - 2, 0, 14)
-            applyAll()
-            save()
-          },
-          radiusUp() {
-            S.set.radius = clamp(S.set.radius + 2, 0, 14)
-            applyAll()
-            save()
-          },
           dailyDown() {
             S.set.dailyNew = clamp(S.set.dailyNew - 5, 5, 100)
             applyAll()
@@ -10857,7 +10862,6 @@
               theme: 'light',
               bg: 'bg-dots',
               fscale: 1,
-              radius: 0,
               statusbar: true,
             })
             applyAll()
@@ -11819,16 +11823,20 @@
           // 跨应用直传：消费收件箱
           if (OMM)
             OMM.watch((p) => {
-              if (!p || !p.env) return
+              if (!p || !p.env) return true
               const items = OMM.normalize(p.env)
-              if (!items.length) return
-              OMM.ask(OMM.recvMsg(p.from, items), '导入').then((ok) => {
-                if (!ok) return notify('已取消导入')
+              if (!items.length) return true
+              return OMM.ask(OMM.recvMsg(p.from, items), '导入').then((ok) => {
+                if (!ok) {
+                  notify('已取消导入')
+                  return false
+                }
                 const n = zbApply(items, p.env.meta, p.from)
                 if (n) {
                   switchView('words')
                   notify('已收到来自 ' + OMM.nameOf(p.from) + ' 的数据')
                 }
+                return true
               })
             })
           $('#fi-ls-audio').addEventListener('change', (ev) => {

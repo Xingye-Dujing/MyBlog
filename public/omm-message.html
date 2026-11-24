@@ -362,10 +362,6 @@
         <div class="sub-panel">
           <div class="settings-grid">
             <div class="setting-row">
-              <span data-i18n="settings.theme">主题</span
-              ><button class="mini" id="theme-btn">浅色</button>
-            </div>
-            <div class="setting-row">
               <span data-i18n="settings.menuPin">固定菜单</span
               ><button class="mini" id="menu-pin-btn">开</button>
             </div>
@@ -375,14 +371,6 @@
                 <button id="font-down">−</button
                 ><button class="value-btn" id="font-value">100%</button
                 ><button id="font-up">+</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <span data-i18n="settings.radius">圆角</span>
-              <div class="setting-actions">
-                <button id="radius-down">−</button
-                ><button class="value-btn" id="radius-value">0px</button
-                ><button id="radius-up">+</button>
               </div>
             </div>
             <div class="setting-row" style="grid-column: 1/-1">
@@ -495,10 +483,8 @@
             'sync.footer':
               'Supabase Auth 负责身份验证，RLS 负责用户隔离，消息正文在浏览器端使用 AES-GCM 加密后写入数据库，并通过 Realtime 推送到其它在线设备。',
             'settings.title': '界面设置',
-            'settings.theme': '主题',
             'settings.menuPin': '固定菜单',
             'settings.font': '字号',
-            'settings.radius': '圆角',
             'settings.background': '背景',
             'settings.language': '语言',
             'settings.clear': '清理本地消息缓存',
@@ -511,8 +497,6 @@
               '消息输入框§发送这条消息|Enter|换行（不发送）|Shift + Enter~~全局§取消正在编辑的消息 / 返回上一层|Esc|打开 / 重新载入本说明|?|取消云同步的确认提示|Esc~~焦点在搜索框上时§清空搜索|Esc~~焦点在密码框上时§登录|Enter',
             'hk.note':
               '窄屏（≤720px）上 Enter 一律换行，发送必须点“发送”按钮。\nEsc 会先取消正在编辑的消息，没有在编辑时才返回上一层；它不会关闭确认框。',
-            'settings.light': '浅色',
-            'settings.dark': '深色',
             'settings.on': '开',
             'settings.off': '关',
             'toast.saved': '连接设置已保存',
@@ -557,12 +541,14 @@
             'status.configured': '已配置，待登录',
             'status.locked': '已登录，等待解锁',
             'status.live': '实时连接',
+            'status.manual': '手动同步已就绪',
             'status.error': '连接异常',
             'status.loading': '正在连接',
             'sync.connectFirst': '请先保存 Supabase 连接设置',
             'sync.emailRequired': '请填写 Auth 邮箱',
             'sync.passwordRequired': '请输入密码',
             'sync.loginFailed': '登录失败，请检查邮箱和密码',
+            'sync.identityMismatch': '当前登录身份与连接邮箱不一致，请重新登录',
             'sync.unlockFailed': '密码错误或消息无法解密',
             'sync.cloudEmpty': '暂无云端消息',
             'sync.noMessages': '暂无消息',
@@ -654,10 +640,8 @@
             'sync.footer':
               'Supabase Auth handles identity, RLS isolates users, message bodies are encrypted with AES-GCM in the browser before storage, and Realtime pushes new messages to other online devices.',
             'settings.title': 'INTERFACE',
-            'settings.theme': 'THEME',
             'settings.menuPin': 'PIN MENU',
             'settings.font': 'FONT SIZE',
-            'settings.radius': 'RADIUS',
             'settings.background': 'BACKGROUND',
             'settings.language': 'LANGUAGE',
             'settings.clear': 'CLEAR LOCAL MESSAGE CACHE',
@@ -670,8 +654,6 @@
               'Message box§Send this message|Enter|New line without sending|Shift + Enter~~General§Cancel the message being edited / go back one level|Esc|Open this panel|?|Dismiss the cloud-sync warning|Esc~~While focused in the search box§Clear the search|Esc~~While focused in the password box§Sign in|Enter',
             'hk.note':
               'On narrow screens (≤720px) Enter always inserts a new line — use the Send button to post.\nEsc cancels the message being edited first and only goes back a level when nothing is being edited; it does not close the confirm dialog.',
-            'settings.light': 'LIGHT',
-            'settings.dark': 'DARK',
             'settings.on': 'ON',
             'settings.off': 'OFF',
             'toast.saved': 'Connection settings saved',
@@ -718,12 +700,14 @@
             'status.configured': 'CONFIGURED, SIGN IN',
             'status.locked': 'SIGNED IN, LOCKED',
             'status.live': 'REALTIME CONNECTED',
+            'status.manual': 'MANUAL SYNC READY',
             'status.error': 'CONNECTION ERROR',
             'status.loading': 'CONNECTING',
             'sync.connectFirst': 'Save Supabase connection settings first',
             'sync.emailRequired': 'Enter the Auth email',
             'sync.passwordRequired': 'Enter the password',
             'sync.loginFailed': 'Sign-in failed. Check the email and password',
+            'sync.identityMismatch': 'The signed-in identity does not match the configured email. Sign in again',
             'sync.unlockFailed': 'Wrong password or message decryption failed',
             'sync.cloudEmpty': 'No cloud messages',
             'sync.noMessages': 'No messages',
@@ -761,13 +745,15 @@
           session = null,
           channel = null,
           realtimeReady = false,
+          syncMode = 'manual',
+          activeCacheKey = null,
           password = '',
           busy = false,
           lang = 'zh',
           messages = [],
           deviceId = '',
           deviceName = '',
-          ui = { theme: 'light', bg: 'bg-void', fscale: 1, radius: 0, pinned: true },
+          ui = { bg: 'bg-void', fscale: 1, pinned: true },
           editingId = null,
           favoriteIds = new Set(),
           favoriteFilter = false,
@@ -802,6 +788,50 @@
         function lsGet(k, fb) { return ZenUtil.lsGet(k, fb) }
         function lsSet(k, v) { return ZenUtil.lsSet(k, v) }
         function lsDel(k) { return ZenUtil.lsDel(k) }
+        function cacheIdentity() {
+          const c = cfg(),
+            user = session && session.user
+          if (!c.url || !c.key || !user || !user.id) return null
+          const userEmail = String(user.email || '').trim().toLowerCase(),
+            configuredEmail = String(c.email || '').trim().toLowerCase()
+          if (configuredEmail && userEmail && configuredEmail !== userEmail) return null
+          return {
+            project: String(c.url).trim().replace(/\/$/, ''),
+            userId: String(user.id),
+            email: userEmail || configuredEmail,
+          }
+        }
+        function cacheKey(identity) {
+          return LS.cache + ':' + encodeURIComponent(identity.project) + ':' +
+            encodeURIComponent(identity.userId) + ':' + encodeURIComponent(identity.email)
+        }
+        function cacheMatches(data, identity) {
+          return !!data && data.version === 1 && data.project === identity.project &&
+            data.userId === identity.userId && data.email === identity.email
+        }
+        function activateCacheIdentity() {
+          const identity = cacheIdentity()
+          if (!identity) throw new Error(t('sync.identityMismatch'))
+          activeCacheKey = cacheKey(identity)
+          return identity
+        }
+        function resetMessageView() {
+          messages = []
+          favoriteIds.clear()
+          metaAvailable = false
+          favoriteFilter = false
+          searchQuery = ''
+          if ($('message-search')) $('message-search').value = ''
+          renderMessages()
+        }
+        function clearActiveCache() {
+          if (activeCacheKey) {
+            lsDel(activeCacheKey)
+            lsDel(activeCacheKey + '-favorites')
+          }
+          activeCacheKey = null
+          resetMessageView()
+        }
         function saveCfg(v) {
           lsSet(LS.cfg, JSON.stringify(v))
         }
@@ -868,6 +898,7 @@
         }
         function syncPrefsUi() {
           const p = prefs()
+          syncMode = p.autoSync ? 'auto' : 'manual'
           const sw = $('auto-sync')
           if (sw) sw.setAttribute('aria-checked', p.autoSync ? 'true' : 'false')
           const d = $('auto-sync-desc')
@@ -923,18 +954,26 @@
             }
         }
         function loadUi() {
-          ui = Object.assign(ui, ZenUtil.getJSON(LS.ui, {}))
+          const stored = ZenUtil.getJSON(LS.ui, {}) || {}
+          ui = {
+            bg: ['bg-void', 'bg-grid', 'bg-dots', 'bg-cross', 'bg-diagonal'].includes(stored.bg)
+              ? stored.bg
+              : 'bg-void',
+            fscale: Number.isFinite(Number(stored.fscale))
+              ? Math.max(0.85, Math.min(1.4, Number(stored.fscale)))
+              : 1,
+            pinned: stored.pinned !== false,
+          }
           applyUi()
         }
         function saveUi() {
           if (!lsSet(LS.ui, JSON.stringify(ui))) toast(t('toast.storageFull'))
         }
         function applyUi() {
-          ZenUtil.themeApply(ui.theme === 'dark')
+          if (!document.documentElement.classList.contains('omm-embed')) ZenUtil.themeApply(false)
           document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
           document.body.classList.add(ui.bg)
           document.documentElement.style.setProperty('--fscale', ui.fscale)
-          document.documentElement.style.setProperty('--radius', ui.radius + 'px')
           $('top-menu').classList.toggle('pinned', !!ui.pinned)
           document.body.classList.toggle('menu-pinned', !!ui.pinned)
           $('pin-btn').classList.toggle('pinned', !!ui.pinned)
@@ -947,12 +986,9 @@
           }
           $('status-device').textContent = deviceName || ''
           $('status-count').textContent = String(messages.length)
-          $('theme-btn').textContent =
-            ui.theme === 'dark' ? t('settings.dark') : t('settings.light')
           $('menu-pin-btn').textContent = ui.pinned ? t('settings.on') : t('settings.off')
           $('lang-btn').textContent = lang === 'zh' ? 'EN' : '中'
           $('font-value').textContent = Math.round(ui.fscale * 100) + '%'
-          $('radius-value').textContent = ui.radius + 'px'
           if ($('status-center'))
             $('status-center').textContent = t('side.messages') + ' ' + messages.length
           $$('.bg-dot').forEach((e) => {
@@ -983,21 +1019,21 @@
           $('compose-info').textContent = window.matchMedia('(max-width: 720px)').matches
             ? t('chat.hotkeyMobile')
             : t('chat.hotkey')
-          $('theme-btn').textContent =
-            ui.theme === 'dark' ? t('settings.dark') : t('settings.light')
           $('menu-pin-btn').textContent = ui.pinned ? t('settings.on') : t('settings.off')
         }
         function connState() {
           if (!session) return cfg().url && cfg().key ? t('status.configured') : t('status.offline')
           if (!password) return t('status.locked')
+          if (syncMode === 'manual') return t('status.manual')
           return realtimeReady
             ? t('status.live')
             : channel
               ? t('status.loading')
-              : t('status.locked')
+              : t('status.configured')
         }
         function sideState() {
           if (realtimeReady && password) return t('status.live')
+          if (session && password && syncMode === 'manual') return t('status.manual')
           if (session) return t('status.locked')
           return cfg().url && cfg().key ? t('status.configured') : t('status.offline')
         }
@@ -1011,7 +1047,7 @@
           $('status-dot').className = 'status-dot ' + (err ? 'err' : ok ? 'live' : '')
         }
         function requireCloudAction(kind) {
-          if (!session || !password || !sb || !realtimeReady) {
+          if (!session || !password || !sb) {
             const key =
               kind === 'quote'
                 ? 'toast.quoteOffline'
@@ -1025,19 +1061,42 @@
         }
 
         function persistCache() {
+          const identity = cacheIdentity()
+          if (!identity || !password || !activeCacheKey) return
           try {
-            localStorage.setItem(LS.cache, JSON.stringify(messages.slice(-250)))
-            localStorage.setItem(LS.cache + '-favorites', JSON.stringify(Array.from(favoriteIds)))
-          } catch {}
-        }
-        function loadCache() {
-          const a = ZenUtil.getJSON(LS.cache, [])
-          const f = ZenUtil.getJSON(LS.cache + '-favorites', [])
-          favoriteIds = new Set(Array.isArray(f) ? f : [])
-          if (Array.isArray(a)) {
-            messages = a.map(normalizeMessage)
-            renderMessages()
+            localStorage.setItem(activeCacheKey, JSON.stringify({
+              version: 1,
+              project: identity.project,
+              userId: identity.userId,
+              email: identity.email,
+              messages: messages.slice(-250),
+            }))
+            localStorage.setItem(activeCacheKey + '-favorites', JSON.stringify(Array.from(favoriteIds)))
+          } catch {
+            toast(t('toast.storageFull'))
           }
+        }
+        function loadCache(identity = cacheIdentity()) {
+          if (!identity || !session || !password) {
+            messages = []
+            favoriteIds.clear()
+            renderMessages()
+            return false
+          }
+          activeCacheKey = cacheKey(identity)
+          const data = ZenUtil.getJSON(activeCacheKey, null)
+          if (!cacheMatches(data, identity)) {
+            messages = []
+            favoriteIds.clear()
+            renderMessages()
+            return false
+          }
+          const favorites = ZenUtil.getJSON(activeCacheKey + '-favorites', [])
+          messages = (Array.isArray(data.messages) ? data.messages : []).map(normalizeMessage)
+          const ids = new Set(messages.map((m) => m.id))
+          favoriteIds = new Set((Array.isArray(favorites) ? favorites : []).filter((id) => ids.has(id)))
+          renderMessages()
+          return true
         }
         function device() {
           if (!deviceId) {
@@ -1106,6 +1165,12 @@
           if (r.error) throw r.error
           session = r.data.session || null
           realtimeReady = false
+          if (session && !cacheIdentity()) {
+            try { await sb.auth.signOut({ scope: 'local' }) } catch {}
+            session = null
+            activeCacheKey = null
+            resetMessageView()
+          } else if (session) activeCacheKey = cacheKey(cacheIdentity())
           setConn()
         }
         function sqlText() {
@@ -1202,7 +1267,7 @@
         }
         async function setFavorite(id, value) {
           if (!id || busy) return
-          if (!session || !password || !sb || !realtimeReady) {
+          if (!session || !password || !sb) {
             toast(t('toast.favoriteOffline'))
             return
           }
@@ -1326,9 +1391,50 @@
             from = index + needle.length
           }
         }
-        function locateMessage(id) {
+        async function locateMessage(id) {
           if (!id) return false
-          const row = document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')
+          const findRow = () => document.querySelector('[data-message-id="' + CSS.escape(id) + '"]')
+          let row = findRow()
+          if (!row && messages.some((m) => m.id === id)) {
+            searchQuery = ''
+            favoriteFilter = false
+            if ($('message-search')) $('message-search').value = ''
+            renderMessages()
+            row = findRow()
+          } else if (!row && sb && session && password) {
+            try {
+              const r = await sb
+                .from(TABLE)
+                .select('id,device_id,device_name,payload,client_created_at,created_at')
+                .eq('user_id', session.user.id)
+                .eq('id', id)
+                .maybeSingle()
+              if (r.error) throw r.error
+              if (!r.data) {
+                messages = messages.map((m) => m.quoteId === id
+                  ? Object.assign({}, m, { quoteDeleted: true })
+                  : m)
+                persistCache()
+                renderMessages()
+                toast(t('toast.quoteDeleted'))
+                return false
+              }
+              const target = messageFromPayload(await dec(r.data.payload), {
+                id: r.data.id,
+                deviceId: r.data.device_id,
+                deviceName: r.data.device_name || '',
+                ts: Number(r.data.client_created_at) || new Date(r.data.created_at).getTime(),
+              })
+              addMessage(target, true)
+              row = findRow()
+            } catch (e) {
+              toast(friendly(e))
+              return false
+            }
+          } else if (!row) {
+            toast(t('toast.quoteOffline'))
+            return false
+          }
           if (!row) {
             toast(t('toast.quoteDeleted'))
             return false
@@ -1498,12 +1604,13 @@
           $('send-btn').disabled = !password || busy
           $('send-btn').textContent = editingId ? t('chat.edit') : t('chat.send')
         }
-        function addMessage(m) {
+        function addMessage(m, keepOutsideWindow = false) {
           m = normalizeMessage(m)
           const i = messages.findIndex((x) => x.id === m.id)
           if (i >= 0) messages[i] = Object.assign({}, messages[i], m)
           else messages.push(m)
-          messages = messages.slice(-250)
+          messages.sort((a, b) => a.ts - b.ts)
+          if (!keepOutsideWindow) messages = messages.slice(-250)
           persistCache()
           renderMessages()
         }
@@ -1515,13 +1622,35 @@
             renderMessages()
           }
         }
+        async function resolveQuoteStatus(list) {
+          const ids = new Set(list.map((x) => x.id)),
+            missing = Array.from(new Set(list
+              .map((x) => x.quoteId)
+              .filter((id) => id && !ids.has(id))))
+          if (!missing.length) {
+            return list.map((x) => Object.assign({}, x, { quoteDeleted: false }))
+          }
+          const existing = new Set()
+          for (let offset = 0; offset < missing.length; offset += 50) {
+            const r = await sb
+              .from(TABLE)
+              .select('id')
+              .eq('user_id', session.user.id)
+              .in('id', missing.slice(offset, offset + 50))
+            if (r.error) throw r.error
+            for (const row of r.data || []) existing.add(row.id)
+          }
+          return list.map((x) => Object.assign({}, x, {
+            quoteDeleted: !!x.quoteId && !ids.has(x.quoteId) && !existing.has(x.quoteId),
+          }))
+        }
         async function fetchHistory() {
           if (!sb || !session || !password) return
           const r = await sb
             .from(TABLE)
             .select('id,device_id,device_name,payload,client_created_at,created_at')
             .eq('user_id', session.user.id)
-            .order('client_created_at', { ascending: true })
+            .order('client_created_at', { ascending: false })
             .limit(250)
           if (r.error) {
             if (/schema cache|Could not find the table/i.test(r.error.message || ''))
@@ -1529,7 +1658,7 @@
             throw r.error
           }
           const out = []
-          for (const row of r.data || []) {
+          for (const row of (r.data || []).slice().reverse()) {
             try {
               out.push(
                 messageFromPayload(await dec(row.payload), {
@@ -1543,10 +1672,7 @@
               throw new Error(t('sync.unlockFailed'))
             }
           }
-          const ids = new Set(out.map((x) => x.id))
-          messages = out.map((x) =>
-            Object.assign({}, x, { quoteDeleted: !!x.quoteId && !ids.has(x.quoteId) }),
-          )
+          messages = await resolveQuoteStatus(out)
           persistCache()
           renderMessages()
           await fetchMessageMeta()
@@ -1809,14 +1935,14 @@
             pw = p.password
           if (!pw) return false
           await connect()
-          if (!session) {
-            if (!email) return false
-            const r = await sb.auth.signInWithPassword({ email, password: pw })
-            if (r.error) throw r.error
-            session = r.data.session || null
-          }
+          if (!email) return false
+          const r = await sb.auth.signInWithPassword({ email, password: pw })
+          if (r.error) throw r.error
+          session = r.data.session || null
           if (!session) throw new Error(t('sync.loginFailed'))
           password = pw
+          activateCacheIdentity()
+          loadCache()
           deviceName = lsGet(LS.device + '-name', '') || deviceName
           syncPrefsUi()
           setConn()
@@ -1839,12 +1965,13 @@
           busy = true
           try {
             await connect()
-            if (!session) {
-              const r = await sb.auth.signInWithPassword({ email, password: pw })
-              if (r.error) throw r.error
-              session = r.data.session || null
-            }
+            const r = await sb.auth.signInWithPassword({ email, password: pw })
+            if (r.error) throw r.error
+            session = r.data.session || null
+            if (!session) throw new Error(t('sync.loginFailed'))
             password = pw
+            activateCacheIdentity()
+            loadCache()
             deviceName = ($('device-name').value || '').trim()
             if (deviceName) lsSet(LS.device + '-name', deviceName)
             savePrefs({ remember: remember, password: pw })
@@ -1872,7 +1999,7 @@
           if (editingId) return saveEdit()
           const input = $('message-input'),
             raw = input.value.trim()
-          if (!raw || !session || !password || busy) return
+          if (!raw || !session || !password || !sb || busy) return
           const lines = raw.split('\n')
           const quoteLines = []
           let i = 0
@@ -1983,19 +2110,15 @@
           realtimeReady = false
           password = ''
           busy = false
+          clearActiveCache()
+          clearEditMode()
+          $('message-input').value = ''
           $('password').value = ''
           syncPrefsUi()
           closeSubpage()
           $('config-panel').classList.remove('hidden')
           $('auth-panel').classList.add('hidden')
           $('sql-panel').classList.add('hidden')
-          messages = []
-          favoriteIds.clear()
-          metaAvailable = false
-          favoriteFilter = false
-          searchQuery = ''
-          if ($('message-search')) $('message-search').value = ''
-          renderMessages()
           setConn()
           toast(t('toast.loggedOut'))
           openSync(true)
@@ -2013,9 +2136,11 @@
             channel = null
           }
           $('password').value = ''
+          clearEditMode()
+          $('message-input').value = ''
+          resetMessageView()
           syncPrefsUi()
           setConn()
-          renderMessages()
           toast(cleared ? t('sync.lockedCleared') : t('toast.locked'))
           openSync()
         }
@@ -2116,6 +2241,15 @@
               ? { url: url, key: key, email: email, remember: false, password: '' }
               : { url: url, key: key, email: email },
           )
+          if (changed) {
+            if (channel) {
+              try { sb.removeChannel(channel) } catch {}
+              channel = null
+            }
+            clearActiveCache()
+            clearEditMode()
+            $('message-input').value = ''
+          }
           sb = null
           session = null
           realtimeReady = false
@@ -2131,11 +2265,12 @@
           ZenUtil.autosize(x, { min: 220, extra: 2 })
         }
         function clearLocal() {
-          lsDel(LS.cache)
-          lsDel(LS.cache + '-favorites')
-          favoriteIds.clear()
-          messages = []
-          renderMessages()
+          if (activeCacheKey) clearActiveCache()
+          else {
+            lsDel(LS.cache)
+            lsDel(LS.cache + '-favorites')
+            resetMessageView()
+          }
           toast(t('toast.deleted'))
         }
         function resizeSql() {
@@ -2270,12 +2405,6 @@
             }
           })
           autoResizeMessageInput()
-          $('theme-btn').onclick = () => {
-            ui.theme = ui.theme === 'dark' ? 'light' : 'dark'
-            saveUi()
-            applyUi()
-            applyI18n()
-          }
           $('menu-pin-btn').onclick = () => {
             ui.pinned = !ui.pinned
             saveUi()
@@ -2288,16 +2417,6 @@
           }
           $('font-up').onclick = () => {
             ui.fscale = Math.min(1.4, +(ui.fscale + 0.05).toFixed(2))
-            saveUi()
-            applyUi()
-          }
-          $('radius-down').onclick = () => {
-            ui.radius = Math.max(0, ui.radius - 2)
-            saveUi()
-            applyUi()
-          }
-          $('radius-up').onclick = () => {
-            ui.radius = Math.min(14, ui.radius + 2)
             saveUi()
             applyUi()
           }
@@ -2348,11 +2467,13 @@
             lang = localStorage.getItem(LS.ui + '-lang') || 'zh'
             loadUi()
             device()
-            loadCache()
+            lsDel(LS.cache)
+            lsDel(LS.cache + '-favorites')
             bind()
             bindSyncPrefs()
             applyI18n()
             syncPrefsUi()
+            resetMessageView()
             const c = cfg()
             if (c.url && c.key) {
               await connect()

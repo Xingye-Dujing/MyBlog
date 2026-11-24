@@ -20,8 +20,8 @@ import omm_launcher  # noqa: E402
 class ShareIdentityTests(unittest.TestCase):
     def test_hub_identity_cannot_be_claimed_by_a_product(self):
         self.assertEqual(omm_share._client_app("data", {"app": ["hub"]}), "data")
-        self.assertEqual(omm_share._client_app("data", {"app": ["corpus"]}), "corpus")
-        self.assertEqual(omm_share._client_app("hub", {}), "hub")
+        self.assertEqual(omm_share._client_app("data", {"app": ["corpus"]}), "data")
+        self.assertEqual(omm_share._client_app("hub", {}, trusted_hub=True), "hub")
 
 
 class PortReuseTests(unittest.TestCase):

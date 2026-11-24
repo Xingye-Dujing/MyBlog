@@ -18,6 +18,13 @@
   var active = null
   var wiredLayer = null
   var SELECTOR = 'select[data-zen-select]'
+  var INTERACTIVE_SELECTOR = [
+    'input', 'textarea', 'select', 'button', 'a[href]', 'summary',
+    'audio[controls]', 'video[controls]', 'iframe', 'object', 'embed',
+    '[contenteditable]:not([contenteditable="false"])', '[tabindex]',
+    '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]',
+    '[role="switch"]', '[role="tab"]', '[role="menuitem"]', '[role="option"]',
+  ].join(',')
 
   function wireMenu() {
     var l = layer.get()
@@ -190,7 +197,9 @@
       if (ownerLabel) {
         ownerLabel.removeAttribute('for')
         ownerLabel.addEventListener('click', function (event) {
-          if (event.target.closest('.zenui-select-trigger')) return
+          var interactive = event.target.closest && event.target.closest(INTERACTIVE_SELECTOR)
+          if (interactive && ownerLabel.contains(interactive)) return
+          event.preventDefault()
           open(select, trigger, sync)
         })
       }

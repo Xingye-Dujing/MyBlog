@@ -271,14 +271,6 @@
         </div>
       </div>
       <div class="dd-item-row">
-        <span>圆角</span>
-        <div class="settings-control">
-          <span class="settings-value" id="sv-radius">0</span
-          ><span class="settings-btn" data-action="radiusDown">−</span
-          ><span class="settings-btn" data-action="radiusUp">+</span>
-        </div>
-      </div>
-      <div class="dd-item-row">
         <span>界面字体</span>
         <div class="settings-control">
           <span class="settings-value" id="sv-fontsize">13px</span
@@ -923,8 +915,7 @@
         // 下划线/删除线/虚线较细，透明度低就看不见了
         var MK_LINE_A = 0.92
         // 圆角上限 = 自身厚度 × 该比例。细线（删除线/下划线）只有 0.13em 厚，
-        // 若直接吃满设置里的圆角，浏览器会把圆角钳到厚度的一半，细线就变成一根
-        // “香肠”，看起来比高亮块的圆角大得多 —— 所以统一按自身厚度收一次。
+        // 浏览器会把圆角钳到厚度的一半，细线容易变成一根“香肠”——所以统一按自身厚度收一次。
         var MK_RADIUS_CAP = 0.3
         function mkRgba(c, a) {
           var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c || '')
@@ -940,19 +931,19 @@
         function mkVars(color) {
           return '--mc:' + mkRgba(color, MK_BLOCK_A) + ';--mc-line:' + mkRgba(color, MK_LINE_A)
         }
-        // 批注圆角统一受“设置 → 圆角”（CSS 变量 --radius）控制，再按自身厚度收敛：
-        //   半径 = min(--radius, 厚度 × MK_RADIUS_CAP)
+        // 批注图形圆角使用共享 ZEN 令牌，再按自身厚度收敛：
+        //   半径 = min(--zen-radius, 厚度 × MK_RADIUS_CAP)
         // 用 CSS min() 表达，样式里只有一个出处。
         // 文本模式：厚度用 em，随正文排版字号缩放
         function mkRadiusCss(sty) {
           var cap = (MK_RADIUS_CAP * (HLFMT[sty] || HLFMT.hl).h).toFixed(4) + 'em'
-          var e = 'min(var(--radius), ' + cap + ')'
+          var e = 'min(var(--zen-radius), ' + cap + ')'
           return HL_ROUND_BOTTOM[sty] ? '0 0 ' + e + ' ' + e : e
         }
         // 版式模式：该样式色块的厚度（px）已经算出来了，直接用 px
         function mkRadiusPxCss(sty, h) {
           var cap = (MK_RADIUS_CAP * h).toFixed(2) + 'px'
-          var e = 'min(var(--radius), ' + cap + ')'
+          var e = 'min(var(--zen-radius), ' + cap + ')'
           return HL_ROUND_BOTTOM[sty] ? '0 0 ' + e + ' ' + e : e
         }
         var DOCTYPES = [
@@ -1130,7 +1121,6 @@
           theme: 'light',
           bg: 'bg-void',
           zoom: 1,
-          radius: 0,
           fontSize: 13,
           bodyFont: 15,
           lh: 1.95,
@@ -1320,7 +1310,6 @@
             })
             document.body.classList.add(S.bg)
             document.documentElement.style.setProperty('--zoom', S.zoom)
-            document.documentElement.style.setProperty('--radius', S.radius + 'px')
             document.documentElement.style.setProperty('--fscale', (S.fontSize / 13).toFixed(3))
             document.documentElement.style.setProperty(
               '--bfscale',
@@ -1342,11 +1331,13 @@
         }
 
         var Store = {
-          save: function () {
+          save: function (project) {
             try {
-              localStorage.setItem(LS_P, JSON.stringify(P))
+              localStorage.setItem(LS_P, JSON.stringify(project || P))
+              return true
             } catch (e) {
               notify('本地存储空间不足')
+              return false
             }
           },
           load: function () {
@@ -1378,6 +1369,229 @@
               return false
             }
           },
+        }
+
+        function prepareProjectImport(project) {
+          if (!project || typeof project !== 'object' || Array.isArray(project))
+            throw new Error('项目文件必须是 JSON 对象')
+          var arrayKeys = ['docs', 'codes', 'anns', 'rels', 'memos', 'marks', 'notes', 'cellCodes', 'reliability']
+          arrayKeys.forEach(function (key) {
+            if (!Array.isArray(project[key])) throw new Error('项目缺少数组字段：' + key)
+          })
+          var candidate = ZenUtil.clone(project)
+          function fail(message) {
+            throw new Error(message)
+          }
+          function objectList(key) {
+            return candidate[key].map(function (item, index) {
+              if (!item || typeof item !== 'object' || Array.isArray(item))
+                fail(key + '[' + index + '] 必须是对象')
+              return item
+            })
+          }
+          function indexBy(list, label) {
+            var map = Object.create(null)
+            list.forEach(function (item, index) {
+              var id = item && item.id
+              if (typeof id !== 'string' || !id.trim()) fail(label + '[' + index + '] 缺少 id')
+              if (Object.prototype.hasOwnProperty.call(map, id)) fail(label + ' 存在重复 id：' + id)
+              map[id] = item
+            })
+            return map
+          }
+          function requiredString(item, key, label) {
+            if (typeof item[key] !== 'string' || !item[key].trim()) fail(label + '.' + key + ' 必须是非空字符串')
+          }
+          function optionalString(item, key, label) {
+            if (item[key] != null && typeof item[key] !== 'string') fail(label + '.' + key + ' 必须是字符串')
+          }
+          function integer(value) {
+            return typeof value === 'number' && isFinite(value) && Math.floor(value) === value
+          }
+          function checkRange(item, doc, label) {
+            if (!integer(item.start) || !integer(item.end) || item.start < 0 || item.end <= item.start || item.end > doc.text.length)
+              fail(label + ' 的文本范围无效')
+          }
+
+          var docs = objectList('docs')
+          var codes = objectList('codes')
+          var anns = objectList('anns')
+          var rels = objectList('rels')
+          var memos = objectList('memos')
+          var marks = objectList('marks')
+          var notes = objectList('notes')
+          var cellCodes = objectList('cellCodes')
+          var reliability = objectList('reliability')
+          var docMap = indexBy(docs, 'docs')
+          var codeMap = indexBy(codes, 'codes')
+          var annMap = indexBy(anns, 'anns')
+          indexBy(rels, 'rels')
+          indexBy(memos, 'memos')
+          indexBy(marks, 'marks')
+          indexBy(notes, 'notes')
+          indexBy(cellCodes, 'cellCodes')
+          indexBy(reliability, 'reliability')
+
+          docs.forEach(function (doc, index) {
+            var label = 'docs[' + index + ']'
+            requiredString(doc, 'title', label)
+            if (typeof doc.text !== 'string') fail(label + '.text 必须是字符串')
+            if (doc.kind == null) doc.kind = 'text'
+            if (['text', 'pdf', 'table'].indexOf(doc.kind) < 0) fail(label + '.kind 无效')
+            ;['source', 'type', 'date', 'note'].forEach(function (key) { optionalString(doc, key, label) })
+            if (doc.kind === 'table') {
+              if (!Array.isArray(doc.columns) || !doc.columns.length || doc.columns.some(function (col) { return typeof col !== 'string' || !col }))
+                fail(label + '.columns 必须是非空字符串数组')
+              if (!integer(doc.rowCount) || doc.rowCount < 0) fail(label + '.rowCount 必须是非负整数')
+            }
+          })
+          codes.forEach(function (code, index) {
+            var label = 'codes[' + index + ']'
+            requiredString(code, 'no', label)
+            requiredString(code, 'name', label)
+            if (['open', 'axial', 'selective'].indexOf(code.level) < 0) fail(label + '.level 无效')
+            optionalString(code, 'parent', label)
+            if (code.parent && !codeMap[code.parent]) fail(label + '.parent 指向不存在的码号')
+            if (code.parent === code.id) fail(label + '不能把自己设为上级码')
+            ;['def', 'incl', 'excl', 'eg', 'memo', 'color'].forEach(function (key) { optionalString(code, key, label) })
+          })
+          codes.forEach(function (code) {
+            var seen = Object.create(null)
+            var current = code
+            while (current && current.parent) {
+              if (seen[current.id]) fail('codes 的上级码形成循环：' + code.id)
+              seen[current.id] = true
+              current = codeMap[current.parent]
+            }
+          })
+          anns.forEach(function (ann, index) {
+            var label = 'anns[' + index + ']'
+            var doc = docMap[ann.doc]
+            if (!doc) fail(label + '.doc 指向不存在的材料')
+            if (!codeMap[ann.code]) fail(label + '.code 指向不存在的码号')
+            if (typeof ann.quote !== 'string') fail(label + '.quote 必须是字符串')
+            checkRange(ann, doc, label)
+            ;['memo', 'status', 'ts'].forEach(function (key) { optionalString(ann, key, label) })
+          })
+          rels.forEach(function (rel, index) {
+            var label = 'rels[' + index + ']'
+            if (!annMap[rel.a] || !annMap[rel.b]) fail(label + ' 引用了不存在的编码片段')
+            if (rel.a === rel.b) fail(label + ' 不能关联同一个片段')
+            requiredString(rel, 'type', label)
+          })
+          memos.forEach(function (memo, index) {
+            var label = 'memos[' + index + ']'
+            requiredString(memo, 'title', label)
+            optionalString(memo, 'type', label)
+            optionalString(memo, 'body', label)
+            optionalString(memo, 'ts', label)
+            if (!Array.isArray(memo.codes)) fail(label + '.codes 必须是数组')
+            memo.codes.forEach(function (id) {
+              if (!codeMap[id]) fail(label + '.codes 引用了不存在的码号')
+            })
+          })
+          marks.forEach(function (mark, index) {
+            var label = 'marks[' + index + ']'
+            var doc = docMap[mark.doc]
+            if (!doc) fail(label + '.doc 指向不存在的材料')
+            if (typeof mark.quote !== 'string') fail(label + '.quote 必须是字符串')
+            checkRange(mark, doc, label)
+            ;['sty', 'color', 'text', 'ts'].forEach(function (key) { optionalString(mark, key, label) })
+          })
+          notes.forEach(function (note, index) {
+            var label = 'notes[' + index + ']'
+            if (['word', 'sentence', 'template', 'phrase'].indexOf(note.kind) < 0) fail(label + '.kind 无效')
+            requiredString(note, 'en', label)
+            ;['zh', 'phon', 'ex', 'exZh', 'note', 'src', 'ts'].forEach(function (key) { optionalString(note, key, label) })
+            if (!Array.isArray(note.tags) || note.tags.some(function (tag) { return typeof tag !== 'string' }))
+              fail(label + '.tags 必须是字符串数组')
+            if (!integer(note.start) || !integer(note.end)) fail(label + ' 的文本范围必须是整数')
+            if (note.doc == null || note.doc === '') {
+              if (note.start >= 0 || note.end >= 0) fail(label + ' 缺少材料但带有文本定位')
+            } else {
+              var doc = docMap[note.doc]
+              if (!doc) fail(label + '.doc 指向不存在的材料')
+              if (note.start >= 0 || note.end >= 0) checkRange(note, doc, label)
+              else if (note.start !== -1 || note.end !== -1) fail(label + ' 的未定位标记必须使用 -1')
+            }
+          })
+          cellCodes.forEach(function (cell, index) {
+            var label = 'cellCodes[' + index + ']'
+            var doc = docMap[cell.table]
+            if (!doc || doc.kind !== 'table') fail(label + '.table 必须指向表格材料')
+            if (!codeMap[cell.code]) fail(label + '.code 指向不存在的码号')
+            if (typeof cell.col !== 'string' || doc.columns.indexOf(cell.col) < 0) fail(label + '.col 不属于该表格')
+            if (!integer(cell.row) || cell.row < 0 || cell.row >= doc.rowCount) fail(label + '.row 超出表格范围')
+            if (cell.round == null) cell.round = 1
+            if (!integer(cell.round) || cell.round < 1) fail(label + '.round 必须是正整数')
+            ;['memo', 'status', 'ts'].forEach(function (key) { optionalString(cell, key, label) })
+          })
+          reliability.forEach(function (result, index) {
+            var label = 'reliability[' + index + ']'
+            if (['text', 'table'].indexOf(result.source) < 0) fail(label + '.source 无效')
+            if (!integer(result.round) || result.round < 1) fail(label + '.round 必须是正整数')
+            optionalString(result, 'col', label)
+            optionalString(result, 'ts', label)
+            ;['unmatched', 'missing', 'multi'].forEach(function (key) {
+              if (!integer(result[key]) || result[key] < 0) fail(label + '.' + key + ' 必须是非负整数')
+            })
+            if (result.jaccard != null && (typeof result.jaccard !== 'number' || !isFinite(result.jaccard) || result.jaccard < 0 || result.jaccard > 1))
+              fail(label + '.jaccard 必须是 0–1 数值或 null')
+            if (result.stat != null) {
+              if (typeof result.stat !== 'object' || Array.isArray(result.stat)) fail(label + '.stat 必须是对象或 null')
+              if (!integer(result.stat.N) || result.stat.N < 0) fail(label + '.stat.N 必须是非负整数')
+              ;['po', 'pe', 'kappa'].forEach(function (key) {
+                if (typeof result.stat[key] !== 'number' || !isFinite(result.stat[key])) fail(label + '.stat.' + key + ' 必须是数值')
+              })
+            }
+            if (!Array.isArray(result.disagreements)) fail(label + '.disagreements 必须是数组')
+            result.disagreements.forEach(function (item, disagreementIndex) {
+              var dlabel = label + '.disagreements[' + disagreementIndex + ']'
+              if (!item || typeof item !== 'object' || Array.isArray(item)) fail(dlabel + ' 必须是对象')
+              if (!codeMap[item.a] || !codeMap[item.b]) fail(dlabel + ' 引用了不存在的码号')
+              if (result.source === 'text' && !annMap[item.k]) fail(dlabel + '.k 引用了不存在的片段')
+              if (result.source === 'table') {
+                var row = Number(item.k)
+                if (!/^\d+$/.test(String(item.k)) || !integer(row) || row < 0) fail(dlabel + '.k 必须是表格行号')
+                if (!docs.some(function (doc) {
+                  return doc.kind === 'table' && doc.columns.indexOf(result.col || '') >= 0 && row < doc.rowCount
+                })) fail(dlabel + '.k 超出表格范围')
+              }
+            })
+            if (result.source === 'table' && !docs.some(function (doc) {
+              return doc.kind === 'table' && doc.columns.indexOf(result.col || '') >= 0
+            })) fail(label + '.col 不属于任何表格材料')
+          })
+
+          candidate.title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title : '未命名研究项目'
+          candidate.desc = typeof candidate.desc === 'string' ? candidate.desc : ''
+          candidate.codes.forEach(function (code, index) {
+            if (!code.color || COLORS.indexOf(code.color) < 0) code.color = COLORS[index % COLORS.length]
+          })
+          return candidate
+        }
+
+        function replaceProject(project) {
+          var candidate = prepareProjectImport(project)
+          var serialized = JSON.stringify(candidate)
+          // localStorage 的 setItem 是原子操作；只有它成功后才替换内存状态。
+          localStorage.setItem(LS_P, serialized)
+          P.title = candidate.title
+          P.desc = candidate.desc
+          P.docs = candidate.docs
+          P.codes = candidate.codes
+          P.anns = candidate.anns
+          P.rels = candidate.rels
+          P.memos = candidate.memos
+          P.marks = candidate.marks
+          P.notes = candidate.notes
+          P.cellCodes = candidate.cellCodes
+          P.reliability = candidate.reliability
+          S.docId = P.docs.length ? P.docs[0].id : null
+          S.selAnn = null
+          S.selMark = null
+          S.pdfLostId = null
+          return candidate
         }
 
         // ================================================================
@@ -1737,15 +1951,27 @@
             })
           },
           put: function (k, v) {
+            return IDB.putMany([[k, v]])
+          },
+          putMany: function (entries) {
             return IDB.open().then(function (db) {
               return new Promise(function (res, rej) {
                 var tx = db.transaction('files', 'readwrite')
-                tx.objectStore('files').put(v, k)
+                var store = tx.objectStore('files')
+                ;(entries || []).forEach(function (entry) {
+                  var key = entry && entry[0]
+                  var value = entry && entry[1]
+                  if (value == null) store.delete(key)
+                  else store.put(value, key)
+                })
                 tx.oncomplete = function () {
                   res(true)
                 }
                 tx.onerror = function () {
-                  rej(tx.error)
+                  rej(tx.error || new Error('IndexedDB 写入失败'))
+                }
+                tx.onabort = function () {
+                  rej(tx.error || new Error('IndexedDB 事务已中止'))
                 }
               })
             })
@@ -3392,7 +3618,7 @@
                 var box = b.box
                 var w = Math.max(1, box.x1 - box.x0)
                 var h = Math.max(1, box.y1 - box.y0)
-                // 圆角与文本模式同源：都是 min(--radius, 厚度 × MK_RADIUS_CAP)
+                // 圆角与文本模式同源：都是 min(--zen-radius, 厚度 × MK_RADIUS_CAP)
                 var radiusCss = mkRadiusPxCss(r.sty, h)
                 return (
                   '<i class="mk ' +
@@ -5095,9 +5321,13 @@
             if (P.notes.length > before2) addedN++
             else np++
           })
-          Store.save()
-          renderAll()
-          if (S.view === 'notes') renderNoteList()
+          if (Store.save() === false) throw new Error('互通包导入失败：本地存储写入失败')
+          try {
+            renderAll()
+            if (S.view === 'notes') renderNoteList()
+          } catch (renderError) {
+            if (window.console) console.error(renderError)
+          }
           if (!quiet)
             notify(
               '已导入 ' +
@@ -5132,6 +5362,28 @@
             })
             notify(total ? '互通包已导入 · ' + total + ' 项' : '没有新增内容（可能重复）')
           })
+        }
+        async function applyIncomingBridge(packet) {
+          if (!OMM || !packet || !packet.env) return false
+          var items = OMM.normalize(packet.env)
+          if (!items.length) return false
+          var ok = await OMM.ask(OMM.recvMsg(packet.from, items), '导入')
+          if (!ok) {
+            notify('已取消导入')
+            return false
+          }
+          var count = ingestBridge(packet.env, true)
+          if (count) {
+            try {
+              setView('notes')
+              renderNoteList()
+              notify('已收到来自 ' + OMM.nameOf(packet.from) + ' 的 ' + count + ' 项数据')
+            } catch (renderError) {
+              if (window.console) console.error(renderError)
+            }
+          }
+          // OMMBridge.watch 只在明确 true 时释放 inbox；成功或重复但合法的包都消费。
+          return true
         }
 
         // ================================================================
@@ -6462,7 +6714,7 @@
           })
           var done = 0
           function finish() {
-            Store.save()
+            if (done) Store.save()
             renderAll()
             if (done) notify('已导入 ' + done + ' 份材料')
           }
@@ -6493,23 +6745,16 @@
                   return finish()
                 }
                 var pr = o && o.project ? o.project : o
-                if (!pr || !Array.isArray(pr.codes)) throw new Error('bad')
+                if (!pr || typeof pr !== 'object' || Array.isArray(pr)) throw new Error('bad')
                 showConfirm('检测到项目备份，导入将替换当前全部数据，确定继续？', '导入').then(
                   function (ok) {
-                    if (!ok) return finish()
-                    P.title = pr.title || P.title
-                    P.desc = pr.desc || ''
-                    P.docs = pr.docs || []
-                    P.codes = pr.codes || []
-                    P.anns = pr.anns || []
-                    P.rels = pr.rels || []
-                    P.memos = pr.memos || []
-                    P.marks = pr.marks || []
-                    P.notes = pr.notes || []
-                    P.cellCodes = pr.cellCodes || []
-                    P.reliability = pr.reliability || []
-                    S.docId = P.docs.length ? P.docs[0].id : null
-                    Store.save()
+                    if (!ok) return
+                    try {
+                      replaceProject(pr)
+                    } catch (importError) {
+                      notify('项目文件校验失败：' + (importError.message || String(importError)))
+                      return
+                    }
                     renderAll()
                     notify('项目已导入')
                   },
@@ -7135,7 +7380,6 @@
         function updateSettingsUI() {
           el('sv-theme').textContent = S.theme === 'dark' ? '深色' : '浅色'
           el('sv-zoom').textContent = Math.round(S.zoom * 100) + '%'
-          el('sv-radius').textContent = String(S.radius)
           el('sv-fontsize').textContent = S.fontSize + 'px'
           el('sv-bodyfont').textContent = S.bodyFont + 'px'
           el('sv-lh').textContent = Number(S.lh).toFixed(2)
@@ -7577,16 +7821,6 @@
             Settings.apply()
             Settings.save()
           },
-          radiusUp: function () {
-            S.radius = clamp(S.radius + 1, 0, 12)
-            Settings.apply()
-            Settings.save()
-          },
-          radiusDown: function () {
-            S.radius = clamp(S.radius - 1, 0, 12)
-            Settings.apply()
-            Settings.save()
-          },
           fontUp: function () {
             S.fontSize = clamp(S.fontSize + 1, 11, 20)
             Settings.apply()
@@ -7621,7 +7855,6 @@
             S.theme = 'light'
             S.bg = 'bg-void'
             S.zoom = 1
-            S.radius = 0
             S.fontSize = 13
             S.bodyFont = 15
             S.lh = 1.95
@@ -8306,21 +8539,7 @@
             e.target.value = ''
           })
           // ---- 跨应用直传：消费收件箱 ----
-          if (OMM)
-            OMM.watch(function (p) {
-              if (!p || !p.env) return
-              var items = OMM.normalize(p.env)
-              if (!items.length) return
-              OMM.ask(OMM.recvMsg(p.from, items), '导入').then(function (ok) {
-                if (!ok) return notify('已取消导入')
-                var n = ingestBridge(p.env, true)
-                if (n) {
-                  setView('notes')
-                  renderNoteList()
-                  notify('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 项数据')
-                }
-              })
-            })
+          if (OMM) OMM.watch(applyIncomingBridge)
 
           // ---- file ----
           el('file-input').addEventListener('change', function (e) {

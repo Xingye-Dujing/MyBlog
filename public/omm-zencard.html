@@ -134,6 +134,51 @@
         ZenUtil.setJSON(CARD_KEY, cards)
         ZenUtil.setJSON(SRS_KEY, srs)
       }
+      function renderAll() {
+        renderLibrary()
+        renderStats()
+        renderReview()
+        $('status-text').textContent = '卡片 ' + cards.length + ' 张'
+      }
+      async function removeCard(id) {
+        const card = cards.find((c) => c.id === id)
+        if (!card) return false
+        const ok = await window.ZenUI.dialog.confirm(
+          '删除卡片“' + card.content.slice(0, 40) + '”？对应的复习进度也会删除。',
+          { title: '删除卡片', ok: '删除', danger: true },
+        )
+        if (!ok) return false
+        cards = cards.filter((c) => c.id !== id)
+        srs = srs.filter((s) => s.id !== id)
+        if (current && current.id === id) current = null
+        save()
+        renderAll()
+        return true
+      }
+      function applyArtifact(artifact) {
+        if (!artifact || (artifact.format !== 'zen-card' && artifact.format !== 'zen-card-pack')) return
+        let incoming
+        if (artifact.format === 'zen-card') {
+          incoming = [ZenCard.parse(artifact.payload || artifact.card || artifact)]
+        } else {
+          incoming = ZenCard.parsePack(artifact.payload || artifact.pack || artifact).cards
+        }
+        /* 整包先通过严格校验，再一次性合并；非法包不会改动卡片或进度。 */
+        cards = ZenCard.merge(cards.concat(incoming))
+        syncSrs()
+        save()
+        renderAll()
+        toast('已合并 ' + incoming.length + ' 张共享卡片')
+      }
+      function importSrsText(text) {
+        const incoming = ZenSRS.deserialize(text)
+        const map = Object.create(null)
+        srs.concat(incoming).forEach((state) => { map[state.id] = state })
+        srs = Object.keys(map).map((id) => map[id])
+        syncSrs()
+        save()
+        renderAll()
+      }
 
       function renderStats() {
         const s = ZenSRS.stats(srs, Date.now())
@@ -208,20 +253,21 @@
         }).join('')
         box.querySelectorAll('.item').forEach((el) => {
           el.querySelector('[data-act="del"]').addEventListener('click', () => {
-            cards = cards.filter((c) => c.id !== el.dataset.id)
-            srs = srs.filter((s) => s.id !== el.dataset.id)
-            save(); renderLibrary(); renderStats(); renderReview()
+            removeCard(el.dataset.id).catch(() => toast('删除失败'))
           })
-          el.querySelector('[data-act="send"]').addEventListener('click', () => {
+          el.querySelector('[data-act="send"]').addEventListener('click', async () => {
             const card = cards.find((c) => c.id === el.dataset.id)
-            window.ZenUI.dialog.prompt('发送到哪个产品？\nwriter / corpus / english / annotate / data', 'writer').then(function (target) {
-              if (!target) return
-              if (window.OMMShare && window.OMMShare.send) {
-                window.OMMShare.send({ to: target, format: 'zen-card', title: card.content.slice(0, 30), payload: card })
-                  .then(() => toast('已发送给 ' + target))
-                  .catch(() => toast('发送失败（离线环境可导出 JSON）'))
-              } else toast('当前环境无法发送，请用“导入导出”')
-            })
+            if (!card) return
+            const target = await window.ZenUI.dialog.prompt('发送到哪个产品？\nwriter / corpus / english / annotate / data', 'writer')
+            if (!target) return
+            if (window.OMMShare && window.OMMShare.send) {
+              try {
+                await window.OMMShare.send({ to: target, format: 'zen-card', title: card.content.slice(0, 30), payload: card })
+                toast('已发送给 ' + target)
+              } catch (e) {
+                toast('发送失败（离线环境可导出 JSON）')
+              }
+            } else toast('当前环境无法发送，请用“导入导出”')
           })
         })
       }
@@ -314,7 +360,7 @@
           try {
             const pack = ZenCard.parsePack($('import-text').value)
             cards = ZenCard.merge(cards.concat(pack.cards))
-            syncSrs(); save(); renderLibrary(); renderStats(); renderReview()
+            syncSrs(); save(); renderAll()
             toast('导入 ' + pack.cards.length + ' 张卡片')
           } catch (e) { toast('导入失败：' + e.message) }
         })
@@ -328,9 +374,8 @@
         $('srs-import').addEventListener('change', async (e) => {
           const f = e.target.files[0]; if (!f) return
           try {
-            const incoming = ZenSRS.deserialize(await f.text())
-            const map = Object.create(null); srs.concat(incoming).forEach((s) => { map[s.id] = s })
-            srs = Object.keys(map).map((k) => map[k]); save(); renderStats(); renderReview(); toast('进度已导入')
+            importSrsText(await f.text())
+            toast('进度已导入')
           } catch (err) { toast('导入失败：' + err.message) }
         })
       }
@@ -372,8 +417,8 @@
       }
 
       ZenUtil.themeInit()
-      load(); fillSelects(); bind(); renderStats(); renderReview(); renderLibrary()
-      $('status-text').textContent = '卡片 ' + cards.length + ' 张'
+      load(); fillSelects(); bind(); renderAll()
+      if (window.OMMShare && window.OMMShare.onArtifact) window.OMMShare.onArtifact(applyArtifact)
     </script>
   </body>
 </html>

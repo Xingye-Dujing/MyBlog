@@ -32,6 +32,35 @@ test('每个产品都引用共享核心资产（含 Lambda 入口页）', () => 
   }
 })
 
+test('ZenUtil 跨窗口消息只信任精确父 Hub 或同源父窗口', () => {
+  const source = read('public/zen/foundation/util.js')
+  const parent = {}
+  const window = {
+    parent,
+    location: {
+      origin: 'http://127.0.0.1:8311',
+      search: '?omm_embed=1&omm_hub_origin=http%3A%2F%2F127.0.0.1%3A8300',
+    },
+  }
+  const context = { window, URL, URLSearchParams }
+  vm.runInNewContext(source, context)
+  const trust = context.window.ZenUtil.isTrustedParentMessage
+  assert.equal(context.window.ZenUtil.parentTargetOrigin(), 'http://127.0.0.1:8300')
+  assert.equal(trust({ source: parent, origin: 'http://127.0.0.1:8300' }), true)
+  assert.equal(trust({ source: {}, origin: 'http://127.0.0.1:8300' }), false)
+  assert.equal(trust({ source: parent, origin: 'http://127.0.0.1:9999' }), false)
+  window.location.search = '?omm_embed=1'
+  assert.equal(trust({ source: parent, origin: 'http://127.0.0.1:8300' }), false)
+  window.location.search = '?omm_embed=1&omm_hub_origin=javascript%3Aalert(1)'
+  assert.equal(trust({ source: parent, origin: 'null' }), false)
+  assert.equal(context.window.ZenUtil.parentTargetOrigin(), 'http://127.0.0.1:8311')
+  window.location.search = ''
+  assert.equal(trust({ source: parent, origin: 'http://127.0.0.1:8311' }), true)
+  assert.equal(trust({ source: parent, origin: 'http://127.0.0.1:8300' }), false)
+  window.parent = window
+  assert.equal(trust({ source: window, origin: 'http://127.0.0.1:8311' }), false)
+})
+
 test('无废弃兼容别名回潮', () => {
   const files = [
     ...PAGES,
@@ -105,7 +134,7 @@ test('zen/ 目录职责单一且名称互不重叠', () => {
 
 test('通用助手统一引用共享 ZenUtil，不再各自实现', () => {
   const util = read('public/zen/foundation/util.js')
-  for (const key of ['byId', 'tpl', 'setText', 'toggleCls', 'autosize', 'nz', 'low', 'kz', 'nowISO', 'pad', 'str', 'arr', 'isTableMissing', 'esc', 'uid', 'download', 'copy', 'safeName', 'escRe']) {
+  for (const key of ['byId', 'tpl', 'setText', 'toggleCls', 'autosize', 'nz', 'low', 'kz', 'nowISO', 'pad', 'str', 'arr', 'isTableMissing', 'isLocalOrigin', 'parentTargetOrigin', 'isTrustedParentMessage', 'esc', 'uid', 'download', 'copy', 'safeName', 'escRe']) {
     assert.ok(util.includes('u.' + key + ' ='), `ZenUtil 缺少 ${key}`)
   }
   const migrated = ['annotate', 'corpus', 'data', 'english', 'planner', 'writer']
@@ -325,7 +354,7 @@ test('主题应用与初始化统一委托 ZenUtil.theme*，不再直接操作 t
     const text = read(`public/omm-${id}.html`)
     assert.ok(text.includes('ZenUtil.themeApply('), `${id} 未委托主题应用`)
   }
-  assert.ok(read('public/omm-mdforge.html').includes("ZenUtil.themeApply(s.theme === 'night', 'theme-night')"),
+  assert.ok(read('public/omm-mdforge.html').includes("ZenUtil.themeApply(s.theme === 'night', 'theme-dark')"),
     'mdforge night 主题未委托共享应用')
   // 任何产品都不应再直接 toggle/add/remove 'theme-dark'
   for (const id of [...initIds, ...applyIds, 'ai', 'hub', 'latex', 'table', 'video',
@@ -429,12 +458,14 @@ test('三端 OMMBridge 下沉到共享库，产品只声明 data-self', () => {
   }
 })
 
-test('loopback origin / lsDel / fileStamp 等小助手不再自行实现', () => {
+test('跨窗口信任 / lsDel / fileStamp 等小助手不再自行实现', () => {
   const util = read('public/zen/foundation/util.js')
   assert.ok(util.includes('u.isLocalOrigin ='), 'ZenUtil 缺少 isLocalOrigin')
-  for (const page of ['public/index.html', 'public/lib/zen-table.js', 'public/lib/zen-video.js']) {
+  assert.ok(util.includes('u.isTrustedParentMessage ='), 'ZenUtil 缺少统一消息信任校验')
+  for (const page of ['public/index.html', 'public/lib/zen-table.js', 'public/lib/zen-video.js',
+    'public/lib/zen-link.js', 'public/viz-bridge.js', 'public/omm-zenreview.html']) {
     const text = read(page)
-    assert.ok(text.includes('ZenUtil.isLocalOrigin('), `${page} 未委托 isLocalOrigin`)
+    assert.ok(text.includes('ZenUtil.isTrustedParentMessage('), `${page} 未委托统一消息信任校验`)
     assert.ok(!/\bfunction localOrigin\s*\(/.test(text), `${page} 仍有内联 localOrigin`)
   }
   for (const page of ['public/omm-message.html', 'public/omm-writer.html']) {

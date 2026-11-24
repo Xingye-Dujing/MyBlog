@@ -79,6 +79,54 @@ class BrowserCase:
         self.assertEqual(self._console_errors, [], "页面存在控制台错误: %s" % self._console_errors[:3])
         self.assertEqual(self._bad_responses, [], "页面存在意外资源错误: %s" % self._bad_responses[:3])
 
+    def assert_accessible_dom(self):
+        issues = self.page.evaluate("""() => {
+            const visible = (el) => {
+                const style = getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden'
+                    && !el.closest('[hidden]') && rect.width > 0 && rect.height > 0;
+            };
+            const accessibleName = (el) => {
+                const direct = [el.getAttribute('aria-label'), el.getAttribute('title'),
+                    el.getAttribute('alt'), el.textContent].find((value) => value && value.trim());
+                if (direct) return direct.trim();
+                const labelledBy = (el.getAttribute('aria-labelledby') || '').split(/\\s+/).filter(Boolean);
+                const external = labelledBy.map((id) => document.getElementById(id)?.textContent || '').join(' ').trim();
+                if (external) return external;
+                if (el.id) {
+                    const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+                    if (label?.textContent.trim()) return label.textContent.trim();
+                }
+                return el.closest('label')?.textContent.trim() || el.getAttribute('placeholder') || '';
+            };
+            const counts = new Map();
+            for (const el of document.querySelectorAll('[id]')) counts.set(el.id, (counts.get(el.id) || 0) + 1);
+            const duplicateIds = [...counts].filter(([, count]) => count > 1).map(([id]) => id);
+            const unnamed = [...document.querySelectorAll(
+                'button,a[href],input,select,textarea,[role="button"],[role="link"],[tabindex]'
+            )].filter((el) => visible(el) && !el.disabled && !accessibleName(el))
+                .map((el) => el.id || el.tagName.toLowerCase());
+            const images = [...document.querySelectorAll('img')]
+                .filter((el) => visible(el) && !el.hasAttribute('alt')).map((el) => el.src);
+            const nativeDialogs = [...document.querySelectorAll('dialog')].filter(visible).length;
+            const nativeSelects = [...document.querySelectorAll('select')].filter(visible).length;
+            return {duplicateIds, unnamed, images, nativeDialogs, nativeSelects};
+        }""")
+        self.assertEqual(issues, {
+            "duplicateIds": [], "unnamed": [], "images": [],
+            "nativeDialogs": 0, "nativeSelects": 0,
+        }, "页面存在可访问性结构问题: %s" % issues)
+
+    def assert_zen_radius(self):
+        radii = self.page.evaluate("""() => {
+            const style = getComputedStyle(document.documentElement)
+            return [style.getPropertyValue('--zen-radius').trim(),
+                style.getPropertyValue('--radius').trim()]
+        }""")
+        self.assertEqual([float(value.replace('px', '') or 0) for value in radii], [0.0, 0.0],
+            "页面不得覆盖 ZEN 直角令牌: %s" % radii)
+
     def select_zen_option(self, selector, value, label):
         """Use the shared select's visible trigger and shadow-DOM option list."""
         select = self.page.locator(selector)
@@ -100,6 +148,8 @@ class ChainTest(BrowserCase, unittest.TestCase):
                 self.open(name)
                 self.assertTrue(self.page.title(), "%s 没有 title" % name)
                 self.assert_no_script_errors()
+                self.assert_accessible_dom()
+                self.assert_zen_radius()
 
     def test_writer_import_sanitizes_rich_html(self):
         self.open("omm-writer.html")
@@ -232,6 +282,25 @@ class ChainTest(BrowserCase, unittest.TestCase):
         self.page.wait_for_timeout(400)
         self.assertGreater(self.page.locator("#flow-canvas .flow-node").count(), 0)
         self.assertIn("条规则", self.page.locator("#flow-status").inner_text())
+        self.assert_no_script_errors()
+
+    def test_zenflow_run_persists_card_changes(self):
+        self.open("omm-zenflow.html")
+        self.page.evaluate("""() => {
+            localStorage.setItem('zen.cards.v1', JSON.stringify([
+                { id: 'flow-e2e', kind: 'note', source: 'manual', content: '规则写回', tags: ['test'] }
+            ]));
+            localStorage.setItem('zen.flow.rules.v1', JSON.stringify([
+                { id: 'rule-e2e', name: '加完成标签', enabled: true, priority: 0,
+                  when: { tag: 'test' }, actions: [{ type: 'addTag', value: 'done' }] }
+            ]));
+        }""")
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_timeout(300)
+        self.page.click("#run-btn")
+        self.page.wait_for_timeout(300)
+        cards = json.loads(self.page.evaluate("localStorage.getItem('zen.cards.v1') || '[]'"))
+        self.assertIn("done", cards[0]["tags"])
         self.assert_no_script_errors()
 
     def test_zenpack_export_import_restore_roundtrip(self):

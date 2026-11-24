@@ -44,7 +44,7 @@ test('VizBridge 三种投递路径与 origin 校验', () => {
   assert.ok(bridge.includes("localStorage.setItem(KEY, JSON.stringify(payload))"))
   assert.ok(bridge.includes("to: 'visualization'"))
   assert.ok(bridge.includes("type: 'omm:zenviz-data'"))
-  assert.ok(bridge.includes('isTrusted(e.origin)'))
+  assert.match(bridge, /ZenUtil\.isTrustedParentMessage\(\s*[a-z]+\s*\)/)
   assert.doesNotMatch(bridge, /postMessage\([^,]+,\s*'\*'/)
 })
 

@@ -41,6 +41,15 @@ Interpreter lookup order (overridable by environment variables):
   LAMBDA_INTERP_DIR/extension[.exe] 指定目录 / directory
   <repo>/extension[.exe]            仓库内本地运行 / inside the repo
   /opt/lambda-calculus-interpreter/ 线上部署 / production deployment
+
+安全配置 / security configuration:
+  LAMBDA_PUBLIC_MODE=1             显式启用公网部署；域名来源必须另行登记
+                                  opt into public deployment; register its hosts/origins
+  LAMBDA_ALLOWED_HOSTS            逗号分隔的 Host 白名单 / comma-separated Host allowlist
+  LAMBDA_ALLOWED_ORIGINS          逗号分隔的 Origin 白名单 / comma-separated Origin allowlist
+  LAMBDA_RATE_LIMIT               通用每 IP 每分钟请求数 / general per-IP requests/minute
+  LAMBDA_SESSION_RATE_LIMIT       会话创建/恢复限流 / session create/restore limit
+  LAMBDA_EVAL_RATE_LIMIT          求值/竞速限流 / evaluation/race limit
 """
 from __future__ import annotations
 
@@ -61,6 +70,7 @@ import time
 import unicodedata
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import (Flask, Response, g, has_request_context, jsonify, request,
                    send_from_directory, stream_with_context)
@@ -90,7 +100,7 @@ SHARE_DB = os.environ.get("LAMBDA_SHARE_DB", str(APP_DIR / "shares.json"))
 # Session snapshots: persist replay history so a session survives expiry/restarts.
 SNAPSHOT_TTL = max(0.0, float(os.environ.get("LAMBDA_SNAPSHOT_TTL", str(SESSION_IDLE))))
 MAX_SNAPSHOTS = max(0, int(os.environ.get("LAMBDA_MAX_SNAPSHOTS", str(MAX_SESSIONS))))
-MAX_SNAPSHOT_LINES = 200
+MAX_SNAPSHOT_LINES = max(1, int(os.environ.get("LAMBDA_MAX_SNAPSHOT_LINES", "2000")))
 SNAPSHOT_DB = os.environ.get("LAMBDA_SNAPSHOT_DB", str(APP_DIR / "sessions.json"))
 # 静态分享页：把一段对话渲染成自包含 HTML
 # Static share pages: render a transcript as a self-contained HTML document.
@@ -117,15 +127,41 @@ STRATEGIES = ("applicative", "normal", "cbn", "cbv")
 # 限制请求体大小，避免公开部署时一个巨大请求耗尽内存
 # Cap the request body so a huge request cannot exhaust memory in production.
 MAX_BODY = max(1024, int(os.environ.get("LAMBDA_MAX_BODY", str(1024 * 1024))))
-# 可选的每 IP 每分钟请求上限；0 表示关闭（默认关闭，避免影响本地与测试）
-# Optional per-IP requests/minute cap; 0 disables it (default, so local/tests are unaffected).
-RATE_LIMIT = max(0, int(os.environ.get("LAMBDA_RATE_LIMIT", "0")))
+# 每 IP 每分钟请求上限。会话与求值使用独立桶和更保守的默认值；0 仅用于显式关闭。
+# Per-IP requests/minute. Sessions and evaluations have separate, stricter buckets;
+# zero is accepted only as an explicit opt-out.
+RATE_LIMIT = max(0, int(os.environ.get("LAMBDA_RATE_LIMIT", "120")))
+SESSION_RATE_LIMIT = max(0, int(os.environ.get("LAMBDA_SESSION_RATE_LIMIT", "12")))
+# 240/min 仍限制持续滥用，同时允许一次恢复 201+ 行本地历史及少量初始化命令。
+# 240/min still bounds sustained abuse while allowing a 201+ line local replay.
+EVAL_RATE_LIMIT = max(0, int(os.environ.get("LAMBDA_EVAL_RATE_LIMIT", "240")))
 # 是否信任来自回环代理的 X-Forwarded-For；默认关闭，需显式 opt-in
 # Whether to trust X-Forwarded-For from a loopback proxy; off by default, opt in explicitly.
 TRUST_XFF = os.environ.get("LAMBDA_TRUST_XFF", "").strip().lower() in ("1", "true", "yes", "on")
 # 可选的表达式节点上限，传给解释器的 --max-term-size
 # Optional AST node cap forwarded to the interpreter as --max-term-size.
 MAX_TERM_SIZE = os.environ.get("LAMBDA_MAX_TERM_SIZE", "").strip()
+
+# 本机/桌面始终只接受回环 Host 与同源 Origin。公网部署必须显式开启并登记域名，
+# 开启公网模式不会自动跳过 Origin、Sec-Fetch-Site 或 JSON Content-Type 校验。
+# Loopback/desktop accepts only loopback Hosts and same-origin requests. Public
+# deployment is explicit and hostname-based; it never weakens CSRF checks by default.
+PUBLIC_MODE = os.environ.get("LAMBDA_PUBLIC_MODE", "").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _configured_names(name: str) -> frozenset[str]:
+    return frozenset(
+        part.strip().lower().rstrip(".")
+        for part in os.environ.get(name, "").split(",")
+        if part.strip()
+    )
+
+
+ALLOWED_HOSTS = _LOOPBACK_HOSTS | _configured_names("LAMBDA_ALLOWED_HOSTS")
+ALLOWED_ORIGINS = _configured_names("LAMBDA_ALLOWED_ORIGINS")
 
 # 分享载荷 code 的行数上限，与字节上限一起约束短链状态的大小
 # Line cap for share code; together with the byte cap it bounds short-link state.
@@ -170,14 +206,23 @@ def _client_ip() -> str:
     return remote
 
 
-def _rate_ok(cost: int = 1) -> bool:
-    """Token bucket per client IP; disabled when RATE_LIMIT <= 0."""
-    if RATE_LIMIT <= 0:
+def _rate_ok(cost: int = 1, scope: str = "general") -> bool:
+    """Token bucket per client IP and endpoint class.
+
+    A zero limit disables only that bucket. Session/eval defaults stay enabled in
+    loopback, desktop and public modes; deployments may tune them explicitly.
+    """
+    limit = RATE_LIMIT
+    if scope == "session":
+        limit = SESSION_RATE_LIMIT
+    elif scope == "eval":
+        limit = EVAL_RATE_LIMIT
+    if limit <= 0:
         return True
     cost = max(1, int(cost))
-    ip = _client_ip()
+    bucket = f"{scope}:{_client_ip()}"
     now = time.monotonic()
-    rate = RATE_LIMIT / 60.0
+    rate = limit / 60.0
     with _rate_lock:
         if len(_rate_buckets) > RATE_BUCKET_MAX:
             cutoff = now - RATE_BUCKET_IDLE
@@ -186,12 +231,12 @@ def _rate_ok(cost: int = 1) -> bool:
             while len(_rate_buckets) > RATE_BUCKET_MAX:
                 oldest = min(_rate_buckets, key=lambda k: _rate_buckets[k][1])
                 _rate_buckets.pop(oldest, None)
-        tokens, last = _rate_buckets.get(ip, (float(RATE_LIMIT), now))
-        tokens = min(float(RATE_LIMIT), tokens + (now - last) * rate)
+        tokens, last = _rate_buckets.get(bucket, (float(limit), now))
+        tokens = min(float(limit), tokens + (now - last) * rate)
         if tokens < cost:
-            _rate_buckets[ip] = (tokens, now)
+            _rate_buckets[bucket] = (tokens, now)
             return False
-        _rate_buckets[ip] = (tokens - float(cost), now)
+        _rate_buckets[bucket] = (tokens - float(cost), now)
     return True
 
 # `:load` 默认只允许解释器目录内的文件，防止 Web 用户读取服务器任意路径；
@@ -313,7 +358,10 @@ def _resolve_interp() -> Path:
     dirs = []
     if os.environ.get("LAMBDA_INTERP_DIR"):
         dirs.append(Path(os.environ["LAMBDA_INTERP_DIR"]))
-    dirs.extend([APP_DIR.parent, Path("/opt/lambda-calculus-interpreter")])
+    # 源码树与暂存插件都把二进制放在页面资源目录；仓库根仅作为旧布局回退。
+    # Source and staged plugins keep the binary beside the page assets; the repo
+    # root remains a fallback for the older layout.
+    dirs.extend([APP_DIR, APP_DIR.parent, Path("/opt/lambda-calculus-interpreter")])
 
     for directory in dirs:
         for name in ("extension.exe", "extension"):
@@ -383,6 +431,73 @@ def _bind_request_id():
     g.request_id = rid or uuid.uuid4().hex[:12]
 
 
+def _origin_parts(value: str) -> tuple[str, str, int] | None:
+    """Normalize an Origin/Host URL to scheme, hostname and effective port."""
+    if not isinstance(value, str) or not value or "," in value:
+        return None
+    try:
+        parsed = urlsplit(value)
+        scheme = parsed.scheme.lower()
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if (scheme not in ("http", "https") or not hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+            return None
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except (TypeError, ValueError):
+        return None
+    return scheme, hostname, port
+
+
+def _request_source_allowed() -> tuple[bool, str]:
+    """Validate Host, Origin and Fetch Metadata before any route can mutate state."""
+    request_origin = _origin_parts(request.host_url)
+    host = request_origin[1] if request_origin else ""
+    allowed_hosts = ALLOWED_HOSTS if PUBLIC_MODE else _LOOPBACK_HOSTS
+    if host not in allowed_hosts:
+        return False, "Host header is not allowed"
+
+    origin = (request.headers.get("Origin") or "").strip()
+    site = (request.headers.get("Sec-Fetch-Site") or "").strip().lower()
+    explicit_origin = False
+    if origin:
+        parts = _origin_parts(origin)
+        if parts is None:
+            return False, "Origin header is invalid"
+        explicit_origin = PUBLIC_MODE and any(
+            parts == _origin_parts(item) for item in ALLOWED_ORIGINS
+        )
+        if not explicit_origin and parts != request_origin:
+            return False, "Origin must match the request origin"
+
+    # Simple cross-site navigations/forms may omit Origin. Fetch Metadata keeps
+    # those requests out even when their Content-Type happens to look harmless.
+    if site == "cross-site" and not explicit_origin:
+        return False, "Cross-site requests are not allowed"
+    if not origin and site not in ("", "none", "same-origin"):
+        # The Hub and product use different loopback ports, so an embedded GET
+        # is same-site rather than same-origin and carries no Origin header.
+        safe_embedded_get = (site == "same-site"
+                             and request.method in ("GET", "HEAD", "OPTIONS"))
+        if not safe_embedded_get:
+            return False, "Browser request is missing a trusted Origin"
+    return True, ""
+
+
+@app.before_request
+def _guard_request_source():
+    allowed, reason = _request_source_allowed()
+    if not allowed:
+        return api_error("请求来源不受信任 / untrusted request source: " + reason,
+                         403, "forbidden")
+    if (request.path.startswith("/api/")
+            and request.method in ("POST", "PUT", "PATCH", "DELETE")
+            and request.mimetype != "application/json"):
+        return api_error("浏览器 API 必须使用 application/json", 415,
+                         "unsupported_media_type")
+    return None
+
+
 @app.after_request
 def _echo_request_id(resp):
     # 把请求 id 写回响应头，便于前端与日志关联
@@ -423,6 +538,16 @@ _ERROR_TEXT = {
                   "The session was cancelled"),
     "rate_limited": ("请求过于频繁，请稍后再试",
                      "Too many requests; please retry shortly"),
+    "forbidden": ("请求来源不受信任",
+                  "Request source is not trusted"),
+    "unsupported_media_type": ("浏览器 API 必须使用 application/json",
+                               "Browser API requests must use application/json"),
+    "snapshot_full": ("会话历史已达到快照容量上限，请导出后清空或调整服务端上限",
+                      "Session history reached the snapshot capacity; export and clear it or raise the server limit"),
+    "snapshot_truncated": ("快照历史不完整，不能用它覆盖本地历史；请使用本地历史重建",
+                           "Snapshot history is truncated; keep local history and rebuild from it instead"),
+    "snapshot_shorter": ("服务端快照比本地历史短，已拒绝覆盖",
+                         "Server snapshot is shorter than local history; overwrite refused"),
 }
 
 # 其余 HTTP 异常沿用原生状态码，映射到同一套 code 词表
@@ -432,9 +557,12 @@ _HTTP_ERROR_CODE = {
     404: "not_found",
     405: "bad_request",
     408: "timeout",
+    409: "snapshot_shorter",
     410: "session_expired",
     413: "payload_too_large",
+    415: "unsupported_media_type",
     429: "rate_limited",
+    403: "forbidden",
     500: "internal",
 }
 
@@ -912,6 +1040,89 @@ def _use_sqlite() -> bool:
     return raw.endswith((".sqlite", ".sqlite3", ".db"))
 
 
+def _snapshot_metadata(entry: dict) -> dict:
+    """Describe the stored replay history without hiding capacity loss."""
+    code = entry.get("code")
+    stored = len(code) if isinstance(code, list) else 0
+    total = entry.get("totalLines")
+    if not isinstance(total, int) or isinstance(total, bool) or total < stored:
+        total = stored
+    truncated = bool(entry.get("truncated")) or total > stored
+    return {
+        "truncated": truncated,
+        "totalLines": total,
+        "storedLines": stored,
+        "droppedLines": max(0, total - stored),
+        "maxLines": MAX_SNAPSHOT_LINES,
+    }
+
+
+def _normalize_snapshot_entry(entry: dict) -> dict:
+    """Bound stored code and persist explicit truncation metadata.
+
+    Histories up to the configured cap are kept in full. Oversized or legacy
+    histories remain bounded, but are marked unrecoverable so restore refuses
+    them instead of silently replacing a longer client-side history.
+    """
+    raw = entry.get("code")
+    code = list(raw) if isinstance(raw, list) else []
+    total = entry.get("totalLines")
+    if not isinstance(total, int) or isinstance(total, bool) or total < len(code):
+        total = len(code)
+    bounded = code[-MAX_SNAPSHOT_LINES:]
+    truncated = bool(entry.get("truncated")) or len(code) > len(bounded) or total > len(bounded)
+    normalized = dict(entry)
+    normalized.update({
+        "code": bounded,
+        "truncated": truncated,
+        "totalLines": total,
+        "droppedLines": max(0, total - len(bounded)),
+    })
+    return normalized
+
+
+def _append_snapshot_lines(entry: dict, lines) -> dict:
+    added = [str(ln).strip() for ln in lines if str(ln).strip()]
+    metadata = _snapshot_metadata(entry)
+    updated = dict(entry)
+    updated["code"] = list(entry.get("code", [])) + added
+    updated["totalLines"] = metadata["totalLines"] + len(added)
+    return _normalize_snapshot_entry(updated)
+
+
+def _snapshot_row(row: tuple) -> dict | None:
+    try:
+        code = json.loads(row[0])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(code, list) or not all(isinstance(x, str) for x in code):
+        return None
+    return _normalize_snapshot_entry({
+        "code": code, "lang": row[1], "created": float(row[2]),
+        "used": float(row[3]), "name": row[4] or "", "owner": row[5] or None,
+        "truncated": bool(row[6]), "totalLines": row[7], "droppedLines": row[8],
+    })
+
+
+def _ensure_snapshot_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS snapshots ("
+        "id TEXT PRIMARY KEY, code TEXT NOT NULL, lang TEXT NOT NULL, "
+        "created REAL NOT NULL, used REAL NOT NULL, name TEXT NOT NULL DEFAULT '', "
+        "owner TEXT, truncated INTEGER NOT NULL DEFAULT 0, total_lines INTEGER, "
+        "dropped_lines INTEGER NOT NULL DEFAULT 0)"
+    )
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(snapshots)").fetchall()}
+    for name, declaration in (
+        ("owner", "TEXT"),
+        ("truncated", "INTEGER NOT NULL DEFAULT 0"),
+        ("total_lines", "INTEGER"),
+        ("dropped_lines", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE snapshots ADD COLUMN {name} {declaration}")
+
+
 @contextmanager
 def _sql_conn():
     # 每次调用都提交并关闭连接，避免长驻服务累积文件描述符
@@ -921,18 +1132,7 @@ def _sql_conn():
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), timeout=10)
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS snapshots ("
-            "id TEXT PRIMARY KEY, code TEXT NOT NULL, lang TEXT NOT NULL, "
-            "created REAL NOT NULL, used REAL NOT NULL, name TEXT NOT NULL DEFAULT '', "
-            "owner TEXT)"
-        )
-        # 旧库可能还没有 owner 列；补齐后旧行保持 ownerless（向后兼容）
-        # Older databases may lack the owner column; add it and leave old rows
-        # ownerless for backwards compatibility.
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(snapshots)").fetchall()}
-        if "owner" not in cols:
-            conn.execute("ALTER TABLE snapshots ADD COLUMN owner TEXT")
+        _ensure_snapshot_schema(conn)
         yield conn
         conn.commit()
     except Exception:
@@ -946,34 +1146,28 @@ def _sql_get(sid: str) -> dict | None:
     try:
         with _sql_conn() as conn:
             row = conn.execute(
-                "SELECT code, lang, created, used, name, owner FROM snapshots WHERE id=?",
+                "SELECT code, lang, created, used, name, owner, truncated, "
+                "total_lines, dropped_lines FROM snapshots WHERE id=?",
                 (sid,),
             ).fetchone()
     except sqlite3.Error as exc:
         log.warning("snapshot sqlite read failed / SQLite 快照读取失败: %s", exc)
         return None
-    if not row:
-        return None
-    try:
-        code = json.loads(row[0])
-    except (TypeError, ValueError):
-        return None
-    if not isinstance(code, list) or not all(isinstance(x, str) for x in code):
-        return None
-    return {"code": code[-MAX_SNAPSHOT_LINES:], "lang": row[1],
-            "created": float(row[2]), "used": float(row[3]), "name": row[4] or "",
-            "owner": row[5] or None}
+    return _snapshot_row(row) if row else None
 
 
 def _sql_put(sid: str, entry: dict) -> bool:
+    entry = _normalize_snapshot_entry(entry)
     try:
         with _sql_conn() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO snapshots (id, code, lang, created, used, name, owner) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO snapshots "
+                "(id, code, lang, created, used, name, owner, truncated, total_lines, dropped_lines) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (sid, json.dumps(entry["code"], ensure_ascii=False), entry["lang"],
                  entry["created"], entry["used"], entry.get("name", ""),
-                 entry.get("owner") or None),
+                 entry.get("owner") or None, int(entry["truncated"]),
+                 entry["totalLines"], entry["droppedLines"]),
             )
         return True
     except sqlite3.Error as exc:
@@ -985,21 +1179,17 @@ def _sql_all() -> dict[str, dict]:
     try:
         with _sql_conn() as conn:
             rows = conn.execute(
-                "SELECT id, code, lang, created, used, name, owner FROM snapshots"
+                "SELECT id, code, lang, created, used, name, owner, truncated, "
+                "total_lines, dropped_lines FROM snapshots"
             ).fetchall()
     except sqlite3.Error as exc:
         log.warning("snapshot sqlite scan failed / SQLite 快照扫描失败: %s", exc)
         return {}
     out: dict[str, dict] = {}
-    for sid, raw, lang, created, used, name, owner in rows:
-        try:
-            code = json.loads(raw)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(code, list) and all(isinstance(x, str) for x in code):
-            out[sid] = {"code": code[-MAX_SNAPSHOT_LINES:], "lang": lang,
-                        "created": float(created), "used": float(used), "name": name or "",
-                        "owner": owner or None}
+    for sid, *fields in rows:
+        entry = _snapshot_row(tuple(fields))
+        if entry is not None:
+            out[sid] = entry
     return out
 
 
@@ -1013,47 +1203,47 @@ def _owner_sql(owner: str | None) -> tuple[str, tuple]:
 
 
 def _sql_append(sid: str, lines, lang: str, set_lang: bool,
-                owner: str | None) -> None:
+                owner: str | None) -> dict | None:
     """跨 worker 原子的快照追加：读-改-写放在同一个 BEGIN IMMEDIATE 事务里
     Atomic append across workers: the read-modify-write runs in one transaction.
     """
     path = _snapshot_db_path()
     assert path is not None
+    path.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
     conn = sqlite3.connect(str(path), timeout=10)
     try:
+        _ensure_snapshot_schema(conn)
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT code, lang, created, used, name, owner FROM snapshots WHERE id=?",
+            "SELECT code, lang, created, used, name, owner, truncated, "
+            "total_lines, dropped_lines FROM snapshots WHERE id=?",
             (sid,),
         ).fetchone()
-        if row:
-            try:
-                stored = json.loads(row[0])
-            except (TypeError, ValueError):
-                stored = []
-            code = [x for x in stored if isinstance(x, str)] if isinstance(stored, list) else []
-            used_lang, created = row[1], float(row[2])
-            name, saved_owner = row[4] or "", row[5] or None
-        else:
-            code, used_lang, created = [], lang, now
-            name, saved_owner = "", owner
-        for ln in lines:
-            text = str(ln).strip()
-            if text:
-                code.append(text)
+        entry = _snapshot_row(row) if row else {
+            "code": [], "lang": lang, "created": now, "used": now,
+            "name": "", "owner": owner, "truncated": False,
+            "totalLines": 0, "droppedLines": 0,
+        }
+        entry = _append_snapshot_lines(entry, lines)
+        entry["used"] = now
         if set_lang and lang in ALLOWED_LANGS:
-            used_lang = lang
+            entry["lang"] = lang
         conn.execute(
             "INSERT OR REPLACE INTO snapshots "
-            "(id, code, lang, created, used, name, owner) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (sid, json.dumps(code[-MAX_SNAPSHOT_LINES:], ensure_ascii=False),
-             used_lang, created, now, name, saved_owner),
+            "(id, code, lang, created, used, name, owner, truncated, total_lines, dropped_lines) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (sid, json.dumps(entry["code"], ensure_ascii=False), entry["lang"],
+             entry["created"], entry["used"], entry.get("name", ""),
+             entry.get("owner") or None, int(entry["truncated"]),
+             entry["totalLines"], entry["droppedLines"]),
         )
         conn.commit()
+        return _snapshot_metadata(entry)
     except (sqlite3.Error, TypeError, ValueError) as exc:
         conn.rollback()
         log.warning("snapshot sqlite append failed / SQLite 快照追加失败: %s", exc)
+        return None
     finally:
         conn.close()
 
@@ -1118,10 +1308,13 @@ def _load_snapshots() -> None:
         owner = entry.get("owner")
         if not isinstance(owner, str):
             owner = None
-        candidates.append((float(used), sid,
-                           {"code": code[-MAX_SNAPSHOT_LINES:], "lang": lang,
-                            "created": float(created), "used": float(used), "name": name,
-                            "owner": owner}))
+        candidates.append((float(used), sid, _normalize_snapshot_entry({
+            "code": code, "lang": lang, "created": float(created),
+            "used": float(used), "name": name, "owner": owner,
+            "truncated": entry.get("truncated") is True,
+            "totalLines": entry.get("totalLines"),
+            "droppedLines": entry.get("droppedLines", 0),
+        })))
     candidates.sort(key=lambda item: item[0], reverse=True)
     with _snapshots_lock:
         for _, sid, entry in candidates[:MAX_SNAPSHOTS]:
@@ -1150,7 +1343,7 @@ def _snapshot_all() -> dict[str, dict]:
     if _use_sqlite():
         return _sql_all()
     with _snapshots_lock:
-        return {k: dict(v) for k, v in _snapshots.items()}
+        return {k: _normalize_snapshot_entry(v) for k, v in _snapshots.items()}
 
 
 def _snapshot_get(sid: str) -> dict | None:
@@ -1158,10 +1351,11 @@ def _snapshot_get(sid: str) -> dict | None:
         return _sql_get(sid)
     with _snapshots_lock:
         entry = _snapshots.get(sid)
-        return dict(entry) if entry else None
+        return _normalize_snapshot_entry(entry) if entry else None
 
 
 def _snapshot_put(sid: str, entry: dict) -> bool:
+    entry = _normalize_snapshot_entry(entry)
     if _use_sqlite():
         return _sql_put(sid, entry)
     with _snapshots_lock:
@@ -1214,51 +1408,53 @@ def _prune_snapshots() -> None:
         _snapshot_remove(sid, force=True)
 
 
-def _snapshot_record(sid: str, lines, lang: str, set_lang: bool = True,
-                     owner: str | None = None) -> None:
-    """Append successfully evaluated lines to a persistent replay snapshot.
+def _snapshot_has_room(sid: str | None, lines) -> bool:
+    """Reject new work before execution when a complete snapshot cannot fit."""
+    if _snapshot_db_path() is None:
+        return True
+    added = sum(1 for ln in lines if str(ln).strip())
+    if added > MAX_SNAPSHOT_LINES:
+        return False
+    with _snapshot_rmw_lock:
+        entry = _snapshot_get(sid) if sid else None
+        if entry is None:
+            return True
+        metadata = _snapshot_metadata(entry)
+        return not metadata["truncated"] and metadata["storedLines"] + added <= MAX_SNAPSHOT_LINES
 
-    把成功执行的行追加到可持久化的回放快照中。set_lang=False 用于请求未显式带
-    lang 的情况：不能把快照里已有的 en/zh 悄悄改回默认的 both。
-    owner 取自会话，写进快照供管理器鉴权；已有快照的所有者不被覆盖。
+
+def _snapshot_record(sid: str, lines, lang: str, set_lang: bool = True,
+                     owner: str | None = None) -> dict | None:
+    """Append evaluated lines and return explicit snapshot capacity metadata.
+
+    Up to the configured cap the complete ordered history is persisted. If a
+    legacy/manual store or a racing writer exceeds it, the bounded remainder is
+    marked truncated and restore will refuse it rather than hide the data loss.
     """
     if _snapshot_db_path() is None or not isinstance(sid, str):
-        return
+        return None
     if not isinstance(lang, str) or lang not in ALLOWED_LANGS:
         lang = "both"
     if owner is None:
         with _sessions_lock:
             session = _sessions.get(sid)
             owner = session.get("owner") if session else None
-    # SQLite 下用 BEGIN IMMEDIATE 事务保证跨 worker 的读-改-写原子性；
-    # JSON 文件模式下用进程内的 RLock
-    # SQLite uses BEGIN IMMEDIATE for cross-worker atomicity; the JSON file
-    # backend relies on the process-local RLock.
     if _use_sqlite():
         with _snapshot_rmw_lock:
-            _sql_append(sid, lines, lang, set_lang, owner)
-        return
-    # RLock 不与 _snapshots_lock 形成环：get/put 各自获取后即释放
-    # Hold the whole read-modify-write so two concurrent evals cannot both read the
-    # same old snapshot and let the later write clobber the earlier one.
+            return _sql_append(sid, lines, lang, set_lang, owner)
     with _snapshot_rmw_lock:
         now = time.time()
         entry = _snapshot_get(sid) or {
-            "code": [], "lang": lang if lang in ALLOWED_LANGS else "both",
-            "created": now, "used": now, "name": "", "owner": owner}
-        code = list(entry.get("code", []))
-        for ln in lines:
-            text = str(ln).strip()
-            if text:
-                code.append(text)
-        # 语言切换要写回已有快照，否则恢复时会沿用旧语言
-        # Persist a language switch onto an existing snapshot, or restore uses the
-        # stale language. Invalid values leave the stored language untouched.
+            "code": [], "lang": lang, "created": now, "used": now,
+            "name": "", "owner": owner, "truncated": False,
+            "totalLines": 0, "droppedLines": 0,
+        }
+        entry = _append_snapshot_lines(entry, lines)
+        entry["used"] = now
         if set_lang and lang in ALLOWED_LANGS:
             entry["lang"] = lang
-        entry.update({"code": code[-MAX_SNAPSHOT_LINES:], "used": now,
-                      "name": entry.get("name", "")})
         _snapshot_put(sid, entry)
+        return _snapshot_metadata(entry)
 
 
 # 静态分享页存储 / static share-page storage
@@ -1744,6 +1940,19 @@ def run_interpreter(code: str, lang: str = "both", timeout: float = EVAL_TIMEOUT
     return results
 
 
+def _snapshot_capacity_error(sid: str | None, lines):
+    """Return a explicit 413 before execution when replay history cannot fit."""
+    if _snapshot_has_room(sid, lines):
+        return None
+    entry = _snapshot_get(sid) if sid else None
+    metadata = _snapshot_metadata(entry or {"code": []})
+    return api_error(
+        "会话历史已达到快照容量上限，请导出后清空或调整服务端上限 / "
+        "session history reached the snapshot capacity; export and clear it or raise the server limit",
+        413, "snapshot_full", snapshot=metadata, maxLines=MAX_SNAPSHOT_LINES,
+    )
+
+
 # ---------------------------------------------------------------------------
 # 路由 / routes
 # ---------------------------------------------------------------------------
@@ -1821,6 +2030,7 @@ def health():
         "pages": page_count,
         "tokens": token_count,
         "sessionsMax": MAX_SESSIONS,
+        "snapshotMaxLines": MAX_SNAPSHOT_LINES,
         "interpreterPath": str(INTERP_BIN),
     })
 
@@ -1921,7 +2131,7 @@ def api_token():
 
 @app.route("/api/session", methods=["POST"])
 def api_session():
-    if not _rate_ok():
+    if not _rate_ok(scope="session"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
     if not INTERP_BIN.is_file():
         log.error("interpreter missing / 解释器缺失: %s", INTERP_BIN)
@@ -1929,7 +2139,7 @@ def api_session():
     data = _json_body() or {}
     lang = _req_lang(data)
     sid, _ = get_session(None, lang, owner=_req_owner(data))
-    return jsonify({"ok": True, "session": sid})
+    return jsonify({"ok": True, "session": sid, "snapshotMaxLines": MAX_SNAPSHOT_LINES})
 
 
 @app.route("/api/session/<sid>/restore", methods=["POST"])
@@ -1938,21 +2148,36 @@ def api_session_restore(sid):
 
     从持久化的回放快照重建已失效的会话，避免重复执行客户端历史。
     """
-    if not _rate_ok():
+    if not _rate_ok(scope="session"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
     data = _json_body() or {}
     lang = _req_lang(data)
     owner = _req_owner(data)
     _prune_snapshots()
-    # 只在读取/校验和最终提交时持锁：回放最多 200 行、每行可能耗满超时，
-    # 全程持锁会让所有并发 eval 与快照管理请求一起阻塞
-    # Hold the lock only to read and to commit: replaying up to 200 lines while
-    # holding it would block every concurrent eval and snapshot request.
+    # 只在读取/校验和最终提交时持锁：回放行数受快照容量上限约束，每行可能耗满超时，
+    # 全程持锁会让所有并发 eval 与快照管理请求一起阻塞。
+    # Hold the lock only to read and commit; replay is bounded by the snapshot cap.
     with _snapshot_rmw_lock:
         entry = _snapshot_get(sid)
         if not _owner_allowed(entry, owner):
             return api_error("快照不存在或已过期 / snapshot not found", 404, "not_found")
+        metadata = _snapshot_metadata(entry)
+        if metadata["truncated"]:
+            return api_error(
+                "快照历史不完整，不能用它覆盖本地历史；请使用本地历史重建 / "
+                "snapshot history is truncated; keep local history and rebuild from it",
+                413, "snapshot_truncated", snapshot=metadata,
+                maxLines=MAX_SNAPSHOT_LINES,
+            )
         code = list(entry["code"])
+        local_lines = data.get("localLines")
+        if (isinstance(local_lines, int) and not isinstance(local_lines, bool)
+                and local_lines > len(code)):
+            return api_error(
+                "服务端快照比本地历史短，已拒绝覆盖 / server snapshot is shorter than local history",
+                409, "snapshot_shorter", snapshot=metadata,
+                localLines=local_lines, maxLines=MAX_SNAPSHOT_LINES,
+            )
         saved_lang = entry["lang"]
         saved_name = entry.get("name", "")
         saved_owner = entry.get("owner")
@@ -1976,7 +2201,8 @@ def api_session_restore(sid):
         log.warning("snapshot restore failed sid=%s: %s / 快照恢复失败", sid, exc)
         return api_error(str(exc), 410, "session_expired", restart=True)
     new_entry = {"code": code, "lang": saved_lang, "name": saved_name,
-                 "owner": saved_owner,
+                 "owner": saved_owner, "truncated": False,
+                 "totalLines": len(code), "droppedLines": 0,
                  "created": time.time(), "used": time.time()}
     # 提交时重新校验归属，并先写新快照再删旧快照：SQLite 写入失败会被吞掉，
     # 若先删就再也找不回原快照
@@ -1992,7 +2218,15 @@ def api_session_restore(sid):
             return api_error("快照写入失败 / snapshot write failed", 500, "internal")
         _snapshot_remove(sid, owner)
     log.info("session restored from snapshot %s -> %s / 会话已从快照恢复", sid, new_sid)
-    return jsonify({"ok": True, "session": new_sid, "code": code, "lang": saved_lang})
+    restored_metadata = _snapshot_metadata(new_entry)
+    return jsonify({
+        "ok": True, "session": new_sid, "code": code, "lang": saved_lang,
+        "snapshot": restored_metadata, "truncated": False,
+        "totalLines": restored_metadata["totalLines"],
+        "storedLines": restored_metadata["storedLines"],
+        "droppedLines": restored_metadata["droppedLines"],
+        "maxLines": MAX_SNAPSHOT_LINES,
+    })
 
 
 @app.route("/api/snapshots", methods=["GET"])
@@ -2009,12 +2243,14 @@ def api_snapshots():
     for sid, entry in _snapshot_all().items():
         if not _owner_allowed(entry, owner):
             continue
-        items.append({"id": sid, "lines": len(entry["code"]), "lang": entry["lang"],
+        metadata = _snapshot_metadata(entry)
+        items.append({"id": sid, "lines": metadata["storedLines"], "lang": entry["lang"],
                       "created": entry["created"], "used": entry["used"],
-                      "name": entry.get("name", "")})
+                      "name": entry.get("name", ""), **metadata})
     items.sort(key=lambda x: x["used"], reverse=True)
-    return jsonify({"ok": True, "snapshots": items, "storage":
-                    "sqlite" if _use_sqlite() else ("off" if _snapshot_db_path() is None else "file")})
+    return jsonify({"ok": True, "snapshots": items, "maxLines": MAX_SNAPSHOT_LINES,
+                    "storage": "sqlite" if _use_sqlite() else
+                    ("off" if _snapshot_db_path() is None else "file")})
 
 
 @app.route("/api/snapshot/<sid>/name", methods=["POST"])
@@ -2065,8 +2301,9 @@ def api_session_lang(sid):
         return api_error("session not found", 410, "session_expired", restart=True)
     try:
         outputs = entry["interp"].send(f":lang {lang}")
-        _snapshot_record(sid, [f":lang {lang}"], lang)
-        return jsonify({"ok": True, "session": sid, "lang": lang, "outputs": outputs})
+        snapshot = _snapshot_record(sid, [], lang)
+        return jsonify({"ok": True, "session": sid, "lang": lang, "outputs": outputs,
+                        "snapshot": snapshot})
     except TimeoutError:
         log.warning("lang timeout sid=%s / 切换语言超时", sid)
         return api_error(_timeout_msg(lang), 408, "timeout", timeout=True)
@@ -2106,7 +2343,7 @@ def api_session_cancel(sid):
 
 @app.route("/api/eval", methods=["POST"])
 def api_eval():
-    if not _rate_ok():
+    if not _rate_ok(scope="eval"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
     data = _json_body() or {}
     lang = _req_lang(data)
@@ -2123,7 +2360,7 @@ def api_eval():
             # 旧接口同样按命令数计费，不能一个请求塞进几百条命令
             # Charge per command here too, so one legacy request cannot smuggle
             # hundreds of commands past the per-request limit.
-            if len(legacy_lines) > 1 and not _rate_ok(len(legacy_lines) - 1):
+            if len(legacy_lines) > 1 and not _rate_ok(len(legacy_lines) - 1, scope="eval"):
                 return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
             if not INTERP_BIN.is_file():
                 return api_error(_missing_bin_msg(), 500, "internal")
@@ -2159,7 +2396,7 @@ def api_eval():
 
     # 批量请求按命令数计费，避免一次 lines 数组绕过按请求的限流
     # Charge per command so a single lines[] array cannot bypass the rate limit.
-    if len(lines) > 1 and not _rate_ok(len(lines) - 1):
+    if len(lines) > 1 and not _rate_ok(len(lines) - 1, scope="eval"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
 
     if not INTERP_BIN.is_file():
@@ -2168,6 +2405,9 @@ def api_eval():
     sid_in = data.get("session")
     if sid_in is not None and not isinstance(sid_in, str):
         return api_error("会话编号无效 / invalid session id", 400, "bad_request")
+    capacity_error = _snapshot_capacity_error(sid_in, lines)
+    if capacity_error is not None:
+        return capacity_error
     owner = _req_owner(data)
     try:
         sid, interp = get_session(sid_in, lang, create=sid_in is None, owner=owner)
@@ -2177,6 +2417,7 @@ def api_eval():
                 410, "session_expired", restart=True)
         outputs: list[dict] = []
         done = 0
+        snapshot = None
         try:
             for ln in lines:
                 outputs.extend(interp.send(ln))
@@ -2187,12 +2428,14 @@ def api_eval():
             # Record the successfully executed prefix even if a later line times
             # out, so a restored session still contains earlier definitions.
             if done:
-                _snapshot_record(sid, lines[:done], lang, set_lang=("lang" in data))
+                snapshot = _snapshot_record(sid, lines[:done], lang, set_lang=("lang" in data))
         _token_used(data.get("token"))
         with _sessions_lock:
             if sid in _sessions:
                 _sessions[sid]["used"] = time.time()
-        return jsonify({"ok": True, "session": sid, "outputs": outputs, "results": outputs})
+        return jsonify({"ok": True, "session": sid, "outputs": outputs, "results": outputs,
+                        "snapshot": snapshot,
+                        "truncated": bool(snapshot and snapshot["truncated"])})
     except TimeoutError:
         log.warning("eval timeout sid=%s / 求值超时", sid_in)
         return api_error(_timeout_msg(lang), 408, "timeout", timeout=True)
@@ -2224,7 +2467,7 @@ def api_race():
     在同一个会话里用四种策略归约同一个表达式，供前端并排展示。
     The original strategy is restored at the end.
     """
-    if not _rate_ok():
+    if not _rate_ok(cost=len(STRATEGIES) * 2 + 1, scope="eval"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
     data = _json_body() or {}
     lang = _req_lang(data)
@@ -2254,6 +2497,9 @@ def api_race():
     sid_in = data.get("session")
     if sid_in is not None and not isinstance(sid_in, str):
         return api_error("会话编号无效 / invalid session id", 400, "bad_request")
+    capacity_error = _snapshot_capacity_error(sid_in, [expr])
+    if capacity_error is not None:
+        return capacity_error
     # need 不在竞速的四种策略里，但界面可能正选用它：恢复时必须原样保留，
     # 否则竞速结束后会话策略被悄悄改成 applicative
     # need is not raced, but the UI may be using it: preserve it on restore so a
@@ -2287,12 +2533,13 @@ def api_race():
     except RuntimeError as exc:
         log.warning("race session dead sid=%s: %s / 策略竞速会话已退出", sid_in, exc)
         return api_error(str(exc), 410, "session_expired", restart=True)
-    _snapshot_record(sid, [expr], lang, set_lang=("lang" in data))
+    snapshot = _snapshot_record(sid, [expr], lang, set_lang=("lang" in data))
     with _sessions_lock:
         if sid in _sessions:
             _sessions[sid]["used"] = time.time()
     return jsonify({"ok": True, "session": sid, "line": expr,
-                    "strategy": strategy, "results": results})
+                    "strategy": strategy, "results": results, "snapshot": snapshot,
+                    "truncated": bool(snapshot and snapshot["truncated"])})
 
 
 @app.route("/api/eval/stream", methods=["POST"])
@@ -2303,7 +2550,7 @@ def api_eval_stream():
     forwarded as soon as the interpreter emits it; a heartbeat every few seconds
     proves the connection is alive, and a final ``done`` frame closes the run.
     """
-    if not _rate_ok():
+    if not _rate_ok(scope="eval"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
     data = _json_body() or {}
     lang = _req_lang(data)
@@ -2319,7 +2566,7 @@ def api_eval_stream():
         problem = validate_line(ln)
         if problem:
             return api_error(problem[1], 400, problem[0])
-    if len(lines) > 1 and not _rate_ok(len(lines) - 1):
+    if len(lines) > 1 and not _rate_ok(len(lines) - 1, scope="eval"):
         return api_error("请求过于频繁 / rate limit exceeded", 429, "rate_limited")
     if not INTERP_BIN.is_file():
         return api_error(_missing_bin_msg(), 500, "internal")
@@ -2331,6 +2578,9 @@ def api_eval_stream():
     # reject it here with the same 400 shape as /api/eval.
     if sid_in is not None and not isinstance(sid_in, str):
         return api_error("invalid session id", 400, "bad_request")
+    capacity_error = _snapshot_capacity_error(sid_in, lines)
+    if capacity_error is not None:
+        return capacity_error
     sid, interp = get_session(sid_in, lang, create=sid_in is None,
                               owner=_req_owner(data))
     if sid is None or interp is None:
@@ -2344,17 +2594,20 @@ def api_eval_stream():
     @stream_with_context
     def gen():
         yield sse({"kind": "start", "session": sid, "text": ""})
+        snapshot = None
         try:
             for ln in lines:
                 for obj in interp.send_stream(ln):
                     yield sse(obj)
                 # 逐行落盘：中途超时也能保住已执行的定义
                 # Persist each completed line so a later timeout keeps earlier definitions.
-                _snapshot_record(sid, [ln], lang, set_lang=("lang" in data))
+                snapshot = _snapshot_record(sid, [ln], lang, set_lang=("lang" in data))
             with _sessions_lock:
                 if sid in _sessions:
                     _sessions[sid]["used"] = time.time()
-            yield sse({"kind": "done", "ok": True, "session": sid})
+            yield sse({"kind": "done", "ok": True, "session": sid,
+                       "snapshot": snapshot,
+                       "truncated": bool(snapshot and snapshot["truncated"])})
         except TimeoutError:
             log.warning("stream eval timeout sid=%s / 流式求值超时", sid)
             yield sse({"kind": "timeout", "ok": False, "timeout": True,

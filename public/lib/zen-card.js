@@ -75,13 +75,54 @@ function escapeHtml(s) {
 }
 
 function stripHtml(s) {
-  return str(s)
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+  const html = str(s)
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    doc.querySelectorAll('script,style,template,noscript').forEach(function (node) { node.remove() })
+    return String(doc.body.textContent || '').trim()
+  }
+  /* Node/worker fallback: skip whole raw-text/inert elements, not just their tags. */
+  const dropped = new Set(['script', 'style', 'template', 'noscript'])
+  let out = '', i = 0
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt < 0) { out += html.slice(i); break }
+    out += html.slice(i, lt)
+    if (html.slice(lt, lt + 4) === '<!--') {
+      const end = html.indexOf('-->', lt + 4)
+      i = end < 0 ? html.length : end + 3
+      continue
+    }
+    let end = lt + 1, quote = ''
+    for (; end < html.length; end++) {
+      const ch = html[end]
+      if (quote) {
+        if (ch === quote) quote = ''
+      } else if (ch === '"' || ch === "'") quote = ch
+      else if (ch === '>') { end++; break }
+    }
+    const rawTag = html.slice(lt, end)
+    const match = rawTag.match(/^<\s*\/?\s*([a-z][a-z0-9:-]*)/i)
+    if (!match) { out += '<'; i = lt + 1; continue }
+    const name = match[1].toLowerCase()
+    if (!/^<\s*\//.test(rawTag) && dropped.has(name)) {
+      const close = new RegExp('</\\s*' + name + '\\b[^>]*>', 'ig')
+      close.lastIndex = end
+      const found = close.exec(html)
+      i = found ? found.index + found[0].length : html.length
+      continue
+    }
+    i = end
+  }
+  return out
+    .replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, function (entity, key) {
+      if (key[0] === '#') {
+        const hex = key[1].toLowerCase() === 'x'
+        const n = parseInt(key.slice(hex ? 2 : 1), hex ? 16 : 10)
+        return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ''
+      }
+      return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' }[key.toLowerCase()]
+    })
     .trim()
 }
 
@@ -176,13 +217,20 @@ function serializePack(cards, meta, pretty) {
 
 function parsePack(text) {
   const obj = typeof text === 'string' ? JSON.parse(text) : text
-  if (!obj || obj.format !== 'zen-card-pack' || !Array.isArray(obj.cards)) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
+      obj.format !== 'zen-card-pack' || obj.v !== VERSION || !Array.isArray(obj.cards)) {
     throw new Error('非法 zen-card-pack')
   }
-  const cards = obj.cards.map(create)
-  cards.forEach(function (card, index) {
-    const result = validate(card)
+  if (obj.name !== undefined && typeof obj.name !== 'string') {
+    throw new Error('非法 zen-card-pack：name 必须是字符串')
+  }
+  const cards = obj.cards.map(function (raw, index) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('非法 zen-card-pack：cards[' + index + '] 必须是对象')
+    }
+    const result = validate(raw)
     if (!result.ok) throw new Error('非法 zen-card-pack：cards[' + index + '] ' + result.errors.join('；'))
+    return create(raw)
   })
   return { name: str(obj.name), cards: cards }
 }

@@ -580,7 +580,8 @@ def test_cancelled(simple, tmp_path):
     nodes[1]["data"] = {"filename": "cancel.xlsx"}
     result = run(spec(nodes, conns), tmp_path, resolver=lambda x: str(simple),
                  cancelled=lambda: True)
-    assert result["ok"]
+    assert result["ok"] is False
+    assert result["cancelled"] is True
     assert not (tmp_path / "cancel.xlsx").exists()
 
 

@@ -7,34 +7,78 @@ function arr(v) {
 function str(v) {
   return v === null || v === undefined ? '' : String(v)
 }
+function localDateKey(date) {
+  if (!date || isNaN(date.getTime())) return ''
+  return String(date.getFullYear()).padStart(4, '0') + '-' +
+    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+    String(date.getDate()).padStart(2, '0')
+}
+
 function dateKey(v) {
-  // Hub 时间线的 ts 常是 Date.now() 数字（epoch 毫秒）。原实现先 str() 再
-  // new Date()，把 "1767225600000" 当日期字符串解析成 Invalid Date，导致
-  // 所有数字时间戳的事件被区间过滤静默丢弃。
-  if (typeof v === 'number' && isFinite(v)) {
-    const nd = new Date(v)
-    return isNaN(nd.getTime()) ? '' : nd.toISOString().slice(0, 10)
+  if (typeof v === 'number' && isFinite(v)) return localDateKey(new Date(v))
+  const s = str(v).trim()
+  if (!s) return ''
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (dateOnly) {
+    const year = Number(dateOnly[1])
+    const month = Number(dateOnly[2])
+    const day = Number(dateOnly[3])
+    const date = new Date(0)
+    date.setHours(0, 0, 0, 0)
+    date.setFullYear(year, month - 1, day)
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+      ? s
+      : ''
   }
-  const s = str(v)
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  if (/^\d+$/.test(s)) {
-    const nd = new Date(Number(s))
-    return isNaN(nd.getTime()) ? '' : nd.toISOString().slice(0, 10)
+  const date = new Date(/^\d+$/.test(s) ? Number(s) : s)
+  return localDateKey(date)
+}
+
+function defaultRange(now) {
+  const end = new Date(now === undefined ? Date.now() : now)
+  const start = new Date(end.getTime())
+  start.setDate(start.getDate() - 6)
+  return { from: dateKey(start), to: dateKey(end) }
+}
+
+function parseJSONArray(text, field) {
+  const name = str(field).trim()
+  if (name !== 'timeline' && name !== 'planner') {
+    return { value: [], error: '未知 JSON 字段：' + name }
   }
-  const d = new Date(s)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+  const raw = str(text).trim()
+  if (!raw) return { value: [], error: '' }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    return { value: [], error: name + ' JSON 解析失败：' + (error.message || String(error)) }
+  }
+  if (Array.isArray(parsed)) return { value: parsed, error: '' }
+  if (parsed && typeof parsed === 'object') {
+    const hasTimeline = Object.prototype.hasOwnProperty.call(parsed, 'timeline')
+    const hasPlanner = Object.prototype.hasOwnProperty.call(parsed, 'planner')
+    if (hasTimeline || hasPlanner) {
+      if (!hasTimeline || !Array.isArray(parsed.timeline)) {
+        return { value: [], error: '规范 wrapper 的 timeline 必须是数组' }
+      }
+      if (!hasPlanner || !Array.isArray(parsed.planner)) {
+        return { value: [], error: '规范 wrapper 的 planner 必须是数组' }
+      }
+      return { value: parsed[name], error: '', wrapper: parsed }
+    }
+  }
+  return { value: [], error: name + ' 必须是数组或规范 wrapper { timeline: [...], planner: [...] }' }
 }
 
 function inRange(key, range) {
-  if (!key) return false
+  const normalized = dateKey(key)
+  if (!normalized) return false
   if (!range || (!range.from && !range.to)) return true
-  // 区间边界同样可能是 Date.now() 数字（Hub 时间线就是这种形状）。直接
-  // str(range.from).slice(0,10) 会得到 "1767225600" 之类的片段，与 ISO 日期键
-  // 比较时整个区间的数据会被静默丢弃；统一走 dateKey 归一化。
   const from = range.from ? dateKey(range.from) : ''
   const to = range.to ? dateKey(range.to) : ''
-  if (from && key < from) return false
-  if (to && key > to) return false
+  if (from && normalized < from) return false
+  if (to && normalized > to) return false
   return true
 }
 
@@ -94,7 +138,9 @@ function buildReport(data, opts) {
   const lines = []
   lines.push('# ' + (o.title || '复盘报告'))
   if (o.range && (o.range.from || o.range.to)) {
-    lines.push('', '周期：' + (o.range.from || '…') + ' 至 ' + (o.range.to || '…'))
+    const from = o.range.from ? dateKey(o.range.from) : ''
+    const to = o.range.to ? dateKey(o.range.to) : ''
+    lines.push('', '周期：' + (from || '…') + ' 至 ' + (to || '…'))
   }
   lines.push('')
   lines.push('- 活跃天数：**' + s.activeDays + '**')
@@ -128,6 +174,6 @@ function buildReport(data, opts) {
   return lines.join('\n') + '\n'
 }
 
-export const ZenReview = { summarize, buildReport, inRange, dateKey }
+export const ZenReview = { summarize, buildReport, inRange, dateKey, defaultRange, parseJSONArray }
 if (typeof globalThis !== 'undefined') globalThis.ZenReview = ZenReview
 export default ZenReview

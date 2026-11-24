@@ -24,11 +24,11 @@ small broker they share instead:
 
 Every loopback server exposes the same API under ``/__omm/share``::
 
-    GET  /__omm/share/space?app=data         channels, policy and artifacts
-    GET  /__omm/share/items?app=data         artifact list
+    GET  /__omm/share/space                  channels, policy and artifacts
+    GET  /__omm/share/items                  artifact list
     GET  /__omm/share/item?id=...            one artifact (records include payload)
     GET  /__omm/share/file?id=...            artifact bytes
-    GET  /__omm/share/inbox?app=corpus       take pending messages
+    GET  /__omm/share/inbox                  take pending messages
     POST /__omm/share/publish                publish a file or a record
     POST /__omm/share/send                   deliver to one product
     POST /__omm/share/delete                 remove an artifact
@@ -463,6 +463,46 @@ def pick_channel(policy: Dict[str, Any], app: str, mime: str, requested: str = "
     raise ValueError("没有频道接受类型 %s" % mime)
 
 
+SEND_FORMAT_CHANNELS = {
+    "omm.bridge": "notes.english",
+    "zenviz-data": "data.tables",
+}
+
+
+def resolve_send_channel(
+    policy: Dict[str, Any],
+    from_app: str,
+    to_app: str,
+    format_id: str = "",
+    artifact: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Resolve the one channel allowed by both ends of a message.
+
+    Callers never choose a channel. An artifact fixes it to its registered
+    channel; a known wire format disambiguates pairs with several common
+    channels. Ambiguous or unauthorized pairs fail closed.
+    """
+    candidates = [
+        channel_id
+        for channel_id in (policy.get("channels") or {})
+        if channel_allows(policy, channel_id, from_app, ROLE_PUBLISH)
+        and channel_allows(policy, channel_id, to_app, ROLE_CONSUME)
+    ]
+    if artifact is not None:
+        channel_id = str(artifact.get("channel") or "")
+        if channel_id not in candidates:
+            raise ValueError("共享项目所属频道不在来源与目标的共同权限内")
+        return channel_id
+    preferred = SEND_FORMAT_CHANNELS.get(str(format_id or ""), "")
+    if preferred and preferred in candidates:
+        return preferred
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        raise ValueError("“%s”与“%s”没有共同的共享频道" % (from_app, to_app))
+    raise ValueError("“%s”与“%s”有多个共同频道，无法唯一确定投递频道" % (from_app, to_app))
+
+
 # ---------------------------------------------------------------- index/items
 
 
@@ -707,15 +747,16 @@ def send(from_app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from_app = clean_app_id(from_app)
     policy = load_policy()
     to_app = clean_app_id(payload.get("to") or "")
-    channel_id = str(payload.get("channel") or "")
     if not to_app:
         raise ValueError("缺少接收方")
-    if not channel_id:
-        raise ValueError("缺少频道")
-    if not channel_allows(policy, channel_id, from_app, "publish"):
-        raise ValueError("“%s”不能向频道 %s 发送" % (from_app, channel_id))
-    if not channel_allows(policy, channel_id, to_app, "consume"):
-        raise ValueError("“%s”不能从频道 %s 接收" % (to_app, channel_id))
+    format_id = _clean_text(payload.get("format") or "", 60)
+    artifact_id = str(payload.get("artifact_id") or "")
+    entry = None
+    if artifact_id:
+        entry = _find(load_index(), artifact_id)
+        if not entry:
+            raise ValueError("要发送的共享项目不存在")
+    channel_id = resolve_send_channel(policy, from_app, to_app, format_id, entry)
 
     message: Dict[str, Any] = {
         "id": _new_id("msg"),
@@ -724,19 +765,12 @@ def send(from_app: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         "to": to_app,
         "channel": channel_id,
         "created_at": now_iso(),
-        "format": _clean_text(payload.get("format") or "", 60),
+        "format": format_id,
         "title": _clean_text(payload.get("title") or "", 160),
         "payload": payload.get("payload"),
         "artifact": None,
     }
-    artifact_id = str(payload.get("artifact_id") or "")
-    if artifact_id:
-        index = load_index()
-        entry = _find(index, artifact_id)
-        if not entry:
-            raise ValueError("要发送的共享项目不存在")
-        if entry.get("channel") != channel_id:
-            raise ValueError("共享项目不属于该频道")
+    if entry is not None:
         message["artifact"] = _public_item(entry)
         message["format"] = message["format"] or entry.get("format") or ""
         message["title"] = message["title"] or entry.get("title") or ""
@@ -871,27 +905,25 @@ def policy_view() -> Dict[str, Any]:
 # ----------------------------------------------------------------------- HTTP
 
 
-def _client_app(default_app: str, query: Dict[str, List[str]]) -> str:
-    """Caller identity for the share API.
-
-    ``default_app`` comes from the server's trusted OMM_APP_ID. The query override
-    exists for same-origin callers, but must never let a product claim the hub's
-    all-seeing identity — otherwise the ``app == hub`` bypass exposes every item.
-    """
-    supplied = (query.get("app") or [""])[0]
-    raw = clean_app_id(supplied) if supplied else ""
-    trusted = clean_app_id(default_app or "app")
-    if raw == "hub" and trusted != "hub":
-        raw = ""
-    return raw or trusted
+def _client_app(
+    default_app: str, query: Dict[str, List[str]], trusted_hub: bool = False
+) -> str:
+    """Resolve caller identity only from the server's trusted handler context."""
+    app = clean_app_id(default_app or "app")
+    if app == "hub" and not trusted_hub:
+        return "app"
+    return app
 
 
 def handle_get(
-    path: str, query: Dict[str, List[str]], default_app: str = "app"
+    path: str,
+    query: Dict[str, List[str]],
+    default_app: str = "app",
+    trusted_hub: bool = False,
 ) -> Tuple[int, str, bytes]:
     if not desktop_enabled():
         return _error(404, "desktop API is not enabled")
-    app = _client_app(default_app, query)
+    app = _client_app(default_app, query, trusted_hub=trusted_hub)
     try:
         if path == "/__omm/share/space":
             return _json_response(200, describe_space(app))
@@ -919,11 +951,15 @@ def handle_get(
 
 
 def handle_post(
-    path: str, query: Dict[str, List[str]], body: bytes, default_app: str = "app"
+    path: str,
+    query: Dict[str, List[str]],
+    body: bytes,
+    default_app: str = "app",
+    trusted_hub: bool = False,
 ) -> Tuple[int, str, bytes]:
     if not desktop_enabled():
         return _error(404, "desktop API is not enabled")
-    app = _client_app(default_app, query)
+    app = _client_app(default_app, query, trusted_hub=trusted_hub)
     try:
         if len(body) > MAX_BODY_BYTES:
             return _error(413, "请求体过大")
@@ -943,6 +979,8 @@ def handle_post(
             ids = payload.get("ids") if isinstance(payload.get("ids"), list) else []
             return _json_response(200, ack_inbox(sender, ids))
         if path == "/__omm/share/policy":
+            if app != "hub":
+                return _error(403, "只有可信工作台可以修改共享策略")
             policy = update_policy(payload)
             return _json_response(200, {"ok": True, "policy": policy})
     except ValueError as exc:

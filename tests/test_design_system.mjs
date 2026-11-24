@@ -1,7 +1,7 @@
 /* 设计系统契约：文档齐备、样式入口统一、组件词汇可复用、开发者技能已接线。 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 
 const ROOT = new URL('../', import.meta.url)
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8')
@@ -90,6 +90,42 @@ test('样式入口只加载核心层，能力包按需引用', () => {
   }
   assert.ok(exists('public/zen/canvas/canvas.css'), '缺少统一画布样式包')
   assert.ok(!imports.some((p) => p.includes('canvas/canvas.css')), '画布样式不应进入核心入口')
+})
+
+test('ZEN 界面圆角只允许共享令牌或语义圆形', () => {
+  const files = readdirSync(new URL('public/zen/', ROOT), { recursive: true })
+    .filter((name) => String(name).endsWith('.css'))
+    .map((name) => `public/zen/${String(name).replaceAll('\\\\', '/')}`)
+  files.push('public/lib/zen-link.js', 'public/omm-mdforge.html', 'public/index.html')
+  for (const name of readdirSync(new URL('public/', ROOT))) {
+    const file = String(name).replaceAll('\\\\', '/')
+    if (/^omm-[^/]+\.html$/.test(file)) files.push(`public/${file}`)
+  }
+  if (exists('third_party/zenviz-core/core/zenviz.css')) {
+    files.push('third_party/zenviz-core/core/zenviz.css')
+  }
+  const embed = read('public/omm-embed.js')
+  assert.ok(embed.includes("'--zen-radius': '0px'"), '嵌入桥必须固定 ZEN 直角令牌')
+  assert.ok(!/data\.radius/.test(embed), '嵌入桥不得接受父窗口圆角覆盖')
+  const fixed = /border-radius\s*:\s*(?:[1-9]\d*(?:\.\d+)?px|99px|999px)/i
+  const derived = /border-radius\s*:\s*calc\(var\(--(?:zen-)?radius\)\s*[+*-]\s*[0-9.]+\s*px\)/i
+  const tokenOverride = /--(?:zen-)?radius\s*:\s*[1-9]\d*(?:\.\d+)?px/i
+  for (const file of new Set(files)) {
+    const text = read(file)
+    assert.ok(!fixed.test(text), `${file} 写死了非零界面圆角`)
+    assert.ok(!derived.test(text), `${file} 从圆角令牌派生出非零圆角`)
+    assert.ok(!tokenOverride.test(text), `${file} 覆盖了 ZEN 圆角令牌`)
+  }
+})
+
+test('Lambda 与 MdForge 不写死第二套产品色板', () => {
+  const lambda = read('public/zen/products/lambda.css')
+  assert.ok(lambda.includes('--bg:var(--zen-paper)'), 'Lambda 底色必须复用 ZEN 令牌')
+  assert.doesNotMatch(lambda, /#[0-9a-f]{3,8}\b|rgba?\(/i, 'Lambda 不得写死产品色值')
+  assert.doesNotMatch(lambda, /^\s*'\s*\+/m, 'Lambda CSS 不得残留 JavaScript 片段')
+  const mdforge = read('public/zen/products/mdforge.css')
+  assert.doesNotMatch(mdforge, /--(?:bg|paper|text|border|hover|active|accent)[\w-]*\s*:\s*(?:#|rgba?\()/i,
+    'MdForge 不得写死第二套 ZEN 色彩令牌')
 })
 
 test('候选区不再使用浏览器原生 select 弹窗', () => {

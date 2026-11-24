@@ -133,33 +133,6 @@
           </button>
         </div>
       </div>
-      <div class="dd-item-row">
-        <span>圆角</span>
-        <div class="settings-control">
-          <button class="settings-btn" id="radius-minus" type="button" aria-label="减小圆角">
-            <svg
-              class="icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-            >
-              <path d="M5 12h14" />
-            </svg></button
-          ><span class="settings-value" id="radius-value">0</span
-          ><button class="settings-btn" id="radius-plus" type="button" aria-label="增大圆角">
-            <svg
-              class="icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
-        </div>
-      </div>
       <div class="dd-divider"></div>
       <div class="dd-label">边框</div>
       <div class="dd-item-row">
@@ -1929,7 +1902,6 @@
             bg: 'void',
             fontScale: 1,
             pinned: false,
-            radius: 0,
             borderWidth: 1,
             borderStyle: 'solid',
             borderAlpha: 15,
@@ -1974,6 +1946,7 @@
               out.entries = base.entries
             }
             out.settings = Object.assign(base.settings, d.settings || {})
+            delete out.settings.radius
             if (typeof out.settings.aiThinkingEnabled !== 'boolean')
               out.settings.aiThinkingEnabled = true
             if (!Number.isFinite(Number(out.settings.aiMainWidth))) out.settings.aiMainWidth = 0.58
@@ -2125,7 +2098,7 @@
           document.body.classList.add('bg-' + (st.bg || 'void'))
           document.body.classList.toggle('menu-pinned', !!st.pinned)
           document.documentElement.style.setProperty('--fscale', st.fontScale || 1)
-          document.documentElement.style.setProperty('--radius', (st.radius || 0) + 'px')
+          document.documentElement.style.setProperty('--zen-radius', '0px')
           document.documentElement.style.setProperty('--border-width', (st.borderWidth || 1) + 'px')
           document.documentElement.style.setProperty('--border-style', st.borderStyle || 'solid')
           const a = Math.max(0.01, Math.min(0.42, Number(st.borderAlpha || 15) / 100))
@@ -2140,7 +2113,6 @@
             st.theme === 'dark' ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)',
           )
           $('#font-value').textContent = Math.round((st.fontScale || 1) * 100) + '%'
-          $('#radius-value').textContent = st.radius || 0
           $('#border-width-value').textContent = st.borderWidth || 1
           $('#border-alpha-value').textContent = Math.round(Number(st.borderAlpha || 15)) + '%'
           if ($('#ai-context-limit'))
@@ -4012,6 +3984,7 @@ ${extra}`
         }
         function exportData() {
           const data = clone(S)
+          data.settings.apiKey = ''
           data.exportedAt = now()
           return JSON.stringify(data, null, 2)
         }
@@ -4051,6 +4024,7 @@ ${extra}`
               settings: Object.assign(clone(DEFAULT).settings, d.settings || {}),
               stats: Object.assign({}, d.stats || {}),
             })
+            delete S.settings.radius
             save()
             populateCats()
             applySettings()
@@ -4149,14 +4123,26 @@ ${extra}`
           OMM.saveJSON('omm-corpus-' + OMM.fileStamp() + '.json', OMM.env(items, zbMeta()))
           toast('已导出 ' + items.length + ' 项')
         }
-        function zbSend(toApp, items) {
+        async function zbSend(toApp, items) {
           if (!OMM) return toast('互通模块未加载')
           if (!items || !items.length) return toast('没有可发送的内容')
-          OMM.ask(OMM.sendMsg(toApp, items), '发送').then((ok) => {
-            if (!ok) return toast('已取消发送')
-            OMM.deliver(toApp, items, zbMeta())
+          const ok = await OMM.ask(OMM.sendMsg(toApp, items), '发送')
+          if (!ok) return toast('已取消发送')
+          try {
+            const meta = zbMeta()
+            await window.OMMShare.send({
+              to: toApp,
+              format: 'omm.bridge',
+              title: meta.sourceAppName + ' 互通数据',
+              payload: OMM.env(items, meta),
+            })
+            if (window.OMMShare.openApp) window.OMMShare.openApp(toApp)
             toast('已发送到 ' + OMM.nameOf(toApp) + ' · ' + items.length + ' 项')
-          })
+            return true
+          } catch (e) {
+            toast('发送失败：' + (e.message || e))
+            return false
+          }
         }
         function zbApply(items, meta, from) {
           if (!OMM || !items || !items.length) return 0
@@ -4577,18 +4563,6 @@ ${extra}`
           applySettings()
           document.body.classList.add('submenu-open')
         }
-        $('#radius-minus').onclick = () => {
-          S.settings.radius = Math.max(0, (S.settings.radius || 0) - 2)
-          save()
-          applySettings()
-          document.body.classList.add('submenu-open')
-        }
-        $('#radius-plus').onclick = () => {
-          S.settings.radius = Math.min(14, (S.settings.radius || 0) + 2)
-          save()
-          applySettings()
-          document.body.classList.add('submenu-open')
-        }
         $('#border-width-minus').onclick = () => {
           S.settings.borderWidth = Math.max(0.5, (S.settings.borderWidth || 1) - 0.5)
           save()
@@ -4645,13 +4619,17 @@ ${extra}`
         }
         if (OMM)
           OMM.watch((p) => {
-            if (!p || !p.env) return
+            if (!p || !p.env) return true
             const items = OMM.normalize(p.env)
-            if (!items.length) return
-            OMM.ask(OMM.recvMsg(p.from, items), '导入').then((ok) => {
-              if (!ok) return toast('已取消导入')
+            if (!items.length) return true
+            return OMM.ask(OMM.recvMsg(p.from, items), '导入').then((ok) => {
+              if (!ok) {
+                toast('已取消导入')
+                return false
+              }
               const n = zbApply(items, p.env.meta, p.from)
               if (n) toast('已收到来自 ' + OMM.nameOf(p.from) + ' 的 ' + n + ' 条数据')
+              return true
             })
           })
         $('#export-btn').onclick = () => openData('export')
@@ -4768,10 +4746,11 @@ ${extra}`
           }
           applyWidth(Number(S.settings.aiMainWidth) || 0.58)
           resizer.addEventListener('pointerdown', (e) => {
-            if (window.matchMedia('(max-width: 760px)').matches) return
+            if (e.button !== 0 || window.matchMedia('(max-width: 760px)').matches) return
+            e.preventDefault()
             dragging = true
             resizer.classList.add('dragging')
-            resizer.setPointerCapture?.(e.pointerId)
+            resizer.setPointerCapture(e.pointerId)
             document.body.style.cursor = 'col-resize'
             document.body.style.userSelect = 'none'
           })
@@ -4788,6 +4767,7 @@ ${extra}`
           }
           resizer.addEventListener('pointerup', end)
           resizer.addEventListener('pointercancel', end)
+          resizer.addEventListener('lostpointercapture', end)
           resizer.addEventListener('keydown', (e) => {
             if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
             e.preventDefault()
@@ -5058,61 +5038,6 @@ ${extra}`
         closeModal = function () {
           _origCloseModal()
           if (isMobile) document.body.style.overflow = ''
-        }
-
-        // AI resizer: add touch support
-        const aiResizer = $('#ai-resizer')
-        if (aiResizer) {
-          let isDragging = false
-          let startX = 0
-          let startWidth = 0
-          const aiSide = $('#ai-side-panel')
-
-          function onDragStart(clientX) {
-            isDragging = true
-            startX = clientX
-            startWidth = aiSide ? aiSide.offsetWidth : 0
-            document.body.classList.add('dragging')
-          }
-          function onDragMove(clientX) {
-            if (!isDragging) return
-            const diff = clientX - startX
-            const newWidth = Math.max(240, Math.min(500, startWidth + diff))
-            if (aiSide) aiSide.style.width = newWidth + 'px'
-          }
-          function onDragEnd() {
-            isDragging = false
-            document.body.classList.remove('dragging')
-          }
-
-          aiResizer.addEventListener(
-            'touchstart',
-            (e) => {
-              onDragStart(e.touches[0].clientX)
-            },
-            { passive: true },
-          )
-          document.addEventListener(
-            'touchmove',
-            (e) => {
-              if (!isDragging) return
-              onDragMove(e.touches[0].clientX)
-            },
-            { passive: true },
-          )
-          document.addEventListener('touchend', onDragEnd)
-          aiResizer.addEventListener(
-            'mousedown',
-            (e) => {
-              onDragStart(e.clientX)
-            },
-            { passive: true },
-          )
-          document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return
-            onDragMove(e.clientX)
-          })
-          document.addEventListener('mouseup', onDragEnd)
         }
 
         // Fix: prevent focus issues on mobile when switching views

@@ -125,44 +125,108 @@ class InstallerApi:
         return ""
 
 
+def _remove_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def _validate_framework_archive(zip_path: Path) -> None:
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            for info in zf.infolist():
+                name = info.filename.replace("\\", "/")
+                if not name or "\x00" in name:
+                    raise PluginError("框架包包含非法文件名")
+                if name.startswith(("/", "\\")) or (len(name) > 1 and name[1] == ":"):
+                    raise PluginError("框架包包含绝对路径")
+                if ".." in name.split("/"):
+                    raise PluginError("框架包路径无效")
+                mode = (info.external_attr >> 16) & 0o170000
+                if sys.platform != "darwin" and mode == 0o120000:
+                    raise PluginError("框架包不能包含符号链接")
+    except zipfile.BadZipFile as exc:
+        raise PluginError("不是有效的框架 zip 包") from exc
+
+
+def _replace_framework_file(staged: Path, target: Path, backup: Path) -> None:
+    if backup.exists() or backup.is_symlink():
+        _remove_path(backup)
+    if target.exists() or target.is_symlink():
+        shutil.copy2(target, backup)
+    os.replace(staged, target)
+
+
+def _replace_framework_app(staged: Path, target: Path, backup: Path) -> None:
+    if backup.exists() or backup.is_symlink():
+        _remove_path(backup)
+    had_previous = target.exists() or target.is_symlink()
+    if had_previous:
+        os.replace(target, backup)
+    try:
+        os.replace(staged, target)
+    except Exception:
+        if had_previous and not target.exists() and backup.exists():
+            os.replace(backup, target)
+        raise
+
+
 def _extract_framework(zip_path: Path, install_dir: Path) -> Path:
+    install_dir = Path(install_dir)
     install_dir.mkdir(parents=True, exist_ok=True)
-    if sys.platform == "darwin":
-        temp = Path(tempfile.mkdtemp(prefix="omm-framework-"))
-        try:
-            subprocess.run(
-                ["ditto", "-x", "-k", str(zip_path), str(temp)],
-                check=True,
-                capture_output=True,
-            )
-            apps = list(temp.glob("*.app"))
+    _validate_framework_archive(zip_path)
+    temp = Path(tempfile.mkdtemp(prefix=".omm-framework-", dir=str(install_dir.parent)))
+    try:
+        unpack = temp / "unpack"
+        unpack.mkdir()
+        if sys.platform == "darwin":
+            try:
+                subprocess.run(
+                    ["ditto", "-x", "-k", str(zip_path), str(unpack)],
+                    check=True,
+                    capture_output=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise PluginError("框架包解压失败") from exc
+            apps = sorted(unpack.glob("*.app"))
             if not apps:
                 raise PluginError("框架包中没有 .app")
-            target = install_dir / apps[0].name
-            if target.exists():
-                shutil.rmtree(target)
-            subprocess.run(
-                ["ditto", str(apps[0]), str(target)],
-                check=True,
-                capture_output=True,
-            )
+            staged = unpack / "OMM-ZEN.app"
+            if not staged.is_dir():
+                staged = apps[0]
+            executable = staged / "Contents" / "MacOS" / "OMM-ZEN"
+            if not executable.is_file() or executable.stat().st_size == 0:
+                raise PluginError("框架 .app 缺少可执行文件")
+            target = install_dir / staged.name
+            _replace_framework_app(staged, target, install_dir / ".OMM-ZEN.previous-app")
             return target
-        finally:
-            shutil.rmtree(temp, ignore_errors=True)
-    with zipfile.ZipFile(zip_path) as zf:
-        for info in zf.infolist():
-            name = info.filename.replace("\\", "/")
-            if name.startswith("/") or ".." in Path(name).parts:
-                raise PluginError("框架包路径无效")
-            zf.extract(info, install_dir)
-    exe = install_dir / "OMM-ZEN.exe"
-    if not exe.is_file():
-        matches = list(install_dir.glob("OMM-ZEN*.exe"))
-        if matches:
-            exe = matches[0]
-        else:
-            raise PluginError("框架包中没有 OMM-ZEN.exe")
-    return exe
+
+        with zipfile.ZipFile(zip_path) as zf:
+            for info in zf.infolist():
+                name = info.filename.replace("\\", "/")
+                parts = [part for part in name.split("/") if part not in ("", ".")]
+                if not parts or info.is_dir():
+                    continue
+                dest = (unpack / Path(*parts)).resolve()
+                if unpack.resolve() not in dest.parents:
+                    raise PluginError("框架包路径越界")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as src, open(dest, "wb") as out:
+                    shutil.copyfileobj(src, out)
+        staged = unpack / "OMM-ZEN.exe"
+        if not staged.is_file():
+            matches = sorted(unpack.glob("OMM-ZEN*.exe"))
+            if not matches:
+                raise PluginError("框架包中没有 OMM-ZEN.exe")
+            staged = matches[0]
+        if staged.stat().st_size == 0:
+            raise PluginError("框架包中的 OMM-ZEN.exe 为空")
+        target = install_dir / staged.name
+        _replace_framework_file(staged, target, install_dir / ".OMM-ZEN.previous.exe")
+        return target
+    finally:
+        shutil.rmtree(temp, ignore_errors=True)
 
 
 def _create_shortcut(exe: Path) -> None:

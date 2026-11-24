@@ -36,9 +36,11 @@ test('Golden 备份清单通过校验和与结构校验', () => {
 })
 
 test('Golden 规则通过 ZenFlow 校验', () => {
-  for (const rule of read('zenflow-rules.json')) {
+  const pack = read('zenflow-rules.json')
+  for (const rule of pack.rules) {
     assert.deepEqual(ZenFlow.validateRule(rule), { ok: true, errors: [] })
   }
+  assert.equal(ZenFlow.deserialize(JSON.stringify(pack)).length, 1)
 })
 
 test('Golden 样本确实被强制：篡改格式会被 JS 拒绝', () => {
@@ -50,7 +52,9 @@ test('Golden 样本确实被强制：篡改格式会被 JS 拒绝', () => {
   assert.equal(ZenBackup.validate(tampered).ok, false)
 
   const rules = read('zenflow-rules.json')
-  assert.equal(ZenFlow.validateRule({ ...rules[0], actions: [] }).ok, false)
+  assert.equal(ZenFlow.validateRule({ ...rules.rules[0], actions: [] }).ok, false)
+  assert.throws(() => ZenFlow.deserialize(JSON.stringify(rules.rules)), /非法 zen-flow/)
+  assert.throws(() => ZenFlow.deserialize(JSON.stringify({ ...rules, v: 2 })), /非法 zen-flow/)
 })
 
 test('Golden 样例文件与 Python 对拍测试同在', () => {

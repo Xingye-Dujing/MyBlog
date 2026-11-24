@@ -29,7 +29,7 @@ from .models import Document
 from .parser import parse_markdown
 from .preview import document_stats, render_preview, toc_payload
 from .template import default_template_name, list_templates, load_template
-from .validate import validate_document
+from .validate import untrusted_tex, validate_document
 
 PUBLIC_ROOT = Path(
     os.environ.get("OMM_PLUGIN_ROOT") or Path(__file__).resolve().parent.parent
@@ -58,6 +58,58 @@ JOBS: Dict[str, Dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
 MAX_MARKDOWN = 2 * 1024 * 1024
 JOB_TTL = 24 * 3600
+_LOOPBACK_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
+
+
+def _host_endpoint(host_header: str):
+    raw = str(host_header or "").strip()
+    if not raw or "," in raw:
+        return None
+    try:
+        parsed = urlsplit("//" + raw)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except (TypeError, ValueError):
+        return None
+    if parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        return None
+    if host not in _LOOPBACK_HOSTS:
+        return None
+    return host, port
+
+
+def _origin_is_same_origin(origin_header: str, host_header: str, scheme: str) -> bool:
+    raw = str(origin_header or "").strip()
+    if not raw or raw == "null" or "," in raw:
+        return False
+    target = _host_endpoint(host_header)
+    if not target:
+        return False
+    try:
+        parsed = urlsplit(raw)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except (TypeError, ValueError):
+        return False
+    if parsed.scheme.lower() != str(scheme or "").lower():
+        return False
+    if parsed.username or parsed.password or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return False
+    if host not in _LOOPBACK_HOSTS or host != target[0]:
+        return False
+    default_port = 443 if parsed.scheme.lower() == "https" else 80
+    return (port or default_port) == (target[1] or default_port)
+
+
+def _request_is_local() -> bool:
+    if _host_endpoint(request.headers.get("Host")) is None:
+        return False
+    if (request.headers.get("Sec-Fetch-Site") or "").strip().lower() == "cross-site":
+        return False
+    origin = request.headers.get("Origin")
+    if origin and not _origin_is_same_origin(origin, request.headers.get("Host"), request.scheme):
+        return False
+    return True
 
 
 def _cleanup_jobs() -> None:
@@ -287,8 +339,20 @@ def _parse_payload(payload: Dict[str, Any]) -> Tuple[Document, Any, Dict[str, An
         template_name = str(document.metadata.get("template") or "").strip() or default_template_name(fmt)
     template = load_template(fmt, template_name)
     document.metadata["template"] = template_name
-    issues = validate_document(document, template.config, check_images=False)
+    with untrusted_tex():
+        issues = validate_document(document, template.config, check_images=False)
     return document, template, {"issues": issues, "format": fmt, "template": template_name}
+
+
+def _reject_untrusted_figures(source: str, filename: str) -> None:
+    with untrusted_tex():
+        document = parse_markdown(source, source_name=filename, base_dir=None)
+        issues = validate_document(document, check_images=False)
+    failures = [item for item in issues if item.get("code") == "latex-figure-disabled"]
+    if failures:
+        error = ValidationError(failures[0]["message"], int(failures[0].get("line") or 0))
+        error.issues = issues
+        raise error
 
 
 def create_app(public_root: Optional[Path] = None) -> Flask:
@@ -299,14 +363,10 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
 
     @app.before_request
     def _omm_local_guard():
-        # 与桌面桥其它 HTTP 端点一致：桌面模式下校验回环 Host + Origin，
-        # 阻断外部网站借浏览器发起的跨站 POST（磁盘桥解析裸 JSON body）。
-        if omm_shared is not None and omm_shared.desktop_enabled():
-            if not omm_shared.headers_are_local(
-                request.headers.get("Host"), request.headers.get("Origin"),
-                request.headers.get("Sec-Fetch-Site"),
-            ):
-                abort(403)
+        # 独立 Web 服务与桌面插件都无条件校验回环 Host；带 Origin 时必须同源。
+        # 该守卫在路由解析表单和创建任务之前执行，跨站 multipart 不会进入 _new_job。
+        if not _request_is_local():
+            abort(403)
         return None
 
     @app.get("/")
@@ -564,25 +624,27 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
                 raise ValidationError("Markdown 内容为空")
             if len(source.encode("utf-8")) > MAX_MARKDOWN:
                 raise ValidationError("Markdown 超过 2 MB 限制")
+            _reject_untrusted_figures(source, filename)
             _stage_images(directory, source, uploads)
             fmt = fmt if fmt in ("docx", "tex") else "docx"
             stem = _stem(filename, "document")
             output_name = stem + ("." + fmt)
             output_path = os.path.join(directory, output_name)
-            result = convert_text(
-                source,
-                output=output_path,
-                fmt=fmt,
-                template=template_name,
-                base_dir=directory,
-                strict=strict,
-                compile_pdf=compile_pdf,
-                engine=engine if isinstance(engine, str) and engine else None,
-                overrides=overrides if isinstance(overrides, dict) else {},
-                keep_anchor=keep_anchor,
-                source_name=filename,
-                tuning=format_overrides,
-            )
+            with untrusted_tex():
+                result = convert_text(
+                    source,
+                    output=output_path,
+                    fmt=fmt,
+                    template=template_name,
+                    base_dir=directory,
+                    strict=strict,
+                    compile_pdf=compile_pdf,
+                    engine=engine if isinstance(engine, str) and engine else None,
+                    overrides=overrides if isinstance(overrides, dict) else {},
+                    keep_anchor=keep_anchor,
+                    source_name=filename,
+                    tuning=format_overrides,
+                )
             files = {"source": os.path.join(directory, "source-" + filename), fmt: output_path}
             with open(files["source"], "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(source)
@@ -596,6 +658,7 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
                     JOBS[job_id]["template"] = result.get("template") or template_name or "academic"
                     JOBS[job_id]["metadata"] = result.get("metadata") or overrides
                     JOBS[job_id]["asset_dir"] = result.get("asset_dir")
+                    JOBS[job_id]["tex_trusted"] = True
             result.update(
                 {
                     "ok": True,
@@ -714,6 +777,8 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
         updates = payload.get("metadata")
         if not isinstance(updates, dict) or not updates:
             return jsonify({"ok": False, "error": "缺少 metadata"}), 400
+        if fmt == "tex" and _bool(payload.get("recompile")) and not job.get("tex_trusted"):
+            return jsonify({"ok": False, "error": "上传的原始 TeX 不在受信任任务目录中，不能重新编译"}), 400
         template_name = str(payload.get("template") or job.get("template") or ("academic" if fmt == "tex" else "")).strip()
         try:
             config = load_template(fmt, template_name).config if template_name else {}
@@ -740,7 +805,7 @@ def create_app(public_root: Optional[Path] = None) -> Flask:
             if recompile:
                 engine = str(payload.get("engine") or config.get("engine") or "xelatex")
                 try:
-                    compiled = compile_tex(path, engine=engine)
+                    compiled = compile_tex(path, engine=engine, trusted=bool(job.get("tex_trusted")))
                     files["pdf"] = compiled["pdf"]
                     result["pdf_url"] = "/api/download/%s/pdf?v=%d" % (job_id, int(time.time() * 1000))
                     compile_info = {

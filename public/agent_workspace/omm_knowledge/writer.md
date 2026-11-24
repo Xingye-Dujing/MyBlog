@@ -117,7 +117,8 @@ else                                                -> 报“无效文件”
   "collapsed": false,          // 仅 group 有意义，见 3.3
   "fontSize": "15px",          // 正文字号
   "lh": "1.8",                 // 行高（仅 text/todo/group）
-  "borderColor": "#c96a2e"     // 边框色
+  "borderColor": "#c96a2e",    // 边框色
+  "zenCardId": "zc-123"        // 可选，关联的 ZenCard id
 }
 ```
 
@@ -134,11 +135,12 @@ else                                                -> 报“无效文件”
 | `fontSize` | string/number | `14px` | `"15px"` 和 `15` 都行（内部会补 `px`） |
 | `lh` | string/number | `1.8` | 仅 text/todo/group。写 `"1.8"` 或 `"28px"` |
 | `borderColor` | string | 无（用主题默认） | 只接受 `#rgb` 或 `#rrggbb`，其它一律忽略并清除 |
+| `zenCardId` | string | 无 | 关联 ZenCard；保存到节点 `dataset.zenCardId`，重开/导出/再导入后仍显示复习按钮 |
 
 **关于 `id`**：加载器会 `parseInt(id.split('-')[1])` 来推进新节点计数器。
 所以请用 `node-1` … `node-20` 这种**纯数字后缀**，且**绝不重复**。
 用 `a`、`b` 这种非数字 id 不会报错，但之后新建的节点可能撞 id，
-导致连线指向错乱。**未知的多余字段会被静默忽略**（可以加自己的元数据，
+导致连线指向错乱。除 `zenCardId` 外，未知的多余字段会被静默忽略（可以加自己的元数据，
 但重新保存时会被丢掉，不要依赖往返）。
 
 ### 3.2 类型表
@@ -400,11 +402,12 @@ else                                                -> 报“无效文件”
    反斜杠已按 JSON 规则写成 `\\`。
 9. 图片只用 `url`（或正确的 `data:` URL）；**没有** `link` 模式、
    **没有** `assetId`、**没有** `blob:` 地址。
-10. `doodles` 里每笔至少有一个 `[x, y]` 有效点。
-11. 文件是 **UTF-8** 编码的合法 JSON（不要有注释、不要有尾逗号）。
+10. 若节点关联 ZenCard，`zenCardId` 必须是真实卡片 id；`.zc` 与 `.zwlib` 都按同一节点字段保存。
+11. `doodles` 里每笔至少有一个 `[x, y]` 有效点。
+12. 文件是 **UTF-8** 编码的合法 JSON（不要有注释、不要有尾逗号）。
 
 只要 1–4 条满足，导入就一定成功并显示全部节点；
-5–11 条决定“好不好看”。
+5–12 条决定“好不好看”。
 
 ---
 

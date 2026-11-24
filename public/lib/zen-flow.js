@@ -27,6 +27,13 @@ function createRule(input) {
     },
     actions: arr(r.actions).filter(function (a) {
       return a && ACTIONS.indexOf(a.type) >= 0
+    }).map(function (a) {
+      const out = Object.assign({}, a)
+      if (out.type === 'notify') {
+        out.message = str(out.message || out.value)
+        delete out.value
+      }
+      return out
     }),
   }
 }
@@ -124,7 +131,7 @@ function serialize(rules) {
 
 function deserialize(text) {
   const obj = typeof text === 'string' ? JSON.parse(text) : text
-  if (!obj || obj.format !== 'zen-flow' || !Array.isArray(obj.rules)) {
+  if (!obj || obj.format !== 'zen-flow' || obj.v !== 1 || !Array.isArray(obj.rules)) {
     throw new Error('非法 zen-flow 规则文件')
   }
   const rules = obj.rules.map(createRule)

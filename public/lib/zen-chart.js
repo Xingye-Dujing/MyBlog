@@ -116,7 +116,7 @@ function renderSVG(spec) {
   const plotH = H - padT - padB
   const all = []
   data.series.forEach((s) => (s.values || []).forEach((v) => all.push(Number(v) || 0)))
-  const max = all.length ? Math.max.apply(null, all) : 1
+  const max = all.length ? Math.max.apply(null, all.concat([0])) : 1
   const min = Math.min.apply(null, all.concat([0]))
   const span = max - min || 1
   const n = Math.max(data.labels.length, 1)
@@ -134,6 +134,7 @@ function renderSVG(spec) {
     out.push('<text x="' + (padL - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-family="sans-serif" font-size="10" fill="#6b655b">' + esc(Math.round(val)) + '</text>')
   }
   const yOf = (v) => padT + plotH - ((Number(v) || 0) - min) / span * plotH
+  const zeroY = yOf(0)
   if (kind === 'bar') {
     const group = plotW / n
     const bw = Math.max(4, group / (data.series.length + 1))
@@ -141,7 +142,9 @@ function renderSVG(spec) {
       ;(s.values || []).forEach((v, i) => {
         const x = padL + group * i + (si + 0.5) * bw
         const y = yOf(v)
-        out.push('<rect x="' + x + '" y="' + y + '" width="' + (bw - 2) + '" height="' + Math.max(0, H - padB - y) + '" fill="' + palette[si % palette.length] + '"><title>' + esc(s.name + ': ' + v) + '</title></rect>')
+        const rectY = Math.min(y, zeroY)
+        const rectH = Math.abs(zeroY - y)
+        out.push('<rect x="' + x + '" y="' + rectY + '" width="' + (bw - 2) + '" height="' + rectH + '" fill="' + palette[si % palette.length] + '"><title>' + esc(s.name + ': ' + v) + '</title></rect>')
       })
     })
   } else {

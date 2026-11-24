@@ -105,24 +105,10 @@ test('既有 12 个产品仍全部引入共享桥接脚本（回归护栏）', (
   })
 })
 
-test('zen-link 仅信任同源与 loopback origin', () => {
+test('zen-link 跨窗口消息统一委托精确父窗口信任校验', () => {
   const src = read('public/lib/zen-link.js')
-  const start = src.indexOf('function isTrusted(')
-  assert.notEqual(start, -1)
-  const open = src.indexOf('{', start)
-  let depth = 0
-  let end = -1
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === '{') depth++
-    else if (src[i] === '}' && --depth === 0) { end = i + 1; break }
-  }
-  const fn = new Function('location', 'URL', `return (${src.slice(start, end)})`)(
-    { origin: 'https://example.com' }, URL
-  )
-  assert.equal(fn('https://example.com'), true)
-  assert.equal(fn('http://127.0.0.1:8321'), true)
-  assert.equal(fn('https://evil.example'), false)
-  assert.equal(fn('null'), false)
+  assert.ok(src.includes('ZenUtil.isTrustedParentMessage('), 'zen-link 未使用共享消息信任校验')
+  assert.ok(!/function\s+isTrusted\s*\(/.test(src), 'zen-link 不得保留第二套 loopback 信任实现')
 })
 
 test('核心模块均挂载全局并导出命名符号', () => {

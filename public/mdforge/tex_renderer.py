@@ -16,6 +16,7 @@ from .images import resolve_tex_width
 from .models import Block, Document, Inline, ListItem, plain_text
 from .template import Template
 from .tuning import normalize_tuning, tex_font
+from .validate import raw_tex_allowed, sanitize_math
 
 
 def _as_text(value: Any) -> str:
@@ -152,7 +153,8 @@ class TexRenderer:
                 text = self.inlines(item.children) or escape(item.url)
                 parts.append(r"\href{%s}{%s}" % (escape_url(item.url), text))
             elif item.type == "math":
-                parts.append("$%s$" % item.text)
+                math = item.text if raw_tex_allowed() else sanitize_math(item.text)
+                parts.append("$%s$" % math)
             elif item.type == "break":
                 parts.append(r"\\")
             else:
@@ -194,7 +196,8 @@ class TexRenderer:
         if block.type == "hr":
             return r"\par\noindent\rule{\linewidth}{0.4pt}\par"
         if block.type == "math_block":
-            return "\\[\n%s\n\\]" % block.text
+            math = block.text if raw_tex_allowed() else sanitize_math(block.text)
+            return "\\[\n%s\n\\]" % math
         if block.type == "bibliography":
             return ""
         return ""
@@ -259,6 +262,8 @@ class TexRenderer:
         code = (block.text or "").strip()
         if not code:
             return ""
+        if not raw_tex_allowed():
+            return r"\par\noindent\texttt{[Web/AI 模式已禁用原始 TeX 图表]}"
         if "\\begin{figure}" in code or "\\begin{figure*}" in code:
             return code
         lines = [r"\begin{figure}[htbp]", r"\centering", code]

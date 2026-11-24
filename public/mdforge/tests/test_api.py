@@ -183,18 +183,22 @@ def test_frontend_contract():
         'configurationChanged',
         'data-action="settings"',
         'data-ai-spec-kind="figure"',
-        "--radius",
-        "var(--radius)",
+        'zen/zen.css',
+        'zen/products/mdforge.css',
     ]:
         assert marker in html
     assert '<div id="preview"></div>' in html
     lowered = html.lower()
-    assert "--bg: #ffffff" in lowered
-    assert "--bg: #1a1a1a" in lowered
-    assert "--active-bg: #1a1a1a" in lowered
-    assert "--active-bg: #e8e8e8" in lowered
+    css = (ROOT / "zen" / "products" / "mdforge.css").read_text(encoding="utf-8").lower()
+    assert "var(--zen-surface)" in css
+    assert "--bg: #ffffff" not in css
+    assert "--bg: #1a1a1a" not in css
+    assert "--active-bg: #1a1a1a" not in css
+    assert "--active-bg: #e8e8e8" not in css
+    assert "--accent-soft:" not in css
     for forbidden in ["blue", "#0000ff", "#657047", "#525c38", "#a9b27f", "#bcc594", "olive"]:
         assert forbidden not in lowered
+        assert forbidden not in css
 
 
 def test_template_name_cannot_escape_templates_root(tmp_path):

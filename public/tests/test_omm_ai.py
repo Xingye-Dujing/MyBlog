@@ -23,6 +23,7 @@ from agent_workspace.omm_host import OMMZenHostAdapter, shared_dir  # noqa: E402
 from agent_workspace.omm_server import _resolve_provider, _safe_asset, create_app  # noqa: E402
 from agent_workspace.omm_skills import SKILLS  # noqa: E402
 from agent_workspace.omm_tools import KNOWLEDGE_DIR  # noqa: E402
+from agent_workspace.omm_workspace import OMMWorkspace  # noqa: E402
 from agent_workspace.service import AgentWorkspace  # noqa: E402
 from agent_workspace.types import SKILL_ID_RE  # noqa: E402
 
@@ -34,7 +35,7 @@ def host(tmp_path):
 
 @pytest.fixture()
 def ws(host):
-    workspace = AgentWorkspace(host)
+    workspace = OMMWorkspace(host)
     for spec in host.tools():
         workspace.tools.register(spec)
     workspace.settings.set('chat.default_provider', 'complete')
@@ -187,10 +188,14 @@ def test_apply_artifact_via_workspace(ws):
     conv = ws.store.create_conversation('default', title='产物测试')['id']
     artifact = ws.store.save_artifact('default', conv, 'omm_markdown',
                                       {'filename': 'report.md', 'content': '# 报告'})
-    applied = ws.apply_artifact('default', artifact['id'])
-    assert applied['ok'] and applied['result']['action'] == 'save_text'
+    prepared = ws.apply_artifact('default', artifact['id'])
+    assert prepared['ok'] and prepared['result']['action'] == 'save_text'
     row = ws.store.get_artifact(artifact['id'])
-    assert row['status'] == 'applied'
+    assert row['status'] == 'prepared'
+    committed = ws.commit_artifact('default', artifact['id'])
+    assert committed['ok'] and committed['status'] == 'applied'
+    assert ws.store.get_artifact(artifact['id'])['status'] == 'applied'
+    assert ws.apply_artifact('default', artifact['id'])['already_applied'] is True
 
 
 # ── 5. 离线对话 ───────────────────────────────────────────────────────────────
@@ -207,8 +212,8 @@ def test_offline_chat_with_product_skill(ws):
 def test_provider_mapping_registers_custom_catalog(ws):
     payload = {'provider': 'custom', 'baseUrl': 'https://example.test/v1', 'model': 'my-model'}
     _resolve_provider(ws, payload)
-    assert payload['provider'] == 'omm_custom' and payload['model'] == 'my-model'
-    registered = ws.catalog.get('omm_custom', check_scope=False)
+    assert payload['provider'].startswith('omm_custom_') and payload['model'] == 'my-model'
+    registered = ws.catalog.get(payload['provider'], check_scope=False)
     assert registered is not None and registered.spec.base_url == 'https://example.test/v1'
     assert 'tools' in registered.spec.capabilities
 

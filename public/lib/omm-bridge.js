@@ -373,6 +373,7 @@
   }
 
   /* ---------- 跨应用直传（同源 localStorage 收件箱 + BroadcastChannel） ---------- */
+  var LEASE_MS = 120000
   function readBox() {
     var a = ZenUtil.getJSON(INBOX, [])
     return Array.isArray(a) ? a : []
@@ -380,21 +381,54 @@
   function writeBox(a) {
     try {
       localStorage.setItem(INBOX, JSON.stringify(a))
-    } catch (e) {}
+      return true
+    } catch (e) {
+      return false
+    }
   }
-  function take() {
-    var box = readBox()
-    if (!box.length) return []
-    var got = [],
+  /* 只租借、不删除。页面在确认或应用途中关闭时，消息仍在收件箱里。 */
+  function peek() {
+    var box = readBox(),
+      now = Date.now(),
+      ids = Object.create(null)
+    box.forEach(function (p) {
+      if (p && p.id) ids[p.id] = true
+    })
+    for (var i = 0; i < box.length; i++) {
+      var p = box[i]
+      if (!p || !p.env || (p.to && p.to !== SELF)) continue
+      if (p.lease && p.lease.until > now) continue
+      if (!p.id) {
+        do {
+          p.id = 'p' + now + Math.random().toString(36).slice(2, 8)
+        } while (ids[p.id])
+        ids[p.id] = true
+      }
+      var token = now + '-' + Math.random().toString(36).slice(2, 10)
+      p.lease = { token: token, until: now + LEASE_MS }
+      if (!writeBox(box)) return null
+      var packet = Object.assign({}, p)
+      delete packet.lease
+      return { id: p.id, token: token, packet: packet }
+    }
+    return null
+  }
+  function settle(id, token, applied) {
+    var box = readBox(),
+      found = false,
       keep = []
     box.forEach(function (p) {
-      if (!p || !p.env) return
-      if (!p.to || p.to === SELF) got.push(p)
-      else keep.push(p)
+      if (p && p.id === id && p.lease && p.lease.token === token) {
+        found = true
+        if (applied) return
+        delete p.lease
+      }
+      keep.push(p)
     })
-    writeBox(keep)
-    return got
+    return found ? writeBox(keep) : false
   }
+  function release(id, token) { return settle(id, token, true) }
+  function requeue(id, token) { return settle(id, token, false) }
   function openApp(file) {
     var a = document.createElement('a')
     a.href = file
@@ -419,7 +453,7 @@
       ts: nowISO(),
       env: env(items, meta),
     })
-    writeBox(box)
+    if (!writeBox(box)) return false
     try {
       if (ch) ch.postMessage({ t: 'inbox' })
     } catch (e) {}
@@ -430,15 +464,28 @@
     return true
   }
   function watch(apply) {
-    function run() {
-      var got = take()
-      got.forEach(function (p) {
-        try {
-          apply(p)
-        } catch (e) {
-          if (window.console) console.error(e)
+    var running = false
+    async function run() {
+      if (running) return
+      running = true
+      try {
+        while (true) {
+          var lease = peek()
+          if (!lease) break
+          var applied = false
+          try {
+            applied = (await apply(lease.packet)) === true
+          } catch (e) {
+            if (window.console) console.error(e)
+          }
+          if (applied) release(lease.id, lease.token)
+          else requeue(lease.id, lease.token)
+          /* 取消或失败后立即重试会反复弹窗，留给下一次消息/可见性事件。 */
+          if (!applied) break
         }
-      })
+      } finally {
+        running = false
+      }
     }
     setTimeout(run, 300)
     window.addEventListener('storage', function (e) {
@@ -488,7 +535,9 @@
     deliver: deliver,
     openApp: openApp,
     watch: watch,
-    take: take,
+    peek: peek,
+    release: release,
+    requeue: requeue,
     clearBox: writeBox,
   }
 })()

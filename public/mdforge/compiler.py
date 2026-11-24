@@ -263,7 +263,15 @@ def compile_tex(
     engine: str = "xelatex",
     output_dir: Optional[str] = None,
     timeout: int = 300,
+    trusted: bool = True,
 ) -> Dict[str, Any]:
-    """Serialize MiKTeX calls: its package database is not concurrency-safe."""
+    """Serialize MiKTeX calls: its package database is not concurrency-safe.
+
+    Server jobs must pass ``trusted=False`` for uploaded raw TeX. There is no
+    cross-platform OS sandbox in this launcher, so untrusted source is refused
+    before the compiler process is created.
+    """
+    if not trusted:
+        raise CompileError("服务器拒绝编译不可信的原始 TeX 文件")
     with _COMPILE_LOCK:
         return _compile_tex_unlocked(tex_path, engine=engine, output_dir=output_dir, timeout=timeout)

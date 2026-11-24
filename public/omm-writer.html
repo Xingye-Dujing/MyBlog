@@ -466,14 +466,6 @@
         <span data-i18n="dd.settings.nodeBg">Node BG</span
         ><span class="hint" id="sv-node-bg"></span>
       </div>
-      <div class="dd-item-row">
-        <span data-i18n="dd.settings.nodeRadius">Node Radius</span>
-        <div class="settings-control">
-          <span class="settings-value" id="sv-node-radius">0</span
-          ><span class="settings-btn" data-action="settingsNodeRadiusDown">−</span
-          ><span class="settings-btn" data-action="settingsNodeRadiusUp">+</span>
-        </div>
-      </div>
       <div class="dd-divider"></div>
       <div class="dd-label" data-i18n="dd.settings.mode">Mode</div>
       <div class="dd-item" data-action="settingsToggleFocus">
@@ -1656,7 +1648,6 @@
             'dd.settings.theme': '主题',
             'dd.settings.bg': '背景',
             'dd.settings.nodeBg': '节点背景',
-            'dd.settings.nodeRadius': '圆角',
             'dd.settings.mode': '模式',
             'dd.settings.focus': '专注模式',
             'dd.settings.read': '阅读模式',
@@ -1929,7 +1920,6 @@
           titleFontSize: 10,
           contentFontSize: 14,
           contentLineHeight: 1.8,
-          nodeBorderRadius: 0,
           portSize: 10,
           portColor: '#888888',
           connColor: '#555555',
@@ -2177,7 +2167,6 @@
               titleFontSize: AppState.titleFontSize,
               contentFontSize: AppState.contentFontSize,
               contentLineHeight: AppState.contentLineHeight,
-              nodeBorderRadius: AppState.nodeBorderRadius,
               menuPinned: AppState.menuPinned,
               focusMode: AppState.focusMode,
               readingMode: AppState.readingMode,
@@ -2257,7 +2246,6 @@
               'titleFontSize',
               'contentFontSize',
               'contentLineHeight',
-              'nodeBorderRadius',
               'portSize',
               'portColor',
               'connColor',
@@ -2316,7 +2304,6 @@
               '--content-line-height',
               AppState.contentLineHeight,
             )
-            document.documentElement.style.setProperty('--radius', AppState.nodeBorderRadius + 'px')
             // Port size
             document.documentElement.style.setProperty('--port-size', AppState.portSize + 'px')
             // Port color
@@ -2669,7 +2656,6 @@
             document.getElementById('sv-content-lh').textContent =
               AppState.contentLineHeight.toFixed(1)
             document.getElementById('sv-title-fs').textContent = AppState.titleFontSize
-            document.getElementById('sv-node-radius').textContent = AppState.nodeBorderRadius
             document.getElementById('sv-port-size').textContent = AppState.portSize
             document.getElementById('sv-conn-width').textContent = AppState.connWidth
             document.getElementById('sv-menu-pinned').textContent = AppState.menuPinned
@@ -2785,12 +2771,6 @@
             Settings.save()
             UIManager.updateSettingsUI()
           },
-          changeNodeRadius(delta) {
-            AppState.nodeBorderRadius = Math.max(0, Math.min(24, AppState.nodeBorderRadius + delta))
-            document.documentElement.style.setProperty('--radius', AppState.nodeBorderRadius + 'px')
-            Settings.save()
-            UIManager.updateSettingsUI()
-          },
           settingsSetBg(bg) {
             document.body.className = document.body.className.replace(/bg-\S+/g, '').trim()
             document.body.classList.add(bg)
@@ -2829,7 +2809,6 @@
             AppState.contentFontSize = 14
             AppState.contentLineHeight = 1.8
             AppState.titleFontSize = 10
-            AppState.nodeBorderRadius = 0
             AppState.nodeBgVisible = true
             AppState.portSize = 10
             AppState.portColor = '#888888'
@@ -4927,6 +4906,7 @@
             node.className = 'node'
             if (!AppState.nodeBgVisible) node.classList.add('no-bg')
             node.dataset.type = type
+            if (data && data.zenCardId) node.dataset.zenCardId = String(data.zenCardId)
             if (type === 'todo') node.classList.add('node-todo')
             if (type === 'group') node.classList.add('node-group')
             node.style.left = x + 'px'
@@ -11537,6 +11517,7 @@
             collapsed: node.dataset.groupCollapsed === 'true' || undefined,
             fontSize: contentEl ? contentEl.dataset.fontSize || '' : '',
             borderColor: node.dataset.borderColor || '',
+            zenCardId: node.dataset.zenCardId || '',
           }
           if (type === 'text' || type === 'todo' || type === 'group') {
             obj.content = contentEl
@@ -14313,12 +14294,6 @@
                 break
               case 'settingsConnWidthUp':
                 UIManager.changeConnWidth(1)
-                break
-              case 'settingsNodeRadiusDown':
-                UIManager.changeNodeRadius(-1)
-                break
-              case 'settingsNodeRadiusUp':
-                UIManager.changeNodeRadius(1)
                 break
               case 'settingsTogglePin':
                 UIManager.togglePin()

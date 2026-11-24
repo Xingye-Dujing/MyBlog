@@ -22,7 +22,7 @@ import threading
 import urllib.parse
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 from urllib.parse import parse_qs, urlsplit
 
 import omm_shared
@@ -373,11 +373,22 @@ class ShellHandler(SimpleHTTPRequestHandler):
     server_version = "OMM-ZEN"
     sys_version = ""
 
-    def __init__(self, *args, default_app: str = "", **kwargs):
-        # Trusted identity must be per-handler. In the integrated hub the process-wide
-        # OMM_APP_ID is "hub", so a handler that falls back to it grants every plugin
-        # the hub's all-seeing share identity. Plugin servers pass their own id here.
+    def __init__(
+        self,
+        *args,
+        default_app: str = "",
+        capabilities: Optional[Iterable[str]] = None,
+        trusted_hub: bool = False,
+        **kwargs,
+    ):
+        # Trusted identity and capabilities must be per-handler. In the integrated hub
+        # the process-wide OMM_APP_ID is "hub", so falling back to it would grant every
+        # plugin the hub's all-seeing identity. Plugin servers pass their own context.
         self._default_app = default_app
+        self._fs_capabilities = (
+            frozenset(str(item) for item in capabilities) if capabilities is not None else None
+        )
+        self._trusted_hub = bool(trusted_hub)
         super().__init__(*args, **kwargs)
 
     def log_message(self, fmt, *args):  # noqa: D401 - keep desktop logs quiet
@@ -403,6 +414,17 @@ class ShellHandler(SimpleHTTPRequestHandler):
     def _default_app_id(self) -> str:
         return (self._default_app or os.environ.get("OMM_APP_ID") or "app").strip() or "app"
 
+    def _desktop_capabilities(self) -> frozenset[str]:
+        if self._fs_capabilities is not None:
+            return self._fs_capabilities
+        return omm_shared.capabilities_for_app(
+            self._default_app_id(), trusted_hub=self._trusted_hub
+        )
+
+    def page_capability_script(self) -> str:
+        """Optional same-origin bootstrap injected before page scripts."""
+        return ""
+
     def handle_desktop_get(self) -> bool:
         parsed = urlsplit(self.path)
         if parsed.path.startswith("/__omm/share/"):
@@ -410,14 +432,21 @@ class ShellHandler(SimpleHTTPRequestHandler):
                 self.reply_json(404, {"ok": False, "error": "share API is not available"})
                 return True
             status, content_type, body = omm_share.handle_get(
-                parsed.path, parse_qs(parsed.query), self._default_app_id()
+                parsed.path,
+                parse_qs(parsed.query),
+                self._default_app_id(),
+                trusted_hub=self._trusted_hub,
             )
             self.reply_raw(status, content_type, body)
             return True
         if not parsed.path.startswith("/__omm/fs/"):
             return False
         status, content_type, body = omm_shared.handle_get(
-            parsed.path, parse_qs(parsed.query), self._default_app_id()
+            parsed.path,
+            parse_qs(parsed.query),
+            self._default_app_id(),
+            capabilities=self._desktop_capabilities(),
+            trusted_hub=self._trusted_hub,
         )
         self.reply_raw(status, content_type, body)
         return True
@@ -444,11 +473,20 @@ class ShellHandler(SimpleHTTPRequestHandler):
                 self.reply_json(404, {"ok": False, "error": "share API is not available"})
                 return True
             status, content_type, payload = omm_share.handle_post(
-                parsed.path, parse_qs(parsed.query), body, self._default_app_id()
+                parsed.path,
+                parse_qs(parsed.query),
+                body,
+                self._default_app_id(),
+                trusted_hub=self._trusted_hub,
             )
         else:
             status, content_type, payload = omm_shared.handle_post(
-                parsed.path, parse_qs(parsed.query), body, self._default_app_id()
+                parsed.path,
+                parse_qs(parsed.query),
+                body,
+                self._default_app_id(),
+                capabilities=self._desktop_capabilities(),
+                trusted_hub=self._trusted_hub,
             )
         self.reply_raw(status, content_type, payload)
         return True
@@ -499,6 +537,13 @@ class ShellHandler(SimpleHTTPRequestHandler):
             text = raw.decode("utf-8")
         except Exception:
             return False
+        capability_script = self.page_capability_script()
+        if capability_script:
+            head = re.search(r"<head(?:\s[^>]*)?>", text, re.I)
+            if head:
+                text = text[: head.end()] + capability_script + text[head.end() :]
+            else:
+                text = capability_script + text
         tag = '<script src="%s"></script>' % UPDATE_JS_PATH
         lower = text.lower()
         index = lower.rfind("</body>")

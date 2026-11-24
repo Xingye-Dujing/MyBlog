@@ -120,7 +120,7 @@
   var S = {
     conv: '', skill: 'omm.zen.ai', provider: 'complete', model: 'complete', base: '',
     key: '', busy: false, products: [], skills: [], artifacts: {}, docs: [], formats: {}, lastHolder: null,
-    liveToken: '', liveResolve: null
+    liveToken: '', liveResolve: null, generation: 0, abort: null, questions: {}, applyResults: {}, shareBound: false
   };
 
   function esc(text) { return ZenUtil.esc(text) }
@@ -146,7 +146,6 @@
         accentLine: '--accent-line', accentContrast: '--accent-contrast' }[key];
       if (payload[key]) root.style.setProperty(css, payload[key]);
     });
-    if (payload.radius != null) root.style.setProperty('--radius', Number(payload.radius) + 'px');
   }
   /* 主题与快捷指令只接受来自宿主 Hub 的消息。Hub 会把自己的 origin 放进 iframe URL
      （与 omm-embed.js 同一约定）；任何第三方窗口都不应能借 postMessage 改写本页样式
@@ -211,6 +210,22 @@
     });
   }
 
+  function cancelLiveData() {
+    var resolve = S.liveResolve;
+    S.liveResolve = null; S.liveToken = '';
+    if (resolve) resolve(null);
+  }
+  function invalidateRun() {
+    S.generation += 1;
+    cancelLiveData();
+    if (S.abort) { S.abort.abort(); S.abort = null; }
+    S.busy = false; $('btnSend').disabled = false; $('btnStop').disabled = true;
+    return S.generation;
+  }
+  function isCurrentRun(run) {
+    return !!run && run.id === S.generation && String(run.conv || '') === String(S.conv || '');
+  }
+
   function switchTab(name) { window.ZenUI.tabs.select($('tabs'), name); }
   $('tabs').addEventListener('zen:tab', function (event) {
     var name = event.detail.id;
@@ -257,8 +272,10 @@
     $('chat').appendChild(box); $('chat').scrollTop = $('chat').scrollHeight;
   }
 
-  function artifactCard(event) {
+  function artifactCard(event, run) {
+    if (run && !isCurrentRun(run)) return;
     var id = event.artifact_id || '';
+    if (!id || S.artifacts[id]) return;
     S.artifacts[id] = event;
     var box = document.createElement('div'); box.className = 'artifact';
     box.innerHTML = '<div class="kind">产物 · ' + esc(event.kind || '') + '</div>' +
@@ -268,7 +285,8 @@
     var ops = box.querySelector('.ops');
     var apply = document.createElement('button');
     apply.type = 'button'; apply.className = 'btn primary sm'; apply.textContent = '应用';
-    apply.addEventListener('click', function () { applyArtifact(id, apply, ops); });
+    if (event.status === 'applied') { apply.textContent = '已应用'; apply.disabled = true; }
+    else apply.addEventListener('click', function () { applyArtifact(id, apply, ops, run); });
     ops.appendChild(apply);
     var target = event.payload && (event.payload.product || event.payload.target || event.payload.product_id);
     if (target) {
@@ -286,48 +304,173 @@
     $('valContent').value = JSON.stringify(payload, null, 2);
     runValidate();
   }
-  async function applyArtifact(id, button, ops) {
+  async function saveArtifactText(result, payload) {
+    var filename = result.filename;
+    var content = result.content != null ? result.content : (payload.content || '');
+    var mime = result.mime || 'text/plain';
+    if (window.OMMDesktop && window.OMMDesktop.saveText) {
+      var saved = await window.OMMDesktop.saveText(filename, content, mime);
+      if (saved) return true;
+    }
+    return !!ZenUtil.download(filename, content, mime);
+  }
+  async function sendArtifactCards(result, target) {
+    if (!window.OMMShare || !window.OMMShare.enabled || !window.OMMShare.send) {
+      throw new Error('桌面版共享不可用，请下载卡片包后导入');
+    }
+    var sent = await window.OMMShare.send({ to: target, format: 'zen-card-pack',
+      payload: { v: 1, name: result.title || 'AI 卡片包', cards: result.cards || [] } });
+    if (sent === false) throw new Error('共享频道未接受卡片包');
+  }
+  function sharedArtifactContext() {
+    var list = ZenUtil.getJSON('omm.ai.inbox.v1', [])
+    if (!Array.isArray(list)) return []
+    return list.slice(-10).map(function (item) {
+      var text = ''
+      try { text = JSON.stringify(item.payload || {}) } catch (_) { text = '' }
+      return { from: item.from || '', format: item.format || '', title: item.title || '',
+        payload: text.slice(0, 20000) }
+    })
+  }
+
+  async function receiveSharedArtifact(artifact) {
+    if (!artifact) throw new Error('共享产物为空')
+    var format = String(artifact.format || '')
+    if (format === 'zen-card' || format === 'zen-card-pack') {
+      var ZenCard = (await import('./lib/zen-card.js')).ZenCard
+      var incoming
+      if (format === 'zen-card-pack') {
+        var payload = artifact.payload || artifact.card || {}
+        incoming = ZenCard.parsePack(Object.assign({ format: 'zen-card-pack' }, payload)).cards
+      } else {
+        var card = artifact.payload || artifact.card || artifact
+        var check = ZenCard.validate(card)
+        if (!check.ok) throw new Error(check.errors[0])
+        incoming = [ZenCard.create(card)]
+      }
+      var current = ZenUtil.getJSON('zen.cards.v1', [])
+      var merged = ZenCard.merge((Array.isArray(current) ? current : []).concat(incoming))
+      if (!ZenUtil.setJSON('zen.cards.v1', merged)) throw new Error('卡片库写入失败')
+      toast('已接收 ' + incoming.length + ' 张知识卡片')
+      return
+    }
+    if (/^omm[.-](?:table|video|lambda)[.-]/.test(format)) {
+      var inbox = ZenUtil.getJSON('omm.ai.inbox.v1', [])
+      if (!Array.isArray(inbox)) inbox = []
+      inbox.push({ id: artifact.id || ZenUtil.uid('ai-shared-'), from: artifact.from || '',
+        format: format, title: artifact.title || format, payload: artifact.payload || {},
+        created_at: artifact.created_at || new Date().toISOString() })
+      if (!ZenUtil.setJSON('omm.ai.inbox.v1', inbox.slice(-50))) throw new Error('共享上下文写入失败')
+      toast('已接收 ' + (artifact.title || format) + '，将加入下次对话上下文')
+      return
+    }
+    throw new Error('AI 工作区不支持该共享格式：' + (format || '未知'))
+  }
+
+  function installSharedReceiver() {
+    if (S.shareBound || !window.OMMShare || !window.OMMShare.onArtifact) return
+    window.OMMShare.onArtifact(receiveSharedArtifact)
+    S.shareBound = true
+  }
+
+  function markArtifactApplied(id, button, label) {
+    if (S.artifacts[id]) S.artifacts[id].status = 'applied';
+    if (button) { button.disabled = true; button.textContent = label || '已应用'; }
+  }
+  function pendingArtifactCommits() {
+    var list = ZenUtil.getJSON('omm.ai.pending-commits.v1', [])
+    return Array.isArray(list) ? list.filter(function (id) { return typeof id === 'string' && id }) : []
+  }
+  function rememberArtifactCommit(id) {
+    var list = pendingArtifactCommits()
+    if (list.indexOf(id) < 0) list.push(id)
+    ZenUtil.setJSON('omm.ai.pending-commits.v1', list.slice(-200))
+  }
+  async function commitArtifact(id) {
+    rememberArtifactCommit(id)
+    try {
+      var response = await fetch('/api/ai/artifacts/' + encodeURIComponent(id) + '/commit', { method: 'POST' })
+      if (!response.ok) return false
+      var list = pendingArtifactCommits().filter(function (value) { return value !== id })
+      ZenUtil.setJSON('omm.ai.pending-commits.v1', list)
+      return true
+    } catch (_) { return false }
+  }
+  async function flushArtifactCommits() {
+    var list = pendingArtifactCommits()
+    for (var i = 0; i < list.length; i++) await commitArtifact(list[i])
+  }
+  async function finalizeArtifact(id, button, label, message) {
+    markArtifactApplied(id, button, label)
+    var synced = await commitArtifact(id)
+    toast(message + (synced ? '' : '（状态同步待重试）'))
+  }
+  async function applyArtifact(id, button, ops, run) {
+    run = run || { id: S.generation, conv: S.conv };
+    if (!isCurrentRun(run)) return;
+    if ((S.artifacts[id] || {}).status === 'applied') { markArtifactApplied(id, button); return; }
     button.disabled = true; button.textContent = '应用中…';
     try {
-      var response = await fetch('/api/ai/artifacts/' + encodeURIComponent(id) + '/apply', { method: 'POST' });
-      var result = await response.json();
-      if (!response.ok || result.ok === false) throw new Error(result.error || '应用失败');
+      var result = S.applyResults[id];
+      if (!result) {
+        var response = await fetch('/api/ai/artifacts/' + encodeURIComponent(id) + '/apply', { method: 'POST' });
+        var data = await response.json();
+        if (!response.ok || data.ok === false) throw new Error(data.error || '应用失败');
+        result = data.result || {};
+        S.applyResults[id] = result;
+      }
+      if (!isCurrentRun(run)) return;
+      if (result.action === 'already_applied') {
+        markArtifactApplied(id, button); toast('该产物已应用，未重复执行'); return;
+      }
       var artifact = S.artifacts[id] || {};
       var payload = artifact.payload || {};
       if (result.action === 'save_text') {
-        if (window.OMMDesktop && window.OMMDesktop.saveText) {
-          await window.OMMDesktop.saveText(result.filename, result.content || payload.content || '', result.mime);
-          toast('已保存到本机：' + result.filename);
-        } else {
-          ZenUtil.download(result.filename, result.content || payload.content || '', result.mime || 'text/plain');
-          toast('已下载：' + result.filename);
-        }
+        if (!await saveArtifactText(result, payload)) throw new Error('保存或下载失败');
+        if (!isCurrentRun(run)) return;
+        await finalizeArtifact(id, button, '已保存', '已保存：' + result.filename);
       } else if (result.action === 'publish_cards') {
-        var select = document.createElement('select'); select.className = 'btn sm';
+        if (ops.querySelector('[data-card-send]')) return;
+        var select = document.createElement('select'); select.className = 'btn sm'; select.dataset.cardTarget = '';
         ['zencard', 'writer', 'corpus', 'english'].forEach(function (target) {
           var option = document.createElement('option'); option.value = target; option.textContent = target; select.appendChild(option);
         });
-        var send = document.createElement('button'); send.type = 'button'; send.className = 'btn primary sm'; send.textContent = '发送卡片';
-        send.addEventListener('click', function () {
-          if (window.OMMShare && window.OMMShare.enabled) {
-            window.OMMShare.send({ to: select.value, format: 'zen-card',
-              payload: { format: 'zen-card-pack', v: 1, name: result.title || 'AI 卡片包', cards: result.cards || [] } });
-            toast('已发送到 ' + select.value + '；请检查共享连接规则');
-          } else { toast('桌面版共享不可用，请下载卡片包后导入'); }
+        var send = document.createElement('button'); send.type = 'button'; send.className = 'btn primary sm';
+        send.dataset.cardSend = ''; send.textContent = '发送卡片';
+        send.addEventListener('click', async function () {
+          if (!isCurrentRun(run)) return;
+          send.disabled = true; send.textContent = '发送中…';
+          try {
+            await sendArtifactCards(result, select.value);
+            if (!isCurrentRun(run)) return;
+            send.textContent = '已发送'
+            await finalizeArtifact(id, button, '已发送', '已发送到 ' + select.value);
+          } catch (error) {
+            if (!isCurrentRun(run)) return;
+            send.disabled = false; send.textContent = '重试发送';
+            toast('发送失败：' + (error.message || error));
+          }
         });
         ops.appendChild(select); ops.appendChild(send);
+        button.disabled = true; button.textContent = '待发送';
         toast('卡片已校验，请选择目标产品');
       } else if (result.action === 'open_app') {
-        if (window.OMMShare && window.OMMShare.openApp) { window.OMMShare.openApp(result.app); toast('已请求打开 ' + result.app); }
-      } else { toast('已应用：' + result.kind); }
-      button.textContent = '已应用';
+        if (window.OMMShare && window.OMMShare.openApp) window.OMMShare.openApp(result.app);
+        await finalizeArtifact(id, button, '已应用', '已请求打开 ' + result.app);
+      } else {
+        await finalizeArtifact(id, button, '已应用', '已应用：' + (result.kind || artifact.kind || '产物'));
+      }
     } catch (error) {
+      if (!isCurrentRun(run)) return;
       button.disabled = false; button.textContent = '重试应用';
       toast('应用失败：' + (error.message || error));
     }
   }
 
-  function questionCard(event) {
+  function questionCard(event, run) {
+    if (run && !isCurrentRun(run)) return;
+    if (event.call_id && S.questions[event.call_id]) return;
+    if (event.call_id) S.questions[event.call_id] = true;
     var box = document.createElement('div'); box.className = 'question';
     var opts = event.options || ['允许一次', '本次会话允许', '拒绝'];
     box.innerHTML = '<div><b>需要你的决定：</b>' + esc(event.question || '是否允许执行该工具？') + '</div>';
@@ -336,34 +479,51 @@
       var button = document.createElement('button'); button.type = 'button'; button.className = 'btn sm';
       button.textContent = label;
       button.addEventListener('click', async function () {
+        if (!isCurrentRun(run)) return;
+        var conversation = S.conv;
         row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        var headers = { 'Content-Type': 'application/json' };
+        if (S.key) headers['X-Provider-Key'] = S.key;
         try {
           var response = await fetch('/api/ai/answer', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation_id: S.conv, call_id: event.call_id,
+            method: 'POST', headers: headers,
+            body: JSON.stringify({ conversation_id: conversation, call_id: event.call_id,
+              provider: S.provider, model: S.model, baseUrl: S.base,
               answers: { [event.call_id]: { selected: [label] } }, stream: false })
           });
           var data = await response.json();
           if (!response.ok) throw new Error(data.error || '回答失败');
-          consumeEvents(data.events || [], null);
+          if (!isCurrentRun(run) || S.conv !== conversation) return;
+          delete S.questions[event.call_id];
+          consumeEvents(data.events || [], null, run);
           toast('已记录：' + label);
-        } catch (error) { toast('提交失败：' + (error.message || error)); }
+        } catch (error) {
+          if (!isCurrentRun(run) || S.conv !== conversation) return;
+          row.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+          toast('提交失败：' + (error.message || error));
+        }
       });
       row.appendChild(button);
     });
     box.appendChild(row); $('chat').appendChild(box); $('chat').scrollTop = $('chat').scrollHeight;
   }
 
-  function consumeEvents(events, holder) {
+  function consumeEvents(events, holder, run) {
+    run = run || { id: S.generation, conv: S.conv };
     events.forEach(function (event) {
+      if (!isCurrentRun(run)) return;
       var type = event.type;
-      if (type === 'conversation') { S.conv = event.conversation_id; refreshConversations(); }
+      if (type === 'conversation') {
+        var id = event.conversation_id;
+        if (!id || (run.conv && run.conv !== id) || (S.conv && S.conv !== id)) return;
+        run.conv = id; S.conv = id; refreshConversations();
+      }
       else if (type === 'meta') { if (event.skill) { S.skill = event.skill; meta(); } }
       else if (type === 'text_delta') { if (!holder) holder = addMessage('assistant', '', S.skill); appendText(holder, event.text); }
       else if (type === 'thinking_delta') { thinkEvent(event); }
       else if (type === 'tool_call' || type === 'tool_start' || type === 'tool_result') { toolEvent(event); }
-      else if (type === 'artifact') { artifactCard(event); }
-      else if (type === 'question') { questionCard(event); }
+      else if (type === 'artifact') { artifactCard(event, run); }
+      else if (type === 'question') { questionCard(event, run); }
       else if (type === 'usage') { $('metaTokens').textContent = 'Token ' + (event.usage && event.usage.total_tokens || 0); }
       else if (type === 'title') { refreshConversations(); }
       else if (type === 'error') { toast('错误：' + (event.message || event.kind)); }
@@ -385,38 +545,50 @@
 
   async function send(text) {
     if (!text.trim() || S.busy) return;
+    var run = { id: S.generation, conv: S.conv };
+    var controller = new AbortController(); S.abort = controller;
     S.busy = true; $('btnSend').disabled = true; $('btnStop').disabled = false; status('等待数据…');
     // Best-effort: enrich the prompt with the user's real product data (cards,
     // notes, searches, rules). Never blocks chat if the Hub is absent.
     var live = await requestLiveData();
+    if (!isCurrentRun(run)) return;
     status('生成中…');
     addMessage('user', text);
     var holder = addMessage('assistant', '', S.skill); S.lastHolder = holder;
-    var body = { text: text, conversation_id: S.conv, skill: S.skill, provider: S.provider,
-      model: S.model, baseUrl: S.base, stream: true, title: true,
-      context: live ? { omm_live: live } : {} };
+    var shared = sharedArtifactContext()
+    var context = {}
+    if (live) context.omm_live = live
+    if (shared.length) context.omm_shared = shared
+    var body = { text: text, conversation_id: run.conv, skill: S.skill, provider: S.provider,
+      model: S.model, baseUrl: S.base, stream: true, title: true, context: context };
     var headers = { 'Content-Type': 'application/json' };
     if (S.key) headers['X-Provider-Key'] = S.key;
     try {
-      var response = await fetch('/api/ai/chat', { method: 'POST', headers: headers, body: JSON.stringify(body) });
+      var response = await fetch('/api/ai/chat', { method: 'POST', headers: headers,
+        body: JSON.stringify(body), signal: controller.signal });
       if (!response.ok) { var err = await response.json().catch(function () { return {}; }); throw new Error(err.error || ('HTTP ' + response.status)); }
       var reader = response.body.getReader(); var decoder = new TextDecoder(); var buffer = '';
       while (true) {
         var chunk = await reader.read(); if (chunk.done) break;
+        if (!isCurrentRun(run)) return;
         buffer += decoder.decode(chunk.value, { stream: true });
         var at;
         while ((at = buffer.indexOf('\n\n')) >= 0) {
           var frame = buffer.slice(0, at); buffer = buffer.slice(at + 2);
           var events = parseSSE(frame + '\n\n');
-          if (events.length) consumeEvents(events, holder);
+          if (events.length) consumeEvents(events, holder, run);
         }
       }
+      if (!isCurrentRun(run)) return;
       status('完成');
     } catch (error) {
+      if (!isCurrentRun(run)) return;
       holder.body.innerHTML = '<span style="color:var(--danger)">请求失败：' + esc(error.message || error) + '</span>';
       status('请求失败');
     } finally {
-      S.busy = false; $('btnSend').disabled = false; $('btnStop').disabled = true;
+      if (isCurrentRun(run) && S.abort === controller) {
+        S.abort = null; S.busy = false; $('btnSend').disabled = false; $('btnStop').disabled = true;
+      }
     }
   }
   $('btnSend').addEventListener('click', function () {
@@ -431,7 +603,15 @@
       body: JSON.stringify({ conversation_id: S.conv }) });
     status('正在停止…');
   });
-  function newChat() { S.conv = ''; $('chat').innerHTML = '<div class="empty"><div class="big">新的对话</div>选择专家技能，然后输入你的问题。</div>'; meta(); switchTab('chat'); }
+  function newChat() {
+    var previous = S.conv;
+    invalidateRun();
+    if (previous) fetch('/api/ai/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: previous }) }).catch(function () {});
+    S.conv = ''; S.artifacts = {}; S.questions = {}; S.applyResults = {}; S.lastHolder = null;
+    $('chat').innerHTML = '<div class="empty"><div class="big">新的对话</div>选择专家技能，然后输入你的问题。</div>';
+    meta(); switchTab('chat');
+  }
 
   async function refreshConversations() {
     try {
@@ -448,17 +628,64 @@
       }).join('') || '<div class="empty">还没有会话</div>';
     } catch (error) { /* 静默：未连接后端时不影响界面 */ }
   }
-  async function openConversation(id) {
-    var data = await fetch('/api/ai/conversations/' + encodeURIComponent(id)).then(function (r) { return r.json(); });
-    S.conv = id; $('chat').innerHTML = '';
-    (data.messages || []).forEach(function (message) {
+  function renderConversation(data, artifacts) {
+    var run = { id: S.generation, conv: S.conv };
+    var messages = data.messages || [];
+    var rows = {};
+    (artifacts || []).forEach(function (row) { rows[row.id] = row; });
+    var answered = {}, artifactForCall = {};
+    messages.forEach(function (message) {
+      (message.blocks || []).forEach(function (block) {
+        if (block.type !== 'tool_result') return;
+        answered[block.tool_use_id] = true;
+        var content = block.content || {};
+        if (content.artifact_id) artifactForCall[block.tool_use_id] = content.artifact_id;
+      });
+    });
+    messages.forEach(function (message) {
       var holder = addMessage(message.role === 'user' ? 'user' : 'assistant', '');
       (message.blocks || []).forEach(function (block) {
         if (block.type === 'text') appendText(holder, block.text);
-        if (block.type === 'tool_use') toolEvent({ tool: block.name, arguments: block.input });
+        if (block.type !== 'tool_use') return;
+        toolEvent({ tool: block.name, arguments: block.input });
+        var input = block.input || {};
+        if (block.name === 'present_artifact') {
+          var id = artifactForCall[block.id] || '';
+          var row = rows[id] || {};
+          artifactCard({ artifact_id: id, kind: input.kind || row.kind, title: input.title || row.title,
+            summary: input.summary || row.summary, payload: input.payload || row.payload || {},
+            status: row.status || 'proposed' }, run);
+        } else if ((block.name === 'ask_user_question' || block.name === 'request_approval') && !answered[block.id]) {
+          questionCard({ call_id: block.id, question: input.question,
+            options: input.options || ['允许一次', '本次会话允许', '拒绝'],
+            detail: input.detail || input.args || {}, tool: block.name,
+            kind: block.name === 'request_approval' ? 'approval' : 'question' }, run);
+        }
       });
     });
-    switchTab('chat'); refreshConversations();
+    (artifacts || []).slice().reverse().forEach(function (row) {
+      if (S.artifacts[row.id]) return;
+      var payload = row.payload || {};
+      artifactCard({ artifact_id: row.id, kind: row.kind, title: payload.title || payload.filename || payload.name,
+        summary: '已持久化的产物', payload: payload, status: row.status }, run);
+    });
+  }
+  async function openConversation(id) {
+    invalidateRun();
+    var generation = S.generation;
+    try {
+      var responses = await Promise.all([
+        fetch('/api/ai/conversations/' + encodeURIComponent(id)).then(function (r) { return r.json(); }),
+        fetch('/api/ai/artifacts?conversation_id=' + encodeURIComponent(id)).then(function (r) { return r.json(); })
+      ]);
+      if (generation !== S.generation) return;
+      var data = responses[0];
+      if (!data.ok || !data.conversation) throw new Error(data.error || '读取会话失败');
+      S.conv = id; S.artifacts = {}; S.questions = {}; S.applyResults = {}; S.lastHolder = null;
+      $('chat').innerHTML = '';
+      renderConversation(data, responses[1].artifacts || []);
+      switchTab('chat'); refreshConversations();
+    } catch (error) { toast('打开会话失败：' + (error.message || error)); }
   }
   document.addEventListener('click', async function (event) {
     var target = event.target.closest('button'); if (!target) return;
@@ -612,48 +839,60 @@
     $('valContent').value = ''; $('valResult').innerHTML = '已清空。';
   });
 
+  function defaultBase(provider) {
+    return { deepseek: 'https://api.deepseek.com', openai: 'https://api.openai.com/v1',
+      openrouter: 'https://openrouter.ai/api/v1', zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+      ollama: 'http://127.0.0.1:11434', custom: '', complete: '' }[provider] || '';
+  }
+  function defaultModel(provider) {
+    return { deepseek: 'deepseek-chat', openai: 'gpt-4o-mini', openrouter: 'openai/gpt-4o-mini',
+      zhipu: 'glm-4-flash', ollama: 'qwen3.5:9b', custom: 'gpt-4o-mini', complete: 'complete' }[provider] || '';
+  }
   function mapProvider(name) {
-    var map = { deepseek: 'deepseek', openrouter: 'openrouter', ollama: 'ollama', openai: 'openai', zhipu: 'zhipu', custom: 'custom' };
-    return map[name] || 'complete';
+    var map = { deepseek: 'deepseek', openrouter: 'openrouter', ollama: 'ollama', openai: 'openai', zhipu: 'zhipu', custom: 'custom', complete: 'complete' };
+    return map[name] || (name ? 'custom' : 'complete');
   }
   async function loadConfig() {
     var ai = null;
-    if (window.OMMDesktop && window.OMMDesktop.aiConfig) {
-      try { var data = await window.OMMDesktop.aiConfig(); ai = data && data.ai; } catch (error) { /* ignore */ }
-    }
-    if (!ai) { try { ai = await fetch('/api/omm/ai-config').then(function (r) { return r.json(); }); } catch (error) { ai = null; } }
+    try { ai = await fetch('/api/omm/ai-config').then(function (r) { return r.json(); }); } catch (error) { ai = null; }
     ai = ai || {};
     if (!ai.configured) {
-      // 没有密钥时默认走离线回显，保证界面开箱可用；用户可在设置里临时改成本地 Ollama。
       S.provider = 'complete'; S.model = 'complete'; S.base = '';
       $('setProvider').value = 'complete'; $('setModel').value = 'complete'; $('setBase').value = '';
       $('configHint').textContent = '静书房尚未填写 API Key；当前使用“离线回显”（只回显你的问题，用于自检）。到静书房 → 设置 → AI 服务填写后点“读取统一配置”即可联网。';
       meta(); return;
     }
     S.provider = mapProvider(ai.provider || 'deepseek');
-    S.model = ai.apiModel || 'deepseek-chat';
-    S.base = ai.apiBase || '';
+    S.model = ai.model || defaultModel(S.provider);
+    S.base = ai.baseUrl || defaultBase(S.provider);
     $('setProvider').value = S.provider; $('setModel').value = S.model; $('setBase').value = S.base;
-    $('configHint').textContent = ai.configured
-      ? '已读取静书房统一配置（密钥不显示）。修改后留空即保持原密钥。'
-      : '静书房尚未填写 API Key；可先用“离线回显”自检，或到静书房 → 设置 → AI 服务填写。';
-    if (S.provider === 'complete') { S.model = 'complete'; $('setModel').value = 'complete'; }
+    $('configHint').textContent = '已读取静书房统一配置（密钥保留在服务端，不返回页面）。临时密钥只留在本页内存。';
     meta();
   }
   $('btnLoadConfig').addEventListener('click', function () { loadConfig().then(function () { toast('已读取统一配置'); }); });
+  $('setProvider').addEventListener('change', function () {
+    var previous = S.provider;
+    S.provider = $('setProvider').value || 'complete';
+    if (previous !== S.provider) {
+      $('setBase').value = defaultBase(S.provider);
+      $('setModel').value = defaultModel(S.provider);
+    }
+    meta();
+  });
   $('btnApplyConfig').addEventListener('click', function () {
     S.provider = $('setProvider').value || 'complete';
-    S.model = $('setModel').value || '';
-    S.base = $('setBase').value || '';
+    S.model = $('setModel').value || defaultModel(S.provider);
+    S.base = $('setBase').value || defaultBase(S.provider);
     S.key = $('setKey').value || '';
     $('setKey').value = '';
-    if (S.provider === 'complete') { S.model = 'complete'; }
+    if (S.provider === 'complete') { S.model = 'complete'; S.base = ''; }
     meta(); toast('已应用本次配置（密钥只留在内存）');
   });
 
   $('btnNew').addEventListener('click', newChat);
 
   async function boot() {
+    installSharedReceiver()
     try {
       var env = await fetch('/api/omm/env').then(function (r) { return r.json(); });
       status('READY', env.products + ' 产品 · ' + env.skills + ' 技能 · ' + env.tools + ' 工具');
@@ -677,9 +916,11 @@
       renderValidateProducts();
     } catch (error) { /* ignore */ }
     try { await loadSpecs(); } catch (error) { /* ignore */ }
+    try { await flushArtifactCommits(); } catch (error) { /* ignore */ }
     try { await refreshConversations(); } catch (error) { /* ignore */ }
     await loadConfig();
   }
+  installSharedReceiver()
   boot();
 })();
 </script>

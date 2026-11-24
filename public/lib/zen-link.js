@@ -12,40 +12,6 @@ const APP = (function () {
   return m ? m[1] : ''
 })()
 
-var HUB_ORIGIN = (function () {
-  try {
-    var raw = new URLSearchParams(location.search).get('omm_hub_origin')
-    if (!raw) return ''
-    var u = new URL(raw)
-    if ((u.protocol === 'http:' || u.protocol === 'https:') &&
-        ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) {
-      return u.origin
-    }
-  } catch (e) { /* ignore */ }
-  return ''
-})()
-
-function parentTarget() {
-  if (HUB_ORIGIN) return HUB_ORIGIN
-  try {
-    if (document.referrer) return new URL(document.referrer).origin
-  } catch (e) { /* ignore */ }
-  return location.origin
-}
-
-function isTrusted(origin) {
-  try {
-    if (origin === location.origin) return true
-    const u = new URL(String(origin || ''))
-    return (
-      (u.protocol === 'http:' || u.protocol === 'https:') &&
-      ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
-    )
-  } catch (e) {
-    return false
-  }
-}
-
 function toast(msg) { return window.ZenUI.toast(msg) }
 
 function readInbox() {
@@ -66,35 +32,37 @@ function receive(card) {
   }
 }
 
-function publish(card, target) {
+async function publish(card, target) {
   const c = ZenCard.create(card)
   if (target && window.OMMShare && window.OMMShare.send) {
-    return window.OMMShare.send({
-      to: target,
-      format: 'zen-card',
-      title: c.content.slice(0, 40),
-      payload: c,
-    }).then(() => {
+    try {
+      await window.OMMShare.send({
+        to: target,
+        format: 'zen-card',
+        title: c.content.slice(0, 40),
+        payload: c,
+      })
       toast('已发送到 ' + target)
       return c
-    }).catch(() => {
-      fallbackSave(c)
-      return c
-    })
+    } catch (e) {
+      return fallbackSave(c) ? c : null
+    }
   }
-  fallbackSave(c)
-  return Promise.resolve(c)
+  return fallbackSave(c) ? c : null
 }
 
 function fallbackSave(c) {
   try {
     const key = 'zen.cards.v1'
     const list = JSON.parse(localStorage.getItem(key) || '[]')
+    if (!Array.isArray(list)) throw new Error('invalid local card library')
     if (!list.some((x) => x && x.id === c.id)) list.push(c)
     localStorage.setItem(key, JSON.stringify(list))
     toast('已存入本地卡片库')
+    return true
   } catch (e) {
-    toast('保存失败')
+    toast('发送失败，本地保存也失败')
+    return false
   }
 }
 
@@ -106,15 +74,15 @@ function openPanel() {
   panel.id = 'zen-link-panel'
   panel.style.cssText =
     'position:fixed;right:14px;bottom:60px;width:min(360px,calc(100vw - 28px));background:var(--paper,#ffffff);color:var(--ink,#1a1a1a);' +
-    'border:1px solid var(--border,#1a1a1a);border-radius:8px;padding:14px;z-index:99998;box-shadow:0 8px 28px rgba(0,0,0,.16);' +
+    'border:1px solid var(--border,#1a1a1a);border-radius:var(--zen-radius);padding:14px;z-index:99998;box-shadow:0 8px 28px rgba(0,0,0,.16);' +
     'font:13px/1.5 "Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif'
   panel.innerHTML =
     '<div style="display:flex;align-items:center;margin-bottom:8px"><b>发布为知识卡片</b>' +
     '<span style="flex:1"></span><button id="zlp-close" style="border:0;background:none;font-size:18px;cursor:pointer">×</button></div>' +
-    '<textarea id="zlp-text" style="width:100%;min-height:72px;border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:7px;box-sizing:border-box" placeholder="要剪藏的内容"></textarea>' +
+    '<textarea id="zlp-text" style="width:100%;min-height:72px;border:1px solid var(--border-dim,#d8d0c4);border-radius:var(--zen-radius);padding:7px;box-sizing:border-box" placeholder="要剪藏的内容"></textarea>' +
     '<div style="display:flex;gap:6px;margin-top:6px">' +
-    '<input id="zlp-tags" style="flex:1;border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px" placeholder="标签，逗号分隔" />' +
-    '<select id="zlp-kind" data-zen-select style="border:1px solid var(--border-dim,#d8d0c4);border-radius:5px;padding:6px">' +
+    '<input id="zlp-tags" style="flex:1;border:1px solid var(--border-dim,#d8d0c4);border-radius:var(--zen-radius);padding:6px" placeholder="标签，逗号分隔" />' +
+    '<select id="zlp-kind" data-zen-select style="border:1px solid var(--border-dim,#d8d0c4);border-radius:var(--zen-radius);padding:6px">' +
     ZenCard.KINDS.map((k) => `<option value="${k}">${k}</option>`).join('') + '</select></div>' +
     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
     '<button class="zlp-send" data-to="" style="padding:5px 9px">存本地</button>' +
@@ -124,7 +92,7 @@ function openPanel() {
   panel.querySelector('#zlp-text').value = selected
   panel.querySelector('#zlp-close').onclick = () => panel.remove()
   panel.querySelectorAll('.zlp-send').forEach((b) => {
-    b.onclick = () => {
+    b.onclick = async () => {
       const text = panel.querySelector('#zlp-text').value.trim()
       if (!text) { toast('内容不能为空'); return }
       const card = ZenCard.create({
@@ -134,8 +102,14 @@ function openPanel() {
         tags: panel.querySelector('#zlp-tags').value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
         ref: location.href,
       })
-      publish(card, b.dataset.to || '')
-      panel.remove()
+      b.disabled = true
+      try {
+        const published = await publish(card, b.dataset.to || '')
+        if (published) panel.remove()
+        else b.disabled = false
+      } catch (e) {
+        b.disabled = false
+      }
     }
   })
 }
@@ -147,7 +121,7 @@ function mount() {
   btn.setAttribute('aria-label', 'zen-card 卡片桥接')
   btn.textContent = '卡'
   btn.style.cssText =
-    'position:fixed;right:14px;bottom:14px;width:34px;height:34px;border-radius:50%;' +
+    'position:fixed;right:14px;bottom:14px;width:34px;height:34px;border-radius:var(--zen-radius,0px);' +
     'border:1px solid var(--border,#1a1a1a);background:var(--paper,#ffffff);color:var(--ink,#1a1a1a);font:14px "Literata", "SimSun", "宋体", "NSimSun", "Songti SC", "STSong", serif;cursor:pointer;z-index:99997;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.12)'
   btn.onclick = openPanel
@@ -162,7 +136,7 @@ function boot() {
     })
   }
   window.addEventListener('message', function (e) {
-    if (!isTrusted(e.origin)) return
+    if (!ZenUtil.isTrustedParentMessage(e)) return
     const d = e.data
     if (d && d.type === 'omm:zen-card') receive(d.card)
     if (d && d.type === 'omm:zen-card-request') {
@@ -174,9 +148,7 @@ function boot() {
         } catch (_) { /* ignore */ }
       })
       try {
-        // 这是“请求-应答”：必须回给已通过 isTrusted 校验的请求方 origin。
-        // 用 parentTarget()（可能来自 document.referrer）会把整库卡片发给
-        // 从未授权的嵌入站点。
+        // 只回给已通过父窗口与精确 origin 校验的请求方。
         window.parent.postMessage(
           { type: 'omm:zen-card-reply', token: d.token, app: APP, cards: own },
           e.origin
@@ -186,7 +158,7 @@ function boot() {
   })
 }
 
-export const ZenLink = { receive, publish, readInbox, APP, isTrusted }
+export const ZenLink = { receive, publish, readInbox, APP }
 if (typeof globalThis !== 'undefined') globalThis.ZenLink = ZenLink
 
 if (document.readyState === 'loading') {

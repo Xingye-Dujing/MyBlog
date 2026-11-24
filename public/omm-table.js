@@ -50,8 +50,8 @@
   function notify(m) {
     H.notify(m)
   }
-  function saveStore() {
-    H.Store.save()
+  function saveStore(project) {
+    return H.Store.save(project)
   }
   function clamp(v, a, b) {
     return H.clamp(v, a, b)
@@ -94,11 +94,6 @@
       })
     return loading[id]
   }
-  function setData(id, v) {
-    cache[id] = v
-    return H.IDB.put(keyOf(id), v)
-  }
-
   // ---------- CSV 解析（支持引号、逗号、分号、Tab、BOM、引号内换行） ----------
   function parseCSV(text) {
     text = String(text || '').replace(/^\uFEFF/, '')
@@ -181,32 +176,45 @@
   }
 
   // ---------- 导入 ----------
-  function importCsvFiles(files) {
-    if (!H) return
-    var arr = Array.prototype.slice.call(files || [])
-    var pending = arr.length
-    if (!pending) return
-    arr.forEach(function (f) {
-      var fr = new FileReader()
-      fr.onload = function () {
-        var parsed = null
+  function readCsvFile(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader()
+      reader.onload = function () {
         try {
-          parsed = parseCSV(String(fr.result || ''))
-        } catch (e) {}
-        if (!parsed || !parsed.headers.length) {
-          notify('CSV 解析失败：' + f.name)
-          return done()
+          var parsed = parseCSV(String(reader.result || ''))
+          if (!parsed || !parsed.headers.length) throw new Error('CSV 解析失败：' + file.name)
+          resolve(parsed)
+        } catch (error) {
+          reject(error)
         }
-        var base = f.name.replace(/\.csv$/i, '')
-        var exist = null
-        H.P.docs.forEach(function (d) {
-          if (d.kind === 'table' && d.title === base) exist = d
+      }
+      reader.onerror = function () {
+        reject(new Error('读取 CSV 失败：' + file.name))
+      }
+      reader.readAsText(file, 'utf-8')
+    })
+  }
+
+  function importCsvFiles(files) {
+    if (!H) return Promise.resolve(false)
+    var arr = Array.prototype.slice.call(files || [])
+    if (!arr.length) return Promise.resolve(false)
+
+    return Promise.all(arr.map(readCsvFile))
+      .then(function (results) {
+        var docs = H.P.docs.slice()
+        var byTitle = Object.create(null)
+        docs.forEach(function (doc) {
+          if (doc.kind === 'table') byTitle[doc.title] = doc
         })
-        var recovered = !!exist
-        var oldCols = exist && exist.columns ? exist.columns.slice() : null
-        var id = exist ? exist.id : uid('d')
-        if (!exist) {
-          H.P.docs.push({
+        var plans = results.map(function (parsed, index) {
+          var file = arr[index]
+          var base = file.name.replace(/\.csv$/i, '')
+          var exist = byTitle[base] || null
+          var recovered = !!exist
+          var oldCols = exist && exist.columns ? exist.columns.slice() : null
+          var id = exist ? exist.id : uid('d')
+          var doc = exist ? Object.assign({}, exist) : {
             id: id,
             title: base,
             source: 'CSV · ' + parsed.rows.length + ' 行',
@@ -217,44 +225,69 @@
             kind: 'table',
             columns: parsed.headers,
             rowCount: parsed.rows.length,
+          }
+          doc.columns = parsed.headers
+          doc.rowCount = parsed.rows.length
+          doc.source = 'CSV · ' + parsed.rows.length + ' 行'
+          if (!exist) docs.push(doc)
+          byTitle[base] = doc
+          return {
+            id: id,
+            base: base,
+            parsed: parsed,
+            recovered: recovered,
+            changed: !!oldCols && oldCols.join('|') !== parsed.headers.join('|'),
+            data: { name: base, headers: parsed.headers, rows: parsed.rows },
+          }
+        })
+        var entries = plans.map(function (plan) {
+          return [keyOf(plan.id), plan.data]
+        })
+        var rollback = entries.map(function (entry) {
+          return H.IDB.get(entry[0]).then(function (value) {
+            return [entry[0], value]
           })
-        } else {
-          exist.columns = parsed.headers
-          exist.rowCount = parsed.rows.length
-          exist.source = 'CSV · ' + parsed.rows.length + ' 行'
-        }
-        setData(id, { name: base, headers: parsed.headers, rows: parsed.rows })
-          .then(function () {
-            H.S.docId = id
-            ui.docId = id
-            if (ui.col && parsed.headers.indexOf(ui.col) < 0) ui.col = parsed.headers[0] || ''
+        })
+
+        return Promise.all(rollback).then(function (previous) {
+          // 所有原文先在一个 IndexedDB 事务里落盘；任一文件失败则事务整体回滚。
+          return H.IDB.putMany(entries).then(function () {
+            var project = Object.assign({}, H.P, { docs: docs })
+            if (saveStore(project) === false) {
+              // 元数据未提交，恢复本次写入前的 IndexedDB 原文。
+              return H.IDB.putMany(previous).then(function () {
+                notify('表格元数据保存失败，已回滚 CSV 导入')
+                return false
+              })
+            }
+            H.P.docs = docs
+            plans.forEach(function (plan) {
+              cache[plan.id] = plan.data
+            })
+            var last = plans[plans.length - 1]
+            H.S.docId = last.id
+            ui.docId = last.id
+            if (ui.col && last.parsed.headers.indexOf(ui.col) < 0)
+              ui.col = last.parsed.headers[0] || ''
             saveUI()
-            saveStore()
             H.renderAll()
-            if (recovered) {
-              var changed = !!oldCols && oldCols.join('|') !== parsed.headers.join('|')
-              notify(
-                changed
-                  ? '已恢复表格原文，但列名有变化，请检查已有编码是否仍对齐'
-                  : '已恢复表格原文，原有编码已保留',
-              )
-            } else notify('已导入表格：' + base + '（' + parsed.rows.length + ' 行）')
-            done()
+            plans.forEach(function (plan) {
+              if (plan.recovered) {
+                notify(
+                  plan.changed
+                    ? '已恢复表格原文，但列名有变化，请检查已有编码是否仍对齐'
+                    : '已恢复表格原文，原有编码已保留',
+                )
+              } else notify('已导入表格：' + plan.base + '（' + plan.parsed.rows.length + ' 行）')
+            })
+            return true
           })
-          .catch(function () {
-            notify('表格原文写入本机数据库失败：' + f.name)
-            done()
-          })
-      }
-      fr.onerror = function () {
-        notify('读取 CSV 失败：' + f.name)
-        done()
-      }
-      fr.readAsText(f, 'utf-8')
-    })
-    function done() {
-      pending--
-    }
+        })
+      })
+      .catch(function (error) {
+        notify('CSV 导入失败：' + (error && error.message ? error.message : String(error)))
+        return false
+      })
   }
 
   // ---------- 数据查询 ----------

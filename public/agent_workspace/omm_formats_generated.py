@@ -1154,6 +1154,7 @@ _DATA = json.loads(r'''{
             "y": 100,
             "w": "240px",
             "h": "80px",
+            "zenCardId": "zc-1",
             "content": "正文"
           }
         ],
@@ -1185,15 +1186,31 @@ _DATA = json.loads(r'''{
       ],
       "hard": [
         "format=zenwriter-library",
-        "docs 是对象"
+        "docs 是对象",
+        "docs 中每张画布有 nodes 数组"
       ],
       "template": {
         "format": "zenwriter-library",
-        "docs": {}
+        "v": 2,
+        "docs": {
+          "doc-a": {
+            "name": "第一张",
+            "nodes": [
+              {
+                "id": "node-1",
+                "type": "text",
+                "x": 100,
+                "y": 100,
+                "zenCardId": "zc-1",
+                "content": "正文"
+              }
+            ]
+          }
+        }
       },
       "validator": "v_writer",
       "golden": null,
-      "ext": ".zc",
+      "ext": ".zwlib",
       "enums": {}
     },
     {
@@ -1474,40 +1491,55 @@ _DATA = json.loads(r'''{
       "product": "zenflow",
       "label": "自动化编排",
       "kind": "rules",
-      "format": null,
-      "version": null,
+      "format": "zen-flow",
+      "version": 1,
       "source": "public/lib/zen-flow.js",
       "fields": [
         {
-          "name": "",
+          "name": "format",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "v",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "rules",
           "type": "array",
           "required": true
         }
       ],
       "hard": [
+        "format=zen-flow",
+        "v 数字 1",
         "actions.type 在允许枚举内",
-        "顶层规则数组",
         "rules[] 每项通过 validateRule"
       ],
-      "template": [
-        {
-          "name": "示例规则",
-          "priority": 1,
-          "enabled": true,
-          "when": {
-            "source": "manual",
-            "kind": "note",
-            "tag": "待整理",
-            "text": ""
-          },
-          "actions": [
-            {
-              "type": "addTag",
-              "value": "已整理"
-            }
-          ]
-        }
-      ],
+      "template": {
+        "format": "zen-flow",
+        "v": 1,
+        "rules": [
+          {
+            "name": "示例规则",
+            "priority": 1,
+            "enabled": true,
+            "when": {
+              "source": "manual",
+              "kind": "note",
+              "tag": "待整理",
+              "text": ""
+            },
+            "actions": [
+              {
+                "type": "addTag",
+                "value": "已整理"
+              }
+            ]
+          }
+        ]
+      },
       "validator": "v_zenflow",
       "golden": "zenflow-rules.json",
       "ext": ".json",

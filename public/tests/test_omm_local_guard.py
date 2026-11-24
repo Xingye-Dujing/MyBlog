@@ -53,8 +53,9 @@ def test_opaque_origin_is_rejected(factory, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("factory", [create_ai_app, create_mdforge_app])
-def test_web_preview_is_unaffected(factory, tmp_path, monkeypatch):
+def test_web_preview_keeps_ai_public_and_mdforge_local(factory, tmp_path, monkeypatch):
     monkeypatch.delenv("OMM_DESKTOP", raising=False)
     kwargs = {"data_dir": tmp_path} if factory is create_ai_app else {"public_root": PUBLIC}
     client = factory(**kwargs).test_client()
-    assert client.get("/", headers={"Origin": "https://evil.example"}).status_code == 200
+    expected = 200 if factory is create_ai_app else 403
+    assert client.get("/", headers={"Origin": "https://evil.example"}).status_code == expected

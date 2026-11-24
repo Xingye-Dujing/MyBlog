@@ -12,7 +12,7 @@
     <script src="zen/components/shortcuts.js"></script>
     <script src="zen/components/picker.js"></script>
     <script src="zen/components/index.js"></script>
-<script src="omm-desktop.js"></script>
+    <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
@@ -20,8 +20,8 @@
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
     <link rel="stylesheet" href="zen/zen.css">
     <link rel="stylesheet" href="zen/features/tool.css" />
-<link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
-</head>
+    <link rel="stylesheet" href="vendor/fonts/literata-alt.css" />
+  </head>
   <body>
     <div id="app">
       <header class="top">
@@ -38,16 +38,18 @@
           </div>
           <label class="zt-field"><span>标题</span><input id="report-title" value="复盘报告" /></label>
           <label class="zt-field"><span>手写小结（可选）</span><textarea id="report-notes" placeholder="这周学到了什么……"></textarea></label>
-          <p class="hint">数据来源：ZenCard / ZenClip 的卡片（localStorage）＋ 下方粘贴的 Hub 时间线与 Planner 记录。</p>
+          <p class="hint">数据来源：本地卡片，以及从静书房工作台拉取或手动粘贴的 Hub 时间线、Planner 完成项和跨产品卡片。</p>
         </div>
         <div class="grid2">
           <div class="zt-panel">
             <h3>Hub 时间线 JSON（可选）</h3>
-            <textarea id="tl-json" placeholder='[{"app":"writer","ts":"2026-01-01T09:00:00Z"}]'></textarea>
+            <textarea id="tl-json" aria-describedby="tl-json-error" aria-invalid="false" placeholder='[{"app":"writer","ts":"2026-01-01T09:00:00Z"}]'></textarea>
+            <p class="hint" id="tl-json-error" role="alert" hidden></p>
           </div>
           <div class="zt-panel">
             <h3>Planner 完成项 JSON（可选）</h3>
-            <textarea id="pl-json" placeholder='[{"title":"写周报","done":true}]'></textarea>
+            <textarea id="pl-json" aria-describedby="pl-json-error" aria-invalid="false" placeholder='[{"title":"写周报","done":true}]'></textarea>
+            <p class="hint" id="pl-json-error" role="alert" hidden></p>
           </div>
         </div>
         <div class="zt-panel">
@@ -59,105 +61,247 @@
             <button class="zt-btn" id="tocards-btn">导出为知识卡片</button>
           </div>
         </div>
-        <div class="zt-panel"><h2>报告预览</h2><pre class="code" id="report-out" style="min-height:220px">点击“生成报告”。</pre></div>
+        <div class="zt-panel"><h2>报告预览</h2><pre class="code" id="report-out">点击“生成报告”。</pre></div>
       </main>
-      <footer class="status"><span><i class="dot"></i>ZenReview · 数据来自本地卡片与时间线</span><span id="status-text"></span></footer>
+      <footer class="status"><span><i class="dot"></i>ZenReview · 数据来自本地卡片与工作台快照</span><span id="status-text"></span></footer>
     </div>
     <script type="module">
       import { ZenCard } from './lib/zen-card.js'
       import { ZenReview } from './lib/zen-review.js'
       const $ = (id) => document.getElementById(id)
+      const HUB_REPLY_FALLBACK_MS = 2000
+      const PULL_TIMEOUT_MS = HUB_REPLY_FALLBACK_MS + 1000
       let last = ''
-      function toast(msg) { return window.ZenUI.toast(msg) }
-      function parseArr(id) { try { const v = JSON.parse($(id).value || '[]'); return Array.isArray(v) ? v : [] } catch { return [] } }
-      function cards() {
-        const out = []
-        ;['zen.cards.v1', 'zen.clip.v1'].forEach((k) => { out.push(...ZenUtil.getJSON(k, [])) })
-        return out.map(ZenCard.create)
-      }
-      function data() { return { timeline: parseArr('tl-json'), planner: parseArr('pl-json'), cards: cards() } }
-      function range() { return { from: $('range-from').value, to: $('range-to').value } }
-
-      /* 从工作台拉取时间线与待办：复用 omm:live-data-request 快照协议（与 AI 工作区
-       * 同一条链路）。独立运行或 Hub 未响应时提示用户仍可用下方粘贴框。 */
+      let hubCards = []
+      let pullGeneration = 0
       let pullToken = ''
       let pullResolve = null
+
+      function toast(message, tone) {
+        return window.ZenUI.toast(message, tone ? { tone } : undefined)
+      }
+      function showFieldError(id, error) {
+        $(id + '-error').textContent = error || ''
+        $(id + '-error').hidden = !error
+        $(id).setAttribute('aria-invalid', error ? 'true' : 'false')
+      }
+      function parseArr(id, field) {
+        const parsed = ZenReview.parseJSONArray($(id).value, field)
+        showFieldError(id, parsed.error)
+        return parsed
+      }
+      function applyInputsWrapper(wrapper, sourceId) {
+        const otherId = sourceId === 'tl-json' ? 'pl-json' : 'tl-json'
+        const otherField = sourceId === 'tl-json' ? 'planner' : 'timeline'
+        const otherRaw = $(otherId).value.trim()
+        if (otherRaw) {
+          const other = ZenReview.parseJSONArray(otherRaw, otherField)
+          const same = other.wrapper &&
+            JSON.stringify(other.wrapper.timeline) === JSON.stringify(wrapper.timeline) &&
+            JSON.stringify(other.wrapper.planner) === JSON.stringify(wrapper.planner)
+          if (!same) {
+            showFieldError(sourceId, 'inputs wrapper 与另一字段内容冲突；请清空另一字段，或分别粘贴两个数组')
+            return false
+          }
+        }
+        $('tl-json').value = JSON.stringify(wrapper.timeline, null, 2)
+        $('pl-json').value = JSON.stringify(wrapper.planner, null, 2)
+        showFieldError('tl-json', '')
+        showFieldError('pl-json', '')
+        toast('已识别 inputs wrapper，并填充时间线与待办')
+        return true
+      }
+      function inspectInput(id, field) {
+        const parsed = parseArr(id, field)
+        if (parsed.wrapper) applyInputsWrapper(parsed.wrapper, id)
+      }
+      function readInputs() {
+        const timeline = parseArr('tl-json', 'timeline')
+        const planner = parseArr('pl-json', 'planner')
+        if (timeline.wrapper && !applyInputsWrapper(timeline.wrapper, 'tl-json')) return null
+        if (!timeline.wrapper && planner.wrapper && !applyInputsWrapper(planner.wrapper, 'pl-json')) return null
+        if (timeline.error || planner.error) return null
+        const wrapper = timeline.wrapper || planner.wrapper
+        return {
+          timeline: wrapper ? wrapper.timeline : timeline.value,
+          planner: wrapper ? wrapper.planner : planner.value,
+        }
+      }
+      function localCards() {
+        const out = []
+        const keys = ['zen.cards.v1', 'zen.clip.v1']
+        keys.forEach((key) => {
+          const list = ZenUtil.getJSON(key, [])
+          if (Array.isArray(list)) out.push(...list)
+        })
+        return out.map((card) => ZenCard.create(card))
+      }
+      function cards() {
+        return ZenCard.merge(localCards().concat(hubCards.map((card) => ZenCard.create(card))), { sort: false })
+      }
+      function data(input) {
+        return { timeline: input.timeline, planner: input.planner, cards: cards() }
+      }
+      function range() {
+        return { from: $('range-from').value, to: $('range-to').value }
+      }
+
       const hubOrigin = (function () {
         try {
-          const raw = new URLSearchParams(location.search).get('omm_hub_origin')
-          if (raw) {
-            const u = new URL(raw)
-            if ((u.protocol === 'http:' || u.protocol === 'https:') &&
-                ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0) return u.origin
+          const params = new URLSearchParams(location.search)
+          if (params.get('omm_embed') === '1') {
+            const raw = params.get('omm_hub_origin')
+            if (!raw) return ''
+            const parsed = new URL(raw)
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : ''
           }
         } catch (e) { /* ignore */ }
         return location.origin
       })()
       function trustedParent(origin) {
-        try {
-          const u = new URL(String(origin || ''))
-          return (u.protocol === 'http:' || u.protocol === 'https:') &&
-            ['127.0.0.1', 'localhost', '[::1]', '::1'].indexOf(u.hostname) >= 0
-        } catch (e) { return false }
+        return ZenUtil.isTrustedParentMessage({ origin, source: window.parent })
       }
       window.addEventListener('message', (event) => {
         if (event.source !== window.parent || !trustedParent(event.origin)) return
         const d = event.data
         if (d && d.type === 'omm:live-data-reply' && d.token === pullToken && pullResolve) {
-          const resolve = pullResolve; pullResolve = null; pullToken = ''
-          resolve(d.data || null)
+          pullResolve(d.data || null)
         }
       })
       function pullFromHub() {
-        if (window.parent === window) { toast('请在静书房工作台内打开以拉取'); return }
-        if (pullResolve) return
-        const token = 'review-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6)
-        pullToken = token
-        const timer = setTimeout(() => {
-          if (pullResolve) { pullResolve = null; pullToken = ''; toast('工作台未响应，请手动粘贴') }
-        }, 1800)
-        pullResolve = (data) => {
-          clearTimeout(timer)
-          if (!data) { toast('没有可拉取的数据'); return }
-          const tl = Array.isArray(data.timeline) ? data.timeline : []
-          const pl = Array.isArray(data.planner) ? data.planner : []
-          $('tl-json').value = JSON.stringify(tl, null, 2)
-          $('pl-json').value = JSON.stringify(pl, null, 2)
-          if (!tl.length && !pl.length) toast('工作台暂无时间线/待办数据')
-          else toast(`已拉取 ${tl.length} 条动态 · ${pl.length} 项待办`)
+        if (window.parent === window) {
+          toast('请在静书房工作台内打开以拉取', 'warning')
+          return Promise.resolve(null)
         }
-        try { window.parent.postMessage({ type: 'omm:live-data-request', token: token }, hubOrigin) }
-        catch (e) { pullResolve = null; pullToken = ''; clearTimeout(timer); toast('拉取失败') }
+        if (!hubOrigin) {
+          toast('工作台地址无效，请从静书房工作台重新打开', 'error')
+          return Promise.resolve(null)
+        }
+        if (pullResolve) pullResolve(null)
+        const generation = ++pullGeneration
+        const token = 'review-' + generation + '-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6)
+        pullToken = token
+        let notified = false
+        return new Promise((resolve) => {
+          let timer = null
+          let settled = false
+          const settle = (value) => {
+            if (settled) return
+            settled = true
+            if (timer) clearTimeout(timer)
+            if (pullResolve === wrapped) pullResolve = null
+            if (pullToken === token) pullToken = ''
+            resolve(value)
+          }
+          const wrapped = (value) => settle(value)
+          pullResolve = wrapped
+          timer = setTimeout(() => {
+            if (pullResolve !== wrapped) return
+            settle(null)
+            notified = true
+            toast('工作台未响应，请手动粘贴', 'warning')
+          }, PULL_TIMEOUT_MS)
+          try {
+            window.parent.postMessage({
+              type: 'omm:live-data-request', token: token,
+              source: 'zenreview', expected: 1,
+            }, hubOrigin)
+          } catch (error) {
+            settle(null)
+            notified = true
+            toast('拉取失败：' + (error.message || error), 'error')
+          }
+        }).then((snapshot) => {
+          if (generation !== pullGeneration) return null
+          if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+            if (!notified) toast('工作台返回数据格式无效', 'error')
+            return null
+          }
+          const timeline = Array.isArray(snapshot.timeline) ? snapshot.timeline : []
+          const planner = Array.isArray(snapshot.planner) ? snapshot.planner : []
+          hubCards = Array.isArray(snapshot.cards) ? snapshot.cards : []
+          $('tl-json').value = JSON.stringify(timeline, null, 2)
+          $('pl-json').value = JSON.stringify(planner, null, 2)
+          showFieldError('tl-json', '')
+          showFieldError('pl-json', '')
+          if (!timeline.length && !planner.length && !hubCards.length) {
+            toast('工作台暂无时间线、待办或卡片数据', 'warning')
+          } else {
+            toast(`已拉取 ${timeline.length} 条动态 · ${planner.length} 项待办 · ${hubCards.length} 张卡片`)
+          }
+          return snapshot
+        })
       }
-
+      function generateReport() {
+        const input = readInputs()
+        if (!input) {
+          toast('请修正 JSON 字段错误', 'error')
+          return
+        }
+        const selectedRange = range()
+        const snapshot = data(input)
+        const report = ZenReview.buildReport(snapshot, {
+          title: $('report-title').value.trim() || '复盘报告',
+          notes: $('report-notes').value,
+          range: selectedRange,
+        })
+        const summary = ZenReview.summarize(snapshot, selectedRange)
+        last = report
+        $('report-out').textContent = last
+        $('status-text').textContent = `${summary.events} 条动态 · ${summary.cards} 张卡片 · ${summary.done} 项完成`
+        toast('报告已生成')
+      }
+      async function exportReportCard() {
+        if (!last) {
+          toast('先生成报告', 'warning')
+          return
+        }
+        const button = $('tocards-btn')
+        button.disabled = true
+        try {
+          if (!window.OMMShare || typeof window.OMMShare.send !== 'function') {
+            throw new Error('桌面版共享不可用，请下载报告后导入')
+          }
+          const card = ZenCard.create({
+            source: 'manual',
+            kind: 'note',
+            content: last,
+            note: '复盘报告',
+            tags: ['复盘'],
+          })
+          await window.OMMShare.send({
+            to: 'zencard',
+            format: 'zen-card',
+            title: $('report-title').value.trim() || '复盘报告',
+            payload: card,
+          })
+          toast('已发送到 ZenCard', 'success')
+        } catch (error) {
+          toast('发送失败：' + (error.message || error), 'error')
+        } finally {
+          button.disabled = false
+        }
+      }
       function bind() {
         $('theme-btn').addEventListener('click', () => ZenUtil.themeToggle())
-        $('gen-btn').addEventListener('click', () => {
-          last = ZenReview.buildReport(data(), { title: $('report-title').value.trim() || '复盘报告', notes: $('report-notes').value, range: range() })
-          $('report-out').textContent = last
-          const s = ZenReview.summarize(data(), range())
-          $('status-text').textContent = `${s.events} 条动态 · ${s.cards} 张卡片 · ${s.done} 项完成`
-          toast('报告已生成')
-        })
+        $('tl-json').addEventListener('input', () => inspectInput('tl-json', 'timeline'))
+        $('pl-json').addEventListener('input', () => inspectInput('pl-json', 'planner'))
+        $('gen-btn').addEventListener('click', generateReport)
         $('pull-btn').addEventListener('click', pullFromHub)
-        $('copy-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); ZenUtil.copy(last, function () { toast('已复制') }, function () { toast('复制失败') }) })
-        $('download-btn').addEventListener('click', () => { if (!last) return toast('先生成报告'); ZenUtil.download('review.md', last, 'text/markdown') })
-        $('tocards-btn').addEventListener('click', () => {
-          if (!last) return toast('先生成报告')
-          const card = ZenCard.create({ source: 'manual', kind: 'note', content: last, note: '复盘报告', tags: ['复盘'] })
-          // cards() 是 zen.cards.v1 + zen.clip.v1 的并集（供报告统计用），不能写回
-          // 卡片库，否则每次导出都会把剪藏卡片复制进 ZenCard。只追加新报告卡片。
-          let list = []
-          const raw = ZenUtil.getJSON('zen.cards.v1', []); if (Array.isArray(raw)) list = raw
-          list.push(card)
-          ZenUtil.setJSON('zen.cards.v1', list)
-          toast('已存入 ZenCard 卡片库')
+        $('copy-btn').addEventListener('click', () => {
+          if (!last) return toast('先生成报告', 'warning')
+          ZenUtil.copy(last, () => toast('已复制'), () => toast('复制失败', 'error'))
         })
+        $('download-btn').addEventListener('click', () => {
+          if (!last) return toast('先生成报告', 'warning')
+          ZenUtil.download('review.md', last, 'text/markdown')
+        })
+        $('tocards-btn').addEventListener('click', exportReportCard)
       }
       ZenUtil.themeInit()
-      const today = new Date().toISOString().slice(0, 10)
-      $('range-to').value = today
-      $('range-from').value = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+      const dates = ZenReview.defaultRange()
+      $('range-from').value = dates.from
+      $('range-to').value = dates.to
       bind()
     </script>
   </body>

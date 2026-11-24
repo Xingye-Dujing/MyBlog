@@ -657,9 +657,14 @@ def v_zencard(obj: Any, text: str, r: Report) -> str:
 
 
 def v_zenflow(obj: Any, text: str, r: Report) -> str:
-    rules = obj.get('rules') if isinstance(obj, dict) else obj
+    if not isinstance(obj, dict) or obj.get('format') != 'zen-flow':
+        r.error('format 必须是 zen-flow')
+        return 'rules'
+    if obj.get('v') != 1:
+        r.error('v 必须是数字 1')
+    rules = obj.get('rules')
     if not isinstance(rules, list):
-        r.error('规则文件必须是规则数组或 {rules:[…]}')
+        r.error('rules 必须是数组')
         return 'rules'
     if not rules:
         r.warn('规则数组为空，运行后不会产生任何效果')
@@ -711,9 +716,14 @@ def v_zenreview(obj: Any, text: str, r: Report) -> str:
                 r.warn('[%d].app "%s" 不是已知产品 id' % (index, row['app']))
         return 'timeline'
     if isinstance(obj, dict):
-        for key, value in obj.items():
-            if not isinstance(value, list):
+        for key in ('timeline', 'planner'):
+            if key not in obj:
+                r.error('缺少 %s 数组' % key)
+            elif not isinstance(obj[key], list):
                 r.error('%s 必须是数组（时间线与完成项分别粘贴）' % key)
+        for key in obj:
+            if key not in ('timeline', 'planner'):
+                r.error('未知 inputs 字段 %s' % key)
         return 'inputs'
     if not text.strip():
         r.error('报告内容不能为空')

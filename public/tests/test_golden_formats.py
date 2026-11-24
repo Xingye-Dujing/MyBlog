@@ -42,7 +42,10 @@ def test_golden_samples_are_enforced_by_python_validator():
     assert validate('zenbackup', tampered, 'manifest')['ok'] is False
 
     rules = _load('zenflow-rules.json')
-    assert validate('zenflow', [{**rules[0], 'actions': []}], 'rules')['ok'] is False
+    tampered_rules = {**rules, 'rules': [{**rules['rules'][0], 'actions': []}]}
+    assert validate('zenflow', tampered_rules, 'rules')['ok'] is False
+    assert validate('zenflow', rules['rules'], 'rules')['ok'] is False
+    assert validate('zenflow', {**rules, 'v': 2}, 'rules')['ok'] is False
 
 
 def test_js_counterpart_shares_the_same_fixtures():

@@ -81,8 +81,8 @@ test('Data 的 WHERE 词法器支持科学计数法与带空格的一元负号',
   const source = read('public/omm-data.html')
   const lexer = source.slice(source.indexOf('if (/[0-9]/.test(ch)'), source.indexOf("throw new Error('无法识别的字符"))
   assert.match(lexer, /\[eE\]/, '数字扫描应识别科学计数法')
-  assert.ok(source.includes("'=<>(),.*+-'"), '运算符应包含 +/- 以支持一元符号')
-  assert.match(source, /x\.v === '-' \|\| x\.v === '\+'/)
+  assert.ok(source.includes("'=<>(),.*+-;'"), '运算符应包含 +/- 以支持一元符号')
+  assert.match(source, /x\.t === 'op' && \(x\.v === '-' \|\| x\.v === '\+'\)/)
 })
 
 test('Hub live-data 在所有目标窗格回复后立即回传，不再固定 700ms', () => {

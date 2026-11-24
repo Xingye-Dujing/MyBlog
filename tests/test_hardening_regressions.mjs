@@ -144,13 +144,14 @@ test('AI 实时数据超时比较与最终保存的 resolver 是同一引用', (
   assert.doesNotMatch(src, /S\.liveResolve === resolve/)
 })
 
-test('ZenReview 导出只追加新报告卡片，不写回剪藏并集', () => {
+test('ZenReview 导出通过共享桥写入 ZenCard，不写回当前 origin', () => {
   const src = read('public/omm-zenreview.html')
-  const at = src.indexOf("$('tocards-btn').addEventListener")
-  assert.ok(at >= 0, 'tocards 事件处理器未找到')
-  const block = src.slice(at, at + 700)
-  assert.doesNotMatch(block, /cards\(\)\.concat/)
-  assert.match(block, /(?:localStorage\.getItem|ZenUtil\.getJSON)\('zen\.cards\.v1'/)
+  const at = src.indexOf('async function exportReportCard')
+  assert.ok(at >= 0, 'exportReportCard 未找到')
+  const block = src.slice(at, at + 1600)
+  assert.doesNotMatch(block, /cards\(\)\.concat|setJSON\(CARD_KEY/)
+  assert.match(block, /await window\.OMMShare\.send/)
+  assert.match(block, /to:\s*'zencard'/)
 })
 
 test('Hub 设置备份导出前清空 WebDAV 密码', () => {

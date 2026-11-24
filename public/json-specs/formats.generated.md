@@ -49,7 +49,7 @@
   - properties（.json/.csv）
 - [writer · 所思所想](#writer)
   - canvas（.zc）
-  - library（.zc）
+  - library（.zwlib）
 - [zenbackup · 统一备份](#zenbackup)
   - manifest（.json）
 - [zencard · 间隔复习](#zencard)
@@ -991,6 +991,7 @@
       "y": 100,
       "w": "240px",
       "h": "80px",
+      "zenCardId": "zc-1",
       "content": "正文"
     }
   ],
@@ -998,12 +999,12 @@
 }
 ```
 
-### `library` · .zc
+### `library` · .zwlib
 
 - 契约：format=`zenwriter-library`
 - 实现源码：`public/omm-writer.html`
 - 深度校验器：`v_writer`
-- 硬门槛：format=zenwriter-library；docs 是对象
+- 硬门槛：format=zenwriter-library；docs 是对象；docs 中每张画布有 nodes 数组
 
 | 字段 | 类型 | 必需 |
 |---|---|---|
@@ -1015,7 +1016,22 @@
 ```json
 {
   "format": "zenwriter-library",
-  "docs": {}
+  "v": 2,
+  "docs": {
+    "doc-a": {
+      "name": "第一张",
+      "nodes": [
+        {
+          "id": "node-1",
+          "type": "text",
+          "x": 100,
+          "y": 100,
+          "zenCardId": "zc-1",
+          "content": "正文"
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -1197,38 +1213,44 @@
 
 ### `rules` · .json
 
-- 契约：无固定 token
+- 契约：format=`zen-flow`，version=`1`
 - 实现源码：`public/lib/zen-flow.js`
 - 深度校验器：`v_zenflow`
 - Golden fixture：`zenflow-rules.json`
-- 硬门槛：actions.type 在允许枚举内；顶层规则数组；rules[] 每项通过 validateRule
+- 硬门槛：format=zen-flow；v 数字 1；actions.type 在允许枚举内；rules[] 每项通过 validateRule
 
 | 字段 | 类型 | 必需 |
 |---|---|---|
-| `—` | array | 是 |
+| `format` | string | 是 |
+| `v` | number | 是 |
+| `rules` | array | 是 |
 
 最小示例：
 
 ```json
-[
-  {
-    "name": "示例规则",
-    "priority": 1,
-    "enabled": true,
-    "when": {
-      "source": "manual",
-      "kind": "note",
-      "tag": "待整理",
-      "text": ""
-    },
-    "actions": [
-      {
-        "type": "addTag",
-        "value": "已整理"
-      }
-    ]
-  }
-]
+{
+  "format": "zen-flow",
+  "v": 1,
+  "rules": [
+    {
+      "name": "示例规则",
+      "priority": 1,
+      "enabled": true,
+      "when": {
+        "source": "manual",
+        "kind": "note",
+        "tag": "待整理",
+        "text": ""
+      },
+      "actions": [
+        {
+          "type": "addTag",
+          "value": "已整理"
+        }
+      ]
+    }
+  ]
+}
 ```
 
 ---

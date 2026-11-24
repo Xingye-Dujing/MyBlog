@@ -3,6 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ZenFlow } from '../public/lib/zen-flow.js'
 import { ZenCard } from '../public/lib/zen-card.js'
+import { readFileSync } from 'node:fs'
 
 const baseCard = { id: 'zc-1', kind: 'quote', source: 'annotate', content: '精读句子', tags: ['精读'] }
 
@@ -68,7 +69,15 @@ test('applyActions：send/publish/notify 产生副作用描述且不改原卡片
   assert.equal(res.effects.length, 3)
   assert.deepEqual(res.effects.map((e) => e.type), ['send', 'publish', 'notify'])
   assert.equal(res.effects[0].to, 'writer')
+  assert.equal(res.effects[2].message, 'hi')
   assert.equal(res.card.tags.length, 1)
+})
+
+test('notify 旧数据 value 归一化为唯一 message 字段', () => {
+  const rule = ZenFlow.createRule({ actions: [{ type: 'notify', value: 'hello' }] })
+  assert.deepEqual(rule.actions, [{ type: 'notify', message: 'hello' }])
+  const out = ZenFlow.applyActions(rule, baseCard, { now: 1 })
+  assert.equal(out.effects[0].message, 'hello')
 })
 
 test('run：按优先级触发多条规则并汇总', () => {
@@ -100,4 +109,17 @@ test('validateRule 遇到缺失/非数组 actions 时返回校验失败而不是
     assert.equal(res.ok, false)
     assert.ok(res.errors.some((e) => e.indexOf('action') >= 0))
   }
+})
+
+test('ZenFlow 页面等待发送结果并报告失败', () => {
+  const page = readFileSync(new URL('../public/omm-zenflow.html', import.meta.url), 'utf8')
+  assert.ok(page.includes('await window.OMMShare.send('), '发送动作必须等待 broker 结果')
+  assert.ok(page.includes('await window.OMMShare.publishRecord('), '发布动作必须等待 broker 结果')
+  assert.ok(page.includes('个发送动作失败'), '发送失败不得提示运行成功')
+  const module = page.match(/<script type="module">([\s\S]*?)<\/script>/)
+  assert.ok(module, 'ZenFlow 缺少模块脚本')
+  assert.doesNotThrow(() => new Function(module[1].replace(/^\s*import .*$/gm, '')), 'ZenFlow 模块语法应有效')
+  assert.ok(page.includes('ZenUtil.setJSON(CARD_KEY, out.cards)'), '本地运行结果必须写回卡片库')
+  assert.ok(page.includes("to: 'zencard'"), '桌面运行结果必须写回 ZenCard')
+  assert.ok(page.includes("a.message = value"), '通知动作必须保存自定义消息')
 })

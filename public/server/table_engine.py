@@ -54,6 +54,14 @@ class _Skip:
     pass
 
 
+class _Cancelled(Exception):
+    """内部控制信号：取消不是普通节点错误，也不能触发写计划应用。"""
+
+    def __init__(self, node: str = ""):
+        super().__init__("任务已取消")
+        self.node = node
+
+
 SKIP = _Skip()
 
 _FORCED_BORDER = Border(
@@ -123,6 +131,15 @@ def column_list(spec: Any, step: int = 1) -> List[str]:
         except Exception:
             raise WorkflowError("列字母无效：%s" % letter)
     return letters
+
+
+def key_list(value: Any) -> List[str]:
+    """把前端文本框或 JSON 数组统一成字段名列表。"""
+    if isinstance(value, (list, tuple)):
+        items = value
+    else:
+        items = re.split(r"[,，]", str(value or ""))
+    return [str(item).strip() for item in items if str(item).strip()]
 
 
 def number_of(value: Any) -> Optional[float]:
@@ -281,11 +298,22 @@ def conditions_pass(rules: Any, logic: str, row: "Row", table: "Table") -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _lookup_result(value: Any, kind: str, result_type: str = "") -> Any:
+    """数值区间/时间区间归一化数值结果；显式文本结果保持原样。"""
+    if result_type == "text":
+        return "" if value is None else str(value)
+    if result_type == "number" or kind in ("numeric", "time", "range"):
+        number = number_of(value)
+        if number is not None:
+            return normalize_result(number)
+    return value
+
+
 def lookup_value(value: Any, data: Dict[str, Any], kind: str = "range") -> Any:
     rows = data.get("lookup") if isinstance(data.get("lookup"), list) else []
     default = data.get("defaultResult", 0)
-    kind = str(data.get("lookupKind") or kind or "range")
-    numeric = kind == "numeric"
+    kind = str(data.get("lookupKind") or kind or "range").strip().lower()
+    result_type = str(data.get("lookupResultType") or "").strip().lower()
     for item in rows:
         if not isinstance(item, dict):
             continue
@@ -296,19 +324,19 @@ def lookup_value(value: Any, data: Dict[str, Any], kind: str = "range") -> Any:
             if v is None:
                 continue
             if (lo is None or v >= lo) and (hi is None or v <= hi):
-                return item.get("result", default)
-        elif numeric:
+                return _lookup_result(item.get("result", default), kind, result_type)
+        elif kind == "numeric":
             v = number_of(value)
             lo = number_of(item.get("min")) if item.get("min") not in (None, "") else None
             hi = number_of(item.get("max")) if item.get("max") not in (None, "") else None
             if v is None:
                 continue
             if (lo is None or v >= lo) and (hi is None or v <= hi):
-                return item.get("result", default)
+                return _lookup_result(item.get("result", default), kind, result_type)
         else:  # exact
             if text_of(value).strip().lower() == text_of(item.get("value")).strip().lower():
-                return item.get("result", default)
-    return default
+                return _lookup_result(item.get("result", default), kind, result_type)
+    return _lookup_result(default, kind, result_type)
 
 
 # ---------------------------------------------------------------------------
@@ -710,6 +738,7 @@ class Engine:
         self.warnings: List[Dict[str, str]] = []
         self.conflicts: List[Dict[str, Any]] = []
         self.outputs_files: List[Dict[str, Any]] = []
+        self.executed: Set[str] = set()
         self.dry_run = bool(self.options.get("dryRun"))
         self.stop_node = str(self.options.get("previewNode") or "")
         self.out_dir = str(self.options.get("outDir") or "")
@@ -788,14 +817,13 @@ class Engine:
     def run(self) -> Dict[str, Any]:
         errors = self._validate()
         if errors:
-            return {"ok": False, "errors": errors, "nodes": self.node_results,
+            return {"ok": False, "cancelled": False, "errors": errors, "nodes": self.node_results,
                     "outputs": [], "conflicts": [], "warnings": self.warnings,
                     "dryRun": self.dry_run}
         total = len(self.order)
         try:
             for idx, nid in enumerate(self.order):
-                if self.cancelled():
-                    break
+                self._raise_if_cancelled(nid)
                 node = self.nodes[nid]
                 self.on_event("node_start", {"id": nid, "type": node["type"], "index": idx, "total": total})
                 try:
@@ -805,18 +833,31 @@ class Engine:
                     else:
                         # 写回/保存/备注等节点把上游表透传，后续节点可以继续加工。
                         self.outputs[nid] = self._input(node)
+                    self.executed.add(nid)
                     self.node_results[nid] = {
                         "status": "done", "progress": 1,
                         "result": result.as_dict() if isinstance(result, Table) else (result or {}),
                     }
                     self.on_event("node_done", {"id": nid, "result": self.node_results[nid]["result"]})
+                except _Cancelled as exc:
+                    self.node_results[nid] = {"status": "cancelled", "progress": 0}
+                    self.on_event("node_cancelled", {"id": nid})
+                    raise
                 except WorkflowError as exc:
+                    if self.cancelled():
+                        self.node_results[nid] = {"status": "cancelled", "progress": 0}
+                        self.on_event("node_cancelled", {"id": nid})
+                        raise _Cancelled(nid) from exc
                     if not exc.node:
                         exc.node = nid
                     self.node_results[nid] = {"status": "error", "error": exc.as_dict(), "progress": 0}
                     self.on_event("node_error", {"id": nid, "error": exc.as_dict()})
                     raise
                 except Exception as exc:
+                    if self.cancelled():
+                        self.node_results[nid] = {"status": "cancelled", "progress": 0}
+                        self.on_event("node_cancelled", {"id": nid})
+                        raise _Cancelled(nid) from exc
                     err = {"message": str(exc), "node": nid}
                     self.node_results[nid] = {"status": "error", "error": err, "progress": 0}
                     self.on_event("node_error", {"id": nid, "error": err})
@@ -824,10 +865,15 @@ class Engine:
                 if self.stop_node and nid == self.stop_node:
                     self.stopped = True
                     break
+            self._raise_if_cancelled()
+            if self.book is not None:
+                self._check_conflicts()
+            self._raise_if_cancelled()
             if not self.dry_run and not self.stopped and self.book is not None:
                 self._apply_all()
             return {
                 "ok": True,
+                "cancelled": False,
                 "dryRun": self.dry_run,
                 "stopped": self.stopped,
                 "nodes": self.node_results,
@@ -835,15 +881,25 @@ class Engine:
                 "conflicts": self.conflicts[:1000],
                 "warnings": self.warnings,
             }
+        except _Cancelled:
+            return {
+                "ok": False, "cancelled": True, "error": {"message": "任务已取消"},
+                "nodes": self.node_results, "outputs": [], "conflicts": self.conflicts[:1000],
+                "warnings": self.warnings, "dryRun": self.dry_run, "stopped": self.stopped,
+            }
         except WorkflowError as exc:
             return {
-                "ok": False, "error": exc.as_dict(), "errors": [exc.as_dict()],
+                "ok": False, "cancelled": False, "error": exc.as_dict(), "errors": [exc.as_dict()],
                 "nodes": self.node_results, "outputs": [], "conflicts": self.conflicts[:1000],
                 "warnings": self.warnings, "dryRun": self.dry_run,
             }
         finally:
             if self.book is not None:
                 self.book.close()
+
+    def _raise_if_cancelled(self, nid: str = "") -> None:
+        if self.cancelled():
+            raise _Cancelled(nid)
 
     def _input(self, node: Dict[str, Any], port: str = "left") -> Optional[Table]:
         conns = [c for c in (self.spec.get("connections") or [])
@@ -899,6 +955,8 @@ class Engine:
                     columns.append(letter)
             grid = self.book.values(sheet)
             for r in range(r1, r2 + 1):
+                if r % 200 == 0:
+                    self._raise_if_cancelled(nid)
                 if header_row and r == header_row:
                     continue
                 values = {letter: grid.get(r, {}).get(column_index_from_string(letter)) for letter in letters}
@@ -1005,8 +1063,8 @@ class Engine:
                 out.columns.append(target)
         total = max(1, len(out.rows))
         for i, row in enumerate(out.rows):
-            if i % 200 == 0 and self.cancelled():
-                raise WorkflowError("任务已取消", nid)
+            if i % 200 == 0:
+                self._raise_if_cancelled(nid)
             for letter in cols:
                 value = row.values.get(letter)
                 if data.get("sourceSkipEmpty", True) and (value is None or text_of(value).strip() == ""):
@@ -1033,8 +1091,7 @@ class Engine:
         total = max(1, len(out.rows) * len(targets))
         done = 0
         for row in out.rows:
-            if self.cancelled():
-                raise WorkflowError("任务已取消", nid)
+            self._raise_if_cancelled(nid)
             for target in targets:
                 if mode == "same":
                     source = target
@@ -1076,7 +1133,9 @@ class Engine:
         out = table.copy()
         if target not in out.columns:
             out.columns.append(target)
-        for row in out.rows:
+        for index, row in enumerate(out.rows):
+            if index % 200 == 0:
+                self._raise_if_cancelled(nid)
             row.values[target] = eval_expression(expr, row)
         return out
 
@@ -1251,7 +1310,7 @@ class Engine:
         table = self._input(self.nodes[nid])
         if table is None:
             raise WorkflowError("交叉汇总节点没有上游表格", nid)
-        row_keys = [str(k).strip() for k in (data.get("rowKeys") or []) if str(k).strip()]
+        row_keys = key_list(data.get("rowKeys"))
         col_key, value_key = str(data.get("colKey") or ""), str(data.get("valueKey") or "")
         if not row_keys or not col_key or not value_key:
             raise WorkflowError("交叉汇总需要行字段、列字段和值字段", nid)
@@ -1317,7 +1376,9 @@ class Engine:
         conflict = str(data.get("conflict") or "skip")
         style = str(data.get("style") or "asc")
         written = skipped = 0
-        for row in table.rows:
+        for index, row in enumerate(table.rows):
+            if index % 200 == 0:
+                self._raise_if_cancelled(nid)
             for col in cols:
                 if formula_fn is not None:
                     value = formula_fn(row, col)
@@ -1429,19 +1490,17 @@ class Engine:
     def _op_note(self, data: Dict[str, Any], nid: str) -> Dict[str, Any]:
         return {"text": str(data.get("text") or "")}
 
-    # ---- 应用写计划 ----
-    def _apply_all(self) -> None:
+    # ---- 写计划预检与应用 ----
+    def _check_conflicts(self) -> None:
+        """独立冲突预检：dry-run 与 preview 也执行，但不修改工作簿。"""
         assert self.book is not None
-        book = self.book
-        if not book.writes and not book.exports:
-            self.warnings.append({"message": "没有产生任何写入或导出，结果文件与原文件相同"})
-        # 1. 冲突预检（在插行之前读取原始值）
+        self.conflicts.clear()
         blocked = False
-        for plan in book.writes:
+        for plan in self.book.writes:
             if plan["row_mode"] == "insertBelow":
                 continue  # 写到新插入的空行，天然不存在冲突
             sheet = plan["sheet"]
-            ws = book.ws(sheet)
+            ws = self.book.ws(sheet)
             check_row = max(1, int(plan["check_row"]))
             old = ws.cell(row=check_row, column=plan["col"]).value
             if old is None:
@@ -1461,9 +1520,16 @@ class Engine:
         if blocked:
             raise WorkflowError("存在不允许覆盖的非空单元格，已中止保存（未写出文件）",
                                 hint="把写回节点的冲突策略改为“覆盖已有值”或“跳过已有值”。")
-        if self.dry_run:
-            return
-        # 2. 统一插行（按表、自底向上）
+
+    def _apply_all(self) -> None:
+        self._raise_if_cancelled()
+        assert self.book is not None
+        book = self.book
+        if self.dry_run or self.stopped:
+            raise RuntimeError("试运行或节点预览不能应用写计划")
+        if not book.writes and not book.exports:
+            self.warnings.append({"message": "没有产生任何写入或导出，结果文件与原文件相同"})
+        # 1. 统一插行（按表、自底向上）
         for sheet, rows in book.inserts.items():
             ws = book.ws(sheet)
             for r in sorted(set(rows), reverse=True):
@@ -1476,7 +1542,7 @@ class Engine:
         def count_le(sheet: str, row: int) -> int:
             return sum(1 for r in inserted.get(sheet, []) if r <= row)
 
-        # 3. 写值与公式
+        # 2. 写值与公式
         touched: Set[Tuple[str, int, int]] = set()
         for plan in book.writes:
             sheet = plan["sheet"]
@@ -1517,10 +1583,12 @@ class Engine:
                     cell.number_format = src.number_format
                 except Exception:
                     pass
-        # 4. 保存主工作簿
-        save_nodes = [n for n in self.nodes.values() if n["type"] == "save"]
+        # 3. 保存主工作簿（只允许已执行节点触发的保存）
+        save_nodes = [n for n in self.nodes.values()
+                      if n["type"] == "save" and n["id"] in self.executed]
         if save_nodes:
             for save in save_nodes:
+                self._raise_if_cancelled()
                 filename = safe_filename(save["data"].get("filename"), "result.xlsx")
                 if not filename.lower().endswith(_SAFE_EXT):
                     filename += ".xlsx"
@@ -1533,8 +1601,9 @@ class Engine:
                     "name": filename, "path": path, "kind": "workbook",
                     "url": "/api/file/%s" % filename,
                 })
-        # 5. 导出独立表
+        # 4. 导出独立表
         for exp in book.exports:
+            self._raise_if_cancelled()
             path = self._write_export(exp)
             self.outputs_files.append({
                 "name": exp["filename"], "path": path, "kind": "table",

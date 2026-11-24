@@ -547,6 +547,7 @@
     var self = this
     var rec = this._nodeById(id)
     if (!rec) return this
+    if (this.state.alignBaseId === id) this.setAlignBase(null)
     rec.el.remove()
     this.state.nodes = this.state.nodes.filter(function (n) {
       return n.id !== id
@@ -558,11 +559,15 @@
       return c.from !== id && c.to !== id
     })
     this.state.selectedNodeIds.delete(id)
+    if (removed.some(function (c) { return c.id === self.state.selectedConnId })) {
+      this.state.selectedConnId = null
+    }
     this.renderConnections()
     this.emitNodeCommand(rec, 'removed')
     removed.forEach(function (c) {
       self.bus.emit('disconnect', c)
     })
+    this._selectionChanged()
     this._changed()
     return this
   }
@@ -650,7 +655,12 @@
     this.state.nodes = []
     this.state.connections = []
     this.state.selectedNodeIds.clear()
+    this.state.selectedConnId = null
+    this.state.alignBaseId = null
+    this.state.portDrag = null
+    this.state.tempLine = null
     this.svg.innerHTML = ''
+    this._selectionChanged()
     this._changed()
     return this
   }
@@ -803,6 +813,8 @@
       { id: 'conn-' + ++this.connSeq, from: from, to: to, fromPort: fromPort, toPort: toPort },
       extra || {}
     )
+    var connNum = parseInt(String(conn.id).split('-').pop(), 10)
+    if (!isNaN(connNum) && connNum > this.connSeq) this.connSeq = connNum
     this.state.connections.push(conn)
     this.renderConnections()
     this.opts.onConnect(conn)
@@ -1399,35 +1411,90 @@
     }
   }
 
+  ZenCanvasInstance.prototype._validateCanvasData = function (data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('invalid canvas data')
+    }
+    if (data.app !== this.scope) {
+      throw new Error('canvas app mismatch: expected "' + this.scope + '"')
+    }
+    if (!Array.isArray(data.nodes)) throw new Error('canvas nodes must be an array')
+    if (data.connections != null && !Array.isArray(data.connections)) {
+      throw new Error('canvas connections must be an array')
+    }
+
+    var self = this
+    var nodeIds = new Set()
+    var connectionIds = new Set()
+    var connectionKeys = new Set()
+    var nodes = data.nodes.map(function (n, index) {
+      if (!n || typeof n !== 'object' || Array.isArray(n)) {
+        throw new Error('invalid canvas node at index ' + index)
+      }
+      if (typeof n.type !== 'string' || !Object.prototype.hasOwnProperty.call(self.types, n.type)) {
+        throw new Error('unknown node type at index ' + index + ': ' + n.type)
+      }
+      if ((typeof n.id !== 'string' && typeof n.id !== 'number') ||
+          (typeof n.id === 'number' && !isFinite(n.id)) || String(n.id).trim() === '') {
+        throw new Error('canvas node id is required at index ' + index)
+      }
+      var id = String(n.id)
+      if (nodeIds.has(id)) throw new Error('duplicate canvas node id: ' + id)
+      nodeIds.add(id)
+      return { source: n, id: id }
+    })
+
+    var connections = (data.connections || []).map(function (c, index) {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) {
+        throw new Error('invalid canvas connection at index ' + index)
+      }
+      var from = c.from == null ? '' : String(c.from)
+      var to = c.to == null ? '' : String(c.to)
+      if (!nodeIds.has(from)) throw new Error('unknown connection source at index ' + index + ': ' + from)
+      if (!nodeIds.has(to)) throw new Error('unknown connection target at index ' + index + ': ' + to)
+      if (from === to) throw new Error('canvas connection cannot reference the same node: ' + from)
+      var fromPort = c.fromPort || 'right'
+      var toPort = c.toPort || 'left'
+      var key = from + '\u0000' + to + '\u0000' + fromPort + '\u0000' + toPort
+      if (connectionKeys.has(key)) throw new Error('duplicate canvas connection at index ' + index)
+      connectionKeys.add(key)
+
+      var id = null
+      if (c.id != null) {
+        if ((typeof c.id !== 'string' && typeof c.id !== 'number') ||
+            (typeof c.id === 'number' && !isFinite(c.id)) || String(c.id).trim() === '') {
+          throw new Error('canvas connection id is invalid at index ' + index)
+        }
+        id = String(c.id)
+        if (connectionIds.has(id)) throw new Error('duplicate canvas connection id: ' + id)
+        connectionIds.add(id)
+      }
+      return { source: c, id: id, from: from, to: to, fromPort: fromPort, toPort: toPort }
+    })
+    return { nodes: nodes, connections: connections }
+  }
+
   ZenCanvasInstance.prototype.fromJSON = function (data, opts) {
-    if (!data || !Array.isArray(data.nodes)) return this
+    var plan = this._validateCanvasData(data)
     var self = this
     this._silent(function () {
       self.clear()
-      var known = new Set(data.nodes.map(function (n) { return String(n.id || '') }))
-      data.nodes.forEach(function (n) {
-        if (!n.type || !self.types[n.type]) {
-          console.warn('[ZenCanvas] unknown node type skipped:', n.type)
-          return
-        }
+      plan.nodes.forEach(function (item) {
+        var n = item.source
         var payload = assign({}, n.data || {})
         if (n.title != null) payload.title = n.title
         if (n.w != null) payload.w = num(n.w, 240)
         if (n.h != null) payload.h = num(n.h, 110)
         payload.locked = !!n.locked
         payload.minimized = !!n.minimized
-        payload.id = String(n.id || '')
+        payload.id = item.id
         self.addNode(n.type, payload, { x: num(n.x, 100), y: num(n.y, 100) }, { change: false })
       })
-      ;(data.connections || []).forEach(function (c) {
-        if (!c || !known.has(String(c.from)) || !known.has(String(c.to))) return
-        self.addConnection(
-          String(c.from),
-          String(c.to),
-          c.fromPort || 'right',
-          c.toPort || 'left',
-          { id: c.id, route: c.route, routeHint: c.routeHint },
-        )
+      plan.connections.forEach(function (item) {
+        var c = item.source
+        var extra = { route: c.route, routeHint: c.routeHint }
+        if (item.id != null) extra.id = item.id
+        self.addConnection(item.from, item.to, item.fromPort, item.toPort, extra)
       })
       self.setView(data.view || { scale: 1, panX: 0, panY: 0 })
     })

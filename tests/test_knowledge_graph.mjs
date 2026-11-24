@@ -228,7 +228,7 @@ test('kgEscape 转义 HTML', () => {
 test('产品端响应收集请求，并以明确 origin 回传', () => {
   assert.ok(link.includes("d.type === 'omm:zen-card-request'"))
   assert.ok(link.includes("type: 'omm:zen-card-reply'"))
-  assert.ok(link.includes('parentTarget()'))
+  assert.ok(link.includes('e.origin'))
   assert.doesNotMatch(link, /postMessage\([^,]+,\s*'\*'/)
 })
 

@@ -28,7 +28,8 @@ python tools/new_product.py <id> <名称> <字标> <描述> --port <端口> --ch
 <link rel="stylesheet" href="zen/products/<id>.css">
 ```
 
-按需引入 `vendor/fonts/literata-*.css` 与 `zen-*.js` 共享模块。不得内联 `<style>`。
+入口根元素声明 `data-omm-app="<产品 id>"`，桌面桥与共享总线以此识别产品；非 `omm-*.html`
+入口也必须声明。按需引入 `vendor/fonts/literata-*.css` 与 `zen-*.js` 共享模块。不得内联 `<style>`。
 
 ## 3. 写产品样式
 

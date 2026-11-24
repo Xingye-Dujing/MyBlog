@@ -120,9 +120,6 @@
       <div class="dd-item" data-action="settingsToggleTheme">
         <span>主题</span><span class="hint" id="sv-theme">浅色</span>
       </div>
-      <div class="dd-item" data-action="radiusPlus">
-        <span>圆角</span><span class="hint" id="sv-radius">0px</span>
-      </div>
       <div class="dd-divider"></div>
       <div class="dd-label">图片跳转</div>
       <div class="dd-item" data-action="toggleImageNavigation">
@@ -293,12 +290,12 @@
               </div>
             </div>
             <div class="style-row">
-              <label>圆角</label>
+              <label for="redact-radius">圆角</label>
               <input type="range" id="redact-radius" min="0" max="24" value="0" />
               <span class="style-val" id="redact-radius-val">0px</span>
             </div>
             <div class="style-row">
-              <label>不透明度</label>
+              <label for="redact-opacity">不透明度</label>
               <input type="range" id="redact-opacity" min="10" max="100" value="100" />
               <span class="style-val" id="redact-opacity-val">100%</span>
             </div>
@@ -316,7 +313,7 @@
                   font-size: 10px;
                   padding: 3px 14px;
                   border: 1px solid var(--border-dim);
-                  border-radius: var(--radius);
+                  border-radius: var(--zen-radius);
                 "
               >
                 重置样式
@@ -673,12 +670,19 @@
       </div>
     </template>
 
-    <input type="file" id="file-input" accept=".txt,.docx,.pdf,.pptx" />
-    <input type="file" id="pdf-tool-input" accept=".pdf,application/pdf" multiple />
-    <input type="file" id="image-file-input" accept="image/*" multiple />
+    <input type="file" id="file-input" aria-label="导入文档" accept=".txt,.docx,.pdf,.pptx" />
+    <input
+      type="file"
+      id="pdf-tool-input"
+      aria-label="选择 PDF 文件"
+      accept=".pdf,application/pdf"
+      multiple
+    />
+    <input type="file" id="image-file-input" aria-label="导入图片" accept="image/*" multiple />
     <input
       type="file"
       id="image-folder-input"
+      aria-label="导入图片文件夹"
       accept="image/*"
       webkitdirectory
       directory
@@ -727,7 +731,6 @@
           tool: 'rect',
           textSelect: false,
           pinned: false,
-          radius: 0,
           lockRedacts: true,
           showPageNum: true,
           autoPage: true,
@@ -1163,13 +1166,6 @@
           }
         }
 
-        function applyRadius() {
-          var r = S.radius || 0
-          document.documentElement.style.setProperty('--radius', r + 'px')
-          var rv = document.getElementById('sv-radius')
-          if (rv) rv.textContent = r + 'px'
-        }
-
         function updateSearchHighlightRadius() {
           var radius = Math.max(0, parseInt(S.redactStyle && S.redactStyle.radius, 10) || 0)
           document.documentElement.style.setProperty('--search-radius', radius + 'px')
@@ -1275,7 +1271,6 @@
                 bg: S.bg,
                 tool: S.tool,
                 pinned: S.pinned,
-                radius: S.radius,
                 sidebarCollapsed: S.sidebarCollapsed,
                 sidebarW: sidebarW,
                 rightSidebarCollapsed: S.rightSidebarCollapsed,
@@ -1307,7 +1302,6 @@
                 : 'ask'
             S.docxPdfEngine = String(d.docxPdfEngine || '')
             S.pinned = d.pinned === false ? false : true
-            S.radius = d.radius || 0
             S.sidebarCollapsed = d.sidebarCollapsed || false
             S.rightSidebarCollapsed = d.rightSidebarCollapsed || false
             imageNavState.enabled =
@@ -1350,7 +1344,6 @@
           updateDocxRenderModeUI()
           applyTheme()
           applyBg()
-          applyRadius()
           applyRedactStyle()
           if (S.sidebarCollapsed) {
             DOM.sidebar.classList.add('collapsed')
@@ -3480,21 +3473,32 @@
 
         async function loadFileStreaming(file) {
           return new Promise(function (resolve, reject) {
-            var result = '',
-              offset = 0,
-              chunk = CONFIG.CHUNK_SIZE
+            var decoder = new TextDecoder('utf-8')
+            var parts = []
+            var offset = 0
+            var chunk = CONFIG.CHUNK_SIZE
 
             function next() {
               if (offset >= file.size) {
-                resolve(result)
+                try {
+                  parts.push(decoder.decode())
+                  resolve(parts.join(''))
+                } catch (err) {
+                  reject(err)
+                }
                 return
               }
               var slice = file.slice(offset, offset + chunk)
               var r = new FileReader()
               r.onload = function (e) {
-                result += e.target.result
-                offset += chunk
-                if (offset % (chunk * 4) === 0) {
+                try {
+                  parts.push(decoder.decode(new Uint8Array(e.target.result), { stream: true }))
+                } catch (err) {
+                  reject(err)
+                  return
+                }
+                offset += slice.size
+                if (offset % (chunk * 4) === 0 || offset >= file.size) {
                   var pct = Math.round((offset / file.size) * 100)
                   DOM.statusLeft.textContent =
                     '加载: ' + formatSize(offset) + ' / ' + formatSize(file.size)
@@ -3514,7 +3518,7 @@
               r.onerror = function () {
                 reject(new Error('流式读取失败'))
               }
-              r.readAsText(slice)
+              r.readAsArrayBuffer(slice)
             }
             next()
           })
@@ -5341,7 +5345,7 @@
             'position:relative;box-sizing:border-box;width:' + o.pageW +
             'px;min-width:' + o.pageW + 'px;max-width:none;height:' + o.pageH +
             'px;padding:0;margin:0 auto 20px;background:#ffffff;color:#000000;' +
-            'border:1px solid var(--border);border-radius:var(--radius);' +
+            'border:1px solid var(--border);border-radius:var(--zen-radius);' +
             'box-shadow:var(--page-shadow);overflow:hidden;flex:0 0 auto;align-self:center;'
 
           var container = document.createElement('div')
@@ -7125,7 +7129,7 @@
             PAGE_W +
             'px;height:auto;min-height:' +
             PAGE_H +
-            'px;box-sizing:border-box;margin:0 auto 20px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--page-shadow);overflow:hidden;flex:0 0 auto;align-self:center;}' +
+            'px;box-sizing:border-box;margin:0 auto 20px;background:var(--bg);border:1px solid var(--border);border-radius:var(--zen-radius);box-shadow:var(--page-shadow);overflow:hidden;flex:0 0 auto;align-self:center;}' +
             '.docx-export-page.auto-page{height:' +
             PAGE_H +
             'px;overflow:hidden;}' +
@@ -7358,7 +7362,7 @@
             pageEl.style.padding = '0'
             pageEl.style.border = '1px solid var(--border)'
             pageEl.style.borderStyle = 'solid'
-            pageEl.style.borderRadius = 'var(--radius)'
+            pageEl.style.borderRadius = 'var(--zen-radius)'
             pageEl.style.boxShadow = 'var(--page-shadow)'
             pageEl.style.overflow = 'hidden'
             if (!singlePageMode) {
@@ -9951,13 +9955,6 @@ openSharedModal('tpl-shortcuts', {
               window.ZenUI.popover.close()
             } else if (a === 'toggleLargeImageFilter') {
               toggleLargeImageFilter()
-            } else if (a === 'radiusPlus') {
-              var radii = [0, 4, 8, 12, 16, 20, 24]
-              var cur = radii.indexOf(S.radius || 0)
-              S.radius = radii[(cur + 1) % radii.length]
-              applyRadius()
-              saveSettings()
-              $('#sv-radius').textContent = S.radius + 'px'
             } else if (a === 'showShortcuts') {
               window.ZenUI.popover.close()
               openShortcuts()
@@ -10139,7 +10136,6 @@ openSharedModal('tpl-shortcuts', {
               pinBtn.classList.remove('pinned')
               document.body.classList.remove('menu-pinned')
             }
-            applyRadius()
             setTool(S.tool)
             initEvents()
             initColorPicker()

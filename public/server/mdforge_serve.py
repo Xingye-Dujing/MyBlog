@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import socket
 import sys
 import threading
@@ -31,6 +32,15 @@ def port_in_use(host: str, port: int) -> bool:
         return False
 
 
+def is_loopback_bind(host: str) -> bool:
+    if str(host or "").lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(str(host or "")).is_loopback
+    except ValueError:
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="MdForge — Markdown to DOCX / TeX studio")
     parser.add_argument("--host", default="127.0.0.1")
@@ -38,6 +48,9 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--open", action="store_true", help="启动后打开浏览器")
     args = parser.parse_args()
+    if not is_loopback_bind(args.host):
+        print("[错误] MdForge 只能绑定本机回环地址。", file=sys.stderr)
+        sys.exit(1)
     if args.debug and args.host not in ("127.0.0.1", "localhost", "::1"):
         print("[错误] 出于安全考虑，--debug 仅允许绑定本机回环地址。", file=sys.stderr)
         sys.exit(1)

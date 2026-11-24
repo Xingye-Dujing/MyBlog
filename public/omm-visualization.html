@@ -172,93 +172,152 @@
 (function (root) {
     'use strict';
 
-    function delimiterOf(headerLine) {
-        /* Delimiters inside quoted fields are data, not separators. Compare only
-           the characters outside quotes, or `"a,b";"c,d"` is read as comma
-           separated and every column shifts. Keep the original tab > comma >
-           semicolon priority. */
-        var outside = '';
-        var quoted = false;
-        var line = String(headerLine || '');
-        for (var i = 0; i < line.length; i += 1) {
-            var ch = line.charAt(i);
-            if (quoted) {
-                if (ch === '"') {
-                    if (line.charAt(i + 1) === '"') { i += 1; }
-                    else { quoted = false; }
-                }
-                continue;
-            }
-            if (ch === '"') { quoted = true; continue; }
-            outside += ch;
+    function hasClosingQuote(text, start) {
+        for (var i = start + 1; i < text.length; i += 1) {
+            if (text.charAt(i) !== '"') continue
+            if (text.charAt(i + 1) === '"') i += 1
+            else return true
         }
-        if (outside.includes('\t')) return '\t';
-        if (outside.includes(',')) return ',';
-        if (outside.includes(';')) return ';';
-        if (/\s{2,}/.test(outside)) return 'whitespace';
-        return ' ';
+        return false
     }
 
-    /* One line, split on `delim`, honouring quotes. Quoting only means anything for a character
-       delimiter: the "two or more spaces" shape has no quote character to honour. */
-    function splitLine(line, delim) {
-        if (delim === 'whitespace') return line.trim().split(/\s{2,}/);
-        var out = [];
-        var cell = '';
-        var quoted = false;
+    function delimiterOf(headerLine) {
+        /* Delimiters inside quoted fields are data, not separators. Compare only
+           the characters outside the first logical record, or `"a,b";"c,d"` is
+           read as comma separated and every column shifts. A newline inside a
+           quoted header belongs to that field; CRLF / lone CR outside it ends
+           the record. Keep the original tab > comma > semicolon priority. */
+        var outside = ''
+        var quoted = false
+        var line = String(headerLine || '')
         for (var i = 0; i < line.length; i += 1) {
-            var ch = line.charAt(i);
+            var ch = line.charAt(i)
             if (quoted) {
                 if (ch === '"') {
-                    if (line.charAt(i + 1) === '"') {
-                        cell += '"';
-                        i += 1;
+                    if (line.charAt(i + 1) === '"') i += 1
+                    else quoted = false
+                }
+                continue
+            }
+            if (ch === '\r' || ch === '\n') break
+            if (ch === '"' && hasClosingQuote(line, i)) {
+                quoted = true
+                continue
+            }
+            outside += ch
+        }
+        if (outside.includes('\t')) return '\t'
+        if (outside.includes(',')) return ','
+        if (outside.includes(';')) return ';'
+        if (/\s{2,}/.test(outside)) return 'whitespace'
+        return ' '
+    }
+
+    /* Character state machine shared by textData and splitLine. Newlines are
+       record separators only outside quotes; CRLF and lone CR inside quotes are
+       kept verbatim as field data. Quoted fields keep their own leading/trailing
+       whitespace, while ordinary fields retain the editor's historical
+       trim-on-paste behaviour. */
+    function parseRows(raw, delim) {
+        var s = String(raw == null ? '' : raw).replace(/^\uFEFF/, '')
+        var rows = []
+        var row = []
+        var field = ''
+        var quoted = false
+        var fieldWasQuoted = false
+        var afterQuote = false
+
+        function finishField() {
+            row.push(fieldWasQuoted ? field : field.trim())
+            field = ''
+            fieldWasQuoted = false
+            afterQuote = false
+        }
+        function finishRow() {
+            finishField()
+            if (row.some(function (cell) { return String(cell).trim() !== '' })) rows.push(row)
+            row = []
+        }
+
+        for (var i = 0; i < s.length; i += 1) {
+            var ch = s.charAt(i)
+            if (quoted) {
+                if (ch === '"') {
+                    if (s.charAt(i + 1) === '"') {
+                        field += '"'
+                        i += 1
                     } else {
-                        quoted = false;
+                        quoted = false
+                        afterQuote = true
                     }
                 } else {
-                    cell += ch;
+                    field += ch
                 }
-            } else if (ch === '"' && cell.trim() === '') {
-                quoted = true;
-                cell = '';
-            } else if (ch === delim) {
-                out.push(cell.trim());
-                cell = '';
-            } else {
-                cell += ch;
+                continue
             }
+
+            if (ch === '\r' || ch === '\n') {
+                finishRow()
+                if (ch === '\r' && s.charAt(i + 1) === '\n') i += 1
+                continue
+            }
+            if (afterQuote && /\s/.test(ch)) continue
+            afterQuote = false
+
+            if (delim === 'whitespace' && /\s/.test(ch)) {
+                var end = i + 1
+                while (end < s.length && /\s/.test(s.charAt(end))) end += 1
+                if (end - i >= 2) {
+                    finishField()
+                    i = end - 1
+                } else {
+                    field += ch
+                }
+                continue
+            }
+            if (ch === '"' && field.trim() === '' && hasClosingQuote(s, i)) {
+                field = ''
+                quoted = true
+                fieldWasQuoted = true
+                continue
+            }
+            if (ch === delim) {
+                finishField()
+                continue
+            }
+            field += ch
         }
-        out.push(cell.trim());
-        return out;
+        finishRow()
+        return rows
+    }
+
+    function splitLine(line, delim) {
+        var rows = parseRows(line, delim)
+        return rows.length ? rows[0] : ['']
     }
 
     function textData(raw) {
-        var lines = String(raw == null ? '' : raw)
-            .split(/\r?\n/)
-            .filter(function (line) {
-                return line.trim();
-            });
-        if (!lines.length) return { headers: [], rows: [] };
-        var delim = delimiterOf(lines[0]);
-        var headers = splitLine(lines[0], delim);
-        var rows = lines.slice(1).map(function (line) {
-            return splitLine(line, delim);
-        });
-        var max = headers.length;
+        var source = String(raw == null ? '' : raw)
+            .replace(/^\uFEFF/, '')
+            .replace(/^(?:[ \t]*(?:\r\n|\r|\n))+/, '')
+        var records = parseRows(source, delimiterOf(source))
+        if (!records.length) return { headers: [], rows: [] }
+        var headers = records[0]
+        var rows = records.slice(1)
+        var max = headers.length
         rows.forEach(function (row) {
-            if (row.length > max) max = row.length;
-        });
-        while (headers.length < max) headers.push('列' + (headers.length + 1));
+            if (row.length > max) max = row.length
+        })
+        while (headers.length < max) headers.push('列' + (headers.length + 1))
         rows = rows.map(function (row) {
-            while (row.length < max) row.push('');
-            return row;
-        });
-        return { headers: headers, rows: rows };
+            while (row.length < max) row.push('')
+            return row
+        })
+        return { headers: headers, rows: rows }
     }
 
-    root.ZenvizParse = { textData: textData, delimiterOf: delimiterOf, splitLine: splitLine };
-})(typeof window !== 'undefined' ? window : globalThis);
+    root.ZenvizParse = { textData: textData, delimiterOf: delimiterOf, splitLine: splitLine }
+})(typeof window !== 'undefined' ? window : globalThis)
     </script>
     <script>
       ;(function () {
@@ -271,7 +330,6 @@
           category: '论文',
           type: 'line',
           palette: 'science',
-          radius: 0,
           title: '研究结果',
           subtitle: '',
           titlePosition: 'top-left',
@@ -385,7 +443,7 @@
           apexcharts: {
             name: 'ApexCharts',
             short: 'ApexCharts',
-            version: '5.3',
+            version: '7.4.0',
             types: ['line', 'bar', 'area', 'scatter', 'pie', 'radar'],
           },
           zen: {
@@ -6916,13 +6974,12 @@
         }
 
         function createDataSelectionState(type = '') {
-          // 网络关系图 / 桑基图的默认映射避开第一列“分类/类别”列，直接使用后面的三列
-          // 作为 来源 → 去向 → 权重，这样示例数据加载后即可直接形成有效关系图。
+          // 三列关系表按 来源 → 去向 → 权重 直接映射 0 / 1 / 2。
           if (type === 'network' || type === 'sankey' || type === 'chord') {
             return {
-              xCol: 1,
-              yCols: [3],
-              targetCol: 2,
+              xCol: 0,
+              yCols: [2],
+              targetCol: 1,
               y1Col: 1,
               y2Col: 2,
             }
@@ -7700,22 +7757,61 @@
           }
           const rule = getChartDataRule(state.type)
           let x = Number.isInteger(state.xCol) ? state.xCol : Number(state.xCol)
-          if (!Number.isInteger(x) || x < 0 || x >= count) x = 0
+          if (!Number.isInteger(x) || x < 0 || x >= count || !isUsableCategoryColumn(x)) {
+            x = firstUsableCategoryColumn(-1)
+            if (x === null)
+              x = (d.headers || []).findIndex((_, i) => isUsableCategoryColumn(i))
+            if (x < 0) x = 0
+          }
           state.xCol = x
           if (rule.target) {
-            let target = Number.isInteger(state.targetCol)
-              ? state.targetCol
-              : Number(state.targetCol)
-            if (!Number.isInteger(target) || target < 0 || target >= count || target === x)
-              target = firstUsableCategoryColumn(x)
-            state.targetCol = target
-          } else state.targetCol = null
+            const requestedTarget = Number(state.targetCol)
+            const targetValid =
+              Number.isInteger(requestedTarget) &&
+              requestedTarget >= 0 &&
+              requestedTarget < count &&
+              requestedTarget !== x &&
+              isUsableCategoryColumn(requestedTarget)
+            const requestedYs = Array.isArray(state.yCols) ? state.yCols.map(Number) : []
+            const validYs = requestedYs
+              .filter(
+                (v) =>
+                  Number.isInteger(v) &&
+                  v >= 0 &&
+                  v < count &&
+                  v !== x &&
+                  (!targetValid || v !== requestedTarget) &&
+                  isUsableNumericColumn(v),
+              )
+              .filter((v, i, a) => a.indexOf(v) === i)
+              .slice(0, rule.maxY)
+            if (targetValid && validYs.length) {
+              state.targetCol = requestedTarget
+              state.yCols = validYs
+              return
+            }
+            // 旧版关系图默认曾使用 1 / 2 / 3；三列表上它会整体越界。
+            // 任一角色无效时重新推断完整三元组，优先把第三列作为权重。
+            const numericCandidates = firstUsableNumericColumns(-1, count)
+            const weight =
+              validYs[0] ??
+              (count >= 3 && isUsableNumericColumn(2)
+                ? 2
+                : numericCandidates[0] ?? null)
+            const roleIndexes = (d.headers || [])
+              .map((_, i) => i)
+              .filter((i) => i !== weight && isUsableCategoryColumn(i))
+            state.xCol = roleIndexes[0] ?? x
+            state.targetCol = roleIndexes[1] ?? null
+            state.yCols = weight === null ? [] : [weight]
+            return
+          }
+          state.targetCol = null
           if (rule.pairY) {
             let y1 = Number.isInteger(state.y1Col) ? state.y1Col : Number(state.y1Col)
             let y2 = Number.isInteger(state.y2Col) ? state.y2Col : Number(state.y2Col)
             const excluded = new Set()
             if (rule.x !== 'none') excluded.add(x)
-            if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol)
             const defaults = firstUsableNumericColumns(-1, 8).filter((i) => !excluded.has(i))
             if (!Number.isInteger(y1) || y1 < 0 || y1 >= count || excluded.has(y1))
               y1 = defaults[0] ?? null
@@ -7732,7 +7828,6 @@
           ys = ys.filter((v, i, a) => a.indexOf(v) === i)
           const excluded = new Set()
           if (rule.x !== 'none') excluded.add(x)
-          if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol)
           ys = ys.filter((v) => !excluded.has(v))
           if (fillDefaults && ys.length === 0)
             ys = firstUsableNumericColumns(rule.x === 'none' ? -1 : x, rule.maxY).filter(
@@ -8307,7 +8402,6 @@
             ],
             style: [
               ['bgrow', '背景'],
-              ['radiusrow', '圆角'],
               ['sep'],
               ['toggle:grid', '显示网格'],
               ['toggle:legend', '显示图例'],
@@ -8334,8 +8428,6 @@
               if (it[0] === 'sep') return '<div class="dd-divider"></div>'
               if (it[0] === 'bgrow')
                 return `<div class="dd-item-row"><span>背景</span><div class="settings-bg-options">${bgDot('plain', '纯白')}${bgDot('body-grid', '网格')}${bgDot('body-dots', '圆点')}${bgDot('body-cross', '十字')}${bgDot('body-diagonal', '斜线')}</div></div>`
-              if (it[0] === 'radiusrow')
-                return `<div class="dd-item-row"><span>圆角</span><div class="settings-control"><span class="settings-value">${state.radius}px</span><button class="settings-btn" type="button" data-dd="radius:down">−</button><button class="settings-btn" type="button" data-dd="radius:up">+</button></div></div>`
               // 透明背景显示当前状态，方便和右侧属性栏对照
               if (it[0] === 'export-transparency')
                 return `<button class="dd-item${exportTransparent() ? ' selected' : ''}" type="button" data-dd="export-transparency"><span>透明背景</span><span class="muted">${exportTransparent() ? '开' : '关'}</span></button>`
@@ -8358,9 +8450,6 @@
               edit: 'D',
               import: 'I',
               shortcuts: '?',
-              'radius:down': '',
-              'radius:show': '',
-              'radius:up': '',
               'zoom:down': '',
               'zoom:show': '',
               'zoom:up': '',
@@ -8393,7 +8482,7 @@
             hkNote(
               '焦点停在任意输入框里时，<b>I</b> 与 <b>D</b> 不会触发，可以正常打字；带 <b>' +
                 esc(mod) +
-                '</b> 的导出键位不受影响。<br />导出 SVG、打印、以及“样式 → 背景 / 圆角”目前只能点击操作，暂无键位。',
+                '</b> 的导出键位不受影响。<br />导出 SVG、打印，以及“样式 → 背景”目前只能点击操作，暂无键位。',
             ),
           ]
           window.ZenUI.shortcuts.help({
@@ -8462,7 +8551,10 @@
             const nextStores = {}
             ENGINE_IDS.forEach((id) => {
               const incoming = incomingEngines[id]
+              const previous = enginePropertyStores[id]
               const store = createEnginePropertyStore(id)
+              // 右侧属性文件只描述外观属性；列映射属于工作区，导入时原样保留。
+              store.dataSelections = structuredClone(previous?.dataSelections || store.dataSelections)
               if (incoming && typeof incoming === 'object') {
                 store.typeStates = sanitizeTypeStates(incoming.typeStates, null, id)
                 store.chartProps = sanitizeChartProps(incoming.chartProps, id)
@@ -8474,7 +8566,6 @@
               saveEngineStore(id)
             })
             loadEnginePropertyStore(state.engine, state.type)
-            loadDataSelectionStore(state.engine, state.type)
             normalizeLayoutPrefs()
             renderInspector()
             applyChartMountLayout()
@@ -8533,11 +8624,6 @@
           if (id.startsWith('engine:')) {
             selectEngine(id.split(':')[1])
             refreshOpenDropdown('engine')
-            return
-          }
-          if (id.startsWith('radius:')) {
-            changeRadius(id.endsWith('up') ? 2 : -2)
-            refreshOpenDropdown('style')
             return
           }
           if (id.startsWith('toggle:')) {
@@ -8783,42 +8869,42 @@
         }
         function fieldPadding() {
           return `<div class="field"><label>边界留白</label><div class="layout-pad-grid">
-  <div class="layout-pad-cell"><span>上</span><input type="range" min="0" max="180" step="2" value="${state.paddingTop}" data-layout-prop="paddingTop"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingTop}" data-layout-number-prop="paddingTop" aria-label="上边界留白"></div>
-  <div class="layout-pad-cell"><span>右</span><input type="range" min="0" max="180" step="2" value="${state.paddingRight}" data-layout-prop="paddingRight"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingRight}" data-layout-number-prop="paddingRight" aria-label="右边界留白"></div>
-  <div class="layout-pad-cell"><span>下</span><input type="range" min="0" max="180" step="2" value="${state.paddingBottom}" data-layout-prop="paddingBottom"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingBottom}" data-layout-number-prop="paddingBottom" aria-label="下边界留白"></div>
-  <div class="layout-pad-cell"><span>左</span><input type="range" min="0" max="180" step="2" value="${state.paddingLeft}" data-layout-prop="paddingLeft"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingLeft}" data-layout-number-prop="paddingLeft" aria-label="左边界留白"></div>
+  <div class="layout-pad-cell"><span>上</span><input type="range" min="0" max="180" step="2" value="${state.paddingTop}" data-layout-prop="paddingTop" aria-label="上边界留白"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingTop}" data-layout-number-prop="paddingTop" aria-label="上边界留白"></div>
+  <div class="layout-pad-cell"><span>右</span><input type="range" min="0" max="180" step="2" value="${state.paddingRight}" data-layout-prop="paddingRight" aria-label="右边界留白"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingRight}" data-layout-number-prop="paddingRight" aria-label="右边界留白"></div>
+  <div class="layout-pad-cell"><span>下</span><input type="range" min="0" max="180" step="2" value="${state.paddingBottom}" data-layout-prop="paddingBottom" aria-label="下边界留白"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingBottom}" data-layout-number-prop="paddingBottom" aria-label="下边界留白"></div>
+  <div class="layout-pad-cell"><span>左</span><input type="range" min="0" max="180" step="2" value="${state.paddingLeft}" data-layout-prop="paddingLeft" aria-label="左边界留白"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingLeft}" data-layout-number-prop="paddingLeft" aria-label="左边界留白"></div>
  </div></div>`
         }
         function fieldPosition() {
           return `<div class="field"><label>图表位置</label><div class="layout-offset-grid">
-  <div class="layout-offset-cell"><span>上移</span><input type="range" min="0" max="80" step="1" value="${state.positionTop}" data-layout-prop="positionTop"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionTop}" data-layout-number-prop="positionTop" aria-label="图表上移"></div>
-  <div class="layout-offset-cell"><span>右移</span><input type="range" min="0" max="80" step="1" value="${state.positionRight}" data-layout-prop="positionRight"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionRight}" data-layout-number-prop="positionRight" aria-label="图表右移"></div>
-  <div class="layout-offset-cell"><span>下移</span><input type="range" min="0" max="80" step="1" value="${state.positionBottom}" data-layout-prop="positionBottom"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionBottom}" data-layout-number-prop="positionBottom" aria-label="图表下移"></div>
-  <div class="layout-offset-cell"><span>左移</span><input type="range" min="0" max="80" step="1" value="${state.positionLeft}" data-layout-prop="positionLeft"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionLeft}" data-layout-number-prop="positionLeft" aria-label="图表左移"></div>
+  <div class="layout-offset-cell"><span>上移</span><input type="range" min="0" max="80" step="1" value="${state.positionTop}" data-layout-prop="positionTop" aria-label="图表上移"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionTop}" data-layout-number-prop="positionTop" aria-label="图表上移"></div>
+  <div class="layout-offset-cell"><span>右移</span><input type="range" min="0" max="80" step="1" value="${state.positionRight}" data-layout-prop="positionRight" aria-label="图表右移"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionRight}" data-layout-number-prop="positionRight" aria-label="图表右移"></div>
+  <div class="layout-offset-cell"><span>下移</span><input type="range" min="0" max="80" step="1" value="${state.positionBottom}" data-layout-prop="positionBottom" aria-label="图表下移"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionBottom}" data-layout-number-prop="positionBottom" aria-label="图表下移"></div>
+  <div class="layout-offset-cell"><span>左移</span><input type="range" min="0" max="80" step="1" value="${state.positionLeft}" data-layout-prop="positionLeft" aria-label="图表左移"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionLeft}" data-layout-number-prop="positionLeft" aria-label="图表左移"></div>
  </div></div>`
         }
         function fieldScale(label, key, value) {
           const safeValue =
             value == null || value === '' || !Number.isFinite(Number(value)) ? 100 : value
-          return `<div class="field"><label>${label}</label><div class="layout-scale"><input type="range" min="60" max="180" step="5" value="${safeValue}" data-layout-prop="${key}"><input class="layout-value-input" type="number" min="60" max="180" step="5" value="${safeValue}" data-layout-number-prop="${key}" aria-label="${label}"><span class="layout-value-unit">%</span></div></div>`
+          return `<div class="field"><label>${label}</label><div class="layout-scale"><input type="range" min="60" max="180" step="5" value="${safeValue}" data-layout-prop="${key}" aria-label="${label}"><input class="layout-value-input" type="number" min="60" max="180" step="5" value="${safeValue}" data-layout-number-prop="${key}" aria-label="${label}"><span class="layout-value-unit">%</span></div></div>`
         }
         function field(label, type, key, value) {
-          return `<div class="field"><label>${label}</label><input type="${type}" id="field-${key}" value="${escapeHtml(value ?? '')}"></div>`
+          return `<div class="field"><label for="field-${key}">${label}</label><input type="${type}" id="field-${key}" value="${escapeHtml(value ?? '')}"></div>`
         }
         function fieldNumber(label, key, value) {
-          return `<div class="field"><label>${label}</label><input type="number" step="any" id="field-${key}" value="${value ?? ''}" placeholder="自动"></div>`
+          return `<div class="field"><label for="field-${key}">${label}</label><input type="number" step="any" id="field-${key}" value="${value ?? ''}" placeholder="自动"></div>`
         }
         function fieldRange(label, key, min, max, step, value) {
           const safeValue =
             value == null || value === '' || !Number.isFinite(Number(value)) ? min : value
-          return `<div class="field"><label>${label}</label><div class="range-wrap"><input id="field-${key}" data-prop="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${safeValue}"><input class="range-number" type="number" min="${min}" max="${max}" step="${step}" value="${safeValue}" data-range-number-for="${key}" aria-label="${label}"></div></div>`
+          return `<div class="field"><label for="field-${key}">${label}</label><div class="range-wrap"><input id="field-${key}" data-prop="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${safeValue}"><input class="range-number" type="number" min="${min}" max="${max}" step="${step}" value="${safeValue}" data-range-number-for="${key}" aria-label="${label}"></div></div>`
         }
         function fieldToggle(label, key, value) {
-          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-prop-toggle="${key}">${value ? '开启' : '关闭'}</button></div>`
+          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-prop-toggle="${key}" aria-label="${label}">${value ? '开启' : '关闭'}</button></div>`
         }
         // 属于“引擎 + 图表”属性（而不是图表私有属性）的开关，例如导出透明背景
         function fieldStateToggle(label, key, value) {
-          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-state-toggle="${escapeHtml(key)}">${value ? '开启' : '关闭'}</button></div>`
+          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-state-toggle="${escapeHtml(key)}" aria-label="${label}">${value ? '开启' : '关闭'}</button></div>`
         }
         function fieldSelect(label, key, value, opts) {
           return `<div class="field"><label>${label}</label>${zenSelect(key, value, opts, false)}</div>`
@@ -9872,7 +9958,8 @@
                 backgroundColor: '#fff',
                 borderColor: '#151515',
                 textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 10 },
-                formatter: (params) => `${params.name}<br/>${params.value} · ${params.percent}%`,
+                formatter: (params) =>
+                  `${escapeHtml(params.name)}<br/>${escapeHtml(params.value)} · ${escapeHtml(params.percent)}%`,
               },
               title: echartsTitle(),
               legend: { show: false },
@@ -10102,7 +10189,6 @@
               reportError('图例状态保存失败', e, true)
             }
           })
-          window.addEventListener('resize', resizeHandler, { once: true })
         }
         function mixHex(a, b, t) {
           const parse = (hex) => {
@@ -10836,10 +10922,7 @@
           if (!chartW || !chartH) throw new Error('ApexCharts 图表容器尺寸无效')
           const safeSeries = s.series.map((a) => ({
             name: a.name,
-            data: a.data.map((v) => {
-              const n = numeric(v)
-              return n === null ? 0 : n
-            }),
+            data: a.data.map((v) => numeric(v)),
           }))
           mount.style.setProperty('--apex-tooltip-font-family', getChartFontFamily('tooltip'))
           mount.style.setProperty('--apex-axis-x-font-family', getChartFontFamily('xAxis'))
@@ -12635,31 +12718,14 @@
         $('#fullscreen-btn').onclick = openPreview
         window.addEventListener('resize', resizeHandler)
 
-        function applyRadius() {
-          document.documentElement.style.setProperty('--radius', state.radius + 'px')
-        }
-        function changeRadius(delta) {
-          state.radius = Math.min(12, Math.max(0, state.radius + delta))
-          applyRadius()
-          try {
-            localStorage.setItem('zenviz.radius', String(state.radius))
-          } catch (e) {
-            reportError('圆角设置保存失败', e, false)
-          }
-          renderInspector()
-          setStatus(`统一圆角 · ${state.radius}px`)
-        }
         function restoreStylePrefs() {
           try {
-            const r = Number(localStorage.getItem('zenviz.radius'))
-            if (Number.isFinite(r)) state.radius = Math.max(0, Math.min(12, r))
             const bg = localStorage.getItem('zenviz.bg')
             if (['', 'plain', 'body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg))
               state.bg = bg || 'plain'
           } catch (e) {
             reportError('样式设置读取失败', e, false)
           }
-          applyRadius()
           applyBg(state.bg)
         }
 
@@ -12923,21 +12989,27 @@
           if (!f) return
           try {
             const name = f.name.toLowerCase()
+            let emptyWorkbook = false
             if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
               if (!window.XLSX) throw Error('SheetJS 未加载')
               const ab = await f.arrayBuffer()
               const wb = XLSX.read(ab, { type: 'array' })
               const ws = wb.Sheets[wb.SheetNames[0]]
-              const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+              const aoa = ws ? XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) : []
               state.data = aoaToData(aoa)
+              emptyWorkbook = !state.data.headers.length && !state.data.rows.length
             } else {
               const raw = await f.text()
               state.data = parseTextData(raw)
             }
             normalizeDataSelection({ fillDefaults: true })
+            schedulePersist()
             renderDataTable()
             const validation = validateDataMapping(state.type)
-            if (validation.valid) {
+            if (emptyWorkbook) {
+              renderChart(false)
+              setStatus('XLSX 工作表为空 · 已载入空表', 'warn')
+            } else if (validation.valid) {
               renderChart()
               setStatus('已导入 · ' + f.name)
             } else {
@@ -12955,7 +13027,7 @@
           const rows = a
             .filter((r) => r.some((v) => String(v ?? '').trim() !== ''))
             .map((r) => r.map((v) => String(v ?? '')))
-          if (!rows.length) return structuredClone(sample)
+          if (!rows.length) return { headers: [], rows: [] }
           const headers = rows.shift().map((v, i) => v || '列' + (i + 1))
           const width = Math.max(headers.length, ...rows.map((r) => r.length))
           while (headers.length < width) headers.push('列' + (headers.length + 1))
@@ -13121,6 +13193,176 @@
           const n = Number.parseFloat(String(value ?? '').replace(/px/i, ''))
           return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback
         }
+        function svgOverlayBox(position, boxW, boxH, width, height) {
+          const left = 14 + Math.max(0, Math.min(180, Number(state.paddingLeft) || 0))
+          const right = 14 + Math.max(0, Math.min(180, Number(state.paddingRight) || 0))
+          const top = 14 + Math.max(0, Math.min(180, Number(state.paddingTop) || 0))
+          const bottom = 14 + Math.max(0, Math.min(180, Number(state.paddingBottom) || 0))
+          const x = position.includes('right')
+            ? width - right - boxW
+            : position === 'top' || position === 'bottom'
+              ? (width - boxW) / 2
+              : left
+          const y = position.includes('bottom')
+            ? height - bottom - boxH
+            : position === 'left' || position === 'right'
+              ? (height - boxH) / 2
+              : top
+          return { x: Math.max(0, x), y: Math.max(0, y) }
+        }
+        function buildSVGOverlay(width, height) {
+          const overlay = svgEl('g', { 'data-zenviz-overlay': 'workspace' })
+          const titlePosition = state.titlePosition || 'top-left'
+          const title = String(state.title || '')
+          const subtitle = String(state.subtitle || '')
+          if (state.showTitle && title) {
+            const vertical = state.titleOrientation === 'vertical'
+            const titleWidth = vertical
+              ? subtitle
+                ? 42
+                : 24
+              : Math.max(
+                  120,
+                  Array.from(title).length * 17 + 4,
+                  Array.from(subtitle).length * 10 + 4,
+                )
+            const titleHeight = vertical
+              ? Math.max(28, Array.from(title).length * 18 + (subtitle ? 20 : 0))
+              : subtitle
+                ? 40
+                : 24
+            const box = svgOverlayBox(titlePosition, titleWidth, titleHeight, width, height)
+            const anchor = titlePosition.includes('right')
+              ? 'end'
+              : titlePosition === 'top' || titlePosition === 'bottom'
+                ? 'middle'
+                : 'start'
+            const group = svgEl('g', {
+              'data-zenviz-overlay': 'title',
+              transform: `translate(${box.x} ${box.y})`,
+            })
+            const textAttrs = vertical
+              ? { x: 0, y: 16, 'writing-mode': 'vertical-rl', 'text-orientation': 'mixed' }
+              : { x: anchor === 'end' ? titleWidth : anchor === 'middle' ? titleWidth / 2 : 0, y: 16, 'text-anchor': anchor }
+            group.appendChild(
+              svgEl(
+                'text',
+                {
+                  ...textAttrs,
+                  'font-family': getChartFontFamily('title'),
+                  'font-size': 16,
+                  'font-weight': 500,
+                  'letter-spacing': 1,
+                  fill: '#151515',
+                },
+                title,
+              ),
+            )
+            if (subtitle) {
+              const subAttrs = vertical
+                ? { x: 21, y: 16, 'writing-mode': 'vertical-rl', 'text-orientation': 'mixed' }
+                : {
+                    x: anchor === 'end' ? titleWidth : anchor === 'middle' ? titleWidth / 2 : 0,
+                    y: 34,
+                    'text-anchor': anchor,
+                  }
+              group.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    ...subAttrs,
+                    'font-family': getChartFontFamily('title'),
+                    'font-size': 9,
+                    'letter-spacing': 0.8,
+                    fill: 'rgba(21,21,21,.45)',
+                  },
+                  subtitle,
+                ),
+              )
+            }
+            overlay.appendChild(group)
+          }
+          if (!legendVisible()) return overlay
+          const names = currentLegendNames()
+          if (!names.length) return overlay
+          const vertical = state.legendOrientation === 'vertical'
+          const available = Math.max(90, width - 28)
+          const items = names.map((name, index) => ({
+            name: String(name ?? ''),
+            color: palette()[index % palette().length],
+            off: legendSelectionByType[state.type]?.[name] === false,
+            width: Math.min(available, 34 + Array.from(String(name ?? '')).length * 10),
+          }))
+          const rows = []
+          if (vertical) {
+            items.forEach((item) => rows.push([item]))
+          } else {
+            let row = []
+            let used = 0
+            items.forEach((item) => {
+              if (row.length && used + item.width > available) {
+                rows.push(row)
+                row = []
+                used = 0
+              }
+              row.push(item)
+              used += item.width + 7
+            })
+            if (row.length) rows.push(row)
+          }
+          const boxW = Math.min(
+            available + 10,
+            Math.max.apply(null, rows.map((row) => row.reduce((sum, item) => sum + item.width, 0) + (row.length - 1) * 7)) + 10,
+          )
+          const boxH = rows.length * 18 + 8
+          const box = svgOverlayBox(state.legendPosition || 'top', boxW, boxH, width, height)
+          const group = svgEl('g', {
+            'data-zenviz-overlay': 'legend',
+            transform: `translate(${box.x} ${box.y})`,
+          })
+          group.appendChild(
+            svgEl('rect', {
+              x: 0,
+              y: 0,
+              width: boxW,
+              height: boxH,
+              fill: '#ffffff',
+              'fill-opacity': 0.96,
+              stroke: '#d8d8d8',
+              'stroke-width': 1,
+            }),
+          )
+          rows.forEach((row, rowIndex) => {
+            let x = 5
+            row.forEach((item) => {
+              const y = rowIndex * 18 + 5
+              const marker = svgEl('g', { opacity: item.off ? 0.34 : 1 })
+              marker.appendChild(
+                svgEl('rect', { x, y: y + 3, width: 13, height: 2, fill: item.color }),
+              )
+              marker.appendChild(
+                svgEl('rect', { x: x + 4, y: y + 1, width: 5, height: 5, fill: item.color }),
+              )
+              marker.appendChild(
+                svgEl(
+                  'text',
+                  {
+                    x: x + 20,
+                    y: y + 9,
+                    'font-family': getChartFontFamily('legend'),
+                    'font-size': 10,
+                    fill: 'rgba(21,21,21,.65)',
+                  },
+                  item.name,
+                ),
+              )
+              group.appendChild(marker)
+              x += item.width + 7
+            })
+          })
+          overlay.appendChild(group)
+          return overlay
+        }
         function buildStandaloneSVGString(
           sourceSvg,
           width,
@@ -13173,6 +13415,8 @@
             bg.setAttribute('fill', exportPaperColor())
             clone.insertBefore(bg, clone.firstChild)
           }
+          // 引擎画布通常关闭内置标题和图例；工作区 overlay 必须一并写入独立 SVG。
+          clone.appendChild(buildSVGOverlay(w, h))
           return (
             '<?xml version="1.0" encoding="UTF-8"?>\n' +
             new XMLSerializer().serializeToString(clone)
@@ -13215,7 +13459,8 @@
             // 这里只在“导出”时把 Canvas 栅格化，绝不用于图表区域的日常显示。
             let transparent = exportTransparent()
             let size = ''
-            if (!svgString) {
+            const rasterized = !svgString
+            if (rasterized) {
               const shot = await getExportCanvas()
               transparent = shot.transparent
               size = ` · ${shot.canvas.width} × ${shot.canvas.height}`
@@ -13227,7 +13472,12 @@
             }
 
             ZenUtil.download(safeName(state.title) + '.svg', svgString, 'image/svg+xml;charset=utf-8')
-            setStatus('SVG 已导出' + size + (transparent ? ' · 透明背景' : '') + ' · 矢量无限缩放')
+            setStatus(
+              'SVG 已导出' +
+                size +
+                (transparent ? ' · 透明背景' : '') +
+                (rasterized ? ' · Canvas 栅格图兜底（非矢量）' : ' · 矢量 SVG'),
+            )
           } catch (e) {
             reportError('SVG 导出失败', e, true)
           }
@@ -13366,13 +13616,14 @@
           if (!d || !Array.isArray(d.rows) || d.rows.length === 0)
             throw new Error('当前没有可导出的数据，请先导入或编辑数据')
           const type = state.type
+          const props = chartProps[type] || {}
           const libs = new Set()
           const W = Math.max(8, Math.round(((Number(state.width) || 1000) / 96) * 2.54))
           const H = Math.max(6, Math.round(((Number(state.height) || 620) / 96) * 2.54))
           const showTitle = state.showTitle !== false
           const figTitle = showTitle ? state.title || chartNames[type] || 'ZENVIZ' : ''
-          const legendOn = state.showLegend !== false
-          const gridOn = state.showGrid !== false
+          const legendOn = legendVisible()
+          const gridOn = chartProp('showGrid', state.showGrid) !== false
 
           const coordsOf = (data) => {
             const pts = []
@@ -13475,13 +13726,14 @@
                   v,
                 })
               }
-            out.push(
-              '\\draw[white, line width=0.6pt] (0,0) grid (' +
-                (nx * cw).toFixed(3) +
-                ',' +
-                (ny * ch).toFixed(3) +
-                ');',
-            )
+            if (gridOn)
+              out.push(
+                '\\draw[white, line width=0.6pt] (0,0) grid (' +
+                  (nx * cw).toFixed(3) +
+                  ',' +
+                  (ny * ch).toFixed(3) +
+                  ');',
+              )
             out.push(
               '\\draw[black] (0,0) rectangle (' +
                 (nx * cw).toFixed(3) +
@@ -13588,10 +13840,17 @@
             ]
             if (mode === 'bar') {
               extra.unshift('ybar')
-              extra.push('enlarge x limits={abs=0.6}', 'bar width=0.5cm')
+              extra.push(
+                'enlarge x limits={abs=0.6}',
+                'bar width=' + (Number.isFinite(Number(props.barWidth)) ? Number(props.barWidth) : 46) + 'pt',
+              )
             } else {
               extra.push('enlarge x limits=0.08')
             }
+            if (props.yMin != null && props.yMin !== '' && Number.isFinite(Number(props.yMin)))
+              extra.push('ymin=' + texNum(props.yMin))
+            if (props.yMax != null && props.yMax !== '' && Number.isFinite(Number(props.yMax)))
+              extra.push('ymax=' + texNum(props.yMax))
             const lg = legendOpt()
             if (lg && series.length > 1) extra.push(lg)
             if (mode === 'area') {
@@ -13603,17 +13862,32 @@
               const cn = texColorName(si)
               let style,
                 pts = coordsOf(sr.data)
-              if (mode === 'line')
+              if (mode === 'line') {
+                const pointSize = Number.isFinite(Number(props.pointSize)) ? Number(props.pointSize) : 5
+                const lineWidth = Number.isFinite(Number(props.lineWidth)) ? Number(props.lineWidth) : 2
                 style =
                   'color=' +
                   cn +
-                  ', thick, mark=*, mark size=1.6pt' +
-                  (state.smooth ? ', smooth' : '')
-              else if (mode === 'scatter' || mode === 'dot')
-                style = 'only marks, mark=*, mark size=2.2pt, color=' + cn
-              else if (mode === 'lollipop')
-                style = 'ycomb, thick, mark=*, mark size=3pt, color=' + cn
-              else if (mode === 'bar') style = 'ybar, draw=' + cn + ', fill=' + cn + '!65'
+                  ', thick, line width=' +
+                  lineWidth +
+                  'pt' +
+                  (props.showPoints === false ? '' : ', mark=*, mark size=' + pointSize + 'pt') +
+                  (props.smooth ? ', smooth' : '') +
+                  (props.lineType === 'dashed' ? ', dashed' : '')
+              } else if (mode === 'scatter' || mode === 'dot') {
+                const pointSize = Number.isFinite(Number(props.pointSize)) ? Number(props.pointSize) : 5
+                style = 'only marks, mark=*, mark size=' + pointSize + 'pt, color=' + cn
+              } else if (mode === 'lollipop') {
+                const pointSize = Number.isFinite(Number(props.pointSize)) ? Number(props.pointSize) : 6
+                const stemWidth = Number.isFinite(Number(props.stemWidth)) ? Number(props.stemWidth) : 1
+                style =
+                  'ycomb, line width=' +
+                  stemWidth +
+                  'pt, mark=*, mark size=' +
+                  pointSize +
+                  'pt, color=' +
+                  cn
+              } else if (mode === 'bar') style = 'ybar, draw=' + cn + ', fill=' + cn + '!65'
               else if (mode === 'area') {
                 const list = sr.data
                   .map(numeric)
@@ -13634,7 +13908,17 @@
                     texNum(base) +
                     ')'
                 }
-                style = 'color=' + cn + ', fill=' + cn + '!35, thick'
+                const fillOpacity = Number.isFinite(Number(props.fillOpacity))
+                  ? Math.max(0, Math.min(1, Number(props.fillOpacity)))
+                  : 0.18
+                style =
+                  'color=' +
+                  cn +
+                  ', fill=' +
+                  cn +
+                  '!35, fill opacity=' +
+                  fillOpacity +
+                  ', thick'
               }
               if (!pts) return
               lines.push('\\addplot[' + style + '] coordinates {' + pts + '};')
@@ -13658,7 +13942,7 @@
             const slices = getPieSlices().filter((x) => x.value > 0)
             if (!slices.length) throw new Error('饼图没有可绘制的正数值')
             const total = slices.reduce((a, b) => a + b.value, 0)
-            const R = 3,
+            const R = Math.max(1, (Number(props.outerRadius) || 62) / 20),
               L2 = []
             L2.push('% —— 饼图（TikZ 手绘扇区）——')
             if (figTitle)
@@ -13693,7 +13977,7 @@
                   R +
                   'cm) -- cycle;',
               )
-              if (frac >= 0.045)
+              if (props.showLabels && frac >= 0.045)
                 L2.push(
                   '\\node[font=\\scriptsize, align=center] at (' +
                     mid.toFixed(3) +
@@ -13705,33 +13989,35 @@
                 )
               start = end
             })
-            const lx = R + 1.1
-            let ly = slices.length / 2 - 0.25
-            slices.forEach((sl, i) => {
-              const cn = texColorName(i),
-                pct = ((sl.value / total) * 100).toFixed(1)
-              L2.push(
-                '\\draw[fill=' +
-                  cn +
-                  ', draw=none] (' +
-                  lx +
-                  'cm,' +
-                  ly.toFixed(2) +
-                  'cm) rectangle ++(0.35cm,0.35cm);',
-              )
-              L2.push(
-                '\\node[anchor=west, font=\\footnotesize] at (' +
-                  (lx + 0.45) +
-                  'cm,' +
-                  (ly + 0.18).toFixed(2) +
-                  'cm) {' +
-                  texEscapeText(sl.name) +
-                  ' (' +
-                  pct +
-                  '\\%)};',
-              )
-              ly -= 0.72
-            })
+            if (legendOn) {
+              const lx = R + 1.1
+              let ly = slices.length / 2 - 0.25
+              slices.forEach((sl, i) => {
+                const cn = texColorName(i),
+                  pct = ((sl.value / total) * 100).toFixed(1)
+                L2.push(
+                  '\\draw[fill=' +
+                    cn +
+                    ', draw=none] (' +
+                    lx +
+                    'cm,' +
+                    ly.toFixed(2) +
+                    'cm) rectangle ++(0.35cm,0.35cm);',
+                )
+                L2.push(
+                  '\\node[anchor=west, font=\\footnotesize] at (' +
+                    (lx + 0.45) +
+                    'cm,' +
+                    (ly + 0.18).toFixed(2) +
+                    'cm) {' +
+                    texEscapeText(sl.name) +
+                    ' (' +
+                    pct +
+                    '\\%)};',
+                )
+                ly -= 0.72
+              })
+            }
             body.push(...L2)
           } else if (
             type === 'wordfreq' ||
@@ -13807,6 +14093,8 @@
             )
             const mn = nums.length ? Math.min(...nums) : 0
             const mx = nums.length ? Math.max(...nums) : 1
+            const pmin = props.min === '' || !Number.isFinite(Number(props.min)) ? mn : Number(props.min)
+            const pmax = props.max === '' || !Number.isFinite(Number(props.max)) ? mx : Number(props.max)
             const M = s.series.map((a) => a.data)
             body.push(
               ...emitMatrix(
@@ -13814,11 +14102,11 @@
                 yl,
                 M,
                 ['#f7fbff', palette()[0] || '#155EEF'],
-                mn,
-                mx === mn ? mn + 1 : mx,
+                pmin,
+                pmax === pmin ? pmin + 1 : pmax,
                 state.xTitle,
                 state.yTitle,
-                false,
+                props.showValues === true,
               ),
             )
           } else if (type === 'boxplot') {
@@ -13880,7 +14168,10 @@
             if (col.length < 2) throw new Error('直方图至少需要 2 个有效数值')
             const mn = Math.min(...col),
               mx = Math.max(...col)
-            const bins = Math.max(5, Math.min(20, Math.round(Math.sqrt(col.length))))
+            const bins = Math.max(
+              2,
+              Math.min(50, Math.round(Number(props.bins) || Math.sqrt(col.length))),
+            )
             const dmin = texNum(mn - (mx - mn) * 0.05 - 0.5),
               dmax = texNum(mx + (mx - mn) * 0.05 + 0.5)
             const cn = texColorName(0)
@@ -14261,10 +14552,8 @@
           state.engine = 'echarts'
           state.type = 'line'
           state.category = '论文'
-          state.radius = 0
           state.bg = 'body-grid'
           loadEnginePropertyStore(state.engine, state.type)
-          applyRadius()
           applyBg('body-grid')
           renderCategories('论文')
           renderTypeList(categories[state.category])
@@ -14354,6 +14643,7 @@
               }
               state.data = parseTextData(String(csv || ''))
               normalizeDataSelection({ fillDefaults: true })
+              schedulePersist()
               renderDataTable()
               renderChart()
               setStatus('已接收 · ' + (payload.name || '数据表'))
@@ -14364,11 +14654,10 @@
           })
         }
 
-        /* 送复盘：把当前图表登记为一条复盘动态，交给 Hub 的 live 快照聚合后
-         * 由 ZenReview 拉取。只写自己的 localStorage 键，不碰别的产品。 */
+        /* 送复盘：桌面产品各自使用独立 origin，必须经共享 broker 写入 documents，
+         * 不能把记录留在当前产品的 localStorage 里。 */
         function exportReview() {
           try {
-            const KEY = 'zen.viz.review.v1'
             /* state.data is { headers: [...], rows: [...] }, not a bare array. */
             const data = state.data || {}
             const rows = Array.isArray(data.rows) ? data.rows : []
@@ -14380,6 +14669,34 @@
               rows: rows.length,
               cols: Array.isArray(data.headers) ? data.headers.length : 0,
             }
+            const share = typeof window !== 'undefined' ? window.OMMShare : null
+            if (share && typeof share.publishRecord === 'function') {
+              setStatus('正在送复盘 · ' + entry.title, 'ok', false)
+              return Promise.resolve(
+                share.publishRecord(entry, {
+                  channel: 'documents',
+                  type: 'text/markdown',
+                  format: 'omm.visualization.review',
+                  title: '复盘 · ' + entry.title,
+                  tags: ['复盘', '可视化'],
+                }),
+              ).then(
+                function () {
+                  setStatus('已送复盘 · ' + entry.title)
+                  return true
+                },
+                function (err) {
+                  reportError('送复盘失败', err, true)
+                  return false
+                },
+              )
+            }
+            if (typeof window !== 'undefined' && window.OMMDesktop) {
+              reportError('送复盘失败', new Error('共享服务不可用'), true)
+              return false
+            }
+            // 仅在共享桥接与桌面桥都缺失的独立页面保留本地记录。
+            const KEY = 'zen.viz.review.v1'
             let list = []
             try { list = JSON.parse(localStorage.getItem(KEY) || '[]') } catch (e) { list = [] }
             if (!Array.isArray(list)) list = []
@@ -14388,6 +14705,7 @@
             setStatus('已送复盘 · ' + entry.title)
           } catch (e) {
             reportError('送复盘失败', e, true)
+            return false
           }
         }
         $('#save-review-btn').onclick = exportReview

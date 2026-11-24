@@ -136,6 +136,33 @@
       }
       function save() { ZenUtil.setJSON(RULE_KEY, rules) }
 
+      function requestHubCards() {
+        if (window.parent === window) return Promise.resolve(null)
+        return new Promise((resolve) => {
+          const token = 'flow-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8)
+          let timer = null
+          const cleanup = () => {
+            if (timer) clearTimeout(timer)
+            window.removeEventListener('message', onMessage)
+          }
+          const onMessage = (event) => {
+            if (!ZenUtil.isTrustedParentMessage(event)) return
+            const data = event.data
+            if (!data || data.type !== 'omm:live-data-reply' || data.token !== token) return
+            cleanup()
+            const cards = data.data && Array.isArray(data.data.cards) ? data.data.cards : []
+            resolve(cards)
+          }
+          window.addEventListener('message', onMessage)
+          timer = setTimeout(() => { cleanup(); resolve(null) }, 2600)
+          try {
+            window.parent.postMessage({ type: 'omm:live-data-request', token }, ZenUtil.parentTargetOrigin())
+          } catch (_) {
+            cleanup(); resolve(null)
+          }
+        })
+      }
+
       function renderRules() {
         const box = $('rule-list')
         $('status-text').textContent = '规则 ' + rules.length + ' 条'
@@ -289,6 +316,7 @@
           const a = { type }
           if (type === 'send') a.to = value || 'writer'
           else if (type === 'publish') a.channel = value || 'auto'
+          else if (type === 'notify') a.message = value
           else a.value = value
           actions.push(a); $('a-value').value = ''; renderActions()
         })
@@ -308,23 +336,54 @@
           document.querySelector('[data-view="rules"]').click()
         })
         $('cancel-edit').addEventListener('click', () => { resetEditor(); document.querySelector('[data-view="rules"]').click() })
-        $('run-btn').addEventListener('click', () => {
-          let cards = ZenUtil.getJSON(CARD_KEY, [])
-          cards = Array.isArray(cards) ? cards.map(ZenCard.create) : []
-          if (!cards.length) { toast('卡片库为空，先去 ZenCard 添加'); return }
-          const out = ZenFlow.run(rules, cards, { now: Date.now() })
-          $('run-summary').textContent = `处理 ${out.cards.length} 张卡片，触发 ${out.fired.length} 条规则，产生 ${out.effects.length} 个动作。`
-          $('effect-list').innerHTML = out.effects.length
-            ? out.effects.map((e) => `<div class="item"><div class="body"><div class="title">${esc(e.type)}</div><div class="meta">${esc(e.to || e.channel || e.message || e.card && e.card.content)} · ${new Date(e.at).toLocaleString()}</div></div></div>`).join('')
-            : '<div class="empty">没有产生动作</div>'
-          document.querySelector('[data-view="run"]').click()
-          out.effects.filter((e) => e.type === 'send' || e.type === 'publish').forEach((e) => {
-            try {
-              if (e.type === 'send' && window.OMMShare?.send) window.OMMShare.send({ to: e.to, format: 'zen-card', payload: e.card })
-              if (e.type === 'publish' && window.OMMShare?.publishRecord) window.OMMShare.publishRecord(e.card, { channel: e.channel, format: 'zen-card' })
-            } catch (_) {}
-          })
-          toast('运行完成')
+        $('run-btn').addEventListener('click', async () => {
+          const embedded = window.parent !== window
+          const runBtn = $('run-btn')
+          runBtn.disabled = true
+          try {
+            const source = embedded ? await requestHubCards() : ZenUtil.getJSON(CARD_KEY, [])
+            if (source === null) { toast('工作台未响应，请重试'); return }
+            const cards = Array.isArray(source) ? source.map(ZenCard.create) : []
+            if (!cards.length) { toast('卡片库为空，先去 ZenCard 添加'); return }
+            const out = ZenFlow.run(rules, cards, { now: Date.now() })
+            if (embedded) {
+              const changed = out.cards.filter((card, index) => JSON.stringify(card) !== JSON.stringify(cards[index]))
+              if (changed.length) {
+                if (!window.OMMShare?.send) { toast('共享桥不可用，规则结果未保存'); return }
+                const saved = await Promise.all(changed.map((card) =>
+                  window.OMMShare.send({ to: 'zencard', format: 'zen-card', payload: card })
+                    .then(() => true).catch(() => false)))
+                const failedWrites = saved.filter((ok) => !ok).length
+                if (failedWrites) { toast(`${failedWrites} 张卡片写回失败，规则结果未完整保存`, 'error'); return }
+              }
+            } else if (!ZenUtil.setJSON(CARD_KEY, out.cards)) {
+              toast('卡片库写入失败，规则结果未保存', 'error'); return
+            }
+            $('run-summary').textContent = `处理 ${out.cards.length} 张卡片，触发 ${out.fired.length} 条规则，产生 ${out.effects.length} 个动作。`
+            $('effect-list').innerHTML = out.effects.length
+              ? out.effects.map((e) => `<div class="item"><div class="body"><div class="title">${esc(e.type)}</div><div class="meta">${esc(e.to || e.channel || e.message || e.card && e.card.content)} · ${new Date(e.at).toLocaleString()}</div></div></div>`).join('')
+              : '<div class="empty">没有产生动作</div>'
+            document.querySelector('[data-view="run"]').click()
+            const deliveries = out.effects.filter((e) => e.type === 'send' || e.type === 'publish')
+            const results = await Promise.all(deliveries.map(async (e) => {
+              try {
+                if (e.type === 'send') {
+                  if (!window.OMMShare?.send) throw new Error('共享桥不可用')
+                  await window.OMMShare.send({ to: e.to, format: 'zen-card', payload: e.card })
+                } else {
+                  if (!window.OMMShare?.publishRecord) throw new Error('共享桥不可用')
+                  await window.OMMShare.publishRecord(e.card, { channel: e.channel, format: 'zen-card' })
+                }
+                return true
+              } catch (_) { return false }
+            }))
+            const failed = results.filter((ok) => !ok).length
+            toast(failed ? `规则已运行，${failed} 个发送动作失败` : '运行完成', failed ? 'error' : undefined)
+          } catch (_) {
+            toast('规则运行失败，请检查存储或共享连接', 'error')
+          } finally {
+            runBtn.disabled = false
+          }
         })
         $('export-btn').addEventListener('click', () => {
           ZenUtil.download('zen-flow.json', ZenFlow.serialize(rules), 'application/json')

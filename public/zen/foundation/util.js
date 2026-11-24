@@ -95,6 +95,35 @@
     } catch (e) { return false }
   }
 
+  /* Canonical cross-window trust check for product messages. Embedded pages
+   * trust only the exact Hub origin forwarded in their URL; standalone pages
+   * trust only a same-origin parent. Top-level pages and sibling windows are
+   * never message peers. */
+  u.parentTargetOrigin = function () {
+    try {
+      var hub = new URLSearchParams(window.location.search).get('omm_hub_origin')
+      if (hub) {
+        var parsed = new URL(hub)
+        if (u.isLocalOrigin(parsed.origin)) return parsed.origin
+      }
+    } catch (e) { /* fall back to the current origin */ }
+    return window.location.origin
+  }
+
+  u.isTrustedParentMessage = function (event) {
+    if (!event || window.parent === window || event.source !== window.parent) return false
+    try {
+      var params = new URLSearchParams(window.location.search)
+      if (params.get('omm_embed') === '1') {
+        var hub = params.get('omm_hub_origin')
+        if (!hub) return false
+        var parsed = new URL(hub)
+        return u.isLocalOrigin(parsed.origin) && parsed.origin === String(event.origin || '')
+      }
+      return String(event.origin || '') === window.location.origin
+    } catch (e) { return false }
+  }
+
   /* HTML escaping. The 5th entity (apostrophe) is opt-out for legacy callers
    * that only escape the 4 core entities; no product branching lives here. */
   u.esc = function (value, opts) {
