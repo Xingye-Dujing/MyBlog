@@ -81,30 +81,12 @@
 
   /* ------------------------------------------------------------------ utils */
 
-  function el(tag, className, text) {
-    var node = document.createElement(tag)
-    if (className) node.className = className
-    if (text !== undefined && text !== null) node.textContent = text
-    return node
-  }
+  var el = ZenUtil.el
+  var fmtTime = ZenUtil.fmtDateTime
+  var fmtSize = ZenUtil.formatBytes
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild)
-  }
-
-  function fmtTime(value) {
-    if (!value) return ''
-    var date = new Date(value)
-    if (isNaN(date.getTime())) return String(value)
-    return date.toLocaleString()
-  }
-
-  function fmtSize(bytes) {
-    var size = Number(bytes) || 0
-    if (!size) return '0 B'
-    if (size < 1024) return size + ' B'
-    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB'
-    return (size / 1024 / 1024).toFixed(1) + ' MB'
   }
 
   function appId(value) {

@@ -14,13 +14,7 @@
 
   var els = {};
 
-  function esc(text) {
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
+  var esc = ZenUtil.esc
 
   function bytes(value) {
     if (!value) return '0 MB';
@@ -269,13 +263,13 @@
       '</section>' +
       '<section class="setting">' +
         '<div class="setting-label">界面动效</div>' +
-        '<button class="switch" id="motion" type="button" role="switch" aria-checked="true">' +
+        '<button class="switch" data-zen-switch id="motion" type="button" role="switch" aria-checked="true">' +
           '<span class="switch-track"></span><span>启用过渡与进度动画</span>' +
         '</button>' +
       '</section>' +
       '<section class="setting">' +
         '<div class="setting-label">紧凑布局</div>' +
-        '<button class="switch" id="compact" type="button" role="switch" aria-checked="false">' +
+        '<button class="switch" data-zen-switch id="compact" type="button" role="switch" aria-checked="false">' +
           '<span class="switch-track"></span><span>缩小间距，在一屏内看到更多产品</span>' +
         '</button>' +
       '</section>' +

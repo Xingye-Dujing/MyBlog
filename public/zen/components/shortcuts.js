@@ -107,5 +107,72 @@
     return out.join('+')
   }
 
-  ui.shortcuts = { bind: bind, format: format, normalize: normalize }
+  /* The shortcut help sheet is shared: products only supply their own rows
+   * (or the product-localised DSL text) and call help(). All .hk-* markup is
+   * generated here so no product owns a private copy of the sheet. */
+  var esc = global.ZenUtil.esc
+
+  function row(desc, keys) {
+    return '<div class="hk-row"><span>' + esc(desc) + '</span>' +
+      '<span class="hk-key">' + esc(keys) + '</span></div>'
+  }
+
+  function section(title, rows) {
+    return '<div class="hk-section"><div class="hk-section-title">' + esc(title) +
+      '</div>' + (rows || []).join('') + '</div>'
+  }
+
+  function note(html) {
+    return '<div class="hk-section"><div class="hk-note">' + html + '</div></div>'
+  }
+
+  function grid(sections) {
+    return '<div class="hk-grid">' + (sections || []).join('') + '</div>'
+  }
+
+  /* DSL: sections separated by '~~', title/rows by '§', pairs by '|'. */
+  function parseRows(text, opts) {
+    var o = opts || {}
+    var expand = o.expand || function (s) { return String(s == null ? '' : s) }
+    var defaultMod = /Mac|iPhone|iPad/i.test(navigator.platform || '') ? '⌘' : 'Ctrl'
+    var raw = expand(String(text || '')).split('{M}').join(
+      o.mod == null ? defaultMod : o.mod
+    )
+    return raw.split('~~').map(function (sec) {
+      var cut = sec.indexOf('§')
+      var pairs = (cut < 0 ? '' : sec.slice(cut + 1)).split('|')
+      var rows = []
+      for (var i = 0; i + 1 < pairs.length; i += 2) rows.push(row(pairs[i], pairs[i + 1]))
+      return section(cut < 0 ? sec : sec.slice(0, cut), rows)
+    })
+  }
+
+  function help(opts) {
+    var o = opts || {}
+    var body = o.body || grid(o.sections || [])
+    return global.ZenUI.modal.open({
+      title: o.title || '快捷键',
+      width: o.width || 'min(560px, 96vw)',
+      html: o.template || body,
+      ids: { close: o.closeId || 'shortcuts-close' },
+      onMount: function (root) {
+        var host = o.bodyId ? root.querySelector('#' + o.bodyId) : null
+        if (host) host.innerHTML = body
+        if (o.onMount) o.onMount(root)
+      },
+      onClose: o.onClose,
+    })
+  }
+
+  ui.shortcuts = {
+    bind: bind,
+    format: format,
+    normalize: normalize,
+    row: row,
+    section: section,
+    note: note,
+    grid: grid,
+    parseRows: parseRows,
+    help: help,
+  }
 })(window)

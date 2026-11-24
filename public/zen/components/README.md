@@ -14,7 +14,7 @@
 | `dialog.js` | `ZenUI.modal` | 通用内容模态壳与可搜索选择器 `ZenUI.dialog.pick` |
 | `select.js` | `ZenUI.select` | 原生 `<select data-zen-select>` 的候选区 |
 | `menu.js` | `ZenUI.menu` | 下拉 / 右键菜单，替代各产品私有菜单 |
-| `shortcuts.js` | `ZenUI.shortcuts` | 快捷键注册表 |
+| `shortcuts.js` | `ZenUI.shortcuts` | 快捷键注册表；`help()` / `parseRows()` 生成共享 `.hk-*` 说明面板 |
 | `index.js` | `ZenUI` | 装配、渐进增强、MutationObserver |
 
 ## 可选组件（按需加载）
@@ -24,6 +24,7 @@
 | `picker.js` | 日期 / 时间 / 多日期弹窗，仅用于有日期输入的产品 |
 | `tabs.js` | 选项卡行为 |
 | `tooltip.js` | `data-zen-tip` 提示气泡 |
+| `switch.js` | hub / installer / message / redact 的 ARIA 开关 |
 
 ## 加载顺序
 

@@ -376,209 +376,6 @@
       <div class="dr-body" id="dr-body"></div>
     </aside>
 
-    <template id="ze-cloud-tpl">
-      <div class="zen-cloud-status" id="zen-cloud-status">未配置 Supabase</div>
-
-      <div id="ze-config-panel">
-        <div class="zen-cloud-field">
-          <div class="zen-cloud-label">Project URL</div>
-          <input
-            class="zen-cloud-input"
-            id="ze-sb-url"
-            type="url"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="https://xxxx.supabase.co"
-          />
-        </div>
-
-        <div class="zen-cloud-field">
-          <div class="zen-cloud-label">Publishable Key</div>
-          <input
-            class="zen-cloud-input"
-            id="ze-sb-key"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="sb_publishable_..."
-          />
-          <div class="zen-cloud-help">
-            只填 Supabase Publishable key，不要把 service_role 或 secret key 放进页面
-          </div>
-        </div>
-
-        <div class="zen-cloud-field">
-          <div class="zen-cloud-label">Auth 邮箱</div>
-          <input
-            class="zen-cloud-input"
-            id="ze-auth-email-config"
-            type="email"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="your@email.com"
-          />
-          <div class="zen-cloud-help">
-            只保存邮箱地址用于登录；密码仅在勾选“记住密码”后保存到本机
-          </div>
-        </div>
-
-        <div class="zen-cloud-note">
-          <strong>账号与密码</strong><br />
-          <span
-            >这个页面不提供注册，请先在 Supabase Dashboard 的 Authentication → Users 中创建一个
-            Auth 用户，然后使用该用户的邮箱和密码登录本应用</span
-          >
-        </div>
-
-        <div class="zen-cloud-actions">
-          <button class="zen-cloud-btn primary" id="ze-save-config" type="button">
-            保存连接设置
-          </button>
-          <button class="zen-cloud-btn" id="ze-open-dashboard" type="button">
-            打开 Supabase Dashboard
-          </button>
-        </div>
-        <div class="zen-cloud-actions">
-          <button class="zen-cloud-btn" id="ze-open-sql" type="button">查看建表 SQL</button>
-        </div>
-      </div>
-
-      <div id="ze-auth-panel" class="zen-cloud-hidden">
-        <div class="zen-cloud-note">
-          <strong>登录与同步</strong><br />
-          <span>登录时无需再次输入账号，账号邮箱来自连接设置，下面只需要输入密码</span>
-        </div>
-
-        <div class="zen-cloud-field">
-          <div class="zen-cloud-label">密码</div>
-          <input
-            class="zen-cloud-input"
-            id="ze-password"
-            type="password"
-            autocomplete="current-password"
-            spellcheck="false"
-            placeholder="Supabase 登录密码"
-          />
-          <div class="zen-cloud-help">
-            密码用于 Supabase Auth 验证和客户端 AES 解密。勾选“记住密码”后只存在本机浏览器的
-            LocalStorage 里，不会上传到云端；不勾选则仅在本次会话的内存中使用。
-          </div>
-          <label class="zen-remember" for="ze-remember-pw">
-            <input type="checkbox" id="ze-remember-pw" />
-            <span class="zen-cbox" aria-hidden="true"
-              ><svg viewBox="0 0 12 12"><polyline points="1.6,6.4 4.4,9.2 10.4,2.9" /></svg
-            ></span>
-            <span>记住密码（下次打开页面自动登录，无需再次输入）</span>
-          </label>
-        </div>
-
-        <div class="zen-autosync">
-          <div class="zen-autosync-main">
-            <div class="zen-autosync-title">同步策略</div>
-            <div class="zen-autosync-desc" id="zen-autosync-desc">
-              手动同步：只在点击同步按钮时与云端交换数据
-            </div>
-          </div>
-          <button
-            class="zen-autosync-btn"
-            id="zen-autosync-btn"
-            type="button"
-            aria-pressed="false"
-          >
-            <span class="zen-as-dot"></span><span id="ze-autosync-text">手动同步</span>
-          </button>
-        </div>
-
-        <div class="zen-cloud-actions zen-cloud-actions-3">
-          <button class="zen-cloud-btn primary" id="ze-login-only" type="button">登录</button>
-          <button class="zen-cloud-btn" id="ze-login-pull" type="button">
-            登录并从云端同步
-          </button>
-          <button class="zen-cloud-btn" id="ze-login-push" type="button">登录并上传本地</button>
-        </div>
-
-        <div class="zen-cloud-actions">
-          <button class="zen-cloud-btn" id="ze-open-sql-auth" type="button">查看建表 SQL</button>
-          <button class="zen-cloud-btn danger" id="ze-signout" type="button">退出登录</button>
-        </div>
-
-        <div class="zen-cloud-actions zen-cloud-hidden" id="ze-sync-actions">
-          <button class="zen-cloud-btn" id="ze-sync-now" type="button">从云端同步</button>
-          <button class="zen-cloud-btn" id="ze-upload-now" type="button">上传本地</button>
-          <button class="zen-cloud-btn" id="ze-lock" type="button">锁定数据</button>
-        </div>
-      </div>
-
-      <div class="zen-cloud-hidden" id="ze-sql-panel">
-        <div class="zen-cloud-label" style="margin-bottom: 6px">SQL 编辑器</div>
-        <textarea id="zen-sql-box" readonly spellcheck="false">
-create table if not exists public.zenglish_sync (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  payload text not null,
-  client_updated_at bigint not null,
-  updated_at timestamptz not null default now()
-);
-
-alter table public.zenglish_sync enable row level security;
-
-grant select, insert, update, delete on public.zenglish_sync to authenticated;
-revoke all on public.zenglish_sync from anon;
-
-drop policy if exists "zenglish_select_own" on public.zenglish_sync;
-drop policy if exists "zenglish_insert_own" on public.zenglish_sync;
-drop policy if exists "zenglish_update_own" on public.zenglish_sync;
-drop policy if exists "zenglish_delete_own" on public.zenglish_sync;
-
-create policy "zenglish_select_own"
-on public.zenglish_sync
-for select
-to authenticated
-using (auth.uid() = user_id);
-
-create policy "zenglish_insert_own"
-on public.zenglish_sync
-for insert
-to authenticated
-with check (auth.uid() = user_id);
-
-create policy "zenglish_update_own"
-on public.zenglish_sync
-for update
-to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
-
-create policy "zenglish_delete_own"
-on public.zenglish_sync
-for delete
-to authenticated
-using (auth.uid() = user_id);
-
-notify pgrst, 'reload schema';</textarea
-        >
-
-        <div class="zen-cloud-actions">
-          <button class="zen-cloud-btn primary" id="ze-copy-sql" type="button">复制 SQL</button>
-          <button class="zen-cloud-btn" id="ze-back-config" type="button">返回设置</button>
-        </div>
-        <div class="zen-cloud-copy-status" id="ze-sql-copy-status" aria-live="polite"></div>
-      </div>
-    </template>
-    <template id="ze-cloud-foot-tpl">
-      Supabase Auth 负责身份验证，RLS 负责用户隔离；本地数据上传前在浏览器端使用 AES-GCM
-      加密，本应用只使用 Publishable key，不需要 service_role 或 secret key
-    </template>
-    <template id="ze-warn-tpl">
-      <div class="zen-warn-body">
-        开启后，本页的任何改动都会立刻写入云端并覆盖此前保存的云端数据。<br />
-        云端不会保留任何历史记录的备份，误删除、误改动都无法回滚，并且会立刻影响到所有登录同一账号的设备。
-      </div>
-      <div class="zen-warn-actions">
-        <button class="zen-cloud-btn" id="ze-warn-cancel" type="button">取消</button>
-        <button class="zen-cloud-btn primary" id="ze-warn-ok" type="button">我已了解，开启</button>
-      </div>
-    </template>
-
     <!-- Word drawing enlarged viewer · shell provided by shared ZenUI.modal -->
     <template id="sketch-viewer-tpl">
       <div class="sketch-viewer-board">
@@ -12106,6 +11903,7 @@ notify pgrst, 'reload schema';</textarea
       })()
     </script>
 
+    <script src="lib/zen-cloud.js"></script>
     <script src="lib/zen-crypto.js"></script>
     <script id="ze-cloud-sync-script">
       ;(function () {
@@ -12129,42 +11927,44 @@ notify pgrst, 'reload schema';</textarea
           pushTimer = null
 
         function E(id) { return ZenUtil.byId(id) }
-        var cloudHandle = null,
-          warnHandle = null
-        function tpl(id) { return ZenUtil.tpl(id) }
 
-        function prefs() {
-          var c = cfg()
-          return {
-            remember: !!c.remember,
-            autoSync: !!c.autoSync,
-            warnAck: !!c.warnAck,
-            password: typeof c.password === 'string' ? c.password : '',
-          }
+        /* Cloud sync: panel markup and product-independent engine live in the
+           shared library; this product only supplies keys and callbacks. */
+        var zenCloudPanel = {
+          prefix: 'ze',
+          i18n: false,
+          sql: "create table if not exists public.zenglish_sync (\n  user_id uuid primary key references auth.users(id) on delete cascade,\n  payload text not null,\n  client_updated_at bigint not null,\n  updated_at timestamptz not null default now()\n);\n\nalter table public.zenglish_sync enable row level security;\n\ngrant select, insert, update, delete on public.zenglish_sync to authenticated;\nrevoke all on public.zenglish_sync from anon;\n\ndrop policy if exists \"zenglish_select_own\" on public.zenglish_sync;\ndrop policy if exists \"zenglish_insert_own\" on public.zenglish_sync;\ndrop policy if exists \"zenglish_update_own\" on public.zenglish_sync;\ndrop policy if exists \"zenglish_delete_own\" on public.zenglish_sync;\n\ncreate policy \"zenglish_select_own\"\non public.zenglish_sync\nfor select\nto authenticated\nusing (auth.uid() = user_id);\n\ncreate policy \"zenglish_insert_own\"\non public.zenglish_sync\nfor insert\nto authenticated\nwith check (auth.uid() = user_id);\n\ncreate policy \"zenglish_update_own\"\non public.zenglish_sync\nfor update\nto authenticated\nusing (auth.uid() = user_id)\nwith check (auth.uid() = user_id);\n\ncreate policy \"zenglish_delete_own\"\non public.zenglish_sync\nfor delete\nto authenticated\nusing (auth.uid() = user_id);\n\nnotify pgrst, 'reload schema';"
         }
-
-        function patchCfg(part) {
-          var c = cfg()
-          Object.keys(part).forEach(function (k) {
-            if (part[k] === undefined) delete c[k]
-            else c[k] = part[k]
-          })
-          try {
-            localStorage.setItem(CFG_KEY, JSON.stringify(c))
-          } catch (_) {}
-          return cfg()
+        var zenCloud = ZenCloud.create({
+          prefix: 'ze',
+          cfgKey: 'zenglish-supabase-config-v2',
+          metaKey: 'zenglish-sync-meta-v2',
+          table: 'zenglish_sync',
+          client: function () { return sb },
+          session: function () { return session },
+          t: function (key, fb) { return {"sync.tableMissing": "云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次", "sync.invalidLogin": "邮箱或密码不正确，请确认该邮箱已在 Authentication → Users 中创建为 Auth 用户", "sync.emailNotConfirmed": "该邮箱尚未确认，请先在 Supabase Auth 中完成邮箱确认", "sync.networkFailed": "网络请求失败，请检查网络或 Supabase 项目是否可访问", "sync.decryptFailed": "云端数据解密失败，请确认密码正确", "sync.storageFailed": "本机存储写入失败，请清理浏览器存储空间或退出无痕模式后重试", "sync.unknownError": "操作失败，请重试或查看浏览器控制台日志"}[key] || fb },
+          warnTitle: "开启云同步前请注意",
+          onWarnMount: null,
+          statusId: 'zen-cloud-status'
+        })
+        var cfg = zenCloud.cfg
+        var meta = zenCloud.meta
+        var patchCfg = zenCloud.patchCfg
+        var prefs = zenCloud.prefs
+        var savePrefs = zenCloud.savePrefs
+        var openWarn = zenCloud.openWarn
+        var ensureWarnAck = zenCloud.ensureWarnAck
+        function stopWatcher() {
+          if (pollTimer) clearInterval(pollTimer)
+          pollTimer = null
+          if (pushTimer) clearTimeout(pushTimer)
+          pushTimer = null
         }
-        function savePrefs(next) {
-          var p = prefs(),
-            remember = next.remember !== undefined ? !!next.remember : p.remember,
-            pw = next.password !== undefined ? next.password : p.password
-          return patchCfg({
-            remember: remember,
-            autoSync: next.autoSync !== undefined ? !!next.autoSync : p.autoSync,
-            warnAck: next.warnAck !== undefined ? !!next.warnAck : p.warnAck,
-            password: remember ? pw : undefined,
-          })
-        }
+        var now = zenCloud.now
+        var remote = zenCloud.remote
+        var closeModal = zenCloud.closeModal
+        var friendly = zenCloud.friendly
+        var cloudHandle = null
         function syncPrefsUI() {
           var p = prefs(),
             cb = E('ze-remember-pw')
@@ -12180,49 +11980,6 @@ notify pgrst, 'reload schema';</textarea
                 ? '立即同步：打开页面自动对齐云端，本地一有改动立刻上传并覆盖云端'
                 : '手动同步：只在点击“从云端同步”或“上传本地”时与云端交换数据'
           }
-        }
-        function openWarn(onOk, onCancel) {
-          var confirmed = false
-          warnHandle = window.ZenUI.modal.open({
-            title: '开启云同步前请注意',
-            width: 'min(400px, 92vw)',
-            html: tpl('ze-warn-tpl'),
-            ids: { title: 'zen-warn-title' },
-            onMount: function (body) {
-              var ok = body.querySelector('#ze-warn-ok'),
-                cc = body.querySelector('#ze-warn-cancel')
-              cc.addEventListener('click', function () {
-                window.ZenUI.modal.close()
-              })
-              ok.addEventListener('click', function () {
-                confirmed = true
-                window.ZenUI.modal.close()
-                if (onOk) onOk()
-              })
-              setTimeout(function () {
-                try { ok.focus() } catch (_) {}
-              }, 30)
-            },
-            onClose: function () {
-              warnHandle = null
-              if (!confirmed && onCancel) onCancel()
-            },
-          })
-        }
-        function ensureWarnAck() {
-          return new Promise(function (ok) {
-            var p = prefs()
-            if (!p.autoSync || p.warnAck) return ok(true)
-            openWarn(
-              function () {
-                savePrefs({ warnAck: true })
-                ok(true)
-              },
-              function () {
-                ok(false)
-              },
-            )
-          })
         }
         function toggleAutoSync() {
           var p = prefs()
@@ -12249,12 +12006,6 @@ notify pgrst, 'reload schema';</textarea
             s = localStorage.getItem(DATA_KEY) || ''
           } catch (_) {}
           return ZenUtil.fingerprint(s)
-        }
-        function stopWatcher() {
-          if (pollTimer) clearInterval(pollTimer)
-          pollTimer = null
-          if (pushTimer) clearTimeout(pushTimer)
-          pushTimer = null
         }
         function startWatcher() {
           stopWatcher()
@@ -12361,13 +12112,6 @@ notify pgrst, 'reload schema';</textarea
           if (b) b.classList.toggle('zen-busy', !!v)
         }
         function toast(msg) { return window.ZenUI.toast(msg) }
-        function now() {
-          return Date.now()
-        }
-        function cfg() {
-          return ZenUtil.getJSON(CFG_KEY, ZenUtil.getJSON('zenglish-supabase-config-v1', {}))
-        }
-        function meta() { return ZenUtil.getJSON(META_KEY, {}) }
         function mark(ts) {
           try {
             localStorage.setItem(META_KEY, JSON.stringify({ updatedAt: ts || now() }))
@@ -12420,25 +12164,6 @@ notify pgrst, 'reload schema';</textarea
             !!d.books.fav
           )
         }
-        function isTableMissing(err) { return ZenUtil.isTableMissing(err) }
-        function friendly(err) {
-          var m =
-            ((err && err.name ? err.name + ' ' : '') + ((err && err.message) || '')).trim() ||
-            String(err || '')
-          if (isTableMissing(err))
-            return '云同步表尚未创建。请先打开“查看建表 SQL”，在 Supabase SQL Editor 执行一次'
-          if (/Invalid login credentials/i.test(m))
-            return '邮箱或密码不正确，请确认该邮箱已在 Authentication → Users 中创建为 Auth 用户'
-          if (/Email not confirmed/i.test(m))
-            return '该邮箱尚未确认，请先在 Supabase Auth 中完成邮箱确认'
-          if (/Failed to fetch|NetworkError|Load failed/i.test(m))
-            return '无法连接 Supabase 服务，请检查项目 URL、项目状态或网络代理'
-          if (/decrypt|OperationError|InvalidStateError|云端数据无效/i.test(m))
-            return '云端数据解密失败，请确认密码正确'
-          return /^\[object /.test(m)
-            ? '操作失败，请重试或查看浏览器控制台日志'
-            : m || '操作失败，请重试或查看浏览器控制台日志'
-        }
         var libPromise = null
         function ensureLib() {
           if (window.supabase && window.supabase.createClient) return Promise.resolve()
@@ -12484,15 +12209,6 @@ notify pgrst, 'reload schema';</textarea
           return ZenCrypto.unseal(payload, pw, {
             accept: [1, 2], normalize: normalizeData, validate: validateData
           })
-        }
-        async function remote() {
-          var r = await sb
-            .from(TABLE)
-            .select('payload,client_updated_at')
-            .eq('user_id', session.user.id)
-            .maybeSingle()
-          if (r.error) throw r.error
-          return r.data || null
         }
         function writeLocal(d, ts) {
           var safe = normalizeData(d)
@@ -12705,8 +12421,8 @@ notify pgrst, 'reload schema';</textarea
           cloudHandle = window.ZenUI.modal.open({
             title: '云同步',
             width: 'min(460px, 92vw)',
-            html: tpl('ze-cloud-tpl'),
-            foot: tpl('ze-cloud-foot-tpl'),
+            html: ZenCloud.panelHTML(zenCloudPanel),
+            foot: ZenCloud.footHTML(zenCloudPanel),
             ids: { title: 'zen-cloud-title', close: 'zen-cloud-close' },
             onMount: mountCloud,
             onClose: function () {
@@ -12715,9 +12431,6 @@ notify pgrst, 'reload schema';</textarea
               if (b && typeof b.focus === 'function') b.focus()
             },
           })
-        }
-        function closeModal() {
-          window.ZenUI.modal.close()
         }
         function autosizeSql() { return ZenUtil.autosize('zen-sql-box') }
         function refresh() {

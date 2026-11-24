@@ -22,6 +22,7 @@
 | `.dd-item` / `.dd-item-row` / `.dd-label` / `.dd-divider` | 下拉菜单项 |
 | `.dropdown` / `.dd-scroll` / `.dd-empty` | 下拉容器 |
 | `.seg` / `.seg button` / `.seg button.active` | 分段选择 |
+| `.switch` / `.switch-track` / `data-zen-switch` | 共享 ARIA 开关（`zen/components/switch.js`，唯一的开关外观与点击约定） |
 | `.primary` / `.danger` / `.ghost-btn` | 动作语义修饰 |
 
 ## 表单与反馈
@@ -31,6 +32,7 @@
 | `.field` / `.ed-field` / `.ed-label` / `.ed-input` | 字段与编辑控件 |
 | `.dd-select` / `.dd-text` / `.mono-sm` | 下拉输入、文本输入 |
 | `.hint` / `.empty-hint` / `.dd-hint` | 说明文字 |
+| `.hk-grid` / `.hk-section` / `.hk-row` / `.hk-key` | 快捷键说明面板（由 `ZenUI.shortcuts.help()` 生成，产品只提供行数据） |
 | `.spacer` | 弹性留白 |
 | `.hidden` | 统一隐藏 |
 
@@ -44,6 +46,8 @@
 | `features/learning.css` | 词库、卡片、间隔复习 |
 | `features/cloud.css` | 云同步面板与状态 |
 | `features/tool.css` | 小工具页（`.zt-*`） |
+| `features/launcher.css` | 工作台与安装器共用的启动器词汇（`.brand-name` / `.setting` / `.segmented`） |
+| `zen/components/components.css` | 交互组件自身外观（`.zenui-*`、`.switch`） |
 
 ## 使用规则
 

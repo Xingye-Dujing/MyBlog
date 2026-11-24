@@ -38,6 +38,14 @@ legacy 别名仅供存量代码使用，新代码不要引用。
 - `--zen-font-code`：等宽栈，仅代码与数字。历史坑：`--font-mono` 实际是衬线栈，
   需要真正等宽字体时用 `--zen-font-code`。
 
+## 语义与数据色
+
+`--zen-err` / `--zen-danger-bg` / `--zen-danger-line` 为错误语义色；
+`--zen-control-accent` / `--zen-control-track` 为滑杆与开关控件色；
+`--zen-highlight-yellow` 为消息高亮色；`--zen-canvas-port` / `--zen-canvas-conn` /
+`--zen-canvas-node` / `--zen-canvas-title` 为画布节点色；`--zen-swatch-amber/olive/rust/blue`
+为安装器色板。产品不再就地写死这些色值。
+
 ## 间距与圆角
 
 `--zen-space-1..5` = 4 / 8 / 12 / 16 / 24px；`--zen-radius: 0`（全品牌统一直角）；

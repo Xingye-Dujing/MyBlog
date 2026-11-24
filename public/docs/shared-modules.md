@@ -26,7 +26,14 @@
 | `lib/zen-chart.js` | CSV 解析与自包含 SVG 图表 |
 | `lib/zen-table.js` / `zen-paper.js` | 表格与论文辅助 |
 | `lib/zen-crypto.js` | Base64 编解码、PBKDF2 派生（云同步产品共用） |
+| `lib/zen-cloud.js` | `ZenCloud`：云面板/警告/页脚标记生成器与通用引擎（偏好、确认、错误分类、远端读取）；六个云同步产品共用，产品只保留数据快照与冲突策略 |
+| `lib/zen-job.js` | 画布产品的作业协议：JSON 提交、取消、视口中心插点（table / video 共用） |
 | `lib/data-viz.js` / `viz-bridge.js` / `lib/search-library.js` | 出图、跨页送图、检索 |
+| `zen/components/switch.js` | 共享 ARIA 开关（`data-zen-switch`），替代各产品的开关外观与点击实现 |
+| `zen/components/shortcuts.js` | 除快捷键注册外还提供 `ZenUI.shortcuts.help()` 与 `.hk-*` 面板生成器 |
+| `zen/foundation/util.js` | `ZenUtil.el()` / `ZenUtil.fmtDateTime()` 等通用无状态助手（单一实现） |
+| `zen/foundation/base.css` | `zen-spin` 等关键帧的唯一真源；产品只引用动画名 |
+| `zen/features/launcher.css` | hub 与 installer 共用的启动器样式 |
 
 ## 画布框架
 

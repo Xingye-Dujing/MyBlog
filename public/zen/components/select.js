@@ -12,6 +12,8 @@
   var ui = (global.ZenUI = global.ZenUI || {})
   var layer = ui.layer
   if (!layer) throw new Error('zen/ui: core/layer.js must load before components/select.js')
+  if (!global.ZenUtil) throw new Error('zen/ui: foundation/util.js must load before components/select.js')
+  var esc = global.ZenUtil.esc
 
   var active = null
   var wiredLayer = null
@@ -37,12 +39,6 @@
   function currentLabel(select) {
     var opt = select.options[select.selectedIndex]
     return opt ? opt.textContent : ''
-  }
-
-  function esc(text) {
-    return String(text == null ? '' : text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   }
 
   function position(l, trigger) {

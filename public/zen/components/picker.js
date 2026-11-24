@@ -18,6 +18,8 @@
   var ui = (global.ZenUI = global.ZenUI || {})
   var layer = ui.layer
   if (!layer) throw new Error('zen/ui: core/layer.js must load before components/picker.js')
+  if (!global.ZenUtil) throw new Error('zen/ui: foundation/util.js must load before components/picker.js')
+  var esc = global.ZenUtil.esc
 
   var POP_ID = 'zenui-picker-pop'
   var config = {
@@ -49,12 +51,6 @@
   }
 
   function todayDS() { return fmt(new Date()) }
-
-  function esc(text) {
-    return String(text == null ? '' : text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  }
 
   function labels() { return config.labels() || {} }
 

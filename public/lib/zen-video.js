@@ -369,12 +369,7 @@
   }
 
   function addAtCenter(type) {
-    var rect = $('canvas-host').getBoundingClientRect()
-    var w = canvas.screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2)
-    var n = canvas.state.nodes.length
-    var rec = canvas.addNode(type, {}, { x: w.x - 120 + (n % 3) * 28, y: w.y - 60 + (n % 3) * 24 })
-    canvas.select(rec.id)
-    toast('已添加“' + DEFS[type].label + '”')
+    ZenJob.addAtCenter({ canvas: canvas, host: 'canvas-host', type: type, label: DEFS[type].label, toast: toast })
   }
 
   // --------------------------------------------------------------------
@@ -548,13 +543,7 @@
   function apiGet(path) {
     return fetch(API + path).then(function (r) { return r.json() })
   }
-  function apiPost(path, body, raw) {
-    return fetch(API + path, {
-      method: 'POST',
-      headers: raw ? { 'Content-Type': 'application/octet-stream' } : { 'Content-Type': 'application/json' },
-      body: raw ? body : JSON.stringify(body || {}),
-    }).then(function (r) { return r.json() })
-  }
+  function apiPost(path, body, raw) { return ZenJob.post(API, path, body, raw) }
 
   function uploadFile(file, nodeId) {
     toast('正在上传 ' + file.name + ' …')
@@ -588,10 +577,7 @@
     }).catch(function (e) { toast('无法连接后端：' + e.message) })
   }
 
-  function stop() {
-    if (!jobId) return
-    apiPost('/api/cancel/' + jobId, {}).then(function () { toast('已请求停止') })
-  }
+  function stop() { return ZenJob.cancel(API, jobId, toast) }
 
   function poll() {
     clearTimeout(pollTimer)

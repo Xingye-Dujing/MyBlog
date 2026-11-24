@@ -76,4 +76,4 @@ if ERRORS:
         print(" -", error)
     sys.exit(1)
 
-print(f"STYLE AUDIT OK: {len(PAGES)} pages, {len(list(STYLE_DIR.rglob('*.css')))} stylesheets")
+print(f"STYLE AUDIT OK: {len(PAGES)} pages, {sum(len(list(d.rglob('*.css'))) for d in STYLE_DIRS)} stylesheets")

@@ -169,35 +169,11 @@
     return model.scope.mode === 'all'
   }
 
-  function escapeHtml(text) {
-    return String(text === null || text === undefined ? '' : text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-  }
-
-  function fmtSize(bytes) {
-    var size = Number(bytes) || 0
-    if (!size) return '0 B'
-    if (size < 1024) return size + ' B'
-    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB'
-    return (size / 1024 / 1024).toFixed(1) + ' MB'
-  }
-
-  function fmtTime(value) {
-    if (!value) return ''
-    var date = new Date(value)
-    if (isNaN(date.getTime())) return String(value)
-    return date.toLocaleString()
-  }
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag)
-    if (className) node.className = className
-    if (text !== undefined && text !== null) node.textContent = text
-    return node
-  }
+  var escapeHtml = ZenUtil.esc
+  var fmtSize = ZenUtil.formatBytes
+  var fmtTime = ZenUtil.fmtDateTime
+  var el = ZenUtil.el
+  var copyText = ZenUtil.copy
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild)
@@ -205,26 +181,6 @@
 
   function byId(id) {
     return model.shadow ? model.shadow.getElementById(id) : null
-  }
-
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text)
-    }
-    return new Promise(function (resolve, reject) {
-      try {
-        var area = document.createElement('textarea')
-        area.value = text
-        area.style.cssText = 'position:fixed;opacity:0'
-        document.body.appendChild(area)
-        area.select()
-        document.execCommand('copy')
-        area.remove()
-        resolve()
-      } catch (e) {
-        reject(e)
-      }
-    })
   }
 
   function toast(text, kind) {

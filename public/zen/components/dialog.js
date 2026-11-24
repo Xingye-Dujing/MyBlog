@@ -13,6 +13,8 @@
   var ui = (global.ZenUI = global.ZenUI || {})
   var layer = ui.layer
   if (!layer) throw new Error('zen/ui: core/layer.js must load before components/dialog.js')
+  if (!global.ZenUtil) throw new Error('zen/ui: foundation/util.js must load before components/dialog.js')
+  var esc = global.ZenUtil.esc
 
   var pending = null
   var wired = null
@@ -240,12 +242,6 @@
   }
 
   /* Searchable picker (command palette / gallery) built on the shared shell. */
-  function esc(text) {
-    return String(text == null ? '' : text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  }
-
   ui.dialog.pick = function (opts) {
     var o = opts || {}
     var items = o.items || []

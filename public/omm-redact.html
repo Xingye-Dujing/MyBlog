@@ -11,6 +11,7 @@
     <script src="zen/components/select.js"></script>
     <script src="zen/components/menu.js"></script>
     <script src="zen/components/shortcuts.js"></script>
+<script src="zen/components/switch.js"></script>
     <script src="zen/components/index.js"></script>
 <script src="omm-desktop.js"></script>
     <script src="omm-share.js"></script>
@@ -195,7 +196,7 @@
                     开启后，已应用的遮罩不可擦除。
                   </div>
                 </div>
-                <div class="toggle-switch on" id="toggle-lock" data-action="toggleLock"></div>
+                <button type="button" class="switch" role="switch" aria-checked="true" id="toggle-lock" data-action="toggleLock" data-zen-switch aria-label="锁定已应用遮罩"><span class="switch-track" aria-hidden="true"></span></button>
               </div>
               <div class="toggle-row" style="align-items: flex-start">
                 <div>
@@ -211,11 +212,16 @@
                     在每页右上角显示编号。
                   </div>
                 </div>
-                <div
-                  class="toggle-switch on"
+                <button
+                  type="button"
+                  class="switch"
+                  role="switch"
+                  aria-checked="true"
                   id="toggle-pageshow"
                   data-action="togglePageNum"
-                ></div>
+                  data-zen-switch
+                  aria-label="显示页码"
+                ><span class="switch-track" aria-hidden="true"></span></button>
               </div>
               <div class="toggle-row" style="align-items: flex-start">
                 <div>
@@ -231,11 +237,16 @@
                     TXT / 简化 HTML 版式自动拆分为多页；原生 Word 版式沿用文档自身纸张与分页。
                   </div>
                 </div>
-                <div
-                  class="toggle-switch on"
+                <button
+                  type="button"
+                  class="switch"
+                  role="switch"
+                  aria-checked="true"
                   id="toggle-autopage"
                   data-action="toggleAutoPage"
-                ></div>
+                  data-zen-switch
+                  aria-label="自动分页"
+                ><span class="switch-track" aria-hidden="true"></span></button>
               </div>
             </div>
           </div>
@@ -1435,20 +1446,23 @@
         function toggleLock() {
           S.lockRedacts = !S.lockRedacts
           var el = $('#toggle-lock')
-          el.classList.toggle('on', S.lockRedacts)
+          if (el) el.setAttribute('aria-checked', String(S.lockRedacts))
+          $$('.redact-canvas').forEach(function (c) {
+            drawExistingRedacts(c)
+          })
         }
 
         function togglePageNum() {
           S.showPageNum = !S.showPageNum
           var el = $('#toggle-pageshow')
-          el.classList.toggle('on', S.showPageNum)
+          if (el) el.setAttribute('aria-checked', String(S.showPageNum))
           renderDocument()
         }
 
         function toggleAutoPage() {
           S.autoPage = !S.autoPage
           var el = $('#toggle-autopage')
-          if (el) el.classList.toggle('on', S.autoPage)
+          if (el) el.setAttribute('aria-checked', String(S.autoPage))
           // Invalidate an older TXT pagination build immediately so its async callback
           // cannot overwrite the newly selected pagination mode.
           if (S.fileType === 'txt' || (!S.pdfMode && !S.docxHtml)) S.textPageBuildId++
@@ -9718,25 +9732,12 @@
           })
 
           // Toggles
-          $$('.toggle-switch').forEach(function (el) {
+          $$('.switch[data-action]').forEach(function (el) {
             el.addEventListener('click', function () {
               var a = el.dataset.action
-              if (a === 'toggleAutoPage') {
-                // toggleAutoPage() is the single source of truth.
-                // Do not pre-toggle the DOM here, otherwise the state flips twice.
-                toggleAutoPage()
-                return
-              }
-              el.classList.toggle('on')
-              if (a === 'toggleLock') {
-                S.lockRedacts = el.classList.contains('on')
-                $$('.redact-canvas').forEach(function (c) {
-                  drawExistingRedacts(c)
-                })
-              } else if (a === 'togglePageNum') {
-                S.showPageNum = el.classList.contains('on')
-                renderDocument()
-              }
+              if (a === 'toggleLock') toggleLock()
+              else if (a === 'togglePageNum') togglePageNum()
+              else if (a === 'toggleAutoPage') toggleAutoPage()
             })
           })
 
@@ -9811,23 +9812,11 @@
             ? '⌘'
             : 'Ctrl'
           function hkRow(desc, keys) {
-            return (
-              '<div class="hk-row"><span>' +
-              escapeHtml(desc) +
-              '</span><span class="hk-key">' +
-              escapeHtml(keys) +
-              '</span></div>'
-            )
-          }
+          return window.ZenUI.shortcuts.row(desc, keys)
+        }
           function hkSection(title, rows) {
-            return (
-              '<div class="hk-section"><div class="hk-section-title">' +
-              escapeHtml(title) +
-              '</div>' +
-              rows.join('') +
-              '</div>'
-            )
-          }
+          return window.ZenUI.shortcuts.section(title, rows)
+        }
           function openShortcuts() {
             var mod = HK_MOD
             var rows = [
@@ -9854,11 +9843,11 @@
               hkSection('适用范围', []),
             ]
             rows[4] =
-              '<div class="hk-section"><div class="hk-note">' +
+              window.ZenUI.shortcuts.note(
               '带 <b>Ctrl / ⌘</b> 的键位在输入框里同样生效；<b>R</b>、<b>E</b>、<b>Esc</b> 在焦点位于输入框时不生效。<br />' +
-              '图片跳转可在“样式 → 图片跳转”里关闭，关闭后 <b>Alt + ↑ ↓</b> 不再响应。' +
-              '</div></div>'
-            openSharedModal('tpl-shortcuts', {
+              '图片跳转可在“样式 → 图片跳转”里关闭，关闭后 <b>Alt + ↑ ↓</b> 不再响应。'
+              )
+openSharedModal('tpl-shortcuts', {
               title: 'KEYBOARD SHORTCUTS',
               width: 'min(560px, 96vw)',
               onMount: function (root) {

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
+import vm from 'node:vm'
 
 const ROOT = new URL('../', import.meta.url)
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8')
@@ -55,6 +56,11 @@ test('产品不再自带 Toast 节点与 DOM 实现', () => {
     assert.ok(!/zen-link-toast|getElementById\(['"]toast['"]\)/.test(read(lib)),
       `${lib} 仍自带 Toast 节点`)
   }
+  const hub = read('public/omm-hub.js')
+  assert.ok(!/els\.toast\b|getElementById\(['"]toast['"]\)/.test(hub),
+    'omm-hub.js 仍操作私有 Toast 节点')
+  assert.ok(/function toast\([^)]*\)\s*\{\s*window\.ZenUI\.toast\(/.test(hub),
+    'omm-hub.js 未委托 ZenUI.toast')
 })
 
 test('产品不再自带通用模态壳，统一使用 ZenUI.modal', () => {
@@ -437,4 +443,176 @@ test('loopback origin / lsDel / fileStamp 等小助手不再自行实现', () =>
   }
   assert.ok(/function fileStamp\(\)\{ return ZenUtil\.fileStamp\(null, true\) \}/.test(
     read('public/index.html')), 'index 未委托 fileStamp')
+})
+
+test('ZenUtil 提供 el / fmtDateTime，桥接脚本不再各自实现', () => {
+  const util = read('public/zen/foundation/util.js')
+  for (const key of ['el', 'fmtDateTime']) {
+    assert.ok(util.includes('u.' + key + ' ='), `ZenUtil 缺少 ${key}`)
+  }
+  for (const file of ['public/omm-desktop.js', 'public/omm-share.js']) {
+    const text = read(file)
+    for (const name of ['fmtSize', 'fmtTime', 'el', 'copyText']) {
+      assert.ok(!new RegExp('function\\s+' + name + '\\s*\\(').test(text),
+        `${file} 仍有私有 ${name}()`)
+    }
+    assert.ok(!text.includes('navigator.clipboard.writeText'), `${file} 仍有裸剪贴板写入`)
+  }
+  for (const file of ['public/omm-hub.js', 'public/installer.js']) {
+    assert.ok(!/function esc\s*\(/.test(read(file)), `${file} 仍有私有 esc()`)
+  }
+})
+
+test('共享组件不再各自转义 HTML', () => {
+  for (const file of ['dialog', 'menu', 'picker', 'select']) {
+    const text = read(`public/zen/components/${file}.js`)
+    assert.ok(!/function esc\s*\(/.test(text), `${file}.js 仍有私有 esc()`)
+    assert.ok(text.includes('global.ZenUtil.esc'), `${file}.js 未引用 ZenUtil.esc`)
+  }
+  for (const page of ['public/omm-hub.html', 'public/installer.html']) {
+    assert.ok(read(page).includes('src="zen/foundation/util.js"'),
+      `${page} 未加载共享 util（共享组件的前置依赖）`)
+  }
+})
+
+test('开关控件统一 ZenUI.switch，四种私有实现已删除', () => {
+  for (const [page, owner] of [
+    ['public/omm-hub.html', 'public/omm-hub.html'],
+    ['public/omm-message.html', 'public/omm-message.html'],
+    ['public/omm-redact.html', 'public/omm-redact.html'],
+    ['public/installer.html', 'public/installer.js'],
+  ]) {
+    assert.ok(read(page).includes('zen/components/switch.js'), `${page} 未加载共享开关`)
+    assert.ok(read(owner).includes('data-zen-switch'), `${owner} 未声明共享开关`)
+  }
+  for (const css of ['hub', 'installer', 'message', 'redact']) {
+    const text = read(`public/zen/products/${css}.css`)
+    assert.ok(!/\.toggle-switch\b|\.(?:cloud-)?switch(?:-track|\s*[,{:])/.test(text),
+      `${css}.css 仍自带开关外观`)
+  }
+  const shared = read('public/zen/components/components.css')
+  assert.ok(shared.includes('.switch-track'), '共享组件缺少开关外观')
+})
+
+test('快捷键说明面板统一 ZenUI.shortcuts.help', () => {
+  const src = read('public/zen/components/shortcuts.js')
+  for (const key of ['row', 'section', 'note', 'grid', 'parseRows', 'help']) {
+    assert.ok(src.includes(key + ': ' + key) || src.includes('function ' + key + '('),
+      `ZenUI.shortcuts 缺少 ${key}`)
+  }
+  const products = ['annotate', 'corpus', 'data', 'latex', 'redact',
+    'visualization', 'message', 'writer']
+  for (const id of products) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('ZenUI.shortcuts.'), `${id} 未委托共享快捷键面板`)
+    assert.ok(!text.includes('class="hk-row"'), `${id} 仍自带快捷键行标记`)
+    assert.ok(!text.includes('class="hk-section"'), `${id} 仍自带快捷键分组标记`)
+  }
+})
+
+test('作业运行时与画布端口几何来自共享库', () => {
+  for (const id of ['table', 'video']) {
+    assert.ok(read(`public/omm-${id}.html`).includes('src="lib/zen-job.js"'),
+      `${id} 未加载共享作业运行时`)
+    const lib = read(`public/lib/zen-${id}.js`)
+    assert.ok(lib.includes('ZenJob.post('), `${id} 未委托 ZenJob.post`)
+    assert.ok(lib.includes('ZenJob.cancel('), `${id} 未委托 ZenJob.cancel`)
+    assert.ok(lib.includes('ZenJob.addAtCenter('), `${id} 未委托 ZenJob.addAtCenter`)
+  }
+  assert.ok(read('public/zen/canvas/engine.js').includes('getItemPort: getItemPort'),
+    '画布引擎未导出通用端口几何')
+  const writer = read('public/omm-writer.html')
+  assert.ok(writer.includes('ZenCanvas.geometry.getItemPort'), 'Writer 未复用共享端口几何')
+  assert.ok(!/const portOf = \(it, port\) => \{/.test(writer), 'Writer 仍有私有端口几何')
+})
+
+test('产品样式不再重复共享关键帧、云词汇与令牌', () => {
+  for (const css of readdirSync(new URL('../public/zen/products/', import.meta.url))) {
+    if (!css.endsWith('.css')) continue
+    const text = read('public/zen/products/' + css)
+    assert.ok(!/@keyframes\s+(?:spin|export-spin|vin)\b/.test(text), `${css} 仍重复共享关键帧`)
+    assert.ok(!/--border-alpha\s*:/.test(text), `${css} 仍重复令牌`)
+  }
+  const message = read('public/zen/products/message.css')
+  assert.ok(!/\.cloud-(?:status|field|label|input|help|note|actions|btn)\b/.test(message),
+    'message.css 仍是 features/cloud.css 的私有副本')
+  assert.ok(read('public/omm-message.html').includes('zen/features/cloud.css'),
+    'Message 未加载共享云样式')
+})
+
+test('云同步面板与通用引擎统一到 ZenCloud', () => {
+  const lib = read('public/lib/zen-cloud.js')
+  assert.ok(lib.includes('global.ZenCloud ='), '共享云模块未暴露 ZenCloud')
+  for (const key of ['panelHTML', 'footHTML', 'warnHTML', 'create']) {
+    assert.ok(lib.includes('cloud.' + key + ' ='), `ZenCloud 缺少 ${key}`)
+  }
+  for (const id of ['annotate', 'corpus', 'data', 'english', 'planner', 'writer']) {
+    const text = read(`public/omm-${id}.html`)
+    assert.ok(text.includes('src="lib/zen-cloud.js"'), `${id} 未加载共享云模块`)
+    assert.ok(text.includes('ZenCloud.panelHTML('), `${id} 未使用共享云面板`)
+    assert.ok(text.includes('ZenCloud.create('), `${id} 未使用共享云引擎`)
+    for (const fn of ['prefs', 'savePrefs', 'patchCfg', 'ensureWarnAck', 'openWarn', 'remote', 'isTableMissing', 'tpl']) {
+      assert.ok(!new RegExp('function\\s+' + fn + '\\s*\\(').test(text),
+        `${id} 仍有私有 ${fn}()`)
+    }
+    if (id !== 'writer') {
+      assert.ok(!/function\s+friendly\s*\(/.test(text), `${id} 仍有私有 friendly()`)
+      assert.ok(text.includes('var friendly = zenCloud.friendly'), `${id} 未委托共享错误分类`)
+    }
+    assert.ok(!/<template id="[^"]*(?:cloud|warn)-tpl"/.test(text),
+      `${id} 仍自带云面板模版`)
+  }
+})
+
+test('ZenCloud 的偏好、错误分类与面板标记在共享层可验证', () => {
+  const store = new Map()
+  const ctx = {
+    ZenUtil: {
+      esc: (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;'),
+      getJSON: (key, fb) => (store.has(key) ? JSON.parse(store.get(key)) : fb),
+      isTableMissing: (err) => !!(err && (err.code === 'PGRST205' ||
+        /schema cache|Could not find the table/i.test(err.message || ''))),
+    },
+    localStorage: {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => store.set(k, v),
+    },
+    document: { getElementById: () => null },
+    ZenUI: {
+      modal: {
+        open: () => ({ el: null }),
+        close: () => {},
+      },
+    },
+    setTimeout,
+    Promise,
+  }
+  ctx.window = ctx
+  vm.createContext(ctx)
+  vm.runInContext(read('public/lib/zen-cloud.js'), ctx)
+  const ZenCloud = ctx.ZenCloud
+  const api = ZenCloud.create({
+    prefix: 'zp',
+    cfgKey: 'cfg',
+    metaKey: 'meta',
+    table: 'demo_sync',
+    client: () => null,
+    session: () => null,
+    t: (key, fallback) => fallback,
+  })
+  const snap = () => JSON.stringify(api.prefs())
+  assert.equal(snap(), JSON.stringify({ remember: false, autoSync: false, warnAck: false, password: '' }))
+  api.savePrefs({ remember: true, password: 'pw', autoSync: true })
+  assert.equal(snap(), JSON.stringify({ remember: true, autoSync: true, warnAck: false, password: 'pw' }))
+  api.savePrefs({ remember: false })
+  assert.equal(api.prefs().password, '')
+  assert.equal(api.isTableMissing({ message: 'schema cache' }), true)
+  assert.match(api.friendly({ message: 'Failed to fetch' }), /网络请求失败/)
+  const warnHandle = api.openWarn()
+  assert.equal(api.warnHandle(), warnHandle)
+  const html = ZenCloud.panelHTML({ prefix: 'zw', sql: 'select 1' })
+  assert.ok(html.includes('id="zw-sb-url"'))
+  assert.ok(html.includes('id="zen-cloud-status"'))
+  assert.ok(html.includes('select 1'))
+  assert.ok(ZenCloud.warnHTML({ prefix: 'zw' }).includes('id="zw-warn-ok"'))
 })

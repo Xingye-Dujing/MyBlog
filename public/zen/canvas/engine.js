@@ -109,11 +109,8 @@
   // ------------------------------------------------------------------
   // 纯几何函数（从 writer 的 ConnectionManager 原样抽取）
   // ------------------------------------------------------------------
-  function getPortPosition(node, portType) {
-    var l = node.offsetLeft,
-      t = node.offsetTop,
-      w = node.offsetWidth,
-      h = node.offsetHeight
+  function getItemPort(item, portType) {
+    var l = item.x, t = item.y, w = item.w, h = item.h
     switch (portType) {
       case 'top':
         return { x: l + w / 2, y: t }
@@ -126,6 +123,15 @@
       default:
         return { x: l + w / 2, y: t + h / 2 }
     }
+  }
+
+  function getPortPosition(node, portType) {
+    return getItemPort({
+      x: node.offsetLeft,
+      y: node.offsetTop,
+      w: node.offsetWidth,
+      h: node.offsetHeight,
+    }, portType)
   }
 
   function getCurvePath(x1, y1, x2, y2, port1, port2) {
@@ -1791,6 +1797,7 @@
     version: VERSION,
     create: create,
     geometry: {
+      getItemPort: getItemPort,
       getPortPosition: getPortPosition,
       getCurvePath: getCurvePath,
       getElbowPath: getElbowPath,

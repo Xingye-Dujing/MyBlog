@@ -17,6 +17,14 @@
   u.tpl = function (id) { var t = u.byId(id); return t ? t.innerHTML : '' }
   u.setText = function (id, v) { var e = u.byId(id); if (e) e.textContent = v }
   u.toggleCls = function (id, cls, on) { var e = u.byId(id); if (e) e.classList.toggle(cls, !!on) }
+  /* One-line element factory: tag, class and text are the only knobs shared
+   * code needs; anything richer stays with the product. */
+  u.el = function (tag, className, text) {
+    var node = document.createElement(tag)
+    if (className) node.className = className
+    if (text !== undefined && text !== null) node.textContent = text
+    return node
+  }
   /* Grow an input/textarea to fit its content. Optional bounds keep the
    * mechanism generic; the product decides min/max and any extra padding. */
   u.autosize = function (id, opts) {
@@ -231,6 +239,15 @@
     var d = new Date(value)
     if (isNaN(d.getTime())) return u.str(value).slice(0, 10)
     return d.getFullYear() + '-' + u.pad(d.getMonth() + 1) + '-' + u.pad(d.getDate())
+  }
+
+  /* Locale date + time for "last changed" labels; invalid input falls back to
+   * the raw value so records never render as "Invalid Date". */
+  u.fmtDateTime = function (value) {
+    if (!value) return ''
+    var d = new Date(value)
+    if (isNaN(d.getTime())) return u.str(value)
+    return d.toLocaleString()
   }
 
   /* Sortable file-name timestamp: yyyyMMdd-HHmm (optionally :ss). */

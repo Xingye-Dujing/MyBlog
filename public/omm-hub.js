@@ -289,13 +289,7 @@
     };
   }
 
-  function esc(text) {
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
+  var esc = ZenUtil.esc
 
   // Only allow link schemes that are safe to hand to an <a href>. Plugin
   // manifests are untrusted input; esc() stops attribute breakout but does not
@@ -658,7 +652,6 @@
     els.zenExit = document.getElementById('zen-exit');
     els.timelinePanel = document.getElementById('timeline-panel');
     els.timelineList = document.getElementById('timeline-list');
-    els.toast = document.getElementById('toast');
     els.pluginPanel = document.getElementById('plugin-panel');
     els.ppBody = document.getElementById('pp-body');
     els.ppTitle = document.getElementById('pp-title');
@@ -3203,15 +3196,7 @@
   }
 
   function toast(message, kind) {
-    els.toast.textContent = message;
-    // 多处调用会传 'error'，之前被静默丢弃，导致失败提示与成功提示无法区分。
-    els.toast.classList.toggle('error', kind === 'error');
-    els.toast.classList.add('on');
-    window.clearTimeout(toast._timer);
-    toast._timer = window.setTimeout(function () {
-      els.toast.classList.remove('on');
-      els.toast.classList.remove('error');
-    }, 1600);
+    window.ZenUI.toast(message, kind);
   }
 
   function closePopovers() {
